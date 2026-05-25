@@ -103,7 +103,13 @@ Hooks in `.claude/settings.json` enforce R1-R10 (see `.claude/AUTONOMOUS_RULES.m
 15. **Final mega-review of v0.0.6 candidate** before releasing.
 
 ## In progress
-**#6 — README + CLAUDE.md refresh for v0.0.5** (started 2026-05-26T00:25)
+**Live re-verify tile slot fix (continuing #1)** — use snippet Expand buttons (more reliable than F4 palette) (started 2026-05-26T00:50)
+
+## Closed without action
+- **#11** Triage S0/S1 from agent re-review: agent found 1 real (README version bump — already fixed) + 3 doc nits (added inline comment for model-404 false-positive risk). Nothing else.
+- **#13** STT prompt budget audit: already protected with MAX_CHARS=700 soft + GROQ_HARD_LIMIT=800 hard, regression test `prompt_under_groq_hard_limit` covers the 946-char overflow case. No new defense needed.
+- **#14** Snippets ranking: deferred. Substring filter is enough for 57 entries. If snippets crosses 200+ revisit. Low value vs effort.
+- **#15** Final mega-review: defer until after at least one more batch of changes. R9 trigger is ≥5 files OR ≥3 hours; only 30 min elapsed since last agent pass. Single agent re-review already happened (#10).
 
 ## Done log
 *(append-only, newest at top)*

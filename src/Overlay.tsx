@@ -17,7 +17,7 @@ type AiEvent =
   | { type: "done"; reason: string }
   | { type: "error"; message: string };
 
-type Status = "stopped" | "listening" | "thinking" | "answering" | "error";
+type Status = "stopped" | "listening" | "thinking" | "answering" | "error" | "paused";
 
 type HealthState = "ok" | "degraded" | "down" | "idle";
 type HealthPayload = {
@@ -491,13 +491,13 @@ export default function Overlay() {
         // Read CURRENT status via ref to avoid the stale-closure trap that
         // used to plague this listener (registered once with [] deps).
         if (statusRef.current === "listening") {
-          // assert_overlay can throw if invoked from non-overlay context —
-          // defensive try/catch so the listener doesn't hang in flight on a
-          // throw. Today only the overlay calls this, but global hotkeys may
-          // dispatch from other contexts in the future.
+          // Pause via F8 → status "paused" (distinct from "stopped" which
+          // means tray-Quit or initial state). Lets UI show "⏸ Paused
+          // (F8 to resume)" instead of generic "Stopped" — clearer user
+          // mental model that the session is just suspended, not over.
           try {
             await invoke("stop_session");
-            if (mountedRef.current) setStatus("stopped");
+            if (mountedRef.current) setStatus("paused");
           } catch (err) {
             if (!mountedRef.current) return;
             setStatus("error");
@@ -548,6 +548,7 @@ export default function Overlay() {
           aria-live="polite"
         >
           {status === "stopped" && "Stopped"}
+          {status === "paused" && "⏸ Paused (F8 to resume)"}
           {status === "listening" && "Listening"}
           {status === "thinking" && "Asking AI…"}
           {status === "answering" && "Answering"}

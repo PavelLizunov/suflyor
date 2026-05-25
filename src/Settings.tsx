@@ -882,7 +882,15 @@ export default function Settings() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 320, overflowY: "auto" }}>
             {cfg.snippets
-              .filter(s => !snippetFilter.trim() || s.key.toLowerCase().includes(snippetFilter.toLowerCase()) || s.title.toLowerCase().includes(snippetFilter.toLowerCase()))
+              .filter(s => {
+                if (!snippetFilter.trim()) return true;
+                const f = snippetFilter.toLowerCase();
+                return (
+                  s.key.toLowerCase().includes(f) ||
+                  s.title.toLowerCase().includes(f) ||
+                  s.body.toLowerCase().includes(f) // v0.0.7: search body too
+                );
+              })
               .map((s, i) => (
               <div
                 key={s.key + ":" + i}

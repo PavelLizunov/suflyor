@@ -864,11 +864,9 @@ async fn check_bridge(
         Ok((status, body_text, latency_ms)) => {
             // 400 + body mentions "model" → likely model-not-found.
             // Retry with universal fallback to confirm bridge itself is OK.
-            let body_lower = body_text.to_lowercase();
-            let looks_like_model_404 = status == 400
-                && (body_lower.contains("model") && (body_lower.contains("not found")
-                    || body_lower.contains("unknown")
-                    || body_lower.contains("invalid")));
+            // Extracted as pure fn `is_model_not_found_response` so we can
+            // unit-test the matrix of bridge error messages.
+            let looks_like_model_404 = is_model_not_found_response(status, &body_text);
             if looks_like_model_404 {
                 let fallback = "claude-3-5-sonnet-latest".to_string(); // most universal OpenAI-compat alias
                 if let Ok((fb_status, _fb_body, fb_latency)) = probe_once(fallback).await {
@@ -919,6 +917,93 @@ async fn check_bridge(
             };
             Ok(BridgeStatus { reachable: false, status: 0, latency_ms, hint })
         }
+    }
+}
+
+/// Pure helper for `check_bridge`: identifies HTTP 400 responses whose
+/// body suggests "model not found / unknown / invalid" — used to decide
+/// whether to retry the probe with a universal fallback model name.
+///
+/// Loose matching by design: a bridge that returns "invalid request body —
+/// contact model team" will ALSO trigger the fallback retry. Cost is one
+/// extra 1-token POST; benefit is correctly distinguishing "bridge is fine,
+/// just doesn't speak this model alias" from "bridge is broken".
+fn is_model_not_found_response(status: u16, body: &str) -> bool {
+    if status != 400 {
+        return false;
+    }
+    let body_lower = body.to_lowercase();
+    body_lower.contains("model")
+        && (body_lower.contains("not found")
+            || body_lower.contains("unknown")
+            || body_lower.contains("invalid"))
+}
+
+#[cfg(test)]
+mod bridge_probe_tests {
+    use super::is_model_not_found_response;
+
+    #[test]
+    fn non_400_never_matches() {
+        assert!(!is_model_not_found_response(200, "model not found"));
+        assert!(!is_model_not_found_response(401, "model not found"));
+        assert!(!is_model_not_found_response(500, "model unknown"));
+        assert!(!is_model_not_found_response(0, ""));
+    }
+
+    #[test]
+    fn ollama_unknown_model_matches() {
+        // Ollama returns this exact pattern
+        let body = r#"{"error":"model 'claude-haiku-4-5' not found, try `ollama pull`"}"#;
+        assert!(is_model_not_found_response(400, body));
+    }
+
+    #[test]
+    fn openai_invalid_model_matches() {
+        // OpenAI proxy returns "model_not_found" error code with text
+        let body = r#"{"error":{"message":"The model `claude-haiku-4-5` does not exist","type":"invalid_request_error","code":"model_not_found"}}"#;
+        assert!(is_model_not_found_response(400, body));
+    }
+
+    #[test]
+    fn anthropic_passthrough_unknown_model_matches() {
+        let body = r#"{"error":{"type":"invalid_request_error","message":"Unknown model: claude-haiku-4-5"}}"#;
+        assert!(is_model_not_found_response(400, body));
+    }
+
+    #[test]
+    fn unrelated_400_does_not_match() {
+        // 400 from rate limit / quota / etc. — no "model" word in error
+        let body = r#"{"error":"Rate limit exceeded"}"#;
+        assert!(!is_model_not_found_response(400, body));
+    }
+
+    #[test]
+    fn malformed_request_400_does_not_match() {
+        let body = r#"{"error":"Invalid JSON in request body"}"#;
+        assert!(!is_model_not_found_response(400, body));
+    }
+
+    #[test]
+    fn case_insensitive_match() {
+        // Some bridges uppercase "Model" or "MODEL"
+        assert!(is_model_not_found_response(400, r#"{"error":"MODEL NOT FOUND"}"#));
+        assert!(is_model_not_found_response(400, r#"{"error":"Model Unknown"}"#));
+    }
+
+    #[test]
+    fn empty_body_does_not_match() {
+        // Defensive: 400 with no body shouldn't trigger fallback probe.
+        assert!(!is_model_not_found_response(400, ""));
+    }
+
+    #[test]
+    fn known_false_positive_documented() {
+        // Per fn docstring: legitimate non-model-related errors that happen
+        // to mention "model" in their text will trigger fallback. Accepted.
+        let body = r#"{"error":"Request invalid: please contact the model team"}"#;
+        assert!(is_model_not_found_response(400, body),
+            "documented false-positive: matcher is loose by design");
     }
 }
 
