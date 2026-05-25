@@ -592,6 +592,70 @@ mod tests {
         assert_eq!(m, u64::MAX, "should saturate, not panic");
     }
 
+    // ── is_permanent_ai_error classifier (used by retry wrapper) ──
+
+    #[test]
+    fn permanent_error_400_no_retry() {
+        // 400 = bad request payload (e.g. oversized prompt, malformed JSON).
+        // Retrying won't fix the request — fail fast.
+        assert!(is_permanent_ai_error("HTTP 400: invalid request"));
+    }
+
+    #[test]
+    fn permanent_error_auth_no_retry() {
+        // 401 = bad bearer token. 403 = forbidden / quota exceeded.
+        // User must fix Settings → no retry.
+        assert!(is_permanent_ai_error("HTTP 401: unauthorized"));
+        assert!(is_permanent_ai_error("HTTP 403: forbidden"));
+    }
+
+    #[test]
+    fn permanent_error_404_no_retry() {
+        // 404 = endpoint missing (typo in ai_base_url) or model not found.
+        // Will keep 404'ing on retry — fail fast.
+        assert!(is_permanent_ai_error("HTTP 404: not found"));
+    }
+
+    #[test]
+    fn permanent_error_413_no_retry() {
+        // 413 = payload too large. Retry without changing payload pointless.
+        assert!(is_permanent_ai_error("HTTP 413: request entity too large"));
+    }
+
+    #[test]
+    fn transient_error_5xx_retries() {
+        // Server-side problems — bridge restart, upstream Claude blip, etc.
+        // Retry MAY succeed.
+        assert!(!is_permanent_ai_error("HTTP 500: internal server error"));
+        assert!(!is_permanent_ai_error("HTTP 502: bad gateway"));
+        assert!(!is_permanent_ai_error("HTTP 503: service unavailable"));
+        assert!(!is_permanent_ai_error("HTTP 504: gateway timeout"));
+    }
+
+    #[test]
+    fn transient_error_429_retries() {
+        // Rate limit — retry after exponential backoff usually clears it.
+        // Note: NOT in the permanent list per the docstring (4xx EXCEPT 429).
+        assert!(!is_permanent_ai_error("HTTP 429: rate limited"));
+    }
+
+    #[test]
+    fn transient_network_errors_retry() {
+        // Connection refused, timeout, DNS — all transient.
+        assert!(!is_permanent_ai_error("Connection refused"));
+        assert!(!is_permanent_ai_error("request timed out"));
+        assert!(!is_permanent_ai_error("DNS resolution failed"));
+        assert!(!is_permanent_ai_error("connection reset by peer"));
+    }
+
+    #[test]
+    fn empty_error_does_not_match_permanent() {
+        // Defensive: empty error string should NOT be classified as permanent
+        // (otherwise we'd suppress retry for any error that gets stringified
+        // to "").
+        assert!(!is_permanent_ai_error(""));
+    }
+
     #[test]
     fn build_request_attaches_screenshot_as_image_part() {
         let msgs = build_request(
