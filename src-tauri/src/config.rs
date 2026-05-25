@@ -1434,6 +1434,58 @@ mod tests {
         assert!(!cfg.stealth_enabled);
     }
 
+    /// REGRESSION: new config fields added in v0.0.2+ must have correct
+    /// defaults that are user-friendly. If we change the default, this
+    /// test catches it — protects against accidental "all-on-by-default"
+    /// surprises for upgrading users.
+    #[test]
+    fn new_v002_field_defaults() {
+        let d = Config::defaults();
+        // Cost cap default — $1.00 = soft warn (not block in v0.0.5+).
+        assert!((d.max_session_cost_usd - 1.00).abs() < 0.001,
+            "max_session_cost_usd default should be $1.00, got {}", d.max_session_cost_usd);
+        // detector_skip_mic ON by default — fix for live regression #96
+        // (candidate's own voice shouldn't trigger explanation tiles).
+        assert!(d.detector_skip_mic,
+            "detector_skip_mic default should be true (interview use-case)");
+        // post_meeting_debrief OFF by default — opt-in per privacy/cost.
+        assert!(!d.post_meeting_debrief_enabled,
+            "post_meeting_debrief_enabled default should be false (opt-in only)");
+    }
+
+    /// Old config files (pre-v0.0.2) lack the new fields. Serde must
+    /// fill them with proper defaults — NOT struct defaults (zero for
+    /// f64 means "no cap"; false for bool means "include mic in detector").
+    /// Per-field #[serde(default = "...")] attributes must be intact.
+    #[test]
+    fn pre_v002_config_gets_correct_field_defaults_via_serde() {
+        // Simulate a v0.0.1 config — has all fields up to v0.0.1 but no
+        // max_session_cost_usd or detector_skip_mic.
+        let pre_v002 = r#"{
+            "ai_model": "claude-haiku-4-5",
+            "stealth_enabled": false
+        }"#;
+        let cfg: Config = serde_json::from_str(pre_v002).expect("must parse old config");
+        // Field defaults MUST be applied via serde(default=...) on the
+        // field itself (not struct's Default), otherwise upgrades would
+        // silently change behaviour:
+        assert!((cfg.max_session_cost_usd - 1.00).abs() < 0.001,
+            "missing field should fall to 1.00 (cap on), not 0.0 (cap off)");
+        assert!(cfg.detector_skip_mic,
+            "missing field should fall to true (mic skipped), not false");
+        assert!(!cfg.post_meeting_debrief_enabled,
+            "missing field should fall to false (opt-in)");
+    }
+
+    /// Config with an EXPLICIT 0 for cost cap should NOT be overridden
+    /// to the default 1.00 — user intent to disable the warning is preserved.
+    #[test]
+    fn explicit_zero_cost_cap_preserved() {
+        let with_zero = r#"{ "max_session_cost_usd": 0.0 }"#;
+        let cfg: Config = serde_json::from_str(with_zero).expect("must parse");
+        assert_eq!(cfg.max_session_cost_usd, 0.0, "explicit 0 must NOT be replaced with default");
+    }
+
     /// REGRESSION: the default models MUST be in the pricing table.
     /// If someone updates Config::defaults() to a newer model but forgets
     /// to add it to crate::ai::pricing_per_million, cost reporting falls
