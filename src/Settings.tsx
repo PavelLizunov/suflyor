@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 // Inline-toast + modal types. Replaces blocking window.prompt / alert /
 // confirm — those break Tauri WebView focus and look like 1998 UX.
@@ -304,11 +305,26 @@ export default function Settings() {
       {/* Header is the drag region — overlay window has decorations:false
        * so without an explicit drag-region the user can't move the window
        * at all (live regression 2026-05-25). The data-tauri-drag-region
-       * attribute makes the whole header draggable. */}
+       * attribute alone proved unreliable on WebView2 in release build
+       * (2nd live regression: "натройки почему-то все равно не двигаются"),
+       * so we ALSO wire an explicit onMouseDown → startDragging() handler
+       * as a belt-and-suspenders fallback. */}
       <div
         className="settings-header"
         data-tauri-drag-region
         title="Перетащи за этот заголовок чтобы подвинуть окно"
+        onMouseDown={(e) => {
+          // Only initiate drag on primary (left) button + when the target
+          // is the header itself (not a child button). The button check
+          // prevents the ✕ Выйти click from accidentally starting a drag.
+          if (e.button !== 0) return;
+          const target = e.target as HTMLElement;
+          if (target.closest("button, input, select")) return;
+          // Fire-and-forget — drag latency matters more than error reporting.
+          getCurrentWindow().startDragging().catch((err) => {
+            console.warn("startDragging failed:", err);
+          });
+        }}
       >
         <h2 style={{ marginTop: 0, marginBottom: 0 }} data-tauri-drag-region>
           ⋮⋮  Settings

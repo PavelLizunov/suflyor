@@ -679,9 +679,12 @@ fn quit_app(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<(), S
 fn open_settings(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
     assert_overlay(&window)?;
     // Settings open inline in the overlay window — also grow window so
-    // the form is usable, then navigate to ?settings=1.
+    // the form is usable, then navigate to ?settings=1. 900px tall
+    // accommodates 12 sections without scroll on 1080p (live regression
+    // 2026-05-25: "там еще скрол есть"). On smaller screens the window
+    // still resizes naturally — user can shrink via window edge.
     if let Some(w) = app.get_webview_window("overlay") {
-        let _ = w.set_size(tauri::LogicalSize::new(720.0, 640.0));
+        let _ = w.set_size(tauri::LogicalSize::new(760.0, 900.0));
         let _ = w.center();
         let _ = w.show();
         let _ = w.set_focus();

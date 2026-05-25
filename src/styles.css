@@ -897,9 +897,9 @@ body.settings {
 .settings-section {
   display: flex;
   flex-direction: column;
-  gap: var(--s-2);
-  padding-bottom: var(--s-4);
-  margin-bottom: var(--s-4);
+  gap: var(--s-1);
+  padding-bottom: var(--s-2);
+  margin-bottom: var(--s-2);
   border-bottom: 1px solid var(--c-border-soft);
 }
 .settings-section:last-of-type {
