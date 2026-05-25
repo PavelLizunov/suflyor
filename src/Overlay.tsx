@@ -526,12 +526,22 @@ export default function Overlay() {
 
   const openSettings = () => invoke("open_settings");
 
-  const dotClass =
-    status === "listening"
-      ? "dot active"
-      : status === "thinking" || status === "answering"
-      ? "dot thinking"
-      : "dot";
+  // Explicit branches for every Status variant — exhaustive switch makes
+  // future status additions an obvious compile-target (TS will narrow `_`)
+  // rather than a silent miss like "paused → gray dot" was almost.
+  const dotClass = (() => {
+    switch (status) {
+      case "listening":
+        return "dot active";
+      case "thinking":
+      case "answering":
+        return "dot thinking";
+      case "paused":
+      case "stopped":
+      case "error":
+        return "dot"; // explicit gray — visible "session not running"
+    }
+  })();
 
   const transcriptTail = lastLines
     .slice(-2)
