@@ -1080,9 +1080,23 @@ export default function Settings() {
               showToast("err", `Ошибка экспорта: ${e}`);
             }
           }}
-          title="Сохранить config + профили + ключи на Desktop"
+          title="ПОЛНЫЙ backup на Desktop: snippets + контекст + ключи + URL моста. Для переезда на другую свою машину. НЕ шарь с другими."
         >
-          💾 Export
+          💾 Export (full)
+        </button>
+        <button
+          className="btn secondary"
+          onClick={async () => {
+            try {
+              const path = await invoke<string>("export_config_safe");
+              showToast("ok", `Безопасный конфиг (без ключей): ${path}`);
+            } catch (e) {
+              showToast("err", `Ошибка экспорта: ${e}`);
+            }
+          }}
+          title="Shareable export — без groq_api_key, ai_bearer, ai_base_url, meeting_context, context_profiles. Можно отправить другу. Получатель доставит свои ключи + URL моста сам."
+        >
+          🔐 Export (share)
         </button>
         <button
           className="btn secondary"

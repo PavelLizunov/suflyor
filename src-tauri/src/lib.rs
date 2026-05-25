@@ -587,6 +587,50 @@ fn export_config(
     Ok(path.to_string_lossy().to_string())
 }
 
+/// "Shareable" export — blanks secrets + personal data so the file can be
+/// safely sent to a friend via messenger / committed to git / posted in a
+/// gist. The recipient gets snippets + keywords + hotkeys + UI prefs but
+/// must wire up their OWN bridge URL, API key, and meeting context.
+///
+/// Blanked fields:
+/// - groq_api_key       (Whisper STT secret)
+/// - ai_bearer          (BRIDGE_SECRET — Claude proxy auth)
+/// - ai_base_url        (your LAN IP / network topology)
+/// - meeting_context    (resume excerpts, company names, salary)
+/// - context_profiles   (named meeting contexts — personal)
+///
+/// Kept fields: snippets, trigger_keywords, hotkeys, audio device prefs,
+/// tile_monitor_name, ai_model choice, response_language, stt_model.
+#[tauri::command]
+fn export_config_safe(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, SharedConfig>,
+) -> Result<String, String> {
+    assert_overlay(&window)?;
+    let mut cfg = state.read().clone();
+    // Blank everything an attacker / casual reader shouldn't see if the
+    // backup file leaks. We use empty-string / empty-vec rather than
+    // skipping the field so the recipient's Import sets these to defaults
+    // (which is then visibly empty in the Settings UI — clear signal to
+    // "you need to fill these in").
+    cfg.groq_api_key = String::new();
+    cfg.ai_bearer = String::new();
+    cfg.ai_base_url = String::new();
+    cfg.meeting_context = String::new();
+    cfg.context_profiles = Vec::new();
+    cfg.active_profile = None;
+    let bytes = serde_json::to_vec_pretty(&cfg).map_err(|e| e.to_string())?;
+    let stamp = journal::now_unix_ms() / 1000;
+    let desktop = dirs::desktop_dir().or_else(dirs::home_dir).ok_or("no desktop dir")?;
+    let path = desktop.join(format!("suflyor-share-{stamp}.json"));
+    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    log::info!(
+        "exported shareable config (no secrets, no personal context) to {}",
+        path.display()
+    );
+    Ok(path.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 fn import_config(
     window: tauri::WebviewWindow,
@@ -1195,6 +1239,7 @@ pub fn run() {
             open_sessions_folder,
             last_session_summary,
             export_config,
+            export_config_safe,
             import_config,
             list_sessions,
             load_session,
