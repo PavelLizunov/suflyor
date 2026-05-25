@@ -1575,10 +1575,17 @@ pub async fn manual_ask_source(
         return;
     }
 
-    // Cost cap (P1-1) — refuse manual ask if budget exceeded.
+    // Cost cap (P1-1) — refuse manual ask if budget exceeded. Journal
+    // entry matches the auto-tile path so audit-trail is consistent.
     let (cap_usd, current_micro) = (cfg.read().max_session_cost_usd, rt.lock().session_cost_microcents);
     if let Err(reason) = check_cost_cap(cap_usd, current_micro) {
         log::warn!("manual_ask_source blocked by cost cap: {reason}");
+        let journal = rt.lock().journal.clone().unwrap_or_default();
+        journal.write(&JournalEvent::RateLimited {
+            unix_ms: now_unix_ms(),
+            what: "cost_cap",
+            text: &reason,
+        });
         let _ = app.emit_to(
             "overlay",
             "cost:cap-hit",
@@ -2042,10 +2049,17 @@ pub async fn manual_spawn_tile(app: AppHandle, cfg: SharedConfig, rt: SharedRunt
         return;
     };
 
-    // Cost cap (P1-1) — F6 manual tile spawn also respects the budget.
+    // Cost cap (P1-1) — F6 manual tile spawn also respects the budget +
+    // journals the block for audit consistency.
     let (cap_usd, current_micro) = (cfg.read().max_session_cost_usd, rt.lock().session_cost_microcents);
     if let Err(reason) = check_cost_cap(cap_usd, current_micro) {
         log::warn!("manual_spawn_tile blocked by cost cap: {reason}");
+        let journal = rt.lock().journal.clone().unwrap_or_default();
+        journal.write(&JournalEvent::RateLimited {
+            unix_ms: now_unix_ms(),
+            what: "cost_cap",
+            text: &reason,
+        });
         let _ = app.emit_to(
             "overlay",
             "cost:cap-hit",
@@ -2143,11 +2157,19 @@ pub async fn ask(app: AppHandle, cfg: SharedConfig, rt: SharedRuntime) {
         )
     };
 
-    // Cost cap (P1-1): block F9 ask too. ask() emits ai:event so we surface
-    // the cap-hit through the same channel — UI status bar will go red.
+    // Cost cap (P1-1): block F9 ask too. Status bar goes red via the
+    // existing ai:event "error" channel; journal records the block so the
+    // audit trail is complete (bug-hunt 2026-05-25: auto_tile journaled
+    // cost_cap but F9/manual paths didn't — inconsistent log story).
     let current_micro = rt.lock().session_cost_microcents;
     if let Err(reason) = check_cost_cap(cap_usd, current_micro) {
         log::warn!("F9 ask blocked by cost cap: {reason}");
+        let journal = rt.lock().journal.clone().unwrap_or_default();
+        journal.write(&JournalEvent::RateLimited {
+            unix_ms: now_unix_ms(),
+            what: "cost_cap",
+            text: &reason,
+        });
         let _ = app.emit_to(
             "overlay",
             "cost:cap-hit",

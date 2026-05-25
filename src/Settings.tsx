@@ -543,9 +543,14 @@ export default function Settings() {
                 setBridgeBusy(true);
                 setBridgeStatus(null);
                 try {
+                  // Pass user's configured model so bridges that don't
+                  // recognise "claude-haiku-4-5" alias (Ollama, older
+                  // proxy forks) don't get a false "model unknown" 400
+                  // misread as "bridge broken" (bug-hunt 2026-05-25).
                   const s = await invoke<BridgeStatus>("check_bridge", {
                     baseUrl: cfg.ai_base_url,
                     bearer: cfg.ai_bearer,
+                    model: cfg.ai_model || null,
                   });
                   setBridgeStatus(s);
                 } catch (e) {
@@ -585,7 +590,16 @@ export default function Settings() {
             min={0}
             step={0.10}
             value={cfg.max_session_cost_usd ?? 1.0}
-            onChange={(e) => update({ max_session_cost_usd: parseFloat(e.target.value) || 0 })}
+            onChange={(e) => {
+              // Guard NaN — empty input or garbage paste shouldn't
+              // silently disable the cap (which is what `|| 0` would
+              // do because cap_usd <= 0.0 means "no limit" in Rust).
+              // Keep the current value if user types something invalid.
+              const v = parseFloat(e.target.value);
+              if (Number.isFinite(v) && v >= 0) {
+                update({ max_session_cost_usd: v });
+              }
+            }}
             style={{ width: 120 }}
           />
           <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>

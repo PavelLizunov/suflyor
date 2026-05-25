@@ -747,12 +747,16 @@ struct BridgeStatus {
 ///
 /// Tries POST `/chat/completions` with a minimal payload (1 token). Most
 /// OpenAI-compat bridges accept this even on bad model names — the 4xx
-/// response still proves the bridge is alive.
+/// response still proves the bridge is alive. Bug-hunt 2026-05-25: we now
+/// pass the user's CONFIGURED model name instead of a hardcoded one, so
+/// bridges that don't ship "claude-haiku-4-5" alias (e.g. local Ollama,
+/// older proxy forks) don't get misreported as broken when they're fine.
 #[tauri::command]
 async fn check_bridge(
     window: tauri::WebviewWindow,
     base_url: String,
     bearer: String,
+    model: Option<String>,
 ) -> Result<BridgeStatus, String> {
     assert_overlay(&window)?;
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
@@ -770,8 +774,9 @@ async fn check_bridge(
             });
         }
     };
+    let probe_model = model.unwrap_or_else(|| "claude-haiku-4-5".to_string());
     let body = serde_json::json!({
-        "model": "claude-haiku-4-5",
+        "model": probe_model,
         "messages": [{"role": "user", "content": "."}],
         "max_tokens": 1,
         "stream": false,
@@ -900,10 +905,24 @@ async fn check_update(window: tauri::WebviewWindow) -> Result<UpdateInfo, String
     let latest_str = tag.trim_start_matches('v').to_string();
     let notes = v.get("body").and_then(|b| b.as_str()).unwrap_or("").to_string();
     let release_url = v.get("html_url").and_then(|u| u.as_str()).unwrap_or(&download_default).to_string();
+    // Edge case: GitHub returned HTTP 200 but body is missing `tag_name` or
+    // it's an empty string. Don't pretend everything is fine — tell the
+    // user the API responded weirdly so they don't get a false "up to date"
+    // when the response is actually broken.
+    if latest_str.is_empty() {
+        return Ok(UpdateInfo {
+            current,
+            latest: None,
+            update_available: false,
+            download_url: release_url,
+            notes,
+            error: "GitHub API returned no tag_name — releases page may be empty or response malformed".into(),
+        });
+    }
     let update_available = is_strictly_newer(&latest_str, &current);
     Ok(UpdateInfo {
         current,
-        latest: if latest_str.is_empty() { None } else { Some(latest_str) },
+        latest: Some(latest_str),
         update_available,
         download_url: release_url,
         notes,
