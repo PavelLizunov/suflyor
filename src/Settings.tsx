@@ -459,7 +459,7 @@ export default function Settings() {
           </select>
         </div>
         <div className="field">
-          <label>System audio (what they say) — pick "Line (A50 Stream Out)" for A50 setup</label>
+          <label>System audio (what they say) — выбери loopback устройство (для Astro A50: "Line (A50 Stream Out)")</label>
           <select
             value={cfg.system_audio_device ?? ""}
             onChange={(e) => update({ system_audio_device: e.target.value || null })}
@@ -623,7 +623,7 @@ export default function Settings() {
           </label>
         </div>
         <div className="field">
-          <label>Монитор для tiles (по умолчанию: не-primary, в вашем случае ARZOPA)</label>
+          <label>Монитор для tiles (по умолчанию: первый не-primary дисплей; если монитор один — primary)</label>
           <select
             value={cfg.tile_monitor_name ?? ""}
             onChange={(e) => update({ tile_monitor_name: e.target.value || null })}
@@ -742,7 +742,7 @@ export default function Settings() {
         {snippetsExpanded && (
           <div className="field">
             <label>
-              Шаблонные ответы, разворачиваются мгновенно (без AI-вызова, $0). Нажми «Expand →» — карточка появится на ARZOPA.
+              Шаблонные ответы, разворачиваются мгновенно (без AI-вызова, $0). Нажми «Expand →» — карточка появится на tile-мониторе (см. секцию Auto-tiles).
             </label>
             <input
               type="text"
