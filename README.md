@@ -4,6 +4,16 @@
 
 Pet project, **v0.0.1 — first try**. Под одного пользователя. Без code signing, без telemetry.
 
+![overlay bar](docs/screenshots/overlay-bar.png)
+
+Тонкий transparent бар сверху: статус Listening, 3 HUD-dot (audio/stt/ai), push-to-talk кнопки для mic и system audio, hotkey подсказка, шестерёнка Settings.
+
+### F4 — Knowledge Base palette (1643 entries)
+
+![KB palette](docs/screenshots/kb-palette.png)
+
+Поиск по embedded базе (glossary + commands + patterns). Enter → tile с найденным контентом на ARZOPA. Без AI-вызова, $0.
+
 ## Установка
 
 1. Скачать MSI из [Releases](https://github.com/PavelLizunov/suflyor/releases)
