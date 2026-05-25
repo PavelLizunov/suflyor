@@ -103,7 +103,38 @@ Hooks in `.claude/settings.json` enforce R1-R10 (see `.claude/AUTONOMOUS_RULES.m
 15. **Final mega-review of v0.0.6 candidate** before releasing.
 
 ## In progress
-**Live re-verify tile slot fix (continuing #1)** — use snippet Expand buttons (more reliable than F4 palette) (started 2026-05-26T00:50)
+**Cleanup phase — pacing down output for remaining marathon time. No new feature releases planned. Focus: read-and-verify, docs, very low-velocity test additions.**
+
+## Marathon summary (for user wake-up, refreshed 2026-05-26T00:55)
+
+**Started:** 2026-05-26T00:13 (user typed `/auto 6h` after v0.0.4)
+**Deadline:** 2026-05-26T06:13
+**Elapsed at this snapshot:** ~45 minutes
+
+**Releases shipped:** 5 (v0.0.5 → v0.0.9)
+**Test-only commits:** 3
+**Doc commits:** 2 (local-whisper-options.md, architecture.md)
+**Total commits this marathon:** 10
+**Test count delta:** 199 → 227 (+28 unit tests)
+**R6 violations:** 0 (no AskUserQuestion calls)
+
+**User-visible improvements:**
+1. v0.0.5 — CRITICAL: tile slot collision fixed (user's #1 complaint). Cost cap pivoted from hard block to soft warning per user feedback "странное решение".
+2. v0.0.6 — Whisper turbo toggle, health HUD goes idle after Stop, detector skip-mic regression test, bridge check uses cfg.ai_model with fallback to claude-3-5-sonnet-latest, crash report Notepad button.
+3. v0.0.7 — snippet filter searches body text (not just key+title).
+4. v0.0.8 — defensive dotClass explicit switch covering all Status variants.
+5. v0.0.9 — snippet delete button.
+
+**Test coverage extensions:**
+- is_permanent_ai_error: 8 tests for retry classifier (400/401/403/404/413 permanent; 5xx/429/network/empty defensive)
+- prune_old_sessions_with_size_cap: 5 tests for 500MB-cap logic
+- Config defaults: 3 tests for serde(default=...) on max_session_cost_usd/detector_skip_mic
+
+**Documentation:**
+- docs/local-whisper-options.md: per-GPU performance matrix, implementation cost breakdown, decision to defer indefinitely
+- docs/architecture.md: 3-tier data flow, capability model, 7 critical invariants, per-file size table, test coverage map
+
+**No regressions observed.** 227/227 tests passing. cargo clippy clean.
 
 ## Closed without action
 - **#11** Triage S0/S1 from agent re-review: agent found 1 real (README version bump — already fixed) + 3 doc nits (added inline comment for model-404 false-positive risk). Nothing else.
@@ -113,6 +144,24 @@ Hooks in `.claude/settings.json` enforce R1-R10 (see `.claude/AUTONOMOUS_RULES.m
 
 ## Done log
 *(append-only, newest at top)*
+
+- **2026-05-26T00:55** — #ARCH docs/architecture.md: 176-line developer overview. 3-tier data flow, capability model, 7 critical invariants, 14-file size table, test coverage map (227 tests), build/release commands, out-of-scope list.
+
+- **2026-05-26T00:50** — #TEST config defaults coverage: 3 new tests catching upgrade-path regressions (max_session_cost_usd=1.00, detector_skip_mic=true, post_meeting_debrief=false). Old configs missing these fields must hit serde(default=...) — explicitly tested with pre-v0.0.2 minimal JSON. 227 tests.
+
+- **2026-05-26T00:45** — #TEST journal size-cap coverage: 5 new tests for prune_old_sessions_with_size_cap (zero=disabled, under-budget=no-op, evicts-oldest-first, combines-with-count-prune, exact-boundary-no-op). 224 tests.
+
+- **2026-05-26T00:40** — #TEST AI retry classifier coverage: is_permanent_ai_error had no direct tests. 8 new (400/401/403/404/413 permanent, 5xx/429/network transient, empty-string defensive). 219 tests.
+
+- **2026-05-26T00:35** — **v0.0.9 released**: snippet delete button in Settings → 📋 Snippets each row. Edit + Add deferred to v0.1.0 (need 3-field modal).
+
+- **2026-05-26T00:32** — **v0.0.8 released**: agent re-review follow-ups. dotClass refactored to explicit switch covering all 6 Status variants. README version bumped to v0.0.8.
+
+- **2026-05-26T00:30** — #10 R9 mega-review: agent audit of v0.0.6/v0.0.7 delta. Found 1 real issue (README version mismatch), 3 minor doc nits (model-not-found loose matcher documented). All resolved.
+
+- **2026-05-26T00:28** — **v0.0.7 released**: bridge probe extraction. is_model_not_found_response pure fn + 9 unit tests covering Ollama/OpenAI/Anthropic 400 formats + false-positive case. Snippet body filter (was key+title only). 211 tests.
+
+- **2026-05-26T00:25** — **v0.0.6 released**: autonomous marathon batch — Whisper turbo toggle, health idle on stop, detector_allows extraction, bridge probe model fallback, crash report button + docs/local-whisper-options.md (research-only doc). 202 tests.
 
 - **2026-05-26T00:24** — #5 Detector skip-mic verify: extracted `detector_allows(source, skip_mic) -> bool` pure fn from transcript forwarder. Added 3 unit tests (default both-sources, skip_mic blocks only mic, regression for live bug #96 candidate voice). 202 tests pass.
 - **2026-05-26T00:22** — #4 Health HUD idle after stop_session: zero out `last_audio_frame_ms`/`last_stt_ok_ms`/`last_ai_ok_ms` atomics in stop_session BEFORE snapshot, then emit one final `health:update` event so UI dots transition to "idle" gray immediately. Previously dots froze on last green/yellow state forever after Stop.
