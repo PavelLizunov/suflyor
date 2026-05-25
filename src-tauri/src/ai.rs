@@ -256,7 +256,70 @@ pub struct TokenUsage {
 /// Non-streaming completion — used for prep-context structuring where we
 /// want the whole answer at once and latency is acceptable. Returns
 /// (text, token_usage) so caller can track cost.
+///
+/// Wraps `complete_once` with up to 3 retries on transient failures
+/// (network errors, HTTP 5xx, 429 rate-limit). Permanent failures (4xx
+/// other than 429) short-circuit immediately so we don't waste time on
+/// auth/quota errors that won't fix themselves. Backoff: 1s, 2s, 4s.
+///
+/// Added P1-2 (review 2026-05-25) — previously a single network blip would
+/// kill an auto-tile or F9 ask and the user just saw "HTTP timeout" with no
+/// auto-recovery. Bridge restart takes ~30s; 3 retries × 4s ≈ 12s window
+/// catches most local-bridge hiccups without doubling user-visible latency
+/// on the happy path.
 pub async fn complete_with_usage(
+    base_url: &str,
+    bearer: &str,
+    model: &str,
+    messages: Vec<ChatMessage>,
+    max_tokens: u32,
+) -> Result<(String, TokenUsage)> {
+    const MAX_ATTEMPTS: u32 = 3;
+    let mut last_err: Option<anyhow::Error> = None;
+    for attempt in 1..=MAX_ATTEMPTS {
+        match complete_once(base_url, bearer, model, messages.clone(), max_tokens).await {
+            Ok(ok) => {
+                if attempt > 1 {
+                    log::info!("AI complete recovered on attempt {}/{}", attempt, MAX_ATTEMPTS);
+                }
+                return Ok(ok);
+            }
+            Err(e) => {
+                let msg = format!("{e:#}");
+                if is_permanent_ai_error(&msg) {
+                    log::warn!("AI complete permanent failure (no retry): {msg}");
+                    return Err(e);
+                }
+                if attempt == MAX_ATTEMPTS {
+                    log::warn!("AI complete final attempt {} failed: {msg}", attempt);
+                    last_err = Some(e);
+                    break;
+                }
+                let delay_ms = 1000u64 * (1u64 << (attempt - 1)); // 1s, 2s, 4s
+                log::warn!(
+                    "AI complete attempt {}/{} failed: {msg} — retrying in {}ms",
+                    attempt, MAX_ATTEMPTS, delay_ms
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+            }
+        }
+    }
+    Err(last_err.unwrap_or_else(|| anyhow!("AI complete failed without specific error")))
+}
+
+/// HTTP 4xx (except 429) = permanent: auth, quota, bad model name, oversized
+/// request — retry won't fix any of these. Everything else is transient.
+fn is_permanent_ai_error(msg: &str) -> bool {
+    msg.contains("HTTP 400")
+        || msg.contains("HTTP 401")
+        || msg.contains("HTTP 403")
+        || msg.contains("HTTP 404")
+        || msg.contains("HTTP 413")
+}
+
+/// Single attempt — no retry. Extracted so the retry wrapper above can
+/// call it cleanly with a fresh clone of `messages` each time.
+async fn complete_once(
     base_url: &str,
     bearer: &str,
     model: &str,

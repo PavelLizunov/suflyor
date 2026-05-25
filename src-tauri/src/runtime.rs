@@ -493,17 +493,27 @@ pub async fn start_session(
             });
             let _ = app.emit_to("overlay", "transcript:line", &line);
 
-            // Auto-tile detector runs on BOTH sources — собеседник тоже задаёт
-            // вопросы пользователю, но иногда пользователь сам произносит
-            // термин (например когда переспрашивает) и тоже стоит подсказать.
-            maybe_spawn_tile(
-                app.clone(),
-                cfg_for_task.clone(),
-                rt_for_task.clone(),
-                tiles_for_task.clone(),
-                line.text,
-            )
-            .await;
+            // Auto-tile detector: respect detector_skip_mic config (P1-5).
+            // When true (default), only system-audio lines (interviewer)
+            // can trigger an auto-tile — fixes live regression #96 where
+            // candidate's own voice "Я работал с Kubernetes…" kept spawning
+            // redundant explanation tiles.
+            let line_source = line.source;
+            let skip_mic = cfg_for_task.read().detector_skip_mic;
+            let allow_detect = match line_source {
+                AudioSource::Mic => !skip_mic,
+                AudioSource::System => true,
+            };
+            if allow_detect {
+                maybe_spawn_tile(
+                    app.clone(),
+                    cfg_for_task.clone(),
+                    rt_for_task.clone(),
+                    tiles_for_task.clone(),
+                    line.text,
+                )
+                .await;
+            }
         }
         log::info!("transcript forwarder exit");
     });
@@ -680,6 +690,27 @@ async fn maybe_spawn_tile(
     }
 
     log::info!("auto-tile triggered: {:?}", trigger);
+
+    // Cost cap check (P1-1): refuse new AI calls if session budget exceeded.
+    // Emit cost:cap-hit so UI shows a non-blocking notice and journal records it.
+    let (cap_usd, current_micro) = {
+        let s = rt.lock();
+        (cfg.read().max_session_cost_usd, s.session_cost_microcents)
+    };
+    if let Err(reason) = check_cost_cap(cap_usd, current_micro) {
+        log::warn!("auto-tile blocked by cost cap: {reason}");
+        journal.write(&JournalEvent::RateLimited {
+            unix_ms: now_unix_ms(),
+            what: "cost_cap",
+            text: &reason,
+        });
+        let _ = app.emit_to(
+            "overlay",
+            "cost:cap-hit",
+            serde_json::json!({ "reason": reason, "source": "auto_tile" }),
+        );
+        return;
+    }
 
     // Capture last 5 lines for AI context (don't pass single line — context matters).
     let recent_transcript: Vec<String> = {
@@ -1312,9 +1343,19 @@ pub fn stop_session(
     let now = now_unix_ms();
     let duration_ms = now.saturating_sub(session_started_at);
     let mic_lines = transcript_snapshot.iter().filter(|l| matches!(l.source, AudioSource::Mic)).count();
+    // Pre-compute the same mic-text that the debrief runner would build,
+    // so should_run_debrief can short-circuit on tiny text BEFORE the Sonnet
+    // call goes out (P0-2 fix from review 2026-05-25 — previously the
+    // <50-char check happened inside run_post_meeting_debrief AFTER the bill
+    // was already in flight for fire-and-forget tokio::spawn).
+    let mic_text_chars = transcript_snapshot
+        .iter()
+        .filter(|l| matches!(l.source, AudioSource::Mic))
+        .map(|l| l.text.len())
+        .sum::<usize>();
     let enabled = cfg.read().post_meeting_debrief_enabled;
     let has_bearer = !cfg.read().ai_bearer.trim().is_empty();
-    match should_run_debrief(enabled, duration_ms, mic_lines, has_bearer) {
+    match should_run_debrief(enabled, duration_ms, mic_lines, mic_text_chars, has_bearer) {
         Ok(()) => {
             tokio::spawn(async move {
                 run_post_meeting_debrief(app, cfg, tiles, transcript_snapshot).await;
@@ -1331,10 +1372,37 @@ pub fn stop_session(
 /// no I/O. Extracted so it can be unit-tested without the spawn / AI path.
 /// `duration_ms` is `u128` because `journal::now_unix_ms` returns u128 —
 /// we don't truncate at the caller.
+/// Returns Ok if a NEW AI call would stay within the per-session cost cap,
+/// Err with a human-readable reason otherwise. Pure — extracted for unit
+/// testing. `cap_usd` of 0 (or negative) disables the cap entirely.
+///
+/// Rationale: detector miscalibration or runaway F9 spam could in theory
+/// rack up tens of dollars per session at Haiku rates. A hard rail at the
+/// call sites stops the bleeding without requiring careful manual review
+/// of every trigger pattern (P1-1 from review 2026-05-25).
+pub(crate) fn check_cost_cap(
+    cap_usd: f64,
+    current_microcents: u64,
+) -> Result<(), String> {
+    if cap_usd <= 0.0 {
+        return Ok(()); // disabled
+    }
+    let current_usd = (current_microcents as f64) / 100_000_000.0;
+    if current_usd >= cap_usd {
+        Err(format!(
+            "session cost cap reached: ${:.4} spent ≥ ${:.2} cap (Settings → AI proxy → Max cost per session)",
+            current_usd, cap_usd
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 pub(crate) fn should_run_debrief(
     enabled: bool,
     duration_ms: u128,
     mic_lines: usize,
+    mic_text_chars: usize,
     has_bearer: bool,
 ) -> Result<(), &'static str> {
     if !enabled {
@@ -1345,6 +1413,12 @@ pub(crate) fn should_run_debrief(
     }
     if mic_lines < 5 {
         return Err("fewer than 5 mic lines");
+    }
+    // 50 chars ≈ one short sentence — anything less and Sonnet can't yield
+    // 3 meaningful coaching observations. Previously checked AFTER the AI
+    // call already cost money; now gated upfront (P0-2, review 2026-05-25).
+    if mic_text_chars < 50 {
+        return Err("mic transcript too short (<50 chars)");
     }
     if !has_bearer {
         return Err("no AI bearer configured");
@@ -1376,16 +1450,14 @@ async fn run_post_meeting_debrief(
     };
     // Mic-only transcript for "you" coaching. Snapshot is already capped at
     // TRANSCRIPT_MAX_LINES (=80) upstream so no second cap needed here.
+    // The 50-char threshold is now gated upstream in should_run_debrief —
+    // by the time we get here the transcript is long enough (P0-2 fix).
     let mic_text: String = transcript
         .iter()
         .filter(|l| matches!(l.source, AudioSource::Mic))
         .map(|l| l.text.as_str())
         .collect::<Vec<_>>()
         .join("\n");
-    if mic_text.trim().len() < 50 {
-        log::info!("debrief skipped — mic transcript too short after filtering ({} chars)", mic_text.len());
-        return;
-    }
     // Localise BOTH the prompt body and the tile title — Russian-only
     // output would be confusing for an English-speaking user even with a
     // trailing "Respond in English" directive.
@@ -1499,6 +1571,23 @@ pub async fn manual_ask_source(
                 "message": format!("Транскрипт от {} пустой — нечего спросить",
                     if matches!(source, AudioSource::Mic) { "микрофона" } else { "system audio" })
             }),
+        );
+        return;
+    }
+
+    // Cost cap (P1-1) — refuse manual ask if budget exceeded.
+    let (cap_usd, current_micro) = (cfg.read().max_session_cost_usd, rt.lock().session_cost_microcents);
+    if let Err(reason) = check_cost_cap(cap_usd, current_micro) {
+        log::warn!("manual_ask_source blocked by cost cap: {reason}");
+        let _ = app.emit_to(
+            "overlay",
+            "cost:cap-hit",
+            serde_json::json!({ "reason": reason, "source": "manual_ask" }),
+        );
+        let _ = app.emit_to(
+            "overlay",
+            "tile:error",
+            serde_json::json!({ "message": reason }),
         );
         return;
     }
@@ -1952,6 +2041,24 @@ pub async fn manual_spawn_tile(app: AppHandle, cfg: SharedConfig, rt: SharedRunt
         );
         return;
     };
+
+    // Cost cap (P1-1) — F6 manual tile spawn also respects the budget.
+    let (cap_usd, current_micro) = (cfg.read().max_session_cost_usd, rt.lock().session_cost_microcents);
+    if let Err(reason) = check_cost_cap(cap_usd, current_micro) {
+        log::warn!("manual_spawn_tile blocked by cost cap: {reason}");
+        let _ = app.emit_to(
+            "overlay",
+            "cost:cap-hit",
+            serde_json::json!({ "reason": reason, "source": "manual_spawn" }),
+        );
+        let _ = app.emit_to(
+            "overlay",
+            "tile:error",
+            serde_json::json!({ "message": reason }),
+        );
+        return;
+    }
+
     let (base_url, bearer, model, response_language, meeting_context, preferred_monitor, stealth) = {
         let c = cfg.read();
         (
@@ -2024,7 +2131,7 @@ pub async fn manual_spawn_tile(app: AppHandle, cfg: SharedConfig, rt: SharedRunt
 /// Streams AiEvents back to the overlay window as `"ai:event"`.
 /// MUST be called from a Tokio runtime context.
 pub async fn ask(app: AppHandle, cfg: SharedConfig, rt: SharedRuntime) {
-    let (base_url, bearer, model, meeting_context, response_language) = {
+    let (base_url, bearer, model, meeting_context, response_language, cap_usd) = {
         let c = cfg.read();
         (
             c.ai_base_url.clone(),
@@ -2032,8 +2139,27 @@ pub async fn ask(app: AppHandle, cfg: SharedConfig, rt: SharedRuntime) {
             c.ai_model.clone(),
             c.meeting_context.clone(),
             c.response_language.clone(),
+            c.max_session_cost_usd,
         )
     };
+
+    // Cost cap (P1-1): block F9 ask too. ask() emits ai:event so we surface
+    // the cap-hit through the same channel — UI status bar will go red.
+    let current_micro = rt.lock().session_cost_microcents;
+    if let Err(reason) = check_cost_cap(cap_usd, current_micro) {
+        log::warn!("F9 ask blocked by cost cap: {reason}");
+        let _ = app.emit_to(
+            "overlay",
+            "cost:cap-hit",
+            serde_json::json!({ "reason": reason, "source": "live_ask" }),
+        );
+        let _ = app.emit_to(
+            "overlay",
+            "ai:event",
+            serde_json::json!({ "kind": "error", "error": reason }),
+        );
+        return;
+    }
 
     let (transcript_lines, screenshot) = {
         let mut s = rt.lock();
@@ -2555,14 +2681,14 @@ mod tests {
 
     #[test]
     fn debrief_runs_on_normal_session() {
-        assert_eq!(should_run_debrief(true, 60_000, 10, true), Ok(()));
-        assert_eq!(should_run_debrief(true, 1_000_000, 80, true), Ok(()));
+        assert_eq!(should_run_debrief(true, 60_000, 10, 200, true), Ok(()));
+        assert_eq!(should_run_debrief(true, 1_000_000, 80, 4_000, true), Ok(()));
     }
 
     #[test]
     fn debrief_skips_when_disabled() {
         assert_eq!(
-            should_run_debrief(false, 60_000, 10, true),
+            should_run_debrief(false, 60_000, 10, 200, true),
             Err("disabled by config")
         );
     }
@@ -2570,29 +2696,78 @@ mod tests {
     #[test]
     fn debrief_skips_short_session() {
         assert_eq!(
-            should_run_debrief(true, 29_999, 10, true),
+            should_run_debrief(true, 29_999, 10, 200, true),
             Err("session too short (<30s)")
         );
         // Exactly 30s boundary is included → not skipped on duration.
-        assert!(should_run_debrief(true, 30_000, 10, true).is_ok());
+        assert!(should_run_debrief(true, 30_000, 10, 200, true).is_ok());
     }
 
     #[test]
     fn debrief_skips_thin_mic_history() {
         assert_eq!(
-            should_run_debrief(true, 60_000, 4, true),
+            should_run_debrief(true, 60_000, 4, 200, true),
             Err("fewer than 5 mic lines")
         );
         // 5 is the inclusive floor.
-        assert!(should_run_debrief(true, 60_000, 5, true).is_ok());
+        assert!(should_run_debrief(true, 60_000, 5, 200, true).is_ok());
+    }
+
+    #[test]
+    fn debrief_skips_tiny_mic_text() {
+        // 5 mic lines but each only "ok" / "ага" — < 50 chars total — Sonnet
+        // can't produce 3 useful observations. Gate at the should_run layer
+        // so we don't even spawn the AI call (P0-2 fix from review).
+        assert_eq!(
+            should_run_debrief(true, 60_000, 5, 49, true),
+            Err("mic transcript too short (<50 chars)")
+        );
+        // 50 is the inclusive floor.
+        assert!(should_run_debrief(true, 60_000, 5, 50, true).is_ok());
     }
 
     #[test]
     fn debrief_skips_when_no_bearer() {
         assert_eq!(
-            should_run_debrief(true, 60_000, 10, false),
+            should_run_debrief(true, 60_000, 10, 200, false),
             Err("no AI bearer configured")
         );
+    }
+
+    // ── Cost cap gate ──
+
+    #[test]
+    fn cost_cap_disabled_when_zero_or_negative() {
+        // Disabled cap means even sky-high spend passes through.
+        assert!(check_cost_cap(0.0, u64::MAX).is_ok());
+        assert!(check_cost_cap(-1.0, 1_000_000_000).is_ok());
+    }
+
+    #[test]
+    fn cost_cap_passes_under_budget() {
+        // $1.00 cap, 50¢ spent → fine.
+        assert!(check_cost_cap(1.00, 50_000_000).is_ok());
+        // At exact zero spent — also fine.
+        assert!(check_cost_cap(1.00, 0).is_ok());
+    }
+
+    #[test]
+    fn cost_cap_blocks_when_at_or_above() {
+        // 1¢ over cap → error.
+        let r = check_cost_cap(1.00, 101_000_000);
+        assert!(r.is_err());
+        let msg = r.unwrap_err();
+        assert!(msg.contains("session cost cap reached"), "got: {msg}");
+        assert!(msg.contains("$1.01") || msg.contains("$1.0100"), "should mention current spend; got: {msg}");
+    }
+
+    #[test]
+    fn cost_cap_inclusive_at_exact_boundary() {
+        // At $1.00 == $1.00 cap → blocked (≥ comparison).
+        // Rationale: once you HIT the cap, every next call adds more,
+        // so failing fast at boundary is safest. User must Stop+Start
+        // to reset counter.
+        assert!(check_cost_cap(1.00, 100_000_000).is_err());
     }
 
     #[test]
@@ -2600,13 +2775,13 @@ mod tests {
         // If multiple conditions fail, "disabled" wins (first check) — that
         // way the log message tells the user the simplest fix first.
         assert_eq!(
-            should_run_debrief(false, 1_000, 0, false),
+            should_run_debrief(false, 1_000, 0, 0, false),
             Err("disabled by config")
         );
         // With enabled=true the next failure (duration) takes priority over
         // the mic-lines check.
         assert_eq!(
-            should_run_debrief(true, 1_000, 0, false),
+            should_run_debrief(true, 1_000, 0, 0, false),
             Err("session too short (<30s)")
         );
     }

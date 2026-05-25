@@ -10,6 +10,10 @@ use tauri::{
     AppHandle, Manager,
 };
 
+use crate::config::SharedConfig;
+use crate::runtime::SharedRuntime;
+use crate::tile::SharedTiles;
+
 pub fn setup(app: &AppHandle) -> Result<()> {
     let show = MenuItem::with_id(app, "show", "Show overlay", true, None::<&str>)?;
     let hide = MenuItem::with_id(app, "hide", "Hide overlay", true, None::<&str>)?;
@@ -43,7 +47,18 @@ fn handle_menu(app: &AppHandle, event: MenuEvent) {
         "show" => show_overlay(app, false),
         "hide" => hide_overlay(app),
         "settings" => open_settings(app),
-        "quit" => app.exit(0),
+        "quit" => {
+            // Stop the active session before exit so the JSONL journal
+            // closes cleanly with SessionStop + SessionSummary (P0-1).
+            // Tray menu fires from a non-overlay context, so we pull
+            // managed state directly off the app handle.
+            log::info!("tray Quit clicked — closing session first");
+            let cfg = app.state::<SharedConfig>().inner().clone();
+            let rt = app.state::<SharedRuntime>().inner().clone();
+            let tiles = app.state::<SharedTiles>().inner().clone();
+            crate::runtime::stop_session(app.clone(), cfg, rt, tiles);
+            app.exit(0);
+        }
         _ => {}
     }
 }

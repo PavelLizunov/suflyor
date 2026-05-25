@@ -406,6 +406,25 @@ export default function Overlay() {
       })
     );
 
+    // Cost cap hit (P1-1) — show a persistent yellow chip in the overlay
+    // so the user notices the cap kicked in even if they're looking at the
+    // tile area. Cleared by next start_session reset.
+    unlistens.push(
+      listen<{ reason: string; source: string }>("cost:cap-hit", (e) => {
+        if (!mountedRef.current) return;
+        // Reuse the rate-limited chip — same UX semantics ("AI was throttled,
+        // here's why"). A future iteration could split them visually but for
+        // now one chip beats two for screen real estate.
+        setRateLimited(true);
+        // Auto-clear after a longer window (10s vs 3s for rate-limit) since
+        // the user often needs to read the message + change Settings.
+        setTimeout(() => {
+          if (mountedRef.current) setRateLimited(false);
+        }, 10_000);
+        console.warn(`cost cap hit (source=${e.payload.source}): ${e.payload.reason}`);
+      })
+    );
+
     unlistens.push(
       listen<HealthPayload>("health:update", (e) => {
         if (!mountedRef.current) return;

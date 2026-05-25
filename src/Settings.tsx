@@ -65,6 +65,24 @@ type Config = {
   stealth_enabled: boolean;
   snippets: Snippet[];
   post_meeting_debrief_enabled?: boolean;
+  max_session_cost_usd?: number;
+  detector_skip_mic?: boolean;
+};
+
+type BridgeStatus = {
+  reachable: boolean;
+  status: number;
+  latency_ms: number;
+  hint: string;
+};
+
+type UpdateInfo = {
+  current: string;
+  latest: string | null;
+  update_available: boolean;
+  download_url: string;
+  notes: string;
+  error: string;
 };
 
 type DeviceList = { outputs: string[]; inputs: string[] };
@@ -98,6 +116,12 @@ export default function Settings() {
   // 2026-05-25: "snippet бесконечно длинный список").
   const [snippetsExpanded, setSnippetsExpanded] = useState(false);
   const [snippetFilter, setSnippetFilter] = useState("");
+  // Bridge probe — tests ai_base_url + ai_bearer with a cheap 1-token POST.
+  const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
+  const [bridgeBusy, setBridgeBusy] = useState(false);
+  // Update check — GH releases API for "is there a new version".
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
   const toastTimerRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
   // Pending modal resolver — captured so unmount can reject open prompts
@@ -511,6 +535,78 @@ export default function Settings() {
           />
         </div>
         <div className="field">
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button
+              className="btn secondary"
+              disabled={bridgeBusy || !cfg.ai_base_url.trim() || !cfg.ai_bearer.trim()}
+              onClick={async () => {
+                setBridgeBusy(true);
+                setBridgeStatus(null);
+                try {
+                  const s = await invoke<BridgeStatus>("check_bridge", {
+                    baseUrl: cfg.ai_base_url,
+                    bearer: cfg.ai_bearer,
+                  });
+                  setBridgeStatus(s);
+                } catch (e) {
+                  setBridgeStatus({ reachable: false, status: 0, latency_ms: 0, hint: `${e}` });
+                } finally {
+                  setBridgeBusy(false);
+                }
+              }}
+              title="Минимальный 1-токен POST на /chat/completions для проверки что мост доступен"
+            >
+              {bridgeBusy ? "⏳ Проверяю…" : "🔌 Проверить мост"}
+            </button>
+            {bridgeStatus && (
+              <span
+                style={{
+                  fontSize: 12,
+                  color: bridgeStatus.reachable ? "var(--c-ok, #4ade80)" : "var(--c-err, #f87171)",
+                }}
+              >
+                {bridgeStatus.reachable ? "🟢" : "🔴"}{" "}
+                {bridgeStatus.reachable
+                  ? `OK (HTTP ${bridgeStatus.status}, ${bridgeStatus.latency_ms}ms)`
+                  : bridgeStatus.hint}
+              </span>
+            )}
+          </div>
+          {bridgeStatus && !bridgeStatus.reachable && bridgeStatus.hint && (
+            <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
+              💡 Проверь: запущен ли мост на этом IP/порту, открыт ли firewall, не сменился ли BRIDGE_SECRET.
+            </div>
+          )}
+        </div>
+        <div className="field">
+          <label>Max cost per session (USD) — стоп новых AI вызовов при превышении, 0 = без лимита</label>
+          <input
+            type="number"
+            min={0}
+            step={0.10}
+            value={cfg.max_session_cost_usd ?? 1.0}
+            onChange={(e) => update({ max_session_cost_usd: parseFloat(e.target.value) || 0 })}
+            style={{ width: 120 }}
+          />
+          <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
+            $1.00 ≈ 200 Haiku тайлов. Защита от runaway-spend если детектор откалиброван плохо или F9 нажимается часто. Счётчик сбрасывается при start_session.
+          </div>
+        </div>
+        <div className="field">
+          <label>
+            <input
+              type="checkbox"
+              checked={cfg.detector_skip_mic ?? true}
+              onChange={(e) => update({ detector_skip_mic: e.target.checked })}
+              style={{ marginRight: 6 }}
+            />
+            Детектор игнорирует ваш голос (mic) — только вопросы собеседника триггерят auto-tile
+          </label>
+          <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
+            ON по умолчанию. Без этого детектор фаерит и на ваших фразах типа «Я работал с Kubernetes…» — лишние тайлы. Выключи только если хочешь подсказки по обеим сторонам.
+          </div>
+        </div>
+        <div className="field">
           <label>Модель для живых ответов (нужна скорость)</label>
           <select
             value={cfg.ai_model}
@@ -843,6 +939,102 @@ export default function Settings() {
         <div className="field">
           <label>Pause audio</label>
           <input value={cfg.hotkey_pause_audio} onChange={(e) => update({ hotkey_pause_audio: e.target.value })} />
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <h3>🆙 Обновления</h3>
+        <div className="field">
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <button
+              className="btn secondary"
+              disabled={updateBusy}
+              onClick={async () => {
+                setUpdateBusy(true);
+                try {
+                  const info = await invoke<UpdateInfo>("check_update");
+                  setUpdateInfo(info);
+                  if (info.error) {
+                    showToast("err", `Update check: ${info.error}`);
+                  } else if (info.update_available) {
+                    showToast("ok", `Доступна v${info.latest} (у вас v${info.current})`);
+                  } else {
+                    showToast("ok", `Актуальная версия (v${info.current})`);
+                  }
+                } catch (e) {
+                  showToast("err", `Update check failed: ${e}`);
+                } finally {
+                  setUpdateBusy(false);
+                }
+              }}
+              title="Проверить GitHub Releases на новую версию"
+            >
+              {updateBusy ? "⏳ Проверяю…" : "🔍 Проверить обновления"}
+            </button>
+            {updateInfo && !updateInfo.error && (
+              <span style={{ fontSize: 12, color: "var(--c-text-dim)" }}>
+                Текущая: v{updateInfo.current}
+                {updateInfo.latest && updateInfo.latest !== updateInfo.current ? ` · последняя: v${updateInfo.latest}` : ""}
+              </span>
+            )}
+          </div>
+          {updateInfo && updateInfo.update_available && (
+            <div
+              style={{
+                marginTop: 8,
+                padding: 10,
+                background: "color-mix(in srgb, var(--c-accent, #6366f1) 12%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--c-accent, #6366f1) 35%, transparent)",
+                borderLeft: "3px solid var(--c-accent, #6366f1)",
+                borderRadius: "var(--r-1)",
+              }}
+            >
+              <div style={{ marginBottom: 6, fontWeight: 600 }}>
+                ✨ Доступна v{updateInfo.latest}
+              </div>
+              {updateInfo.notes && (
+                <details style={{ marginBottom: 8 }}>
+                  <summary style={{ cursor: "pointer", fontSize: 12 }}>Release notes</summary>
+                  <pre style={{
+                    fontSize: 11,
+                    whiteSpace: "pre-wrap",
+                    maxHeight: 220,
+                    overflowY: "auto",
+                    padding: 8,
+                    background: "var(--c-bg-2, rgba(0,0,0,0.2))",
+                    borderRadius: 4,
+                    marginTop: 4,
+                  }}>{updateInfo.notes}</pre>
+                </details>
+              )}
+              <button
+                className="btn"
+                onClick={async () => {
+                  try {
+                    // tauri-plugin-opener: open URL in default browser.
+                    const { openUrl } = await import("@tauri-apps/plugin-opener");
+                    await openUrl(updateInfo.download_url);
+                  } catch (e) {
+                    showToast("err", `Не удалось открыть браузер: ${e}`);
+                  }
+                }}
+                title="Откроет страницу релиза в браузере — скачай MSI и запусти"
+              >
+                ⬇ Открыть страницу скачивания
+              </button>
+              <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 6 }}>
+                Без code signing — SmartScreen предупредит «Unknown publisher». Жми More info → Run anyway. Установщик заменит старую версию (config сохранится).
+              </div>
+            </div>
+          )}
+          {updateInfo && !updateInfo.update_available && !updateInfo.error && (
+            <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 6 }}>
+              ✓ У вас актуальная версия v{updateInfo.current}.
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 8 }}>
+            Запрос идёт на api.github.com (1 KB JSON, ~200ms). Авто-проверки нет — только когда жмёшь.
+          </div>
         </div>
       </div>
 

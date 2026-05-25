@@ -273,7 +273,27 @@ pub fn sessions_dir() -> Result<PathBuf> {
 /// Returns number of files deleted. Other extensions (e.g. .bak) ignored.
 /// Errors from individual remove calls are logged but don't abort the prune.
 pub fn prune_old_sessions(dir: &Path, keep: usize) -> Result<usize> {
-    let mut entries: Vec<(SystemTime, PathBuf)> = Vec::new();
+    prune_old_sessions_with_size_cap(dir, keep, MAX_TOTAL_BYTES)
+}
+
+/// Total disk budget for session journals — kept separately from the file
+/// count so a few unusually-long sessions can't blow up the data dir.
+/// 500 MB at typical ~5 KB/min works out to ~100 000 minutes of session
+/// time, which is way more than the count-based cap of 100 sessions, so
+/// for normal use the count cap fires first. The size cap is here for
+/// pathological cases (debug builds with verbose logging, very long
+/// continuous sessions). P1-3 fix from review 2026-05-25.
+pub const MAX_TOTAL_BYTES: u64 = 500 * 1024 * 1024; // 500 MB
+
+/// Like `prune_old_sessions` but ALSO enforces a total-size budget. After
+/// the count-based prune, if the remaining files still exceed `max_bytes`,
+/// delete the oldest until under the budget. Returns total files deleted.
+pub fn prune_old_sessions_with_size_cap(
+    dir: &Path,
+    keep: usize,
+    max_bytes: u64,
+) -> Result<usize> {
+    let mut entries: Vec<(SystemTime, u64, PathBuf)> = Vec::new();
     for e in std::fs::read_dir(dir).context("read sessions dir")? {
         let Ok(e) = e else { continue };
         let path = e.path();
@@ -282,16 +302,45 @@ pub fn prune_old_sessions(dir: &Path, keep: usize) -> Result<usize> {
         }
         let Ok(meta) = e.metadata() else { continue };
         let Ok(mtime) = meta.modified() else { continue };
-        entries.push((mtime, path));
+        let size = meta.len();
+        entries.push((mtime, size, path));
     }
     // Sort newest-first so skip(keep) gives us the prunable tail.
     entries.sort_by_key(|e| std::cmp::Reverse(e.0));
 
     let mut deleted = 0usize;
-    for (_, path) in entries.iter().skip(keep) {
+    // Pass 1: count-based prune.
+    for (_, _, path) in entries.iter().skip(keep) {
         match std::fs::remove_file(path) {
             Ok(_) => deleted += 1,
-            Err(e) => log::warn!("could not prune {}: {e}", path.display()),
+            Err(e) => log::warn!("could not prune (count) {}: {e}", path.display()),
+        }
+    }
+    entries.truncate(keep); // survivors
+
+    // Pass 2: size-based prune — kick oldest survivors until under budget.
+    if max_bytes > 0 {
+        let total: u64 = entries.iter().map(|e| e.1).sum();
+        if total > max_bytes {
+            // Reverse so we delete OLDEST first.
+            entries.sort_by_key(|e| e.0);
+            let mut remaining = total;
+            for (_, size, path) in &entries {
+                if remaining <= max_bytes {
+                    break;
+                }
+                match std::fs::remove_file(path) {
+                    Ok(_) => {
+                        remaining = remaining.saturating_sub(*size);
+                        deleted += 1;
+                        log::info!(
+                            "journal pruned by size budget: {} ({} bytes); {} bytes remain",
+                            path.display(), size, remaining
+                        );
+                    }
+                    Err(e) => log::warn!("could not prune (size) {}: {e}", path.display()),
+                }
+            }
         }
     }
     Ok(deleted)

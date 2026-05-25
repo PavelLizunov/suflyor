@@ -68,6 +68,29 @@ pub struct Config {
     #[serde(default = "default_post_meeting_debrief_enabled")]
     pub post_meeting_debrief_enabled: bool,
 
+    /// Hard cap on cumulative AI spend per session, in USD. Once total cost
+    /// (sum of all auto-tile, F9 ask, manual ask, debrief calls) crosses
+    /// this number, NEW ai calls fail fast with a user-visible error tile
+    /// "session cost cap reached". User must stop_session and start_session
+    /// to reset the counter. Set to 0 to disable the cap.
+    ///
+    /// Default 1.00 USD ≈ 200 Haiku tile spawns ≈ 4-5 hours of an active
+    /// interview at typical detector rate. Safe rail against detector
+    /// miscalibration or runaway F9 spam.
+    #[serde(default = "default_max_session_cost_usd")]
+    pub max_session_cost_usd: f64,
+
+    /// When true, the auto-tile detector ignores transcript lines that
+    /// came from the MICROPHONE (your own voice). Only system-audio lines
+    /// (interviewer questions) can trigger an auto-tile. Live regression
+    /// 2026-05-25: detector kept firing on the candidate's own statements
+    /// ("Я работал с Kubernetes …") and spawned redundant explanation tiles.
+    ///
+    /// Default ON — interview use-case is "they ask, I answer; AI helps
+    /// the answer." If you want both sides considered, turn this off.
+    #[serde(default = "default_detector_skip_mic")]
+    pub detector_skip_mic: bool,
+
     /// Hotkeys (cross-platform syntax, e.g. "F9", "CmdOrCtrl+Shift+A").
     pub hotkey_ask: String,
     pub hotkey_screenshot: String,
@@ -134,12 +157,22 @@ impl Config {
             manual_ask_mode: "hold".into(), // push-to-talk by default
             snippets: default_snippets(),
             post_meeting_debrief_enabled: default_post_meeting_debrief_enabled(),
+            max_session_cost_usd: default_max_session_cost_usd(),
+            detector_skip_mic: default_detector_skip_mic(),
         }
     }
 }
 
 fn default_post_meeting_debrief_enabled() -> bool {
     false // opt-in — surprise Sonnet calls are bad UX
+}
+
+fn default_max_session_cost_usd() -> f64 {
+    1.00 // ≈ 200 Haiku tiles. Detector-runaway guard.
+}
+
+fn default_detector_skip_mic() -> bool {
+    true // candidate's own voice shouldn't trigger explanation tiles
 }
 
 /// Massive default trigger-keyword pool — 250+ DevOps/SRE/Cloud/Linux
