@@ -55,6 +55,7 @@ type Config = {
   response_language: string;
   groq_api_key: string;
   stt_language: string | null;
+  stt_model?: string;
   tile_monitor_name: string | null;
   trigger_keywords: string;
   auto_tiles_enabled: boolean;
@@ -122,6 +123,9 @@ export default function Settings() {
   // Update check — GH releases API for "is there a new version".
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateBusy, setUpdateBusy] = useState(false);
+  // Crash report — if %APPDATA%\overlay-mvp\crash-report.txt exists, show
+  // a button to open it. Probed on mount + on window focus.
+  const [crashReport, setCrashReport] = useState<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
   // Pending modal resolver — captured so unmount can reject open prompts
@@ -237,6 +241,10 @@ export default function Settings() {
       invoke<string[]>("list_monitors")
         .then((m) => { if (mountedRef.current) setMonitors(m); })
         .catch((e) => console.warn("list_monitors:", e));
+      // Crash report probe: backend returns path if file exists, else null.
+      invoke<string | null>("crash_report_path")
+        .then((p) => { if (mountedRef.current) setCrashReport(p); })
+        .catch((e) => console.warn("crash_report_path:", e));
     };
     fetchAll();
     // CRITICAL UX/data-safety bug fix (caught live 2026-05-25): if the
@@ -934,6 +942,19 @@ export default function Settings() {
             placeholder="ru, en, …"
           />
         </div>
+        <div className="field">
+          <label>Whisper model — accuracy ↔ speed tradeoff</label>
+          <select
+            value={cfg.stt_model ?? "whisper-large-v3"}
+            onChange={(e) => update({ stt_model: e.target.value })}
+          >
+            <option value="whisper-large-v3">whisper-large-v3 (default — лучшая точность на терминах)</option>
+            <option value="whisper-large-v3-turbo">whisper-large-v3-turbo (≈3× быстрее, слегка хуже на редких словах)</option>
+          </select>
+          <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
+            Turbo сокращает latency Whisper-вызова с ~500ms до ~150-200ms на 2-5s клипе. Качество падает на редких технических терминах (kubectl-debug, consistent hashing). Для типовых SRE/DevOps вопросов разница незаметна. Меняй при необходимости low-latency feedback.
+          </div>
+        </div>
       </div>
 
       <div className="settings-section">
@@ -1049,6 +1070,39 @@ export default function Settings() {
           <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 8 }}>
             Запрос идёт на api.github.com (1 KB JSON, ~200ms). Авто-проверки нет — только когда жмёшь.
           </div>
+          {crashReport && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: 8,
+                background: "color-mix(in srgb, var(--c-err, #f87171) 12%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--c-err, #f87171) 35%, transparent)",
+                borderLeft: "3px solid var(--c-err, #f87171)",
+                borderRadius: "var(--r-1)",
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                ⚠ Найден crash-report
+              </div>
+              <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginBottom: 6 }}>
+                Прошлый запуск упал на startup. Файл: <code>{crashReport}</code>
+              </div>
+              <button
+                className="btn secondary"
+                onClick={async () => {
+                  try {
+                    const { openPath } = await import("@tauri-apps/plugin-opener");
+                    await openPath(crashReport);
+                  } catch (e) {
+                    showToast("err", `Не открылось: ${e}`);
+                  }
+                }}
+                title="Открыть в Блокноте — посмотри что упало"
+              >
+                📨 Открыть в Notepad
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

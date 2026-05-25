@@ -494,17 +494,12 @@ pub async fn start_session(
             let _ = app.emit_to("overlay", "transcript:line", &line);
 
             // Auto-tile detector: respect detector_skip_mic config (P1-5).
-            // When true (default), only system-audio lines (interviewer)
-            // can trigger an auto-tile — fixes live regression #96 where
-            // candidate's own voice "Я работал с Kubernetes…" kept spawning
-            // redundant explanation tiles.
+            // Extracted gate function so we can unit-test the matrix without
+            // spinning up Tauri AppHandle / WebView. See `detector_allows_*`
+            // tests below.
             let line_source = line.source;
             let skip_mic = cfg_for_task.read().detector_skip_mic;
-            let allow_detect = match line_source {
-                AudioSource::Mic => !skip_mic,
-                AudioSource::System => true,
-            };
-            if allow_detect {
+            if detector_allows(line_source, skip_mic) {
                 maybe_spawn_tile(
                     app.clone(),
                     cfg_for_task.clone(),
@@ -1321,6 +1316,14 @@ pub fn stop_session(
         if let Some(h) = guard.health_task.take() {
             h.abort();
         }
+        // Zero out health atomics so a final emit shows idle state, and
+        // future start_session reads them as "never yet" (None → "idle").
+        // Without this, after stop_session the dots froze on whatever
+        // color they had at the moment of stop — looked like "everything
+        // is still working" when actually nothing is running.
+        guard.health.last_audio_frame_ms.store(0, std::sync::atomic::Ordering::Relaxed);
+        guard.health.last_stt_ok_ms.store(0, std::sync::atomic::Ordering::Relaxed);
+        guard.health.last_ai_ok_ms.store(0, std::sync::atomic::Ordering::Relaxed);
         // Snapshot before closing journal (debrief reads from this snapshot,
         // not from the live transcript — which may keep growing if a stray
         // STT result lands after stop).
@@ -1332,6 +1335,11 @@ pub fn stop_session(
         }
         (snap, started_at)
     };
+    // Emit ONE final health snapshot post-zero so the UI sees the idle
+    // state immediately (dots go gray). Without this the React state
+    // keeps showing the last green/yellow/red until next start_session.
+    let final_health = rt.lock().health.snapshot(now_unix_ms() as u64);
+    let _ = app.emit_to("overlay", "health:update", &final_health);
     // Spawn the post-meeting debrief as fire-and-forget. Costs ~1 Sonnet
     // call per session; skipped if the meeting was <30s (nothing to coach
     // about) or fewer than 5 mic transcript lines (test/silent session).
@@ -1379,6 +1387,20 @@ pub fn stop_session(
 /// converts this to a passive "over budget" indicator — calls still go
 /// through, user just SEES the spend ticking past their threshold and
 /// can decide to stop_session manually if needed.
+/// Detector gate: decides whether a transcript line of `source` should
+/// reach the auto-tile detector. When `skip_mic` is true, mic lines are
+/// dropped (candidate's own voice doesn't trigger explanation tiles).
+/// System-audio lines (interviewer) always pass through.
+///
+/// Pure — extracted from the transcript forwarder so the gate matrix
+/// can be unit-tested without spinning up AppHandle / WebView / audio.
+pub(crate) fn detector_allows(source: AudioSource, skip_mic: bool) -> bool {
+    match source {
+        AudioSource::Mic => !skip_mic,
+        AudioSource::System => true,
+    }
+}
+
 pub(crate) fn over_cost_budget(
     cap_usd: f64,
     current_microcents: u64,
@@ -2710,6 +2732,37 @@ mod tests {
         assert_eq!(
             should_run_debrief(true, 60_000, 10, 200, false),
             Err("no AI bearer configured")
+        );
+    }
+
+    // ── Detector skip-mic gate ──
+
+    #[test]
+    fn detector_default_allows_both_sources() {
+        // When skip_mic=false (legacy v0.0.1 behaviour), both sources
+        // feed the detector.
+        assert!(detector_allows(AudioSource::Mic, false));
+        assert!(detector_allows(AudioSource::System, false));
+    }
+
+    #[test]
+    fn detector_skip_mic_blocks_only_mic() {
+        // When skip_mic=true (v0.0.2+ default), mic is filtered out.
+        // System is unaffected — interviewer questions still spawn tiles.
+        assert!(!detector_allows(AudioSource::Mic, true));
+        assert!(detector_allows(AudioSource::System, true));
+    }
+
+    /// Regression for live bug #96: candidate said "Я работал с Kubernetes"
+    /// and a redundant explanation tile spawned. detector_skip_mic should
+    /// prevent that exact scenario.
+    #[test]
+    fn detector_regression_candidate_voice_no_spawn() {
+        let source = AudioSource::Mic; // candidate speaking
+        let cfg_skip_mic = true;       // default v0.0.2+
+        assert!(
+            !detector_allows(source, cfg_skip_mic),
+            "candidate's own mic line must NOT trigger detector when skip_mic=true"
         );
     }
 

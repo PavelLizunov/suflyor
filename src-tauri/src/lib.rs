@@ -693,6 +693,22 @@ fn import_config(
     config::save(&imported).map_err(|e| e.to_string())
 }
 
+/// Returns the path to crash-report.txt if it exists, None otherwise.
+/// Used by Settings UI to surface a "📨 View crash report" button only
+/// when there's actually a report to show. (Created by the `.run()` panic
+/// handler in `pub fn run()` — see P0-3 fix in v0.0.2.)
+#[tauri::command]
+fn crash_report_path(window: tauri::WebviewWindow) -> Result<Option<String>, String> {
+    assert_overlay(&window)?;
+    let dir = dirs::config_dir().ok_or("no config dir")?;
+    let path = dir.join("overlay-mvp").join("crash-report.txt");
+    if path.exists() {
+        Ok(Some(path.to_string_lossy().to_string()))
+    } else {
+        Ok(None)
+    }
+}
+
 #[tauri::command]
 fn open_sessions_folder(window: tauri::WebviewWindow) -> Result<String, String> {
     assert_overlay(&window)?;
@@ -818,19 +834,58 @@ async fn check_bridge(
             });
         }
     };
-    let probe_model = model.unwrap_or_else(|| "claude-haiku-4-5".to_string());
-    let body = serde_json::json!({
-        "model": probe_model,
-        "messages": [{"role": "user", "content": "."}],
-        "max_tokens": 1,
-        "stream": false,
-    });
-    let t0 = std::time::Instant::now();
-    let resp = client.post(&url).bearer_auth(&bearer).json(&body).send().await;
-    let latency_ms = t0.elapsed().as_millis() as u64;
-    match resp {
-        Ok(r) => {
+    let user_model = model.unwrap_or_else(|| "claude-haiku-4-5".to_string());
+    // Two-phase probe: first try user's configured model. If we get a 400
+    // that looks like "model not found", retry with a universal fallback
+    // so we can distinguish "bridge is broken" from "bridge is fine but
+    // doesn't ship this model alias". Hint message says exactly that.
+    let t0_outer = std::time::Instant::now();
+    let probe_once = |model_name: String| {
+        let client = client.clone();
+        let url = url.clone();
+        let bearer = bearer.clone();
+        async move {
+            let body = serde_json::json!({
+                "model": model_name,
+                "messages": [{"role": "user", "content": "."}],
+                "max_tokens": 1,
+                "stream": false,
+            });
+            let t = std::time::Instant::now();
+            let r = client.post(&url).bearer_auth(&bearer).json(&body).send().await?;
             let status = r.status().as_u16();
+            let body_text = r.text().await.unwrap_or_default();
+            Ok::<(u16, String, u64), reqwest::Error>((status, body_text, t.elapsed().as_millis() as u64))
+        }
+    };
+
+    let first = probe_once(user_model.clone()).await;
+    match first {
+        Ok((status, body_text, latency_ms)) => {
+            // 400 + body mentions "model" → likely model-not-found.
+            // Retry with universal fallback to confirm bridge itself is OK.
+            let body_lower = body_text.to_lowercase();
+            let looks_like_model_404 = status == 400
+                && (body_lower.contains("model") && (body_lower.contains("not found")
+                    || body_lower.contains("unknown")
+                    || body_lower.contains("invalid")));
+            if looks_like_model_404 {
+                let fallback = "claude-3-5-sonnet-latest".to_string(); // most universal OpenAI-compat alias
+                if let Ok((fb_status, _fb_body, fb_latency)) = probe_once(fallback).await {
+                    if fb_status < 500 && fb_status != 400 {
+                        // Bridge IS healthy, just doesn't speak user's model name.
+                        return Ok(BridgeStatus {
+                            reachable: true,
+                            status,
+                            latency_ms: fb_latency,
+                            hint: format!(
+                                "bridge alive (HTTP {} with fallback model), but rejected `{}` — check ai_model setting",
+                                fb_status, user_model
+                            ),
+                        });
+                    }
+                }
+            }
             // 200 = full success. 4xx = bridge is alive but rejected our
             // payload (bad model name / auth) — still counts as "reachable".
             // 5xx = bridge is sick.
@@ -841,6 +896,8 @@ async fn check_bridge(
                 "Bearer token rejected — check ai_bearer (BRIDGE_SECRET)".into()
             } else if status == 404 {
                 format!("404 — endpoint /chat/completions not found on {base_url} (typo in URL?)")
+            } else if status == 400 {
+                format!("HTTP 400 — bridge rejected payload (body: {})", body_text.chars().take(120).collect::<String>())
             } else if status >= 500 {
                 format!("HTTP {status} — bridge is reachable but failing")
             } else {
@@ -850,6 +907,7 @@ async fn check_bridge(
         }
         Err(e) => {
             let msg = format!("{e}");
+            let latency_ms = t0_outer.elapsed().as_millis() as u64;
             let hint = if msg.contains("timed out") {
                 format!("no response in 5s — wrong IP/port? (probed {url})")
             } else if msg.contains("dns") || msg.contains("name resolution") {
@@ -1252,6 +1310,7 @@ pub fn run() {
             kb_spawn,
             check_bridge,
             check_update,
+            crash_report_path,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| {

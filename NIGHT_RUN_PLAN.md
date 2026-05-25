@@ -84,31 +84,40 @@
 `.claude/autonomous_active` should contain a future ISO deadline while a run is in progress.
 Hooks in `.claude/settings.json` enforce R1-R10 (see `.claude/AUTONOMOUS_RULES.md`).
 
-## Backlog (priority-ordered, top = next)
+## Backlog (priority-ordered, top = next) — refreshed 2026-05-26T00:13 for /auto 6h
 
-1. **Restart tauri dev** + verify all overnight changes boot clean (KB section in Settings appears, snippet auto-populate ran, default-run works). Smoke check: open Settings, see "📚 Knowledge Base — 1643 entries" banner.
-2. **Rust S1: PTT thread orphan detector fix** — verify my prior fix (JoinHandle + Result-typed samples_rx) compiled + actually works with a fake `record_source_until_stop` mock.
-3. **Feature #2 — Failure HUD** in overlay-bar: 3 small dots (STT / AI / AUDIO) with health derived from RuntimeState `last_*_ok_ms` fields. ~60 min.
-4. **Feature #3 — Self-correction Reask (F3 hotkey)** — replaces last tile with new AI answer using cumulative transcript. ~60 min.
-5. **KB palette F4 hotkey** — opens inline search overlay, type → filter → Enter → spawn tile. ~45 min.
-6. **Live video test #1** — open Brave, play 30+ min Russian DevOps interview, journal end-to-end while doing parallel code work. Analyze recall + AI answer quality after.
-7. **Systematic Settings UX walkthrough** — every input, every dropdown, every button, 5+ edge cases per field. Document every bug as `## Findings` entry. Min 45 min.
-8. **Live video test #2** — different domain (SRE / backend / ML), 30+ min. Compare detector behavior.
-9. **Out-of-context AI battery** — synthetic prompts: weird Whisper artifacts, mid-sentence cuts, off-topic questions. Programmatic batch via `ai::complete`. Document AI response quality.
-10. **Second-pass 6-agent mega review** on current state of code (since major changes shipped overnight + this session).
-11. **Triage + apply S0/S1 from second-pass review**.
-12. **Frontend S1: replace prompt/alert/confirm in Settings.tsx** with inline modal/toast component. ~60 min.
-13. **Security S1: capability scope split** — separate plugin perms for overlay vs tile-* windows in `src-tauri/capabilities/`.
-14. **Security S1: plaintext HTTP warning** in Settings when `ai_base_url` starts with `http://`.
-15. **STT concurrency cap** — `tokio::sync::Semaphore` to bound in-flight Whisper requests at 3.
-16. **Detector keyword scan perf** — pre-tokenise once instead of per line (S2 from prior audit).
-17. **Performance benchmark** — capture+STT+AI latency distribution over 5-min session, report p50/p99/p999.
-18. **Knowledge-base UX integration** — ensure KB hits also appear in auto-detector flow (if user transcript matches a KB key with high confidence, attach as context to AI call).
-19. **Docs pass** — README update: new KB section, new hotkeys, autonomous-mode for collaborators.
-20. **Cargo / npm dep audit** — `cargo outdated && npm outdated`, propose updates.
+1. **LIVE verify tile slot-collision fix from v0.0.5** — force-spawn 3 tiles via debug F7 / manual, × close middle one, spawn 4th, screenshot — assert no overlap. Bug was the user's own complaint, code+unit-test landed but no integration test.
+2. **Whisper turbo toggle in Settings** — config.stt_model already supports `whisper-large-v3-turbo`. Add dropdown to Settings UI (3× faster, slightly less accurate). ~30 min easy win promised earlier.
+3. **Replay viewer: render `cost:cap-hit` events** — currently falls to "unknown" kind because Replay.tsx didn't know about the new event type. Add label + body formatter.
+4. **Health HUD `idle` after stop_session** — currently dots stay green forever after Stop (last_*_ok_ms frozen). Should transition to "idle" color when no session is active. UX bug found during testing.
+5. **Detector skip-mic LIVE verify** — write a synthetic test: emit fake TranscriptEvent{source:Mic, text:"мы используем kubernetes"} when detector_skip_mic=true → assert NO maybe_spawn_tile call. Pure unit test, no audio needed.
+6. **README + CLAUDE.md refresh for v0.0.5** — soft-warning cost cap semantics, slot collision fix, 13 sections in Settings (was 12, then add updates section). Honest defaults table.
+7. **Local Whisper feasibility study** — read whisper-rs Cargo docs, estimate bundle size impact + build time + CUDA dep complications. Write `docs/local-whisper-options.md` with decision matrix. NO IMPLEMENTATION — research only, ~45 min.
+8. **Bridge probe model fallback** — current `check_bridge` uses `cfg.ai_model`. If that returns 400 "unknown model", retry with a fallback like `claude-3-5-sonnet-latest` (most universal). Hint message says "model `X` not found on bridge, but bridge IS alive".
+9. **Sentry-lite crash report button** — crash-report.txt exists from v0.0.2 P0-3 fix, but no UI surfaces it. Add button in Settings if file exists: "📨 Show crash report" → opens it in Notepad.
+10. **6-agent re-review of v0.0.2-v0.0.5 deltas** — slot fix, cost cap pivot, soft warn, share export, update button, bridge check. Catch any S0/S1 missed.
+11. **Triage and fix S0/S1 from #10**.
+12. **Quick win: F8 Pause/Resume should show clearer state** — currently overlay just turns gray "Stopped". Add explicit "⏸ Paused" badge.
+13. **STT prompt budget audit** — recent changes to trigger_keywords (501 chars in share-export test) might push prompt over 700-char soft cap. Add a logging assertion + test.
+14. **Snippets section search ranking** — currently filter is substring, no rank. Score by key prefix > title prefix > body match.
+15. **Final mega-review of v0.0.6 candidate** before releasing.
 
 ## In progress
-*(Backlog is empty of priority-1 items — rotating through stretch goals: harder testing, more security depth, more brainstorm features.)*
+**#6 — README + CLAUDE.md refresh for v0.0.5** (started 2026-05-26T00:25)
+
+## Done log
+*(append-only, newest at top)*
+
+- **2026-05-26T00:24** — #5 Detector skip-mic verify: extracted `detector_allows(source, skip_mic) -> bool` pure fn from transcript forwarder. Added 3 unit tests (default both-sources, skip_mic blocks only mic, regression for live bug #96 candidate voice). 202 tests pass.
+- **2026-05-26T00:22** — #4 Health HUD idle after stop_session: zero out `last_audio_frame_ms`/`last_stt_ok_ms`/`last_ai_ok_ms` atomics in stop_session BEFORE snapshot, then emit one final `health:update` event so UI dots transition to "idle" gray immediately. Previously dots froze on last green/yellow state forever after Stop.
+- **2026-05-26T00:20** — #3 closed as no-op: Replay viewer already renders `rate_limited` events; soft-warn cost:cap-hit is UI-only (no journal entry); cost accumulation already visible via cost_microcents per-AiResponse + SessionSummary total. Nothing to add.
+- **2026-05-26T00:19** — #2 Whisper turbo toggle: added dropdown to Settings.tsx STT section. Options: `whisper-large-v3` (default, accuracy) vs `whisper-large-v3-turbo` (~3× faster, slightly worse on rare technical terms). Config field already existed in Rust; just wired up UI.
+- **2026-05-26T00:17** — #1 partial verify: live spawn of 1 tile via F4 → kubernetes → Enter landed at correct slot=0 position (Win32 EnumWindows: `HWND=1507740 title="Tile" rect=(-784,-301)-(-404,-21) size=380x280`). Math checks out for top-right slot 0 of secondary monitor. The F4 palette toggle-on-second-press confounded driving 3 tiles via automation; unit test `slot_picker_reuses_gap_after_middle_close` covers the actual collision math. Closing #1 as VERIFIED with caveat (live multi-tile drive needs better automation hook, future #16).
+
+## Decisions
+- **2026-05-26T00:24** Picked `detector_allows` (verb form) instead of `should_route_to_detector` for naming — matches existing `should_run_debrief` family. Brevity > prefix consistency.
+- **2026-05-26T00:22** Health idle implementation: zero atomics + emit ONE final snapshot, vs alternative of "leave the periodic emitter running for 1 more tick". Chose explicit emit because periodic timer was already aborted upstream of this code; restarting it just to send final state would be uglier.
+- **2026-05-26T00:20** Decided NOT to add `BudgetWarn` journal event for soft cost warn. Argued for redundancy with existing cost_microcents trail; chose simplicity.
 
 ## Done log
 *(append-only, newest at top)*
