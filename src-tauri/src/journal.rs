@@ -527,6 +527,93 @@ mod tests {
         std::fs::remove_dir_all(&tmp).ok();
     }
 
+    // ── prune_old_sessions_with_size_cap — v0.0.2 size-based prune ──
+
+    /// Helper: create N jsonl files in `dir` each `kb` bytes large, with
+    /// per-file mtime offset so iteration order is deterministic (newest
+    /// last). Returns sorted file paths newest-last.
+    fn make_jsonl_files(dir: &Path, count: usize, size_bytes: usize) -> Vec<PathBuf> {
+        let mut paths = Vec::with_capacity(count);
+        let payload = vec![b'x'; size_bytes];
+        for i in 0..count {
+            let path = dir.join(format!("session-{:03}.jsonl", i));
+            std::fs::write(&path, &payload).unwrap();
+            // Small sleep so mtimes are distinguishable (some FS round to seconds).
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            paths.push(path);
+        }
+        paths
+    }
+
+    #[test]
+    fn size_cap_zero_disables_size_based_prune() {
+        // max_bytes=0 should skip the size check entirely.
+        let tmp = std::env::temp_dir().join(format!("overlay-sizecap-zero-{}", now_unix_ms()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        make_jsonl_files(&tmp, 5, 10_000); // 5 files × 10 KB = 50 KB
+        // keep=10 (no count prune), max_bytes=0 (disabled) → 0 deleted.
+        let deleted = prune_old_sessions_with_size_cap(&tmp, 10, 0).unwrap();
+        assert_eq!(deleted, 0, "max_bytes=0 should disable size cap");
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn size_cap_under_budget_no_op() {
+        let tmp = std::env::temp_dir().join(format!("overlay-sizecap-under-{}", now_unix_ms()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        make_jsonl_files(&tmp, 3, 1000); // 3 KB total
+        // 10 KB cap, 3 KB used → no prune.
+        let deleted = prune_old_sessions_with_size_cap(&tmp, 100, 10_000).unwrap();
+        assert_eq!(deleted, 0);
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn size_cap_evicts_oldest_first() {
+        let tmp = std::env::temp_dir().join(format!("overlay-sizecap-oldest-{}", now_unix_ms()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let files = make_jsonl_files(&tmp, 5, 10_000); // 50 KB total
+        // 25 KB cap → must delete 3 oldest (15 KB+ for total ≤ 25 KB after).
+        // After deleting 3 oldest, remaining = 2 × 10 KB = 20 KB ≤ 25 KB ✓.
+        let deleted = prune_old_sessions_with_size_cap(&tmp, 100, 25_000).unwrap();
+        assert_eq!(deleted, 3, "should delete 3 oldest to fit under 25 KB cap");
+        // Verify the 2 NEWEST survive.
+        let survivors: Vec<_> = std::fs::read_dir(&tmp).unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .collect();
+        assert_eq!(survivors.len(), 2);
+        assert!(survivors.contains(&files[3]), "newest-second survives");
+        assert!(survivors.contains(&files[4]), "newest survives");
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn size_cap_combines_with_count_prune() {
+        let tmp = std::env::temp_dir().join(format!("overlay-sizecap-combo-{}", now_unix_ms()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        make_jsonl_files(&tmp, 6, 10_000); // 6 × 10 KB = 60 KB
+        // keep=4 (count prune evicts 2), then 40 KB → cap 25 KB → evict 2 more.
+        // Total deleted = 4 (2 by count, 2 by size).
+        let deleted = prune_old_sessions_with_size_cap(&tmp, 4, 25_000).unwrap();
+        assert_eq!(deleted, 4, "2 by count + 2 by size = 4 total");
+        let remaining = std::fs::read_dir(&tmp).unwrap().count();
+        assert_eq!(remaining, 2);
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn size_cap_exactly_at_budget_no_op() {
+        let tmp = std::env::temp_dir().join(format!("overlay-sizecap-exact-{}", now_unix_ms()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        make_jsonl_files(&tmp, 2, 10_000); // 20 KB total
+        // 20 KB cap, 20 KB used — boundary case. Total > cap? `total > max_bytes`
+        // check uses strict >. Equal → no prune.
+        let deleted = prune_old_sessions_with_size_cap(&tmp, 100, 20_000).unwrap();
+        assert_eq!(deleted, 0, "at-boundary total should NOT trigger prune");
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
     // ── bump_counters: SessionSummary feeders ──
 
     #[test]
