@@ -584,7 +584,7 @@ export default function Settings() {
           )}
         </div>
         <div className="field">
-          <label>Max cost per session (USD) — стоп новых AI вызовов при превышении, 0 = без лимита</label>
+          <label>Soft budget warning (USD) — жёлтый чип "over budget" когда сессия превысит сумму, AI продолжает работать. 0 = выключить.</label>
           <input
             type="number"
             min={0}
@@ -603,7 +603,7 @@ export default function Settings() {
             style={{ width: 120 }}
           />
           <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
-            $1.00 ≈ 200 Haiku тайлов. Защита от runaway-spend если детектор откалиброван плохо или F9 нажимается часто. Счётчик сбрасывается при start_session.
+            $1.00 ≈ 200 Haiku тайлов. SOFT warning (не hard block) — мост остаётся доступен, юзер сам решит остановить сессию. Счётчик сбрасывается при start_session. v0.0.5 убрал hard-block: блокировать AI в середине собеса оказался плохой идеей.
           </div>
         </div>
         <div className="field">

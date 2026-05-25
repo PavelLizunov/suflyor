@@ -68,15 +68,20 @@ pub struct Config {
     #[serde(default = "default_post_meeting_debrief_enabled")]
     pub post_meeting_debrief_enabled: bool,
 
-    /// Hard cap on cumulative AI spend per session, in USD. Once total cost
-    /// (sum of all auto-tile, F9 ask, manual ask, debrief calls) crosses
-    /// this number, NEW ai calls fail fast with a user-visible error tile
-    /// "session cost cap reached". User must stop_session and start_session
-    /// to reset the counter. Set to 0 to disable the cap.
+    /// Soft budget hint per session, in USD. When session cost crosses
+    /// this number, a yellow "💰 over $X budget" chip appears in the
+    /// overlay — but AI calls still go through. Blocking mid-interview
+    /// would be terrible UX (you can't get help precisely when you need
+    /// it). The rate-limit (15 auto-tiles/min) already prevents real
+    /// runaway-spend scenarios.
     ///
-    /// Default 1.00 USD ≈ 200 Haiku tile spawns ≈ 4-5 hours of an active
-    /// interview at typical detector rate. Safe rail against detector
-    /// miscalibration or runaway F9 spam.
+    /// Set to 0 to disable the warning entirely.
+    /// Default 1.00 USD ≈ 200 Haiku tile spawns. Counter resets on
+    /// start_session.
+    ///
+    /// Live regression 2026-05-25: original v0.0.2 design was a HARD
+    /// block, which user rightfully called "странное решение" — pivoted
+    /// to soft warning in v0.0.5.
     #[serde(default = "default_max_session_cost_usd")]
     pub max_session_cost_usd: f64,
 

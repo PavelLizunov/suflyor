@@ -691,25 +691,21 @@ async fn maybe_spawn_tile(
 
     log::info!("auto-tile triggered: {:?}", trigger);
 
-    // Cost cap check (P1-1): refuse new AI calls if session budget exceeded.
-    // Emit cost:cap-hit so UI shows a non-blocking notice and journal records it.
+    // Cost budget WARN (not block) — see over_cost_budget docstring for
+    // why this is no longer a hard rail. We emit the cap-hit event once
+    // per crossing so the UI can show a persistent "over budget" chip,
+    // but the AI call proceeds normally. User can stop_session if they
+    // actually want to stop the bleeding.
     let (cap_usd, current_micro) = {
         let s = rt.lock();
         (cfg.read().max_session_cost_usd, s.session_cost_microcents)
     };
-    if let Err(reason) = check_cost_cap(cap_usd, current_micro) {
-        log::warn!("auto-tile blocked by cost cap: {reason}");
-        journal.write(&JournalEvent::RateLimited {
-            unix_ms: now_unix_ms(),
-            what: "cost_cap",
-            text: &reason,
-        });
+    if let Some(reason) = over_cost_budget(cap_usd, current_micro) {
         let _ = app.emit_to(
             "overlay",
             "cost:cap-hit",
-            serde_json::json!({ "reason": reason, "source": "auto_tile" }),
+            serde_json::json!({ "reason": reason, "source": "auto_tile", "blocking": false }),
         );
-        return;
     }
 
     // Capture last 5 lines for AI context (don't pass single line — context matters).
@@ -1372,29 +1368,32 @@ pub fn stop_session(
 /// no I/O. Extracted so it can be unit-tested without the spawn / AI path.
 /// `duration_ms` is `u128` because `journal::now_unix_ms` returns u128 —
 /// we don't truncate at the caller.
-/// Returns Ok if a NEW AI call would stay within the per-session cost cap,
-/// Err with a human-readable reason otherwise. Pure — extracted for unit
-/// testing. `cap_usd` of 0 (or negative) disables the cap entirely.
+/// Returns Some(reason) if session cost has crossed the soft-warning budget,
+/// None otherwise. Pure — extracted for unit testing. `cap_usd` of 0 (or
+/// negative) disables the warning entirely.
 ///
-/// Rationale: detector miscalibration or runaway F9 spam could in theory
-/// rack up tens of dollars per session at Haiku rates. A hard rail at the
-/// call sites stops the bleeding without requiring careful manual review
-/// of every trigger pattern (P1-1 from review 2026-05-25).
-pub(crate) fn check_cost_cap(
+/// History: this used to HARD-BLOCK new AI calls (v0.0.2-0.0.4). User
+/// rightfully pointed out: "странное решение" — blocking mid-interview is
+/// worse than the runaway-spend it tries to prevent. The auto-tile
+/// rate-limit (15/min) already caps the actual blast radius. So v0.0.5
+/// converts this to a passive "over budget" indicator — calls still go
+/// through, user just SEES the spend ticking past their threshold and
+/// can decide to stop_session manually if needed.
+pub(crate) fn over_cost_budget(
     cap_usd: f64,
     current_microcents: u64,
-) -> Result<(), String> {
+) -> Option<String> {
     if cap_usd <= 0.0 {
-        return Ok(()); // disabled
+        return None; // disabled
     }
     let current_usd = (current_microcents as f64) / 100_000_000.0;
     if current_usd >= cap_usd {
-        Err(format!(
-            "session cost cap reached: ${:.4} spent ≥ ${:.2} cap (Settings → AI proxy → Max cost per session)",
+        Some(format!(
+            "over budget: ${:.4} spent ≥ ${:.2} (Settings → Max cost per session)",
             current_usd, cap_usd
         ))
     } else {
-        Ok(())
+        None
     }
 }
 
@@ -1575,28 +1574,14 @@ pub async fn manual_ask_source(
         return;
     }
 
-    // Cost cap (P1-1) — refuse manual ask if budget exceeded. Journal
-    // entry matches the auto-tile path so audit-trail is consistent.
+    // Cost budget WARN (not block) — manual ask is user-initiated.
     let (cap_usd, current_micro) = (cfg.read().max_session_cost_usd, rt.lock().session_cost_microcents);
-    if let Err(reason) = check_cost_cap(cap_usd, current_micro) {
-        log::warn!("manual_ask_source blocked by cost cap: {reason}");
-        let journal = rt.lock().journal.clone().unwrap_or_default();
-        journal.write(&JournalEvent::RateLimited {
-            unix_ms: now_unix_ms(),
-            what: "cost_cap",
-            text: &reason,
-        });
+    if let Some(reason) = over_cost_budget(cap_usd, current_micro) {
         let _ = app.emit_to(
             "overlay",
             "cost:cap-hit",
-            serde_json::json!({ "reason": reason, "source": "manual_ask" }),
+            serde_json::json!({ "reason": reason, "source": "manual_ask", "blocking": false }),
         );
-        let _ = app.emit_to(
-            "overlay",
-            "tile:error",
-            serde_json::json!({ "message": reason }),
-        );
-        return;
     }
 
     let (base_url, bearer, model, response_language, meeting_context, preferred_monitor, stealth) = {
@@ -2049,28 +2034,14 @@ pub async fn manual_spawn_tile(app: AppHandle, cfg: SharedConfig, rt: SharedRunt
         return;
     };
 
-    // Cost cap (P1-1) — F6 manual tile spawn also respects the budget +
-    // journals the block for audit consistency.
+    // Cost budget WARN (not block) — F6 is user-initiated.
     let (cap_usd, current_micro) = (cfg.read().max_session_cost_usd, rt.lock().session_cost_microcents);
-    if let Err(reason) = check_cost_cap(cap_usd, current_micro) {
-        log::warn!("manual_spawn_tile blocked by cost cap: {reason}");
-        let journal = rt.lock().journal.clone().unwrap_or_default();
-        journal.write(&JournalEvent::RateLimited {
-            unix_ms: now_unix_ms(),
-            what: "cost_cap",
-            text: &reason,
-        });
+    if let Some(reason) = over_cost_budget(cap_usd, current_micro) {
         let _ = app.emit_to(
             "overlay",
             "cost:cap-hit",
-            serde_json::json!({ "reason": reason, "source": "manual_spawn" }),
+            serde_json::json!({ "reason": reason, "source": "manual_spawn", "blocking": false }),
         );
-        let _ = app.emit_to(
-            "overlay",
-            "tile:error",
-            serde_json::json!({ "message": reason }),
-        );
-        return;
     }
 
     let (base_url, bearer, model, response_language, meeting_context, preferred_monitor, stealth) = {
@@ -2157,30 +2128,16 @@ pub async fn ask(app: AppHandle, cfg: SharedConfig, rt: SharedRuntime) {
         )
     };
 
-    // Cost cap (P1-1): block F9 ask too. Status bar goes red via the
-    // existing ai:event "error" channel; journal records the block so the
-    // audit trail is complete (bug-hunt 2026-05-25: auto_tile journaled
-    // cost_cap but F9/manual paths didn't — inconsistent log story).
+    // Cost budget WARN (not block) — F9 is user-initiated, blocking it
+    // mid-interview defeats the entire point. Emit the warn chip so the
+    // user sees they crossed budget but proceed with the ask.
     let current_micro = rt.lock().session_cost_microcents;
-    if let Err(reason) = check_cost_cap(cap_usd, current_micro) {
-        log::warn!("F9 ask blocked by cost cap: {reason}");
-        let journal = rt.lock().journal.clone().unwrap_or_default();
-        journal.write(&JournalEvent::RateLimited {
-            unix_ms: now_unix_ms(),
-            what: "cost_cap",
-            text: &reason,
-        });
+    if let Some(reason) = over_cost_budget(cap_usd, current_micro) {
         let _ = app.emit_to(
             "overlay",
             "cost:cap-hit",
-            serde_json::json!({ "reason": reason, "source": "live_ask" }),
+            serde_json::json!({ "reason": reason, "source": "live_ask", "blocking": false }),
         );
-        let _ = app.emit_to(
-            "overlay",
-            "ai:event",
-            serde_json::json!({ "kind": "error", "error": reason }),
-        );
-        return;
     }
 
     let (transcript_lines, screenshot) = {
@@ -2756,40 +2713,36 @@ mod tests {
         );
     }
 
-    // ── Cost cap gate ──
+    // ── Cost budget (soft warning, never blocks) ──
 
     #[test]
-    fn cost_cap_disabled_when_zero_or_negative() {
-        // Disabled cap means even sky-high spend passes through.
-        assert!(check_cost_cap(0.0, u64::MAX).is_ok());
-        assert!(check_cost_cap(-1.0, 1_000_000_000).is_ok());
+    fn cost_budget_disabled_when_zero_or_negative() {
+        assert!(over_cost_budget(0.0, u64::MAX).is_none());
+        assert!(over_cost_budget(-1.0, 1_000_000_000).is_none());
     }
 
     #[test]
-    fn cost_cap_passes_under_budget() {
-        // $1.00 cap, 50¢ spent → fine.
-        assert!(check_cost_cap(1.00, 50_000_000).is_ok());
-        // At exact zero spent — also fine.
-        assert!(check_cost_cap(1.00, 0).is_ok());
+    fn cost_budget_silent_under_threshold() {
+        // 50¢ < $1.00 — no warn.
+        assert!(over_cost_budget(1.00, 50_000_000).is_none());
+        // Exactly $0 spent — silent.
+        assert!(over_cost_budget(1.00, 0).is_none());
     }
 
     #[test]
-    fn cost_cap_blocks_when_at_or_above() {
-        // 1¢ over cap → error.
-        let r = check_cost_cap(1.00, 101_000_000);
-        assert!(r.is_err());
-        let msg = r.unwrap_err();
-        assert!(msg.contains("session cost cap reached"), "got: {msg}");
-        assert!(msg.contains("$1.01") || msg.contains("$1.0100"), "should mention current spend; got: {msg}");
+    fn cost_budget_warns_at_or_above_threshold() {
+        // 1¢ over → warn message.
+        let r = over_cost_budget(1.00, 101_000_000);
+        assert!(r.is_some());
+        let msg = r.unwrap();
+        assert!(msg.contains("over budget"), "got: {msg}");
+        assert!(msg.contains("$1.01") || msg.contains("$1.0100"), "shows current spend; got: {msg}");
     }
 
     #[test]
-    fn cost_cap_inclusive_at_exact_boundary() {
-        // At $1.00 == $1.00 cap → blocked (≥ comparison).
-        // Rationale: once you HIT the cap, every next call adds more,
-        // so failing fast at boundary is safest. User must Stop+Start
-        // to reset counter.
-        assert!(check_cost_cap(1.00, 100_000_000).is_err());
+    fn cost_budget_warn_at_exact_boundary() {
+        // At $1.00 == $1.00 → warn (≥ comparison).
+        assert!(over_cost_budget(1.00, 100_000_000).is_some());
     }
 
     #[test]

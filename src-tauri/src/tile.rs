@@ -39,6 +39,13 @@ struct ActiveTile {
     label: String,
     created: Instant,
     pinned: bool,
+    /// Screen slot index used by `grid_position`. Tracked PER TILE (not
+    /// derived from Vec.len()) because the Vec gets holes when tiles are
+    /// closed manually, evicted by FIFO, or destroyed externally. Without
+    /// this, the next spawn picks `slot = Vec.len()` which collides with
+    /// a still-on-screen survivor → live regression 2026-05-25: "оношко
+    /// заспавнилось на окошке".
+    slot: usize,
 }
 
 #[derive(Default)]
@@ -197,25 +204,41 @@ pub fn spawn_tile_with_stealth(
     let monitor = pick_monitor(app, preferred_monitor.as_deref())
         .context("no monitor available")?;
 
-    // Reserve a slot atomically: evict oldest if needed, then push a
-    // placeholder so concurrent spawns don't compete for the same position.
-    // The placeholder is replaced with the real label after build() succeeds.
+    // Reserve a slot atomically: find FIRST FREE slot (not Vec.len()) so
+    // we reuse gaps left by manually-closed / TTL-evicted tiles. Evicts
+    // oldest if all MAX_TILES slots are occupied. Bug-hunt 2026-05-25:
+    // Vec.len() was wrong because manual close shrinks the Vec but doesn't
+    // shift survivors' on-screen positions — next spawn would collide.
     let (slot, oldest_to_close) = {
         let mut mgr = tiles.lock();
         let mut to_close = None;
-        if mgr.active.len() >= MAX_TILES {
-            if let Some(oldest) = mgr.active.first().cloned() {
-                mgr.active.remove(0);
-                to_close = Some(oldest.label);
+        // Collect occupied slots so we can find the first free one.
+        let occupied: std::collections::HashSet<usize> =
+            mgr.active.iter().map(|t| t.slot).collect();
+        let free_slot = (0..MAX_TILES).find(|i| !occupied.contains(i));
+        let slot = match free_slot {
+            Some(s) => s,
+            None => {
+                // All slots occupied — evict oldest, reuse its slot so we
+                // immediately fill the hole instead of leaving a gap.
+                if let Some(oldest) = mgr.active.first().cloned() {
+                    let evicted_slot = oldest.slot;
+                    mgr.active.remove(0);
+                    to_close = Some(oldest.label);
+                    evicted_slot
+                } else {
+                    0 // Shouldn't happen — empty Vec yet len >= MAX is impossible.
+                }
             }
-        }
-        let slot = mgr.active.len();
-        // Reserve the slot with a temporary placeholder.
+        };
+        // Reserve the slot with a temporary placeholder. The slot field is
+        // what grid_position uses, so concurrent spawns can't collide.
         mgr.active.push(ActiveTile {
             id: id.clone(),
             label: label.clone(),
             created: Instant::now(),
             pinned: false,
+            slot,
         });
         (slot, to_close)
     };
@@ -527,9 +550,9 @@ mod tests {
         let mgr = shared();
         {
             let mut m = mgr.lock();
-            m.active.push(ActiveTile { id: "a".into(), label: "tile-1".into(), created: Instant::now(), pinned: false });
-            m.active.push(ActiveTile { id: "b".into(), label: "tile-2".into(), created: Instant::now(), pinned: false });
-            m.active.push(ActiveTile { id: "c".into(), label: "tile-3".into(), created: Instant::now(), pinned: false });
+            m.active.push(ActiveTile { id: "a".into(), label: "tile-1".into(), created: Instant::now(), pinned: false, slot: 0 });
+            m.active.push(ActiveTile { id: "b".into(), label: "tile-2".into(), created: Instant::now(), pinned: false, slot: 1 });
+            m.active.push(ActiveTile { id: "c".into(), label: "tile-3".into(), created: Instant::now(), pinned: false, slot: 2 });
         }
         assert!(set_tile_pinned(&mgr, "tile-2", true), "should find tile-2");
         {
@@ -558,6 +581,7 @@ mod tests {
                 label: "tile-1".into(),
                 created: Instant::now(),
                 pinned: false,
+                slot: 0,
             });
         }
         assert!(take_if_unpinned(&mgr, "tile-1"));
@@ -574,6 +598,7 @@ mod tests {
                 label: "tile-pinned".into(),
                 created: Instant::now(),
                 pinned: true,
+                slot: 0,
             });
         }
         assert!(!take_if_unpinned(&mgr, "tile-pinned"));
@@ -602,6 +627,7 @@ mod tests {
                 label: "tile-race".into(),
                 created: Instant::now(),
                 pinned: false,
+                slot: 0,
             });
         }
         // TTL fires first → tile removed; subsequent set_pin must fail.
@@ -622,11 +648,11 @@ mod tests {
         {
             let mut m = mgr.lock();
             // Old, unpinned — must be reaped
-            m.active.push(ActiveTile { id: "a".into(), label: "old-unpinned".into(), created: old, pinned: false });
+            m.active.push(ActiveTile { id: "a".into(), label: "old-unpinned".into(), created: old, pinned: false, slot: 0 });
             // Old, pinned — must survive
-            m.active.push(ActiveTile { id: "b".into(), label: "old-pinned".into(), created: old, pinned: true });
+            m.active.push(ActiveTile { id: "b".into(), label: "old-pinned".into(), created: old, pinned: true, slot: 1 });
             // New, unpinned — must survive (not yet expired)
-            m.active.push(ActiveTile { id: "c".into(), label: "new-unpinned".into(), created: new, pinned: false });
+            m.active.push(ActiveTile { id: "c".into(), label: "new-unpinned".into(), created: new, pinned: false, slot: 2 });
         }
         let reaped = reap_expired(&mgr, now, Duration::from_secs(125)); // TTL + 5
         assert_eq!(reaped, vec!["old-unpinned".to_string()]);
@@ -648,13 +674,65 @@ mod tests {
         {
             let mut m = mgr.lock();
             // Created exactly now — duration_since == 0
-            m.active.push(ActiveTile { id: "x".into(), label: "fresh".into(), created: now, pinned: false });
+            m.active.push(ActiveTile { id: "x".into(), label: "fresh".into(), created: now, pinned: false, slot: 0 });
         }
         // Sleep a microsecond so now elapses
         std::thread::sleep(Duration::from_millis(2));
         let later = Instant::now();
         let reaped = reap_expired(&mgr, later, Duration::from_millis(1));
         assert_eq!(reaped, vec!["fresh".to_string()], "any duration > grace should reap");
+    }
+
+    /// Pure-fn helper that mirrors the slot-picking logic inside spawn_tile.
+    /// Extracted so we can unit-test gap-reuse without spinning up Tauri.
+    fn pick_free_slot(occupied: &[usize], max: usize) -> Option<usize> {
+        let set: std::collections::HashSet<usize> = occupied.iter().copied().collect();
+        (0..max).find(|i| !set.contains(i))
+    }
+
+    /// Regression: when a non-last tile is closed (×, TTL, external),
+    /// the Vec gets a hole. Next spawn used to pick `slot = Vec.len()`,
+    /// which COLLIDED with a still-on-screen survivor at that index.
+    /// Live bug 2026-05-25: "оношко заспавнилось на окошке". Fix: track
+    /// `slot` per ActiveTile and pick first FREE index, not Vec length.
+    #[test]
+    fn slot_picker_reuses_gap_after_middle_close() {
+        // Initial: 3 tiles at slots 0, 1, 2.
+        // User closes the middle one → surviving slots = {0, 2}.
+        // Old code: new tile got slot = Vec.len() = 2 → COLLISION with
+        //           the surviving slot-2 tile.
+        // New code: finds first free index = 1 → no collision.
+        let after_middle_close = vec![0_usize, 2];
+        assert_eq!(pick_free_slot(&after_middle_close, 6), Some(1));
+    }
+
+    #[test]
+    fn slot_picker_reuses_oldest_after_full_eviction() {
+        // All 6 slots occupied. Spawn-time eviction removes oldest
+        // (whichever sits at index 0 in Vec — that's the FIRST-INSERTED).
+        // Whatever slot that oldest occupied is the one the new tile
+        // should reuse, otherwise we leave a permanent gap.
+        let all_full = vec![0_usize, 1, 2, 3, 4, 5];
+        assert_eq!(
+            pick_free_slot(&all_full, 6),
+            None,
+            "no free slot when all 6 occupied — caller must evict first"
+        );
+        // After evicting whatever was at slot 0 → free slot is 0 again.
+        let after_evict = vec![1_usize, 2, 3, 4, 5];
+        assert_eq!(pick_free_slot(&after_evict, 6), Some(0));
+    }
+
+    #[test]
+    fn slot_picker_starts_at_zero_when_empty() {
+        assert_eq!(pick_free_slot(&[], 6), Some(0));
+    }
+
+    #[test]
+    fn slot_picker_handles_unordered_occupied() {
+        // Vec might be in any order; HashSet check is order-agnostic.
+        let occupied = vec![3_usize, 0, 5];
+        assert_eq!(pick_free_slot(&occupied, 6), Some(1));
     }
 
     #[test]
@@ -667,6 +745,7 @@ mod tests {
                 label: "tile-race2".into(),
                 created: Instant::now(),
                 pinned: false,
+                slot: 0,
             });
         }
         // User pins first → TTL must respect it and leave the tile alone.
