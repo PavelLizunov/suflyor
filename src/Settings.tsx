@@ -921,6 +921,37 @@ export default function Settings() {
                 >
                   Expand →
                 </button>
+                <button
+                  className="btn secondary"
+                  style={{
+                    height: 24,
+                    padding: "0 8px",
+                    color: "var(--c-err, #f87171)",
+                    fontSize: 12,
+                  }}
+                  onClick={async () => {
+                    // v0.0.9: delete-by-confirm. Edit/New require a 3-field
+                    // modal — deferred to v0.1.0. For now users can still
+                    // create new snippets via config.json directly.
+                    const ok = await showConfirm(
+                      `Удалить snippet /${s.key}?\n\nТекст: «${s.title}»\n\nВосстановить можно только через Import конфига или дефолты (пустой массив snippets в config.json → авто-заполнится из defaults).`,
+                    );
+                    if (!ok) return;
+                    const next = { ...cfg, snippets: cfg.snippets.filter(x => x.key !== s.key) };
+                    setCfg(next);
+                    try {
+                      await invoke("save_config", { newCfg: next });
+                      showToast("ok", `/${s.key} удалён · ${next.snippets.length} snippets осталось`);
+                    } catch (e) {
+                      showToast("err", `Удаление не сохранилось: ${e}`);
+                      // Roll back the optimistic UI update.
+                      setCfg(cfg);
+                    }
+                  }}
+                  title={`Удалить snippet /${s.key} (с подтверждением)`}
+                >
+                  🗑
+                </button>
               </div>
             ))}
           </div>
