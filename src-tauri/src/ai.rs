@@ -1,0 +1,547 @@
+//! AI client: POST to OpenAI-compatible endpoint (your Claude OAuth bridge)
+//! with SSE streaming. Emits AiEvent chunks downstream.
+
+use anyhow::{anyhow, Context, Result};
+use futures_util::StreamExt;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use tokio::sync::mpsc;
+
+/// Frontend-visible event stream.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum AiEvent {
+    Start { id: String },
+    Delta { text: String },
+    Done { reason: String },
+    Error { message: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: MessageContent,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum MessageContent {
+    Text(String),
+    Parts(Vec<ContentPart>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ContentPart {
+    Text { text: String },
+    ImageUrl { image_url: ImageUrl },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImageUrl {
+    pub url: String, // "data:image/jpeg;base64,..."
+}
+
+/// Streaming chat completion. Returns a Receiver that emits AiEvents.
+pub fn stream_chat(
+    base_url: String,
+    bearer: String,
+    model: String,
+    messages: Vec<ChatMessage>,
+    max_tokens: u32,
+) -> mpsc::Receiver<AiEvent> {
+    let (tx, rx) = mpsc::channel::<AiEvent>(64);
+
+    tokio::spawn(async move {
+        if let Err(e) =
+            stream_inner(base_url, bearer, model, messages, max_tokens, tx.clone()).await
+        {
+            let _ = tx
+                .send(AiEvent::Error {
+                    message: format!("{e:#}"),
+                })
+                .await;
+        }
+    });
+
+    rx
+}
+
+async fn stream_inner(
+    base_url: String,
+    bearer: String,
+    model: String,
+    messages: Vec<ChatMessage>,
+    max_tokens: u32,
+    tx: mpsc::Sender<AiEvent>,
+) -> Result<()> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()?;
+
+    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+    let body = json!({
+        "model": model,
+        "messages": messages,
+        "stream": true,
+        "max_tokens": max_tokens,
+    });
+
+    // SECURITY: do NOT log the full URL — the configured ai_base_url often
+    // contains the user's LAN IP / proxy port (network topology leak in
+    // crash dumps / support bundles). Surface only model + message count.
+    log::info!("AI stream → /chat/completions (model={}, msgs={})", model, messages.len());
+
+    let resp = client
+        .post(&url)
+        .bearer_auth(&bearer)
+        .json(&body)
+        .send()
+        .await
+        .context("POST chat/completions")?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(anyhow!("HTTP {status}: {body}"));
+    }
+
+    let mut byte_buf: Vec<u8> = Vec::with_capacity(8 * 1024);
+    let mut buf = String::new();
+    let mut stream = resp.bytes_stream();
+    let mut id_sent = false;
+    let mut delta_count: u32 = 0;
+
+    while let Some(chunk_res) = stream.next().await {
+        let chunk = chunk_res.context("read sse chunk")?;
+        byte_buf.extend_from_slice(&chunk);
+        let text = drain_complete_frames(&mut byte_buf);
+        buf.push_str(&text);
+
+        // SSE frames separated by "\n\n"
+        while let Some(pos) = buf.find("\n\n") {
+            let frame = buf[..pos].to_string();
+            buf.drain(..pos + 2);
+
+            for line in frame.lines() {
+                let line = line.trim();
+                if !line.starts_with("data:") {
+                    continue;
+                }
+                let payload = line["data:".len()..].trim();
+                if payload == "[DONE]" {
+                    log::info!("AI stream got [DONE]: deltas={}", delta_count);
+                    let _ = tx
+                        .send(AiEvent::Done { reason: "stop".into() })
+                        .await;
+                    return Ok(());
+                }
+
+                let v: Value = match serde_json::from_str(payload) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+
+                if !id_sent {
+                    if let Some(id) = v.get("id").and_then(|x| x.as_str()) {
+                        let _ = tx
+                            .send(AiEvent::Start {
+                                id: id.to_string(),
+                            })
+                            .await;
+                        id_sent = true;
+                    }
+                }
+
+                if let Some(choices) = v.get("choices").and_then(|c| c.as_array()) {
+                    if let Some(choice) = choices.first() {
+                        if let Some(delta) = choice.get("delta") {
+                            if let Some(content) = delta.get("content").and_then(|c| c.as_str()) {
+                                if !content.is_empty() {
+                                    delta_count += 1;
+                                    let _ = tx
+                                        .send(AiEvent::Delta {
+                                            text: content.to_string(),
+                                        })
+                                        .await;
+                                }
+                            }
+                        }
+                        if let Some(reason) = choice.get("finish_reason").and_then(|r| r.as_str()) {
+                            log::info!(
+                                "AI stream finished: reason={} deltas={}",
+                                reason,
+                                delta_count
+                            );
+                            let _ = tx
+                                .send(AiEvent::Done {
+                                    reason: reason.to_string(),
+                                })
+                                .await;
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Drain bytes up to the last `\n\n` SSE frame boundary, returning the
+/// decoded UTF-8 text. Bytes after the last boundary stay in `byte_buf`
+/// — they may contain a partial UTF-8 character that will complete on the
+/// next network chunk.
+///
+/// This is the regression-tested part of the SSE pipeline: it must NEVER
+/// panic on UTF-8 split across chunk boundaries.
+fn drain_complete_frames(byte_buf: &mut Vec<u8>) -> String {
+    let last_boundary = byte_buf
+        .windows(2)
+        .rposition(|w| w == b"\n\n")
+        .map(|p| p + 2);
+    let Some(split_at) = last_boundary else {
+        return String::new();
+    };
+    let decodable: Vec<u8> = byte_buf.drain(..split_at).collect();
+    match std::str::from_utf8(&decodable) {
+        Ok(s) => s.to_string(),
+        Err(e) => {
+            log::warn!("SSE utf8 error at byte {}: {}", e.valid_up_to(), e);
+            std::str::from_utf8(&decodable[..e.valid_up_to()])
+                .unwrap_or("")
+                .to_string()
+        }
+    }
+}
+
+/// USD price per 1M tokens for each model. Source: anthropic.com pricing
+/// page as of 2026-05. Update when prices change.
+pub fn pricing_per_million(model: &str) -> (f64, f64) {
+    // (input, output)
+    match model {
+        "claude-haiku-4-5" => (1.0, 5.0),
+        "claude-sonnet-4-5" | "claude-sonnet-4-6" => (3.0, 15.0),
+        "claude-opus-4-7" => (15.0, 75.0),
+        _ => (3.0, 15.0), // safe upper-bound default
+    }
+}
+
+/// USD float view of cost — convenience wrapper. Internal accounting
+/// uses microcents (cost_microcents) to avoid f64 drift over long
+/// sessions. UI displays the float.
+#[allow(dead_code)]
+pub fn cost_usd(model: &str, input_tokens: u64, output_tokens: u64) -> f64 {
+    // 1 USD = 100_000_000 microcents (1 microcent = 10⁻⁸ USD).
+    (cost_microcents(model, input_tokens, output_tokens) as f64) / 100_000_000.0
+}
+
+/// Cost in microcents (1 USD = 100_000_000 microcents). Use this for
+/// internal accumulation to avoid f64 precision loss over long sessions.
+pub fn cost_microcents(model: &str, input_tokens: u64, output_tokens: u64) -> u64 {
+    let (p_in_per_m, p_out_per_m) = pricing_per_million(model);
+    // microcents per token = price_per_million_usd × 100_000_000 / 1_000_000 = price × 100
+    let micro_in = (p_in_per_m * 100.0) as u64; // microcents per input token
+    let micro_out = (p_out_per_m * 100.0) as u64;
+    input_tokens.saturating_mul(micro_in).saturating_add(output_tokens.saturating_mul(micro_out))
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TokenUsage {
+    pub input: u64,
+    pub output: u64,
+}
+
+/// Non-streaming completion — used for prep-context structuring where we
+/// want the whole answer at once and latency is acceptable. Returns
+/// (text, token_usage) so caller can track cost.
+pub async fn complete_with_usage(
+    base_url: &str,
+    bearer: &str,
+    model: &str,
+    messages: Vec<ChatMessage>,
+    max_tokens: u32,
+) -> Result<(String, TokenUsage)> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(180))
+        .build()?;
+    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+    let body = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "stream": false,
+        "max_tokens": max_tokens,
+    });
+
+    // SECURITY: don't log the host portion of the URL (LAN IP/topology). See
+    // the matching comment on stream_chat above for the rationale.
+    log::info!("AI complete → /chat/completions (model={}, msgs={})", model, messages.len());
+
+    let resp = client.post(&url).bearer_auth(bearer).json(&body).send().await
+        .context("POST chat/completions")?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        anyhow::bail!("HTTP {status}: {body}");
+    }
+    let v: serde_json::Value = resp.json().await.context("parse json")?;
+    let text = v
+        .get("choices")
+        .and_then(|c| c.as_array())
+        .and_then(|a| a.first())
+        .and_then(|c| c.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+        .unwrap_or("")
+        .to_string();
+    let usage = TokenUsage {
+        input: v.get("usage").and_then(|u| u.get("prompt_tokens")).and_then(|n| n.as_u64()).unwrap_or(0),
+        output: v.get("usage").and_then(|u| u.get("completion_tokens")).and_then(|n| n.as_u64()).unwrap_or(0),
+    };
+    Ok((text, usage))
+}
+
+pub async fn complete(
+    base_url: &str,
+    bearer: &str,
+    model: &str,
+    messages: Vec<ChatMessage>,
+    max_tokens: u32,
+) -> Result<String> {
+    let (text, _usage) =
+        complete_with_usage(base_url, bearer, model, messages, max_tokens).await?;
+    Ok(text)
+}
+
+/// Convenience: build a typical "ask AI" request with system context +
+/// rolling transcript + optional screenshot.
+pub fn build_request(
+    meeting_context: &str,
+    response_language: &str,
+    transcript_lines: &[String],
+    screenshot_data_url: Option<&str>,
+    user_question: Option<&str>,
+) -> Vec<ChatMessage> {
+    let mut messages = Vec::with_capacity(3);
+
+    // System prompt: explicit role + meeting context + strict output rules.
+    let lang_block = match response_language {
+        "ru" => "ВАЖНО: отвечай ИСКЛЮЧИТЕЛЬНО на русском языке. \
+                 Английский только для названий технологий и команд (e.g. `kubectl`).",
+        "en" => "Respond exclusively in English.",
+        _ => "Respond in the user's language.",
+    };
+    let ctx_block = if meeting_context.trim().is_empty() {
+        "Контекст встречи не задан.".to_string()
+    } else {
+        format!(
+            "Бэкграунд пользователя (фон для понимания уровня — НЕ ограничивай ответ этой темой \
+             если вопрос про что-то другое):\n{}",
+            meeting_context.trim()
+        )
+    };
+    let system_prompt = format!(
+        "Ты — техничный AI-ассистент пользователя на встрече/интервью в реальном времени. \
+         Пользователь нажимает F9 чтобы попросить тебя помочь с ответом на последний \
+         вопрос/реплику из транскрипта.\n\n\
+         {ctx_block}\n\n\
+         === Содержимое ===\n\
+         - Отвечай ПО СУТИ вопроса. Если про generic Linux/SQL/Python — отвечай про это, \
+           не притягивай Kubernetes/контейнеры без необходимости.\n\
+         - Контекст пользователя нужен чтобы понять уровень детализации, а не чтобы каждый \
+           ответ строить вокруг его технологий.\n\n\
+         === Формат ===\n\
+         - БЕЗ преамбулы (\"Хороший вопрос!\", \"Конечно\"). Сразу к делу.\n\
+         - Маркдаун: **жирный** для важного, `code` для команд, маркированные списки.\n\
+         - Приводи КОНКРЕТНЫЕ команды/утилиты/числа, не общие фразы.\n\
+         - Если вопрос неясен — дай вероятную интерпретацию + уточняющий вопрос.\n\
+         - {lang_block}\n\
+         - В транскрипте могут быть Whisper-артефакты — восстанавливай смысл из контекста \
+           (\"К87С\" → \"K8s\", \"лоуд-эвередж\" → \"load average\", \"гинкс\" → \"nginx\").\n\
+         - Источник `[System]` — собеседник, `[Mic]` — пользователь."
+    );
+    messages.push(ChatMessage {
+        role: "system".into(),
+        content: MessageContent::Text(system_prompt),
+    });
+
+    // ── User turn: rolling transcript + optional explicit question + optional screenshot ──
+    let mut parts: Vec<ContentPart> = Vec::new();
+
+    let mut prompt = String::new();
+    if !transcript_lines.is_empty() {
+        prompt.push_str("Транскрипт последних реплик (внизу — самые свежие):\n\n");
+        for line in transcript_lines {
+            prompt.push_str(line);
+            prompt.push('\n');
+        }
+        prompt.push('\n');
+    }
+    if let Some(q) = user_question {
+        prompt.push_str("Помоги ответить: ");
+        prompt.push_str(q);
+        prompt.push('\n');
+    } else {
+        prompt.push_str(
+            "На основе последнего вопроса в транскрипте предложи краткий ответ, \
+             который я могу дать. Используй пункты если уместно. Не больше 200 слов.",
+        );
+    }
+    parts.push(ContentPart::Text { text: prompt });
+
+    if let Some(url) = screenshot_data_url {
+        parts.push(ContentPart::ImageUrl {
+            image_url: ImageUrl { url: url.into() },
+        });
+    }
+
+    messages.push(ChatMessage {
+        role: "user".into(),
+        content: if parts.len() == 1 {
+            if let ContentPart::Text { text } = &parts[0] {
+                MessageContent::Text(text.clone())
+            } else {
+                MessageContent::Parts(parts)
+            }
+        } else {
+            MessageContent::Parts(parts)
+        },
+    });
+
+    messages
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Regression: P0 bug — UTF-8 split across network chunks must NOT panic ──
+
+    #[test]
+    fn drain_returns_empty_when_no_complete_frame() {
+        let mut b: Vec<u8> = b"data: hello".to_vec();
+        let s = drain_complete_frames(&mut b);
+        assert_eq!(s, "");
+        assert_eq!(b, b"data: hello"); // bytes preserved for next chunk
+    }
+
+    #[test]
+    fn drain_splits_at_double_newline() {
+        let mut b: Vec<u8> = b"data: a\n\ndata: b".to_vec();
+        let s = drain_complete_frames(&mut b);
+        assert_eq!(s, "data: a\n\n");
+        assert_eq!(b, b"data: b"); // unfinished frame stays
+    }
+
+    /// THE bug we're guarding against: a Russian 2-byte char's bytes are
+    /// split across two network reads. The first read ends mid-char; the
+    /// second completes it. Old code did `from_utf8(&chunk).unwrap()` and
+    /// would panic. New code must keep the leftover for the next call.
+    #[test]
+    fn drain_does_not_panic_when_utf8_split_across_chunks() {
+        // "Привет" — П = 0xD0 0x9F. Find the byte offset that lands mid-char.
+        let full = "data: \"Привет\"\n\n";
+        let bytes = full.as_bytes();
+        // First non-ASCII byte should be П's leading 0xD0. Split right after it.
+        let p_start = bytes.iter().position(|&b| b == 0xD0).unwrap();
+        let split = p_start + 1; // includes 0xD0 (leading byte) but not 0x9F (trailing)
+        let chunk1 = &bytes[..split];
+        let chunk2 = &bytes[split..];
+        assert!(
+            std::str::from_utf8(chunk1).is_err(),
+            "test setup: chunk1 must be invalid UTF-8 (split mid Cyrillic char)"
+        );
+
+        let mut b: Vec<u8> = chunk1.to_vec();
+        let s1 = drain_complete_frames(&mut b);
+        // No \n\n yet, so nothing decoded, and no panic.
+        assert_eq!(s1, "");
+
+        b.extend_from_slice(chunk2);
+        let s2 = drain_complete_frames(&mut b);
+        // Now we have a complete frame ending in \n\n. Must decode cleanly.
+        assert_eq!(s2, full);
+        assert!(b.is_empty());
+    }
+
+    #[test]
+    fn drain_handles_multiple_frames_in_one_chunk() {
+        let mut b: Vec<u8> = b"data: a\n\ndata: b\n\ndata: c".to_vec();
+        let s = drain_complete_frames(&mut b);
+        assert_eq!(s, "data: a\n\ndata: b\n\n");
+        assert_eq!(b, b"data: c");
+    }
+
+    // ── Smoke check on build_request shape ──
+
+    #[test]
+    fn build_request_always_includes_system_prompt() {
+        let msgs = build_request("", "ru", &[], None, None);
+        // system + user
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0].role, "system");
+        assert_eq!(msgs[1].role, "user");
+        // Russian directive present
+        if let MessageContent::Text(s) = &msgs[0].content {
+            assert!(s.contains("русском"));
+        } else {
+            panic!("system message should be text");
+        }
+    }
+
+    // ── NEW: cost/pricing math ──
+
+    #[test]
+    fn cost_microcents_haiku_known_value() {
+        // Haiku: $1/M input + $5/M output. 1M input + 1M output = $6 = 600M microcents.
+        // microcents per token: input=100, output=500
+        assert_eq!(cost_microcents("claude-haiku-4-5", 1_000_000, 1_000_000), 600_000_000);
+    }
+
+    #[test]
+    fn cost_microcents_sonnet_pricing() {
+        // Sonnet: $3/M + $15/M. 100k+50k = 300k*3/M + 50k*15/M ≈ $0.3 + $0.75 = $1.05
+        // microcents per token: input=300, output=1500
+        let m = cost_microcents("claude-sonnet-4-6", 100_000, 50_000);
+        assert_eq!(m, 100_000 * 300 + 50_000 * 1500);
+        assert!((cost_usd("claude-sonnet-4-6", 100_000, 50_000) - 1.05).abs() < 0.001);
+    }
+
+    #[test]
+    fn cost_unknown_model_defaults_to_sonnet() {
+        // Per pricing_per_million fallback.
+        let m_known = cost_microcents("claude-sonnet-4-5", 1000, 1000);
+        let m_unknown = cost_microcents("qwen-14b", 1000, 1000);
+        assert_eq!(m_known, m_unknown, "unknown model should fall back to sonnet pricing");
+    }
+
+    #[test]
+    fn cost_zero_tokens_is_zero() {
+        assert_eq!(cost_microcents("claude-haiku-4-5", 0, 0), 0);
+        assert_eq!(cost_usd("claude-haiku-4-5", 0, 0), 0.0);
+    }
+
+    #[test]
+    fn cost_saturating_no_overflow() {
+        // Max u64 input shouldn't panic.
+        let m = cost_microcents("claude-opus-4-7", u64::MAX, u64::MAX);
+        assert_eq!(m, u64::MAX, "should saturate, not panic");
+    }
+
+    #[test]
+    fn build_request_attaches_screenshot_as_image_part() {
+        let msgs = build_request(
+            "",
+            "ru",
+            &["[System] что такое etcd?".to_string()],
+            Some("data:image/jpeg;base64,XXX"),
+            None,
+        );
+        if let MessageContent::Parts(parts) = &msgs[1].content {
+            assert!(parts.iter().any(|p| matches!(p, ContentPart::ImageUrl { .. })));
+        } else {
+            panic!("user content should be parts when screenshot attached");
+        }
+    }
+}

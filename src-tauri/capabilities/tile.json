@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "tile",
+  "description": "Narrow capability set for dynamically-spawned tile-* windows. Tiles only show AI answers and may receive markdown that came from untrusted sources (interviewer transcript / web pages). They MUST NOT be able to open external URLs (opener), register global shortcuts, or override window geometry — tile placement is governed exclusively by the Rust tile manager. Tiles can hide/show themselves so PANIC HIDE (F11) and the close-button keep working.",
+  "windows": ["tile-*"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-close",
+    "core:event:default"
+  ]
+}

@@ -1,0 +1,173 @@
+{
+  "case_id": "001-devops-sysadmin-1h",
+  "title": "Опытный сисадмин идет в DevOps. Собеседование DevOps Engineer (62 min)",
+  "source": "https://www.youtube.com/watch?v=QqF0656aBPc",
+  "duration_sec": 3727,
+  "domain": ["devops", "docker", "ansible", "gitlab-ci", "sysadmin"],
+
+  "_notes": "Calibrated against actual Whisper output from 25-min live capture (6:05→34:31). expected_triggers use Whisper-realistic substrings, not YT auto-CC text. expected_terms aliases include all phonetic variants Whisper produced. Triggers outside 6:05-34:31 capture window are explicitly noted.",
+
+  "expected_terms": [
+    {
+      "canonical": "docker",
+      "aliases": ["докер", "докера", "докеру", "докере", "докерах", "докерран", "дакерстат", "доб"]
+    },
+    {
+      "canonical": "gitlab",
+      "aliases": ["гитлаб", "гитлэб", "гид-репозитория"]
+    },
+    {
+      "canonical": "pipeline",
+      "aliases": ["пайплайн", "пайплаин"]
+    },
+    {
+      "canonical": "ansible",
+      "aliases": ["ансибл", "ансибле", "ансибла"]
+    },
+    {
+      "canonical": "raid",
+      "aliases": ["рейд", "рэйд", "rate", "софтрейд", "софтрейды"]
+    },
+    {
+      "canonical": "dmesg",
+      "aliases": ["дмеска", "дмс", "дмесг", "демеск", "дс"]
+    },
+    {
+      "canonical": "proxmox",
+      "aliases": ["прокмокс", "прокмаст"]
+    },
+    {
+      "canonical": "image",
+      "aliases": ["имидж", "имиджа", "имиджей", "имиджов", "идж"]
+    },
+    {
+      "canonical": "runner",
+      "aliases": ["раннер", "ранер"]
+    },
+    {
+      "canonical": "container",
+      "aliases": ["контейнер", "контейнеры", "контейнером", "контейнерами", "контейнере", "контейнеру", "контейнерой", "контейнеров", "контейнера"]
+    },
+    {
+      "canonical": "registry",
+      "aliases": ["реджестри", "регистри"]
+    },
+    {
+      "canonical": "cache",
+      "aliases": ["кэш", "кеш"]
+    },
+    {
+      "canonical": "postgres",
+      "aliases": ["постгрес", "постгресс"]
+    },
+    {
+      "canonical": "nginx",
+      "aliases": ["нгинкс", "энджинкс"]
+    },
+    {
+      "canonical": "linux",
+      "aliases": ["линукс", "plynux"]
+    },
+    {
+      "canonical": "alpine",
+      "aliases": ["алпайн", "алпин", "alpin"]
+    },
+    {
+      "canonical": "prometheus",
+      "aliases": ["прометей", "прометеус", "прометеусе"]
+    },
+    {
+      "canonical": "clickhouse",
+      "aliases": ["кликхауз", "кликхаус"]
+    }
+  ],
+
+  "expected_triggers": [
+    {
+      "text_match": "как ты его настраивал",
+      "must_trigger": true,
+      "_video_ts": "07:26"
+    },
+    {
+      "text_match": "какие типы состояний бывают",
+      "must_trigger": true,
+      "_video_ts": "13:48",
+      "_note": "Whisper rephrased — original YT text 'разные состояния. какие знаешь' never appears verbatim"
+    },
+    {
+      "text_match": "чем вообще отличается",
+      "must_trigger": true,
+      "_video_ts": "15:17",
+      "_note": "Specific: docker run vs docker start"
+    },
+    {
+      "text_match": "может не удалить имидж",
+      "must_trigger": true,
+      "_video_ts": "17:23"
+    },
+    {
+      "text_match": "что происходит с",
+      "must_trigger": true,
+      "_video_ts": "23:51",
+      "_note": "VAD-fragmented in Whisper; partial match"
+    },
+    {
+      "text_match": "контейнерами и лид",
+      "must_trigger": true,
+      "_video_ts": "24:12",
+      "_note": "Whisper produced 'лид' for 'лими/Lima'"
+    },
+    {
+      "text_match": "типы нетворка",
+      "must_trigger": true,
+      "_video_ts": "24:59"
+    },
+    {
+      "text_match": "зачем нам это нужно",
+      "must_trigger": true,
+      "_video_ts": "27:14"
+    },
+    {
+      "text_match": "как ты это делал",
+      "must_trigger": true,
+      "_video_ts": "28:30"
+    },
+    {
+      "text_match": "диагностировать всю эту проблему",
+      "must_trigger": true,
+      "_video_ts": "29:24"
+    },
+    {
+      "text_match": "отличаются таски от ролей",
+      "must_trigger": true,
+      "_video_ts": "31:14"
+    },
+    {
+      "text_match": "по списку пакетов",
+      "must_trigger": true,
+      "_video_ts": "32:38",
+      "_note": "Refined from bare 'пакетов' which was too vague"
+    }
+  ],
+
+  "_out_of_range_triggers": [
+    { "text_match": "покупка серверов", "_video_ts": "02:13", "_note": "Before 6:05 capture start" },
+    { "text_match": "переменные хранятся", "_video_ts": "36:41", "_note": "After 34:31 capture end" },
+    { "text_match": "gitlab runner", "_video_ts": "43:17", "_note": "After 34:31" },
+    { "text_match": "как нам с ними работать", "_video_ts": "45:03", "_note": "After 34:31" }
+  ],
+
+  "expected_quiet": [
+    "угу",
+    "ага",
+    "конечно",
+    "так точно",
+    "хорошо",
+    "ну вот",
+    "прикольно"
+  ],
+
+  "_quiet_notes": "Exact-whole-utterance match (not substring). Only flags pure-filler turns like 'Угу.' alone — not real questions that happen to contain filler words.",
+
+  "answer_quality_notes": "## Чек-лист ручной проверки качества AI-ответов\n\n### Темы вопросов\n1. **Docker basics** — image vs container, build/run/start/stop\n2. **Docker advanced** — multi-stage builds, image size optimization, .dockerignore\n3. **Docker networking** — bridge/host/overlay drivers, IP allocation\n4. **Docker security** — user namespacing, capabilities\n5. **Ansible** — playbooks, tasks, roles, vars, vault, group_vars\n6. **GitLab CI** — pipelines, runners, variables (protected/masked), artifacts\n7. **System diagnostics** — dmesg, RAID, hardware errors, hex decoding\n8. **Process states** — running/sleeping/zombie/stopped (D/S/R/Z/T)\n\n### Что ответы ДОЛЖНЫ содержать\n- Конкретные команды (`docker ps -a`, `ansible-playbook -e var=val`)\n- Точные различия (например docker run vs start vs exec)\n- Реальные примеры конфигов / yaml\n- Подводные камни (например image cache layers)\n\n### Чего ответы НЕ ДОЛЖНЫ содержать\n- Преамбулы (\"Хороший вопрос!\", \"Конечно\")\n- Серверlessness/lambda упоминаний (вопросы не про cloud functions)\n- Kubernetes когда вопрос про чистый Docker (контекст важен!)\n- Длинных ответов >120 слов\n\n### Whisper-артефакты для AI-восстановления\nAI должен мысленно делать замены: \"Прокмаст\"→Proxmox, \"Дмеска/Демеск\"→dmesg, \"идж\"→image, \"Rate\"→RAID, \"Plynux\"→Linux."
+}

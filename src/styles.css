@@ -1,0 +1,1342 @@
+/* =====================================================================
+   Natively / overlay-mvp — styles.css
+   Single source of truth. Target: Edge WebView2 (Chromium 120+).
+   Dark-only. Glass on overlay/tile, solid on settings/replay.
+   ===================================================================== */
+
+:root {
+  /* --- Surface scale (warm-cool neutral, zinc-tinted) --------------- */
+  --c-bg-0:        #0e0e11;            /* page void                    */
+  --c-bg-1:        #18181c;            /* solid panel base             */
+  --c-bg-2:        #1f1f25;            /* raised surface               */
+  --c-bg-3:        #26262e;            /* hover / input fill           */
+  --c-bg-4:        #2f2f38;            /* pressed / strong fill        */
+
+  /* --- Text -------------------------------------------------------- */
+  --c-text:        #e8e8ee;            /* primary                      */
+  --c-text-mute:   #9ca3af;            /* secondary                    */
+  --c-text-dim:    #6b6b76;            /* placeholder, hint            */
+
+  /* --- Borders / separators --------------------------------------- */
+  --c-border:      #2a2a32;
+  --c-border-soft: #22222a;
+  --c-border-strong: #3a3a45;
+
+  /* --- Semantic accents (KEEP meanings) --------------------------- */
+  --c-auto:        #6366f1;            /* indigo — detector tile       */
+  --c-system:      #fb923c;            /* orange — interviewer 🔊      */
+  --c-mic:         #22c55e;            /* green — user 🎤              */
+  --c-manual:      #9ca3af;            /* gray — F6 manual             */
+  --c-error:       #ef4444;            /* red — error / recording      */
+  --c-warn:        #facc15;            /* yellow — thinking / rate-lim */
+  --c-ai:          #a855f7;            /* purple — AI request rows     */
+
+  /* --- Glass --------------------------------------------------------
+     Glass surfaces composite over fully transparent Tauri windows.
+     Keep alpha < 0.85 or the blur reads as solid.                    */
+  --c-glass-bg:    color-mix(in srgb, var(--c-bg-1) 72%, transparent);
+  --c-glass-bg-strong: color-mix(in srgb, var(--c-bg-1) 84%, transparent);
+  --c-glass-border: color-mix(in srgb, #ffffff 9%, transparent);
+  --c-glass-shadow: 0 8px 32px -8px rgb(0 0 0 / 0.55),
+                    0 1px 0 0 color-mix(in srgb, #ffffff 6%, transparent) inset;
+
+  /* --- Focus ring (shared) --------------------------------------- */
+  --c-focus:       color-mix(in srgb, var(--c-auto) 65%, transparent);
+  --ring:          0 0 0 2px var(--c-bg-1), 0 0 0 4px var(--c-focus);
+  --ring-glass:    0 0 0 2px color-mix(in srgb, #000 50%, transparent),
+                   0 0 0 4px var(--c-focus);
+
+  /* --- Radius ------------------------------------------------------ */
+  --r-1: 4px;
+  --r-2: 6px;
+  --r-3: 8px;
+  --r-4: 10px;
+
+  /* --- Type sizes -------------------------------------------------- */
+  --fs-10: 10px;
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-15: 15px;
+  --fs-16: 16px;
+
+  /* --- Spacing (compact: this is a peripheral HUD) ---------------- */
+  --s-1: 4px;
+  --s-2: 6px;
+  --s-3: 8px;
+  --s-4: 12px;
+  --s-5: 16px;
+  --s-6: 20px;
+
+  /* --- Fonts ------------------------------------------------------- */
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI",
+             system-ui, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "SF Mono", "Cascadia Mono",
+               Menlo, Consolas, monospace;
+
+  /* --- Motion ------------------------------------------------------ */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --dur-fast: 80ms;
+  --dur-base: 140ms;
+}
+
+/* =====================================================================
+   1. Base reset
+   ===================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: transparent;             /* Tauri windows handle bg     */
+  color: var(--c-text);
+  font: 400 var(--fs-13)/1.45 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  user-select: none;
+  cursor: default;
+}
+
+::selection { background: color-mix(in srgb, var(--c-auto) 55%, transparent); }
+
+/* =====================================================================
+   2. Shared interactives — focus, active, kbd, scrollbar
+   ===================================================================== */
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+button { cursor: pointer; }
+
+:where(button, input, select, textarea):focus { outline: 0; }
+
+:where(button, input, select, textarea):focus-visible {
+  outline: 0;
+  box-shadow: var(--ring);
+}
+
+/* Buttons get tactile feedback */
+:where(button, .btn, .icon-btn, .tile-close):active {
+  transform: scale(0.97);
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+kbd {
+  font: 500 var(--fs-11)/1 var(--font-mono);
+  color: var(--c-text-mute);
+  padding: 1px 5px;
+  border: 1px solid var(--c-border);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  background: var(--c-bg-2);
+  display: inline-block;
+}
+
+/* Subtle scrollbar — these surfaces are tiny */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--c-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--c-border-strong); }
+
+/* =====================================================================
+   3. Overlay (glass)  — .overlay-root + .overlay-bar
+   ===================================================================== */
+
+.overlay-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--c-glass-bg);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid var(--c-glass-border);
+  border-radius: var(--r-4);
+  box-shadow: var(--c-glass-shadow);
+  overflow: hidden;
+  font-size: var(--fs-13);
+}
+
+.overlay-bar {
+  -webkit-app-region: drag;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  height: 36px;
+  border-bottom: 1px solid var(--c-glass-border);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, #ffffff 3%, transparent),
+    transparent
+  );
+}
+.overlay-bar:active { cursor: grabbing; }
+.overlay-bar :where(button, input, select, .no-drag, kbd) {
+  -webkit-app-region: no-drag;
+}
+
+/* Status pill on the bar (label + dot) */
+.overlay-bar .status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--fs-12);
+  color: var(--c-text-mute);
+  padding: 2px var(--s-2);
+  border-radius: var(--r-1);
+  letter-spacing: 0.01em;
+}
+
+/* error variant — slim left bar + tinted bg */
+.overlay-bar .status.status-error,
+.status-error {
+  color: var(--c-text);
+  background: color-mix(in srgb, var(--c-error) 12%, transparent);
+  border-left: 2px solid var(--c-error);
+  padding-left: var(--s-2);
+}
+
+/* Status dot — 10px with halo states ----------------------------- */
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--c-border-strong);
+  flex: 0 0 auto;
+  display: inline-block;
+  position: relative;
+  transition: background var(--dur-base) var(--ease);
+}
+.dot.active {
+  background: var(--c-mic);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-mic) 22%, transparent);
+}
+.dot.thinking {
+  background: var(--c-warn);
+  box-shadow:
+    0 0 0 0 color-mix(in srgb, var(--c-warn) 50%, transparent);
+  animation: dot-halo 1.6s ease-out infinite;
+}
+
+@keyframes dot-halo {
+  0%   { box-shadow: 0 0 0 0   color-mix(in srgb, var(--c-warn) 55%, transparent); }
+  70%  { box-shadow: 0 0 0 8px color-mix(in srgb, var(--c-warn)  0%, transparent); }
+  100% { box-shadow: 0 0 0 0   color-mix(in srgb, var(--c-warn)  0%, transparent); }
+}
+
+/* --- Icon button -------------------------------------------------- */
+.icon-btn {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-1);
+  min-width: 64px;                     /* prevents reflow when label
+                                          flips between "🎤 hold" and
+                                          "🎤 ⏺ 1.4s"                  */
+  height: 26px;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-2);
+  border: 1px solid var(--c-border);
+  background: color-mix(in srgb, var(--c-bg-2) 65%, transparent);
+  color: var(--c-text);
+  font-size: var(--fs-12);
+  font-variant-numeric: tabular-nums;  /* counter doesn't jiggle      */
+  transition:
+    background var(--dur-base) var(--ease),
+    border-color var(--dur-base) var(--ease),
+    color var(--dur-base) var(--ease);
+}
+.icon-btn:hover {
+  background: color-mix(in srgb, var(--c-bg-3) 75%, transparent);
+  border-color: var(--c-border-strong);
+}
+
+.icon-btn.recording {
+  color: var(--c-text);
+  border-color: color-mix(in srgb, var(--c-error) 55%, transparent);
+  background: color-mix(in srgb, var(--c-error) 14%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-error) 35%, transparent),
+              0 0 12px -4px color-mix(in srgb, var(--c-error) 45%, transparent);
+  animation: rec-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes rec-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-error) 35%, transparent),
+                         0 0 10px -4px color-mix(in srgb, var(--c-error) 35%, transparent); }
+  50%      { box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-error) 55%, transparent),
+                         0 0 16px -2px color-mix(in srgb, var(--c-error) 60%, transparent); }
+}
+
+/* "soft" pulse for the listening dot (used by .pulse helper) */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+.pulse { animation: pulse 2s ease-in-out infinite; }
+
+/* --- Transcript tail (the live caption strip) ------------------- */
+.transcript-tail {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: 400 var(--fs-12)/1.4 var(--font-mono);
+  color: var(--c-text-mute);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-2);
+  background: color-mix(in srgb, var(--c-bg-0) 40%, transparent);
+  border: 1px solid var(--c-border-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-app-region: no-drag;
+}
+.transcript-tail:empty::before {
+  content: "waiting for speech…";
+  color: var(--c-text-dim);
+  font-style: italic;
+}
+
+/* =====================================================================
+   4. Tiles (glass)  — .tile-root + kinds
+   ===================================================================== */
+
+.tile-root {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  background: var(--c-glass-bg-strong);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  border: 1px solid var(--c-glass-border);
+  border-radius: var(--r-4);
+  box-shadow: var(--c-glass-shadow);
+  overflow: hidden;
+  font-size: var(--fs-13);
+  max-width: 380px;                    /* matches JS setSize cap      */
+  max-height: 400px;
+}
+
+/* Kind-color is carried by border + shadow + bar — never by fills.
+   Use --kind so child rules don't need to repeat the selector.       */
+.tile-kind-auto    { --kind: var(--c-auto);   }
+.tile-kind-system  { --kind: var(--c-system); }
+.tile-kind-mic     { --kind: var(--c-mic);    }
+.tile-kind-manual  { --kind: var(--c-manual); }
+
+.tile-root[class*="tile-kind-"] {
+  border-color: color-mix(in srgb, var(--kind) 60%, var(--c-glass-border));
+  box-shadow:
+    0 8px 32px -8px rgb(0 0 0 / 0.55),
+    0 0 0 1px color-mix(in srgb, var(--kind) 30%, transparent),
+    0 0 24px -10px color-mix(in srgb, var(--kind) 55%, transparent);
+}
+
+.tile-bar {
+  -webkit-app-region: drag;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  height: 22px;
+  padding: 0 var(--s-2) 0 var(--s-3);
+  background: color-mix(in srgb, var(--kind, var(--c-border)) 22%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--kind, var(--c-border)) 40%, transparent);
+  font-size: var(--fs-11);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--kind, var(--c-text-mute)) 75%, white);
+}
+.tile-bar:active { cursor: grabbing; }
+.tile-bar :where(button, .no-drag) { -webkit-app-region: no-drag; }
+
+.tile-bar .tile-source {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-close {
+  -webkit-app-region: no-drag;
+  width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--r-1);
+  color: var(--c-text-mute);
+  font-size: var(--fs-13);
+  line-height: 1;
+  transition: background var(--dur-base) var(--ease),
+              color var(--dur-base) var(--ease);
+}
+.tile-close:hover {
+  background: color-mix(in srgb, #ffffff 10%, transparent);
+  color: var(--c-text);
+}
+
+/* Question (interviewer line) — neutral so kind only shows on chrome */
+.tile-q {
+  padding: var(--s-3) var(--s-4) var(--s-2);
+  font: 500 var(--fs-13)/1.4 var(--font-ui);
+  color: var(--c-text);                /* explicitly neutral          */
+  border-bottom: 1px solid var(--c-border-soft);
+}
+
+/* Body (Claude's streamed answer) */
+.tile-body {
+  padding: var(--s-3) var(--s-4) var(--s-4);
+  font-size: var(--fs-13);
+  line-height: 1.55;
+  color: var(--c-text);
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Markdown content — hierarchy intentionally flat (h1/h2/h3 same size) */
+.tile-body.markdown :where(h1, h2, h3) {
+  font: 600 var(--fs-13)/1.4 var(--font-ui);
+  margin: var(--s-3) 0 var(--s-1);
+  color: var(--c-text);
+}
+.tile-body.markdown p { margin: 0 0 var(--s-2); }
+.tile-body.markdown p:last-child { margin-bottom: 0; }
+.tile-body.markdown :where(ul, ol) {
+  margin: var(--s-1) 0 var(--s-2);
+  padding-left: var(--s-5);
+}
+.tile-body.markdown li + li { margin-top: 2px; }
+.tile-body.markdown strong { color: var(--c-text); font-weight: 600; }
+.tile-body.markdown em { color: var(--c-text-mute); font-style: italic; }
+
+/* Inline code + pre — charcoal tint, kind-neutral */
+.tile-body.markdown :where(code, pre) {
+  font: 500 var(--fs-12)/1.5 var(--font-mono);
+  background: color-mix(in srgb, var(--c-bg-0) 60%, transparent);
+  border: 1px solid var(--c-border-soft);
+  color: var(--c-text);
+}
+.tile-body.markdown code {
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.tile-body.markdown pre {
+  padding: var(--s-3);
+  border-radius: var(--r-2);
+  overflow-x: auto;
+  margin: var(--s-2) 0;
+}
+.tile-body.markdown pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.tile-body.markdown a {
+  color: color-mix(in srgb, var(--c-auto) 80%, white);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--c-auto) 50%, transparent);
+  text-underline-offset: 2px;
+}
+
+.tile-body.markdown blockquote {
+  margin: var(--s-2) 0;
+  padding: 2px var(--s-3);
+  border-left: 2px solid var(--c-border-strong);
+  color: var(--c-text-mute);
+}
+
+/* =====================================================================
+   5. Settings panel — solid surface
+   ===================================================================== */
+
+.settings-root {
+  position: fixed;
+  inset: 0;
+  background: var(--c-bg-1);
+  color: var(--c-text);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-4);
+  overflow: hidden;
+}
+
+.settings-root header {
+  padding: var(--s-4) var(--s-5);
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-bg-2);
+  font: 600 var(--fs-13)/1 var(--font-ui);
+  letter-spacing: 0.02em;
+  -webkit-app-region: drag;
+  cursor: grab;
+}
+.settings-root header:active { cursor: grabbing; }
+.settings-root header :where(button, input, .no-drag) {
+  -webkit-app-region: no-drag;
+}
+
+.settings-root .body {
+  padding: var(--s-5);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.settings-root .footer {
+  padding: var(--s-3) var(--s-5);
+  border-top: 1px solid var(--c-border);
+  background: var(--c-bg-2);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-2);
+}
+
+/* --- Field (label + control) ----------------------------------- */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.field > label {
+  font-size: var(--fs-12);
+  color: var(--c-text-mute);
+  letter-spacing: 0.01em;
+}
+.field .hint {
+  font-size: var(--fs-11);
+  color: var(--c-text-dim);
+  line-height: 1.4;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="number"],
+input[type="search"],
+select,
+textarea {
+  width: 100%;
+  height: 30px;
+  padding: 0 var(--s-3);
+  background: var(--c-bg-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-2);
+  color: var(--c-text);
+  font-size: var(--fs-13);
+  transition: border-color var(--dur-base) var(--ease),
+              background var(--dur-base) var(--ease);
+}
+textarea {
+  height: auto;
+  min-height: 72px;
+  padding: var(--s-2) var(--s-3);
+  font: 400 var(--fs-12)/1.5 var(--font-mono);
+  resize: vertical;
+}
+input::placeholder, textarea::placeholder { color: var(--c-text-dim); }
+
+input:hover, select:hover, textarea:hover {
+  border-color: var(--c-border-strong);
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  border-color: color-mix(in srgb, var(--c-auto) 70%, transparent);
+  background: var(--c-bg-3);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-auto) 22%, transparent);
+}
+
+/* --- Generic button .btn / .btn.secondary ---------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  height: 30px;
+  padding: 0 var(--s-4);
+  border-radius: var(--r-2);
+  font: 500 var(--fs-12)/1 var(--font-ui);
+  letter-spacing: 0.01em;
+  border: 1px solid color-mix(in srgb, var(--c-auto) 70%, var(--c-border-strong));
+  background: color-mix(in srgb, var(--c-auto) 80%, var(--c-bg-2));
+  color: #fff;
+  transition: background var(--dur-base) var(--ease),
+              border-color var(--dur-base) var(--ease);
+}
+.btn:hover {
+  background: color-mix(in srgb, var(--c-auto) 92%, white 4%);
+  border-color: var(--c-auto);
+}
+.btn.secondary {
+  background: var(--c-bg-3);
+  border-color: var(--c-border);
+  color: var(--c-text);
+}
+.btn.secondary:hover {
+  background: var(--c-bg-4);
+  border-color: var(--c-border-strong);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* =====================================================================
+   6. Replay panel — solid, monospace, dense
+   ===================================================================== */
+
+.replay-root {
+  position: fixed;
+  inset: 0;
+  background: var(--c-bg-1);
+  color: var(--c-text);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-4);
+  overflow: hidden;
+}
+
+.replay-root header {
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-bg-2);
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  font: 600 var(--fs-12)/1 var(--font-ui);
+  -webkit-app-region: drag;
+  cursor: grab;
+}
+.replay-root header:active { cursor: grabbing; }
+.replay-root header :where(button, input, .no-drag) {
+  -webkit-app-region: no-drag;
+}
+
+.replay-root .body {
+  overflow-y: auto;
+  font: 400 var(--fs-12)/1.55 var(--font-mono);
+}
+
+.replay-row {
+  display: grid;
+  grid-template-columns: 64px 80px 1fr;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-4);
+  border-bottom: 1px solid var(--c-border-soft);
+  align-items: baseline;
+  border-left: 2px solid transparent;
+}
+.replay-row .ts {
+  color: var(--c-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.replay-row .kind {
+  font-size: var(--fs-10);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-text-mute);
+}
+.replay-row .msg {
+  color: var(--c-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Row-kind coloring lives on the left rail + .kind label color.
+   Backgrounds stay almost transparent so a long replay isn't busy.   */
+.replay-row.transcript       { border-left-color: var(--c-text-mute); }
+.replay-row.transcript .kind { color: var(--c-text-mute); }
+
+.replay-row.ai-req           { border-left-color: var(--c-ai); }
+.replay-row.ai-req .kind     { color: var(--c-ai); }
+.replay-row.ai-req .msg      { color: color-mix(in srgb, var(--c-text) 80%, var(--c-ai)); }
+
+.replay-row.ai-resp          { border-left-color: color-mix(in srgb, var(--c-ai) 60%, white); }
+.replay-row.ai-resp .kind    { color: color-mix(in srgb, var(--c-ai) 60%, white); }
+
+.replay-row.tile             { border-left-color: var(--c-auto); }
+.replay-row.tile .kind       { color: var(--c-auto); }
+
+.replay-row.detector-on      { border-left-color: var(--c-mic); }
+.replay-row.detector-on .kind{ color: var(--c-mic); }
+
+.replay-row.detector-off     { border-left-color: var(--c-text-dim); }
+.replay-row.detector-off .kind { color: var(--c-text-dim); }
+
+.replay-row.session-start    { border-left-color: var(--c-mic); }
+.replay-row.session-start .kind { color: var(--c-mic); }
+.replay-row.session-start    { background: color-mix(in srgb, var(--c-mic) 5%, transparent); }
+
+.replay-row.session-stop     { border-left-color: var(--c-text-dim); }
+.replay-row.session-stop .kind { color: var(--c-text-dim); }
+
+.replay-row.session-summary  { border-left-color: var(--c-auto); }
+.replay-row.session-summary  { background: color-mix(in srgb, var(--c-auto) 6%, transparent); }
+.replay-row.session-summary .kind { color: var(--c-auto); }
+
+.replay-row.rate-limited     { border-left-color: var(--c-warn); }
+.replay-row.rate-limited .kind { color: var(--c-warn); }
+.replay-row.rate-limited     { background: color-mix(in srgb, var(--c-warn) 6%, transparent); }
+
+.replay-row.error            { border-left-color: var(--c-error); }
+.replay-row.error .kind      { color: var(--c-error); }
+.replay-row.error            { background: color-mix(in srgb, var(--c-error) 8%, transparent); }
+
+.replay-row.unknown          { border-left-color: var(--c-border-strong); }
+.replay-row.unknown .kind    { color: var(--c-text-dim); }
+
+/* hover lift for any row */
+.replay-row:hover { background: color-mix(in srgb, #ffffff 3%, transparent); }
+.replay-row.session-start:hover  { background: color-mix(in srgb, var(--c-mic) 9%, transparent); }
+.replay-row.session-summary:hover{ background: color-mix(in srgb, var(--c-auto) 10%, transparent); }
+.replay-row.rate-limited:hover   { background: color-mix(in srgb, var(--c-warn) 10%, transparent); }
+.replay-row.error:hover          { background: color-mix(in srgb, var(--c-error) 12%, transparent); }
+
+/* =====================================================================
+   7. Reduced motion — kill all keyframed animations + scale presses
+   ===================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .dot.thinking,
+  .icon-btn.recording,
+  .pulse {
+    animation: none;
+  }
+  :where(button, .btn, .icon-btn, .tile-close):active {
+    transform: none;
+  }
+}
+
+/* =====================================================================
+   Notes (rationale + a11y + what stayed)
+   =====================================================================
+   Design rationale
+   ----------------
+   This refresh treats the overlay as a *peripheral HUD* worn over a
+   live meeting. Color is demoted to chrome only — 1px borders, soft
+   outer glows, and the slim .tile-bar strip carry kind semantics, so
+   the user's eye never has to compete with the call window behind.
+   The system uses one neutral surface scale (--c-bg-0..4) and seven
+   semantic accents whose meanings are frozen; everything else is a
+   color-mix() of those tokens, which makes the file easy to retheme
+   from --c-bg-1 alone.
+
+   Accessibility
+   -------------
+   • Every interactive element shows a 2px focus-visible ring with
+     a contrasting inset, including inputs, selects, textareas, and
+     the close glyph.
+   • prefers-reduced-motion disables the recording pulse, the
+     thinking-dot halo, and the :active scale, while keeping all
+     non-animated state changes legible.
+   • The thinking dot communicates state via an expanding halo
+     (size + color), not opacity alone — so it reads even at low
+     contrast settings.
+   • .status-error pairs a left-bar (shape) with red tint (color),
+     so the error state is conveyed through more than hue.
+   • kbd uses tabular monospace + a doubled bottom-border, which
+     keeps it visually distinct from neighboring buttons without
+     relying on color.
+   • Minimum 11px on chrome, 12px on body — at the WebView2 logical
+     scale these clear ~14–16px CSS density.
+
+   Intentionally NOT changed
+   -------------------------
+   • All existing class names continue to work; no JSX/TSX changes
+     are required.
+   • Markdown h1/h2/h3 stay the same size as body — tiles are tiny
+     and a real hierarchy would waste vertical space.
+   • Emoji glyphs (🎤 🔊 📌 📸 💰 ⚠ ⚙ × ⏺) are untouched.
+   • backdrop-filter glass remains on .overlay-root and .tile-root;
+     .settings-root and .replay-root stay solid as specified.
+   • No gradients on large surfaces, no shadows on body text, no
+     !important rules, no new dependencies.
+   ===================================================================== */
+
+/* =====================================================================
+   8. Compat layer — keeps current JSX class names working without
+      having to restructure component code. Drop or fold into the main
+      sections once the JSX is fully migrated to the design grammar.
+   ===================================================================== */
+
+/* Body scoping — current JSX adds body.{overlay|tile|settings} */
+body.overlay, body.tile {
+  background: transparent;
+}
+body.settings {
+  background: var(--c-bg-1);
+  color: var(--c-text);
+  overflow-y: auto;
+}
+
+/* --- Overlay bar: status text label + hint chips ----------------- */
+
+/* Current JSX renders <div class="dot"/> + <div class="status-text">…</div>
+   instead of the design's <span class="status"><span class="dot"/><span/></span>.
+   Treat the bare .status-text as a flex spacer that pushes the rest right. */
+.status-text {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: var(--fs-12);
+  color: var(--c-text-mute);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.status-text.status-error {
+  flex: 0 1 auto;
+  color: var(--c-text);
+  background: color-mix(in srgb, var(--c-error) 14%, transparent);
+  border-left: 2px solid var(--c-error);
+  padding: 2px var(--s-2);
+  border-radius: var(--r-1);
+}
+
+/* Small inline hint chips (📸 ready, ⏱ rate-limited, 💰 cost, ⚠ warn, F-keys) */
+.hint {
+  font-size: var(--fs-11);
+  color: var(--c-text-mute);
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
+}
+
+/* Single-emoji icon buttons in the overlay bar (⚙, …) — opt-out of
+   the 64px min-width that the .icon-btn baseline uses for hold buttons. */
+.icon-btn.icon-only,
+.icon-btn[data-compact="true"] {
+  min-width: 28px;
+  padding: 0 var(--s-2);
+}
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* --- Overlay answer-bubble (inline streaming AI reply) ---------- */
+.answer-bubble {
+  padding: var(--s-3) var(--s-4);
+  font-size: var(--fs-13);
+  line-height: 1.5;
+  color: var(--c-text);
+  background: color-mix(in srgb, var(--c-bg-0) 50%, transparent);
+  border-top: 1px solid var(--c-glass-border);
+  max-height: 240px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  animation: fade-in 150ms ease-out;
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* --- Transcript tail: current JSX places it OUTSIDE .overlay-bar
+       as a separate row. Override the design's in-bar version. ---- */
+.overlay-root > .transcript-tail {
+  flex: 0 0 auto;
+  border: 0;
+  border-top: 1px solid var(--c-glass-border);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--c-bg-0) 30%, transparent);
+  padding: var(--s-2) var(--s-4);
+  font: 400 var(--fs-12)/1.4 var(--font-mono);
+  color: var(--c-text-mute);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-app-region: no-drag;
+}
+.overlay-root > .transcript-tail:empty::before {
+  content: "ожидание речи…";
+  color: var(--c-text-dim);
+  font-style: italic;
+}
+
+/* --- Tile pin state (📌 button shows yellow when pinned) -------- */
+.tile-close[data-pinned="true"] {
+  color: var(--c-warn);
+}
+
+/* --- Settings: keep current .settings-section / .field / .btn-row
+       structure working under design's .settings-root styling. ---- */
+.settings-root {
+  position: static;
+  inset: auto;
+  padding: var(--s-5);
+  overflow-y: auto;
+  border-radius: 0;
+  border: 0;
+  gap: 0;
+}
+.settings-root h2 {
+  font: 600 var(--fs-15)/1.2 var(--font-ui);
+  margin: 0 0 var(--s-4);
+  color: var(--c-text);
+}
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding-bottom: var(--s-4);
+  margin-bottom: var(--s-4);
+  border-bottom: 1px solid var(--c-border-soft);
+}
+.settings-section:last-of-type {
+  border-bottom: 0;
+}
+.settings-section h3 {
+  font: 600 var(--fs-12)/1.2 var(--font-ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-text-mute);
+  margin: 0 0 var(--s-2);
+}
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  justify-content: flex-end;
+  margin-top: var(--s-3);
+}
+
+/* --- Replay viewer: current JSX uses .replay-* class grammar ----- */
+.replay-root {
+  position: static;
+  inset: auto;
+  padding: var(--s-4) var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  height: 100vh;
+  overflow: hidden;
+  border-radius: 0;
+  border: 0;
+}
+.replay-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  flex-shrink: 0;
+}
+.replay-header h2 {
+  font: 600 var(--fs-15)/1.2 var(--font-ui);
+  margin: 0;
+  color: var(--c-text);
+}
+.replay-controls {
+  display: flex;
+  gap: var(--s-2);
+  align-items: center;
+}
+.replay-select {
+  flex: 1;
+  height: 30px;
+  padding: 0 var(--s-3);
+  background: var(--c-bg-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-2);
+  color: var(--c-text);
+  font: 400 var(--fs-12)/1 var(--font-mono);
+}
+.replay-error {
+  background: color-mix(in srgb, var(--c-error) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-error) 35%, transparent);
+  border-left: 3px solid var(--c-error);
+  color: var(--c-text);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-2);
+  font-size: var(--fs-12);
+}
+.replay-status {
+  color: var(--c-text-mute);
+  font-size: var(--fs-12);
+  padding: var(--s-4) 0;
+}
+.replay-timeline {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--c-bg-0);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-2);
+  font: 400 var(--fs-11)/1.5 var(--font-mono);
+}
+.replay-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--s-2) var(--s-3);
+  background: var(--c-bg-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-2);
+  font-size: var(--fs-11);
+  color: var(--c-text-mute);
+  flex-shrink: 0;
+}
+
+/* Map current Replay row JSX (span.replay-time / .replay-label / .replay-body)
+   onto the design's .ts / .kind / .msg visual grammar. */
+.replay-row {
+  display: grid;
+  grid-template-columns: 70px 140px 1fr;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--c-border-soft);
+  border-left: 3px solid transparent;
+  align-items: baseline;
+}
+.replay-row:hover {
+  background: color-mix(in srgb, #fff 3%, transparent);
+}
+.replay-time {
+  color: var(--c-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.replay-label {
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: var(--fs-10);
+}
+.replay-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  align-items: baseline;
+  color: var(--c-text);
+}
+.replay-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.replay-meta {
+  color: var(--c-text-mute);
+  font-size: var(--fs-10);
+  background: color-mix(in srgb, #fff 5%, transparent);
+  border: 1px solid var(--c-border-soft);
+  border-radius: var(--r-1);
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+/* Per-kind accents — left rail + label tint. Backgrounds stay subtle. */
+.replay-row.session-start    { border-left-color: var(--c-mic); background: color-mix(in srgb, var(--c-mic) 5%, transparent); }
+.replay-row.session-start  .replay-label { color: var(--c-mic); }
+.replay-row.session-stop     { border-left-color: var(--c-text-dim); }
+.replay-row.session-stop   .replay-label { color: var(--c-text-dim); }
+.replay-row.session-summary  { border-left-color: var(--c-auto); background: color-mix(in srgb, var(--c-auto) 6%, transparent); }
+.replay-row.session-summary .replay-label { color: var(--c-auto); }
+.replay-row.session-summary .replay-meta  { background: color-mix(in srgb, var(--c-auto) 14%, transparent); color: color-mix(in srgb, var(--c-auto) 60%, white); border-color: color-mix(in srgb, var(--c-auto) 25%, transparent); }
+.replay-row.transcript       { border-left-color: var(--c-text-mute); }
+.replay-row.transcript     .replay-label { color: var(--c-text-mute); }
+.replay-row.detector-on      { border-left-color: var(--c-warn); background: color-mix(in srgb, var(--c-warn) 6%, transparent); }
+.replay-row.detector-on    .replay-label { color: var(--c-warn); }
+.replay-row.detector-off     { border-left-color: var(--c-text-dim); }
+.replay-row.detector-off   .replay-label { color: var(--c-text-dim); }
+.replay-row.detector-off   .replay-text  { color: var(--c-text-mute); }
+.replay-row.ai-req           { border-left-color: var(--c-ai); background: color-mix(in srgb, var(--c-ai) 6%, transparent); }
+.replay-row.ai-req         .replay-label { color: var(--c-ai); }
+.replay-row.ai-resp          { border-left-color: var(--c-mic); background: color-mix(in srgb, var(--c-mic) 4%, transparent); }
+.replay-row.ai-resp        .replay-label { color: var(--c-mic); }
+.replay-row.tile             { border-left-color: var(--c-auto); }
+.replay-row.tile           .replay-label { color: var(--c-auto); }
+.replay-row.rate-limited     { border-left-color: var(--c-system); background: color-mix(in srgb, var(--c-system) 7%, transparent); }
+.replay-row.rate-limited   .replay-label { color: var(--c-system); }
+.replay-row.error            { border-left-color: var(--c-error); background: color-mix(in srgb, var(--c-error) 8%, transparent); }
+.replay-row.error          .replay-label { color: var(--c-error); }
+.replay-row.unknown          { border-left-color: var(--c-border-strong); }
+.replay-row.unknown        .replay-label { color: var(--c-text-dim); }
+
+/* --- KB Palette (F4 floating search) ---------------------------- */
+.kb-palette {
+  position: absolute;
+  top: 40px;
+  left: 8px;
+  right: 8px;
+  z-index: 100;
+  background: color-mix(in srgb, var(--c-bg-1) 96%, transparent);
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--r-3);
+  box-shadow: 0 12px 40px -8px rgb(0 0 0 / 0.65);
+  overflow: hidden;
+  -webkit-app-region: no-drag;
+}
+.kb-palette-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 var(--s-4);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--c-border-soft);
+  color: var(--c-text);
+  font: 400 var(--fs-13)/1 var(--font-ui);
+  outline: none;
+}
+.kb-palette-input::placeholder {
+  color: var(--c-text-dim);
+  font-size: var(--fs-12);
+}
+.kb-palette-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.kb-palette-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 4px var(--s-3);
+  font-size: var(--fs-12);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+.kb-palette-item.active {
+  background: color-mix(in srgb, var(--c-auto) 14%, transparent);
+  border-left-color: var(--c-auto);
+}
+.kb-palette-source {
+  min-width: 60px;
+  font-size: var(--fs-10);
+  color: var(--c-text-mute);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.kb-palette-heading {
+  flex: 1 1 auto;
+  color: var(--c-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kb-palette-empty {
+  padding: var(--s-3) var(--s-4);
+  font-size: var(--fs-12);
+  color: var(--c-text-dim);
+}
+
+/* --- Failure HUD (3-dot system health in overlay bar) ----------- */
+.health-hud {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+  -webkit-app-region: no-drag;
+}
+.hud-dot {
+  /* 10×10 — meets WCAG 2.5.5 minimum target size when combined with the
+   * health-hud padding. Previous 6×6 was too small to be a real click
+   * target on hi-DPI displays and failed contrast for users with low
+   * vision (color-only signalling). The ::after glyph below adds a
+   * shape cue so color-blind users get the same signal. */
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--c-text-dim);
+  flex: 0 0 auto;
+  color: rgba(0, 0, 0, 0.7);
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  transition: background var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease);
+}
+.hud-ok       { background: var(--c-mic); }
+.hud-degraded { background: var(--c-warn); }
+.hud-degraded::after { content: "!"; }
+.hud-down     {
+  background: var(--c-error);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--c-error) 60%, transparent);
+  color: white;
+}
+.hud-down::after { content: "×"; }
+.hud-idle     { background: var(--c-border-strong); opacity: 0.5; }
+@media (prefers-reduced-motion: reduce) {
+  .hud-dot { transition: none; }
+  .hud-down { box-shadow: 0 0 0 1px var(--c-error); }
+}
+
+/* === Settings header with drag region + Quit button === */
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -16px -16px 12px -16px;
+  padding: 10px 16px;
+  background: var(--c-bg-2, rgba(255,255,255,0.04));
+  border-bottom: 1px solid var(--c-border-soft);
+  cursor: grab;
+  user-select: none;
+}
+.settings-header:active { cursor: grabbing; }
+.settings-header h2 {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--c-text-mute);
+}
+
+/* === Voice coach pill — live WPM + filler density (mic only) === */
+.coach-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  background: var(--c-bg-3, rgba(255,255,255,0.06));
+  color: var(--c-text-mute);
+  -webkit-app-region: no-drag;
+  white-space: nowrap;
+  transition: background 0.25s var(--ease), color 0.25s var(--ease);
+}
+.coach-pill.coach-ok    { color: var(--c-mic, #6abf6a); }
+.coach-pill.coach-low   { color: var(--c-text-mute); }
+.coach-pill.coach-fast  { color: var(--c-warn, #facc15); background: color-mix(in srgb, var(--c-warn, #facc15) 12%, transparent); }
+.coach-fillers {
+  color: var(--c-warn, #facc15);
+  font-weight: 700;
+}
+@media (prefers-reduced-motion: reduce) {
+  .coach-pill { transition: none; }
+}
+
+/* === Settings toast (replaces blocking window.alert) === */
+.settings-toast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 240px;
+  max-width: 480px;
+  padding: 10px 12px 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--c-text);
+  background: var(--c-bg-2);
+  border: 1px solid var(--c-border-soft);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+  animation: settings-toast-slide-in 180ms ease-out;
+}
+.settings-toast-ok  { border-left: 3px solid var(--c-mic, #6abf6a); }
+.settings-toast-err { border-left: 3px solid var(--c-error, #d77072); }
+.settings-toast-close {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--c-text-mute);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0;
+}
+.settings-toast-close:hover { color: var(--c-text); background: var(--c-bg-3, rgba(255,255,255,0.06)); }
+@keyframes settings-toast-slide-in {
+  from { transform: translateY(8px); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-toast { animation: none; }
+}
+
+/* === Settings modal (replaces blocking window.prompt/confirm) === */
+.settings-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  animation: settings-modal-fade-in 120ms ease-out;
+}
+.settings-modal {
+  min-width: 320px;
+  max-width: 480px;
+  padding: 18px 18px 14px 18px;
+  border-radius: 10px;
+  background: var(--c-bg-1, #1d1f23);
+  border: 1px solid var(--c-border-strong, rgba(255,255,255,0.12));
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+  animation: settings-modal-pop-in 180ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.settings-modal-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-text);
+  margin-bottom: 12px;
+}
+.settings-modal-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--c-text);
+  background: var(--c-bg-2);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 6px;
+  outline: none;
+  margin-bottom: 14px;
+}
+.settings-modal-input:focus { border-color: var(--c-accent, #6aa9ff); }
+.settings-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.settings-modal-danger {
+  background: var(--c-error, #d77072);
+  border-color: var(--c-error, #d77072);
+  color: white;
+}
+.settings-modal-danger:hover {
+  background: color-mix(in srgb, var(--c-error, #d77072) 80%, white);
+}
+@keyframes settings-modal-fade-in {
+  from { opacity: 0; } to { opacity: 1; }
+}
+@keyframes settings-modal-pop-in {
+  from { transform: scale(0.96); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-modal-backdrop, .settings-modal { animation: none; }
+}
