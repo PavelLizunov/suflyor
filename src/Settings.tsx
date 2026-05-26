@@ -743,180 +743,231 @@ export default function Settings() {
       </div>)}
 
       {activeSection === "ai" && (<div className="settings-section">
-        <h3>🤖 AI proxy (your Claude bridge)</h3>
-        <div className="field">
-          <label>Base URL</label>
-          <input
-            type="text"
-            value={cfg.ai_base_url}
-            onChange={(e) => update({ ai_base_url: e.target.value })}
-            placeholder="http://192.168.0.142:18902/v1"
-          />
-          {(() => {
-            // Suppress the HTTP warning when the URL is loopback (127.0.0.1,
-            // localhost, [::1]) — traffic never leaves the machine, so it's
-            // not actually exposed. Anything else over http:// is risky.
-            const url = cfg.ai_base_url.trim().toLowerCase();
-            if (!url.startsWith("http://")) return null;
-            const host = url.slice("http://".length).split("/")[0].split(":")[0];
-            const isLoopback = host === "127.0.0.1" || host === "localhost" || host === "[::1]" || host === "::1";
-            if (isLoopback) return null;
-            return (
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "var(--c-warn)",
-                  marginTop: 4,
-                  padding: "4px 8px",
-                  background: "color-mix(in srgb, var(--c-warn) 12%, transparent)",
-                  border: "1px solid color-mix(in srgb, var(--c-warn) 35%, transparent)",
-                  borderLeft: "3px solid var(--c-warn)",
-                  borderRadius: "var(--r-1)",
-                }}
-              >
-                ⚠ Plaintext HTTP to non-localhost ({host}) — bearer token + prompts travel in clear. Use https:// (Caddy/Nginx in front) for any non-localhost deployment.
-              </div>
-            );
-          })()}
-        </div>
-        <div className="field">
-          <label>Bearer secret (BRIDGE_SECRET)</label>
-          <input
-            type="password"
-            value={cfg.ai_bearer}
-            onChange={(e) => update({ ai_bearer: e.target.value })}
-          />
-        </div>
-        <div className="field">
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button
-              className="btn secondary"
-              disabled={bridgeBusy || !cfg.ai_base_url.trim() || !cfg.ai_bearer.trim()}
-              onClick={async () => {
-                setBridgeBusy(true);
-                setBridgeStatus(null);
-                try {
-                  // Pass user's configured model so bridges that don't
-                  // recognise "claude-haiku-4-5" alias (Ollama, older
-                  // proxy forks) don't get a false "model unknown" 400
-                  // misread as "bridge broken" (bug-hunt 2026-05-25).
-                  const s = await invoke<BridgeStatus>("check_bridge", {
-                    baseUrl: cfg.ai_base_url,
-                    bearer: cfg.ai_bearer,
-                    model: cfg.ai_model || null,
-                  });
-                  setBridgeStatus(s);
-                } catch (e) {
-                  setBridgeStatus({ reachable: false, status: 0, latency_ms: 0, hint: `${e}` });
-                } finally {
-                  setBridgeBusy(false);
-                }
-              }}
-              title="Минимальный 1-токен POST на /chat/completions для проверки что мост доступен"
-            >
-              {bridgeBusy ? "⏳ Проверяю…" : "🔌 Проверить мост"}
-            </button>
-            {bridgeStatus && (
-              <span
-                style={{
-                  fontSize: 12,
-                  color: bridgeStatus.reachable ? "var(--c-ok, #4ade80)" : "var(--c-err, #f87171)",
-                }}
-              >
-                {bridgeStatus.reachable ? "🟢" : "🔴"}{" "}
-                {bridgeStatus.reachable
-                  ? `OK (HTTP ${bridgeStatus.status}, ${bridgeStatus.latency_ms}ms)`
-                  : bridgeStatus.hint}
-              </span>
-            )}
-          </div>
-          {bridgeStatus && !bridgeStatus.reachable && bridgeStatus.hint && (
-            <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
-              💡 Проверь: запущен ли мост на этом IP/порту, открыт ли firewall, не сменился ли BRIDGE_SECRET.
+        {/* v0.0.40 polish — AI panel split into 4 logical .card sub-
+            sections (was a wall of 9 .field blocks). Same hooks, same
+            backend, same state. Pure structural conversion. */}
+
+        {/* ─ 🛰 Bridge endpoint ─────────────────────────────────── */}
+        <div className="card">
+          <div className="card-title">🛰 Bridge endpoint</div>
+          <div className="card-row">
+            <div className="row-label">
+              Base URL
+              <span className="row-hint">OpenAI-compatible Claude proxy. Local bridge или Caddy-fronted Anthropic.</span>
             </div>
-          )}
-        </div>
-        <div className="field">
-          <label>Лимит затрат на сессию (USD) — <strong>0 = выкл (default с v0.0.28)</strong>. Любое положительное число включит жёлтый 💰 чип когда сессия превысит сумму. AI всё равно продолжит работать.</label>
-          <input
-            type="number"
-            min={0}
-            step={0.10}
-            value={cfg.max_session_cost_usd ?? 0.0}
-            onChange={(e) => {
-              // Guard NaN — empty input or garbage paste shouldn't
-              // silently flip the cap. Keep current value if invalid.
-              const v = parseFloat(e.target.value);
-              if (Number.isFinite(v) && v >= 0) {
-                update({ max_session_cost_usd: v });
-              }
-            }}
-            style={{ width: 120 }}
-          />
-          <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
-            Для справки: $1 ≈ 200 Haiku тайлов · $5 ≈ час непрерывной речи в aggressive mode. Это SOFT warning — AI продолжает отвечать после превышения, чип просто загорается. Счётчик сбрасывается при start_session.
+            <div className="row-control">
+              <input
+                type="text"
+                value={cfg.ai_base_url}
+                onChange={(e) => update({ ai_base_url: e.target.value })}
+                placeholder="http://192.168.0.142:18902/v1"
+              />
+              {(() => {
+                const url = cfg.ai_base_url.trim().toLowerCase();
+                if (!url.startsWith("http://")) return null;
+                const host = url.slice("http://".length).split("/")[0].split(":")[0];
+                const isLoopback = host === "127.0.0.1" || host === "localhost" || host === "[::1]" || host === "::1";
+                if (isLoopback) return null;
+                return (
+                  <div className="banner warn">
+                    ⚠ Plaintext HTTP to non-localhost ({host}) — bearer token
+                    + prompts travel in clear. Use https:// (Caddy/Nginx in
+                    front) for any non-localhost deployment.
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+          <div className="card-row">
+            <div className="row-label">
+              Bearer secret
+              <span className="row-hint">BRIDGE_SECRET — хранится в config.json, не отправляется в журнал.</span>
+            </div>
+            <div className="row-control">
+              <input
+                type="password"
+                value={cfg.ai_bearer}
+                onChange={(e) => update({ ai_bearer: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="card-row">
+            <div className="row-label">
+              Health check
+              <span className="row-hint">1-токен POST на /chat/completions — проверяет URL + bearer + сетевой путь.</span>
+            </div>
+            <div className="row-control">
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <button
+                  className="btn secondary"
+                  disabled={bridgeBusy || !cfg.ai_base_url.trim() || !cfg.ai_bearer.trim()}
+                  onClick={async () => {
+                    setBridgeBusy(true);
+                    setBridgeStatus(null);
+                    try {
+                      const s = await invoke<BridgeStatus>("check_bridge", {
+                        baseUrl: cfg.ai_base_url,
+                        bearer: cfg.ai_bearer,
+                        model: cfg.ai_model || null,
+                      });
+                      setBridgeStatus(s);
+                    } catch (e) {
+                      setBridgeStatus({ reachable: false, status: 0, latency_ms: 0, hint: `${e}` });
+                    } finally {
+                      setBridgeBusy(false);
+                    }
+                  }}
+                  title="Минимальный 1-токен POST на /chat/completions"
+                >
+                  {bridgeBusy ? "⏳ Проверяю…" : "🔌 Проверить мост"}
+                </button>
+                {bridgeStatus && (
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: bridgeStatus.reachable ? "var(--c-mic, #4ade80)" : "var(--c-error, #f87171)",
+                    }}
+                  >
+                    {bridgeStatus.reachable ? "🟢" : "🔴"}{" "}
+                    {bridgeStatus.reachable
+                      ? `OK (HTTP ${bridgeStatus.status}, ${bridgeStatus.latency_ms}ms)`
+                      : bridgeStatus.hint}
+                  </span>
+                )}
+              </div>
+              {bridgeStatus && !bridgeStatus.reachable && bridgeStatus.hint && (
+                <div className="hint">
+                  💡 Проверь: запущен ли мост на этом IP/порту, открыт ли firewall, не сменился ли BRIDGE_SECRET.
+                </div>
+              )}
+            </div>
           </div>
         </div>
-        <div className="field">
-          <label>
-            <input
-              type="checkbox"
-              checked={cfg.detector_skip_mic ?? true}
-              onChange={(e) => update({ detector_skip_mic: e.target.checked })}
-              style={{ marginRight: 6 }}
+
+        {/* ─ 🧠 Models ─────────────────────────────────────────── */}
+        <div className="card">
+          <div className="card-title">🧠 Модели + язык</div>
+          <div className="card-row">
+            <div className="row-label">
+              Живые ответы
+              <span className="row-hint">Эта модель работает на каждый тайл. Нужна скорость.</span>
+            </div>
+            <div className="row-control">
+              <select
+                value={cfg.ai_model}
+                onChange={(e) => update({ ai_model: e.target.value })}
+              >
+                <option value="claude-haiku-4-5">claude-haiku-4-5 (быстро, default)</option>
+                <option value="claude-sonnet-4-6">claude-sonnet-4-6 (умнее, медленнее)</option>
+                <option value="claude-opus-4-7">claude-opus-4-7 (самый умный, медленный)</option>
+              </select>
+            </div>
+          </div>
+          <div className="card-row">
+            <div className="row-label">
+              Подготовка контекста
+              <span className="row-hint">Структурирование meeting_context, coaching debrief. Нужно качество.</span>
+            </div>
+            <div className="row-control">
+              <select
+                value={cfg.prep_model}
+                onChange={(e) => update({ prep_model: e.target.value })}
+              >
+                <option value="claude-sonnet-4-6">claude-sonnet-4-6 (default, 30-50% быстрее 4-5)</option>
+                <option value="claude-sonnet-4-5">claude-sonnet-4-5 (старая, ещё работает)</option>
+                <option value="claude-haiku-4-5">claude-haiku-4-5 (быстро)</option>
+                <option value="claude-opus-4-7">claude-opus-4-7 (максимум качества)</option>
+              </select>
+            </div>
+          </div>
+          <div className="card-row">
+            <div className="row-label">
+              Язык ответов
+              <span className="row-hint">Принудительно через system prompt. Whisper может транскрибировать на другом языке.</span>
+            </div>
+            <div className="row-control">
+              <select
+                value={cfg.response_language}
+                onChange={(e) => update({ response_language: e.target.value })}
+              >
+                <option value="ru">Русский (ru)</option>
+                <option value="en">English (en)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* ─ 💰 Budget ─────────────────────────────────────────── */}
+        <div className="card">
+          <div className="card-title">💰 Лимит затрат на сессию</div>
+          <div className="card-row">
+            <div className="row-label">
+              Cap (USD)
+              <span className="row-hint">0 = выкл (default с v0.0.28). Любое положительное значение — жёлтый 💰 чип в overlay-bar когда сессия превысит.</span>
+            </div>
+            <div className="row-control">
+              <input
+                type="number"
+                min={0}
+                step={0.10}
+                value={cfg.max_session_cost_usd ?? 0.0}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  if (Number.isFinite(v) && v >= 0) {
+                    update({ max_session_cost_usd: v });
+                  }
+                }}
+                style={{ width: 120 }}
+              />
+              <div className="hint">
+                Для справки: $1 ≈ 200 Haiku тайлов · $5 ≈ час непрерывной речи в Aggressive mode. Это SOFT warning — AI продолжает отвечать после превышения, чип просто загорается.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ─ 🎯 Detector ───────────────────────────────────────── */}
+        <div className="card">
+          <div className="card-title">🎯 Триггер на спавн тайла</div>
+          <div className="switch-row">
+            <div className="switch-meta">
+              <div className="switch-title">Игнорировать ваш голос (mic)</div>
+              <div className="switch-desc">
+                ON по умолчанию. Только вопросы собеседника триггерят auto-tile.
+                Без этого детектор фаерит на ваших фразах типа «Я работал с
+                Kubernetes…» — лишние тайлы. Выключи только если хочешь
+                подсказки по обеим сторонам.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="switch"
+              role="switch"
+              aria-checked={cfg.detector_skip_mic ?? true}
+              aria-label="Toggle detector skip-mic"
+              onClick={() => update({ detector_skip_mic: !(cfg.detector_skip_mic ?? true) })}
             />
-            Детектор игнорирует ваш голос (mic) — только вопросы собеседника триггерят auto-tile
-          </label>
-          <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
-            ON по умолчанию. Без этого детектор фаерит и на ваших фразах типа «Я работал с Kubernetes…» — лишние тайлы. Выключи только если хочешь подсказки по обеим сторонам.
           </div>
-        </div>
-        <div className="field">
-          <label>
-            <input
-              type="checkbox"
-              checked={cfg.auto_tile_every_line ?? false}
-              onChange={(e) => update({ auto_tile_every_line: e.target.checked })}
-              style={{ marginRight: 6 }}
+          <div className="switch-row">
+            <div className="switch-meta">
+              <div className="switch-title">🔥 Aggressive mode</div>
+              <div className="switch-desc">
+                Спавнить тайл на КАЖДУЮ строку транскрипта (v0.0.18+). OFF по
+                умолчанию. Bypass'ит «вопрос/не вопрос» проверку — каждая
+                строка от Whisper (длиннее 5 символов) → тайл. Rate-limit
+                бампается с 15 до 60 тайлов/мин. Overlay-бар покажет 🔥 чип
+                когда включён — будешь видеть статус.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="switch"
+              role="switch"
+              aria-checked={cfg.auto_tile_every_line ?? false}
+              aria-label="Toggle aggressive mode"
+              onClick={() => update({ auto_tile_every_line: !(cfg.auto_tile_every_line ?? false) })}
             />
-            <strong>🔥 AGGRESSIVE MODE — спавнить тайл на каждую строку транскрипта (v0.0.18+)</strong>
-          </label>
-          <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
-            <strong>OFF по умолчанию.</strong> Включи если детектор молчит а ты хочешь чтобы AI отвечал на ВСЁ что слышно. Bypass'ит «вопрос/не вопрос» проверку — каждая строка от Whisper (длиннее 5 символов) → тайл. Rate-limit бампается с 15 до 60 тайлов/мин. Overlay-бар покажет 🔥 чип когда включён — будешь видеть статус.
           </div>
-        </div>
-        <div className="field">
-          <label>Модель для живых ответов (нужна скорость)</label>
-          <select
-            value={cfg.ai_model}
-            onChange={(e) => update({ ai_model: e.target.value })}
-          >
-            <option value="claude-haiku-4-5">claude-haiku-4-5 (быстро, default)</option>
-            <option value="claude-sonnet-4-6">claude-sonnet-4-6 (умнее, медленнее)</option>
-            <option value="claude-opus-4-7">claude-opus-4-7 (самый умный, медленный)</option>
-          </select>
-        </div>
-        <div className="field">
-          <label>Модель для подготовки контекста (нужно качество)</label>
-          <select
-            value={cfg.prep_model}
-            onChange={(e) => update({ prep_model: e.target.value })}
-          >
-            <option value="claude-sonnet-4-6">claude-sonnet-4-6 (default, 30-50% быстрее 4-5)</option>
-            <option value="claude-sonnet-4-5">claude-sonnet-4-5 (старая, ещё работает)</option>
-            <option value="claude-haiku-4-5">claude-haiku-4-5 (быстро)</option>
-            <option value="claude-opus-4-7">claude-opus-4-7 (максимум качества)</option>
-          </select>
-        </div>
-        <div className="field">
-          <label>Response language (forced via system prompt)</label>
-          <select
-            value={cfg.response_language}
-            onChange={(e) => update({ response_language: e.target.value })}
-          >
-            <option value="ru">Русский (ru)</option>
-            <option value="en">English (en)</option>
-          </select>
         </div>
       </div>)}
 

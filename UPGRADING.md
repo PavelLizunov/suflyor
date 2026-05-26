@@ -11,6 +11,56 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.41 (2026-05-26)
+
+User: «хедер где settings и Выйти и футтер где back to overlay и save
+были всегда зафиксированы снизу и сверху окна». Also bundles in
+v0.0.39 Hotkeys + Auto-tiles polish and v0.0.40 AI panel split (all
+unreleased separately — folded into v0.0.41 since they touch the same
+Settings UI).
+
+- **Sticky header + footer** — FOUR CSS + Rust fixes (the fourth was
+  the actual P0 root cause, caught by computer-use smoke test in Gate
+  5 of the release verification):
+  1. **(P0 — root cause)** `.settings-root` had TWO conflicting rules:
+     the design-handoff rule at line 533 (`position: fixed; inset: 0;
+     display: flex; flex-direction: column`) followed by a legacy
+     override at line 1275 (`position: static; inset: auto; overflow-y:
+     auto; padding: var(--s-5); gap: 0`). The second wins in the
+     cascade, clobbering the entire flex-pin layout — the root scrolls
+     as one unit, dragging both header and footer out of the viewport
+     when content gets tall. Smoke test on AI panel exposed it: footer
+     visible on small Профиль pane, GONE on tall AI pane. Fix: reduce
+     the legacy override to just the cosmetic resets (no border, no
+     border-radius) so the design's flex+fixed pin survives.
+  2. `.settings-header` had a legacy `margin: -16px -16px 12px -16px;`
+     from when `.settings-root` had 16px padding. The negative margin
+     pushed the header outside flex flow, breaking the column layout.
+     Removed margins, added explicit `flex: 0 0 auto`.
+  3. `.settings-pane` was missing `min-height: 0` — required so the
+     `overflow-y: auto` actually scrolls inside the grid track.
+     Without it, the pane grows to its content height and pushes the
+     footer off-screen.
+  4. `open_settings` was hardcoded to resize the overlay window to
+     760×900 px. On screens shorter than 900 (laptops with 1366×768
+     or scaled 1080p), the bottom of the Settings with the footer
+     was off-screen. Now: cap height to `monitor_h.clamp(480, 900)`
+     (replaced `.min().max()` chained calls per clippy::manual_clamp).
+- **AI panel polished** (v0.0.40 work folded in) — split the wall of
+  9 `.field` blocks into 4 `.card` sub-sections:
+  - 🛰 Bridge endpoint (URL + Bearer + Check button)
+  - 🧠 Models (ai_model + prep_model + response_language)
+  - 💰 Budget (cost cap)
+  - 🎯 Detector (skip_mic + aggressive toggles)
+- **Hotkeys panel polished** (v0.0.39 work folded in) — wrapped in
+  `.card` with `.card-row`s
+- **Auto-tiles panel polished** (v0.0.39 work folded in) — `.card`
+  with `.switch-row` for the boolean + `.card-row`s for monitor
+  select + trigger-keywords textarea
+
+i18n (full RU + EN translations) is planned for v0.0.42+ per
+`docs/I18N_PLAN.md`.
+
 ### → v0.0.38 (2026-05-26)
 
 Second Settings polish micro-release. Converts **Coaching** + **Interface**

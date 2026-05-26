@@ -680,6 +680,10 @@ kbd {
 }
 
 .settings-pane {
+  /* v0.0.41: explicit `min-height: 0` required so overflow-y:auto
+     actually scrolls inside the grid track. Without it, the pane
+     grows to its content height, pushing the footer off-screen. */
+  min-height: 0;
   overflow-y: auto;
   padding: var(--s-5) var(--s-6);
   display: flex;
@@ -1267,15 +1271,18 @@ body.settings {
 }
 
 /* --- Settings: keep current .settings-section / .field / .btn-row
-       structure working under design's .settings-root styling. ---- */
+       structure working under design's .settings-root styling. ----
+   v0.0.41 P0 fix: previously this block forced `position: static` +
+   `overflow-y: auto`, which clobbered the design's flex pin layout
+   from the first .settings-root rule (line ~533). Result: the entire
+   root scrolled, pushing both the header AND the footer out of the
+   viewport on tall content like the AI panel. Now: keep the cosmetic
+   resets (no extra border/radius from the original card design) but
+   leave the flex+fixed positioning alone so the header/footer
+   actually stay pinned. */
 .settings-root {
-  position: static;
-  inset: auto;
-  padding: var(--s-5);
-  overflow-y: auto;
   border-radius: 0;
   border: 0;
-  gap: 0;
 }
 .settings-root h2 {
   font: 600 var(--fs-15)/1.2 var(--font-ui);
@@ -1585,12 +1592,20 @@ body.settings {
 }
 
 /* === Settings header with drag region + Quit button === */
+/* v0.0.41: removed legacy `margin: -16px -16px 12px -16px;` — it was
+   from when .settings-root had 16px padding. With current architecture
+   (.settings-root flex column, no padding), negative margin pushed
+   the header outside flex flow → broke the column → footer was clipped
+   when content was tall. Now: explicit `flex: 0 0 auto` so the header
+   stays at top with natural height, footer stays at bottom (also
+   `flex: 0 0 auto`), and the shell fills the middle with overflow
+   scrolling inside .settings-pane. */
 .settings-header {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: -16px -16px 12px -16px;
   padding: 10px 16px;
   background: var(--c-bg-2, rgba(255,255,255,0.04));
   border-bottom: 1px solid var(--c-border-soft);

@@ -1105,7 +1105,24 @@ fn open_settings(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<
                 }
             }
         }
-        let _ = w.set_size(tauri::LogicalSize::new(760.0, 900.0));
+        // v0.0.41: cap height to monitor work area minus 40 px taskbar
+        // gap. Was hardcoded 900 px — on screens shorter than 900
+        // (laptops with 1366×768 or scaled 1080p), the bottom of the
+        // Settings window with the footer (Save / Back buttons) was
+        // off-screen. Now: shrink to fit.
+        let monitor_h = w.current_monitor()
+            .ok()
+            .flatten()
+            .map(|m| {
+                let scale = m.scale_factor();
+                (m.size().height as f64 / scale) - 40.0
+            })
+            .unwrap_or(900.0);
+        // clamp(min, max) — clippy::manual_clamp wanted instead of chained
+        // .min().max(). Same semantics: floor at 480 (don't shrink past usable),
+        // ceiling at 900 (don't grow past the 12-section content height).
+        let target_h = monitor_h.clamp(480.0, 900.0);
+        let _ = w.set_size(tauri::LogicalSize::new(760.0, target_h));
         let _ = w.center();
         let _ = w.show();
         let _ = w.set_focus();
