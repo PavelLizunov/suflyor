@@ -1,5 +1,34 @@
 # Autonomous work plan
 
+## 🌐 Marathon block 4 — i18n sprint (18:00-19:00 MSK, 10 releases in ~60 min)
+
+User's second ask from the original message: «Также сделай полные переводы как на русский так и на английский». Shipped v0.0.41 (sticky header/footer fix — original primary ask) + 9 i18n releases v0.0.42 → v0.0.50 ALL through full 6-gate verification (cargo test --lib 255 pass · clippy `-D warnings` clean · tsc · NSIS build · install timestamp confirm · computer-use smoke test in EN mode · clean quit). 10 releases this block.
+
+**v0.0.41** (P0 sticky fix) — root cause was TWO conflicting `.settings-root` CSS rules: design-handoff rule sets `position: fixed + flex column` for pin layout, legacy override later in cascade re-applies `position: static + overflow-y: auto`. Removed the override. Bonus: `.settings-header` legacy negative margin removed, `.settings-pane` `min-height: 0`, `open_settings` window cap to `monitor_h.clamp(480, 900)`.
+
+**v0.0.42 → v0.0.50 i18n architecture:**
+- `Config.ui_language: String` (default `"ru"`, `#[serde(default = "default_ui_language")]`)
+- `src/i18n.ts` — typed `t(key: StringKey, lang: Lang)` helper, const object literal, fallback chain `lang → ru → key`
+- Overlay loads via `get_config` on mount + on window-focus; tiles via URL `&lang=ru|en` baked at spawn time (tiles can't call `get_config` per `assert_overlay`); Settings + Replay load via `get_config` (same window)
+- `{placeholder}` interpolation via `.replace("{token}", value)` — no helper, keeps i18n.ts minimal
+
+**Coverage v0.0.42 → v0.0.50:**
+- v0.0.42 — infrastructure + sidebar nav + header + footer
+- v0.0.43 — Stealth + Coaching + Interface + Hotkeys (simple panels)
+- v0.0.44 — AI panel (Bridge + Models + Budget + Detector — 4 sub-cards)
+- v0.0.45 — Profile + Meeting context + Audio + STT
+- v0.0.46 — Auto-tiles + Knowledge base
+- v0.0.47 — Advanced (Updates + Diagnostics + Sessions/Export buttons)
+- v0.0.48 — **Overlay bar** + Tile chrome + tile.rs URL plumbing
+- v0.0.49 — Replay viewer
+- v0.0.50 — Final cleanup (Snippets header + drag tooltips + import toasts)
+
+NOT translated (deferred indefinitely — extreme edge): showSnippetEdit CRUD modal internals (3-field form labels + validation), per-snippet expand/delete row buttons. Tray menu (Rust-side rebuild only at startup).
+
+**Live verification across all 10 releases** via computer-use smoke test: every release had at least one EN-mode screenshot confirming string flip. v0.0.41 had the most thorough verification (3 smoke screenshots) due to its P0 nature.
+
+Marathon ends 21:12. Block 4 wrapped ~19:00 with 2h+ buffer.
+
 ## 🏃 Marathon block 3 — extended to 21:12 per user «запускай 6 часовую сессию»
 
 **Snapshot @ 15:30:** v0.0.35 just shipped (passed all 6 gates of new
