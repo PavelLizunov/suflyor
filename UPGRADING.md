@@ -11,6 +11,20 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.16 (2026-05-26)
+
+- **No config schema change.**
+- **Security:** diagnostic dump (v0.0.15 feature) now runs the journal
+  tail + crash report through `sanitize_diagnostic_text`, which redacts
+  `gsk_*`, `Bearer *`, `sk-*` token patterns. Belt-and-suspenders even
+  though the sanitized config can't leak these — covers the edge case
+  where a future panic message captures an HTTP error with the bearer
+  in its Debug repr. +5 unit tests (244 total).
+- Dump output now also flags that `ai_request` journal events embed the
+  user's `meeting_context` in their prompts — user reviews before sharing.
+- docs/architecture.md: assert_overlay count updated 25 → 31 (39 total
+  Tauri commands; 8 deliberately unprotected per the doc).
+
 ### → v0.0.15 (2026-05-26)
 
 - **No config schema change.**
