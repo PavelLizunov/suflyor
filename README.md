@@ -2,7 +2,7 @@
 
 Личный AI-overlay для технических собесов под Windows. Слушает звук, транскрибирует через Whisper, спрашивает Claude, показывает ответ во второстепенном окошке.
 
-Pet project, **v0.0.50**. Под одного пользователя. Без code signing, без telemetry.
+Pet project, **v0.0.50**. Под одного пользователя. Без code signing, без telemetry. **🇷🇺 Русский / 🇬🇧 English** UI с переключением на лету.
 
 ![overlay bar](docs/screenshots/overlay-bar.png)
 
@@ -25,6 +25,14 @@ Header показывает источник (AUTO · DETECTOR / MIC / SYSTEM / 
 ![Settings](docs/screenshots/settings.png)
 
 Перетаскивается за заголовок «⋮⋮ Settings». ✕ Выйти — quit с подтверждением + auto-stop активной сессии (журнал закрывается с SessionSummary). 13 секций: профили контекста, meeting context, audio devices, AI proxy (с проверкой моста + cost cap), интерфейс, stealth, coaching, auto-tiles, knowledge base, snippets, STT, hotkeys, обновления (скрол).
+
+### 🌐 Bilingual UI — RU + EN (v0.0.42–v0.0.50)
+
+Settings → 🎨 Интерфейс → 🇷🇺 Русский / 🇬🇧 English → Save. Переключение **на лету** — overlay/tiles/Replay re-render без перезапуска. Бэкенд хранит `ui_language` в `%APPDATA%\overlay-mvp\config.json` (`"ru"` по умолчанию, forward-compat для старых конфигов).
+
+Покрытие: каждая видимая UI-строка (header/footer/sidebar/13 панелей Settings, overlay bar со статусом + чипами + push-to-talk + ℹ popover с 8 хоткеями и 9 индикаторами, tile chrome — pin/close/source label, Replay viewer). Технические лейблы в Replay (`model=`, `ms`, `finish=`) намеренно оставлены универсальными — это field names JSONL-журнала.
+
+Не переведены: snippet CRUD modal (редко открываемый), tray menu (Rust-side rebuild только при запуске).
 
 ### 🆙 Update button (v0.0.2+)
 
