@@ -11,6 +11,20 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.54 (2026-05-26) — QOL block 5, #2
+
+**Copy code block button on tile pre blocks.**
+
+Each `<pre>` in a rendered tile body now wraps in a relative-positioned
+div with an absolutely-positioned "📋 Copy" button in the top-right
+corner. Button is `opacity: 0` until the wrapper is hovered. Click →
+`navigator.clipboard.writeText(pre.innerText)` (works in Tauri WebView
+since v0.0.27's CSP allows clipboard) + 1.2 sec "✓ Copied" feedback.
+Bilingual labels via existing `lang` state.
+
+Use case: interviewer asks for a sample command, you don't want to
+retype `kubectl get pods -n my-namespace` — hover, click, paste.
+
 ### → v0.0.53 (2026-05-26) — QOL block 5
 
 User: «продолжай оверлей и подумай что еще можно сделать, мне нужно

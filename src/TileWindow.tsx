@@ -166,14 +166,55 @@ export default function TileWindow() {
     );
   };
 
+  // v0.0.54: CodeBlock wrapper — adds a hover-visible "📋 Copy" button
+  // overlay on each pre. Click extracts text content + writes to
+  // navigator.clipboard. Brief "✓" feedback. The wrapper preserves
+  // the existing pre+code structure so rehype-highlight's class
+  // attribution still works.
+  const CodeBlock = ({ children }: { children?: React.ReactNode }) => {
+    const preRef = useRef<HTMLPreElement>(null);
+    const [copied, setCopied] = useState(false);
+    const onCopy = async () => {
+      const text = preRef.current?.innerText ?? "";
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+      } catch (err) {
+        console.warn("clipboard write failed:", err);
+      }
+    };
+    return (
+      <div className="tile-code-wrap">
+        <pre ref={preRef}>{children}</pre>
+        <button
+          type="button"
+          className="tile-code-copy"
+          onClick={onCopy}
+          aria-label={lang === "en" ? "Copy code block" : "Скопировать код"}
+          title={copied
+            ? (lang === "en" ? "✓ Copied" : "✓ Скопировано")
+            : (lang === "en" ? "Copy" : "Скопировать")}
+        >
+          {copied ? "✓" : "📋"}
+        </button>
+      </div>
+    );
+  };
+
   // Markdown component override: walk text nodes and highlight.
   // Only override what we need (p, li, h*, em, strong, code stay markdown).
-  const markdownComponents = hlRegex ? {
-    text: ({ children }: { children?: React.ReactNode }) => {
-      if (typeof children === "string") return <>{renderWithHighlights(children)}</>;
-      return <>{children}</>;
-    },
-  } : undefined;
+  // v0.0.54: also override `pre` for the copy-button wrapper.
+  const markdownComponents = {
+    ...(hlRegex ? {
+      text: ({ children }: { children?: React.ReactNode }) => {
+        if (typeof children === "string") return <>{renderWithHighlights(children)}</>;
+        return <>{children}</>;
+      },
+    } : {}),
+    pre: CodeBlock,
+  };
 
   return (
     <div

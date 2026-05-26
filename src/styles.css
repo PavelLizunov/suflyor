@@ -522,6 +522,41 @@ kbd {
   padding: 0;
 }
 
+/* v0.0.54: hover-visible copy-code button on each pre. The wrapper
+   is `position: relative` so the button can be absolutely positioned
+   in the top-right corner. Button fades in on wrapper hover. */
+.tile-body.markdown .tile-code-wrap {
+  position: relative;
+}
+.tile-body.markdown .tile-code-wrap pre {
+  margin: var(--s-2) 0;
+}
+.tile-body.markdown .tile-code-copy {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  height: 22px;
+  min-width: 22px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 20px;
+  background: rgba(20, 22, 30, 0.7);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  user-select: none;
+}
+.tile-body.markdown .tile-code-wrap:hover .tile-code-copy {
+  opacity: 0.9;
+}
+.tile-body.markdown .tile-code-copy:hover {
+  opacity: 1;
+  background: rgba(40, 44, 60, 0.85);
+}
+
 .tile-body.markdown a {
   color: color-mix(in srgb, var(--c-auto) 80%, white);
   text-decoration: underline;
