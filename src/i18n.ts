@@ -305,6 +305,58 @@ const strings = {
     ru: "Turbo сокращает latency Whisper-вызова с ~500ms до ~150-200ms на 2-5s клипе. Качество падает на редких технических терминах (kubectl-debug, consistent hashing). Для типовых SRE/DevOps вопросов разница незаметна. Меняй при необходимости low-latency feedback.",
     en: "Turbo cuts Whisper-call latency from ~500ms to ~150-200ms on a 2-5s clip. Quality drops on rare technical terms (kubectl-debug, consistent hashing). For typical SRE/DevOps questions the difference is unnoticeable. Switch when you need low-latency feedback.",
   },
+
+  // ── Auto-tiles panel (v0.0.46) ─────────────────────────────────────
+  "tiles.auto.title":         { ru: "🪟 Авто-тайлы",          en: "🪟 Auto-tiles" },
+  "tiles.auto.switch.title":  {
+    ru: "Включить авто-окошки при вопросах в транскрипте",
+    en: "Enable auto-windows on transcript questions",
+  },
+  "tiles.auto.switch.desc":   {
+    ru: "Когда детектор видит вопрос (или любая строка в Aggressive mode) — спавнится тайл рядом с meeting window.",
+    en: "When the detector sees a question (or any line in Aggressive mode), a tile spawns next to the meeting window.",
+  },
+  "tiles.auto.switch.aria":   { ru: "Переключить авто-тайлы", en: "Toggle auto-tiles" },
+  "tiles.monitor.label":      { ru: "Монитор для tiles",       en: "Monitor for tiles" },
+  "tiles.monitor.hint":       {
+    ru: "по умолчанию — первый не-primary; если монитор один — primary",
+    en: "default — first non-primary; if only one monitor — primary",
+  },
+  "tiles.monitor.auto":       {
+    ru: "— авто (предпочитать не-primary) —",
+    en: "— auto (prefer non-primary) —",
+  },
+  "tiles.keywords.label":     { ru: "Trigger-keywords",        en: "Trigger keywords" },
+  "tiles.keywords.hint":      {
+    ru: "через пробел, case-insensitive, whole-word match. Срабатывают как дополнительный триггер на спавн.",
+    en: "space-separated, case-insensitive, whole-word match. Act as an extra spawn trigger.",
+  },
+
+  // ── Knowledge base panel (v0.0.46) ─────────────────────────────────
+  "kb.title":                 { ru: "📚 Knowledge Base",       en: "📚 Knowledge Base" },
+  "kb.stats":                 {
+    ru: "{total} entries ({glossary} glossary · {commands} commands · {patterns} patterns)",
+    en: "{total} entries ({glossary} glossary · {commands} commands · {patterns} patterns)",
+  },
+  "kb.search.label":          {
+    ru: "Поиск по встроенной базе (термины + команды + паттерны). Хит → Open as tile.",
+    en: "Search the embedded base (terms + commands + patterns). Hit → Open as tile.",
+  },
+  "kb.search.placeholder":    {
+    ru: "kubernetes / dijkstra / saga / iptables / consistent hashing …",
+    en: "kubernetes / dijkstra / saga / iptables / consistent hashing …",
+  },
+  "kb.searching":             { ru: "ищу…",                    en: "searching…" },
+  "kb.no.match":              { ru: "нет совпадений по «{q}»", en: "no matches for «{q}»" },
+  "kb.open.button":           { ru: "Открыть →",               en: "Open →" },
+  "kb.open.tip":              { ru: "Открыть тайл с записью «{h}»", en: "Open tile with entry «{h}»" },
+  "kb.opened.toast":          { ru: "Открыт тайл «{h}»",       en: "Opened tile «{h}»" },
+  "kb.spawn.fail.toast":      { ru: "kb_spawn failed",         en: "kb_spawn failed" },
+  "kb.note":                  {
+    ru: "KB файлы embedded в бинарник (read-only). Источники: src-tauri/knowledge/{glossary,commands,patterns}.md.",
+    en: "KB files embedded in the binary (read-only). Sources: src-tauri/knowledge/{glossary,commands,patterns}.md.",
+  },
+  "kb.source.aria":           { ru: "источник: {s}",           en: "source: {s}" },
 } as const;
 
 export type StringKey = keyof typeof strings;

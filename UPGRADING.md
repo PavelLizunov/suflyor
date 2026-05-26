@@ -11,6 +11,32 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.46 (2026-05-26)
+
+Fifth i18n release. Translates the **Auto-tiles** card and the
+**Knowledge base** panel including its dynamic stats line and search
+results.
+
+Strings covered:
+- **🪟 Auto-tiles**: card title, switch title/desc/aria for "Enable
+  auto-windows on transcript questions", Monitor for tiles label/hint +
+  the auto-select default option, Trigger-keywords label/hint
+- **📚 Knowledge base**: title, stats line with {total} / {glossary} /
+  {commands} / {patterns} interpolation, Search label + placeholder,
+  searching / no-match states with {q} interpolation, Open button +
+  tip + opened-tile toast / kb_spawn fail toast with {h} interpolation,
+  source-aria tooltip with {s} interpolation, footer note about
+  embedded KB files
+
+Still NOT translated (v0.0.47+):
+- Snippets section (~40 strings + dynamic snippet entries +
+  showSnippetEdit modal labels) — deferred because of the CRUD modal
+  complexity
+- Advanced (Updates · Diagnostics) (~25 strings)
+- Overlay bar + tile chrome + Replay viewer
+
+No backend changes.
+
 ### → v0.0.45 (2026-05-26)
 
 Fourth i18n release. Translates the **Profile + Meeting + Audio** panels.

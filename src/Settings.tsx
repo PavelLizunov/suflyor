@@ -1082,35 +1082,32 @@ export default function Settings() {
             and trigger-keywords textarea). Snippets section below stays
             unchanged for now — too much state, deferred. */}
         <div className="card">
-          <div className="card-title">🪟 Авто-тайлы</div>
+          <div className="card-title">{t("tiles.auto.title", lang)}</div>
           <div className="switch-row">
             <div className="switch-meta">
-              <div className="switch-title">Включить авто-окошки при вопросах в транскрипте</div>
-              <div className="switch-desc">
-                Когда детектор видит вопрос (или любая строка в Aggressive
-                mode) — спавнится тайл рядом с meeting window.
-              </div>
+              <div className="switch-title">{t("tiles.auto.switch.title", lang)}</div>
+              <div className="switch-desc">{t("tiles.auto.switch.desc", lang)}</div>
             </div>
             <button
               type="button"
               className="switch"
               role="switch"
               aria-checked={cfg.auto_tiles_enabled}
-              aria-label="Toggle auto-tiles"
+              aria-label={t("tiles.auto.switch.aria", lang)}
               onClick={() => update({ auto_tiles_enabled: !cfg.auto_tiles_enabled })}
             />
           </div>
           <div className="card-row">
             <div className="row-label">
-              Монитор для tiles
-              <span className="row-hint">по умолчанию — первый не-primary; если монитор один — primary</span>
+              {t("tiles.monitor.label", lang)}
+              <span className="row-hint">{t("tiles.monitor.hint", lang)}</span>
             </div>
             <div className="row-control">
               <select
                 value={cfg.tile_monitor_name ?? ""}
                 onChange={(e) => update({ tile_monitor_name: e.target.value || null })}
               >
-                <option value="">— авто (предпочитать не-primary) —</option>
+                <option value="">{t("tiles.monitor.auto", lang)}</option>
                 {monitors.map((m) => (
                   <option key={m} value={m}>{m}</option>
                 ))}
@@ -1119,8 +1116,8 @@ export default function Settings() {
           </div>
           <div className="card-row">
             <div className="row-label">
-              Trigger-keywords
-              <span className="row-hint">через пробел, case-insensitive, whole-word match. Срабатывают как дополнительный триггер на спавн.</span>
+              {t("tiles.keywords.label", lang)}
+              <span className="row-hint">{t("tiles.keywords.hint", lang)}</span>
             </div>
             <div className="row-control">
               <textarea
@@ -1136,30 +1133,34 @@ export default function Settings() {
 
       {activeSection === "knowledge" && (<div className="settings-section">
         <h3>
-          📚 Knowledge Base
+          {t("kb.title", lang)}
           {kbStats && (
             <span style={{ marginLeft: 8, fontSize: 11, color: "var(--c-text-dim)", textTransform: "none", letterSpacing: 0 }}>
-              · {kbStats.total} entries ({kbStats.glossary} glossary · {kbStats.commands} commands · {kbStats.patterns} patterns)
+              · {t("kb.stats", lang)
+                  .replace("{total}", String(kbStats.total))
+                  .replace("{glossary}", String(kbStats.glossary))
+                  .replace("{commands}", String(kbStats.commands))
+                  .replace("{patterns}", String(kbStats.patterns))}
             </span>
           )}
         </h3>
         <div className="field">
-          <label>Поиск по встроенной базе (термины + команды + паттерны). Хит → Open as tile.</label>
+          <label>{t("kb.search.label", lang)}</label>
           <input
             type="text"
             value={kbQuery}
             onChange={(e) => setKbQuery(e.target.value)}
-            placeholder="kubernetes / dijkstra / saga / iptables / consistent hashing …"
+            placeholder={t("kb.search.placeholder", lang)}
             spellCheck={false}
             autoComplete="off"
           />
         </div>
         {kbBusy && (
-          <div style={{ fontSize: 11, color: "var(--c-text-dim)" }}>searching…</div>
+          <div style={{ fontSize: 11, color: "var(--c-text-dim)" }}>{t("kb.searching", lang)}</div>
         )}
         {!kbBusy && kbQuery && kbResults.length === 0 && (
           <div style={{ fontSize: 11, color: "var(--c-text-dim)" }}>
-            no matches for «{kbQuery}»
+            {t("kb.no.match", lang).replace("{q}", kbQuery)}
           </div>
         )}
         {kbResults.length > 0 && (
@@ -1186,7 +1187,7 @@ export default function Settings() {
                     textTransform: "uppercase",
                     letterSpacing: "0.04em",
                   }}
-                  title={`source: ${e.source}`}
+                  title={t("kb.source.aria", lang).replace("{s}", e.source)}
                 >
                   {e.source}
                 </span>
@@ -1198,21 +1199,21 @@ export default function Settings() {
                   onClick={async () => {
                     try {
                       await invoke("kb_spawn", { key: e.key });
-                      showToast("ok", `Открыт тайл «${e.heading}»`);
+                      showToast("ok", t("kb.opened.toast", lang).replace("{h}", e.heading));
                     } catch (err) {
-                      showToast("err", `kb_spawn failed: ${err}`);
+                      showToast("err", `${t("kb.spawn.fail.toast", lang)}: ${err}`);
                     }
                   }}
-                  title={`Открыть тайл с записью «${e.heading}»`}
+                  title={t("kb.open.tip", lang).replace("{h}", e.heading)}
                 >
-                  Open →
+                  {t("kb.open.button", lang)}
                 </button>
               </div>
             ))}
           </div>
         )}
         <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 6 }}>
-          KB файлы embedded в бинарник (read-only). Источники: <code>src-tauri/knowledge/{"{glossary,commands,patterns}"}.md</code>.
+          {t("kb.note", lang)}
         </div>
       </div>)}
 
