@@ -199,6 +199,38 @@ kbd {
   flex-shrink: 0;
 }
 
+/* v0.0.56: KB palette recent-searches strip — shown when input empty. */
+.kb-palette-history {
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid var(--c-border-soft);
+}
+.kb-palette-history-label {
+  font-size: 10px;
+  color: var(--c-text-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+.kb-palette-history-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.kb-palette-history-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--c-border-soft);
+  color: var(--c-text);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.kb-palette-history-chip:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--c-border);
+}
+
 /* v0.0.55: compact mode — hides optional chips that aren't critical
    during a busy session. The `.overlay-root.compact` class is set
    from Settings → 🎨 Interface → Compact mode. We hide via attribute

@@ -11,6 +11,23 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.56 (2026-05-26) — QOL block 5, #4
+
+**Recent KB searches as quick-pick chips in F4 palette.**
+
+When F4 palette opens with empty input, show last 10 KB queries as a
+horizontal chip strip above the (empty) results list. Click a chip →
+prefill the query → KB-search useEffect re-runs. Successful
+`expandSelected` writes the current query to history.
+
+Backed by `localStorage["kb.history"]` (JSON array, capped at 10
+entries, dedupe by case-insensitive match). State is in Overlay.tsx
+(`kbHistory` + `pushKbHistory`). New CSS block in styles.css for the
+`.kb-palette-history` chip strip.
+
+Use case: you searched "consistent hashing" earlier — F4 next time,
+empty input, see the chip, click — instantly back to the same hits.
+
 ### → v0.0.55 (2026-05-26) — QOL block 5, #3
 
 **Tile font size + compact overlay mode.**

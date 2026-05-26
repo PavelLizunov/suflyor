@@ -106,6 +106,27 @@ export default function Overlay() {
   // (same useEffect that reads manual_ask_mode + auto_tile_every_line).
   // Defaults to "ru" until config arrives — same pattern as Settings.
   const [lang, setLang] = useState<Lang>("ru");
+  // v0.0.56: recent KB queries history. Seeded from localStorage on
+  // mount; shown as quick-pick chips when palette is open + input is
+  // empty. Click a chip → re-runs that query. Cap at 10 entries.
+  const [kbHistory, setKbHistory] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem("kb.history");
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.filter((s) => typeof s === "string").slice(0, 10) : [];
+    } catch { return []; }
+  });
+  const pushKbHistory = (q: string) => {
+    const trimmed = q.trim();
+    if (trimmed.length < 2) return;
+    setKbHistory((prev) => {
+      const next = [trimmed, ...prev.filter((x) => x.toLowerCase() !== trimmed.toLowerCase())].slice(0, 10);
+      try { localStorage.setItem("kb.history", JSON.stringify(next)); }
+      catch (err) { console.warn("kb.history write failed:", err); }
+      return next;
+    });
+  };
   // Search debounced when palette open + query non-empty.
   useEffect(() => {
     if (!paletteOpen) return;
@@ -211,6 +232,8 @@ export default function Overlay() {
   const expandSelected = async () => {
     const hit = paletteResults[paletteIdx];
     if (!hit) return;
+    // v0.0.56: record successful expansion in KB history.
+    pushKbHistory(paletteQuery);
     try {
       await invoke("kb_spawn", { key: hit.key });
       closePalette();
@@ -1137,6 +1160,27 @@ export default function Overlay() {
             autoComplete="off"
             autoCapitalize="none"
           />
+          {/* v0.0.56: recent searches shown when input empty. */}
+          {!paletteQuery && kbHistory.length > 0 && (
+            <div className="kb-palette-history" role="region" aria-label={lang === "en" ? "Recent searches" : "Недавние поиски"}>
+              <div className="kb-palette-history-label">
+                {lang === "en" ? "Recent:" : "Недавнее:"}
+              </div>
+              <div className="kb-palette-history-chips">
+                {kbHistory.map((q) => (
+                  <button
+                    key={q}
+                    type="button"
+                    className="kb-palette-history-chip"
+                    onClick={() => setPaletteQuery(q)}
+                    title={lang === "en" ? `Search ${q}` : `Поиск ${q}`}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {paletteResults.length > 0 && (
             <ul
               className="kb-palette-list"
