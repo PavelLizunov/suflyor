@@ -11,6 +11,31 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.44 (2026-05-26)
+
+Third i18n release. Translates the **AI panel** — all 4 sub-cards.
+
+Panels covered:
+- **🛰 Bridge endpoint** — Base URL + Bearer secret + Health check
+  labels/hints, "Check bridge" / "Checking…" button states, fail-tip
+  troubleshooting message, HTTP-warn banner
+- **🧠 Models + language** — Live answers + Context prep + Response
+  language labels/hints, model option descriptions ("fast, default" /
+  "smarter, slower" / "max quality" etc.)
+- **💰 Per-session budget cap** — Cap (USD) label/hint, reference note
+- **🎯 Tile-spawn trigger** — Ignore your own voice (mic) + Aggressive
+  mode switch titles + descriptions + aria-labels
+
+Still NOT translated (v0.0.45+):
+- Profile + Meeting context (~25 strings)
+- Audio + STT (~10 strings)
+- Auto-tiles + Snippets (~40 strings + dynamic entries)
+- Knowledge base (~15 strings + search results)
+- Advanced (Updates · Diagnostics) (~25 strings)
+- Overlay bar + tile chrome + Replay viewer
+
+No backend changes.
+
 ### → v0.0.43 (2026-05-26)
 
 Second i18n release. Translates the **simple panels** — those with

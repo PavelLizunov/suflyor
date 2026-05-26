@@ -154,6 +154,84 @@ const strings = {
     ru: "Пауза/возобновить сессию (F8)",
     en: "Pause/resume session (F8)",
   },
+
+  // ── AI panel (v0.0.44) ─────────────────────────────────────────────
+  // Bridge card
+  "ai.bridge.title":          { ru: "🛰 Bridge endpoint",     en: "🛰 Bridge endpoint" },
+  "ai.bridge.url.label":      { ru: "Base URL",               en: "Base URL" },
+  "ai.bridge.url.hint":       {
+    ru: "OpenAI-compatible Claude proxy. Local bridge или Caddy-fronted Anthropic.",
+    en: "OpenAI-compatible Claude proxy. Local bridge or Caddy-fronted Anthropic.",
+  },
+  "ai.bridge.bearer.label":   { ru: "Bearer secret",          en: "Bearer secret" },
+  "ai.bridge.bearer.hint":    {
+    ru: "BRIDGE_SECRET — хранится в config.json, не отправляется в журнал.",
+    en: "BRIDGE_SECRET — stored in config.json, never sent to journal.",
+  },
+  "ai.bridge.health.label":   { ru: "Health check",           en: "Health check" },
+  "ai.bridge.health.hint":    {
+    ru: "1-токен POST на /chat/completions — проверяет URL + bearer + сетевой путь.",
+    en: "1-token POST to /chat/completions — checks URL + bearer + network path.",
+  },
+  "ai.bridge.check.button":   { ru: "🔌 Проверить мост",       en: "🔌 Check bridge" },
+  "ai.bridge.check.busy":     { ru: "⏳ Проверяю…",            en: "⏳ Checking…" },
+  "ai.bridge.check.tip":      {
+    ru: "Минимальный 1-токен POST на /chat/completions",
+    en: "Minimal 1-token POST to /chat/completions",
+  },
+  "ai.bridge.fail.tip":       {
+    ru: "💡 Проверь: запущен ли мост на этом IP/порту, открыт ли firewall, не сменился ли BRIDGE_SECRET.",
+    en: "💡 Check: is the bridge running on this IP/port, is the firewall open, did BRIDGE_SECRET change.",
+  },
+  "ai.bridge.warn.http":      {
+    ru: "⚠ Plaintext HTTP к non-localhost — bearer token + промпты летят в открытом виде. Используй https:// (Caddy/Nginx впереди) для любого non-localhost deployment.",
+    en: "⚠ Plaintext HTTP to non-localhost — bearer token + prompts travel in clear. Use https:// (Caddy/Nginx in front) for any non-localhost deployment.",
+  },
+
+  // Models card
+  "ai.models.title":          { ru: "🧠 Модели + язык",        en: "🧠 Models + language" },
+  "ai.models.live.label":     { ru: "Живые ответы",           en: "Live answers" },
+  "ai.models.live.hint":      {
+    ru: "Эта модель работает на каждый тайл. Нужна скорость.",
+    en: "This model runs on every tile. Needs to be fast.",
+  },
+  "ai.models.prep.label":     { ru: "Подготовка контекста",   en: "Context prep" },
+  "ai.models.prep.hint":      {
+    ru: "Структурирование meeting_context, coaching debrief. Нужно качество.",
+    en: "Structuring meeting_context, coaching debrief. Needs quality.",
+  },
+  "ai.models.lang.label":     { ru: "Язык ответов",           en: "Response language" },
+  "ai.models.lang.hint":      {
+    ru: "Принудительно через system prompt. Whisper может транскрибировать на другом языке.",
+    en: "Forced via system prompt. Whisper may transcribe in a different language.",
+  },
+
+  // Budget card
+  "ai.budget.title":          { ru: "💰 Лимит затрат на сессию", en: "💰 Per-session budget cap" },
+  "ai.budget.cap.label":      { ru: "Cap (USD)",              en: "Cap (USD)" },
+  "ai.budget.cap.hint":       {
+    ru: "0 = выкл (default с v0.0.28). Любое положительное значение — жёлтый 💰 чип в overlay-bar когда сессия превысит.",
+    en: "0 = off (default since v0.0.28). Any positive value lights up a yellow 💰 chip in the overlay bar when the session exceeds it.",
+  },
+  "ai.budget.note":           {
+    ru: "Для справки: $1 ≈ 200 Haiku тайлов · $5 ≈ час непрерывной речи в Aggressive mode. Это SOFT warning — AI продолжает отвечать после превышения, чип просто загорается.",
+    en: "Reference: $1 ≈ 200 Haiku tiles · $5 ≈ one hour of continuous speech in Aggressive mode. This is a SOFT warning — AI keeps responding after the cap, the chip just lights up.",
+  },
+
+  // Detector card
+  "ai.det.title":             { ru: "🎯 Триггер на спавн тайла", en: "🎯 Tile-spawn trigger" },
+  "ai.det.skip.title":        { ru: "Игнорировать ваш голос (mic)", en: "Ignore your own voice (mic)" },
+  "ai.det.skip.desc":         {
+    ru: "ON по умолчанию. Только вопросы собеседника триггерят auto-tile. Без этого детектор фаерит на ваших фразах типа «Я работал с Kubernetes…» — лишние тайлы. Выключи только если хочешь подсказки по обеим сторонам.",
+    en: "ON by default. Only the other side's questions trigger auto-tiles. Without this the detector fires on your own phrases like «I worked with Kubernetes…» — extra tiles. Disable only if you want hints from both sides.",
+  },
+  "ai.det.skip.aria":         { ru: "Переключить skip-mic детектора", en: "Toggle detector skip-mic" },
+  "ai.det.agg.title":         { ru: "🔥 Aggressive mode",     en: "🔥 Aggressive mode" },
+  "ai.det.agg.desc":          {
+    ru: "Спавнить тайл на КАЖДУЮ строку транскрипта (v0.0.18+). OFF по умолчанию. Bypass'ит «вопрос/не вопрос» проверку — каждая строка от Whisper (длиннее 5 символов) → тайл. Rate-limit бампается с 15 до 60 тайлов/мин. Overlay-бар покажет 🔥 чип когда включён — будешь видеть статус.",
+    en: "Spawn a tile on EVERY transcript line (v0.0.18+). OFF by default. Bypasses the question/non-question check — every Whisper line (longer than 5 chars) → tile. Rate limit bumps from 15 to 60 tiles/min. The overlay bar shows a 🔥 chip when enabled — you'll see the status.",
+  },
+  "ai.det.agg.aria":          { ru: "Переключить aggressive mode", en: "Toggle aggressive mode" },
 } as const;
 
 export type StringKey = keyof typeof strings;

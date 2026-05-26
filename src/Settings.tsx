@@ -759,11 +759,11 @@ export default function Settings() {
 
         {/* ─ 🛰 Bridge endpoint ─────────────────────────────────── */}
         <div className="card">
-          <div className="card-title">🛰 Bridge endpoint</div>
+          <div className="card-title">{t("ai.bridge.title", lang)}</div>
           <div className="card-row">
             <div className="row-label">
-              Base URL
-              <span className="row-hint">OpenAI-compatible Claude proxy. Local bridge или Caddy-fronted Anthropic.</span>
+              {t("ai.bridge.url.label", lang)}
+              <span className="row-hint">{t("ai.bridge.url.hint", lang)}</span>
             </div>
             <div className="row-control">
               <input
@@ -780,9 +780,7 @@ export default function Settings() {
                 if (isLoopback) return null;
                 return (
                   <div className="banner warn">
-                    ⚠ Plaintext HTTP to non-localhost ({host}) — bearer token
-                    + prompts travel in clear. Use https:// (Caddy/Nginx in
-                    front) for any non-localhost deployment.
+                    {t("ai.bridge.warn.http", lang)} ({host})
                   </div>
                 );
               })()}
@@ -790,8 +788,8 @@ export default function Settings() {
           </div>
           <div className="card-row">
             <div className="row-label">
-              Bearer secret
-              <span className="row-hint">BRIDGE_SECRET — хранится в config.json, не отправляется в журнал.</span>
+              {t("ai.bridge.bearer.label", lang)}
+              <span className="row-hint">{t("ai.bridge.bearer.hint", lang)}</span>
             </div>
             <div className="row-control">
               <input
@@ -803,8 +801,8 @@ export default function Settings() {
           </div>
           <div className="card-row">
             <div className="row-label">
-              Health check
-              <span className="row-hint">1-токен POST на /chat/completions — проверяет URL + bearer + сетевой путь.</span>
+              {t("ai.bridge.health.label", lang)}
+              <span className="row-hint">{t("ai.bridge.health.hint", lang)}</span>
             </div>
             <div className="row-control">
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -827,9 +825,9 @@ export default function Settings() {
                       setBridgeBusy(false);
                     }
                   }}
-                  title="Минимальный 1-токен POST на /chat/completions"
+                  title={t("ai.bridge.check.tip", lang)}
                 >
-                  {bridgeBusy ? "⏳ Проверяю…" : "🔌 Проверить мост"}
+                  {bridgeBusy ? t("ai.bridge.check.busy", lang) : t("ai.bridge.check.button", lang)}
                 </button>
                 {bridgeStatus && (
                   <span
@@ -846,9 +844,7 @@ export default function Settings() {
                 )}
               </div>
               {bridgeStatus && !bridgeStatus.reachable && bridgeStatus.hint && (
-                <div className="hint">
-                  💡 Проверь: запущен ли мост на этом IP/порту, открыт ли firewall, не сменился ли BRIDGE_SECRET.
-                </div>
+                <div className="hint">{t("ai.bridge.fail.tip", lang)}</div>
               )}
             </div>
           </div>
@@ -856,51 +852,51 @@ export default function Settings() {
 
         {/* ─ 🧠 Models ─────────────────────────────────────────── */}
         <div className="card">
-          <div className="card-title">🧠 Модели + язык</div>
+          <div className="card-title">{t("ai.models.title", lang)}</div>
           <div className="card-row">
             <div className="row-label">
-              Живые ответы
-              <span className="row-hint">Эта модель работает на каждый тайл. Нужна скорость.</span>
+              {t("ai.models.live.label", lang)}
+              <span className="row-hint">{t("ai.models.live.hint", lang)}</span>
             </div>
             <div className="row-control">
               <select
                 value={cfg.ai_model}
                 onChange={(e) => update({ ai_model: e.target.value })}
               >
-                <option value="claude-haiku-4-5">claude-haiku-4-5 (быстро, default)</option>
-                <option value="claude-sonnet-4-6">claude-sonnet-4-6 (умнее, медленнее)</option>
-                <option value="claude-opus-4-7">claude-opus-4-7 (самый умный, медленный)</option>
+                <option value="claude-haiku-4-5">claude-haiku-4-5 {lang === "en" ? "(fast, default)" : "(быстро, default)"}</option>
+                <option value="claude-sonnet-4-6">claude-sonnet-4-6 {lang === "en" ? "(smarter, slower)" : "(умнее, медленнее)"}</option>
+                <option value="claude-opus-4-7">claude-opus-4-7 {lang === "en" ? "(smartest, slow)" : "(самый умный, медленный)"}</option>
               </select>
             </div>
           </div>
           <div className="card-row">
             <div className="row-label">
-              Подготовка контекста
-              <span className="row-hint">Структурирование meeting_context, coaching debrief. Нужно качество.</span>
+              {t("ai.models.prep.label", lang)}
+              <span className="row-hint">{t("ai.models.prep.hint", lang)}</span>
             </div>
             <div className="row-control">
               <select
                 value={cfg.prep_model}
                 onChange={(e) => update({ prep_model: e.target.value })}
               >
-                <option value="claude-sonnet-4-6">claude-sonnet-4-6 (default, 30-50% быстрее 4-5)</option>
-                <option value="claude-sonnet-4-5">claude-sonnet-4-5 (старая, ещё работает)</option>
-                <option value="claude-haiku-4-5">claude-haiku-4-5 (быстро)</option>
-                <option value="claude-opus-4-7">claude-opus-4-7 (максимум качества)</option>
+                <option value="claude-sonnet-4-6">claude-sonnet-4-6 {lang === "en" ? "(default, 30-50% faster than 4-5)" : "(default, 30-50% быстрее 4-5)"}</option>
+                <option value="claude-sonnet-4-5">claude-sonnet-4-5 {lang === "en" ? "(older, still works)" : "(старая, ещё работает)"}</option>
+                <option value="claude-haiku-4-5">claude-haiku-4-5 {lang === "en" ? "(fast)" : "(быстро)"}</option>
+                <option value="claude-opus-4-7">claude-opus-4-7 {lang === "en" ? "(max quality)" : "(максимум качества)"}</option>
               </select>
             </div>
           </div>
           <div className="card-row">
             <div className="row-label">
-              Язык ответов
-              <span className="row-hint">Принудительно через system prompt. Whisper может транскрибировать на другом языке.</span>
+              {t("ai.models.lang.label", lang)}
+              <span className="row-hint">{t("ai.models.lang.hint", lang)}</span>
             </div>
             <div className="row-control">
               <select
                 value={cfg.response_language}
                 onChange={(e) => update({ response_language: e.target.value })}
               >
-                <option value="ru">Русский (ru)</option>
+                <option value="ru">{lang === "en" ? "Russian (ru)" : "Русский (ru)"}</option>
                 <option value="en">English (en)</option>
               </select>
             </div>
@@ -909,11 +905,11 @@ export default function Settings() {
 
         {/* ─ 💰 Budget ─────────────────────────────────────────── */}
         <div className="card">
-          <div className="card-title">💰 Лимит затрат на сессию</div>
+          <div className="card-title">{t("ai.budget.title", lang)}</div>
           <div className="card-row">
             <div className="row-label">
-              Cap (USD)
-              <span className="row-hint">0 = выкл (default с v0.0.28). Любое положительное значение — жёлтый 💰 чип в overlay-bar когда сессия превысит.</span>
+              {t("ai.budget.cap.label", lang)}
+              <span className="row-hint">{t("ai.budget.cap.hint", lang)}</span>
             </div>
             <div className="row-control">
               <input
@@ -929,52 +925,39 @@ export default function Settings() {
                 }}
                 style={{ width: 120 }}
               />
-              <div className="hint">
-                Для справки: $1 ≈ 200 Haiku тайлов · $5 ≈ час непрерывной речи в Aggressive mode. Это SOFT warning — AI продолжает отвечать после превышения, чип просто загорается.
-              </div>
+              <div className="hint">{t("ai.budget.note", lang)}</div>
             </div>
           </div>
         </div>
 
         {/* ─ 🎯 Detector ───────────────────────────────────────── */}
         <div className="card">
-          <div className="card-title">🎯 Триггер на спавн тайла</div>
+          <div className="card-title">{t("ai.det.title", lang)}</div>
           <div className="switch-row">
             <div className="switch-meta">
-              <div className="switch-title">Игнорировать ваш голос (mic)</div>
-              <div className="switch-desc">
-                ON по умолчанию. Только вопросы собеседника триггерят auto-tile.
-                Без этого детектор фаерит на ваших фразах типа «Я работал с
-                Kubernetes…» — лишние тайлы. Выключи только если хочешь
-                подсказки по обеим сторонам.
-              </div>
+              <div className="switch-title">{t("ai.det.skip.title", lang)}</div>
+              <div className="switch-desc">{t("ai.det.skip.desc", lang)}</div>
             </div>
             <button
               type="button"
               className="switch"
               role="switch"
               aria-checked={cfg.detector_skip_mic ?? true}
-              aria-label="Toggle detector skip-mic"
+              aria-label={t("ai.det.skip.aria", lang)}
               onClick={() => update({ detector_skip_mic: !(cfg.detector_skip_mic ?? true) })}
             />
           </div>
           <div className="switch-row">
             <div className="switch-meta">
-              <div className="switch-title">🔥 Aggressive mode</div>
-              <div className="switch-desc">
-                Спавнить тайл на КАЖДУЮ строку транскрипта (v0.0.18+). OFF по
-                умолчанию. Bypass'ит «вопрос/не вопрос» проверку — каждая
-                строка от Whisper (длиннее 5 символов) → тайл. Rate-limit
-                бампается с 15 до 60 тайлов/мин. Overlay-бар покажет 🔥 чип
-                когда включён — будешь видеть статус.
-              </div>
+              <div className="switch-title">{t("ai.det.agg.title", lang)}</div>
+              <div className="switch-desc">{t("ai.det.agg.desc", lang)}</div>
             </div>
             <button
               type="button"
               className="switch"
               role="switch"
               aria-checked={cfg.auto_tile_every_line ?? false}
-              aria-label="Toggle aggressive mode"
+              aria-label={t("ai.det.agg.aria", lang)}
               onClick={() => update({ auto_tile_every_line: !(cfg.auto_tile_every_line ?? false) })}
             />
           </div>
