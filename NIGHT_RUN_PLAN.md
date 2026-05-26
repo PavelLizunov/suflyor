@@ -1,8 +1,10 @@
 # Autonomous work plan
 
-## 🌐 Marathon block 4 — i18n sprint (18:00-19:00 MSK, 10 releases in ~60 min)
+## 🌐 Marathon block 4 — i18n sprint (18:00-19:11 MSK, **12 releases in ~70 min**)
 
-User's second ask from the original message: «Также сделай полные переводы как на русский так и на английский». Shipped v0.0.41 (sticky header/footer fix — original primary ask) + 9 i18n releases v0.0.42 → v0.0.50 ALL through full 6-gate verification (cargo test --lib 255 pass · clippy `-D warnings` clean · tsc · NSIS build · install timestamp confirm · computer-use smoke test in EN mode · clean quit). 10 releases this block.
+User's two original asks: (1) «хедер где settings и Выйти и футтер где back to overlay и save были всегда зафиксированы снизу и сверху окна» (2) «Также сделай полные переводы как на русский так и на английский». Shipped v0.0.41 (sticky header/footer fix — ask #1) + 9 progressive i18n releases v0.0.42 → v0.0.50 covering every visible UI string + v0.0.51 (agent-review hotfix for 3 misses) + v0.0.52 (Snippets CRUD modal close-out). ALL through full 6-gate verification (cargo test --lib 255 pass · clippy `-D warnings` clean · tsc · NSIS build · install timestamp confirm · computer-use smoke test in EN mode · clean quit). **12 releases this block. Final translation map: 235 keys × 2 langs = 470 entries.**
+
+Independent review subagent (general-purpose) was spawned after v0.0.50 to audit the i18n work. It found 3 legitimate misses (snippets JSON footer, toast close, default modal confirm) which became v0.0.51, plus flagged the Snippets CRUD modal as the last untranslated section which became v0.0.52. Also confirmed: no new XSS/security surface, translation keys compile-time-enforced via TypeScript StringKey, ?lang= URL param whitelisted via resolveLang, Cyrillic round-trips via urlencoding_min + safeDecode.
 
 **v0.0.41** (P0 sticky fix) — root cause was TWO conflicting `.settings-root` CSS rules: design-handoff rule sets `position: fixed + flex column` for pin layout, legacy override later in cascade re-applies `position: static + overflow-y: auto`. Removed the override. Bonus: `.settings-header` legacy negative margin removed, `.settings-pane` `min-height: 0`, `open_settings` window cap to `monitor_h.clamp(480, 900)`.
 
