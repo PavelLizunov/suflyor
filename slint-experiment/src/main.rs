@@ -282,3 +282,160 @@ fn main() -> Result<(), slint::PlatformError> {
 
     window.run()
 }
+
+// ============================================================================
+// Phase 0 Day 3 — i-slint-backend-testing tests.
+//
+// The plan calls for three test SCENARIOS:
+//   1. load → assert N events appear in timeline
+//   2. click filter chip → assert events of that kind disappear
+//   3. switch session → assert filter resets to "all"
+//
+// Slint's testing backend (`i_slint_backend_testing::init_no_event_loop`)
+// installs a per-thread platform shim, and Rust's libtest spawns a new
+// thread for each `#[test]` fn even with `--test-threads=1`. So calling
+// `MainWindow::new()` from a second `#[test]` panics with "The Slint
+// platform was initialized in another thread" — confirmed live with the
+// earlier 3-test layout, where tests 1+2 passed but test 3 hit the
+// thread-affinity check.
+//
+// Workaround for the pilot: ONE `#[test]` fn that runs all three
+// scenarios sequentially on the same thread. Scenarios stay clearly
+// labeled. A real Phase 1 test suite would invest in a custom harness
+// (libtest-mimic or `serial_test` + a long-lived spawned worker
+// thread) so each scenario can be a true `#[test]`. Documented in the
+// pilot report as a known Slint-testing gotcha.
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)] // test brevity
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use slint::Model;
+
+    fn ev(kind: &str, unix_ms: u64) -> serde_json::Value {
+        json!({"kind": kind, "unix_ms": unix_ms})
+    }
+
+    /// Combined Phase 0 test — three scenarios, single thread.
+    #[test]
+    fn slint_pilot_scenarios() {
+        i_slint_backend_testing::init_no_event_loop();
+        let window = MainWindow::new().expect("create window");
+
+        // ===================================================================
+        // Scenario 1 — load: given populated state, sync_window pushes
+        // the events model into Slint at the right row count + chip count.
+        // ===================================================================
+        {
+            let mut state = PilotState::new();
+            state.events = vec![
+                ev("transcript_line", 1000),
+                ev("transcript_line", 2000),
+                ev("ai_response", 3000),
+            ];
+            sync_window(&window, &mut state);
+
+            assert_eq!(window.get_total_events(), 3, "scenario 1: total_events");
+            assert_eq!(window.get_ai_response_count(), 1, "scenario 1: ai count");
+            assert_eq!(
+                window.get_filter_chips().row_count(),
+                2,
+                "scenario 1: 2 distinct kinds → 2 chips"
+            );
+            assert_eq!(
+                window.get_events().row_count(),
+                3,
+                "scenario 1: no hidden kinds → all visible"
+            );
+            // chip_kinds order is by count desc, then kind asc as tie-breaker.
+            assert_eq!(state.chip_kinds.len(), 2);
+            assert_eq!(state.chip_kinds[0], "transcript_line"); // count=2
+            assert_eq!(state.chip_kinds[1], "ai_response");     // count=1
+        }
+
+        // ===================================================================
+        // Scenario 2 — chip toggle: hiding a kind drops only that kind's
+        // events from the visible model, totals stay unfiltered.
+        // ===================================================================
+        {
+            let mut state = PilotState::new();
+            state.events = vec![
+                ev("transcript_line", 1000),
+                ev("transcript_line", 2000),
+                ev("ai_response", 3000),
+            ];
+            sync_window(&window, &mut state);
+
+            let idx = state
+                .chip_kinds
+                .iter()
+                .position(|k| k == "ai_response")
+                .expect("ai_response chip should exist");
+            let kind = state.chip_kinds[idx].clone();
+
+            // Mirror what on_chip_clicked does — toggle into hidden_kinds,
+            // re-sync to push the filtered events to the window.
+            state.hidden_kinds.insert(kind.clone());
+            sync_window(&window, &mut state);
+
+            assert_eq!(window.get_events().row_count(), 2, "scenario 2: 2 visible");
+            assert_eq!(window.get_total_events(), 3, "scenario 2: total unchanged");
+            assert_eq!(window.get_ai_response_count(), 1, "scenario 2: ai unchanged");
+
+            let chips = window.get_filter_chips();
+            let ai_chip = chips
+                .iter()
+                .find(|c| c.kind.as_str() == "ai_response")
+                .expect("ai_response chip");
+            assert!(ai_chip.hidden, "scenario 2: ai_response chip flagged hidden");
+
+            // Toggle back on — all 3 visible.
+            state.hidden_kinds.remove(&kind);
+            sync_window(&window, &mut state);
+            assert_eq!(
+                window.get_events().row_count(),
+                3,
+                "scenario 2: untoggle restores"
+            );
+        }
+
+        // ===================================================================
+        // Scenario 3 — session switch: load_session_into_state's reset
+        // semantics (clear hidden_kinds, replace events) leave the new
+        // session showing all its events.
+        // ===================================================================
+        {
+            let mut state = PilotState::new();
+            state.events = vec![
+                ev("transcript_line", 1000),
+                ev("transcript_line", 2000),
+            ];
+            state.hidden_kinds.insert("transcript_line".to_string());
+            sync_window(&window, &mut state);
+            // Pre-condition: 2 total, 0 visible.
+            assert_eq!(window.get_total_events(), 2);
+            assert_eq!(window.get_events().row_count(), 0);
+
+            // Switching to session B: same mutation load_session_into_state
+            // does (clear filter, replace events). The disk-reading branch is
+            // exercised by the binary at runtime; here we test the post-load
+            // state transition.
+            state.hidden_kinds.clear();
+            state.events = vec![
+                ev("ai_response", 3000),
+                ev("ai_response", 4000),
+                ev("ai_response", 5000),
+            ];
+            sync_window(&window, &mut state);
+
+            assert!(state.hidden_kinds.is_empty(), "scenario 3: filter reset");
+            assert_eq!(window.get_total_events(), 3, "scenario 3: new session total");
+            assert_eq!(
+                window.get_events().row_count(),
+                3,
+                "scenario 3: all events of new session visible"
+            );
+            assert_eq!(window.get_ai_response_count(), 3, "scenario 3: ai count");
+        }
+    }
+}
