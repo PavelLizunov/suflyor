@@ -1020,40 +1020,60 @@ export default function Settings() {
       </div>)}
 
       {activeSection === "tiles" && (<div className="settings-section">
-        <h3>🪟 Auto-tiles</h3>
-        <div className="field">
-          <label>
-            <input
-              type="checkbox"
-              checked={cfg.auto_tiles_enabled}
-              onChange={(e) => update({ auto_tiles_enabled: e.target.checked })}
-              style={{ marginRight: 6 }}
+        {/* v0.0.39 polish: Auto-tiles section converted to .card +
+            .switch-row (for the boolean) + .card-row (for monitor select
+            and trigger-keywords textarea). Snippets section below stays
+            unchanged for now — too much state, deferred. */}
+        <div className="card">
+          <div className="card-title">🪟 Авто-тайлы</div>
+          <div className="switch-row">
+            <div className="switch-meta">
+              <div className="switch-title">Включить авто-окошки при вопросах в транскрипте</div>
+              <div className="switch-desc">
+                Когда детектор видит вопрос (или любая строка в Aggressive
+                mode) — спавнится тайл рядом с meeting window.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="switch"
+              role="switch"
+              aria-checked={cfg.auto_tiles_enabled}
+              aria-label="Toggle auto-tiles"
+              onClick={() => update({ auto_tiles_enabled: !cfg.auto_tiles_enabled })}
             />
-            Включить авто-окошки при вопросах в транскрипте
-          </label>
-        </div>
-        <div className="field">
-          <label>Монитор для tiles (по умолчанию: первый не-primary дисплей; если монитор один — primary)</label>
-          <select
-            value={cfg.tile_monitor_name ?? ""}
-            onChange={(e) => update({ tile_monitor_name: e.target.value || null })}
-          >
-            <option value="">— авто (предпочитать не-primary) —</option>
-            {monitors.map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label>
-            Trigger-keywords (через пробел, case-insensitive). Срабатывают как whole-word match.
-          </label>
-          <textarea
-            style={{ minHeight: 60 }}
-            value={cfg.trigger_keywords}
-            onChange={(e) => update({ trigger_keywords: e.target.value })}
-            placeholder="kubernetes etcd istio terraform prometheus"
-          />
+          </div>
+          <div className="card-row">
+            <div className="row-label">
+              Монитор для tiles
+              <span className="row-hint">по умолчанию — первый не-primary; если монитор один — primary</span>
+            </div>
+            <div className="row-control">
+              <select
+                value={cfg.tile_monitor_name ?? ""}
+                onChange={(e) => update({ tile_monitor_name: e.target.value || null })}
+              >
+                <option value="">— авто (предпочитать не-primary) —</option>
+                {monitors.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="card-row">
+            <div className="row-label">
+              Trigger-keywords
+              <span className="row-hint">через пробел, case-insensitive, whole-word match. Срабатывают как дополнительный триггер на спавн.</span>
+            </div>
+            <div className="row-control">
+              <textarea
+                style={{ minHeight: 60 }}
+                value={cfg.trigger_keywords}
+                onChange={(e) => update({ trigger_keywords: e.target.value })}
+                placeholder="kubernetes etcd istio terraform prometheus"
+              />
+            </div>
+          </div>
         </div>
       </div>)}
 
@@ -1345,22 +1365,55 @@ export default function Settings() {
       </div>)}
 
       {activeSection === "hotkeys" && (<div className="settings-section">
-        <h3>⌨ Hotkeys</h3>
-        <div className="field">
-          <label>Ask AI</label>
-          <input value={cfg.hotkey_ask} onChange={(e) => update({ hotkey_ask: e.target.value })} />
-        </div>
-        <div className="field">
-          <label>Take screenshot</label>
-          <input value={cfg.hotkey_screenshot} onChange={(e) => update({ hotkey_screenshot: e.target.value })} />
-        </div>
-        <div className="field">
-          <label>Toggle visibility</label>
-          <input value={cfg.hotkey_toggle_visibility} onChange={(e) => update({ hotkey_toggle_visibility: e.target.value })} />
-        </div>
-        <div className="field">
-          <label>Pause audio</label>
-          <input value={cfg.hotkey_pause_audio} onChange={(e) => update({ hotkey_pause_audio: e.target.value })} />
+        {/* v0.0.39 polish: converted from .field + text-input rows to the
+            design's .card with text-input pairs. The full .hotkey-row /
+            kbd pattern (used in the ℹ-popover) requires a re-binding flow
+            for click-to-assign, deferred to a future release. For now:
+            same text-input UX, just inside the new card frame.
+            Behavior unchanged. */}
+        <div className="card">
+          <div className="card-title">⌨ Глобальные хоткеи</div>
+          <div className="hint" style={{ fontSize: 11, color: "var(--c-text-dim)" }}>
+            Регистрируются как global hotkeys Windows — работают когда
+            overlay не в фокусе. Формат: «F9» / «Ctrl+Shift+A» (Tauri syntax).
+            После Save потребуется restart сессии чтобы перерегистрировать.
+          </div>
+          <div className="card-row">
+            <div className="row-label">
+              Ask AI
+              <span className="row-hint">Спросить AI сейчас (со screenshot если есть)</span>
+            </div>
+            <div className="row-control">
+              <input value={cfg.hotkey_ask} onChange={(e) => update({ hotkey_ask: e.target.value })} />
+            </div>
+          </div>
+          <div className="card-row">
+            <div className="row-label">
+              Take screenshot
+              <span className="row-hint">Захват экрана для следующего F9</span>
+            </div>
+            <div className="row-control">
+              <input value={cfg.hotkey_screenshot} onChange={(e) => update({ hotkey_screenshot: e.target.value })} />
+            </div>
+          </div>
+          <div className="card-row">
+            <div className="row-label">
+              Toggle visibility
+              <span className="row-hint">PANIC HIDE — скрыть overlay + все тайлы</span>
+            </div>
+            <div className="row-control">
+              <input value={cfg.hotkey_toggle_visibility} onChange={(e) => update({ hotkey_toggle_visibility: e.target.value })} />
+            </div>
+          </div>
+          <div className="card-row">
+            <div className="row-label">
+              Pause audio
+              <span className="row-hint">Пауза/возобновить сессию (F8)</span>
+            </div>
+            <div className="row-control">
+              <input value={cfg.hotkey_pause_audio} onChange={(e) => update({ hotkey_pause_audio: e.target.value })} />
+            </div>
+          </div>
         </div>
       </div>)}
 
