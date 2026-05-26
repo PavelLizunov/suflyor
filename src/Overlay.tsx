@@ -103,6 +103,10 @@ export default function Overlay() {
   // to false on every start_session — chip flips back without us needing
   // to listen for session events.
   const [micMuted, setMicMuted] = useState<boolean>(false);
+  // v0.0.81: stealth (screen-share invisibility) state. Loaded from
+  // cfg.stealth_enabled on mount + focus. Writes via set_stealth.
+  // Toggling applies to overlay + all tile windows immediately.
+  const [stealth, setStealthState] = useState<boolean>(false);
   // Failure HUD — 3 dots (audio/stt/ai). null = no signal received yet.
   const [health, setHealth] = useState<HealthPayload | null>(null);
   // Voice coach — live mic WPM / filler density. null = backend hasn't
@@ -558,7 +562,7 @@ export default function Overlay() {
 
   // Load ask-mode + aggressive flag + ui_language from config once on mount.
   useEffect(() => {
-    invoke<{ manual_ask_mode?: string; auto_tile_every_line?: boolean; ui_language?: string; stt_language?: string | null; ai_model?: string }>("get_config")
+    invoke<{ manual_ask_mode?: string; auto_tile_every_line?: boolean; ui_language?: string; stt_language?: string | null; ai_model?: string; stealth_enabled?: boolean }>("get_config")
       .then((c) => {
         if (!mountedRef.current) return;
         const mode = c.manual_ask_mode === "click" ? "click" : "hold";
@@ -567,6 +571,7 @@ export default function Overlay() {
         setLang(resolveLang(c.ui_language));
         setSttLang(c.stt_language ?? null);
         if (c.ai_model) setAiModel(c.ai_model);
+        setStealthState(Boolean(c.stealth_enabled));
       })
       .catch((e) => console.warn("get_config:", e));
     // v0.0.75: load mic mute state from RuntimeState.
@@ -587,13 +592,14 @@ export default function Overlay() {
   useEffect(() => {
     const onFocus = () => {
       if (!mountedRef.current) return;
-      invoke<{ auto_tile_every_line?: boolean; ui_language?: string; stt_language?: string | null; ai_model?: string }>("get_config")
+      invoke<{ auto_tile_every_line?: boolean; ui_language?: string; stt_language?: string | null; ai_model?: string; stealth_enabled?: boolean }>("get_config")
         .then((c) => {
           if (!mountedRef.current) return;
           setAggressive(Boolean(c.auto_tile_every_line));
           setLang(resolveLang(c.ui_language));
           setSttLang(c.stt_language ?? null);
           if (c.ai_model) setAiModel(c.ai_model);
+          setStealthState(Boolean(c.stealth_enabled));
         })
         .catch(() => {});
     };
@@ -1171,6 +1177,40 @@ export default function Overlay() {
           }}
         >
           {micMuted ? "🔇" : "🎤"}
+        </button>
+        {/* v0.0.81: stealth (screen-share invisibility) toggle chip.
+            ON state tinted purple. SetWindowDisplayAffinity applies
+            to overlay + every tile window immediately via the
+            set_stealth backend command (existing v0.0.7 plumbing). */}
+        <button
+          type="button"
+          className="hint"
+          style={{
+            fontFamily: "monospace",
+            fontSize: 11,
+            padding: "0 6px",
+            borderRadius: 4,
+            border: "1px solid var(--c-border-soft)",
+            background: stealth ? "rgba(140, 90, 200, 0.22)" : "transparent",
+            cursor: "pointer",
+            color: stealth ? "rgba(220, 190, 255, 0.95)" : "var(--c-text-mute)",
+          }}
+          title={lang === "en"
+            ? `Stealth (screen-share invisibility): ${stealth ? "ON — hidden from screen capture" : "off"}. Click to toggle.`
+            : `Stealth (невидимость для screen-share): ${stealth ? "ВКЛ — скрыто от захвата экрана" : "выкл"}. Клик переключает.`}
+          aria-label={lang === "en" ? "Stealth toggle" : "Переключатель stealth"}
+          aria-pressed={stealth}
+          onClick={async () => {
+            const next = !stealth;
+            try {
+              await invoke("set_stealth", { enabled: next });
+              setStealthState(next);
+            } catch (err) {
+              console.warn("set_stealth:", err);
+            }
+          }}
+        >
+          🎯 {stealth ? "ON" : "off"}
         </button>
         {/* v0.0.62: session elapsed timer chip. Shown while session
             running (sessionStartMs set). Yellow at 45 min, red at 60. */}

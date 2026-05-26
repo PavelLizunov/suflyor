@@ -11,6 +11,21 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.81 (2026-05-26) — QOL block 5, #29
+
+**🎯 Stealth quick-toggle chip in overlay bar.**
+
+New chip after the 🔇 mic mute chip. Shows `🎯 ON` (purple tint) /
+`🎯 off` (neutral). Click flips `cfg.stealth_enabled` via the existing
+`set_stealth` backend command — `SetWindowDisplayAffinity` applies to
+the overlay + every tile window immediately.
+
+Use case: screen-share starts unexpectedly → reach for 🎯 chip → hidden
+from capture in <100 ms. Faster than Settings → 🎯 Stealth → save +
+back (4 clicks). Complements F11 PANIC HIDE (which hides the windows
+entirely) — stealth keeps the overlay visible to YOU but invisible to
+the screen-share viewer.
+
 ### → v0.0.80 (2026-05-26) — QOL block 5, #28
 
 **F2 — cycle through saved context profiles.**
