@@ -780,7 +780,14 @@ fn dump_diagnostics(
             let lines: Vec<&str> = content.lines().collect();
             let tail_start = lines.len().saturating_sub(50);
             let tail = sanitize_diagnostic_text(&lines[tail_start..].join("\n"));
-            format!("**File:** `{}`\n**Tail (last {} lines, sanitized):**\n```jsonl\n{}\n```\n\n_NOTE: `ai_request` events in this tail include `system_prompt` + `user_prompt` which contain your meeting_context (e.g. company name, role). Review before sharing if that's sensitive._", path.display(), lines.len() - tail_start, tail)
+            // Emit only the filename, not the full path. The full path
+            // contains the Windows username (`C:\Users\<user>\AppData\...`)
+            // which is a low-grade PII leak when sharing the dump.
+            let filename = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("session.jsonl");
+            format!("**File:** `{}` (in your `%APPDATA%\\overlay-mvp\\sessions\\`)\n**Tail (last {} lines, sanitized):**\n```jsonl\n{}\n```\n\n_NOTE: `ai_request` events in this tail include `system_prompt` + `user_prompt` which contain your meeting_context (e.g. company name, role). Review before sharing if that's sensitive._", filename, lines.len() - tail_start, tail)
         })
         .unwrap_or_else(|| "_no session journal found_".to_string());
 

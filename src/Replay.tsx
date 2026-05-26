@@ -235,10 +235,16 @@ export default function Replay() {
               <button
                 key={kind}
                 onClick={() => {
-                  const next = new Set(hiddenKinds);
-                  if (hidden) next.delete(kind);
-                  else next.add(kind);
-                  setHiddenKinds(next);
+                  // Functional setState — survives batched-update edge case
+                  // where two rapid clicks would otherwise both see the
+                  // pre-batch state and clobber each other. Theoretical for
+                  // a human user but the safe pattern is cheap.
+                  setHiddenKinds(prev => {
+                    const next = new Set(prev);
+                    if (next.has(kind)) next.delete(kind);
+                    else next.add(kind);
+                    return next;
+                  });
                 }}
                 style={{
                   padding: "2px 8px",
