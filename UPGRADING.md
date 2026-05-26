@@ -11,6 +11,25 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.62 (2026-05-26) — QOL block 5, #10
+
+**Session elapsed-time chip in overlay (⏱ mm:ss).**
+
+Visible while a session is running (between first transcript line and
+explicit stop). Updates every 1s via interval. Colors:
+- 0–44 min: muted text
+- 45–59 min: yellow (typical interview "wrapping up" signal)
+- 60+ min: red (you're now over the standard hour)
+
+Implementation: pure frontend. `sessionStartMs` set on first
+`transcript:line` event; cleared when status transitions to `stopped`
+or when meeting-ending chip is clicked. No backend changes.
+
+Use case: interviewer says "we have about an hour" → you see ⏱ 47:12
+in yellow → realize you're almost out of time → wrap up gracefully.
+
+Bilingual hover tooltip.
+
 ### → v0.0.61 (2026-05-26) — QOL block 5, #9
 
 **AI follow-up suggestions button (💡 in overlay).**

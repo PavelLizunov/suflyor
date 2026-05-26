@@ -83,6 +83,13 @@ export default function Overlay() {
   // for your time" / "we'll be in touch" etc. Chip stays until user
   // clicks (stops session) or session ends.
   const [meetingEnding, setMeetingEnding] = useState(false);
+  // v0.0.62: session elapsed timer. Captured when status transitions
+  // to "listening" (i.e. session truly started). Cleared on stopped /
+  // paused. Updated by an interval that ticks every 1s. Display
+  // colors: ≥45 min yellow, ≥60 min red — gives the user a visible
+  // running-out indicator without being intrusive.
+  const [sessionStartMs, setSessionStartMs] = useState<number | null>(null);
+  const [sessionElapsedSec, setSessionElapsedSec] = useState(0);
   // Failure HUD — 3 dots (audio/stt/ai). null = no signal received yet.
   const [health, setHealth] = useState<HealthPayload | null>(null);
   // Voice coach — live mic WPM / filler density. null = backend hasn't
@@ -468,6 +475,28 @@ export default function Overlay() {
     return () => document.body.classList.remove("overlay");
   }, []);
 
+  // v0.0.62: session timer ticker. Runs only while sessionStartMs is
+  // set (i.e. between first transcript and explicit stop).
+  useEffect(() => {
+    if (sessionStartMs === null) {
+      setSessionElapsedSec(0);
+      return;
+    }
+    const id = setInterval(() => {
+      setSessionElapsedSec(Math.floor((Date.now() - sessionStartMs) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [sessionStartMs]);
+
+  // v0.0.62: reset timer when status transitions to stopped/paused.
+  // (meetingEnding chip clears the timer via its own onClick stop.)
+  useEffect(() => {
+    if (status === "stopped") {
+      setSessionStartMs(null);
+      setMeetingEnding(false);
+    }
+  }, [status]);
+
   // v0.0.26: also pull auto_tile_every_line so we can show a 🔥 chip
   // in the bar when aggressive mode is on. User easily forgets this is
   // enabled between sessions — chip is a status indicator (not a cost
@@ -632,6 +661,16 @@ export default function Overlay() {
     unlistens.push(
       listen("meeting:ending", () => {
         setMeetingEnding(true);
+      })
+    );
+
+    // v0.0.62: session timer — start on first transcript line of a
+    // fresh session, stop on session_end-ish events.
+    unlistens.push(
+      listen("transcript:line", () => {
+        if (sessionStartMs === null) {
+          setSessionStartMs(Date.now());
+        }
       })
     );
 
@@ -895,6 +934,27 @@ export default function Overlay() {
           {status === "answering" && t("overlay.status.answering", lang)}
           {status === "error" && t("overlay.status.error", lang).replace("{msg}", errorText.slice(0, 60))}
         </div>
+        {/* v0.0.62: session elapsed timer chip. Shown while session
+            running (sessionStartMs set). Yellow at 45 min, red at 60. */}
+        {sessionStartMs !== null && (
+          <span
+            className="hint"
+            style={{
+              fontFamily: "monospace",
+              color: sessionElapsedSec >= 3600
+                ? "#f87171"
+                : sessionElapsedSec >= 2700
+                  ? "#facc15"
+                  : "var(--c-text-mute)",
+            }}
+            title={lang === "en"
+              ? `Session running for ${Math.floor(sessionElapsedSec / 60)} min ${sessionElapsedSec % 60} sec. Yellow ≥45 min, red ≥60 min.`
+              : `Сессия идёт ${Math.floor(sessionElapsedSec / 60)} мин ${sessionElapsedSec % 60} сек. Жёлтый ≥45 мин, красный ≥60 мин.`}
+            aria-label={lang === "en" ? "Session elapsed time" : "Время сессии"}
+          >
+            ⏱ {`${Math.floor(sessionElapsedSec / 60).toString().padStart(2, "0")}:${(sessionElapsedSec % 60).toString().padStart(2, "0")}`}
+          </span>
+        )}
         {health && (
           <span className="health-hud" aria-label={t("overlay.health.aria", lang)}>
             {(["audio", "stt", "ai"] as const).map((k) => {
