@@ -69,6 +69,13 @@ export default function TileWindow() {
   // Enter triggers tile:reload-request with the edited text (reuses
   // the v0.0.68 bridge — same backend path as 🔄 reload). Esc cancels.
   const [editingQuestion, setEditingQuestion] = useState<string | null>(null);
+  // v0.0.99: save-as-snippet flow. Click 💾 → savingKey opens a small
+  // inline input above the tile body asking for a snippet key. Enter
+  // → calls add_snippet via the v0.0.95 bridge with this tile's Q+A
+  // as the snippet body. Esc cancels.
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "ok" | "err">("idle");
+  const [saveMsg, setSaveMsg] = useState<string>("");
 
   // v0.0.69: track tile age + reload generation. spawnedAt = mount time
   // (no backend plumbing needed; tile lifetime starts on this React
@@ -560,6 +567,40 @@ export default function TileWindow() {
         >
           ✏️
         </button>
+        {/* v0.0.99: 💾 save tile Q+A as a snippet for future reuse.
+            Opens inline input for the snippet key, then calls v0.0.95
+            add_snippet with question+answer formatted as the body. */}
+        <button
+          className="tile-save-snip"
+          onClick={() => {
+            if (reloading || savingKey !== null) return;
+            // Suggest a reasonable default key: first 3 words of question
+            // lowercased + slugged (alphanumeric + dash).
+            const seed = question.toLowerCase()
+              .replace(/[^a-zа-яё0-9\s-]/gi, "")
+              .split(/\s+/).filter(Boolean).slice(0, 3).join("-")
+              .replace(/[^a-z0-9_-]/gi, "")
+              .slice(0, 32);
+            setSavingKey(seed || "snippet");
+            setSaveStatus("idle");
+            setSaveMsg("");
+          }}
+          disabled={reloading || savingKey !== null}
+          title={lang === "en"
+            ? "Save this Q+A as a reusable snippet (recall via F4 → /key)"
+            : "Сохранить Q+A как сниппет (вызов: F4 → /key)"}
+          aria-label={lang === "en" ? "Save as snippet" : "Сохранить как сниппет"}
+          style={{
+            background: "transparent",
+            border: "none",
+            cursor: reloading || savingKey !== null ? "wait" : "pointer",
+            opacity: reloading || savingKey !== null ? 0.5 : 0.85,
+            padding: "0 6px",
+            fontSize: 13,
+          }}
+        >
+          💾
+        </button>
         {/* v0.0.93: 📋 copy question to clipboard. Useful for pasting
             into Slack/email/notes. Confirmation: button briefly shows
             "✓" for 1.2s. Pure frontend, no backend. */}
@@ -602,6 +643,75 @@ export default function TileWindow() {
           v0.0.97: swap to input when editingQuestion !== null. Enter
           re-asks with the edited text via tile:reload-request. Esc
           cancels and restores question display. */}
+      {/* v0.0.99: save-as-snippet inline input. Renders between chrome
+          and the question/body when savingKey !== null. Enter calls
+          add_snippet; Esc cancels; status line shows ✓ key saved or
+          ✗ error. */}
+      {savingKey !== null && !collapsed && (
+        <div style={{
+          padding: "6px 8px",
+          background: "rgba(255, 220, 120, 0.10)",
+          border: "1px solid rgba(255, 220, 120, 0.30)",
+          borderRadius: 4,
+          marginBottom: 4,
+          fontSize: 12,
+        }}>
+          <div style={{ marginBottom: 4, opacity: 0.85 }}>
+            {lang === "en" ? "💾 Snippet key (Enter to save, Esc to cancel):" : "💾 Ключ сниппета (Enter — сохранить, Esc — отменить):"}
+          </div>
+          <input
+            autoFocus
+            type="text"
+            value={savingKey}
+            onChange={(e) => setSavingKey(e.target.value.slice(0, 32))}
+            onKeyDown={async (e) => {
+              if (e.key === "Escape") {
+                setSavingKey(null);
+                setSaveStatus("idle");
+                return;
+              }
+              if (e.key === "Enter") {
+                const key = (savingKey ?? "").trim();
+                if (!key) return;
+                // Build the snippet body — combine question and answer
+                // with a header so the recalled tile reads clearly.
+                const body = `**${question}**\n\n${answer}`;
+                try {
+                  await invoke<string>("add_snippet", { key, body });
+                  setSaveStatus("ok");
+                  setSaveMsg(lang === "en" ? `✓ Saved as /${key}` : `✓ Сохранено как /${key}`);
+                  setTimeout(() => { setSavingKey(null); setSaveStatus("idle"); }, 1500);
+                } catch (err) {
+                  setSaveStatus("err");
+                  const msg = String(err);
+                  setSaveMsg(msg.length > 80 ? msg.slice(0, 80) + "…" : msg);
+                }
+              }
+            }}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "4px 6px",
+              fontFamily: "monospace",
+              fontSize: 12,
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.2)",
+              borderRadius: 3,
+              color: "inherit",
+              outline: "none",
+            }}
+          />
+          {saveStatus !== "idle" && (
+            <div style={{
+              marginTop: 4,
+              fontSize: 11,
+              color: saveStatus === "ok" ? "#7cc97c" : "#d05050",
+            }}>
+              {saveMsg}
+            </div>
+          )}
+        </div>
+      )}
       {editingQuestion !== null ? (
         <input
           autoFocus

@@ -26,6 +26,25 @@ for download. No auto-install (no code signing — by design).
 
 Two code-review agent passes ran on the diff. First found 3 P0/P1 (shipped .85, .86, .87). Second pass running at time of v0.0.88 ship.
 
+### → v0.0.99 (2026-05-26) — 💾 Save tile as snippet
+
+New 💾 button in tile chrome. Click → inline input opens above the
+question asking for a snippet key. Default key suggestion: first 3
+words of question, slugged (alphanumeric + `-`, max 32 chars). Enter
+calls v0.0.95 `add_snippet` with body = `**{question}**\n\n{answer}`.
+Esc cancels.
+
+Visual feedback: amber background while editing. On success → ✓ green
+toast, auto-closes after 1.5s. On error (e.g. dup key) → red message
+with truncated reason.
+
+Use case: AI gave a really good answer to "how do you scale etcd?" —
+click 💾 → suggest "how-do-you" → tweak to "etcd-scale" → Enter →
+saved. Next time you can recall instantly via F4 → `/etcd-scale`.
+
+Pairs with v0.0.95 (inline +key body add) — that's for arbitrary
+text; this is for "turn a real AI answer into permanent reference".
+
 ### → v0.0.98 (2026-05-26) — 🎨 Custom CSS theme injection
 
 New `cfg.custom_css: String` (default empty, capped at 8 KB) and
