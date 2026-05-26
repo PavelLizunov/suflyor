@@ -1,6 +1,16 @@
 # Autonomous work plan
 
-## 🚀 Marathon block 5 — QOL chip + hotkey sprint (~20:00-22:15 MSK, **18 releases in ~2h20**)
+## 🚀 Marathon block 5 — QOL chip + hotkey sprint (~20:00-22:15 MSK, **22 releases in ~3h, +4 audit hotfix releases**)
+
+**Audit hotfix wave (v0.0.85-v0.0.88):**
+- v0.0.85: P0 F7 dup + P0 qa_cache key + P1 reload-bridge security (3 fixes from code-review agent #1)
+- v0.0.86: P1 collapse chip race + P1 opus-preservation (2 more from same agent)
+- v0.0.87: P1 mtime sort for journal "latest" detection (last from agent #1)
+- v0.0.88: 🧪 Mic test card in Settings → Audio (completed pending #143/v0.0.57)
+
+Code-review agent #2 launched at v0.0.88 ship to audit v0.0.85-v0.0.88 diff. Running in background.
+
+
 
 User: «Не заканчивай работу, продолжай оверлей и подумай что еще можно сделать, мне нужно 6 часов бесперывной работы проверок и твоих фонтазий QOL доработак и не обращай внимание на косты, деньги не приоритет.»
 
