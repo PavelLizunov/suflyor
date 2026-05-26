@@ -1,5 +1,39 @@
 # i18n plan — full RU + EN translations
 
+## ✅ COMPLETE as of v0.0.50 (shipped 2026-05-26 in a single ~60-min marathon block)
+
+9 releases v0.0.42 → v0.0.50 covered everything in the original
+"Scope inventory" below:
+- v0.0.42: infrastructure + sidebar/header/footer
+- v0.0.43: Stealth + Coaching + Interface + Hotkeys (4 panels)
+- v0.0.44: AI panel (4 sub-cards)
+- v0.0.45: Profile + Meeting + Audio + STT (3 panels)
+- v0.0.46: Auto-tiles + Knowledge base
+- v0.0.47: Advanced (Updates + Diagnostics)
+- v0.0.48: **Overlay bar** + Tile chrome + tile.rs URL param plumbing
+- v0.0.49: Replay viewer
+- v0.0.50: Final cleanup (Snippets header + drag tooltips)
+
+**Final count: 212 keys × 2 languages = 424 translation entries.**
+
+**Architecture chose A** (central typed strings map) — as predicted, this scaled fine for the 1-developer project and TS caught zero missing-key bugs along the way (the `?? key` fallback never visibly fired in testing).
+
+**Live switching works**: Settings → 🎨 Interface → 🇷🇺/🇬🇧 → Save takes effect immediately on the overlay (via window-focus re-read) and on next Settings/Replay mount. Tile windows respect the language at spawn time (URL param).
+
+**Deferred indefinitely** (the original plan's exclusion list held up — these never became necessary):
+- showSnippetEdit CRUD modal internals (3-field form + validation)
+- Per-snippet expand/delete row buttons inside the snippets list
+- Tray menu (Rust-side rebuild only at startup — separate concern)
+- AI response content (already handled by separate `response_language` config field)
+- KB entries (Russian-only by design — DevOps interview vocab)
+- Journal event kinds + JSONL field names
+
+---
+
+## Original plan (historical)
+
+
+
 User: «Также сделай полные переводы как на русский так и на английский»
 
 Currently the UI is a mix of Russian + English (button labels in
