@@ -508,6 +508,17 @@ fn take_if_unpinned(tiles: &SharedTiles, label: &str) -> bool {
     false
 }
 
+/// v0.0.91: cheap check for "is this label currently in the active
+/// tile registry?". Used by tile_reload + tile_translate to validate
+/// the event payload before paying for an AI call. Replaces the
+/// dropped windowLabel-based frontend check (Tauri v2.11.0 removed
+/// that field). Prevents an attacker-controlled tile from forging
+/// a reload with a junk label.
+pub fn label_is_active(tiles: &SharedTiles, label: &str) -> bool {
+    let mgr = tiles.lock();
+    mgr.active.iter().any(|t| t.label == label)
+}
+
 pub fn close_tile_by_label(app: &AppHandle, tiles: &SharedTiles, label: &str) {
     let mut mgr = tiles.lock();
     if let Some(pos) = mgr.active.iter().position(|t| t.label == label) {

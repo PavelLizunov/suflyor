@@ -2153,6 +2153,12 @@ async fn tile_translate(
     question: String,
 ) -> Result<String, String> {
     assert_overlay(&window)?;
+    // v0.0.91: backend label validation replaces the dead v0.0.85
+    // frontend windowLabel check. Only respawn tiles we actually know
+    // about — forged event with a junk label is a no-op.
+    if !tile::label_is_active(tiles.inner(), &label) {
+        return Err(format!("tile_translate: unknown label '{label}'"));
+    }
     let q_trim = question.trim();
     if q_trim.is_empty() {
         return Err("empty question — cannot translate".into());
@@ -2271,6 +2277,12 @@ async fn tile_reload(
     current_generation: Option<u32>,
 ) -> Result<String, String> {
     assert_overlay(&window)?;
+    // v0.0.91: backend label validation replaces the dead v0.0.85
+    // frontend windowLabel check. Only reload tiles we actually know
+    // about — forged event with a junk label is a no-op.
+    if !tile::label_is_active(tiles.inner(), &label) {
+        return Err(format!("tile_reload: unknown label '{label}'"));
+    }
     let q_trim = question.trim();
     if q_trim.is_empty() {
         return Err("empty question — cannot reload".into());

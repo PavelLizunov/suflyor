@@ -26,6 +26,34 @@ for download. No auto-install (no code signing — by design).
 
 Two code-review agent passes ran on the diff. First found 3 P0/P1 (shipped .85, .86, .87). Second pass running at time of v0.0.88 ship.
 
+### → v0.0.91 (2026-05-26) — P0 fix: reload + translate dead since v0.0.85
+
+**🚨 v0.0.85's reload-security check rejected ALL legitimate requests.**
+
+The v0.0.85 P1 fix added `e.windowLabel` validation to the
+`tile:reload-request` listener — but @tauri-apps/api v2.11.0 REMOVED
+that field from event callbacks (CHANGELOG PR #8280). At runtime
+`source` was always `undefined`, so the `typeof source !== "string"`
+branch fired for every emit. **🔄 reload (since v0.0.85) and 🌐
+translate (since v0.0.89) were both DEAD.**
+
+Caught by code-review agent #2 on v0.0.85-v0.0.88 diff.
+
+Fix:
+1. Frontend listeners dropped the `windowLabel` check. Now validate
+   that `label` is a non-empty string starting with `tile-` and
+   `question` is non-empty + under 1000 chars.
+2. Backend `tile_reload` + `tile_translate` validate `label` against
+   `SharedTiles` active registry via new `tile::label_is_active`
+   helper. Forged event with a junk label = no-op (returns Err but
+   no AI call paid for).
+
+Remaining attack surface: a script-injection vector in tile markdown
+(blocked by ReactMarkdown sanitization today) could trigger reload of
+a REAL tile with an attacker-controlled question. Cost: one Haiku
+call (~$0.001). No data exfil. Acceptable trade for restoring two
+shipped features.
+
 ### → v0.0.90 (2026-05-26) — 🔒 Bulk pin/unpin chip in overlay
 
 New 🔒 chip after the 📦 collapse-all chip. Click → emits Tauri

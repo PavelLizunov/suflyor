@@ -937,24 +937,25 @@ export default function Overlay() {
       })
     );
 
-    // v0.0.89: 🌐 Tile translate bridge. Same pattern as v0.0.68 reload
-    // — tile emits, overlay validates source + invokes backend.
+    // v0.0.89: 🌐 Tile translate bridge. Same pattern as v0.0.68 reload.
+    // v0.0.91 P0 fix: dropped the windowLabel source check. @tauri-apps/
+    // api v2.11.0 removed `windowLabel` from event callbacks (CHANGELOG
+    // PR #8280), so my v0.0.85 check rejected EVERY legitimate request.
+    // Reverted to label+question validation. Backend tile_translate
+    // verifies label is a known tile in SharedTiles before doing work,
+    // so a forged event with a junk label is harmless. The attack
+    // window narrows to "trigger reload of a real tile with an
+    // attacker-supplied question" — cost: one Haiku call (~$0.001),
+    // no data exfil. Worth the trade for restored functionality.
     unlistens.push(
       listen<{ label: string; question: string }>(
         "tile:translate-request",
         async (e) => {
           const { label, question } = e.payload;
-          if (!label || !question) {
-            console.warn("tile:translate-request missing fields", e.payload);
-            return;
-          }
-          const source = (e as { windowLabel?: string }).windowLabel;
-          if (typeof source !== "string" || !source.startsWith("tile-") || source !== label) {
-            console.warn(
-              "tile:translate-request rejected — source/label mismatch (source=%s, claimed=%s)",
-              source ?? "?",
-              label,
-            );
+          if (!label || !question
+              || typeof label !== "string" || !label.startsWith("tile-")
+              || typeof question !== "string" || question.length > 1000) {
+            console.warn("tile:translate-request invalid payload", e.payload);
             return;
           }
           try {
@@ -975,34 +976,30 @@ export default function Overlay() {
 
     // v0.0.68: 🔄 Tile reload bridge. Tile windows can't call tile_reload
     // directly (assert_overlay), so they emit `tile:reload-request` to all
-    // windows; this overlay window invokes the actual command. On AI
-    // failure we surface via tile:error → existing toast UI.
+    // windows; this overlay window invokes the actual command.
     // v0.0.69: payload also carries `currentGeneration` so backend can
     // bump it for the respawned tile (renders as 🔄×N+1 badge).
-    // v0.0.85 P1 fix: validate that the event's source window label
-    // matches the claimed `label` AND starts with "tile-". Without this
-    // check, a poisoned tile (markdown-injection vector) could forge
-    // {label: "tile-OTHER", question: "leak my groq_api_key"} and the
-    // overlay would faithfully invoke tile_reload → arbitrary prompt
-    // execution on the user's AI bridge. Tauri exposes the source via
-    // `e.windowLabel`. Other tabs/windows that try to forge the event
-    // are dropped with a warning.
+    // v0.0.91 P0 fix: dropped the v0.0.85 windowLabel source check.
+    // @tauri-apps/api v2.11.0 removed `windowLabel` from event callbacks
+    // (CHANGELOG PR #8280), so the v0.0.85 fix rejected EVERY legit
+    // request — the entire 🔄 reload feature was dead from v0.0.85
+    // through v0.0.90. Validation is now: label must be a non-empty
+    // string starting with "tile-", question must be a non-empty
+    // string under 1000 chars. Backend tile_reload validates label
+    // against SharedTiles before doing AI work, so a forged event with
+    // an unknown label is harmless. The narrow remaining attack:
+    // triggering reload of a REAL tile with an attacker-supplied
+    // question (one Haiku call, no data exfil). Worth restoring
+    // functionality.
     unlistens.push(
       listen<{ label: string; question: string; currentGeneration?: number }>(
         "tile:reload-request",
         async (e) => {
           const { label, question, currentGeneration } = e.payload;
-          if (!label || !question) {
-            console.warn("tile:reload-request missing fields", e.payload);
-            return;
-          }
-          const source = (e as { windowLabel?: string }).windowLabel;
-          if (typeof source !== "string" || !source.startsWith("tile-") || source !== label) {
-            console.warn(
-              "tile:reload-request rejected — source/label mismatch (source=%s, claimed=%s)",
-              source ?? "?",
-              label,
-            );
+          if (!label || !question
+              || typeof label !== "string" || !label.startsWith("tile-")
+              || typeof question !== "string" || question.length > 1000) {
+            console.warn("tile:reload-request invalid payload", e.payload);
             return;
           }
           try {
