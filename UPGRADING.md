@@ -11,6 +11,41 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.47 (2026-05-26)
+
+Sixth i18n release. Translates the **Advanced (Updates · Diagnostics)**
+panel. ~25 strings + many tooltips + toast templates.
+
+Strings covered:
+- **🆙 Updates section**: section title, Check button + Checking…
+  busy state + tip, all 4 check-result toasts (new version available
+  / up-to-date / API error / network failure) with {latest} {current}
+  {err} interpolation, current+latest version label
+- **✨ Update available banner**: title with {latest}, Release notes
+  summary, "Up to date" footer with {current}
+- **🚀 Download & install button**: button + busy state + tip,
+  start/ok/fail/stuck toast templates with {file}/{err} interp
+- **⬇ Open in browser button**: button + tip + failure toast
+- **SmartScreen + GitHub API notes**: the "Unknown publisher" warning
+  + the api.github.com endpoint note
+- **⚠ Crash report banner**: title, description with {path} interp
+  (file path stays inside `<code>`), Open in Notepad button + tip +
+  failure toast
+- **📊 Diagnostic dump button**: button + tip, success+failure toasts
+  with {path}/{err} interp, "Saves to Desktop. Secrets blanked" note
+- **Sessions and config export section**: label, 5 buttons (📊 Replay,
+  📁 Session logs, 💾 Export full, 🔐 Export share, 📥 Import) with
+  their tooltips + success toasts, Import file-dialog title + filter
+  names (JSON config / All files), import-success + export-fail toasts
+
+Still NOT translated (v0.0.48+):
+- Snippets section (~40 strings + dynamic + CRUD modal)
+- Overlay bar tooltips + hotkey-help popover + indicator legend
+- Tile chrome (close, pin, source labels)
+- Replay viewer
+
+No backend changes.
+
 ### → v0.0.46 (2026-05-26)
 
 Fifth i18n release. Translates the **Auto-tiles** card and the

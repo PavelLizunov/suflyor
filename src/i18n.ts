@@ -357,6 +357,122 @@ const strings = {
     en: "KB files embedded in the binary (read-only). Sources: src-tauri/knowledge/{glossary,commands,patterns}.md.",
   },
   "kb.source.aria":           { ru: "источник: {s}",           en: "source: {s}" },
+
+  // ── Advanced panel (v0.0.47) ───────────────────────────────────────
+  // Section title
+  "adv.updates.title":        { ru: "🆙 Обновления",          en: "🆙 Updates" },
+  // Check button
+  "adv.check.button":         { ru: "🔍 Проверить обновления", en: "🔍 Check for updates" },
+  "adv.check.busy":           { ru: "⏳ Проверяю…",            en: "⏳ Checking…" },
+  "adv.check.tip":            {
+    ru: "Проверить GitHub Releases на новую версию",
+    en: "Check GitHub Releases for a new version",
+  },
+  "adv.check.toast.new":      { ru: "Доступна v{latest} (у вас v{current})", en: "v{latest} available (you have v{current})" },
+  "adv.check.toast.same":     { ru: "Актуальная версия (v{current})", en: "Up to date (v{current})" },
+  "adv.check.toast.err":      { ru: "Update check: {err}",     en: "Update check: {err}" },
+  "adv.check.toast.fail":     { ru: "Update check failed: {err}", en: "Update check failed: {err}" },
+  // Current/latest line
+  "adv.current.label":        { ru: "Текущая: v{v}",           en: "Current: v{v}" },
+  "adv.latest.suffix":        { ru: " · последняя: v{v}",      en: " · latest: v{v}" },
+  // Update available banner
+  "adv.available.title":      { ru: "✨ Доступна v{latest}",   en: "✨ v{latest} available" },
+  "adv.available.notes":      { ru: "Release notes",           en: "Release notes" },
+  "adv.available.upToDate":   { ru: "✓ У вас актуальная версия v{current}.", en: "✓ You're on the latest version v{current}." },
+  // Download buttons
+  "adv.download.button":      { ru: "🚀 Скачать и установить (one-click)", en: "🚀 Download & install (one-click)" },
+  "adv.download.busy":        { ru: "⏳ Скачиваю…",            en: "⏳ Downloading…" },
+  "adv.download.tip":         {
+    ru: "Скачивает NSIS установщик и запускает его. Программа закроется, инсталлер заменит файлы и поднимет новую версию. UAC prompt будет.",
+    en: "Downloads the NSIS installer and runs it. The app will close, the installer replaces files and launches the new version. UAC prompt will appear.",
+  },
+  "adv.download.toast.start": { ru: "⬇ Скачиваю установщик…", en: "⬇ Downloading installer…" },
+  "adv.download.toast.ok":    {
+    ru: "✓ Установщик запущен ({file}). Программа закроется через 2 сек, дальше следуй за UAC + NSIS подсказками.",
+    en: "✓ Installer started ({file}). The app will close in 2 sec, then follow the UAC + NSIS prompts.",
+  },
+  "adv.download.toast.fail":  { ru: "Ошибка обновления: {err}", en: "Update error: {err}" },
+  "adv.download.toast.stuck": {
+    ru: "Не удалось выйти — закрой программу вручную, установщик в %TEMP%",
+    en: "Couldn't quit — close the app manually, installer is in %TEMP%",
+  },
+  "adv.browser.button":       { ru: "⬇ Открыть в браузере",   en: "⬇ Open in browser" },
+  "adv.browser.tip":          {
+    ru: "Альтернативно: откроет страницу релиза в браузере — скачай MSI/EXE и запусти руками",
+    en: "Alternative: opens the release page in browser — download MSI/EXE and run manually",
+  },
+  "adv.browser.toast.fail":   { ru: "Не удалось открыть браузер: {err}", en: "Couldn't open browser: {err}" },
+  "adv.smartscreen.note":     {
+    ru: "Без code signing — SmartScreen может предупредить «Unknown publisher». Жми More info → Run anyway. Установщик заменит старую версию, config сохранится.",
+    en: "No code signing — SmartScreen may warn «Unknown publisher». Click More info → Run anyway. The installer replaces the old version, config is preserved.",
+  },
+  "adv.update.note":          {
+    ru: "Запрос идёт на api.github.com (1 KB JSON, ~200ms). Авто-проверки нет — только когда жмёшь.",
+    en: "Hits api.github.com (1 KB JSON, ~200ms). No auto-check — only when you click.",
+  },
+  // Crash report
+  "adv.crash.title":          { ru: "⚠ Найден crash-report",  en: "⚠ Crash report found" },
+  "adv.crash.desc":           { ru: "Прошлый запуск упал на startup. Файл: {path}", en: "Previous launch crashed on startup. File: {path}" },
+  "adv.crash.button":         { ru: "📨 Открыть в Notepad",   en: "📨 Open in Notepad" },
+  "adv.crash.tip":            {
+    ru: "Открыть в Блокноте — посмотри что упало",
+    en: "Open in Notepad — see what crashed",
+  },
+  "adv.crash.toast.fail":     { ru: "Не открылось: {err}",     en: "Couldn't open: {err}" },
+  // Diagnostic dump
+  "adv.dump.button":          { ru: "📊 Диагностический дамп", en: "📊 Diagnostic dump" },
+  "adv.dump.tip":             {
+    ru: "Сохранить sanitized config + последние 50 событий журнала + crash report (если есть) одним .md файлом на Desktop — приложи к bug report",
+    en: "Save sanitized config + last 50 journal events + crash report (if any) as a single .md on Desktop — attach to bug report",
+  },
+  "adv.dump.toast.ok":        { ru: "Диагностика сохранена: {path}", en: "Diagnostics saved: {path}" },
+  "adv.dump.toast.fail":      { ru: "Не получилось: {err}",   en: "Failed: {err}" },
+  "adv.dump.note":            {
+    ru: "Сохраняет на Desktop. Секреты (groq_api_key, ai_bearer, ai_base_url, meeting_context, profiles) обнулены.",
+    en: "Saves to Desktop. Secrets (groq_api_key, ai_bearer, ai_base_url, meeting_context, profiles) blanked.",
+  },
+  // Sessions / export / import
+  "adv.sessions.label":       { ru: "Сессии и экспорт конфига", en: "Sessions and config export" },
+  "adv.replay.button":        { ru: "📊 Replay",               en: "📊 Replay" },
+  "adv.replay.tip":           {
+    ru: "In-app просмотрщик session journals — timeline transcript/AI/detector/tiles",
+    en: "In-app viewer for session journals — transcript/AI/detector/tiles timeline",
+  },
+  "adv.logs.button":          { ru: "📁 Логи сессий",         en: "📁 Session logs" },
+  "adv.logs.tip":             {
+    ru: "JSONL логи всех transcript/AI/detector событий по сессиям",
+    en: "JSONL logs of all transcript/AI/detector events per session",
+  },
+  "adv.export.full.button":   { ru: "💾 Export (full)",       en: "💾 Export (full)" },
+  "adv.export.full.tip":      {
+    ru: "ПОЛНЫЙ backup на Desktop: snippets + контекст + ключи + URL моста. Для переезда на другую свою машину. НЕ шарь с другими.",
+    en: "FULL backup to Desktop: snippets + context + keys + bridge URL. For migrating to your own other machine. Do NOT share with others.",
+  },
+  "adv.export.full.toast.ok": { ru: "Конфиг сохранён: {path}", en: "Config saved: {path}" },
+  "adv.export.share.button":  { ru: "🔐 Export (share)",      en: "🔐 Export (share)" },
+  "adv.export.share.tip":     {
+    ru: "Shareable export — без groq_api_key, ai_bearer, ai_base_url, meeting_context, context_profiles. Можно отправить другу. Получатель доставит свои ключи + URL моста сам.",
+    en: "Shareable export — without groq_api_key, ai_bearer, ai_base_url, meeting_context, context_profiles. Safe to send to a friend. The recipient will plug in their own keys + bridge URL.",
+  },
+  "adv.export.share.toast.ok": { ru: "Безопасный конфиг (без ключей): {path}", en: "Safe config (without keys): {path}" },
+  "adv.export.fail":          { ru: "Ошибка экспорта: {err}", en: "Export error: {err}" },
+  "adv.import.button":        { ru: "📥 Import",              en: "📥 Import" },
+  "adv.import.tip":           {
+    ru: "Открыть Windows Explorer и выбрать .json файл",
+    en: "Open Windows Explorer and pick a .json file",
+  },
+  "adv.import.dialog.title":  { ru: "Выбери config.json для импорта", en: "Pick a config.json to import" },
+  "adv.import.filter.json":   { ru: "JSON config",            en: "JSON config" },
+  "adv.import.filter.all":    { ru: "Все файлы",              en: "All files" },
+  "adv.import.toast.ok":      {
+    ru: "Конфиг загружен. Перезапустите session чтобы применить.",
+    en: "Config loaded. Restart the session to apply.",
+  },
+  "adv.import.toast.fail":    { ru: "Ошибка импорта: {err}",  en: "Import error: {err}" },
+  "adv.export.note":          {
+    ru: "Full export = все настройки + ключи (для миграции на свою машину). Share export = без секретов, безопасно для GitHub issue.",
+    en: "Full export = all settings + keys (for migrating to your own machine). Share export = without secrets, safe for GitHub issue.",
+  },
 } as const;
 
 export type StringKey = keyof typeof strings;

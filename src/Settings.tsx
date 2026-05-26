@@ -1474,7 +1474,7 @@ export default function Settings() {
       </div>)}
 
       {activeSection === "advanced" && (<div className="settings-section">
-        <h3>🆙 Обновления</h3>
+        <h3>{t("adv.updates.title", lang)}</h3>
         <div className="field">
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <button
@@ -1486,26 +1486,31 @@ export default function Settings() {
                   const info = await invoke<UpdateInfo>("check_update");
                   setUpdateInfo(info);
                   if (info.error) {
-                    showToast("err", `Update check: ${info.error}`);
+                    showToast("err", t("adv.check.toast.err", lang).replace("{err}", info.error));
                   } else if (info.update_available) {
-                    showToast("ok", `Доступна v${info.latest} (у вас v${info.current})`);
+                    showToast("ok",
+                      t("adv.check.toast.new", lang)
+                        .replace("{latest}", info.latest ?? "?")
+                        .replace("{current}", info.current));
                   } else {
-                    showToast("ok", `Актуальная версия (v${info.current})`);
+                    showToast("ok", t("adv.check.toast.same", lang).replace("{current}", info.current));
                   }
                 } catch (e) {
-                  showToast("err", `Update check failed: ${e}`);
+                  showToast("err", t("adv.check.toast.fail", lang).replace("{err}", String(e)));
                 } finally {
                   setUpdateBusy(false);
                 }
               }}
-              title="Проверить GitHub Releases на новую версию"
+              title={t("adv.check.tip", lang)}
             >
-              {updateBusy ? "⏳ Проверяю…" : "🔍 Проверить обновления"}
+              {updateBusy ? t("adv.check.busy", lang) : t("adv.check.button", lang)}
             </button>
             {updateInfo && !updateInfo.error && (
               <span style={{ fontSize: 12, color: "var(--c-text-dim)" }}>
-                Текущая: v{updateInfo.current}
-                {updateInfo.latest && updateInfo.latest !== updateInfo.current ? ` · последняя: v${updateInfo.latest}` : ""}
+                {t("adv.current.label", lang).replace("{v}", updateInfo.current)}
+                {updateInfo.latest && updateInfo.latest !== updateInfo.current
+                  ? t("adv.latest.suffix", lang).replace("{v}", updateInfo.latest)
+                  : ""}
               </span>
             )}
           </div>
@@ -1521,11 +1526,11 @@ export default function Settings() {
               }}
             >
               <div style={{ marginBottom: 6, fontWeight: 600 }}>
-                ✨ Доступна v{updateInfo.latest}
+                {t("adv.available.title", lang).replace("{latest}", updateInfo.latest ?? "?")}
               </div>
               {updateInfo.notes && (
                 <details style={{ marginBottom: 8 }}>
-                  <summary style={{ cursor: "pointer", fontSize: 12 }}>Release notes</summary>
+                  <summary style={{ cursor: "pointer", fontSize: 12 }}>{t("adv.available.notes", lang)}</summary>
                   <pre style={{
                     fontSize: 11,
                     whiteSpace: "pre-wrap",
@@ -1548,9 +1553,9 @@ export default function Settings() {
                     if (oneClickBusy) return;
                     setOneClickBusy(true);
                     try {
-                      showToast("ok", "⬇ Скачиваю установщик…");
+                      showToast("ok", t("adv.download.toast.start", lang));
                       const path = await invoke<string>("download_and_install_update");
-                      showToast("ok", `✓ Установщик запущен (${path.split(/[\\/]/).pop()}). Программа закроется через 2 сек, дальше следуй за UAC + NSIS подсказками.`);
+                      showToast("ok", t("adv.download.toast.ok", lang).replace("{file}", path.split(/[\\/]/).pop() ?? ""));
                       // Give the OS a moment to bring up the UAC prompt
                       // before we kill ourselves; otherwise the user can
                       // miss the prompt and think nothing happened.
@@ -1585,20 +1590,20 @@ export default function Settings() {
                                 // user really has no choice but to kill
                                 // the process from Task Manager.
                               });
-                              showToast("err", "Не удалось выйти — закрой программу вручную, установщик в %TEMP%");
+                              showToast("err", t("adv.download.toast.stuck", lang));
                             }
                           });
                         });
                       }, 2000);
                     } catch (e) {
                       setOneClickBusy(false);
-                      showToast("err", `Ошибка обновления: ${e}`);
+                      showToast("err", t("adv.download.toast.fail", lang).replace("{err}", String(e)));
                     }
                   }}
                   disabled={oneClickBusy}
-                  title="Скачивает NSIS установщик и запускает его. Программа закроется, инсталлер заменит файлы и поднимет новую версию. UAC prompt будет."
+                  title={t("adv.download.tip", lang)}
                 >
-                  {oneClickBusy ? "⏳ Скачиваю…" : "🚀 Скачать и установить (one-click)"}
+                  {oneClickBusy ? t("adv.download.busy", lang) : t("adv.download.button", lang)}
                 </button>
                 <button
                   className="btn secondary"
@@ -1607,26 +1612,26 @@ export default function Settings() {
                       const { openUrl } = await import("@tauri-apps/plugin-opener");
                       await openUrl(updateInfo.download_url);
                     } catch (e) {
-                      showToast("err", `Не удалось открыть браузер: ${e}`);
+                      showToast("err", t("adv.browser.toast.fail", lang).replace("{err}", String(e)));
                     }
                   }}
-                  title="Альтернативно: откроет страницу релиза в браузере — скачай MSI/EXE и запусти руками"
+                  title={t("adv.browser.tip", lang)}
                 >
-                  ⬇ Открыть в браузере
+                  {t("adv.browser.button", lang)}
                 </button>
               </div>
               <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 6 }}>
-                Без code signing — SmartScreen может предупредить «Unknown publisher». Жми More info → Run anyway. Установщик заменит старую версию, config сохранится.
+                {t("adv.smartscreen.note", lang)}
               </div>
             </div>
           )}
           {updateInfo && !updateInfo.update_available && !updateInfo.error && (
             <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 6 }}>
-              ✓ У вас актуальная версия v{updateInfo.current}.
+              {t("adv.available.upToDate", lang).replace("{current}", updateInfo.current)}
             </div>
           )}
           <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 8 }}>
-            Запрос идёт на api.github.com (1 KB JSON, ~200ms). Авто-проверки нет — только когда жмёшь.
+            {t("adv.update.note", lang)}
           </div>
           {crashReport && (
             <div
@@ -1640,10 +1645,14 @@ export default function Settings() {
               }}
             >
               <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                ⚠ Найден crash-report
+                {t("adv.crash.title", lang)}
               </div>
               <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginBottom: 6 }}>
-                Прошлый запуск упал на startup. Файл: <code>{crashReport}</code>
+                {t("adv.crash.desc", lang).split("{path}").map((part, i, arr) =>
+                  i === arr.length - 1
+                    ? <span key={i}>{part}</span>
+                    : <span key={i}>{part}<code>{crashReport}</code></span>
+                )}
               </div>
               <button
                 className="btn secondary"
@@ -1652,12 +1661,12 @@ export default function Settings() {
                     const { openPath } = await import("@tauri-apps/plugin-opener");
                     await openPath(crashReport);
                   } catch (e) {
-                    showToast("err", `Не открылось: ${e}`);
+                    showToast("err", t("adv.crash.toast.fail", lang).replace("{err}", String(e)));
                   }
                 }}
-                title="Открыть в Блокноте — посмотри что упало"
+                title={t("adv.crash.tip", lang)}
               >
-                📨 Открыть в Notepad
+                {t("adv.crash.button", lang)}
               </button>
             </div>
           )}
@@ -1667,17 +1676,17 @@ export default function Settings() {
               onClick={async () => {
                 try {
                   const path = await invoke<string>("dump_diagnostics");
-                  showToast("ok", `Диагностика сохранена: ${path}`);
+                  showToast("ok", t("adv.dump.toast.ok", lang).replace("{path}", path));
                 } catch (e) {
-                  showToast("err", `Не получилось: ${e}`);
+                  showToast("err", t("adv.dump.toast.fail", lang).replace("{err}", String(e)));
                 }
               }}
-              title="Сохранить sanitized config + последние 50 событий журнала + crash report (если есть) одним .md файлом на Desktop — приложи к bug report"
+              title={t("adv.dump.tip", lang)}
             >
-              📊 Диагностический дамп
+              {t("adv.dump.button", lang)}
             </button>
             <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
-              Saves to Desktop. Secrets (groq_api_key, ai_bearer, ai_base_url, meeting_context, profiles) blanked.
+              {t("adv.dump.note", lang)}
             </div>
           </div>
         </div>
@@ -1687,51 +1696,51 @@ export default function Settings() {
            own line. These are «диагностика / сессии» conceptually so they
            belong in the Advanced panel with the update + dump buttons. */}
         <div className="field">
-          <label>Сессии и экспорт конфига</label>
+          <label>{t("adv.sessions.label", lang)}</label>
           <div className="btn-row" style={{ justifyContent: "flex-start", gap: 8, flexWrap: "wrap" }}>
             <button
               className="btn secondary"
               onClick={() => {
                 window.location.search = "?replay=1";
               }}
-              title="In-app просмотрщик session journals — timeline transcript/AI/detector/tiles"
+              title={t("adv.replay.tip", lang)}
             >
-              📊 Replay
+              {t("adv.replay.button", lang)}
             </button>
             <button
               className="btn secondary"
               onClick={() => invoke("open_sessions_folder").catch((e) => console.warn("open_sessions:", e))}
-              title="JSONL логи всех transcript/AI/detector событий по сессиям"
+              title={t("adv.logs.tip", lang)}
             >
-              📁 Логи сессий
+              {t("adv.logs.button", lang)}
             </button>
             <button
               className="btn secondary"
               onClick={async () => {
                 try {
                   const path = await invoke<string>("export_config");
-                  showToast("ok", `Конфиг сохранён: ${path}`);
+                  showToast("ok", t("adv.export.full.toast.ok", lang).replace("{path}", path));
                 } catch (e) {
-                  showToast("err", `Ошибка экспорта: ${e}`);
+                  showToast("err", t("adv.export.fail", lang).replace("{err}", String(e)));
                 }
               }}
-              title="ПОЛНЫЙ backup на Desktop: snippets + контекст + ключи + URL моста. Для переезда на другую свою машину. НЕ шарь с другими."
+              title={t("adv.export.full.tip", lang)}
             >
-              💾 Export (full)
+              {t("adv.export.full.button", lang)}
             </button>
             <button
               className="btn secondary"
               onClick={async () => {
                 try {
                   const path = await invoke<string>("export_config_safe");
-                  showToast("ok", `Безопасный конфиг (без ключей): ${path}`);
+                  showToast("ok", t("adv.export.share.toast.ok", lang).replace("{path}", path));
                 } catch (e) {
-                  showToast("err", `Ошибка экспорта: ${e}`);
+                  showToast("err", t("adv.export.fail", lang).replace("{err}", String(e)));
                 }
               }}
-              title="Shareable export — без groq_api_key, ai_bearer, ai_base_url, meeting_context, context_profiles. Можно отправить другу. Получатель доставит свои ключи + URL моста сам."
+              title={t("adv.export.share.tip", lang)}
             >
-              🔐 Export (share)
+              {t("adv.export.share.button", lang)}
             </button>
             <button
               className="btn secondary"
@@ -1741,10 +1750,10 @@ export default function Settings() {
                   const path = await open({
                     multiple: false,
                     directory: false,
-                    title: "Выбери config.json для импорта",
+                    title: t("adv.import.dialog.title", lang),
                     filters: [
-                      { name: "JSON config", extensions: ["json"] },
-                      { name: "Все файлы", extensions: ["*"] },
+                      { name: t("adv.import.filter.json", lang), extensions: ["json"] },
+                      { name: t("adv.import.filter.all", lang), extensions: ["*"] },
                     ],
                   });
                   if (!path) return;
@@ -1752,18 +1761,18 @@ export default function Settings() {
                   await invoke("import_config", { path: picked });
                   const fresh = await invoke<Config>("get_config");
                   setCfg(fresh);
-                  showToast("ok", "Конфиг загружен. Перезапустите session чтобы применить.");
+                  showToast("ok", t("adv.import.toast.ok", lang));
                 } catch (e) {
-                  showToast("err", `Ошибка импорта: ${e}`);
+                  showToast("err", t("adv.import.toast.fail", lang).replace("{err}", String(e)));
                 }
               }}
-              title="Открыть Windows Explorer и выбрать .json файл"
+              title={t("adv.import.tip", lang)}
             >
-              📥 Import
+              {t("adv.import.button", lang)}
             </button>
           </div>
           <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
-            Full export = все настройки + ключи (для миграции на свою машину). Share export = без секретов, безопасно для GitHub issue.
+            {t("adv.export.note", lang)}
           </div>
         </div>
       </div>)}
