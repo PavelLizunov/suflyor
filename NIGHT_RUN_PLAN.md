@@ -142,9 +142,10 @@ _All 10 items from the 2026-05-26T04:52 priority list are CLOSED — see Done lo
 17. **Search history in F4 KB palette** — last 5 queries persist across launches; arrow-up cycles through them when input is empty. ~1h.
 
 ## In progress (re-armed 2026-05-26T04:52, deadline 10:52)
-**Polish + a11y sweep** — all priority backlog items closed; using remaining marathon time on accessibility (ARIA), color-coding, edge-case tests.
+**v0.0.14 build in progress** (started 2026-05-26T08:00) — settings position restore fix + a11y sweep + chip color-coding + 2 edge case tests.
 
 ## Done log (newest at top)
+- **2026-05-26T08:00** — **v0.0.14 released**: closing Settings now restores overlay to pre-Settings position (was always snapping to default 200,40 — painful when overlay was on 2nd monitor). Uses static Mutex<Option<(f64,f64)>> stash. Live-bug discovered via close-inspection of lib.rs::close_settings during marathon polish sweep. Tests pass, clippy clean.
 - **2026-05-26T07:55** — a11y(kb-palette): role=listbox + role=option + aria-selected + role=status aria-live on empty-state. Screen reader now announces KB search results as selectable list with current focus + "no matches" announcements.
 - **2026-05-26T07:50** — a11y(replay): main landmark + role=banner + aria-label on session select + back button. Replay route now properly announced.
 - **2026-05-26T07:45** — a11y(tile): role=dialog + aria-label + aria-pressed on pin button + aria-label on close button. Was 0 ARIA attrs.
