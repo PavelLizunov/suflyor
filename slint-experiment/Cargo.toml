@@ -14,6 +14,14 @@ publish = false
 name = "slint-replay"
 path = "src/main.rs"
 
+# Phase 0.5 spike: transparent always-on-top overlay via HWND-poking.
+# Validates that WS_EX_LAYERED / WS_EX_TRANSPARENT / WS_EX_TOOLWINDOW
+# survive Slint+winit+skia composition. Hard blocker — if this fails,
+# the migration loses its main reason-for-being (WebView2 fix).
+[[bin]]
+name = "overlay-spike"
+path = "src/bin/overlay_spike.rs"
+
 [build-dependencies]
 # Compiles ui/*.slint into Rust at build time. include_modules!() in
 # src/main.rs pulls the generated code in.
@@ -21,8 +29,10 @@ slint-build = "1.16"
 
 [dependencies]
 # Default features include the winit + skia backends, which on Windows
-# need no system deps (no GTK/X11). Suitable for the pilot.
-slint = "1.16"
+# need no system deps (no GTK/X11). `raw-window-handle-06` exposes the
+# native HWND so the overlay-spike binary can call Win32 SetWindowLongPtrW
+# directly.
+slint = { version = "1.16", features = ["raw-window-handle-06"] }
 
 # Journal data layer (Day 2). serde_json parses the per-line JSONL
 # events; dirs resolves %APPDATA%; anyhow gives Context-friendly errors.
@@ -30,6 +40,15 @@ slint = "1.16"
 serde_json = "1"
 dirs = "5"
 anyhow = "1"
+
+# Phase 0.5 overlay-spike: raw HWND + Win32 calls. Same versions
+# src-tauri uses (tauri 2.x ships windows 0.61/0.62 internally), so no
+# new third-party deps in the workspace.
+raw-window-handle = "0.6"
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 [dev-dependencies]
 # i-slint-backend-testing is the OFFICIAL test framework (not "slint-testing").

@@ -1,0 +1,56 @@
+// Phase 0.5 spike — minimal overlay window to test HWND-poking.
+//
+// Declares Slint-side flags (transparent background, no-frame,
+// always-on-top). The Rust side adds Win32 EX styles via HWND
+// poke after window.show() — see src/bin/overlay_spike.rs.
+
+export component OverlaySpike inherits Window {
+    title: "Slint overlay spike";
+    background: transparent;
+    no-frame: true;
+    always-on-top: true;
+
+    preferred-width: 480px;
+    preferred-height: 220px;
+    min-width: 320px;
+    min-height: 160px;
+
+    // The actual visible content — a translucent dark rounded box.
+    // If the window background is genuinely transparent, only this
+    // Rectangle pixels will be visible against whatever's behind.
+    Rectangle {
+        background: #14161eea;  // 0xea = ~92% alpha
+        border-radius: 12px;
+        border-width: 1px;
+        border-color: #2a2c3a;
+
+        VerticalLayout {
+            padding: 18px;
+            spacing: 10px;
+
+            Text {
+                text: "Slint Overlay Spike";
+                font-size: 18px;
+                font-weight: 700;
+                color: #e8e8ec;
+            }
+            Text {
+                text: "Testing Win32 EX flags: WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW";
+                font-size: 11px;
+                color: #999;
+                wrap: word-wrap;
+            }
+            Text {
+                text: "If this box is rounded (no square corners outside it), background transparency works. If it stays on top of other windows, always-on-top works. If you can click through it, WS_EX_TRANSPARENT works.";
+                font-size: 11px;
+                color: #6cf;
+                wrap: word-wrap;
+            }
+            Text {
+                text: "Spike binary closes itself after 8 s.";
+                font-size: 10px;
+                color: #666;
+            }
+        }
+    }
+}
