@@ -11,6 +11,33 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.59 (2026-05-26) — QOL block 5, #7
+
+**Meeting-ending auto-detector — 🏁 chip in overlay.**
+
+Backend: new `meeting_ending_phrase_match(text)` in runtime.rs scans
+transcript lines (system-audio source only — your own "thanks" doesn't
+trigger) for ~25 case-insensitive goodbye patterns in EN + RU:
+"thanks for your time" · "we'll be in touch" · "any final questions"
+· "let's wrap up" · "спасибо за уделённое время" · "будем на связи" ·
+"приятно было пообщаться" · etc. Pattern list intentionally requires
+multi-word matches so a mid-interview "thanks" doesn't false-fire.
+
+When matched: `RuntimeState.meeting_ending_emitted` flips to true
+(once-per-session flag, reset on `start_session`) + Tauri event
+`meeting:ending` fires.
+
+Overlay: orange `🏁 ending?` button in the bar (between hotkey-
+warnings and PTT buttons). Click → `stop_session` (closes journal
+cleanly, fires SessionSummary). Hover tip explains in current lang.
+
+5 new unit tests cover EN + RU patterns + mid-interview false-positive
+guards + case-insensitivity + empty/short edge cases.
+
+Use case: interview wraps, you forget to hit F8 → backend notices
+"thanks for your time", chip appears → one click, session closed
+cleanly + journal saved + cost final. No stale-session ghost cost.
+
 ### → v0.0.58 (2026-05-26) — QOL block 5, #6
 
 **Markdown export of session from Replay viewer.**

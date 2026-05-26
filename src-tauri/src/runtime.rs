@@ -78,6 +78,11 @@ pub struct RuntimeState {
     /// Each tuple is (unix_ms, word_count, filler_count) for one transcript
     /// line. Cleared on session_start; trimmed to last 60s on every push.
     pub speech_window: VecDeque<(u64, u32, u32)>,
+    /// v0.0.59: once-per-session flag — flipped to true after the meeting-
+    /// ending detector fires "thanks for your time" / "we'll be in touch"
+    /// match. Prevents repeated 🏁 chip emit if the phrase is uttered
+    /// multiple times. Reset to false on session_start.
+    pub meeting_ending_emitted: bool,
 }
 
 /// Three atomic timestamps (unix ms) bumped by their respective subsystems.
@@ -376,6 +381,9 @@ pub async fn start_session(
         // not bleed into a fresh meeting (could surprise the user with
         // "fast" pace when they haven't said a word yet).
         guard.speech_window.clear();
+        // v0.0.59: reset meeting-ending flag so a fresh session can
+        // re-detect goodbye phrases.
+        guard.meeting_ending_emitted = false;
         if let Some(j) = guard.journal.take() {
             close_journal_with_summary(j);
         }
@@ -507,6 +515,23 @@ pub async fn start_session(
             });
             let _ = app.emit_to("overlay", "transcript:line", &line);
 
+            // v0.0.59: meeting-ending detector. Scan transcript text for
+            // common goodbye/wrap-up phrases. Emit `meeting:ending` once
+            // per session so the overlay can show a 🏁 chip prompting
+            // the user to stop the session. Detector is per-text on the
+            // captured side only (system audio) — your own "thanks" to
+            // the interviewer shouldn't trigger.
+            if line.source == AudioSource::System
+                && meeting_ending_phrase_match(&line.text)
+            {
+                let mut s = rt_for_task.lock();
+                if !s.meeting_ending_emitted {
+                    s.meeting_ending_emitted = true;
+                    drop(s);
+                    let _ = app.emit_to("overlay", "meeting:ending", ());
+                }
+            }
+
             // Auto-tile detector: respect detector_skip_mic config (P1-5).
             // Extracted gate function so we can unit-test the matrix without
             // spinning up Tauri AppHandle / WebView. See `detector_allows_*`
@@ -529,6 +554,102 @@ pub async fn start_session(
     rt.lock().transcript_task = Some(task);
 
     Ok(())
+}
+
+/// v0.0.59: case-insensitive substring scan for common meeting-ending
+/// phrases. Returns true if the interviewer is wrapping up. Tuned to be
+/// conservative — false positives are worse than misses (you don't want
+/// the 🏁 chip popping mid-interview because the candidate said "thanks
+/// for the heads-up"). Hence:
+/// - Phrases anchored to interviewer-typical wording
+/// - Requires multi-word patterns, not single "thanks"
+/// - Both English + Russian common goodbyes
+///
+/// All matching is done on lowercase + Unicode-aware (chars().any
+/// after to_lowercase, not byte-level — handles Cyrillic correctly).
+pub fn meeting_ending_phrase_match(text: &str) -> bool {
+    let s = text.to_lowercase();
+    let patterns_en = [
+        "thanks for your time",
+        "thank you for your time",
+        "we'll be in touch",
+        "we will be in touch",
+        "we'll get back to you",
+        "we will get back to you",
+        "appreciate your time",
+        "any final questions",
+        "any questions for us",
+        "that's all from my side",
+        "that wraps it up",
+        "let's wrap up",
+        "let's call it",
+        "have a great rest of your day",
+    ];
+    let patterns_ru = [
+        "спасибо за уделённое время",
+        "спасибо за уделенное время",
+        "приятно было пообщаться",
+        "приятно было поговорить",
+        "приятно было познакомиться",
+        "будем на связи",
+        "свяжемся с вами",
+        "ответим в течение",
+        "у вас есть вопросы к нам",
+        "есть вопросы ко мне",
+        "на этом завершим",
+        "давайте подытожим",
+        "хорошего дня",
+        "всего доброго",
+    ];
+    for p in patterns_en.iter().chain(patterns_ru.iter()) {
+        if s.contains(p) {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod meeting_ending_tests {
+    use super::meeting_ending_phrase_match;
+
+    #[test]
+    fn detects_en_common_goodbyes() {
+        assert!(meeting_ending_phrase_match("Well, thanks for your time today."));
+        assert!(meeting_ending_phrase_match("We'll be in touch by Friday."));
+        assert!(meeting_ending_phrase_match("Any final questions before we wrap?"));
+        assert!(meeting_ending_phrase_match("Let's wrap up here."));
+    }
+
+    #[test]
+    fn detects_ru_common_goodbyes() {
+        assert!(meeting_ending_phrase_match("Спасибо за уделённое время!"));
+        assert!(meeting_ending_phrase_match("Приятно было пообщаться."));
+        assert!(meeting_ending_phrase_match("Будем на связи."));
+        assert!(meeting_ending_phrase_match("Есть вопросы ко мне?"));
+    }
+
+    #[test]
+    fn ignores_mid_interview_thanks() {
+        // Conservative: "thanks" alone is not enough; need multi-word
+        // wrap-up pattern.
+        assert!(!meeting_ending_phrase_match("Thanks for explaining that."));
+        assert!(!meeting_ending_phrase_match("Спасибо за объяснение."));
+        assert!(!meeting_ending_phrase_match("That makes sense, thanks."));
+    }
+
+    #[test]
+    fn case_insensitive() {
+        assert!(meeting_ending_phrase_match("THANKS FOR YOUR TIME"));
+        assert!(meeting_ending_phrase_match("WE'LL Be In Touch soon"));
+    }
+
+    #[test]
+    fn empty_or_short_lines_return_false() {
+        assert!(!meeting_ending_phrase_match(""));
+        assert!(!meeting_ending_phrase_match("ok"));
+        assert!(!meeting_ending_phrase_match("yes"));
+    }
 }
 
 /// Pull the last `max` lines from `transcript` whose source matches.

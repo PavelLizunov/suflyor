@@ -78,6 +78,11 @@ export default function Overlay() {
     try { return localStorage.getItem("overlay.compact") === "true"; }
     catch { return false; }
   });
+  // v0.0.59: meeting-ending detector chip. Backend emits
+  // "meeting:ending" once per session when interviewer says "thanks
+  // for your time" / "we'll be in touch" etc. Chip stays until user
+  // clicks (stops session) or session ends.
+  const [meetingEnding, setMeetingEnding] = useState(false);
   // Failure HUD — 3 dots (audio/stt/ai). null = no signal received yet.
   const [health, setHealth] = useState<HealthPayload | null>(null);
   // Voice coach — live mic WPM / filler density. null = backend hasn't
@@ -622,6 +627,14 @@ export default function Overlay() {
       })
     );
 
+    // v0.0.59: meeting-ending chip. Backend fires once per session
+    // when goodbye phrases hit.
+    unlistens.push(
+      listen("meeting:ending", () => {
+        setMeetingEnding(true);
+      })
+    );
+
     unlistens.push(
       listen<AiEvent>("ai:event", (e) => {
         const ev = e.payload;
@@ -970,6 +983,36 @@ export default function Overlay() {
           >
             ⚠ {hotkeyWarnings.length}
           </span>
+        )}
+        {/* v0.0.59: meeting-ending chip. Click → stop_session. */}
+        {meetingEnding && (
+          <button
+            type="button"
+            className="hint"
+            style={{
+              color: "#fb923c",
+              fontWeight: 600,
+              padding: "0 6px",
+              borderRadius: 4,
+              background: "rgba(251, 146, 60, 0.18)",
+              border: "1px solid rgba(251, 146, 60, 0.5)",
+              cursor: "pointer",
+            }}
+            aria-label={lang === "en" ? "Meeting ending detected — click to stop session" : "Обнаружено завершение встречи — клик чтобы остановить сессию"}
+            title={lang === "en"
+              ? "Detected 'thanks for your time' / 'we'll be in touch' / etc. Click to stop the session + close the journal cleanly."
+              : "Обнаружено «спасибо за уделённое время» / «будем на связи» / и т.п. Клик чтобы остановить сессию + закрыть журнал."}
+            onClick={async () => {
+              try {
+                await invoke("stop_session");
+                setMeetingEnding(false);
+              } catch (err) {
+                console.warn("stop_session from meeting-ending chip failed:", err);
+              }
+            }}
+          >
+            🏁 {lang === "en" ? "ending?" : "конец?"}
+          </button>
         )}
         {(["system", "mic"] as const).map((src) => {
           const icon = src === "system" ? "🔊" : "🎤";
