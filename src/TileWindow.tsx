@@ -58,6 +58,12 @@ export default function TileWindow() {
   // until the user clicks again or closes — acceptable since errors are
   // rare and the new tile that didn't spawn is obvious feedback.
   const [reloading, setReloading] = useState(false);
+  // v0.0.71: collapsed state — true hides the answer body + question
+  // text, leaving only the chrome (source label + pin/reload/close
+  // buttons). Saves screen real estate when many tiles are open.
+  // Stored per-tile in React state (not persisted); auto-resize effect
+  // shrinks/restores window height accordingly.
+  const [collapsed, setCollapsed] = useState(false);
   // v0.0.69: track tile age + reload generation. spawnedAt = mount time
   // (no backend plumbing needed; tile lifetime starts on this React
   // mount). ageStr re-computed every 5s by a setInterval — formatted
@@ -141,11 +147,14 @@ export default function TileWindow() {
 
   // Auto-resize tile window to fit content height (within sane limits).
   // Runs after markdown renders so we measure the real DOM.
+  // v0.0.71: also re-runs when `collapsed` toggles, so the window shrinks
+  // to chrome-only height on collapse and expands back on uncollapse.
   useLayoutEffect(() => {
     const measure = async () => {
       const el = rootRef.current;
       if (!el) return;
-      // Wait one frame so markdown has painted.
+      // Wait one frame so markdown has painted (or, on collapse, the body
+      // has been hidden via CSS).
       await new Promise((r) => requestAnimationFrame(r));
       // v0.0.29: max W/H come from URL params (mw/mh) — Rust computed
       // these per-monitor as percentage of screen with absolute floors.
@@ -154,7 +163,11 @@ export default function TileWindow() {
       const params = new URLSearchParams(window.location.search);
       const maxH = Math.max(parseInt(params.get("mh") || "0", 10) || 510, 280);
       const maxW = Math.max(parseInt(params.get("mw") || "0", 10) || 460, 320);
-      const desiredH = Math.min(Math.max(el.scrollHeight + 16, 240), maxH);
+      // v0.0.71: collapsed uses a fixed compact height that just fits the
+      // chrome row (≈ 42 px). Otherwise measure scrollHeight as usual.
+      const desiredH = collapsed
+        ? 44
+        : Math.min(Math.max(el.scrollHeight + 16, 240), maxH);
       const desiredW = maxW;
       try {
         const w = getCurrentWindow();
@@ -164,7 +177,7 @@ export default function TileWindow() {
       }
     };
     measure();
-  }, [answer]);
+  }, [answer, collapsed]);
 
   const close = async () => {
     try {
@@ -380,6 +393,33 @@ export default function TileWindow() {
         >
           📌
         </button>
+        {/* v0.0.71: ▾/▴ collapse toggle. Collapsed = body+question hidden,
+            tile height shrunk to chrome only (≈44 px). Useful when you
+            want to keep a tile visible as a reference but reclaim screen
+            real estate for the meeting itself. Pin status preserved
+            across collapse so reaper still respects it. */}
+        <button
+          className="tile-collapse"
+          onClick={() => setCollapsed((v) => !v)}
+          title={collapsed
+            ? (lang === "en" ? "Expand tile" : "Развернуть тайл")
+            : (lang === "en" ? "Collapse tile (body hides, only chrome stays)" : "Свернуть тайл (тело скрыто, остаётся только заголовок)")}
+          aria-label={collapsed
+            ? (lang === "en" ? "Expand tile" : "Развернуть тайл")
+            : (lang === "en" ? "Collapse tile" : "Свернуть тайл")}
+          aria-pressed={collapsed}
+          style={{
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            opacity: 0.85,
+            padding: "0 6px",
+            fontSize: 13,
+            color: "rgba(255,255,255,0.85)",
+          }}
+        >
+          {collapsed ? "▴" : "▾"}
+        </button>
         {/* v0.0.68: 🔄 reload — re-ask same question. Backend closes
             this tile + spawns new one with fresh answer. Spinner during
             in-flight; click guarded by `reloading` state to prevent
@@ -412,8 +452,23 @@ export default function TileWindow() {
           ×
         </button>
       </div>
-      <div className="tile-q" title={question}>{renderWithHighlights(question)}</div>
-      <div className="tile-body markdown" role="region" aria-label="AI answer body">
+      {/* v0.0.71: hide question + body when collapsed. CSS display:none
+          via inline style — simpler than a conditional render and keeps
+          the React tree (and hljs class attributions) stable so toggling
+          back is instant with no reflow flash. */}
+      <div
+        className="tile-q"
+        title={question}
+        style={collapsed ? { display: "none" } : undefined}
+      >
+        {renderWithHighlights(question)}
+      </div>
+      <div
+        className="tile-body markdown"
+        role="region"
+        aria-label="AI answer body"
+        style={collapsed ? { display: "none" } : undefined}
+      >
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}

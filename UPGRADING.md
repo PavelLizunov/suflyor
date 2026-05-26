@@ -11,6 +11,24 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.71 (2026-05-26) — QOL block 5, #19
+
+**Tile collapse button (▾/▴) — minimize to chrome only.**
+
+New ▾ button in tile chrome between 📌 pin and 🔄 reload. Click →
+question + answer body hide via CSS display:none, tile window shrinks
+to a chrome-only height (~44 px). Click ▴ → restored.
+
+Pure frontend, no backend changes. Pin status preserved so the reaper
+still respects collapsed-pinned tiles. The auto-resize useLayoutEffect
+now keys on `[answer, collapsed]` so toggling re-measures + setSize's
+the window.
+
+Use case: keep 4 tiles visible during a long interview without them
+eating screen real estate. Collapse the ones you've already read,
+leave the active one expanded. Reload/pin/close all still work on
+collapsed tiles.
+
 ### → v0.0.70 (2026-05-26) — QOL block 5, #18
 
 **F4 palette searches snippets via `/key` prefix.**
