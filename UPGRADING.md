@@ -11,6 +11,29 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.69 (2026-05-26) — QOL block 5, #17
+
+**Tile age indicator (⏱) + reload generation badge (🔄×N).**
+
+Two new tiny chips in tile chrome between source label and pin button:
+
+- **⏱ Ns/Nm/1h+** — time since this tile was spawned. Updates every 5s.
+  Dim (55% opacity) so it doesn't compete for attention.
+- **🔄×N** — only visible when this tile is the result of a reload
+  (gen≥1). Subtle amber background. Lets you tell at a glance "I've
+  already re-asked this 3 times".
+
+Backend changes:
+- `spawn_tile_with_generation` — new entry point taking explicit gen.
+  Existing `spawn_tile_with_highlight` delegates with gen=0.
+- `tile_reload` now accepts `current_generation: Option<u32>` and
+  bumps it via saturating_add (capped at 99 to keep badge layout sane).
+- URL gets `&gen=N` only when N>0 (forward-compat: old clients/URLs
+  still work, frontend defaults missing param to 0).
+
+Use case: "did this tile come straight from the detector, or is it
+already my 4th attempt?" — ⏱45s 🔄×4 tells you instantly.
+
 ### → v0.0.68 (2026-05-26) — QOL block 5, #16
 
 **🔄 Reload button on tile chrome — re-ask the same question.**

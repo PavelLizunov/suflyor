@@ -825,28 +825,38 @@ export default function Overlay() {
     // directly (assert_overlay), so they emit `tile:reload-request` to all
     // windows; this overlay window invokes the actual command. On AI
     // failure we surface via tile:error → existing toast UI.
+    // v0.0.69: payload also carries `currentGeneration` so backend can
+    // bump it for the respawned tile (renders as 🔄×N+1 badge).
     unlistens.push(
-      listen<{ label: string; question: string }>("tile:reload-request", async (e) => {
-        const { label, question } = e.payload;
-        if (!label || !question) {
-          console.warn("tile:reload-request missing fields", e.payload);
-          return;
+      listen<{ label: string; question: string; currentGeneration?: number }>(
+        "tile:reload-request",
+        async (e) => {
+          const { label, question, currentGeneration } = e.payload;
+          if (!label || !question) {
+            console.warn("tile:reload-request missing fields", e.payload);
+            return;
+          }
+          try {
+            await invoke<string>("tile_reload", {
+              label,
+              question,
+              currentGeneration: typeof currentGeneration === "number" ? currentGeneration : 0,
+            });
+            // Success — backend closed old tile + spawned new. Nothing
+            // more to do here; user sees the new tile appear with a
+            // 🔄×N badge in its chrome.
+          } catch (err) {
+            const msg = String(err);
+            console.warn("tile_reload failed:", msg);
+            setErrorText(msg.length > 200 ? msg.slice(0, 200) + "…" : msg);
+            if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+            errorTimerRef.current = setTimeout(() => {
+              if (mountedRef.current) setErrorText("");
+              errorTimerRef.current = null;
+            }, 6000);
+          }
         }
-        try {
-          await invoke<string>("tile_reload", { label, question });
-          // Success — backend closed old tile + spawned new. Nothing more
-          // to do here; user sees the new tile appear.
-        } catch (err) {
-          const msg = String(err);
-          console.warn("tile_reload failed:", msg);
-          setErrorText(msg.length > 200 ? msg.slice(0, 200) + "…" : msg);
-          if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
-          errorTimerRef.current = setTimeout(() => {
-            if (mountedRef.current) setErrorText("");
-            errorTimerRef.current = null;
-          }, 6000);
-        }
-      })
+      )
     );
 
     unlistens.push(

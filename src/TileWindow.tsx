@@ -58,6 +58,18 @@ export default function TileWindow() {
   // until the user clicks again or closes — acceptable since errors are
   // rare and the new tile that didn't spawn is obvious feedback.
   const [reloading, setReloading] = useState(false);
+  // v0.0.69: track tile age + reload generation. spawnedAt = mount time
+  // (no backend plumbing needed; tile lifetime starts on this React
+  // mount). ageStr re-computed every 5s by a setInterval — formatted
+  // human-readable (12s, 1m, 3m, 1h+). gen = reload-counter passed via
+  // URL param &gen=N (set by backend when tile_reload respawns); shown
+  // as 🔄×N badge only if N≥1.
+  const spawnedAtRef = useRef<number>(Date.now());
+  const [ageStr, setAgeStr] = useState<string>("0s");
+  const generationRaw = params.get("gen");
+  const generation = generationRaw && /^\d+$/.test(generationRaw)
+    ? Math.min(parseInt(generationRaw, 10), 99)
+    : 0;
   const rootRef = useRef<HTMLDivElement>(null);
   // v0.0.48: language for tile chrome. tile-* windows have a narrow
   // capability set but get_config is allowed via assert_overlay's caller
@@ -87,6 +99,25 @@ export default function TileWindow() {
   useEffect(() => {
     document.body.classList.add("tile");
     return () => document.body.classList.remove("tile");
+  }, []);
+
+  // v0.0.69: tick tile age every 5s. Formats: <60s as "Ns", <60m as
+  // "Nm", ≥60m as "1h+". Cheap interval (one setInterval per tile
+  // window, fires every 5s). React batches the setAgeStr so re-render
+  // cost is negligible. Cleanup on unmount stops the timer.
+  useEffect(() => {
+    const format = (ms: number): string => {
+      const sec = Math.max(0, Math.floor(ms / 1000));
+      if (sec < 60) return `${sec}s`;
+      const min = Math.floor(sec / 60);
+      if (min < 60) return `${min}m`;
+      return "1h+";
+    };
+    setAgeStr(format(Date.now() - spawnedAtRef.current));
+    const handle = setInterval(() => {
+      setAgeStr(format(Date.now() - spawnedAtRef.current));
+    }, 5000);
+    return () => clearInterval(handle);
   }, []);
 
   // v0.0.11: Esc closes the tile when it has focus. Useful when you've
@@ -167,7 +198,13 @@ export default function TileWindow() {
     if (reloading) return;
     setReloading(true);
     try {
-      await emit("tile:reload-request", { label: `tile-${id}`, question });
+      // v0.0.69: pass currentGeneration so backend can bump it for the
+      // respawned tile (renders as 🔄×N+1 in chrome).
+      await emit("tile:reload-request", {
+        label: `tile-${id}`,
+        question,
+        currentGeneration: generation,
+      });
     } catch (e) {
       console.warn("tile reload emit:", e);
       setReloading(false);
@@ -294,6 +331,45 @@ export default function TileWindow() {
           </span>
         )}
         <span className="tile-source" title={sourceLabel}>{sourceLabel}</span>
+        {/* v0.0.69: age + reload generation badges. Age updates every 5s
+            via setInterval. Generation badge only renders when ≥1 (i.e.
+            this tile is the result of a 🔄 reload). Both tiny + dimmed
+            so they don't compete with the source label for visual
+            attention. Title attrs give the full explanation on hover. */}
+        <span
+          className="tile-age"
+          title={lang === "en" ? `Tile age (since spawn): ${ageStr}` : `Возраст тайла (с момента появления): ${ageStr}`}
+          style={{
+            marginLeft: 6,
+            fontSize: 10,
+            fontFamily: "monospace",
+            opacity: 0.55,
+            userSelect: "none",
+            letterSpacing: "0.5px",
+          }}
+        >
+          ⏱{ageStr}
+        </span>
+        {generation > 0 && (
+          <span
+            className="tile-gen"
+            title={lang === "en"
+              ? `This tile is reload #${generation} of the original question`
+              : `Этот тайл — перезапрос #${generation} исходного вопроса`}
+            style={{
+              marginLeft: 4,
+              fontSize: 10,
+              fontFamily: "monospace",
+              padding: "1px 5px",
+              borderRadius: 6,
+              background: "rgba(255, 180, 80, 0.18)",
+              color: "rgba(255, 200, 120, 0.95)",
+              userSelect: "none",
+            }}
+          >
+            🔄×{generation}
+          </span>
+        )}
         <button
           className="tile-pin"
           data-pinned={pinned ? "true" : undefined}

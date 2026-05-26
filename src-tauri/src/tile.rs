@@ -270,6 +270,27 @@ pub fn spawn_tile_with_highlight(
     kind: TileKind,
     highlights: Vec<String>,
 ) -> Result<String> {
+    spawn_tile_with_generation(app, tiles, question, answer, preferred_monitor, stealth, kind, highlights, 0)
+}
+
+/// v0.0.69: like `spawn_tile_with_highlight` but also carries a
+/// `generation` counter. New tiles get gen=0; tiles spawned by the 🔄
+/// reload flow get gen=N+1 where N was the previous tile's gen. The
+/// number is baked into the URL as `&gen=N`; TileWindow.tsx renders it
+/// as a `🔄×N` badge when ≥1 so the user can tell at a glance that a
+/// given tile has been re-asked multiple times.
+#[allow(clippy::too_many_arguments)]
+pub fn spawn_tile_with_generation(
+    app: &AppHandle,
+    tiles: &SharedTiles,
+    question: String,
+    answer: String,
+    preferred_monitor: Option<String>,
+    stealth: bool,
+    kind: TileKind,
+    highlights: Vec<String>,
+    generation: u32,
+) -> Result<String> {
     let id = format!(
         "{:x}",
         std::time::SystemTime::now()
@@ -374,11 +395,19 @@ pub fn spawn_tile_with_highlight(
     // at mount without an IPC call. Clamp to [11, 18] defensively —
     // an out-of-range config file shouldn't crash the tile renderer.
     let fs_clamped = tile_fs.clamp(11, 18);
+    // v0.0.69: bake generation into URL only when > 0. New tiles omit
+    // the param entirely so old URLs/clients stay backward-compat (the
+    // frontend defaults missing `gen` to 0).
+    let gen_param = if generation == 0 {
+        String::new()
+    } else {
+        format!("&gen={}", generation.min(99))
+    };
     let route = format!(
-        "index.html?tile=1&id={}&kind={}&seq={}{}&q={}&a={}&mh={}&mw={}{}&fs={}",
+        "index.html?tile=1&id={}&kind={}&seq={}{}&q={}&a={}&mh={}&mw={}{}&fs={}{}",
         id, kind.as_str(), seq, hl_param, q_enc, a_enc,
         dims.h_max.round() as i64, dims.w.round() as i64,
-        lang_param, fs_clamped
+        lang_param, fs_clamped, gen_param
     );
 
     let window = match WebviewWindowBuilder::new(app, &label, WebviewUrl::App(route.into()))

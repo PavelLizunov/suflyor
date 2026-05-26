@@ -2148,12 +2148,18 @@ async fn tile_reload(
     tiles: tauri::State<'_, SharedTiles>,
     label: String,
     question: String,
+    current_generation: Option<u32>,
 ) -> Result<String, String> {
     assert_overlay(&window)?;
     let q_trim = question.trim();
     if q_trim.is_empty() {
         return Err("empty question — cannot reload".into());
     }
+    // v0.0.69: increment reload generation. Saturating add to 99 cap
+    // matches frontend display (which clamps at 99 too) — if a user
+    // reloads 99 times, additional reloads keep showing 🔄×99 instead
+    // of overflowing to a 4-digit badge that breaks layout.
+    let next_generation = current_generation.unwrap_or(0).saturating_add(1).min(99);
     let (base_url, bearer, model, response_language, meeting_context, preferred_monitor, stealth) = {
         let c = state.read();
         (
@@ -2222,8 +2228,9 @@ async fn tile_reload(
 
     // Spawn fresh tile with the new answer. Kind=Manual so the
     // color-code header reads "MANUAL" (this was an explicit user
-    // action, not auto-detection).
-    let new_label = tile::spawn_tile_with_stealth(
+    // action, not auto-detection). v0.0.69: pass next_generation so
+    // the new tile shows 🔄×N badge in its chrome.
+    let new_label = tile::spawn_tile_with_generation(
         &app,
         tiles.inner(),
         q_trim.to_string(),
@@ -2231,6 +2238,8 @@ async fn tile_reload(
         preferred_monitor,
         stealth,
         tile::TileKind::Manual,
+        Vec::new(),
+        next_generation,
     )
     .map_err(|e| e.to_string())?;
 
