@@ -104,6 +104,12 @@ Fresh priorities below.
 **#3 Replay viewer filter by event kind** (started 2026-05-26T05:08)
 
 ## Done log (newest at top)
+- **2026-05-26T05:55** — **LIVE VERIFY overlay drag**: launched v0.0.12, dragged overlay from (200,40) to (661,246) via left_click_drag at (250,44). Win32 GetWindowRect confirmed window moved. v0.0.10 fix works in release. Backlog #1 fully verified end-to-end.
+- **2026-05-26T05:50** — docs(architecture): test count 237 + new test entries documented (blank_share_secrets/is_permanent/slot picker).
+- **2026-05-26T05:30** — **v0.0.12 released**: separate "💰 over budget" chip (was conflated with "⏱ rate-limited" — different semantics). 60s auto-clear. Resets on cost:update with session_usd=0.
+- **2026-05-26T05:20** — test+docs: blank_share_secrets extracted as pure fn + 10 unit tests (security-critical share export field protection). docs/security-audit-2026-05-26.md (cargo audit + npm audit + manual review). 237 tests.
+- **2026-05-26T05:08** — docs: CONTRIBUTING.md for forkers + version-bump checklist + autonomous-mode opt-out caveat.
+- **2026-05-26T05:00** — **v0.0.11 released**: Replay viewer per-kind filter chips + Tile Esc-to-close. Backlog #3 + #4 closed.
 - **2026-05-26T05:07** — **v0.0.10 released**: overlay bar drag + full snippet CRUD modal. Backlog #1 + #2 closed.
 - **2026-05-26T04:55** — **HOOK FIX**: stop-guard.ps1 anti-loop bypass replaced with sliding-window rate limit. User-reported "автоматический режим снова завершился слишком рано". Counter at .claude/_stop_count tracks Stop events; blocks ≥240/hr → safety rail allows stop (genuine loop). Tested both branches.
 
