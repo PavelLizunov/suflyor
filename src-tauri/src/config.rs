@@ -131,6 +131,17 @@ pub struct Config {
     /// Hold-mode shows a pulsing red indicator while recording.
     pub manual_ask_mode: String,
 
+    /// UI language for Settings + Overlay + Tile chrome strings (NOT
+    /// AI response language — that's `response_language` above). v0.0.42.
+    /// Supported: "ru" (default, current primary), "en". Anything else
+    /// falls back to "ru" at the t() lookup level.
+    ///
+    /// Stored in config.json. Loaded once per window mount; switching
+    /// re-renders via React state. Tray menu remains Russian (Rust-side
+    /// menu builder doesn't observe this field — separate concern).
+    #[serde(default = "default_ui_language")]
+    pub ui_language: String,
+
     /// Pre-written answer snippets. Each snippet has a short trigger key
     /// (e.g. "k8s", "pg") that the user can invoke via the palette to
     /// instantly spawn a tile with the body text — zero AI latency,
@@ -181,6 +192,7 @@ impl Config {
             hotkey_toggle_visibility: "F11".into(),
             hotkey_pause_audio: "F12".into(),
             manual_ask_mode: "hold".into(), // push-to-talk by default
+            ui_language: default_ui_language(),
             snippets: default_snippets(),
             post_meeting_debrief_enabled: default_post_meeting_debrief_enabled(),
             max_session_cost_usd: default_max_session_cost_usd(),
@@ -210,6 +222,13 @@ fn default_max_session_cost_usd() -> f64 {
 
 fn default_detector_skip_mic() -> bool {
     true // candidate's own voice shouldn't trigger explanation tiles
+}
+
+fn default_ui_language() -> String {
+    // v0.0.42: default RU because that's the current primary language
+    // (user is Russian-speaking; original Settings copy is Russian).
+    // EN is opt-in via Settings → Interface → Язык интерфейса.
+    "ru".into()
 }
 
 /// Massive default trigger-keyword pool — 250+ DevOps/SRE/Cloud/Linux

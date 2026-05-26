@@ -11,6 +11,43 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.42 (2026-05-26)
+
+User: «Также сделай полные переводы как на русский так и на английский».
+
+First i18n release — adds the **infrastructure** + translates the
+**visible-always strings** (sidebar nav + header + footer + search
+placeholder + quit-confirm). Per-panel content strings (~360 total)
+roll out in v0.0.43 → v0.0.45 per `docs/I18N_PLAN.md`.
+
+- **New config field** `ui_language: "ru" | "en"` (default `"ru"`,
+  forward-compat via `#[serde(default = "default_ui_language")]`).
+  Stored in `%APPDATA%\overlay-mvp\config.json` like every other
+  preference. Anything other than `"en"` falls back to RU at the
+  `resolveLang()` boundary.
+- **`src/i18n.ts`** — typed `t(key: StringKey, lang: Lang)` helper
+  backed by a const object literal. TS catches missing keys at compile
+  time, fallback chain is `lang → ru → key-itself`.
+- **Settings UI** — header (Settings · ✕ Quit), footer (← Back to
+  overlay · Save · ✓ Saved), 4 sidebar groups, 10 sidebar items,
+  search placeholder + aria-labels, quit-confirm text + button label
+  all use `t(...)` now.
+- **Language switcher** — new card at the top of Settings → 🎨
+  Интерфейс. Two pill buttons (🇷🇺 Русский / 🇬🇧 English). Click
+  flips `cfg.ui_language` immediately (live re-render), Save persists.
+
+NOT translated yet (deferred to v0.0.43+):
+- Per-panel content (~300 strings across Profile, Audio, AI, Tiles,
+  KB, Coaching, Stealth, Hotkeys, Advanced)
+- Overlay bar tooltips + hotkey-help popover + indicator legend
+- Tile chrome (close, pin, source label)
+- Replay viewer event labels + filter chips
+- Tray menu (Rust-side — separate concern, low priority)
+
+Anything not yet covered renders in Russian regardless of language
+setting — fallback to source language is intentional, no "[missing]"
+placeholder.
+
 ### → v0.0.41 (2026-05-26)
 
 User: «хедер где settings и Выйти и футтер где back to overlay и save

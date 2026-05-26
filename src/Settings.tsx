@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { t, resolveLang, type Lang } from "./i18n";
 
 // Inline-toast + modal types. Replaces blocking window.prompt / alert /
 // confirm — those break Tauri WebView focus and look like 1998 UX.
@@ -87,6 +88,9 @@ type Config = {
   max_session_cost_usd?: number;
   detector_skip_mic?: boolean;
   auto_tile_every_line?: boolean;
+  // v0.0.42: UI language for Settings/overlay chrome. Defaults to "ru" on
+  // backend. Optional in TS because old configs from <v0.0.42 lack it.
+  ui_language?: string;
 };
 
 type BridgeStatus = {
@@ -160,6 +164,12 @@ export default function Settings() {
   // instead of moving them — preserves all save/load field bindings.
   const [activeSection, setActiveSection] = useState<string>("profile");
   const [navFilter, setNavFilter] = useState("");
+  // v0.0.42: i18n. Resolve the UI language from cfg on every render.
+  // Defaults to "ru" when cfg is null (initial paint before load_config
+  // completes) and for any value other than the explicit "en". This is
+  // intentionally a derived value not its own state — the source of truth
+  // is the persisted config, and we want a single re-render when it loads.
+  const lang: Lang = resolveLang(cfg?.ui_language);
   // v0.0.36 (agent P1): track the 2-sec setTimeout that fires quit_app
   // after a successful download_and_install_update spawn. Without this
   // ref, if Settings unmounts (e.g. user clicks Back to overlay), the
@@ -493,24 +503,24 @@ export default function Settings() {
         }}
       >
         <h2 style={{ marginTop: 0, marginBottom: 0 }} data-tauri-drag-region>
-          ⋮⋮  Settings
+          ⋮⋮  {t("settings.title", lang)}
         </h2>
         <button
           className="btn settings-modal-danger"
           style={{ height: 28, padding: "0 12px", fontSize: 12 }}
           onClick={async () => {
             const ok = await showConfirm(
-              "Выйти из приложения? Текущая сессия захвата завершится, journal сохранится.",
-              { confirmLabel: "Выйти", danger: true },
+              t("settings.quit.confirm", lang),
+              { confirmLabel: t("settings.quit.confirm.label", lang), danger: true },
             );
             if (ok) {
               try { await invoke("quit_app"); }
-              catch (e) { showToast("err", `quit failed: ${e}`); }
+              catch (e) { showToast("err", `${t("settings.quit.failed", lang)}: ${e}`); }
             }
           }}
-          title="Полностью завершить suflyor (с подтверждением)"
+          title={t("settings.quit.tip", lang)}
         >
-          ✕ Выйти
+          {t("settings.quit", lang)}
         </button>
       </div>
 
@@ -519,14 +529,14 @@ export default function Settings() {
        * driven by `activeSection`. Sidebar nav lives on the left. The old
        * btn-row footer (Save/Back/Replay/etc) stays below the shell. */}
       <div className="settings-shell">
-        <nav className="settings-nav" aria-label="Settings sections">
+        <nav className="settings-nav" aria-label={t("nav.aria.settings", lang)}>
           <div className="nav-search">
             <input
               type="search"
-              placeholder="фильтр…"
+              placeholder={t("nav.filter.placeholder", lang)}
               value={navFilter}
               onChange={(e) => setNavFilter(e.target.value)}
-              aria-label="Filter settings sections"
+              aria-label={t("nav.filter.aria", lang)}
             />
           </div>
           {(() => {
@@ -534,14 +544,14 @@ export default function Settings() {
               | { group: string }
               | { id: string; icon: string; label: string; badge?: string; warn?: boolean }
             > = [
-              { group: "Сессия" },
-              { id: "profile", icon: "👤", label: "Профиль и контекст" },
-              { id: "audio", icon: "🎚", label: "Аудио и STT" },
-              { group: "AI" },
+              { group: t("nav.group.session", lang) },
+              { id: "profile", icon: "👤", label: t("nav.profile", lang) },
+              { id: "audio", icon: "🎚", label: t("nav.audio", lang) },
+              { group: t("nav.group.ai", lang) },
               {
                 id: "ai",
                 icon: "🛰",
-                label: "AI мост · модели · бюджет",
+                label: t("nav.ai", lang),
                 ...(cfg && cfg.ai_base_url && cfg.ai_base_url.startsWith("http://") &&
                   !cfg.ai_base_url.includes("localhost") &&
                   !cfg.ai_base_url.includes("127.0.0.1") &&
@@ -549,19 +559,19 @@ export default function Settings() {
                   ? { warn: true, badge: "HTTP" }
                   : {}),
               },
-              { group: "Логика" },
-              { id: "tiles", icon: "🪟", label: "Авто-тайлы и сниппеты",
+              { group: t("nav.group.logic", lang) },
+              { id: "tiles", icon: "🪟", label: t("nav.tiles", lang),
                 ...(cfg?.snippets?.length ? { badge: String(cfg.snippets.length) } : {}) },
-              { id: "knowledge", icon: "📚", label: "База знаний",
+              { id: "knowledge", icon: "📚", label: t("nav.knowledge", lang),
                 ...(kbStats?.total ? { badge: kbStats.total >= 1000
                   ? `${(kbStats.total / 1000).toFixed(1)}k`
                   : String(kbStats.total) } : {}) },
-              { id: "coaching", icon: "🎓", label: "Коучинг" },
-              { group: "Приложение" },
-              { id: "interface", icon: "🎨", label: "Интерфейс" },
-              { id: "stealth", icon: "🫥", label: "Скрытность" },
-              { id: "hotkeys", icon: "⌨", label: "Хоткеи" },
-              { id: "advanced", icon: "🔧", label: "Обновления · диагностика" },
+              { id: "coaching", icon: "🎓", label: t("nav.coaching", lang) },
+              { group: t("nav.group.app", lang) },
+              { id: "interface", icon: "🎨", label: t("nav.interface", lang) },
+              { id: "stealth", icon: "🫥", label: t("nav.stealth", lang) },
+              { id: "hotkeys", icon: "⌨", label: t("nav.hotkeys", lang) },
+              { id: "advanced", icon: "🔧", label: t("nav.advanced", lang) },
             ];
             const q = navFilter.trim().toLowerCase();
             const filtered = q
@@ -609,7 +619,7 @@ export default function Settings() {
           })()}
         </nav>
 
-        <section className="settings-pane" aria-label="Active settings panel">
+        <section className="settings-pane" aria-label={t("nav.aria.pane", lang)}>
 
       {activeSection === "profile" && (<div className="settings-section">
         <h3>👥 Профили контекста</h3>
@@ -972,6 +982,37 @@ export default function Settings() {
       </div>)}
 
       {activeSection === "interface" && (<div className="settings-section">
+        {/* v0.0.42 i18n: language picker card. Two-pill toggle (RU/EN).
+            Persists via standard save() flow — value is on cfg.ui_language,
+            picked up by next mount (and the current mount via the `lang`
+            derivation above). */}
+        <div className="card">
+          <div className="card-title">{t("interface.language.title", lang)}</div>
+          <div className="card-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+            <div className="row-hint">{t("interface.language.desc", lang)}</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                className={"btn" + (lang === "ru" ? "" : " secondary")}
+                style={{ flex: 1 }}
+                onClick={() => update({ ui_language: "ru" })}
+                aria-pressed={lang === "ru"}
+              >
+                🇷🇺 {t("interface.language.ru", lang)}
+              </button>
+              <button
+                type="button"
+                className={"btn" + (lang === "en" ? "" : " secondary")}
+                style={{ flex: 1 }}
+                onClick={() => update({ ui_language: "en" })}
+                aria-pressed={lang === "en"}
+              >
+                🇬🇧 {t("interface.language.en", lang)}
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* v0.0.38 polish — same template as Stealth/Coaching panels. */}
         <div className="card">
           <div className="card-title">🎨 Внешний вид overlay</div>
@@ -1772,9 +1813,9 @@ export default function Settings() {
          visual pin treatment (border-top + bg-2) so it reads as fixed
          instead of floating. */}
       <div className="btn-row settings-footer">
-        {savedFlash && <span style={{ color: "#4ade80", alignSelf: "center" }}>✓ Saved</span>}
-        <button className="btn secondary" onClick={back}>← Back to overlay</button>
-        <button className="btn" onClick={async () => { await save(); }}>Save</button>
+        {savedFlash && <span style={{ color: "#4ade80", alignSelf: "center" }}>{t("settings.saved", lang)}</span>}
+        <button className="btn secondary" onClick={back}>{t("settings.back", lang)}</button>
+        <button className="btn" onClick={async () => { await save(); }}>{t("settings.save", lang)}</button>
       </div>
 
       {toast && (
@@ -1834,7 +1875,7 @@ export default function Settings() {
                   }}
                 />
                 <div className="settings-modal-actions">
-                  <button className="btn secondary" onClick={modal.onCancel}>Отмена</button>
+                  <button className="btn secondary" onClick={modal.onCancel}>{t("common.cancel", lang)}</button>
                   <button
                     className="btn"
                     onClick={() => modal.onSubmit(promptValue)}
@@ -1845,7 +1886,7 @@ export default function Settings() {
             )}
             {modal.kind === "confirm" && (
               <div className="settings-modal-actions">
-                <button className="btn secondary" autoFocus onClick={modal.onNo}>Отмена</button>
+                <button className="btn secondary" autoFocus onClick={modal.onNo}>{t("common.cancel", lang)}</button>
                 {/* v0.0.31: use the caller-supplied label + danger flag.
                    Default «Подтвердить» (neutral). Danger callers (delete
                    profile / snippet) pass `danger:true` for red styling. */}
@@ -1910,7 +1951,7 @@ export default function Settings() {
                   }}>{snipError}</div>
                 )}
                 <div className="settings-modal-actions">
-                  <button className="btn secondary" onClick={modal.onCancel}>Отмена</button>
+                  <button className="btn secondary" onClick={modal.onCancel}>{t("common.cancel", lang)}</button>
                   <button
                     className="btn"
                     onClick={() => {
