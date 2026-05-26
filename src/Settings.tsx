@@ -776,6 +776,25 @@ export default function Settings() {
               ? t("meeting.structure.busy", lang)
               : t("meeting.structure.button", lang).replace("{model}", cfg.prep_model)}
           </button>
+          {/* v0.0.65: pre-meeting cheatsheet generator. Asks Sonnet
+              for 8 likely questions + answer outlines based on
+              meeting_context, saves to Desktop. */}
+          <button
+            className="btn secondary"
+            onClick={async () => {
+              try {
+                const path = await invoke<string>("generate_cheatsheet");
+                showToast("ok", (lang === "en" ? "💎 Cheatsheet saved: " : "💎 Шпаргалка сохранена: ") + path);
+              } catch (e) {
+                showToast("err", (lang === "en" ? "Cheatsheet failed: " : "Ошибка шпаргалки: ") + String(e));
+              }
+            }}
+            title={lang === "en"
+              ? `Generate 8 likely questions + answer outlines from meeting_context via ${cfg.prep_model}. Saves to Desktop.`
+              : `Сгенерировать 8 вероятных вопросов + outline ответов из meeting_context через ${cfg.prep_model}. Сохраняет на Desktop.`}
+          >
+            💎 {lang === "en" ? "Cheatsheet" : "Шпаргалка"} ({cfg.prep_model})
+          </button>
         </div>
         {recError && (
           <div style={{ color: "#ef4444", fontSize: 11, marginTop: 6 }}>

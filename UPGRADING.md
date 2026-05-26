@@ -11,6 +11,25 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.65 (2026-05-26) — QOL block 5, #13
+
+**Pre-meeting cheatsheet generator (💎 button).**
+
+Settings → 👥 Profile → 📝 Meeting context → new "💎 Cheatsheet
+(claude-sonnet-4-6)" button next to ✨ Structure. Click → backend
+calls Sonnet with meeting_context + system prompt "generate 8 likely
+questions and answer outlines for an upcoming interview based on this
+context. Cover both behavioural + technical deep-dives." Returns full
+markdown (capped at 2048 tokens, ~$0.02), saves to Desktop with
+`suflyor-cheatsheet-YYYY-MM-DD.md` filename.
+
+Use case: 15 minutes before the call, click 💎 → open file → review
+likely questions + your prepared answer outlines. Walk into the
+interview ready instead of cold.
+
+Errors gracefully: if meeting_context is empty or AI bridge not
+configured, returns descriptive error in the toast.
+
 ### → v0.0.64 (2026-05-26) — QOL block 5, #12
 
 **Auto-tile dedup — skip duplicate spawns within 60 sec.**

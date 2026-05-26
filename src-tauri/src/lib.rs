@@ -2094,6 +2094,74 @@ fn ymd_from_unix_ms(ms: i64) -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
+/// v0.0.65: Pre-meeting cheatsheet generator. Reads cfg.meeting_context,
+/// asks Sonnet (prep_model) to produce 8 likely interview questions
+/// with brief answer outlines. Saves the markdown to Desktop with a
+/// dated filename so the user can review pre-call.
+///
+/// Costs ~1 Sonnet call (≈$0.01-0.03 depending on context length).
+/// Settings UI: Profile → Meeting Context → "💎 Cheatsheet (Sonnet)"
+/// button next to "✨ Structure".
+#[tauri::command]
+async fn generate_cheatsheet(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, SharedConfig>,
+) -> Result<String, String> {
+    assert_overlay(&window)?;
+    let (base_url, bearer, model, lang, ctx) = {
+        let c = state.read();
+        (
+            c.ai_base_url.clone(),
+            c.ai_bearer.clone(),
+            c.prep_model.clone(),
+            c.response_language.clone(),
+            c.meeting_context.clone(),
+        )
+    };
+    if base_url.trim().is_empty() || bearer.trim().is_empty() {
+        return Err("AI bridge not configured".into());
+    }
+    if ctx.trim().is_empty() {
+        return Err("meeting_context is empty — fill it in first via Settings → Profile → Meeting context".into());
+    }
+    let lang_directive = if lang == "ru" {
+        "Пиши на русском языке."
+    } else {
+        "Write in English."
+    };
+    let system = format!(
+        "You are an interview prep coach. Given a description of an upcoming meeting/interview, \
+         generate a cheatsheet of 8 likely questions and short answer outlines (3-5 bullet points each). \
+         Output as markdown with H2 headings per question. Be concrete and pragmatic — no fluff. \
+         Cover both behavioural questions and the most likely technical deep-dives based on the role. {lang_directive}"
+    );
+    let user = format!("Meeting/interview context:\n\n{ctx}\n\nGenerate the 8-question cheatsheet now:");
+    let messages = vec![
+        ai::ChatMessage {
+            role: "system".into(),
+            content: ai::MessageContent::Text(system),
+        },
+        ai::ChatMessage {
+            role: "user".into(),
+            content: ai::MessageContent::Text(user),
+        },
+    ];
+    let (text, _usage) = ai::complete_with_usage(&base_url, &bearer, &model, messages, 2048)
+        .await
+        .map_err(|e| e.to_string())?;
+    // Save to Desktop with timestamped filename.
+    let desktop = dirs::desktop_dir().ok_or_else(|| "no desktop dir".to_string())?;
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    let ymd = ymd_from_unix_ms(ts);
+    let out_path = desktop.join(format!("suflyor-cheatsheet-{ymd}.md"));
+    let header = format!("# Pre-meeting cheatsheet — {ymd}\n\n");
+    std::fs::write(&out_path, header + &text).map_err(|e| e.to_string())?;
+    Ok(out_path.to_string_lossy().into_owned())
+}
+
 /// v0.0.63: append the most recent Q+A to a persistent bookmarks.md
 /// in the app data dir. Lets the user save particularly good AI
 /// answers for later review.
@@ -2582,6 +2650,7 @@ pub fn run() {
             get_last_qa,
             bookmark_last_answer,
             open_bookmarks,
+            generate_cheatsheet,
             set_stealth,
             list_snippets,
             expand_snippet,
