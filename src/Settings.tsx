@@ -1501,90 +1501,103 @@ export default function Settings() {
             </div>
           </div>
         </div>
+
+        {/* v0.0.32: moved Replay/Logs/Export×2/Import here from the footer.
+           The footer was getting 7 buttons wide which wrapped Save to its
+           own line. These are «диагностика / сессии» conceptually so they
+           belong in the Advanced panel with the update + dump buttons. */}
+        <div className="field">
+          <label>Сессии и экспорт конфига</label>
+          <div className="btn-row" style={{ justifyContent: "flex-start", gap: 8, flexWrap: "wrap" }}>
+            <button
+              className="btn secondary"
+              onClick={() => {
+                window.location.search = "?replay=1";
+              }}
+              title="In-app просмотрщик session journals — timeline transcript/AI/detector/tiles"
+            >
+              📊 Replay
+            </button>
+            <button
+              className="btn secondary"
+              onClick={() => invoke("open_sessions_folder").catch((e) => console.warn("open_sessions:", e))}
+              title="JSONL логи всех transcript/AI/detector событий по сессиям"
+            >
+              📁 Логи сессий
+            </button>
+            <button
+              className="btn secondary"
+              onClick={async () => {
+                try {
+                  const path = await invoke<string>("export_config");
+                  showToast("ok", `Конфиг сохранён: ${path}`);
+                } catch (e) {
+                  showToast("err", `Ошибка экспорта: ${e}`);
+                }
+              }}
+              title="ПОЛНЫЙ backup на Desktop: snippets + контекст + ключи + URL моста. Для переезда на другую свою машину. НЕ шарь с другими."
+            >
+              💾 Export (full)
+            </button>
+            <button
+              className="btn secondary"
+              onClick={async () => {
+                try {
+                  const path = await invoke<string>("export_config_safe");
+                  showToast("ok", `Безопасный конфиг (без ключей): ${path}`);
+                } catch (e) {
+                  showToast("err", `Ошибка экспорта: ${e}`);
+                }
+              }}
+              title="Shareable export — без groq_api_key, ai_bearer, ai_base_url, meeting_context, context_profiles. Можно отправить другу. Получатель доставит свои ключи + URL моста сам."
+            >
+              🔐 Export (share)
+            </button>
+            <button
+              className="btn secondary"
+              onClick={async () => {
+                try {
+                  const { open } = await import("@tauri-apps/plugin-dialog");
+                  const path = await open({
+                    multiple: false,
+                    directory: false,
+                    title: "Выбери config.json для импорта",
+                    filters: [
+                      { name: "JSON config", extensions: ["json"] },
+                      { name: "Все файлы", extensions: ["*"] },
+                    ],
+                  });
+                  if (!path) return;
+                  const picked = typeof path === "string" ? path : path[0];
+                  await invoke("import_config", { path: picked });
+                  const fresh = await invoke<Config>("get_config");
+                  setCfg(fresh);
+                  showToast("ok", "Конфиг загружен. Перезапустите session чтобы применить.");
+                } catch (e) {
+                  showToast("err", `Ошибка импорта: ${e}`);
+                }
+              }}
+              title="Открыть Windows Explorer и выбрать .json файл"
+            >
+              📥 Import
+            </button>
+          </div>
+          <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
+            Full export = все настройки + ключи (для миграции на свою машину). Share export = без секретов, безопасно для GitHub issue.
+          </div>
+        </div>
       </div>)}
 
         </section>
       </div>
       {/* end v0.0.30 settings-shell (sidebar + pane) */}
 
+      {/* v0.0.32: footer now minimal — just Back + Save. The 5 «сессии /
+         экспорт» buttons moved into the Advanced panel above so the footer
+         never wraps Save to a second line on the default 750-px Settings
+         window. */}
       <div className="btn-row">
         {savedFlash && <span style={{ color: "#4ade80", alignSelf: "center" }}>✓ Saved</span>}
-        <button
-          className="btn secondary"
-          onClick={() => {
-            window.location.search = "?replay=1";
-          }}
-          title="In-app просмотрщик session journals — timeline transcript/AI/detector/tiles"
-        >
-          📊 Replay
-        </button>
-        <button
-          className="btn secondary"
-          onClick={() => invoke("open_sessions_folder").catch((e) => console.warn("open_sessions:", e))}
-          title="JSONL логи всех transcript/AI/detector событий по сессиям"
-        >
-          📁 Логи сессий
-        </button>
-        <button
-          className="btn secondary"
-          onClick={async () => {
-            try {
-              const path = await invoke<string>("export_config");
-              showToast("ok", `Конфиг сохранён: ${path}`);
-            } catch (e) {
-              showToast("err", `Ошибка экспорта: ${e}`);
-            }
-          }}
-          title="ПОЛНЫЙ backup на Desktop: snippets + контекст + ключи + URL моста. Для переезда на другую свою машину. НЕ шарь с другими."
-        >
-          💾 Export (full)
-        </button>
-        <button
-          className="btn secondary"
-          onClick={async () => {
-            try {
-              const path = await invoke<string>("export_config_safe");
-              showToast("ok", `Безопасный конфиг (без ключей): ${path}`);
-            } catch (e) {
-              showToast("err", `Ошибка экспорта: ${e}`);
-            }
-          }}
-          title="Shareable export — без groq_api_key, ai_bearer, ai_base_url, meeting_context, context_profiles. Можно отправить другу. Получатель доставит свои ключи + URL моста сам."
-        >
-          🔐 Export (share)
-        </button>
-        <button
-          className="btn secondary"
-          onClick={async () => {
-            // v0.0.17: native file picker (was: text prompt → user typed
-            // full path → Russian Windows / OneDrive / Downloads paths
-            // tripped the Desktop-only allowlist). Now anyone can pick a
-            // JSON file from anywhere via Windows Explorer dialog.
-            try {
-              const { open } = await import("@tauri-apps/plugin-dialog");
-              const path = await open({
-                multiple: false,
-                directory: false,
-                title: "Выбери config.json для импорта",
-                filters: [
-                  { name: "JSON config", extensions: ["json"] },
-                  { name: "Все файлы", extensions: ["*"] },
-                ],
-              });
-              if (!path) return;
-              const picked = typeof path === "string" ? path : path[0];
-              await invoke("import_config", { path: picked });
-              const fresh = await invoke<Config>("get_config");
-              setCfg(fresh);
-              showToast("ok", "Конфиг загружен. Перезапустите session чтобы применить.");
-            } catch (e) {
-              showToast("err", `Ошибка импорта: ${e}`);
-            }
-          }}
-          title="Открыть Windows Explorer и выбрать .json файл — или перетащи файл прямо в окно Settings"
-        >
-          📥 Import
-        </button>
         <button className="btn secondary" onClick={back}>← Back to overlay</button>
         <button className="btn" onClick={async () => { await save(); }}>Save</button>
       </div>

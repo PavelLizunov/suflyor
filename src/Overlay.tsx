@@ -205,14 +205,20 @@ export default function Overlay() {
   // at line 110) sets its own size; observing here would race.
   const overlayBarRef = useRef<HTMLDivElement | null>(null);
   const overlayRootRef = useRef<HTMLDivElement | null>(null);
-  const paletteOpenRef = useRef(paletteOpen);
-  useEffect(() => { paletteOpenRef.current = paletteOpen; }, [paletteOpen]);
+  // v0.0.33: removed `paletteOpenRef` — the ref-update useEffect ran
+  // AFTER React commit, leaving a race window where ResizeObserver
+  // could fire DURING the palette open/close transition and see palette
+  // content with the guard still stale. That triggered a setSize from
+  // RO while the palette's own setSize was in-flight → competing setSize
+  // calls → potential hang on rapid F4-keystroke-Esc cycles. The fix
+  // moves the guard into the `useEffect` deps array — RO is now literally
+  // not attached while palette is open. Zero race possible.
   useEffect(() => {
     if (!overlayRootRef.current) return;
+    if (paletteOpen) return; // RO disabled while palette is open
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
-      if (paletteOpenRef.current) return; // palette has its own size logic
       // contentRect doesn't include border. We add a small margin for
       // padding + safety. Clamp to sane bounds.
       //
@@ -225,7 +231,11 @@ export default function Overlay() {
       // the PRIMARY monitor, which is close enough for a soft cap.
       const screenW = (typeof window !== "undefined" && window.screen?.availWidth) || 1920;
       const maxBarW = Math.min(Math.max(Math.floor(screenW * 0.5), 520), 1200);
-      const desiredW = Math.min(Math.max(Math.ceil(entry.contentRect.width) + 30, 520), maxBarW);
+      // v0.0.32: padding +30 → +50 per user feedback («запас 50 пикселей»).
+      // Min size = content + 50 px buffer so the last indicator (gear, F-key
+      // strip) never sits flush against the bar edge. Still capped at 50 %
+      // of screen via maxBarW.
+      const desiredW = Math.min(Math.max(Math.ceil(entry.contentRect.width) + 50, 520), maxBarW);
       const desiredH = Math.min(Math.max(Math.ceil(entry.contentRect.height) + 4, 96), 900);
       getCurrentWindow().outerSize().then((sz) => {
         getCurrentWindow().scaleFactor().then((scale) => {
@@ -242,7 +252,7 @@ export default function Overlay() {
     });
     ro.observe(overlayRootRef.current);
     return () => ro.disconnect();
-  }, []);
+  }, [paletteOpen]);
 
   // v0.0.25: re-assert always-on-top every 3s. User complaint: overlay
   // bar sometimes goes BEHIND other always-on-top windows (Zoom call
@@ -907,6 +917,7 @@ export default function Overlay() {
                 ["F9", "Ask AI — спросить AI сейчас (со screenshot если есть)"],
                 ["F10", "Screenshot — захват для следующего F9"],
                 ["F11", "PANIC HIDE — скрыть overlay + все тайлы"],
+                ["Ctrl+Alt+W", "Close all tiles (кроме pinned)"],
               ].map(([key, desc]) => (
                 <tr key={key}>
                   <td style={{ padding: "2px 8px 2px 0", verticalAlign: "top", width: 40 }}>
@@ -920,6 +931,50 @@ export default function Overlay() {
                       border: "1px solid rgba(255,255,255,0.2)",
                       borderRadius: 4,
                     }}>{key}</kbd>
+                  </td>
+                  <td style={{ padding: "2px 0", color: "var(--c-text)" }}>{desc}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* v0.0.33: indicator legend per user request («нужна расшифровка
+             индикаторов»). Explains the 3 HUD dots + transient chips that
+             appear in the overlay bar. Hover-tooltips still exist; this
+             gives the visible reference. */}
+          <div style={{
+            fontWeight: 600,
+            margin: "10px 0 6px",
+            fontSize: 11,
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+            color: "var(--c-text-mute)",
+          }}>
+            Indicators — что значат точки и чипы
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <tbody>
+              {[
+                ["audio", "🟢 audio — capture работает (зелёный = ok, жёлтый = thinking, серый = idle, красный = error)"],
+                ["stt", "🟢 stt — Whisper транскрибирует (loops каждые 2-5 сек)"],
+                ["ai", "🟢 ai — Claude отвечает на тайлах (purple flash = active request)"],
+                ["🎙", "🎙 wpm — voice coach: ваш темп речи + filler-words за 60 сек (mic only)"],
+                ["📸", "📸 ready — screenshot захвачен (F10) и прикрепится к следующему F9 ask"],
+                ["🔥", "🔥 aggressive — bypass-режим, тайл на каждую строку транскрипта (Settings → Auto-tiles)"],
+                ["⏱", "⏱ rate-limited — backend временно throttles (3 сек cooldown), AI запросы пропускаются"],
+                ["💰", "💰 over budget — сессия превысила Soft budget warning (Settings → AI proxy). AI работает дальше"],
+                ["💰 $", "💰 $X.XXX — накопленная стоимость сессии (Claude tokens). Toggle в Settings → Interface"],
+              ].map(([label, desc]) => (
+                <tr key={label}>
+                  <td style={{ padding: "2px 8px 2px 0", verticalAlign: "top", width: 40 }}>
+                    <span style={{
+                      display: "inline-block",
+                      padding: "1px 6px",
+                      fontFamily: "monospace",
+                      fontSize: 11,
+                      background: "rgba(255,255,255,0.08)",
+                      borderRadius: 4,
+                    }}>{label}</span>
                   </td>
                   <td style={{ padding: "2px 0", color: "var(--c-text)" }}>{desc}</td>
                 </tr>

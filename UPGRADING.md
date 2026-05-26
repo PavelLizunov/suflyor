@@ -11,6 +11,44 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.33 (2026-05-26) 🚨 P0 hang fix
+
+Four live-feedback fixes — most critical first.
+
+- **(P0) F4 KB palette no longer hangs the app.** User: «f4 палитра
+  ломает приложение зависает». Root cause: ResizeObserver + setSize
+  race. When the palette opens or closes, both the palette's own
+  setSize useEffect AND the bar's auto-resize ResizeObserver could
+  fire on the same DOM-mutation, racing to call `setSize` on the
+  Tauri window. The previous guard (`paletteOpenRef.current` set in
+  a separate useEffect) was updated AFTER React commit, leaving a
+  race window where RO saw palette content with the guard still
+  stale → competing setSize calls → potential infinite loop / hang on
+  rapid F4 + typing.
+
+  Fix: moved the guard from a ref into the `useEffect` deps array.
+  ResizeObserver is now literally not attached while palette is open
+  (`if (paletteOpen) return;` at the top of the effect, plus
+  `[paletteOpen]` deps so it re-attaches on close). Zero race possible.
+- **(UX) Indicator legend.** User: «нужна расшифровка индикаторов».
+  The ℹ-popover (click `F3·F4·…·ℹ` strip in the bar) now has a second
+  table «Indicators — что значат точки и чипы» listing the 3 HUD dots
+  (audio · stt · ai), voice-coach pill (🎙 wpm), screenshot-ready (📸),
+  aggressive mode (🔥), rate-limited (⏱), over-budget (💰), session-cost
+  ($X.XXX). The Hotkeys table also gained the Ctrl+Alt+W close-all row.
+- **(UX) Settings footer no longer wraps Save to a new row.** Was 7
+  buttons (Replay · Logs · Export full · Export share · Import · Back ·
+  Save) overflowing the 750-px default Settings width. Moved the 5
+  «сессии / экспорт» buttons into the Advanced panel (where Обновления
+  + Диагностический дамп already live — conceptually they're all about
+  session diagnostics & config migration). Footer is now minimal:
+  just **← Back to overlay** + **Save**. Fits any window width.
+- **(UX) Overlay bar padding +30 → +50.** User: «минимальный размер
+  должен быть таким чтоб все индикаторы помещались + запас 50 пикселей».
+  The ResizeObserver-derived desired width adds buffer past the
+  measured content. Was +30, now +50. Abs floor (520), abs ceiling
+  (1200), and 50 %-of-screen cap are unchanged.
+
 ### → v0.0.31 (2026-05-26)
 
 Three follow-ups from v0.0.30 live screenshot review:
