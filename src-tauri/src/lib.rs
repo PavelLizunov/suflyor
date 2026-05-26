@@ -2094,6 +2094,85 @@ fn ymd_from_unix_ms(ms: i64) -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
+/// v0.0.61: snapshot of the last Q+A pair (used by the overlay's
+/// 💡 button to seed `tile_followups`). Reads `last_question` +
+/// `last_answer` from RuntimeState — populated by every AI flow
+/// (auto-tile / manual ask / PTT / F3).
+#[tauri::command]
+fn get_last_qa(
+    window: tauri::WebviewWindow,
+    rt: tauri::State<'_, SharedRuntime>,
+) -> Result<Option<(String, String)>, String> {
+    assert_overlay(&window)?;
+    let s = rt.lock();
+    match (s.last_question.clone(), s.last_answer.clone()) {
+        (Some(q), Some(a)) if !q.is_empty() && !a.is_empty() => Ok(Some((q, a))),
+        _ => Ok(None),
+    }
+}
+
+/// v0.0.61: Generate 3 follow-up questions for a tile via Haiku. Used
+/// by the `💡` button on each tile. Returns plain strings the
+/// frontend renders as clickable chips.
+///
+/// Prompt design: explicit instruction to return EXACTLY 3 questions,
+/// one per line, no numbering, no quotes, no markdown. Short Sonnet-
+/// style "system prompt" enforces the format. Capped at 256 input +
+/// 256 output tokens — keeps cost <$0.001 per call.
+#[tauri::command]
+async fn tile_followups(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, SharedConfig>,
+    question: String,
+    answer: String,
+) -> Result<Vec<String>, String> {
+    assert_overlay(&window)?;
+    let (base_url, bearer, model) = {
+        let cfg = state.read();
+        (cfg.ai_base_url.clone(), cfg.ai_bearer.clone(), cfg.ai_model.clone())
+    };
+    if base_url.trim().is_empty() || bearer.trim().is_empty() {
+        return Err("AI bridge not configured (set base_url + bearer in Settings)".into());
+    }
+
+    // Truncate inputs so we don't blow up token budget on a giant tile.
+    let q_short: String = question.chars().take(500).collect();
+    let a_short: String = answer.chars().take(2000).collect();
+
+    let system = "You generate 3 short follow-up questions that an interviewer might ask \
+                  next, given a Q&A. Output EXACTLY 3 questions, one per line. \
+                  No numbering, no quotes, no markdown, no preamble. \
+                  Each question on its own line, terminated by ?";
+    let user = format!(
+        "Original question:\n{q_short}\n\nAnswer given:\n{a_short}\n\nNow output 3 follow-up questions:"
+    );
+
+    let messages = vec![
+        crate::ai::ChatMessage {
+            role: "system".to_string(),
+            content: crate::ai::MessageContent::Text(system.to_string()),
+        },
+        crate::ai::ChatMessage {
+            role: "user".to_string(),
+            content: crate::ai::MessageContent::Text(user),
+        },
+    ];
+
+    let (text, _usage) = crate::ai::complete_with_usage(&base_url, &bearer, &model, messages, 256)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Split by newlines, trim, drop empties, take 3.
+    let questions: Vec<String> = text
+        .lines()
+        .map(|s| s.trim().trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ')' || c.is_whitespace()).to_string())
+        .filter(|s| !s.is_empty() && s.len() > 4)
+        .take(3)
+        .collect();
+
+    Ok(questions)
+}
+
 /// v0.0.58: render a session JSONL into a human-readable markdown file
 /// and save to Desktop. Pairs with the Replay viewer "📥 Export
 /// markdown" button. Same path-validation as `load_session` — only
@@ -2425,6 +2504,8 @@ pub fn run() {
             load_session,
             export_session_markdown,
             read_all_session_stats,
+            tile_followups,
+            get_last_qa,
             set_stealth,
             list_snippets,
             expand_snippet,

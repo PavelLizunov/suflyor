@@ -1068,6 +1068,39 @@ export default function Overlay() {
             padding: 0,
           }}
         >F3·F4·F6·F8·F9·F10·F11&nbsp;ℹ</button>
+        {/* v0.0.61: AI follow-up suggestions button. Click → fetch
+            last Q+A from backend → call tile_followups → spawn new tile
+            with 3 follow-up questions as bullet markdown. */}
+        <button
+          className="icon-btn icon-only"
+          type="button"
+          title={lang === "en"
+            ? "Generate 3 follow-up questions for the last AI answer"
+            : "Сгенерировать 3 follow-up вопроса для последнего AI ответа"}
+          aria-label={lang === "en" ? "AI follow-up suggestions" : "AI follow-up подсказки"}
+          onClick={async () => {
+            try {
+              const qa = await invoke<[string, string] | null>("get_last_qa");
+              if (!qa) {
+                console.warn("get_last_qa returned null — no AI answer yet this session");
+                return;
+              }
+              const [q, a] = qa;
+              const fups = await invoke<string[]>("tile_followups", { question: q, answer: a });
+              if (fups.length === 0) {
+                console.warn("tile_followups returned empty list");
+                return;
+              }
+              const bullets = fups.map((f) => `- ${f}`).join("\n");
+              const title = lang === "en" ? "💡 Follow-up questions" : "💡 Follow-up вопросы";
+              await invoke("spawn_tile", { question: title, answer: bullets });
+            } catch (err) {
+              console.warn("tile_followups flow failed:", err);
+            }
+          }}
+        >
+          💡
+        </button>
         <button
           className="icon-btn icon-only"
           onClick={openSettings}

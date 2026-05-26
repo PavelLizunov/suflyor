@@ -11,6 +11,33 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.61 (2026-05-26) — QOL block 5, #9
+
+**AI follow-up suggestions button (💡 in overlay).**
+
+New 💡 button in the overlay bar next to ⚙ Settings gear. Click flow:
+1. Fetch `(last_question, last_answer)` snapshot from RuntimeState via
+   new `get_last_qa` Tauri command (read-only, gated by assert_overlay)
+2. Call new `tile_followups(question, answer)` Tauri command → Haiku
+   call (capped at 256 in + 256 out tokens, <$0.001) → returns 3
+   follow-up question strings
+3. Format as bulleted markdown
+4. `spawn_tile("💡 Follow-up questions", "- Q1\n- Q2\n- Q3")` → new
+   tile appears next to existing tiles
+
+System prompt enforces strict format: "EXACTLY 3 questions, one per
+line, no numbering, no quotes, no markdown, no preamble. Each
+terminated by ?". Output parser strips any rogue digits/dots/parens
+just in case.
+
+Bilingual button labels + tile title.
+
+Use case: AI just answered "explain consistent hashing". You see the
+answer, want to anticipate what the interviewer might dig into next —
+click 💡, get a tile with: "How do you handle adding nodes to the
+ring?" · "What's the impact of virtual nodes?" · "How does it compare
+to range-based sharding?"
+
 ### → v0.0.60 (2026-05-26) — QOL block 5, #8
 
 **Session stats dashboard panel.**
