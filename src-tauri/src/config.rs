@@ -68,6 +68,19 @@ pub struct Config {
     #[serde(default = "default_post_meeting_debrief_enabled")]
     pub post_meeting_debrief_enabled: bool,
 
+    /// v0.0.73: when true, `quit_app` exports the most recent session's
+    /// JSONL journal to a Markdown file on the user's Desktop right
+    /// before exiting. Filename: `suflyor-session-YYYY-MM-DD-HHmm.md`.
+    /// Same rendering as the Replay viewer's "📥 Export markdown" button
+    /// — only Q+A pairs + final summary, no raw transcript clutter.
+    ///
+    /// Default OFF (opt-in). Users who want every session captured
+    /// without thinking enable it once and forget. Failure to write is
+    /// logged but never blocks the quit (avoids "I want to leave but
+    /// the app won't let me" UX nightmares).
+    #[serde(default)]
+    pub auto_export_on_quit: bool,
+
     /// Soft budget hint per session, in USD. When session cost crosses
     /// this number, a yellow "💰 over $X budget" chip appears in the
     /// overlay — but AI calls still go through. Blocking mid-interview
@@ -203,6 +216,7 @@ impl Config {
             tile_font_size: default_tile_font_size(),
             snippets: default_snippets(),
             post_meeting_debrief_enabled: default_post_meeting_debrief_enabled(),
+            auto_export_on_quit: false,
             max_session_cost_usd: default_max_session_cost_usd(),
             detector_skip_mic: default_detector_skip_mic(),
             auto_tile_every_line: false,

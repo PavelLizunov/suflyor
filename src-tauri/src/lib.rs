@@ -1081,6 +1081,17 @@ fn quit_app(
         rt.inner().clone(),
         tiles.inner().clone(),
     );
+    // v0.0.73: opt-in auto-export latest session journal to Desktop. Runs
+    // AFTER stop_session so the JSONL already has its SessionSummary
+    // footer. Best-effort — failures (no journals, IO error, missing
+    // Desktop) are logged but never block the quit.
+    let auto_export = cfg.read().auto_export_on_quit;
+    if auto_export {
+        match try_auto_export_latest_to_desktop() {
+            Ok(path) => log::info!("auto-export wrote {}", path.display()),
+            Err(e) => log::warn!("auto-export failed: {e}"),
+        }
+    }
     app.exit(0);
     Ok(())
 }
@@ -2544,41 +2555,12 @@ async fn tile_followups(
     Ok(questions)
 }
 
-/// v0.0.58: render a session JSONL into a human-readable markdown file
-/// and save to Desktop. Pairs with the Replay viewer "📥 Export
-/// markdown" button. Same path-validation as `load_session` — only
-/// reads from the sessions dir.
-///
-/// Markdown sections (rendered in chronological order):
-///   - H1 with session start timestamp + AI model
-///   - For each `ai_request` / `ai_response` pair: Q (prompt preview) +
-///     A (full response markdown), wall-clock timestamp, latency, cost
-///   - For each `tile_spawn`: Q + A (snapshot of what was shown)
-///   - Final SessionSummary block if present
-///
-/// Intentionally skips raw transcript lines and detector decisions —
-/// they're noise for a human reading a post-meeting recap. (The
-/// Replay viewer is the right tool when you want the raw timeline.)
-#[tauri::command]
-fn export_session_markdown(
-    window: tauri::WebviewWindow,
-    path: String,
-) -> Result<String, String> {
-    assert_overlay(&window)?;
-    const MAX_BYTES: u64 = 10 * 1024 * 1024;
-    let p = std::path::PathBuf::from(&path);
-    let sessions_dir = journal::sessions_dir().map_err(|e| e.to_string())?;
-    let canonical_session_dir = sessions_dir.canonicalize().map_err(|e| e.to_string())?;
-    let canonical_path = p.canonicalize().map_err(|e| e.to_string())?;
-    if !canonical_path.starts_with(&canonical_session_dir) {
-        return Err("path is outside sessions dir".into());
-    }
-    let meta = std::fs::metadata(&canonical_path).map_err(|e| e.to_string())?;
-    if meta.len() > MAX_BYTES {
-        return Err(format!("session file too large ({} bytes, max {})", meta.len(), MAX_BYTES));
-    }
-
-    let content = std::fs::read_to_string(&canonical_path).map_err(|e| e.to_string())?;
+/// v0.0.73: pure rendering helper extracted from `export_session_markdown`.
+/// Takes raw JSONL `content` + the originating `filename` (used as a
+/// heading), returns the rendered markdown string. No I/O, no Tauri
+/// dependencies — callable from auto-export paths (e.g. quit_app)
+/// without holding a webview reference.
+fn render_session_md(content: &str, filename: &str) -> String {
     let mut events: Vec<serde_json::Value> = Vec::new();
     for line in content.lines() {
         let line = line.trim();
@@ -2589,9 +2571,7 @@ fn export_session_markdown(
     }
 
     let fmt_clock = |unix_ms: i64| -> String {
-        // Naive HH:MM:SS from milliseconds — uses chrono if available,
-        // otherwise raw arithmetic. We don't want to pull chrono just
-        // for this so do it by hand.
+        // HH:MM:SS from unix_ms — by-hand to avoid pulling chrono.
         let total_sec = (unix_ms / 1000).rem_euclid(86_400);
         let h = total_sec / 3600;
         let m = (total_sec % 3600) / 60;
@@ -2600,13 +2580,8 @@ fn export_session_markdown(
     };
 
     let mut md = String::new();
-    let filename = canonical_path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("session");
     md.push_str(&format!("# suflyor session — {filename}\n\n"));
 
-    // Pull session_start metadata if present.
     if let Some(start) = events.iter().find(|e| e["kind"] == "session_start") {
         let model = start["ai_model"].as_str().unwrap_or("?");
         let prep = start["prep_model"].as_str().unwrap_or("");
@@ -2620,8 +2595,6 @@ fn export_session_markdown(
         md.push('\n');
     }
 
-    // Pair ai_request with following ai_response by tile id when possible,
-    // otherwise just emit in order.
     let mut req_count = 0;
     let mut pending_req: Option<&serde_json::Value> = None;
     for ev in &events {
@@ -2660,7 +2633,6 @@ fn export_session_markdown(
         }
     }
 
-    // SessionSummary footer if present.
     if let Some(sum) = events.iter().find(|e| e["kind"] == "session_summary") {
         md.push_str("## Summary\n\n");
         let dur_min = sum["duration_ms"].as_i64().unwrap_or(0) as f64 / 60_000.0;
@@ -2675,6 +2647,77 @@ fn export_session_markdown(
         let total_cost = sum["total_cost_microcents"].as_i64().unwrap_or(0) as f64 / 100_000_000.0;
         md.push_str(&format!("- total cost: ${total_cost:.4}\n"));
     }
+
+    md
+}
+
+/// v0.0.73: find the most recent .jsonl in sessions dir and render it
+/// to a .md on the user's Desktop. Best-effort: returns Err but never
+/// panics. Used by `quit_app` when `cfg.auto_export_on_quit` is true.
+fn try_auto_export_latest_to_desktop() -> Result<std::path::PathBuf, String> {
+    let dir = journal::sessions_dir().map_err(|e| e.to_string())?;
+    let read = std::fs::read_dir(&dir).map_err(|e| e.to_string())?;
+    let mut files: Vec<std::path::PathBuf> = read
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("jsonl"))
+        .collect();
+    files.sort();
+    let latest = files.last().ok_or_else(|| "no session journals found".to_string())?;
+    let meta = std::fs::metadata(latest).map_err(|e| e.to_string())?;
+    if meta.len() == 0 {
+        return Err("latest session journal is empty".into());
+    }
+    let content = std::fs::read_to_string(latest).map_err(|e| e.to_string())?;
+    let filename = latest.file_name().and_then(|s| s.to_str()).unwrap_or("session");
+    let md = render_session_md(&content, filename);
+    let desktop = dirs::desktop_dir().ok_or_else(|| "no desktop dir".to_string())?;
+    let stem = latest.file_stem().and_then(|s| s.to_str()).unwrap_or("session");
+    let out_path = desktop.join(format!("{stem}.md"));
+    std::fs::write(&out_path, md).map_err(|e| e.to_string())?;
+    Ok(out_path)
+}
+
+/// v0.0.58: render a session JSONL into a human-readable markdown file
+/// and save to Desktop. Pairs with the Replay viewer "📥 Export
+/// markdown" button. Same path-validation as `load_session` — only
+/// reads from the sessions dir.
+///
+/// Markdown sections (rendered in chronological order):
+///   - H1 with session start timestamp + AI model
+///   - For each `ai_request` / `ai_response` pair: Q (prompt preview) +
+///     A (full response markdown), wall-clock timestamp, latency, cost
+///   - For each `tile_spawn`: Q + A (snapshot of what was shown)
+///   - Final SessionSummary block if present
+///
+/// Intentionally skips raw transcript lines and detector decisions —
+/// they're noise for a human reading a post-meeting recap. (The
+/// Replay viewer is the right tool when you want the raw timeline.)
+#[tauri::command]
+fn export_session_markdown(
+    window: tauri::WebviewWindow,
+    path: String,
+) -> Result<String, String> {
+    assert_overlay(&window)?;
+    const MAX_BYTES: u64 = 10 * 1024 * 1024;
+    let p = std::path::PathBuf::from(&path);
+    let sessions_dir = journal::sessions_dir().map_err(|e| e.to_string())?;
+    let canonical_session_dir = sessions_dir.canonicalize().map_err(|e| e.to_string())?;
+    let canonical_path = p.canonicalize().map_err(|e| e.to_string())?;
+    if !canonical_path.starts_with(&canonical_session_dir) {
+        return Err("path is outside sessions dir".into());
+    }
+    let meta = std::fs::metadata(&canonical_path).map_err(|e| e.to_string())?;
+    if meta.len() > MAX_BYTES {
+        return Err(format!("session file too large ({} bytes, max {})", meta.len(), MAX_BYTES));
+    }
+
+    let content = std::fs::read_to_string(&canonical_path).map_err(|e| e.to_string())?;
+    let filename = canonical_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("session");
+    let md = render_session_md(&content, filename);
 
     // Save to Desktop with `.md` suffix replacing the `.jsonl` ext.
     let desktop = dirs::desktop_dir().ok_or_else(|| "no desktop dir".to_string())?;

@@ -11,6 +11,30 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.73 (2026-05-26) — QOL block 5, #21
+
+**Auto-export session to .md on quit (opt-in).**
+
+New `cfg.auto_export_on_quit: bool` (default `false`). When `true`,
+`quit_app` writes the most-recent session JSONL as a Markdown file on
+the user's Desktop right before exiting — same rendering as the Replay
+viewer's "📥 Export markdown" button (Q+A pairs + summary, no raw
+transcript clutter).
+
+To enable: edit `%APPDATA%\overlay-mvp\config.json` and add
+`"auto_export_on_quit": true`. Settings UI toggle pending — file an
+issue if you want it bumped.
+
+Refactor: extracted `render_session_md(content, filename) -> String`
+helper. Both the manual "📥 Export" Replay button (`export_session_
+markdown` command) and the new auto-export path call it. New
+`try_auto_export_latest_to_desktop()` finds latest .jsonl in sessions
+dir → renders → saves to Desktop.
+
+Failure modes (no journals / empty file / no Desktop dir / IO error)
+are logged but never block the quit — won't ever trap the user in the
+app.
+
 ### → v0.0.72 (2026-05-26) — QOL block 5, #20
 
 **🧠 AI model quick-switch chip in overlay bar (haiku ↔ sonnet).**
