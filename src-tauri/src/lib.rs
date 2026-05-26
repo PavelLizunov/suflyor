@@ -2576,20 +2576,26 @@ fn add_snippet(
     if b.len() > MAX_BODY {
         return Err(format!("snippet body too long ({} bytes, max {MAX_BODY})", b.len()));
     }
-    let next_cfg = {
-        let mut c = state.write();
-        // Dedup check — case-insensitive on existing keys.
-        if c.snippets.iter().any(|s| s.key.to_lowercase() == k) {
-            return Err(format!("snippet '{k}' already exists — delete it first via Settings → Snippets"));
-        }
-        c.snippets.push(config::Snippet {
-            key: k.clone(),
-            title: k.clone(), // use key as title; user can edit in Settings later
-            body: b,
-        });
-        c.clone()
-    };
-    config::save(&next_cfg).map_err(|e| e.to_string())?;
+    // v0.0.96 P1 fix: hold the write lock across config::save so two
+    // concurrent add_snippet calls can't both clone-then-write-to-disk
+    // (where the second fs::write clobbers the first → first snippet
+    // appears in-memory but vanishes on restart). The lock spans the
+    // dedup check + push + serialize + disk-write as one atomic op.
+    let mut c = state.write();
+    if c.snippets.iter().any(|s| s.key.to_lowercase() == k) {
+        return Err(format!("snippet '{k}' already exists — delete it first via Settings → Snippets"));
+    }
+    c.snippets.push(config::Snippet {
+        key: k.clone(),
+        title: k.clone(),
+        body: b,
+    });
+    if let Err(e) = config::save(&c) {
+        // Rollback the in-memory push so cfg stays consistent with disk
+        // (otherwise the user sees the snippet exist until next restart).
+        c.snippets.pop();
+        return Err(e.to_string());
+    }
     Ok(k)
 }
 

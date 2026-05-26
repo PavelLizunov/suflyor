@@ -462,8 +462,14 @@ function ReplayRow({ event }: { event: JournalEvent }) {
     case "tile_spawn": {
       const question = asStr(event.question);
       const answer = asStr(event.answer);
+      // v0.0.96: detect v0.0.89 translate tiles by the 🇷🇺/🇬🇧 prefix
+      // the backend bakes in. Display as a small label suffix so the
+      // Replay timeline visually distinguishes translated from
+      // detector / manual / reload spawns.
+      const isTranslated = question.startsWith("🇷🇺") || question.startsWith("🇬🇧");
+      const label = isTranslated ? "TILE · 🌐" : "TILE";
       return (
-        <Row time={time} cls="tile" label="TILE">
+        <Row time={time} cls="tile" label={label}>
           <span className="replay-text"><strong>{preview(question, 80)}</strong></span>
           <span className="replay-text">{preview(answer, 100)}</span>
         </Row>

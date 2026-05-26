@@ -26,6 +26,34 @@ for download. No auto-install (no code signing — by design).
 
 Two code-review agent passes ran on the diff. First found 3 P0/P1 (shipped .85, .86, .87). Second pass running at time of v0.0.88 ship.
 
+### → v0.0.96 (2026-05-26) — Audit #3 fixes + Replay flag badge
+
+Three findings from code-review agent #3 + 1 polish:
+
+**P1 — `add_snippet` save-to-disk race.**
+v0.0.95's command released the write lock before `config::save` → two
+concurrent calls could clobber each other's disk writes. Now holds
+the lock across check + push + serialize + write (one atomic op). On
+disk-write failure, rolls back the in-memory push so cfg + disk stay
+consistent.
+
+**P2 — Word-count regex broke hyphenated words.**
+v0.0.94's regex stripped `-` which turned "self-employed" into
+2 words, "x-ray" into 2. Also numbered list markers ("1. foo") left
+"1." that counted as a word. Now preserves hyphens + strips leading
+`^\s*\d+\.\s+` per line.
+
+**P2 — CopyQuestionButton swallowed clipboard rejection.**
+On denied permission / secure-context issue, button only logged to
+console; user saw no feedback. Now shows ✗ (red) for 2 sec on
+failure with descriptive tooltip.
+
+**Polish — Replay viewer flag badge for translated tiles.**
+`tile_spawn` rows whose question starts with 🇷🇺/🇬🇧 (set by
+v0.0.89 tile_translate) now render with `TILE · 🌐` label instead
+of plain `TILE`. Quick visual hint for which spawns came from the
+translate flow.
+
 ### → v0.0.95 (2026-05-26) — Add snippet inline via F4 palette `+key body`
 
 Type `+greet Hi, glad to meet you` in the F4 KB palette → Enter →

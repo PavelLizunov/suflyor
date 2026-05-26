@@ -437,15 +437,17 @@ export default function TileWindow() {
         )}
         {/* v0.0.94: answer word count. Helps you tell at a glance
             whether AI gave a one-liner or a deep dive without expanding
-            the tile body. Computed once from `answer` prop (won't
-            change since markdown re-renders don't alter the source).
-            Strip markdown code fences + bullets so the count reflects
-            actual prose. */}
+            the tile body. Strips markdown formatting first so the
+            count reflects actual prose.
+            v0.0.96 P2 fix: preserve hyphenated words ("self-employed"
+            stays 1 word). Strip leading ordered-list markers ("1.")
+            per line so they don't count. */}
         {(() => {
           const stripped = answer
             .replace(/```[\s\S]*?```/g, "")     // drop code blocks
             .replace(/`[^`]*`/g, "")            // drop inline code
-            .replace(/[*_#>\-]/g, " ");         // drop markdown punctuation
+            .replace(/^\s*\d+\.\s+/gm, " ")     // drop ordered-list markers
+            .replace(/[*_#>]/g, " ");           // drop md punct (preserve -)
           const words = stripped.split(/\s+/).filter(Boolean).length;
           if (words === 0) return null;
           return (
@@ -596,23 +598,32 @@ export default function TileWindow() {
 // its own copied state). Compact styling matches reload/translate
 // buttons.
 function CopyQuestionButton({ question, lang }: { question: string; lang: Lang }) {
-  const [copied, setCopied] = useState(false);
+  // v0.0.96 P2 fix: track failure state so button shows ✗ on rejected
+  // clipboard write (denied permission / secure-context issue) instead
+  // of looking dead. ok / fail labels distinct in tooltip.
+  const [status, setStatus] = useState<"idle" | "ok" | "fail">("idle");
   const onClick = async () => {
     try {
       await navigator.clipboard.writeText(question);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
+      setStatus("ok");
+      setTimeout(() => setStatus("idle"), 1200);
     } catch (e) {
       console.warn("clipboard write:", e);
+      setStatus("fail");
+      setTimeout(() => setStatus("idle"), 2000);
     }
   };
+  const icon = status === "ok" ? "✓" : status === "fail" ? "✗" : "📋";
+  const title = status === "ok"
+    ? (lang === "en" ? "✓ Copied" : "✓ Скопировано")
+    : status === "fail"
+      ? (lang === "en" ? "✗ Clipboard write failed (permission?)" : "✗ Не удалось записать в буфер")
+      : (lang === "en" ? "Copy question to clipboard" : "Скопировать вопрос в буфер");
   return (
     <button
       className="tile-copy-q"
       onClick={onClick}
-      title={copied
-        ? (lang === "en" ? "✓ Copied" : "✓ Скопировано")
-        : (lang === "en" ? "Copy question to clipboard" : "Скопировать вопрос в буфер")}
+      title={title}
       aria-label={lang === "en" ? "Copy question" : "Скопировать вопрос"}
       style={{
         background: "transparent",
@@ -621,9 +632,10 @@ function CopyQuestionButton({ question, lang }: { question: string; lang: Lang }
         opacity: 0.85,
         padding: "0 6px",
         fontSize: 13,
+        color: status === "fail" ? "#d05050" : undefined,
       }}
     >
-      {copied ? "✓" : "📋"}
+      {icon}
     </button>
   );
 }
