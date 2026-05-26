@@ -13,8 +13,14 @@ mod tray;
 use config::{Config, SharedConfig};
 use runtime::{SharedRuntime, TranscriptLine};
 use serde::Serialize;
+use std::sync::Mutex;
 use tauri::Manager;
 use tile::SharedTiles;
+
+/// Remembers the overlay window's pre-settings position so close_settings
+/// can restore it instead of always snapping back to (200, 40). Lazy-init
+/// from None — first open_settings call sets it; close_settings reads + clears.
+static PRE_SETTINGS_POS: Mutex<Option<(f64, f64)>> = Mutex::new(None);
 
 // ── Caller-window guard ──────────────────────────────────────────────────
 //
@@ -864,6 +870,17 @@ fn open_settings(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<
     // 2026-05-25: "там еще скрол есть"). On smaller screens the window
     // still resizes naturally — user can shrink via window edge.
     if let Some(w) = app.get_webview_window("overlay") {
+        // Remember current outer position so close_settings can restore it
+        // (instead of always snapping back to the default 200,40). Skip if
+        // outer_position errors — we'll just fall back to the default on close.
+        if let Ok(pos) = w.outer_position() {
+            if let Ok(scale) = w.scale_factor() {
+                let logical = pos.to_logical::<f64>(scale);
+                if let Ok(mut guard) = PRE_SETTINGS_POS.lock() {
+                    *guard = Some((logical.x, logical.y));
+                }
+            }
+        }
         let _ = w.set_size(tauri::LogicalSize::new(760.0, 900.0));
         let _ = w.center();
         let _ = w.show();
@@ -876,10 +893,17 @@ fn open_settings(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<
 #[tauri::command]
 fn close_settings(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
     assert_overlay(&window)?;
-    // Restore overlay window to compact bar size + top of screen + clear ?settings.
+    // Restore overlay window to compact bar size + (pre-settings position
+    // OR default 200,40) + clear ?settings. The remembered position is
+    // taken from open_settings; if that failed we fall back to default.
     if let Some(w) = app.get_webview_window("overlay") {
+        let (x, y) = PRE_SETTINGS_POS
+            .lock()
+            .ok()
+            .and_then(|mut g| g.take())
+            .unwrap_or((200.0, 40.0));
         let _ = w.set_size(tauri::LogicalSize::new(520.0, 96.0));
-        let _ = w.set_position(tauri::LogicalPosition::new(200.0, 40.0));
+        let _ = w.set_position(tauri::LogicalPosition::new(x, y));
         let _ = w.eval("window.location.search = ''");
     }
     Ok(())
