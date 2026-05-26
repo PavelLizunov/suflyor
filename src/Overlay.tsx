@@ -1458,7 +1458,7 @@ export default function Overlay() {
             cursor: "pointer",
             padding: 0,
           }}
-        >F3·F4·F6·F8·F9·F10·F11&nbsp;ℹ</button>
+        >F1-F11&nbsp;ℹ</button>
         {/* v0.0.63: bookmark last answer to %APPDATA%/bookmarks.md. */}
         <button
           className="icon-btn icon-only"
@@ -1552,9 +1552,12 @@ export default function Overlay() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <tbody>
               {[
+                ["F1", lang === "en" ? "Toggle help popover" : "Открыть/закрыть help"],
+                ["F2", lang === "en" ? "Cycle context profile" : "Переключить профиль"],
                 ["F3", t("overlay.help.hk.f3", lang)],
                 ["F4", t("overlay.help.hk.f4", lang)],
                 ["F6", t("overlay.help.hk.f6", lang)],
+                ["F7", lang === "en" ? "Collapse / expand all tiles" : "Свернуть / развернуть все тайлы"],
                 ["F8", t("overlay.help.hk.f8", lang)],
                 ["F9", t("overlay.help.hk.f9", lang)],
                 ["F10", t("overlay.help.hk.f10", lang)],

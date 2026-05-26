@@ -11,6 +11,17 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.84 (2026-05-26) — QOL block 5, #32
+
+**Hotkey hint + help popover updated for v0.0.77/.80/.83 additions.**
+
+- Overlay bar hint now reads `F1-F11 ℹ` (was `F3·F4·F6·F8·F9·F10·F11
+  ℹ` — didn't include F1 help, F2 profile, F7 collapse-all).
+- ℹ popover hotkey table now lists F1, F2, F7 alongside the originals.
+
+Pure UI polish — no behavior change. Caught via live verification of
+v0.0.83 (overlay screenshot showed missing keys in the hint).
+
 ### → v0.0.83 (2026-05-26) — QOL block 5, #31
 
 **F7 — bulk collapse/expand all tiles (hotkey mirror of v0.0.82 📦 chip).**
