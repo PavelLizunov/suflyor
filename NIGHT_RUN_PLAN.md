@@ -1,5 +1,21 @@
 # Autonomous work plan
 
+## ☀️ Live-iteration summary — marathon block 2 (extended to 16:00)
+
+**TL;DR (rolling):** 17 releases shipped this session (v0.0.10 → v0.0.26). Live user feedback drove rapid iteration — F8 crash (real Rust panic from runtime-panics.log, fixed v0.0.22), tile UX (size/transparency/double-click maximize, fixed v0.0.24-25), one-click update (v0.0.23), aggressive-mode opt-in (v0.0.18) with visible 🔥 chip (v0.0.26). 244 cargo tests pass through every release · clippy `-D warnings` clean · vite build clean throughout. Two agent-review passes caught 7 real issues; all fixed inline.
+
+**Releases v0.0.17 → v0.0.26 (this block):**
+- **v0.0.17** — import config: native file picker + drag-drop, removed Desktop-only path allowlist (broke OneDrive + Russian Windows)
+- **v0.0.18** — AGGRESSIVE MODE opt-in (tile per transcript line, bypass detector, MAX_TILES_PER_MIN bumped 15→60)
+- **v0.0.19** — sequence number `#N` badge in tile header (chronological reading order when aggressive floods grid)
+- **v0.0.20** — keyword highlighting in tiles + question collapse 4-line + scroll-to-bottom fix
+- **v0.0.21** — F8 crash JS-side re-entry guard + visible hotkey legend popover + runtime-panics.log
+- **v0.0.22** — REAL F8 crash fix: tokio::spawn → tauri::async_runtime::spawn in stop_session debrief + tile TTL (same root cause as task #93)
+- **v0.0.23** — one-click update: download NSIS + spawn + quit_app
+- **v0.0.24** — tile UX sweep: 24×24 buttons with bg, 460×360 default size, less transparent bg, Ctrl+Alt+W close-all-tiles
+- **v0.0.25** — overlay always-on-top reassertion (3s tick), tile dblclick suppression, bar auto-resize ResizeObserver
+- **v0.0.26** — agent-review fix sweep: overlay autoresize observes .overlay-root not .overlay-bar (was clipping children + undoing manual resize), panic-log keep-last-500KB, download_and_install_update AtomicBool re-entry guard, oneClickBusy reset fallback, 🔥 aggressive chip
+
 ## ☀️ Wake-up summary — marathon retry 2026-05-26 04:52 → ~07:52 (~3h)
 
 **TL;DR:** 7 releases shipped (v0.0.10 → v0.0.16) closing every priority backlog item + 2 fresh-backlog items (#12 chip colors, #13 diagnostic dump). 244 cargo tests pass · clippy `-D warnings` clean · vite build clean. README has 4 fresh screenshots from running release. v0.0.5 slot-collision fix LIVE-VERIFIED on real hardware (6 tiles in 6 unique slots, gap reuse confirmed). A11y sweep across all 3 React surfaces. Diagnostic dump button with defensive secret-pattern redaction.
