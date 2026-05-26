@@ -8,15 +8,15 @@ Pet project, **v0.0.89**. Под одного пользователя. Без c
 
 Тонкий transparent бар сверху: статус Listening, 3 HUD-dot (audio/stt/ai), push-to-talk кнопки для mic и system audio, hotkey подсказка, шестерёнка Settings.
 
-### 🚀 New in v0.0.84 (QOL block 5, 18 releases)
+### 🚀 New in v0.0.89 (QOL block 5, 23 releases)
 
 Overlay bar chips (left → right after status): **$ cost · 🎙 STT lang · 🧠 AI model · 🎤/🔇 mic mute · 🎯 stealth · 📦 collapse-all · ⏱ timer · F1-F11 ℹ · ⭐ bookmark · 💡 followups · ⚙ Settings**. Click any chip to toggle; tooltip shows current state.
 
-Tile chrome (per-tile): **source label · ⏱ age · 🔄×N reload generation · 📌 pin · 🔄 reload · ▾/▴ collapse · × close**.
+Tile chrome (per-tile): **source label · ⏱ age · 🔄×N reload generation · 📌 pin · 🔄 reload · 🌐 translate · ▾/▴ collapse · × close**.
 
 New hotkeys: **F1** (help popover) · **F2** (cycle context profile) · **F7** (collapse all tiles).
 
-Quality-of-life backend additions: F4 palette searches user snippets via `/key` prefix, qa_cache (avoids duplicate AI calls for the same question within 10 min), auto-export session to Desktop on quit (opt-in), +📋 clipboard → meeting_context button.
+Quality-of-life backend additions: F4 palette searches user snippets via `/key` prefix, qa_cache (avoids duplicate AI calls for the same question within 10 min), auto-export session to Desktop on quit (opt-in), +📋 clipboard → meeting_context button, 🧪 mic test card in Settings → Audio.
 
 ### F4 — Knowledge Base palette (1643 entries)
 
