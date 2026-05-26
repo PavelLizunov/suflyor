@@ -22,6 +22,15 @@ use tile::SharedTiles;
 /// from None — first open_settings call sets it; close_settings reads + clears.
 static PRE_SETTINGS_POS: Mutex<Option<(f64, f64)>> = Mutex::new(None);
 
+/// v0.0.26: backend guard against concurrent download_and_install_update.
+/// JS-side `oneClickBusy` ref only protects the Settings React component;
+/// a second invocation from devtools or a programmatic invoke would race
+/// to write the same `%TEMP%/suflyor-update-<ver>.exe`. Two writers →
+/// the second hits a Windows sharing-violation on the file once the
+/// first spawned process opens it. Better to refuse re-entry cleanly.
+static UPDATE_IN_FLIGHT: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 // ── Caller-window guard ──────────────────────────────────────────────────
 //
 // Sensitive commands (config read/write, session lifecycle, screenshot,
@@ -1464,6 +1473,36 @@ async fn check_update(window: tauri::WebviewWindow) -> Result<UpdateInfo, String
 #[tauri::command]
 async fn download_and_install_update(window: tauri::WebviewWindow) -> Result<String, String> {
     assert_overlay(&window)?;
+    // v0.0.26: refuse re-entry. compare_exchange returns Ok if it was
+    // false → we win, set it true and proceed. Err means another call
+    // is already in flight. We do NOT unset on success — the spawned
+    // installer has the file mmap'd; a second call would hit Windows
+    // sharing-violation. We DO unset on error so the user can retry.
+    use std::sync::atomic::Ordering;
+    if UPDATE_IN_FLIGHT
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return Err("Update already in progress — wait for the installer to launch".into());
+    }
+    // RAII helper that ONLY unsets if we mark it for reset on the error
+    // path. Success path calls `mem::forget(guard)` so the flag stays set
+    // (intentional: stops re-entry until app quits + restarts).
+    struct ReleaseGuard {
+        reset: bool,
+    }
+    impl Drop for ReleaseGuard {
+        fn drop(&mut self) {
+            if self.reset {
+                UPDATE_IN_FLIGHT.store(false, Ordering::SeqCst);
+            }
+        }
+    }
+    let mut guard = ReleaseGuard { reset: true };
+    // Closure helper: any `?` returning early below leaves guard.reset=true
+    // and releases the lock so the user can retry. Right before the
+    // successful spawn we flip reset=false to keep the lock.
+
     let current = env!("CARGO_PKG_VERSION");
     let api_url = format!(
         "https://api.github.com/repos/{owner}/{name}/releases/latest",
@@ -1549,6 +1588,10 @@ async fn download_and_install_update(window: tauri::WebviewWindow) -> Result<Str
         .spawn()
         .map_err(|e| format!("spawn installer failed: {e}"))?;
 
+    // v0.0.26: spawn succeeded — keep the UPDATE_IN_FLIGHT lock SET so
+    // a second invoke can't race against the running installer for the
+    // same file. The lock naturally clears when the app quits 2s later.
+    guard.reset = false;
     Ok(installer_path.to_string_lossy().to_string())
 }
 
@@ -1770,12 +1813,28 @@ pub fn run() {
             if let Some(parent) = path.parent() {
                 let _ = std::fs::create_dir_all(parent);
             }
-            // Append, never truncate — we want history across sessions.
-            // Cap file at 1MB; truncate from the front if it grows past
-            // (rare in practice; one panic = ~200 bytes).
+            // v0.0.26: KEEP-LAST-N rotation instead of full delete.
+            // Previously remove_file at 1MB wiped history right when the
+            // user might need it most (e.g. cascading panics). Now: read
+            // file, keep last ~500KB worth (rough — split on \n\n which
+            // is the entry separator), rewrite. The very panic that just
+            // tripped the size check gets appended below.
             if let Ok(meta) = std::fs::metadata(&path) {
                 if meta.len() > 1_000_000 {
-                    let _ = std::fs::remove_file(&path);
+                    if let Ok(s) = std::fs::read_to_string(&path) {
+                        // Keep latter half. Find a clean boundary (entry
+                        // separator is "\n\n" per the format below).
+                        let start = s.len().saturating_sub(500_000);
+                        let tail = s[start..]
+                            .find("\n\n")
+                            .map(|i| &s[start + i + 2..])
+                            .unwrap_or(&s[start..]);
+                        let _ = std::fs::write(&path, tail);
+                    } else {
+                        // If we can't even read it, fall back to delete
+                        // so writes don't keep failing on a broken file.
+                        let _ = std::fs::remove_file(&path);
+                    }
                 }
             }
             if let Ok(mut f) = std::fs::OpenOptions::new()

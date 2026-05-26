@@ -190,36 +190,47 @@ export default function Overlay() {
   // Hold latest answer for streaming concatenation without React batching loss.
   const answerRef = useRef("");
 
-  // v0.0.25: auto-resize overlay bar width based on actual content.
-  // User complaint: «Settings ⚙ уходит за пределы окна когда статус
-  // расширяется». Default 520px width was tight; with chips like
-  // «🟢 Listening 🟡 ⏱ rate-limited 💰 over budget» + HUD + buttons,
-  // the gear got clipped. ResizeObserver on overlay-bar → call
-  // window.setSize() to ≥ measured width + margin (cap 1200 so it
-  // doesn't grow ridiculous).
+  // v0.0.26: auto-resize overlay window based on actual content of
+  // overlay-root (which includes the bar + transcript-tail + answer-bubble
+  // siblings). v0.0.25 observed only the bar and hard-coded height=96 in
+  // setSize — that CLIPPED transcript-tail / answer-bubble (they grow
+  // downward below the bar) AND undid the user's manual vertical resize.
+  // Agent-review finding 2026-05-26.
+  //
+  // Now: ResizeObserver on overlay-root → measure BOTH width and height
+  // of the actual visible flex column. setSize preserves whatever vertical
+  // growth the children produced.
+  //
+  // Skipped when palette is open — the palette resize logic (see useEffect
+  // at line 110) sets its own size; observing here would race.
   const overlayBarRef = useRef<HTMLDivElement | null>(null);
+  const overlayRootRef = useRef<HTMLDivElement | null>(null);
+  const paletteOpenRef = useRef(paletteOpen);
+  useEffect(() => { paletteOpenRef.current = paletteOpen; }, [paletteOpen]);
   useEffect(() => {
-    if (!overlayBarRef.current) return;
+    if (!overlayRootRef.current) return;
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
-      const measured = entry.contentRect.width;
-      // +30px margin for padding + scrollbar/safety
-      const desiredW = Math.min(Math.max(measured + 30, 520), 1200);
-      // Don't resize if we're inside Settings (palette open also grows window).
-      if (window.location.search.includes("settings=1")) return;
+      if (paletteOpenRef.current) return; // palette has its own size logic
+      // contentRect doesn't include border. We add a small margin for
+      // padding + safety. Clamp to sane bounds.
+      const desiredW = Math.min(Math.max(Math.ceil(entry.contentRect.width) + 30, 520), 1200);
+      const desiredH = Math.min(Math.max(Math.ceil(entry.contentRect.height) + 4, 96), 900);
       getCurrentWindow().outerSize().then((sz) => {
         getCurrentWindow().scaleFactor().then((scale) => {
           const currentW = Math.round(sz.width / scale);
-          // Only resize on > 4px delta to dampen flicker.
-          if (Math.abs(currentW - desiredW) > 4) {
-            getCurrentWindow().setSize(new LogicalSize(desiredW, 96))
+          const currentH = Math.round(sz.height / scale);
+          // Only resize on > 4px delta on either axis to dampen flicker
+          // and to ignore sub-pixel measurement noise.
+          if (Math.abs(currentW - desiredW) > 4 || Math.abs(currentH - desiredH) > 4) {
+            getCurrentWindow().setSize(new LogicalSize(desiredW, desiredH))
               .catch((err) => console.warn("overlay autoresize:", err));
           }
         }).catch(() => {});
       }).catch(() => {});
     });
-    ro.observe(overlayBarRef.current);
+    ro.observe(overlayRootRef.current);
     return () => ro.disconnect();
   }, []);
 
@@ -286,15 +297,36 @@ export default function Overlay() {
     return () => document.body.classList.remove("overlay");
   }, []);
 
-  // Load ask-mode from config once on mount. Default 'hold' (push-to-talk).
+  // v0.0.26: also pull auto_tile_every_line so we can show a 🔥 chip
+  // in the bar when aggressive mode is on. User easily forgets this is
+  // enabled between sessions; without a visible reminder cost can creep
+  // up unexpectedly.
+  const [aggressive, setAggressive] = useState(false);
+
+  // Load ask-mode + aggressive flag from config once on mount.
   useEffect(() => {
-    invoke<{ manual_ask_mode?: string }>("get_config")
+    invoke<{ manual_ask_mode?: string; auto_tile_every_line?: boolean }>("get_config")
       .then((c) => {
         if (!mountedRef.current) return;
         const mode = c.manual_ask_mode === "click" ? "click" : "hold";
         setAskMode(mode);
+        setAggressive(Boolean(c.auto_tile_every_line));
       })
       .catch((e) => console.warn("get_config:", e));
+  }, []);
+
+  // Re-read aggressive flag when Settings window closes (user may have
+  // toggled it). Use the same window-focus event we already listen to
+  // for the Settings stale-state heal pattern.
+  useEffect(() => {
+    const onFocus = () => {
+      if (!mountedRef.current) return;
+      invoke<{ auto_tile_every_line?: boolean }>("get_config")
+        .then((c) => mountedRef.current && setAggressive(Boolean(c.auto_tile_every_line)))
+        .catch(() => {});
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, []);
 
   // Push-to-talk handlers — start on mousedown, stop on mouseup/leave.
@@ -633,7 +665,7 @@ export default function Overlay() {
     .join("  ");
 
   return (
-    <div className="overlay-root">
+    <div className="overlay-root" ref={overlayRootRef}>
       <div
         ref={overlayBarRef}
         className="overlay-bar"
@@ -711,6 +743,23 @@ export default function Overlay() {
           </span>
         )}
         {hasScreenshot && <span className="hint" aria-label="Screenshot ready">📸 ready</span>}
+        {aggressive && (
+          <span
+            className="hint"
+            style={{
+              color: "#fb923c",
+              fontWeight: 600,
+              padding: "0 4px",
+              borderRadius: 4,
+              background: "rgba(251, 146, 60, 0.15)",
+              border: "1px solid rgba(251, 146, 60, 0.4)",
+            }}
+            aria-label="Aggressive mode is enabled — tile spawns on every transcript line"
+            title="🔥 AGGRESSIVE MODE ON — тайл на КАЖДУЮ строку транскрипта. AI cost растёт быстро (~$4-5/час непрерывной речи). Отключить: Settings → 🪟 Auto-tiles → снять галку «спавнить тайл на каждую строку»"
+          >
+            🔥 aggressive
+          </span>
+        )}
         {rateLimited && (
           <span className="hint" style={{ color: "#facc15" }} aria-label="Rate limited">
             ⏱ rate-limited

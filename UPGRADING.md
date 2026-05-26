@@ -11,6 +11,37 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.26 (2026-05-26)
+
+5 fixes from a code-review agent pass on v0.0.20-v0.0.25 diff:
+
+- **(P1) Overlay auto-resize no longer clips transcript-tail / answer-bubble.**
+  v0.0.25 hard-coded `setSize(width, 96)` whenever the bar's width
+  changed → killed the user's manual vertical drag AND clipped the
+  growing children below the bar. Now ResizeObserver watches the whole
+  `.overlay-root` (not just `.overlay-bar`) and sets both width AND
+  measured height.
+- **(P1) runtime-panics.log keep-last-500KB instead of full delete.**
+  v0.0.21's rotation removed the file at 1 MB — wiped history right
+  when the user might need it most. Now seeks to a clean entry
+  boundary and rewrites the latter half.
+- **(P1) `download_and_install_update` backend re-entry guard.**
+  Static `AtomicBool` flips on entry; second concurrent call (e.g. from
+  devtools) returns «Update already in progress» instead of racing for
+  the same `%TEMP%/suflyor-update-<ver>.exe` and hitting a Windows
+  sharing-violation. Lock stays set on successful spawn (intentional
+  — the installer has the file mmap'd until app quits).
+- **(P1) `oneClickBusy` Settings button no longer stuck on quit_app
+  double-failure.** Edge case: both `quit_app` AND `window.close()` fail
+  → flag was never reset → button stuck at «⏳ Скачиваю…» forever.
+  Now resets + shows a toast pointing to %TEMP%.
+- **(New) 🔥 aggressive chip in overlay-bar** when `auto_tile_every_line`
+  is on. User easily forgets between sessions; without it cost can
+  unexpectedly creep to ~$5/hour. Reads config on mount and on
+  window-focus (so toggling in Settings updates it on return).
+- (Polish) Settings copy for aggressive mode now states the concrete
+  «≈$5/час» estimate instead of vague «Расход AI взлетит».
+
 ### → v0.0.25 (2026-05-26)
 
 Three more UX bugs from live session (continuation of v0.0.24 sweep):

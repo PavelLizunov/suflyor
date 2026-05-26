@@ -752,7 +752,7 @@ export default function Settings() {
             <strong>🔥 AGGRESSIVE MODE — спавнить тайл на каждую строку транскрипта (v0.0.18+)</strong>
           </label>
           <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
-            <strong>OFF по умолчанию.</strong> Включи если детектор молчит а ты хочешь чтобы AI отвечал на ВСЁ что слышно. Bypass'ит «вопрос/не вопрос» проверку — каждая строка от Whisper (длиннее 5 символов) → тайл. Rate-limit бампается с 15 до 60 тайлов/мин. Расход AI взлетит соответственно — но cost cap всё равно soft warning, не блокирует. Используй вместе с «Детектор игнорирует ваш голос» (можно отключить если хочешь подсказки и на свои фразы).
+            <strong>OFF по умолчанию.</strong> Включи если детектор молчит а ты хочешь чтобы AI отвечал на ВСЁ что слышно. Bypass'ит «вопрос/не вопрос» проверку — каждая строка от Whisper (длиннее 5 символов) → тайл. Rate-limit бампается с 15 до 60 тайлов/мин. <strong>Стоит ≈$5/час непрерывной речи</strong> на Haiku 4.5 (60 тайлов × ~700 токенов × Haiku price). Soft cost warning остаётся включён, но не блокирует. v0.0.26+: overlay-бар покажет 🔥 чип когда включён — не забудешь.
           </div>
         </div>
         <div className="field">
@@ -1284,7 +1284,17 @@ export default function Settings() {
                           // Fallback if quit_app refuses: hard exit by
                           // closing the overlay window which is the only
                           // main window — Tauri will tear the app down.
-                          getCurrentWindow().close().catch(() => {});
+                          getCurrentWindow().close().catch(() => {
+                            // v0.0.26: if BOTH quit_app and window.close
+                            // fail (extremely rare — would mean Tauri is
+                            // totally broken), unstick the button so user
+                            // isn't trapped at "⏳ Скачиваю…" forever and
+                            // can at least retry / report it.
+                            if (mountedRef.current) {
+                              setOneClickBusy(false);
+                              showToast("err", "Не удалось выйти — закрой программу вручную, установщик в %TEMP%");
+                            }
+                          });
                         });
                       }, 2000);
                     } catch (e) {
