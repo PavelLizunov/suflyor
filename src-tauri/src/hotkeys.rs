@@ -140,6 +140,15 @@ pub fn register_all(app: &AppHandle, _cfg: SharedConfig) -> Vec<String> {
         }
     });
 
+    // v0.0.83: F7 — emit a toggle event for bulk-collapse tiles. The
+    // overlay frontend mirrors the 📦 chip click handler, flipping
+    // `allCollapsed` and emitting `tile:collapse-all` or
+    // `tile:expand-all` to all windows.
+    let app_h = app.clone();
+    try_register(app, "F7 (collapse all tiles)", Code::F7, &mut warnings, move || {
+        let _ = app_h.emit_to("overlay", "hotkey:collapse-all", ());
+    });
+
     // v0.0.77: F1 — toggle the hotkey-help popover. Same UX as clicking
     // the ℹ button in the overlay bar. Useful when the user forgets
     // which keys are bound and wants the cheatsheet on top of their

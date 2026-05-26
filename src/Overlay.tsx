@@ -875,6 +875,21 @@ export default function Overlay() {
       })
     );
 
+    // v0.0.83: F7 mirrors the 📦 collapse-all chip from v0.0.82.
+    // Backend just dispatches the event; here we flip allCollapsed
+    // and emit the actual collapse/expand broadcast that tiles
+    // listen for. Same toggle semantics as the chip click.
+    unlistens.push(
+      listen<void>("hotkey:collapse-all", () => {
+        setAllCollapsed((v) => {
+          const next = !v;
+          emit(next ? "tile:collapse-all" : "tile:expand-all")
+            .catch((e) => console.warn("F7 collapse-all emit:", e));
+          return next;
+        });
+      })
+    );
+
     // v0.0.80: F2 cycles through saved context profiles. Backend has
     // already applied the switch (cfg + save). Frontend just shows a
     // toast so the user knows what profile is now active.

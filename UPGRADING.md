@@ -11,6 +11,20 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.83 (2026-05-26) — QOL block 5, #31
+
+**F7 — bulk collapse/expand all tiles (hotkey mirror of v0.0.82 📦 chip).**
+
+Same toggle semantics, just keyboard-accessible. F7 keeps your mouse on
+your work — useful mid-meeting when you want to clear tile clutter
+without reaching for the bar.
+
+`hotkeys.rs` registers F7 alongside F1/F2/F3/F4/F6/F8/F9/F10/F11.
+Frontend listens for `hotkey:collapse-all`, flips local `allCollapsed`
+state, emits the actual broadcast that tiles listen for.
+
+README hotkey table updated.
+
 ### → v0.0.82 (2026-05-26) — QOL block 5, #30
 
 **📦 Bulk collapse/expand all tiles from overlay bar.**

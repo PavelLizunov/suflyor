@@ -2,7 +2,7 @@
 
 Личный AI-overlay для технических собесов под Windows. Слушает звук, транскрибирует через Whisper, спрашивает Claude, показывает ответ во второстепенном окошке.
 
-Pet project, **v0.0.82**. Под одного пользователя. Без code signing, без telemetry. **🇷🇺 Русский / 🇬🇧 English** UI с переключением на лету.
+Pet project, **v0.0.83**. Под одного пользователя. Без code signing, без telemetry. **🇷🇺 Русский / 🇬🇧 English** UI с переключением на лету.
 
 ![overlay bar](docs/screenshots/overlay-bar.png)
 
@@ -91,6 +91,7 @@ Settings → 🆙 Обновления → «📊 Диагностический
 | F3 | Reask последнего вопроса |
 | F4 | KB palette (поиск 1643 entries) |
 | F6 | Manual tile из последней реплики |
+| F7 | Collapse/expand all tiles (mirrors 📦 chip) |
 | F8 | Pause/resume сессии |
 | F9 | Ask AI |
 | F10 | Screenshot для следующего ask |
