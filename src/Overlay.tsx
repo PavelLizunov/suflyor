@@ -738,11 +738,17 @@ export default function Overlay() {
             autoCapitalize="none"
           />
           {paletteResults.length > 0 && (
-            <ul className="kb-palette-list">
+            <ul
+              className="kb-palette-list"
+              role="listbox"
+              aria-label="Knowledge base search results"
+            >
               {paletteResults.map((h, i) => (
                 <li
                   key={h.source + ":" + h.key + ":" + i}
                   className={"kb-palette-item" + (i === paletteIdx ? " active" : "")}
+                  role="option"
+                  aria-selected={i === paletteIdx}
                   onMouseEnter={() => setPaletteIdx(i)}
                   onClick={() => void expandSelected()}
                 >
@@ -754,7 +760,7 @@ export default function Overlay() {
             </ul>
           )}
           {paletteQuery && paletteResults.length === 0 && (
-            <div className="kb-palette-empty">no matches for «{paletteQuery}»</div>
+            <div className="kb-palette-empty" role="status" aria-live="polite">no matches for «{paletteQuery}»</div>
           )}
         </div>
       )}
