@@ -11,6 +11,25 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.53 (2026-05-26) — QOL block 5
+
+User: «продолжай оверлей и подумай что еще можно сделать, мне нужно
+6 часов бесперывной работы проверок и твоих фонтазий QOL доработак».
+Starting marathon block 5 — quality-of-life sprint.
+
+**v0.0.53: syntax highlighting in tile code blocks.**
+
+Tiles render lots of code (kubectl, sql, bash one-liners) — previously
+just plain monospace. Now uses `rehype-highlight` + `highlight.js`
+github-dark theme. Auto-detects language from fence info-string or
+content. Composes with existing `.tile-body.markdown pre` tinting
+(background override `.hljs { background: transparent !important }`
+so our charcoal bg wins, syntax colors layer on top).
+
+Added deps: `rehype-highlight ^7.0.2`, `highlight.js ^11.11.1` (+ 4
+transitive). Total bundle size delta: ~95 KB gzip (full highlight.js
+common-languages pack — covers bash/js/ts/sql/yaml/json/python/rust/go).
+
 ### → v0.0.52 (2026-05-26)
 
 i18n marathon close-out — translates the previously-deferred **Snippets

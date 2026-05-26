@@ -512,6 +512,16 @@ kbd {
   padding: 0;
 }
 
+/* v0.0.53: rehype-highlight + github-dark theme adds .hljs class to
+   <code>. The theme has its own background that fights our charcoal
+   tint. Override so the tile's pre background wins and the syntax
+   colors blend with our chrome. */
+.tile-body.markdown pre code.hljs,
+.tile-body.markdown code.hljs {
+  background: transparent !important;
+  padding: 0;
+}
+
 .tile-body.markdown a {
   color: color-mix(in srgb, var(--c-auto) 80%, white);
   text-decoration: underline;

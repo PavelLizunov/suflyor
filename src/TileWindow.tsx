@@ -3,6 +3,11 @@ import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
+// v0.0.53: highlight.js stylesheet. github-dark works well on our
+// dark-themed tiles. Loaded as a CSS module so vite bundles it into
+// the dist without us having to manually copy hljs CSS into styles.css.
+import "highlight.js/styles/github-dark.css";
 import { t, resolveLang, type Lang } from "./i18n";
 
 export default function TileWindow() {
@@ -234,7 +239,11 @@ export default function TileWindow() {
       </div>
       <div className="tile-q" title={question}>{renderWithHighlights(question)}</div>
       <div className="tile-body markdown" role="region" aria-label="AI answer body">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}
+          components={markdownComponents}
+        >
           {answer}
         </ReactMarkdown>
       </div>
