@@ -1,0 +1,221 @@
+// Phase 0 Day 1 — Replay viewer scaffold.
+//
+// Mirrors the structure of src/Replay.tsx in the React app:
+//   - top bar: title + session combobox + back button
+//   - filter chip row: one chip per distinct event kind
+//   - timeline: vertical scrollable list of events
+//   - footer: counts + cumulative cost
+//
+// Day 1 ships static placeholder data. Day 2 wires real backend
+// (list_sessions + load_session via shared replay_backend.rs module).
+
+import { ComboBox, ScrollView, Button } from "std-widgets.slint";
+
+// Event row data passed in from Rust. `accent` is the left-border color
+// derived from `kind` on the Rust side so the .slint stays presentation-only.
+export struct ReplayEvent {
+    kind: string,
+    time: string,
+    label: string,
+    body: string,
+    accent: color,
+}
+
+// One filter chip with its kind name, count, and current hidden state.
+export struct FilterChip {
+    kind: string,
+    count: int,
+    hidden: bool,
+    accent: color,
+}
+
+export component MainWindow inherits Window {
+    title: "Replay — Slint pilot (Phase 0)";
+    preferred-width: 920px;
+    preferred-height: 620px;
+    min-width: 560px;
+    min-height: 360px;
+    background: #14161e;
+
+    // ===== Properties driven from Rust =====
+
+    // Session filenames shown in the combobox.
+    in-out property <[string]> session-labels: [
+        "(no sessions loaded — Day 2 will wire backend)",
+    ];
+    in-out property <int> selected-session-index: 0;
+
+    // Distinct event kinds with their counts. Click toggles `hidden`.
+    in-out property <[FilterChip]> filter-chips: [];
+
+    // Pre-filtered list of events from the selected session.
+    in-out property <[ReplayEvent]> events: [];
+
+    // Footer stats.
+    in-out property <int> total-events: 0;
+    in-out property <int> ai-response-count: 0;
+    in-out property <string> total-cost-display: "—";
+
+    // ===== Callbacks fired into Rust =====
+    callback session-changed(int);
+    callback chip-clicked(int);
+    callback reset-filter();
+    callback back-clicked();
+
+    // ===== Layout =====
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+
+        // ---------- Header ----------
+        HorizontalLayout {
+            spacing: 12px;
+            alignment: start;
+            Text {
+                text: "Replay";
+                font-size: 18px;
+                font-weight: 700;
+                color: #e8e8ec;
+                vertical-alignment: center;
+            }
+            session-combo := ComboBox {
+                model: root.session-labels;
+                current-index <=> root.selected-session-index;
+                min-width: 360px;
+                selected(_) => { root.session-changed(self.current-index); }
+            }
+            Rectangle { } // spring spacer
+            Button {
+                text: "Back";
+                clicked => { root.back-clicked(); }
+            }
+        }
+
+        // ---------- Filter chips ----------
+        if root.filter-chips.length > 0 : HorizontalLayout {
+            spacing: 6px;
+            alignment: start;
+            Text {
+                text: "Filter:";
+                font-size: 11px;
+                color: #999;
+                vertical-alignment: center;
+            }
+            for chip[i] in root.filter-chips : Rectangle {
+                background: chip.hidden ? transparent : #1f2230;
+                border-color: chip.hidden ? #3a3c44 : chip.accent;
+                border-width: 1px;
+                border-radius: 12px;
+                height: 22px;
+                horizontal-stretch: 0;
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: 0px;
+                    Text {
+                        text: chip.kind + " · " + chip.count;
+                        font-size: 11px;
+                        color: chip.hidden ? #666 : #e8e8ec;
+                        vertical-alignment: center;
+                    }
+                }
+                TouchArea { clicked => { root.chip-clicked(i); } }
+            }
+            // "Reset filter" button only when at least one chip is hidden.
+            // Computing "any hidden" inline is awkward in Slint; Rust side
+            // exposes total-events vs. visible events count, but for the
+            // pilot we always show reset and let it no-op if nothing hidden.
+            Rectangle {
+                background: transparent;
+                border-color: #6366f1;
+                border-width: 1px;
+                border-radius: 12px;
+                height: 22px;
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    Text {
+                        text: "reset";
+                        font-size: 11px;
+                        color: #6366f1;
+                        vertical-alignment: center;
+                    }
+                }
+                TouchArea { clicked => { root.reset-filter(); } }
+            }
+        }
+
+        // ---------- Timeline ----------
+        ScrollView {
+            vertical-stretch: 1;
+            VerticalLayout {
+                spacing: 4px;
+                for ev[i] in root.events : Rectangle {
+                    background: #181a23;
+                    border-radius: 4px;
+                    border-width: 0px;
+                    height: 28px;
+                    // Left accent stripe.
+                    Rectangle {
+                        x: 0;
+                        width: 3px;
+                        background: ev.accent;
+                    }
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 8px;
+                        spacing: 10px;
+                        Text {
+                            text: ev.time;
+                            font-size: 11px;
+                            color: #888;
+                            width: 70px;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: ev.label;
+                            font-size: 11px;
+                            color: #e8e8ec;
+                            font-weight: 600;
+                            width: 140px;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                        Text {
+                            text: ev.body;
+                            font-size: 12px;
+                            color: #c8c8cc;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                }
+                if root.events.length == 0 : Text {
+                    text: "(no events — choose a session above)";
+                    font-size: 12px;
+                    color: #666;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+
+        // ---------- Footer ----------
+        HorizontalLayout {
+            spacing: 16px;
+            Text {
+                text: root.total-events + " events · " + root.ai-response-count + " AI responses";
+                font-size: 11px;
+                color: #999;
+                vertical-alignment: center;
+            }
+            Rectangle { } // spring spacer
+            Text {
+                text: "Total cost: $" + root.total-cost-display;
+                font-size: 11px;
+                color: #999;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

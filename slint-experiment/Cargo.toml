@@ -1,0 +1,43 @@
+# Phase 0 pilot crate — standalone (NOT a workspace member of src-tauri/).
+# Rationale: src-tauri/Cargo.toml is a standalone package, not a workspace.
+# Converting it to a workspace mid-pilot would risk the existing build.
+# This crate sits as a sibling at the repo root and compiles independently.
+# If the pilot greenlights Phase 1, the repo gets restructured then.
+[package]
+name = "slint-replay"
+version = "0.1.0"
+edition = "2021"
+description = "Phase 0 Slint pilot — port of the Replay viewer for stack evaluation"
+publish = false
+
+[[bin]]
+name = "slint-replay"
+path = "src/main.rs"
+
+[build-dependencies]
+# Compiles ui/*.slint into Rust at build time. include_modules!() in
+# src/main.rs pulls the generated code in.
+slint-build = "1.16"
+
+[dependencies]
+# Default features include the winit + skia backends, which on Windows
+# need no system deps (no GTK/X11). Suitable for the pilot.
+slint = "1.16"
+
+[dev-dependencies]
+# i-slint-backend-testing is the OFFICIAL test framework (not "slint-testing").
+# `mcp` feature enables the embedded MCP server; with SLINT_EMIT_DEBUG_INFO=1
+# SLINT_MCP_PORT=8080, Claude Code can inspect the live UI tree, take
+# screenshots, click, and type — replaces our visual_check.ps1 + computer-use
+# flow once wired.
+i-slint-backend-testing = { version = "1.16", features = ["mcp"] }
+
+[lints.clippy]
+# Mirror src-tauri/src/lib.rs (Tier 3 baseline). `deny` (not `forbid`) so
+# Slint's generated code can use the inner `#[allow(...)]` it needs — the
+# VTable macros emit `unsafe` blocks that `forbid` cannot tolerate.
+# `unsafe_code = "forbid"` deliberately omitted: the slint-build output
+# requires unsafe and there's no way around it.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"

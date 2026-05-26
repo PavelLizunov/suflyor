@@ -29,6 +29,9 @@ src-tauri/target/
 # Tauri generated bindings (rebuilt automatically)
 src-tauri/gen/
 
+# Slint pilot crate build artifacts (Phase 0)
+slint-experiment/target/
+
 # Autonomous mode internal state (hook-managed, machine-local)
 .claude/autonomous_active
 .claude/_progress_counter
