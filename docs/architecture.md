@@ -117,7 +117,7 @@ Unprotected commands (read-only or low-blast-radius): `list_audio_devices`, `kb_
 | `src/TileWindow.tsx` | 133 | Q/A tile card with markdown |
 | `src/Replay.tsx` | 439 | JSONL journal timeline viewer |
 
-## Test coverage (239 tests as of marathon retry 2026-05-26 ~06:30)
+## Test coverage (244 lib tests + 25 journal-eval tests as of v0.0.15 release)
 
 Strong coverage:
 - Config save/load + serde defaults + pricing-table sync (15 tests)
@@ -137,6 +137,8 @@ Strong coverage:
 - Audio — WAV roundtrip, resample, decimator (~10 tests)
 - **blank_share_secrets** (10 tests) — security-critical: each share-export
   field gets blanked / each kept field survives / idempotent
+- **sanitize_diagnostic_text** (5 tests) — v0.0.15: redacts gsk_/Bearer/sk-
+  patterns from crash report + journal tail before dump_diagnostics writes
 - **is_permanent_ai_error** (8 tests) — retry classifier gate (400/401/403/
   404/413 permanent; 5xx/429/network transient; empty defensive)
 - **Tile slot picker** (4 tests) — gap-reuse after middle close, oldest
