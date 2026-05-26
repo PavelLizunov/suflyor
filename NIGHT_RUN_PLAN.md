@@ -1,5 +1,25 @@
 # Autonomous work plan
 
+## 🏃 Marathon block 3 — extended to 21:12 per user «запускай 6 часовую сессию»
+
+**Snapshot @ 15:30:** v0.0.35 just shipped (passed all 6 gates of new
+RELEASE_CHECKLIST.md). Bug-hunt agent running on v0.0.30→v0.0.35
+diff in background. Repo clean, 4 fresh commits pushed (v0.0.35
+release + post-mortem doc + settings polish plan + CLAUDE.md update +
+KB shell entries). 5h40m left.
+
+**Plan for the next 6h:**
+1. **15:30-16:00**: react to bug-hunt agent findings → fix → ship v0.0.36
+   if needed
+2. **16:00-18:00**: Settings polish micro-releases per
+   `docs/SETTINGS_POLISH_PLAN.md` (one panel per release, full 6-gate
+   per release). Order: stealth → coaching → interface → hotkeys.
+3. **18:00-19:30**: feature work — config UI for tile-size %,
+   monitor-pick dropdown, hotkey edit UI
+4. **19:30-21:00**: final agent-review pass on the full block; fold
+   findings; spawn fresh-eyes agent for security/perf review
+5. **21:00-21:12**: documentation pass, final commit
+
 ## ☀️ Live-iteration summary — marathon block 2 (extended to 16:00)
 
 **TL;DR (rolling):** 25 releases shipped this session (v0.0.10 → v0.0.35, v0.0.32 folded). Added strict release-verification methodology in `RELEASE_CHECKLIST.md` after v0.0.34 shipped a P0 infinite-grow bug — going forward, no release without a computer-use smoke test. Live user feedback drove rapid iteration — F8 crash (real Rust panic from runtime-panics.log, fixed v0.0.22), tile UX (size/transparency/double-click maximize, fixed v0.0.24-25), one-click update (v0.0.23), aggressive-mode opt-in (v0.0.18) with visible 🔥 chip (v0.0.26), percentage-based tile sizing (v0.0.29), Settings sidebar redesign per Claude Design handoff (v0.0.30) + sidebar bottom-pin + overlay width cap (v0.0.31). 255 cargo tests pass through every release · clippy `-D warnings` clean · vite build clean throughout. Three agent-review passes + 1 computer-use live test caught 14 real issues; all fixed inline.
