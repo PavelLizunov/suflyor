@@ -156,6 +156,37 @@ The script does the boring infra — the actual eyeball gate is Claude
 reading the PNG via the `Read` tool. Without that final read, layer 6
 is just bookkeeping. See `scripts/visual_check.ps1`.
 
+### Tier 2 status — strict TS + ESLint adopted 2026-05-27
+
+**TypeScript:** all flags from the suflyor spec ARE enabled
+(`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`,
+`noImplicitOverride`, `noImplicitReturns`, `noPropertyAccessFromIndexSignature`,
+`useUnknownInCatchVariables`, `allowUnreachableCode: false`,
+`allowUnusedLabels: false`). `tsc --noEmit` is GREEN.
+
+**ESLint:** `eslint.config.js` extends `tseslint.configs.strictTypeChecked`
++ `stylisticTypeChecked` + `react-hooks`. Spec-required rules ON:
+`no-explicit-any`, `no-non-null-assertion`, `consistent-type-assertions:
+never`, `switch-exhaustiveness-check`, `react-hooks/exhaustive-deps`,
+plus `no-restricted-syntax` for `Date.now()` / `Math.random()` (use
+`src/clock.ts` instead).
+
+**Pragmatic downgrades** (documented in `eslint.config.js`):
+`restrict-template-expressions`, `no-unnecessary-condition`,
+`no-empty-function`, `prefer-nullish-coalescing`, `no-invalid-void-type`
+— off because the overlay marathon left a long tail of idiom-mismatch
+that aren't safety issues. Pin these in the methodology backlog.
+
+**Residual error count:** 34. These are real (floating promises, type
+assertions, plus-coercion bugs). Backlog — fix as the surrounding code
+is touched. NOT YET wired into `git-gate.ps1` because gating on 34
+existing errors would block all commits. Re-evaluate Tier 2.5: once
+the residual drops to 0, add `npx eslint src` to git-gate's push gate
+alongside `tsc --noEmit`.
+
+Run `npm run lint` to see current state. `npm run lint:fix` for the
+~117 auto-fixable subset.
+
 ### Lessons learned (the "we got burned" list)
 
 1. **Don't skip a layer.** Every time I did during the marathon,

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { now } from "./clock";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow, currentMonitor, LogicalSize } from "@tauri-apps/api/window";
@@ -6,11 +7,11 @@ import { t, resolveLang, type Lang } from "./i18n";
 
 type AudioSource = "system" | "mic";
 
-type TranscriptLine = {
+interface TranscriptLine {
   source: AudioSource;
   text: string;
   timestamp_ms: number;
-};
+}
 
 type AiEvent =
   | { type: "start"; id: string }
@@ -21,23 +22,23 @@ type AiEvent =
 type Status = "stopped" | "listening" | "thinking" | "answering" | "error" | "paused";
 
 type HealthState = "ok" | "degraded" | "down" | "idle";
-type HealthPayload = {
+interface HealthPayload {
   audio: HealthState;
   stt: HealthState;
   ai: HealthState;
   audio_age_ms: number | null;
   stt_age_ms: number | null;
   ai_age_ms: number | null;
-};
+}
 
 type SpeechPace = "low" | "ok" | "fast" | "idle";
-type SpeechCoach = {
+interface SpeechCoach {
   words_60s: number;
   fillers_60s: number;
   filler_per_100: number | null;
   wpm: number | null;
   pace: SpeechPace;
-};
+}
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 
@@ -121,7 +122,7 @@ export default function Overlay() {
   // emitted yet (pre-session or just after start).
   const [coach, setCoach] = useState<SpeechCoach | null>(null);
   // KB palette state — opened by F4 global hotkey.
-  type KBHit = { key: string; heading: string; body: string; source: string };
+  interface KBHit { key: string; heading: string; body: string; source: string }
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [paletteResults, setPaletteResults] = useState<KBHit[]>([]);
@@ -177,7 +178,7 @@ export default function Overlay() {
     const t = setTimeout(() => {
       if (q.startsWith("/")) {
         const needle = q.slice(1).toLowerCase().trim();
-        invoke<Array<{ key: string; title?: string; body?: string }>>("list_snippets")
+        invoke<{ key: string; title?: string; body?: string }[]>("list_snippets")
           .then((all) => {
             if (cancelled || !mountedRef.current) return;
             const filtered = all
@@ -196,7 +197,7 @@ export default function Overlay() {
             setPaletteResults(filtered);
             setPaletteIdx(0);
           })
-          .catch((e) => {
+          .catch((e: unknown) => {
             if (cancelled || !mountedRef.current) return;
             console.warn("list_snippets:", e);
             setPaletteResults([]);
@@ -208,7 +209,7 @@ export default function Overlay() {
             setPaletteResults(res);
             setPaletteIdx(0);
           })
-          .catch((e) => {
+          .catch((e: unknown) => {
             if (cancelled || !mountedRef.current) return;
             console.warn("kb_search:", e);
             setPaletteResults([]);
@@ -237,12 +238,12 @@ export default function Overlay() {
             h: Math.round(size.height / scale),
           };
           await w.setSize(new LogicalSize(Math.max(originalSizeRef.current.w, 540), 380));
-        } catch (e) { console.warn("palette resize:", e); }
+        } catch (e: unknown) { console.warn("palette resize:", e); }
       })();
     } else if (originalSizeRef.current) {
       const { w: w0, h: h0 } = originalSizeRef.current;
       originalSizeRef.current = null;
-      w.setSize(new LogicalSize(w0, h0)).catch((e) => console.warn("palette restore:", e));
+      w.setSize(new LogicalSize(w0, h0)).catch((e: unknown) => { console.warn("palette restore:", e); });
     }
   }, [paletteOpen]);
   // v0.0.36 (agent P0): hotkey-help popover is `position: absolute`
@@ -267,12 +268,12 @@ export default function Overlay() {
           // v0.0.36 smoke test: 500 cut off the bottom 2 indicator
           // rows (💰 over budget, 💰 $). Bumped to 600 with slack.
           await w.setSize(new LogicalSize(originalHelpSizeRef.current.w, 600));
-        } catch (e) { console.warn("help-popover resize:", e); }
+        } catch (e: unknown) { console.warn("help-popover resize:", e); }
       })();
     } else if (originalHelpSizeRef.current) {
       const { w: w0, h: h0 } = originalHelpSizeRef.current;
       originalHelpSizeRef.current = null;
-      w.setSize(new LogicalSize(w0, h0)).catch((e) => console.warn("help-popover restore:", e));
+      w.setSize(new LogicalSize(w0, h0)).catch((e: unknown) => { console.warn("help-popover restore:", e); });
     }
   }, [hotkeyHelpOpen]);
   // Esc-anywhere closes the palette — the input's own onKeyDown only fires
@@ -290,7 +291,7 @@ export default function Overlay() {
       }
     };
     window.addEventListener("keydown", handler, true);
-    return () => window.removeEventListener("keydown", handler, true);
+    return () => { window.removeEventListener("keydown", handler, true); };
   }, [paletteOpen]);
   const closePalette = () => {
     setPaletteOpen(false);
@@ -330,7 +331,7 @@ export default function Overlay() {
           if (mountedRef.current) setErrorText("");
           errorTimerRef.current = null;
         }, 4000);
-      } catch (e) {
+      } catch (e: unknown) {
         setErrorText(String(e));
         if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
         errorTimerRef.current = setTimeout(() => {
@@ -355,7 +356,7 @@ export default function Overlay() {
         await invoke("kb_spawn", { key: hit.key });
       }
       closePalette();
-    } catch (e) {
+    } catch (e: unknown) {
       console.warn("palette expand:", e);
     }
   };
@@ -505,13 +506,13 @@ export default function Overlay() {
           if (isFirstFit) initialFitDoneRef.current = true;
           if (Math.abs(currentW - targetW) > 4 || Math.abs(currentH - desiredH) > 4) {
             getCurrentWindow().setSize(new LogicalSize(targetW, desiredH))
-              .catch((err) => console.warn("overlay autoresize:", err));
+              .catch((err: unknown) => { console.warn("overlay autoresize:", err); });
           }
         }).catch(() => {});
       }).catch(() => {});
     });
     ro.observe(overlayRootRef.current);
-    return () => ro.disconnect();
+    return () => { ro.disconnect(); };
   }, [paletteOpen, hotkeyHelpOpen]);
 
   // v0.0.25: re-assert always-on-top every 3s. User complaint: overlay
@@ -529,7 +530,7 @@ export default function Overlay() {
     };
     tick();
     const id = window.setInterval(tick, 3000);
-    return () => window.clearInterval(id);
+    return () => { window.clearInterval(id); };
   }, []);
 
   // Cleanup all timers + flag on unmount, in ONE place.
@@ -554,9 +555,9 @@ export default function Overlay() {
     }
     setElapsedSec(0);
     const id = setInterval(() => {
-      setElapsedSec((Date.now() - recordingStartMs) / 1000);
+      setElapsedSec((now() - recordingStartMs) / 1000);
     }, 100);
-    return () => clearInterval(id);
+    return () => { clearInterval(id); };
   }, [recordingSource, recordingStartMs]);
 
   useEffect(() => {
@@ -573,12 +574,12 @@ export default function Overlay() {
       }
     };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    return () => { window.removeEventListener("storage", onStorage); };
   }, []);
 
   useEffect(() => {
     document.body.classList.add("overlay");
-    return () => document.body.classList.remove("overlay");
+    return () => { document.body.classList.remove("overlay"); };
   }, []);
 
   // v0.0.62: session timer ticker. Runs only while sessionStartMs is
@@ -589,9 +590,9 @@ export default function Overlay() {
       return;
     }
     const id = setInterval(() => {
-      setSessionElapsedSec(Math.floor((Date.now() - sessionStartMs) / 1000));
+      setSessionElapsedSec(Math.floor((now() - sessionStartMs) / 1000));
     }, 1000);
-    return () => clearInterval(id);
+    return () => { clearInterval(id); };
   }, [sessionStartMs]);
 
   // v0.0.62: reset timer when status transitions to stopped/paused.
@@ -634,7 +635,7 @@ export default function Overlay() {
         }
         el.textContent = css;
       })
-      .catch((e) => console.warn("get_config:", e));
+      .catch((e: unknown) => { console.warn("get_config:", e); });
     // v0.0.75: load mic mute state from RuntimeState.
     invoke<boolean>("get_mic_muted")
       .then((b) => { if (mountedRef.current) setMicMuted(b); })
@@ -665,17 +666,17 @@ export default function Overlay() {
         .catch(() => {});
     };
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    return () => { window.removeEventListener("focus", onFocus); };
   }, []);
 
   // Push-to-talk handlers — start on mousedown, stop on mouseup/leave.
   const holdStart = async (source: "mic" | "system") => {
     if (askMode !== "hold" || recordingSource) return;
     setRecordingSource(source);
-    setRecordingStartMs(Date.now());
+    setRecordingStartMs(now());
     try {
       await invoke("manual_ask_hold_start", { source });
-    } catch (e) {
+    } catch (e: unknown) {
       console.warn("manual_ask_hold_start:", e);
       if (mountedRef.current) setRecordingSource(null);
     }
@@ -685,7 +686,7 @@ export default function Overlay() {
     setRecordingSource(null);
     try {
       await invoke("manual_ask_hold_end", { source });
-    } catch (e) {
+    } catch (e: unknown) {
       console.warn("manual_ask_hold_end:", e);
     }
   };
@@ -693,7 +694,7 @@ export default function Overlay() {
   // Click-mode handler — original behaviour (last 5 lines).
   const clickAsk = (source: "mic" | "system") => {
     const cmd = source === "system" ? "ask_from_system" : "ask_from_mic";
-    invoke(cmd).catch((e) => console.warn(`${cmd}:`, e));
+    invoke(cmd).catch((e: unknown) => { console.warn(`${cmd}:`, e); });
   };
 
   // Helper: set an auto-clearing flag using a tracked timer ref.
@@ -729,7 +730,7 @@ export default function Overlay() {
               setLastLines(lines.slice(-5));
             }
           })
-          .catch((e) => {
+          .catch((e: unknown) => {
             if (!mountedRef.current) return;
             console.warn("get_transcript on mount:", e);
             setErrorText("get_transcript: " + String(e));
@@ -739,7 +740,7 @@ export default function Overlay() {
           .then(() => {
             if (mountedRef.current) setStatus("listening");
           })
-          .catch((e) => {
+          .catch((e: unknown) => {
             if (!mountedRef.current) return;
             setStatus("error");
             setErrorText("start_session: " + String(e));
@@ -797,7 +798,7 @@ export default function Overlay() {
     unlistens.push(
       listen("transcript:line", () => {
         if (sessionStartMs === null) {
-          setSessionStartMs(Date.now());
+          setSessionStartMs(now());
         }
       })
     );
@@ -826,7 +827,7 @@ export default function Overlay() {
         setStatus("thinking");
         try {
           await invoke("ask_ai");
-        } catch (err) {
+        } catch (err: unknown) {
           setStatus("error");
           setErrorText(String(err));
         }
@@ -839,7 +840,7 @@ export default function Overlay() {
           await invoke<string>("take_screenshot");
           // Clear flag after 5 s (screenshot is consumed on next ask).
           flashFlag(screenshotTimerRef, setHasScreenshot, true, 5000);
-        } catch (err) {
+        } catch (err: unknown) {
           console.error("screenshot:", err);
         }
       })
@@ -940,7 +941,7 @@ export default function Overlay() {
         setAllCollapsed((v) => {
           const next = !v;
           emit(next ? "tile:collapse-all" : "tile:expand-all")
-            .catch((e) => console.warn("F7 collapse-all emit:", e));
+            .catch((e: unknown) => { console.warn("F7 collapse-all emit:", e); });
           return next;
         });
       })
@@ -1013,7 +1014,7 @@ export default function Overlay() {
           }
           try {
             await invoke<string>("tile_translate", { label, question });
-          } catch (err) {
+          } catch (err: unknown) {
             const msg = String(err);
             console.warn("tile_translate failed:", msg);
             setErrorText(msg.length > 200 ? msg.slice(0, 200) + "…" : msg);
@@ -1064,7 +1065,7 @@ export default function Overlay() {
             // Success — backend closed old tile + spawned new. Nothing
             // more to do here; user sees the new tile appear with a
             // 🔄×N badge in its chrome.
-          } catch (err) {
+          } catch (err: unknown) {
             const msg = String(err);
             console.warn("tile_reload failed:", msg);
             setErrorText(msg.length > 200 ? msg.slice(0, 200) + "…" : msg);
@@ -1102,7 +1103,7 @@ export default function Overlay() {
             try {
               await invoke("stop_session");
               if (mountedRef.current) setStatus("paused");
-            } catch (err) {
+            } catch (err: unknown) {
               if (!mountedRef.current) return;
               setStatus("error");
               setErrorText(String(err));
@@ -1111,7 +1112,7 @@ export default function Overlay() {
             try {
               await invoke("start_session");
               if (mountedRef.current) setStatus("listening");
-            } catch (err) {
+            } catch (err: unknown) {
               if (!mountedRef.current) return;
               setStatus("error");
               setErrorText(String(err));
@@ -1127,8 +1128,14 @@ export default function Overlay() {
       // Await each listener registration before calling its unlisten fn —
       // otherwise an early unmount can leak listeners that registered after
       // cleanup ran (the promise still resolves and the fn is never invoked).
-      Promise.all(unlistens).then((fs) => fs.forEach((f) => f()));
+      Promise.all(unlistens).then((fs) => { fs.forEach((f) => { f(); }); });
     };
+    // Intentional `[]` — Tauri listeners register ONCE on mount and read
+    // current state via refs (statusRef, mountedRef, etc.). Adding `lang`/
+    // `paletteOpen`/`sessionStartMs` would tear down + re-register every
+    // change → listener leak. TODO Tier 2.5: refactor closures to read
+    // from refs instead of captured vars, then drop this disable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const openSettings = () => invoke("open_settings");
@@ -1177,7 +1184,7 @@ export default function Overlay() {
           if (e.button !== 0) return;
           const target = e.target as HTMLElement;
           if (target.closest("button, input, select, .no-drag, kbd")) return;
-          getCurrentWindow().startDragging().catch((err) => {
+          getCurrentWindow().startDragging().catch((err: unknown) => {
             console.warn("overlay startDragging failed:", err);
           });
         }}
@@ -1220,7 +1227,7 @@ export default function Overlay() {
             try {
               await invoke("set_stt_language", { lang: next });
               setSttLang(next === "" ? null : next);
-            } catch (err) {
+            } catch (err: unknown) {
               console.warn("set_stt_language:", err);
             }
           }}
@@ -1275,7 +1282,7 @@ export default function Overlay() {
                 try {
                   await invoke("set_ai_model", { model: next });
                   setAiModel(next);
-                } catch (err) {
+                } catch (err: unknown) {
                   console.warn("set_ai_model:", err);
                 }
               }}
@@ -1312,7 +1319,7 @@ export default function Overlay() {
             try {
               const got = await invoke<boolean>("set_mic_muted", { muted: next });
               setMicMuted(got);
-            } catch (err) {
+            } catch (err: unknown) {
               console.warn("set_mic_muted:", err);
             }
           }}
@@ -1346,7 +1353,7 @@ export default function Overlay() {
             try {
               await invoke("set_stealth", { enabled: next });
               setStealthState(next);
-            } catch (err) {
+            } catch (err: unknown) {
               console.warn("set_stealth:", err);
             }
           }}
@@ -1385,7 +1392,7 @@ export default function Overlay() {
             setAllCollapsed((v) => {
               const next = !v;
               emit(next ? "tile:collapse-all" : "tile:expand-all")
-                .catch((e) => console.warn("collapse-all emit:", e));
+                .catch((e: unknown) => { console.warn("collapse-all emit:", e); });
               return next;
             });
           }}
@@ -1420,7 +1427,7 @@ export default function Overlay() {
             setAllPinned((v) => {
               const next = !v;
               emit(next ? "tile:pin-all" : "tile:unpin-all")
-                .catch((e) => console.warn("pin-all emit:", e));
+                .catch((e: unknown) => { console.warn("pin-all emit:", e); });
               return next;
             });
           }}
@@ -1559,7 +1566,7 @@ export default function Overlay() {
               try {
                 await invoke("stop_session");
                 setMeetingEnding(false);
-              } catch (err) {
+              } catch (err: unknown) {
                 console.warn("stop_session from meeting-ending chip failed:", err);
               }
             }}
@@ -1593,7 +1600,7 @@ export default function Overlay() {
             <button
               key={src}
               className={`icon-btn${isRec ? " recording" : ""}`}
-              onClick={askMode === "click" ? () => clickAsk(src) : undefined}
+              onClick={askMode === "click" ? () => { clickAsk(src); } : undefined}
               onMouseDown={askMode === "hold" ? () => holdStart(src) : undefined}
               onMouseUp={askMode === "hold" ? () => holdEnd(src) : undefined}
               onMouseLeave={askMode === "hold" && isRec ? () => holdEnd(src) : undefined}
@@ -1608,7 +1615,7 @@ export default function Overlay() {
         <button
           className="hint"
           type="button"
-          onClick={() => setHotkeyHelpOpen((v) => !v)}
+          onClick={() => { setHotkeyHelpOpen((v) => !v); }}
           aria-expanded={hotkeyHelpOpen}
           aria-label={t("overlay.help.aria", lang)}
           title={t("overlay.help.tip", lang)}
@@ -1632,7 +1639,7 @@ export default function Overlay() {
           onClick={async () => {
             try {
               await invoke<string>("bookmark_last_answer");
-            } catch (err) {
+            } catch (err: unknown) {
               console.warn("bookmark_last_answer:", err);
             }
           }}
@@ -1665,7 +1672,7 @@ export default function Overlay() {
               const bullets = fups.map((f) => `- ${f}`).join("\n");
               const title = lang === "en" ? "💡 Follow-up questions" : "💡 Follow-up вопросы";
               await invoke("spawn_tile", { question: title, answer: bullets });
-            } catch (err) {
+            } catch (err: unknown) {
               console.warn("tile_followups flow failed:", err);
             }
           }}
@@ -1689,7 +1696,7 @@ export default function Overlay() {
         <div
           role="dialog"
           aria-label={t("overlay.help.dialog.aria", lang)}
-          onClick={() => setHotkeyHelpOpen(false)}
+          onClick={() => { setHotkeyHelpOpen(false); }}
           style={{
             position: "absolute",
             top: 38,
@@ -1798,7 +1805,7 @@ export default function Overlay() {
             type="text"
             className="kb-palette-input"
             value={paletteQuery}
-            onChange={(e) => setPaletteQuery(e.target.value)}
+            onChange={(e) => { setPaletteQuery(e.target.value); }}
             onKeyDown={(e) => {
               if (e.key === "Escape") { e.preventDefault(); closePalette(); }
               else if (e.key === "Enter") { e.preventDefault(); void expandSelected(); }
@@ -1822,7 +1829,7 @@ export default function Overlay() {
                     key={q}
                     type="button"
                     className="kb-palette-history-chip"
-                    onClick={() => setPaletteQuery(q)}
+                    onClick={() => { setPaletteQuery(q); }}
                     title={lang === "en" ? `Search ${q}` : `Поиск ${q}`}
                   >
                     {q}
@@ -1843,7 +1850,7 @@ export default function Overlay() {
                   className={"kb-palette-item" + (i === paletteIdx ? " active" : "")}
                   role="option"
                   aria-selected={i === paletteIdx}
-                  onMouseEnter={() => setPaletteIdx(i)}
+                  onMouseEnter={() => { setPaletteIdx(i); }}
                   onClick={() => void expandSelected()}
                 >
                   <span className="kb-palette-source">{h.source}</span>

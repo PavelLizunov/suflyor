@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { now } from "./clock";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { t, resolveLang, type Lang } from "./i18n";
@@ -6,7 +7,7 @@ import { t, resolveLang, type Lang } from "./i18n";
 // Inline-toast + modal types. Replaces blocking window.prompt / alert /
 // confirm — those break Tauri WebView focus and look like 1998 UX.
 type ToastKind = "ok" | "err";
-type Toast = { kind: ToastKind; text: string; ts: number };
+interface Toast { kind: ToastKind; text: string; ts: number }
 type ModalState =
   | {
       kind: "prompt";
@@ -41,27 +42,27 @@ type ModalState =
       onCancel: () => void;
     };
 
-type Snippet = {
+interface Snippet {
   key: string;
   title: string;
   body: string;
-};
+}
 
-type KBEntry = {
+interface KBEntry {
   key: string;
   heading: string;
   body: string;
   source: "glossary" | "commands" | "patterns";
-};
+}
 
-type KBStats = {
+interface KBStats {
   total: number;
   glossary: number;
   commands: number;
   patterns: number;
-};
+}
 
-type Config = {
+interface Config {
   meeting_context: string;
   context_profiles: { name: string; context: string }[];
   active_profile: string | null;
@@ -100,25 +101,25 @@ type Config = {
   // v0.0.55: tile body font size in px (range 11-18, default 12).
   // Optional for backward compat with <v0.0.55 configs.
   tile_font_size?: number;
-};
+}
 
-type BridgeStatus = {
+interface BridgeStatus {
   reachable: boolean;
   status: number;
   latency_ms: number;
   hint: string;
-};
+}
 
-type UpdateInfo = {
+interface UpdateInfo {
   current: string;
   latest: string | null;
   update_available: boolean;
   download_url: string;
   notes: string;
   error: string;
-};
+}
 
-type DeviceList = { outputs: string[]; inputs: string[] };
+interface DeviceList { outputs: string[]; inputs: string[] }
 
 export default function Settings() {
   const [cfg, setCfg] = useState<Config | null>(null);
@@ -194,7 +195,7 @@ export default function Settings() {
   // panel for the first time. Refresh button re-reads. Null = not
   // loaded yet; spinner shown. (useEffect that auto-loads on tab open
   // is declared later, after `activeSection` is in scope.)
-  type Stats = {
+  interface Stats {
     sessions_total: number;
     sessions_closed: number;
     duration_total_sec: number;
@@ -203,15 +204,15 @@ export default function Settings() {
     total_cost_usd: number;
     daily_last_30: [string, number][];
     top_questions: [string, number][];
-  };
+  }
   const [stats, setStats] = useState<Stats | null>(null);
   const [statsBusy, setStatsBusy] = useState(false);
   const loadStats = useCallback(() => {
     setStatsBusy(true);
     invoke<Stats>("read_all_session_stats")
-      .then((s) => setStats(s))
-      .catch((e) => console.warn("read_all_session_stats:", e))
-      .finally(() => setStatsBusy(false));
+      .then((s) => { setStats(s); })
+      .catch((e: unknown) => { console.warn("read_all_session_stats:", e); })
+      .finally(() => { setStatsBusy(false); });
   }, []);
   // Bridge probe — tests ai_base_url + ai_bearer with a cheap 1-token POST.
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
@@ -263,7 +264,7 @@ export default function Settings() {
       window.clearTimeout(toastTimerRef.current);
       toastTimerRef.current = null;
     }
-    setToast({ kind, text, ts: Date.now() });
+    setToast({ kind, text, ts: now() });
     toastTimerRef.current = window.setTimeout(() => {
       if (!mountedRef.current) return;
       setToast(null);
@@ -311,8 +312,9 @@ export default function Settings() {
           const paths = (payload as { type: "drop"; paths: string[] }).paths || [];
           const json = paths.find((p) => p.toLowerCase().endsWith(".json"));
           if (!json) {
-            if (paths.length > 0) {
-              showToast("err", t("settings.dnd.import.bad", lang).replace("{ext}", paths[0].split(/[\\/]/).pop() ?? ""));
+            const firstPath = paths[0];
+            if (firstPath) {
+              showToast("err", t("settings.dnd.import.bad", lang).replace("{ext}", firstPath.split(/[\\/]/).pop() ?? ""));
             }
             return;
           }
@@ -324,14 +326,14 @@ export default function Settings() {
                 setCfg(fresh);
                 showToast("ok", t("settings.dnd.import.ok", lang));
               }
-            } catch (e) {
+            } catch (e: unknown) {
               if (mountedRef.current) showToast("err", t("settings.import.error", lang).replace("{err}", String(e)));
             }
           })();
         });
         if (cancelled) u();
         else unlisten = u;
-      } catch (e) {
+      } catch (e: unknown) {
         console.warn("onDragDropEvent register failed:", e);
       }
     })();
@@ -339,16 +341,23 @@ export default function Settings() {
       cancelled = true;
       if (unlisten) unlisten();
     };
+    // Intentional `[]` — onDragDropEvent must register ONCE; current
+    // `lang` is read inside the listener closure. Re-registering on
+    // every `lang` change would leak listeners. TODO Tier 2.5: replace
+    // closure capture with a langRef pattern, then drop this disable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const showPrompt = useCallback((title: string, placeholder?: string, initial = "") =>
     new Promise<string | null>((resolve) => {
       if (!mountedRef.current) { resolve(null); return; }
-      pendingModalRejectRef.current = () => resolve(null);
+      pendingModalRejectRef.current = () => { resolve(null); };
       setPromptValue(initial);
       setModal({
         kind: "prompt",
         title,
-        placeholder,
+        // exactOptionalPropertyTypes: omit `placeholder` entirely when
+        // undefined rather than passing it explicitly.
+        ...(placeholder !== undefined ? { placeholder } : {}),
         initial,
         onSubmit: (v) => {
           pendingModalRejectRef.current = null;
@@ -368,12 +377,13 @@ export default function Settings() {
   ) =>
     new Promise<boolean>((resolve) => {
       if (!mountedRef.current) { resolve(false); return; }
-      pendingModalRejectRef.current = () => resolve(false);
+      pendingModalRejectRef.current = () => { resolve(false); };
       setModal({
         kind: "confirm",
         title,
-        confirmLabel: opts?.confirmLabel,
-        danger: opts?.danger,
+        // exactOptionalPropertyTypes: omit fields when undefined.
+        ...(opts?.confirmLabel !== undefined ? { confirmLabel: opts.confirmLabel } : {}),
+        ...(opts?.danger !== undefined ? { danger: opts.danger } : {}),
         onYes: () => {
           pendingModalRejectRef.current = null;
           setModal(null);
@@ -396,7 +406,7 @@ export default function Settings() {
   ) =>
     new Promise<{ key: string; title: string; body: string } | null>((resolve) => {
       if (!mountedRef.current) { resolve(null); return; }
-      pendingModalRejectRef.current = () => resolve(null);
+      pendingModalRejectRef.current = () => { resolve(null); };
       setSnipKey(initial.key);
       setSnipTitle(initial.title);
       setSnipBody(initial.body);
@@ -430,10 +440,10 @@ export default function Settings() {
       }
     };
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    return () => { window.removeEventListener("keydown", handler); };
   }, [modal]);
   useEffect(() => {
-    invoke<KBStats>("kb_stats").then(setKbStats).catch((e) => console.warn("kb_stats:", e));
+    invoke<KBStats>("kb_stats").then(setKbStats).catch((e: unknown) => { console.warn("kb_stats:", e); });
   }, []);
   useEffect(() => {
     const q = kbQuery.trim();
@@ -443,7 +453,7 @@ export default function Settings() {
     const t = setTimeout(() => {
       invoke<KBEntry[]>("kb_search", { query: q, limit: 12 })
         .then((res) => { if (!cancelled) setKbResults(res); })
-        .catch((e) => { if (!cancelled) { console.warn("kb_search:", e); setKbResults([]); } })
+        .catch((e: unknown) => { if (!cancelled) { console.warn("kb_search:", e); setKbResults([]); } })
         .finally(() => { if (!cancelled) setKbBusy(false); });
     }, 100); // debounce
     return () => { cancelled = true; clearTimeout(t); };
@@ -454,17 +464,17 @@ export default function Settings() {
     const fetchAll = () => {
       invoke<Config>("get_config")
         .then((c) => { if (mountedRef.current) setCfg(c); })
-        .catch((e) => console.warn("get_config:", e));
+        .catch((e: unknown) => { console.warn("get_config:", e); });
       invoke<DeviceList>("list_audio_devices")
         .then((d) => { if (mountedRef.current) setDevices(d); })
-        .catch((e) => console.warn("list_audio_devices:", e));
+        .catch((e: unknown) => { console.warn("list_audio_devices:", e); });
       invoke<string[]>("list_monitors")
         .then((m) => { if (mountedRef.current) setMonitors(m); })
-        .catch((e) => console.warn("list_monitors:", e));
+        .catch((e: unknown) => { console.warn("list_monitors:", e); });
       // Crash report probe: backend returns path if file exists, else null.
       invoke<string | null>("crash_report_path")
         .then((p) => { if (mountedRef.current) setCrashReport(p); })
-        .catch((e) => console.warn("crash_report_path:", e));
+        .catch((e: unknown) => { console.warn("crash_report_path:", e); });
     };
     fetchAll();
     // CRITICAL UX/data-safety bug fix (caught live 2026-05-25): if the
@@ -474,7 +484,7 @@ export default function Settings() {
     // empty values to disk and wipe real secrets+devices. Re-fetch on every
     // window-focus event so the page heals itself the moment the user
     // tabs back in.
-    const onFocus = () => fetchAll();
+    const onFocus = () => { fetchAll(); };
     window.addEventListener("focus", onFocus);
     return () => {
       document.body.classList.remove("settings");
@@ -484,12 +494,12 @@ export default function Settings() {
 
   if (!cfg) return <div style={{ padding: 24 }}>Loading…</div>;
 
-  const update = (patch: Partial<Config>) => setCfg({ ...cfg, ...patch });
+  const update = (patch: Partial<Config>) => { setCfg({ ...cfg, ...patch }); };
 
   const save = async () => {
     await invoke("save_config", { newCfg: cfg });
     setSavedFlash(true);
-    setTimeout(() => setSavedFlash(false), 1500);
+    setTimeout(() => { setSavedFlash(false); }, 1500);
   };
 
   const RECORD_SECONDS = 30;
@@ -514,7 +524,7 @@ export default function Settings() {
         : text.trim();
       update({ meeting_context: appended });
       setRecState("idle");
-    } catch (e) {
+    } catch (e: unknown) {
       clearInterval(tick);
       setRecError(String(e));
       setRecState("idle");
@@ -535,7 +545,7 @@ export default function Settings() {
       });
       update({ meeting_context: structured });
       setRecState("idle");
-    } catch (e) {
+    } catch (e: unknown) {
       setRecError(String(e));
       setRecState("idle");
     }
@@ -564,7 +574,7 @@ export default function Settings() {
         : capped;
       update({ meeting_context: appended });
       setRecError(""); // clear any stale error
-    } catch (e) {
+    } catch (e: unknown) {
       setRecError(lang === "en"
         ? `Clipboard read failed: ${e}`
         : `Не удалось прочитать буфер: ${e}`);
@@ -576,7 +586,7 @@ export default function Settings() {
     // so the window resize happens atomically with the route change.
     try {
       await invoke("close_settings");
-    } catch (e) {
+    } catch (e: unknown) {
       console.error("close_settings:", e);
       window.location.search = "";
     }
@@ -603,7 +613,7 @@ export default function Settings() {
           const target = e.target as HTMLElement;
           if (target.closest("button, input, select")) return;
           // Fire-and-forget — drag latency matters more than error reporting.
-          getCurrentWindow().startDragging().catch((err) => {
+          getCurrentWindow().startDragging().catch((err: unknown) => {
             console.warn("startDragging failed:", err);
           });
         }}
@@ -641,15 +651,13 @@ export default function Settings() {
               type="search"
               placeholder={t("nav.filter.placeholder", lang)}
               value={navFilter}
-              onChange={(e) => setNavFilter(e.target.value)}
+              onChange={(e) => { setNavFilter(e.target.value); }}
               aria-label={t("nav.filter.aria", lang)}
             />
           </div>
           {(() => {
-            const items: Array<
-              | { group: string }
-              | { id: string; icon: string; label: string; badge?: string; warn?: boolean }
-            > = [
+            const items: (| { group: string }
+              | { id: string; icon: string; label: string; badge?: string; warn?: boolean })[] = [
               { group: t("nav.group.session", lang) },
               { id: "profile", icon: "👤", label: t("nav.profile", lang) },
               { id: "audio", icon: "🎚", label: t("nav.audio", lang) },
@@ -693,7 +701,8 @@ export default function Settings() {
             // the bottom-pinned layout. Now: explicit class.
             const lastGroupIdx = (() => {
               for (let i = filtered.length - 1; i >= 0; i--) {
-                if ("group" in filtered[i]) return i;
+                const it = filtered[i];
+                if (it && "group" in it) return i;
               }
               return -1;
             })();
@@ -714,7 +723,7 @@ export default function Settings() {
                     (activeSection === it.id ? " active" : "") +
                     (it.warn ? " has-warn" : "")
                   }
-                  onClick={() => setActiveSection(it.id)}
+                  onClick={() => { setActiveSection(it.id); }}
                   aria-current={activeSection === it.id ? "page" : undefined}
                 >
                   <span className="nav-icon">{it.icon}</span>
@@ -793,7 +802,7 @@ export default function Settings() {
           <label>{t("meeting.label", lang)}</label>
           <textarea
             value={cfg.meeting_context}
-            onChange={(e) => update({ meeting_context: e.target.value })}
+            onChange={(e) => { update({ meeting_context: e.target.value }); }}
             placeholder={t("meeting.placeholder", lang)}
           />
           {/* v0.0.76: live char counter. ~2000 chars is the soft sweet
@@ -874,7 +883,7 @@ export default function Settings() {
               try {
                 const path = await invoke<string>("generate_cheatsheet");
                 showToast("ok", (lang === "en" ? "💎 Cheatsheet saved: " : "💎 Шпаргалка сохранена: ") + path);
-              } catch (e) {
+              } catch (e: unknown) {
                 showToast("err", (lang === "en" ? "Cheatsheet failed: " : "Ошибка шпаргалки: ") + String(e));
               }
             }}
@@ -912,7 +921,7 @@ export default function Settings() {
             onClick={() => {
               invoke<DeviceList>("list_audio_devices")
                 .then((d) => { if (mountedRef.current) setDevices(d); })
-                .catch((e) => console.warn("list_audio_devices refresh:", e));
+                .catch((e: unknown) => { console.warn("list_audio_devices refresh:", e); });
             }}
           >
             🔄 {lang === "en" ? "Refresh" : "Обновить"}
@@ -922,7 +931,7 @@ export default function Settings() {
           <label>{t("audio.mic.label", lang)}</label>
           <select
             value={cfg.mic_device ?? ""}
-            onChange={(e) => update({ mic_device: e.target.value || null })}
+            onChange={(e) => { update({ mic_device: e.target.value || null }); }}
           >
             <option value="">{t("audio.mic.default", lang)}</option>
             {devices.inputs.map((d) => (
@@ -934,7 +943,7 @@ export default function Settings() {
           <label>{t("audio.sys.label", lang)}</label>
           <select
             value={cfg.system_audio_device ?? ""}
-            onChange={(e) => update({ system_audio_device: e.target.value || null })}
+            onChange={(e) => { update({ system_audio_device: e.target.value || null }); }}
           >
             <option value="">{t("audio.sys.default", lang)}</option>
             {devices.inputs.map((d) => (
@@ -964,13 +973,13 @@ export default function Settings() {
               <input
                 type="text"
                 value={cfg.ai_base_url}
-                onChange={(e) => update({ ai_base_url: e.target.value })}
+                onChange={(e) => { update({ ai_base_url: e.target.value }); }}
                 placeholder="http://192.168.0.142:18902/v1"
               />
               {(() => {
                 const url = cfg.ai_base_url.trim().toLowerCase();
                 if (!url.startsWith("http://")) return null;
-                const host = url.slice("http://".length).split("/")[0].split(":")[0];
+                const host = url.slice("http://".length).split("/")[0]?.split(":")[0] ?? "";
                 const isLoopback = host === "127.0.0.1" || host === "localhost" || host === "[::1]" || host === "::1";
                 if (isLoopback) return null;
                 return (
@@ -990,7 +999,7 @@ export default function Settings() {
               <input
                 type="password"
                 value={cfg.ai_bearer}
-                onChange={(e) => update({ ai_bearer: e.target.value })}
+                onChange={(e) => { update({ ai_bearer: e.target.value }); }}
               />
             </div>
           </div>
@@ -1014,7 +1023,7 @@ export default function Settings() {
                         model: cfg.ai_model || null,
                       });
                       setBridgeStatus(s);
-                    } catch (e) {
+                    } catch (e: unknown) {
                       setBridgeStatus({ reachable: false, status: 0, latency_ms: 0, hint: `${e}` });
                     } finally {
                       setBridgeBusy(false);
@@ -1056,7 +1065,7 @@ export default function Settings() {
             <div className="row-control">
               <select
                 value={cfg.ai_model}
-                onChange={(e) => update({ ai_model: e.target.value })}
+                onChange={(e) => { update({ ai_model: e.target.value }); }}
               >
                 <option value="claude-haiku-4-5">claude-haiku-4-5 {lang === "en" ? "(fast, default)" : "(быстро, default)"}</option>
                 <option value="claude-sonnet-4-6">claude-sonnet-4-6 {lang === "en" ? "(smarter, slower)" : "(умнее, медленнее)"}</option>
@@ -1072,7 +1081,7 @@ export default function Settings() {
             <div className="row-control">
               <select
                 value={cfg.prep_model}
-                onChange={(e) => update({ prep_model: e.target.value })}
+                onChange={(e) => { update({ prep_model: e.target.value }); }}
               >
                 <option value="claude-sonnet-4-6">claude-sonnet-4-6 {lang === "en" ? "(default, 30-50% faster than 4-5)" : "(default, 30-50% быстрее 4-5)"}</option>
                 <option value="claude-sonnet-4-5">claude-sonnet-4-5 {lang === "en" ? "(older, still works)" : "(старая, ещё работает)"}</option>
@@ -1089,7 +1098,7 @@ export default function Settings() {
             <div className="row-control">
               <select
                 value={cfg.response_language}
-                onChange={(e) => update({ response_language: e.target.value })}
+                onChange={(e) => { update({ response_language: e.target.value }); }}
               >
                 <option value="ru">{lang === "en" ? "Russian (ru)" : "Русский (ru)"}</option>
                 <option value="en">English (en)</option>
@@ -1139,7 +1148,7 @@ export default function Settings() {
               role="switch"
               aria-checked={cfg.detector_skip_mic ?? true}
               aria-label={t("ai.det.skip.aria", lang)}
-              onClick={() => update({ detector_skip_mic: !(cfg.detector_skip_mic ?? true) })}
+              onClick={() => { update({ detector_skip_mic: !(cfg.detector_skip_mic ?? true) }); }}
             />
           </div>
           <div className="switch-row">
@@ -1153,7 +1162,7 @@ export default function Settings() {
               role="switch"
               aria-checked={cfg.auto_tile_every_line ?? false}
               aria-label={t("ai.det.agg.aria", lang)}
-              onClick={() => update({ auto_tile_every_line: !(cfg.auto_tile_every_line ?? false) })}
+              onClick={() => { update({ auto_tile_every_line: !(cfg.auto_tile_every_line ?? false) }); }}
             />
           </div>
         </div>
@@ -1173,7 +1182,7 @@ export default function Settings() {
                 type="button"
                 className={"btn" + (lang === "ru" ? "" : " secondary")}
                 style={{ flex: 1 }}
-                onClick={() => update({ ui_language: "ru" })}
+                onClick={() => { update({ ui_language: "ru" }); }}
                 aria-pressed={lang === "ru"}
               >
                 🇷🇺 {t("interface.language.ru", lang)}
@@ -1182,7 +1191,7 @@ export default function Settings() {
                 type="button"
                 className={"btn" + (lang === "en" ? "" : " secondary")}
                 style={{ flex: 1 }}
-                onClick={() => update({ ui_language: "en" })}
+                onClick={() => { update({ ui_language: "en" }); }}
                 aria-pressed={lang === "en"}
               >
                 🇬🇧 {t("interface.language.en", lang)}
@@ -1217,7 +1226,7 @@ export default function Settings() {
               role="switch"
               aria-checked={cfg.auto_export_on_quit ?? false}
               aria-label={lang === "en" ? "Auto-export on quit" : "Авто-экспорт при выходе"}
-              onClick={() => update({ auto_export_on_quit: !(cfg.auto_export_on_quit ?? false) })}
+              onClick={() => { update({ auto_export_on_quit: !(cfg.auto_export_on_quit ?? false) }); }}
             />
           </div>
         </div>
@@ -1326,7 +1335,7 @@ export default function Settings() {
                 max={18}
                 step={1}
                 value={cfg.tile_font_size ?? 12}
-                onChange={(e) => update({ tile_font_size: parseInt(e.target.value, 10) || 12 })}
+                onChange={(e) => { update({ tile_font_size: parseInt(e.target.value, 10) || 12 }); }}
                 style={{ flex: 1 }}
               />
               <span style={{ minWidth: 36, fontFamily: "monospace", fontSize: 12 }}>
@@ -1361,7 +1370,7 @@ export default function Settings() {
                 update({ stealth_enabled: v });
                 try {
                   await invoke("set_stealth", { enabled: v });
-                } catch (err) {
+                } catch (err: unknown) {
                   console.warn("set_stealth:", err);
                 }
               }}
@@ -1387,7 +1396,7 @@ export default function Settings() {
               role="switch"
               aria-checked={cfg.post_meeting_debrief_enabled ?? false}
               aria-label={t("coaching.switch.aria", lang)}
-              onClick={() => update({ post_meeting_debrief_enabled: !(cfg.post_meeting_debrief_enabled ?? false) })}
+              onClick={() => { update({ post_meeting_debrief_enabled: !(cfg.post_meeting_debrief_enabled ?? false) }); }}
             />
           </div>
         </div>
@@ -1411,7 +1420,7 @@ export default function Settings() {
               role="switch"
               aria-checked={cfg.auto_tiles_enabled}
               aria-label={t("tiles.auto.switch.aria", lang)}
-              onClick={() => update({ auto_tiles_enabled: !cfg.auto_tiles_enabled })}
+              onClick={() => { update({ auto_tiles_enabled: !cfg.auto_tiles_enabled }); }}
             />
           </div>
           <div className="card-row">
@@ -1422,7 +1431,7 @@ export default function Settings() {
             <div className="row-control">
               <select
                 value={cfg.tile_monitor_name ?? ""}
-                onChange={(e) => update({ tile_monitor_name: e.target.value || null })}
+                onChange={(e) => { update({ tile_monitor_name: e.target.value || null }); }}
               >
                 <option value="">{t("tiles.monitor.auto", lang)}</option>
                 {monitors.map((m) => (
@@ -1440,7 +1449,7 @@ export default function Settings() {
               <textarea
                 style={{ minHeight: 60 }}
                 value={cfg.trigger_keywords}
-                onChange={(e) => update({ trigger_keywords: e.target.value })}
+                onChange={(e) => { update({ trigger_keywords: e.target.value }); }}
                 placeholder="kubernetes etcd istio terraform prometheus"
               />
             </div>
@@ -1460,7 +1469,7 @@ export default function Settings() {
               <input
                 type="text"
                 value={detectorTestText}
-                onChange={(e) => setDetectorTestText(e.target.value)}
+                onChange={(e) => { setDetectorTestText(e.target.value); }}
                 placeholder={lang === "en"
                   ? "What about Kubernetes networking?"
                   : "Расскажи как настраивал etcd кластер"}
@@ -1471,10 +1480,10 @@ export default function Settings() {
                 disabled={!detectorTestText.trim()}
                 onClick={async () => {
                   try {
-                    type Result = { triggered: boolean; reason: string; matched_keyword: string | null };
+                    interface Result { triggered: boolean; reason: string; matched_keyword: string | null }
                     const r = await invoke<Result>("test_detector", { text: detectorTestText });
                     setDetectorTestResult(r);
-                  } catch (e) {
+                  } catch (e: unknown) {
                     setDetectorTestResult({ triggered: false, reason: String(e), matched_keyword: null });
                   }
                 }}
@@ -1527,7 +1536,7 @@ export default function Settings() {
           <input
             type="text"
             value={kbQuery}
-            onChange={(e) => setKbQuery(e.target.value)}
+            onChange={(e) => { setKbQuery(e.target.value); }}
             placeholder={t("kb.search.placeholder", lang)}
             spellCheck={false}
             autoComplete="off"
@@ -1578,7 +1587,7 @@ export default function Settings() {
                     try {
                       await invoke("kb_spawn", { key: e.key });
                       showToast("ok", t("kb.opened.toast", lang).replace("{h}", e.heading));
-                    } catch (err) {
+                    } catch (err: unknown) {
                       showToast("err", `${t("kb.spawn.fail.toast", lang)}: ${err}`);
                     }
                   }}
@@ -1601,7 +1610,7 @@ export default function Settings() {
           <button
             className="btn secondary"
             style={{ height: 22, padding: "0 8px", fontSize: 11, marginLeft: 8 }}
-            onClick={() => setSnippetsExpanded(v => !v)}
+            onClick={() => { setSnippetsExpanded(v => !v); }}
             title={snippetsExpanded ? t("snippets.collapse.tip", lang) : t("snippets.expand.tip", lang)}
           >{snippetsExpanded ? t("snippets.collapse.button", lang) : t("snippets.expand.button", lang)}</button>
           <button
@@ -1621,7 +1630,7 @@ export default function Settings() {
                 await invoke("save_config", { newCfg: next });
                 showToast("ok", t("snippets.create.toast.ok", lang).replace("{key}", newSnip.key).replace("{n}", String(next.snippets.length)));
                 if (!snippetsExpanded) setSnippetsExpanded(true);
-              } catch (e) {
+              } catch (e: unknown) {
                 showToast("err", t("snippets.create.toast.fail", lang).replace("{err}", String(e)));
                 setCfg(cfg);
               }
@@ -1635,7 +1644,7 @@ export default function Settings() {
             <input
               type="text"
               value={snippetFilter}
-              onChange={(e) => setSnippetFilter(e.target.value)}
+              onChange={(e) => { setSnippetFilter(e.target.value); }}
               placeholder={t("snippets.filter.placeholder", lang).replace("{n}", String((cfg.snippets || []).length))}
               style={{ marginTop: 4 }}
             />
@@ -1713,7 +1722,7 @@ export default function Settings() {
                       // v0.0.58: bump frecency counter on successful expand.
                       bumpSnipUse(s.key);
                       showToast("ok", t("snip.expand.toast.ok", lang).replace("{key}", s.key));
-                    } catch (e) {
+                    } catch (e: unknown) {
                       showToast("err", t("snip.expand.toast.fail", lang).replace("{err}", String(e)));
                     }
                   }}
@@ -1743,7 +1752,7 @@ export default function Settings() {
                     try {
                       await invoke("save_config", { newCfg: next });
                       showToast("ok", t("snip.edit.toast.ok", lang).replace("{key}", s.key));
-                    } catch (e) {
+                    } catch (e: unknown) {
                       showToast("err", t("snip.edit.toast.fail", lang).replace("{err}", String(e)));
                       setCfg(cfg);
                     }
@@ -1774,7 +1783,7 @@ export default function Settings() {
                     try {
                       await invoke("save_config", { newCfg: next });
                       showToast("ok", t("snip.delete.toast.ok", lang).replace("{key}", s.key).replace("{n}", String(next.snippets.length)));
-                    } catch (e) {
+                    } catch (e: unknown) {
                       showToast("err", t("snip.delete.toast.fail", lang).replace("{err}", String(e)));
                       // Roll back the optimistic UI update.
                       setCfg(cfg);
@@ -1800,7 +1809,7 @@ export default function Settings() {
           <input
             type="password"
             value={cfg.groq_api_key}
-            onChange={(e) => update({ groq_api_key: e.target.value })}
+            onChange={(e) => { update({ groq_api_key: e.target.value }); }}
           />
         </div>
         <div className="field">
@@ -1808,7 +1817,7 @@ export default function Settings() {
           <input
             type="text"
             value={cfg.stt_language ?? ""}
-            onChange={(e) => update({ stt_language: e.target.value || null })}
+            onChange={(e) => { update({ stt_language: e.target.value || null }); }}
             placeholder={t("audio.stt.lang.placeholder", lang)}
           />
         </div>
@@ -1816,7 +1825,7 @@ export default function Settings() {
           <label>{t("audio.stt.model.label", lang)}</label>
           <select
             value={cfg.stt_model ?? "whisper-large-v3"}
-            onChange={(e) => update({ stt_model: e.target.value })}
+            onChange={(e) => { update({ stt_model: e.target.value }); }}
           >
             <option value="whisper-large-v3">{t("audio.stt.model.large", lang)}</option>
             <option value="whisper-large-v3-turbo">{t("audio.stt.model.turbo", lang)}</option>
@@ -1845,7 +1854,7 @@ export default function Settings() {
               <span className="row-hint">{t("hotkeys.ask.hint", lang)}</span>
             </div>
             <div className="row-control">
-              <input value={cfg.hotkey_ask} onChange={(e) => update({ hotkey_ask: e.target.value })} />
+              <input value={cfg.hotkey_ask} onChange={(e) => { update({ hotkey_ask: e.target.value }); }} />
             </div>
           </div>
           <div className="card-row">
@@ -1854,7 +1863,7 @@ export default function Settings() {
               <span className="row-hint">{t("hotkeys.screenshot.hint", lang)}</span>
             </div>
             <div className="row-control">
-              <input value={cfg.hotkey_screenshot} onChange={(e) => update({ hotkey_screenshot: e.target.value })} />
+              <input value={cfg.hotkey_screenshot} onChange={(e) => { update({ hotkey_screenshot: e.target.value }); }} />
             </div>
           </div>
           <div className="card-row">
@@ -1863,7 +1872,7 @@ export default function Settings() {
               <span className="row-hint">{t("hotkeys.toggle.hint", lang)}</span>
             </div>
             <div className="row-control">
-              <input value={cfg.hotkey_toggle_visibility} onChange={(e) => update({ hotkey_toggle_visibility: e.target.value })} />
+              <input value={cfg.hotkey_toggle_visibility} onChange={(e) => { update({ hotkey_toggle_visibility: e.target.value }); }} />
             </div>
           </div>
           <div className="card-row">
@@ -1872,7 +1881,7 @@ export default function Settings() {
               <span className="row-hint">{t("hotkeys.pause.hint", lang)}</span>
             </div>
             <div className="row-control">
-              <input value={cfg.hotkey_pause_audio} onChange={(e) => update({ hotkey_pause_audio: e.target.value })} />
+              <input value={cfg.hotkey_pause_audio} onChange={(e) => { update({ hotkey_pause_audio: e.target.value }); }} />
             </div>
           </div>
         </div>
@@ -1900,7 +1909,7 @@ export default function Settings() {
                   } else {
                     showToast("ok", t("adv.check.toast.same", lang).replace("{current}", info.current));
                   }
-                } catch (e) {
+                } catch (e: unknown) {
                   showToast("err", t("adv.check.toast.fail", lang).replace("{err}", String(e)));
                 } finally {
                   setUpdateBusy(false);
@@ -2000,7 +2009,7 @@ export default function Settings() {
                           });
                         });
                       }, 2000);
-                    } catch (e) {
+                    } catch (e: unknown) {
                       setOneClickBusy(false);
                       showToast("err", t("adv.download.toast.fail", lang).replace("{err}", String(e)));
                     }
@@ -2016,7 +2025,7 @@ export default function Settings() {
                     try {
                       const { openUrl } = await import("@tauri-apps/plugin-opener");
                       await openUrl(updateInfo.download_url);
-                    } catch (e) {
+                    } catch (e: unknown) {
                       showToast("err", t("adv.browser.toast.fail", lang).replace("{err}", String(e)));
                     }
                   }}
@@ -2065,7 +2074,7 @@ export default function Settings() {
                   try {
                     const { openPath } = await import("@tauri-apps/plugin-opener");
                     await openPath(crashReport);
-                  } catch (e) {
+                  } catch (e: unknown) {
                     showToast("err", t("adv.crash.toast.fail", lang).replace("{err}", String(e)));
                   }
                 }}
@@ -2082,7 +2091,7 @@ export default function Settings() {
                 try {
                   const path = await invoke<string>("dump_diagnostics");
                   showToast("ok", t("adv.dump.toast.ok", lang).replace("{path}", path));
-                } catch (e) {
+                } catch (e: unknown) {
                   showToast("err", t("adv.dump.toast.fail", lang).replace("{err}", String(e)));
                 }
               }}
@@ -2102,7 +2111,7 @@ export default function Settings() {
                 try {
                   const path = await invoke<string>("open_bookmarks");
                   showToast("ok", (lang === "en" ? "Opened: " : "Открыто: ") + path);
-                } catch (e) {
+                } catch (e: unknown) {
                   showToast("err", (lang === "en" ? "Open failed: " : "Не открылось: ") + String(e));
                 }
               }}
@@ -2138,7 +2147,7 @@ export default function Settings() {
             </button>
             <button
               className="btn secondary"
-              onClick={() => invoke("open_sessions_folder").catch((e) => console.warn("open_sessions:", e))}
+              onClick={() => invoke("open_sessions_folder").catch((e: unknown) => { console.warn("open_sessions:", e); })}
               title={t("adv.logs.tip", lang)}
             >
               {t("adv.logs.button", lang)}
@@ -2149,7 +2158,7 @@ export default function Settings() {
                 try {
                   const path = await invoke<string>("export_config");
                   showToast("ok", t("adv.export.full.toast.ok", lang).replace("{path}", path));
-                } catch (e) {
+                } catch (e: unknown) {
                   showToast("err", t("adv.export.fail", lang).replace("{err}", String(e)));
                 }
               }}
@@ -2163,7 +2172,7 @@ export default function Settings() {
                 try {
                   const path = await invoke<string>("export_config_safe");
                   showToast("ok", t("adv.export.share.toast.ok", lang).replace("{path}", path));
-                } catch (e) {
+                } catch (e: unknown) {
                   showToast("err", t("adv.export.fail", lang).replace("{err}", String(e)));
                 }
               }}
@@ -2191,7 +2200,7 @@ export default function Settings() {
                   const fresh = await invoke<Config>("get_config");
                   setCfg(fresh);
                   showToast("ok", t("adv.import.toast.ok", lang));
-                } catch (e) {
+                } catch (e: unknown) {
                   showToast("err", t("adv.import.toast.fail", lang).replace("{err}", String(e)));
                 }
               }}
@@ -2338,7 +2347,7 @@ export default function Settings() {
           <span style={{ flex: 1 }}>{toast.text}</span>
           <button
             className="settings-toast-close"
-            onClick={() => setToast(null)}
+            onClick={() => { setToast(null); }}
             aria-label={t("toast.close", lang)}
             title={t("toast.close", lang)}
           >×</button>
@@ -2360,7 +2369,7 @@ export default function Settings() {
         >
           <div
             className="settings-modal"
-            onMouseDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => { e.stopPropagation(); }}
             role="dialog"
             aria-modal="true"
           >
@@ -2373,7 +2382,7 @@ export default function Settings() {
                   autoFocus
                   value={promptValue}
                   placeholder={modal.placeholder}
-                  onChange={(e) => setPromptValue(e.target.value)}
+                  onChange={(e) => { setPromptValue(e.target.value); }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       // Mirror the OK-button gate — empty input shouldn't
@@ -2388,7 +2397,7 @@ export default function Settings() {
                   <button className="btn secondary" onClick={modal.onCancel}>{t("common.cancel", lang)}</button>
                   <button
                     className="btn"
-                    onClick={() => modal.onSubmit(promptValue)}
+                    onClick={() => { modal.onSubmit(promptValue); }}
                     disabled={!promptValue.trim()}
                   >OK</button>
                 </div>
@@ -2503,7 +2512,7 @@ export default function Settings() {
 function MicTestCard({ lang }: { lang: Lang }) {
   // v0.0.92: peak_dbfs is Option<f32> on backend now — skip_serializing
   // means the field is absent on silent path. TS type matches reality.
-  type Result = { peak_dbfs?: number | null; transcript: string; verdict: "ok" | "quiet" | "silent" };
+  interface Result { peak_dbfs?: number | null; transcript: string; verdict: "ok" | "quiet" | "silent" }
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [err, setErr] = useState("");
@@ -2515,7 +2524,7 @@ function MicTestCard({ lang }: { lang: Lang }) {
     try {
       const r = await invoke<Result>("test_microphone");
       setResult(r);
-    } catch (e) {
+    } catch (e: unknown) {
       setErr(String(e));
     } finally {
       setBusy(false);

@@ -11,7 +11,7 @@ const isSettings = params.get("settings") === "1";
 const isTile = params.get("tile") === "1";
 const isReplay = params.get("replay") === "1";
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     {isTile ? (
       <TileWindow />

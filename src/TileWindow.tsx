@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { now } from "./clock";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
@@ -83,7 +84,7 @@ export default function TileWindow() {
   // human-readable (12s, 1m, 3m, 1h+). gen = reload-counter passed via
   // URL param &gen=N (set by backend when tile_reload respawns); shown
   // as 🔄×N badge only if N≥1.
-  const spawnedAtRef = useRef<number>(Date.now());
+  const spawnedAtRef = useRef<number>(now());
   const [ageStr, setAgeStr] = useState<string>("0s");
   const generationRaw = params.get("gen");
   const generation = generationRaw && /^\d+$/.test(generationRaw)
@@ -117,7 +118,7 @@ export default function TileWindow() {
 
   useEffect(() => {
     document.body.classList.add("tile");
-    return () => document.body.classList.remove("tile");
+    return () => { document.body.classList.remove("tile"); };
   }, []);
 
   // v0.0.82: listen for bulk collapse/expand events from the overlay
@@ -126,11 +127,11 @@ export default function TileWindow() {
   // fires don't matter — new tiles spawn with collapsed=false (the
   // chip toggle re-emits when toggled again).
   useEffect(() => {
-    const unlistens: Array<() => void> = [];
-    listen<void>("tile:collapse-all", () => setCollapsed(true))
+    const unlistens: (() => void)[] = [];
+    listen<void>("tile:collapse-all", () => { setCollapsed(true); })
       .then((u) => unlistens.push(u))
       .catch(() => {});
-    listen<void>("tile:expand-all", () => setCollapsed(false))
+    listen<void>("tile:expand-all", () => { setCollapsed(false); })
       .then((u) => unlistens.push(u))
       .catch(() => {});
     // v0.0.90: bulk pin / unpin via overlay 🔒 chip. Each tile flips
@@ -141,7 +142,7 @@ export default function TileWindow() {
       try {
         await invoke("pin_tile", { label: `tile-${id}`, pinned: next });
         setPinned(next);
-      } catch (err) {
+      } catch (err: unknown) {
         console.warn("bulk pin invoke:", err);
       }
     };
@@ -151,7 +152,7 @@ export default function TileWindow() {
     listen<void>("tile:unpin-all", () => { void applyPin(false); })
       .then((u) => unlistens.push(u))
       .catch(() => {});
-    return () => { unlistens.forEach((u) => u()); };
+    return () => { unlistens.forEach((u) => { u(); }); };
   }, [id]);
 
   // v0.0.69: tick tile age every 5s. Formats: <60s as "Ns", <60m as
@@ -166,11 +167,11 @@ export default function TileWindow() {
       if (min < 60) return `${min}m`;
       return "1h+";
     };
-    setAgeStr(format(Date.now() - spawnedAtRef.current));
+    setAgeStr(format(now() - spawnedAtRef.current));
     const handle = setInterval(() => {
-      setAgeStr(format(Date.now() - spawnedAtRef.current));
+      setAgeStr(format(now() - spawnedAtRef.current));
     }, 5000);
-    return () => clearInterval(handle);
+    return () => { clearInterval(handle); };
   }, []);
 
   // v0.0.11: Esc closes the tile when it has focus. Useful when you've
@@ -189,7 +190,7 @@ export default function TileWindow() {
       }
     };
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    return () => { window.removeEventListener("keydown", handler); };
   }, [id]);
 
   // Auto-resize tile window to fit content height (within sane limits).
@@ -219,7 +220,7 @@ export default function TileWindow() {
       try {
         const w = getCurrentWindow();
         await w.setSize(new LogicalSize(desiredW, desiredH));
-      } catch (e) {
+      } catch (e: unknown) {
         console.warn("setSize:", e);
       }
     };
@@ -242,7 +243,7 @@ export default function TileWindow() {
     try {
       await invoke("pin_tile", { label: `tile-${id}`, pinned: next });
       setPinned(next);
-    } catch (e) {
+    } catch (e: unknown) {
       console.warn("pin_tile:", e);
     }
   };
@@ -265,7 +266,7 @@ export default function TileWindow() {
         question,
         currentGeneration: generation,
       });
-    } catch (e) {
+    } catch (e: unknown) {
       console.warn("tile reload emit:", e);
       setReloading(false);
     }
@@ -283,7 +284,7 @@ export default function TileWindow() {
         label: `tile-${id}`,
         question,
       });
-    } catch (e) {
+    } catch (e: unknown) {
       console.warn("tile translate emit:", e);
       setReloading(false);
     }
@@ -329,8 +330,8 @@ export default function TileWindow() {
       try {
         await navigator.clipboard.writeText(text);
         setCopied(true);
-        setTimeout(() => setCopied(false), 1200);
-      } catch (err) {
+        setTimeout(() => { setCopied(false); }, 1200);
+      } catch (err: unknown) {
         console.warn("clipboard write failed:", err);
       }
     };
@@ -498,7 +499,7 @@ export default function TileWindow() {
             across collapse so reaper still respects it. */}
         <button
           className="tile-collapse"
-          onClick={() => setCollapsed((v) => !v)}
+          onClick={() => { setCollapsed((v) => !v); }}
           title={collapsed
             ? (lang === "en" ? "Expand tile" : "Развернуть тайл")
             : (lang === "en" ? "Collapse tile (body hides, only chrome stays)" : "Свернуть тайл (тело скрыто, остаётся только заголовок)")}
@@ -669,7 +670,7 @@ export default function TileWindow() {
             // toast window so a stray Enter can't re-submit (which
             // would trigger backend dedup error + flip ✓ to ✗).
             disabled={saveStatus === "ok"}
-            onChange={(e) => setSavingKey(e.target.value.slice(0, 32))}
+            onChange={(e) => { setSavingKey(e.target.value.slice(0, 32)); }}
             onKeyDown={async (e) => {
               if (e.key === "Escape") {
                 setSavingKey(null);
@@ -691,7 +692,7 @@ export default function TileWindow() {
                   setSaveStatus("ok");
                   setSaveMsg(lang === "en" ? `✓ Saved as /${key}` : `✓ Сохранено как /${key}`);
                   setTimeout(() => { setSavingKey(null); setSaveStatus("idle"); }, 1500);
-                } catch (err) {
+                } catch (err: unknown) {
                   setSaveStatus("err");
                   const msg = String(err);
                   setSaveMsg(msg.length > 80 ? msg.slice(0, 80) + "…" : msg);
@@ -727,7 +728,7 @@ export default function TileWindow() {
           autoFocus
           type="text"
           value={editingQuestion}
-          onChange={(e) => setEditingQuestion(e.target.value)}
+          onChange={(e) => { setEditingQuestion(e.target.value); }}
           onKeyDown={async (e) => {
             if (e.key === "Escape") {
               setEditingQuestion(null);
@@ -745,13 +746,13 @@ export default function TileWindow() {
                   question: edited,
                   currentGeneration: generation,
                 });
-              } catch (err) {
+              } catch (err: unknown) {
                 console.warn("tile edit reload emit:", err);
                 setReloading(false);
               }
             }
           }}
-          onBlur={() => setEditingQuestion(null)}
+          onBlur={() => { setEditingQuestion(null); }}
           style={collapsed ? { display: "none" } : {
             width: "100%",
             boxSizing: "border-box",
@@ -806,11 +807,11 @@ function CopyQuestionButton({ question, lang }: { question: string; lang: Lang }
     try {
       await navigator.clipboard.writeText(question);
       setStatus("ok");
-      setTimeout(() => setStatus("idle"), 1200);
-    } catch (e) {
+      setTimeout(() => { setStatus("idle"); }, 1200);
+    } catch (e: unknown) {
       console.warn("clipboard write:", e);
       setStatus("fail");
-      setTimeout(() => setStatus("idle"), 2000);
+      setTimeout(() => { setStatus("idle"); }, 2000);
     }
   };
   const icon = status === "ok" ? "✓" : status === "fail" ? "✗" : "📋";

@@ -2,19 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { t, resolveLang, type Lang } from "./i18n";
 
-type SessionInfo = {
+interface SessionInfo {
   path: string;
   filename: string;
   size_bytes: number;
   modified_unix: number;
-};
+}
 
 // Every event in the JSONL has at minimum {kind, unix_ms, ...}.
-type JournalEvent = {
+interface JournalEvent {
   kind: string;
   unix_ms?: number;
   [k: string]: unknown;
-};
+}
 
 function fmtClock(unix_ms?: number): string {
   if (!unix_ms || !Number.isFinite(unix_ms)) return "--:--:--";
@@ -109,13 +109,13 @@ export default function Replay() {
   const [lang, setLang] = useState<Lang>("ru");
   useEffect(() => {
     invoke<{ ui_language?: string }>("get_config")
-      .then((c) => setLang(resolveLang(c.ui_language)))
+      .then((c) => { setLang(resolveLang(c.ui_language)); })
       .catch(() => {});
   }, []);
 
   useEffect(() => {
     document.body.classList.add("settings");
-    return () => document.body.classList.remove("settings");
+    return () => { document.body.classList.remove("settings"); };
   }, []);
 
   useEffect(() => {
@@ -123,11 +123,12 @@ export default function Replay() {
       .then((s) => {
         setSessions(s);
         // Auto-load the newest session for convenience.
-        if (s.length > 0) {
-          setSelected(s[0].path);
+        const first = s[0];
+        if (first) {
+          setSelected(first.path);
         }
       })
-      .catch((e) => setErr(`list_sessions: ${e}`));
+      .catch((e: unknown) => { setErr(`list_sessions: ${e}`); });
   }, []);
 
   useEffect(() => {
@@ -138,12 +139,12 @@ export default function Replay() {
     setLoading(true);
     setErr("");
     invoke<JournalEvent[]>("load_session", { path: selected })
-      .then((es) => setEvents(es))
-      .catch((e) => {
+      .then((es) => { setEvents(es); })
+      .catch((e: unknown) => {
         setErr(`load_session: ${e}`);
         setEvents([]);
       })
-      .finally(() => setLoading(false));
+      .finally(() => { setLoading(false); });
   }, [selected]);
 
   const totalCost = useMemo(() => {
@@ -192,7 +193,7 @@ export default function Replay() {
         <div className="replay-controls">
           <select
             value={selected}
-            onChange={(e) => setSelected(e.target.value)}
+            onChange={(e) => { setSelected(e.target.value); }}
             className="replay-select"
             aria-label={t("replay.session.aria", lang)}
           >
@@ -216,7 +217,7 @@ export default function Replay() {
                 alert(
                   (lang === "en" ? "Markdown saved to: " : "Markdown сохранён: ") + path
                 );
-              } catch (e) {
+              } catch (e: unknown) {
                 alert(
                   (lang === "en" ? "Export failed: " : "Ошибка экспорта: ") + String(e)
                 );
@@ -300,7 +301,7 @@ export default function Replay() {
           })}
           {hiddenKinds.size > 0 && (
             <button
-              onClick={() => setHiddenKinds(new Set())}
+              onClick={() => { setHiddenKinds(new Set()); }}
               style={{
                 padding: "2px 8px",
                 fontSize: 11,
@@ -351,10 +352,10 @@ function ReplayRow({ event }: { event: JournalEvent }) {
 
   switch (kind) {
     case "session_start": {
-      const ctxChars = asNum(event.meeting_context_chars) ?? 0;
-      const model = asStr(event.ai_model);
-      const prepModel = asStr(event.prep_model);
-      const lang = asStr(event.response_language);
+      const ctxChars = asNum(event["meeting_context_chars"]) ?? 0;
+      const model = asStr(event["ai_model"]);
+      const prepModel = asStr(event["prep_model"]);
+      const lang = asStr(event["response_language"]);
       return (
         <Row time={time} cls="session-start" label="SESSION START">
           <span className="replay-meta">model={model}</span>
@@ -371,17 +372,17 @@ function ReplayRow({ event }: { event: JournalEvent }) {
         </Row>
       );
     case "session_summary": {
-      const dur = asNum(event.duration_ms) ?? 0;
-      const lines = asNum(event.transcript_lines) ?? 0;
-      const mic = asNum(event.transcript_mic) ?? 0;
-      const sys = asNum(event.transcript_system) ?? 0;
-      const trig = asNum(event.detector_triggered) ?? 0;
-      const skip = asNum(event.detector_skipped) ?? 0;
-      const reqs = asNum(event.ai_requests_total) ?? 0;
-      const errs = asNum(event.ai_errors) ?? 0;
-      const tiles = asNum(event.tiles_spawned) ?? 0;
-      const rl = asNum(event.rate_limited) ?? 0;
-      const cost = (asNum(event.total_cost_microcents) ?? 0) / 100_000_000;
+      const dur = asNum(event["duration_ms"]) ?? 0;
+      const lines = asNum(event["transcript_lines"]) ?? 0;
+      const mic = asNum(event["transcript_mic"]) ?? 0;
+      const sys = asNum(event["transcript_system"]) ?? 0;
+      const trig = asNum(event["detector_triggered"]) ?? 0;
+      const skip = asNum(event["detector_skipped"]) ?? 0;
+      const reqs = asNum(event["ai_requests_total"]) ?? 0;
+      const errs = asNum(event["ai_errors"]) ?? 0;
+      const tiles = asNum(event["tiles_spawned"]) ?? 0;
+      const rl = asNum(event["rate_limited"]) ?? 0;
+      const cost = (asNum(event["total_cost_microcents"]) ?? 0) / 100_000_000;
       const durMin = (dur / 60_000).toFixed(1);
       return (
         <Row time={time} cls="session-summary" label="SUMMARY">
@@ -402,8 +403,8 @@ function ReplayRow({ event }: { event: JournalEvent }) {
       );
     }
     case "transcript_line": {
-      const source = asStr(event.source);
-      const text = asStr(event.text);
+      const source = asStr(event["source"]);
+      const text = asStr(event["text"]);
       const icon = source === "mic" ? "🎤" : "🗣";
       return (
         <Row time={time} cls="transcript" label={`${icon} ${source}`}>
@@ -412,9 +413,9 @@ function ReplayRow({ event }: { event: JournalEvent }) {
       );
     }
     case "detector_decision": {
-      const triggered = asBool(event.triggered);
-      const text = asStr(event.text);
-      const trigKind = asStr(event.trigger_kind);
+      const triggered = asBool(event["triggered"]);
+      const text = asStr(event["text"]);
+      const trigKind = asStr(event["trigger_kind"]);
       const cls = triggered ? "detector-on" : "detector-off";
       const reason = triggered ? `→ ${trigKind || "trigger"}` : "no trigger";
       return (
@@ -425,14 +426,14 @@ function ReplayRow({ event }: { event: JournalEvent }) {
       );
     }
     case "ai_request": {
-      const purpose = asStr(event.purpose);
-      const model = asStr(event.model);
+      const purpose = asStr(event["purpose"]);
+      const model = asStr(event["model"]);
       // Journal now stores the FULL user_prompt (was user_prompt_preview).
       // Fall back to legacy field name if reading an older journal.
       const userPrompt =
-        asStr(event.user_prompt) || asStr(event.user_prompt_preview);
-      const tokensEst = asNum(event.input_tokens_est);
-      const hasShot = asBool(event.attached_screenshot);
+        asStr(event["user_prompt"]) || asStr(event["user_prompt_preview"]);
+      const tokensEst = asNum(event["input_tokens_est"]);
+      const hasShot = asBool(event["attached_screenshot"]);
       return (
         <Row time={time} cls="ai-req" label={`AI REQ · ${purpose}`}>
           <span className="replay-meta">{model}</span>
@@ -445,10 +446,10 @@ function ReplayRow({ event }: { event: JournalEvent }) {
       );
     }
     case "ai_response": {
-      const purpose = asStr(event.purpose);
-      const latency = asNum(event.latency_ms);
-      const finish = asStr(event.finish_reason);
-      const text = asStr(event.text);
+      const purpose = asStr(event["purpose"]);
+      const latency = asNum(event["latency_ms"]);
+      const finish = asStr(event["finish_reason"]);
+      const text = asStr(event["text"]);
       const cost = eventCost(event);
       return (
         <Row time={time} cls="ai-resp" label={`AI RESP · ${purpose}`}>
@@ -460,8 +461,8 @@ function ReplayRow({ event }: { event: JournalEvent }) {
       );
     }
     case "tile_spawn": {
-      const question = asStr(event.question);
-      const answer = asStr(event.answer);
+      const question = asStr(event["question"]);
+      const answer = asStr(event["answer"]);
       // v0.0.96: detect v0.0.89 translate tiles by the 🇷🇺/🇬🇧 prefix
       // the backend bakes in. Display as a small label suffix so the
       // Replay timeline visually distinguishes translated from
@@ -476,8 +477,8 @@ function ReplayRow({ event }: { event: JournalEvent }) {
       );
     }
     case "rate_limited": {
-      const what = asStr(event.what);
-      const text = asStr(event.text);
+      const what = asStr(event["what"]);
+      const text = asStr(event["text"]);
       return (
         <Row time={time} cls="rate-limited" label={`RATE LIMITED · ${what}`}>
           <span className="replay-text">{preview(text, 240)}</span>
@@ -485,8 +486,8 @@ function ReplayRow({ event }: { event: JournalEvent }) {
       );
     }
     case "error": {
-      const module = asStr(event.module);
-      const message = asStr(event.message);
+      const module = asStr(event["module"]);
+      const message = asStr(event["message"]);
       return (
         <Row time={time} cls="error" label={`ERROR · ${module}`}>
           <span className="replay-text">{message}</span>
