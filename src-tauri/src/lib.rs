@@ -2543,6 +2543,56 @@ async fn test_microphone(
     Ok(MicTestResult { peak_dbfs, transcript, verdict })
 }
 
+/// v0.0.95: Add a new snippet on-the-fly from the F4 palette
+/// (`+key body` syntax). Validates the key (alphanumeric + dash +
+/// underscore, 2-32 chars), rejects duplicates (case-insensitive),
+/// caps body at 4 KB, and persists via config::save.
+///
+/// Returns the saved snippet's key on success — frontend can show
+/// "✓ Snippet added: <key>" toast.
+#[tauri::command]
+fn add_snippet(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, SharedConfig>,
+    key: String,
+    body: String,
+) -> Result<String, String> {
+    assert_overlay(&window)?;
+    let k = key.trim().to_lowercase();
+    if k.is_empty() {
+        return Err("snippet key is empty".into());
+    }
+    if k.len() < 2 || k.len() > 32 {
+        return Err(format!("snippet key '{k}' must be 2-32 chars"));
+    }
+    if !k.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return Err(format!("snippet key '{k}' must be alphanumeric + '-' / '_'"));
+    }
+    let b = body.trim().to_string();
+    if b.is_empty() {
+        return Err("snippet body is empty".into());
+    }
+    const MAX_BODY: usize = 4096;
+    if b.len() > MAX_BODY {
+        return Err(format!("snippet body too long ({} bytes, max {MAX_BODY})", b.len()));
+    }
+    let next_cfg = {
+        let mut c = state.write();
+        // Dedup check — case-insensitive on existing keys.
+        if c.snippets.iter().any(|s| s.key.to_lowercase() == k) {
+            return Err(format!("snippet '{k}' already exists — delete it first via Settings → Snippets"));
+        }
+        c.snippets.push(config::Snippet {
+            key: k.clone(),
+            title: k.clone(), // use key as title; user can edit in Settings later
+            body: b,
+        });
+        c.clone()
+    };
+    config::save(&next_cfg).map_err(|e| e.to_string())?;
+    Ok(k)
+}
+
 /// v0.0.66: detector trigger tester. Runs the real detect_trigger
 /// function on sample text using the current cfg.trigger_keywords.
 /// Returns a human-readable verdict so user can tune trigger_keywords
@@ -3185,6 +3235,7 @@ pub fn run() {
             set_mic_muted,
             get_mic_muted,
             test_microphone,
+            add_snippet,
             tile_reload,
             tile_translate,
             set_stealth,

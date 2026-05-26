@@ -299,6 +299,47 @@ export default function Overlay() {
     setPaletteIdx(0);
   };
   const expandSelected = async () => {
+    // v0.0.95: `+key body` syntax — add snippet on the fly.
+    // Parsed BEFORE the result list (since there are no results to
+    // pick when the query starts with +).
+    const q = paletteQuery.trim();
+    if (q.startsWith("+")) {
+      const rest = q.slice(1).trimStart();
+      const spaceIdx = rest.indexOf(" ");
+      if (spaceIdx < 2) {
+        setErrorText(lang === "en"
+          ? "+key body syntax: +greet Hi, glad to meet you"
+          : "+ключ тело: +greet Hi, glad to meet you");
+        if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+        errorTimerRef.current = setTimeout(() => {
+          if (mountedRef.current) setErrorText("");
+          errorTimerRef.current = null;
+        }, 4000);
+        return;
+      }
+      const key = rest.slice(0, spaceIdx);
+      const body = rest.slice(spaceIdx + 1).trim();
+      try {
+        const saved = await invoke<string>("add_snippet", { key, body });
+        closePalette();
+        setErrorText(lang === "en"
+          ? `✓ Snippet '${saved}' added. Recall via F4 → /${saved}`
+          : `✓ Сниппет '${saved}' добавлен. Вызов: F4 → /${saved}`);
+        if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+        errorTimerRef.current = setTimeout(() => {
+          if (mountedRef.current) setErrorText("");
+          errorTimerRef.current = null;
+        }, 4000);
+      } catch (e) {
+        setErrorText(String(e));
+        if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+        errorTimerRef.current = setTimeout(() => {
+          if (mountedRef.current) setErrorText("");
+          errorTimerRef.current = null;
+        }, 5000);
+      }
+      return;
+    }
     const hit = paletteResults[paletteIdx];
     if (!hit) return;
     // v0.0.56: record successful expansion in KB history.

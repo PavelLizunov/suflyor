@@ -641,9 +641,10 @@ const strings = {
   },
   // KB palette
   // v0.0.70: hint at the `/` prefix for snippet search.
+  // v0.0.95: hint at `+key body` to add a snippet inline.
   "overlay.palette.placeholder": {
-    ru: "KB поиск или /сниппет (Esc закрыть · Enter раскрыть)",
-    en: "KB search or /snippet (Esc to close · Enter to expand)",
+    ru: "KB поиск · /сниппет · +key тело (Esc · Enter)",
+    en: "KB search · /snippet · +key body (Esc · Enter)",
   },
   "overlay.palette.aria":     { ru: "Поиск по knowledge base", en: "Knowledge base search" },
 

@@ -26,6 +26,27 @@ for download. No auto-install (no code signing — by design).
 
 Two code-review agent passes ran on the diff. First found 3 P0/P1 (shipped .85, .86, .87). Second pass running at time of v0.0.88 ship.
 
+### → v0.0.95 (2026-05-26) — Add snippet inline via F4 palette `+key body`
+
+Type `+greet Hi, glad to meet you` in the F4 KB palette → Enter →
+new snippet saved. Recall via `F4 → /greet` (v0.0.70 path).
+
+Validation:
+- key: 2-32 chars, alphanumeric + `-` / `_`
+- body: 1-4096 bytes
+- duplicate key (case-insensitive): rejected with error toast pointing
+  to Settings → Snippets to delete
+
+Backend `add_snippet` Tauri command (assert_overlay-gated). Persists
+via `config::save`. Title defaults to the key; user can edit in
+Settings → 💬 Snippets later if they want a different label.
+
+Use case: mid-interview the user thinks "I should save this elevator
+pitch" — F4 → `+pitch …text…` → Enter → done in 5 seconds. No
+Settings dive.
+
+Placeholder text updated to advertise the new prefix.
+
 ### → v0.0.94 (2026-05-26) — Answer word count badge in tile chrome
 
 New `Nw` badge next to ⏱ age + 🔄×N generation chips. Shows answer
