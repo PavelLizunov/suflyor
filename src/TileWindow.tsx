@@ -42,6 +42,25 @@ export default function TileWindow() {
     return () => document.body.classList.remove("tile");
   }, []);
 
+  // v0.0.11: Esc closes the tile when it has focus. Useful when you've
+  // mouse-overed onto a tile to read it — instead of finding the × you
+  // can just press Esc. Listener at window level so Esc works regardless
+  // of which inner element holds focus.
+  useEffect(() => {
+    const handler = async (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      try {
+        const label = `tile-${id}`;
+        await invoke("close_tile", { label });
+      } catch {
+        // Fallback: close directly. Won't run cleanup hooks but tile dies.
+        try { await getCurrentWindow().close(); } catch {}
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [id]);
+
   // Auto-resize tile window to fit content height (within sane limits).
   // Runs after markdown renders so we measure the real DOM.
   useLayoutEffect(() => {

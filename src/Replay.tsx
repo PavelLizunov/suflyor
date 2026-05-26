@@ -68,6 +68,10 @@ export default function Replay() {
   const [events, setEvents] = useState<JournalEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string>("");
+  // v0.0.11: filter chips. Set of EXCLUDED event kinds (click to toggle).
+  // Default empty = show all. Stored per-session in state, not localStorage —
+  // simpler model + each session has potentially different kinds anyway.
+  const [hiddenKinds, setHiddenKinds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     document.body.classList.add("settings");
@@ -114,6 +118,29 @@ export default function Replay() {
     return { sum, count };
   }, [events]);
 
+  // v0.0.11: distinct event kinds + count per kind. Sorted so common ones
+  // (transcript_line, detector_decision) appear first. Used for filter chips.
+  const kindCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const e of events) {
+      const k = String(e.kind || "unknown");
+      m.set(k, (m.get(k) || 0) + 1);
+    }
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
+  }, [events]);
+
+  const visibleEvents = useMemo(() => {
+    if (hiddenKinds.size === 0) return events;
+    return events.filter(e => !hiddenKinds.has(String(e.kind || "unknown")));
+  }, [events, hiddenKinds]);
+
+  // Reset filter when switching session — different sessions have different
+  // event kinds and stale filters would silently hide events the user just
+  // loaded.
+  useEffect(() => {
+    setHiddenKinds(new Set());
+  }, [selected]);
+
   const back = () => {
     window.location.search = "";
   };
@@ -152,9 +179,71 @@ export default function Replay() {
         </div>
       )}
 
-      {events.length > 0 && (
+      {events.length > 0 && kindCounts.length > 1 && (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 6,
+            padding: "6px 0",
+            borderBottom: "1px solid var(--c-border-soft)",
+            marginBottom: 6,
+          }}
+        >
+          <span style={{ fontSize: 11, color: "var(--c-text-dim)", alignSelf: "center", marginRight: 4 }}>
+            Filter:
+          </span>
+          {kindCounts.map(([kind, count]) => {
+            const hidden = hiddenKinds.has(kind);
+            return (
+              <button
+                key={kind}
+                onClick={() => {
+                  const next = new Set(hiddenKinds);
+                  if (hidden) next.delete(kind);
+                  else next.add(kind);
+                  setHiddenKinds(next);
+                }}
+                style={{
+                  padding: "2px 8px",
+                  fontSize: 11,
+                  borderRadius: 12,
+                  border: "1px solid var(--c-border-soft)",
+                  background: hidden ? "transparent" : "var(--c-bg-2)",
+                  color: hidden ? "var(--c-text-dim)" : "var(--c-text)",
+                  textDecoration: hidden ? "line-through" : "none",
+                  cursor: "pointer",
+                }}
+                title={hidden ? `Включить ${kind}` : `Скрыть ${kind} (${count} событий)`}
+              >
+                {kind} · {count}
+              </button>
+            );
+          })}
+          {hiddenKinds.size > 0 && (
+            <button
+              onClick={() => setHiddenKinds(new Set())}
+              style={{
+                padding: "2px 8px",
+                fontSize: 11,
+                borderRadius: 12,
+                border: "1px solid var(--c-accent, #6366f1)",
+                background: "transparent",
+                color: "var(--c-accent, #6366f1)",
+                cursor: "pointer",
+                marginLeft: 4,
+              }}
+              title="Show all events"
+            >
+              ↺ reset
+            </button>
+          )}
+        </div>
+      )}
+
+      {visibleEvents.length > 0 && (
         <div className="replay-timeline">
-          {events.map((e, idx) => (
+          {visibleEvents.map((e, idx) => (
             <ReplayRow key={idx} event={e} />
           ))}
         </div>

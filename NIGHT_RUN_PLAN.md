@@ -100,24 +100,12 @@ Fresh priorities below.
 9. **`cargo audit` security audit** — check Cargo.lock for known vulns in deps.
 10. **`npm audit` for frontend** — same check on node_modules.
 
-## In progress (re-armed 2026-05-26T04:52, new deadline 10:52)
+## In progress (re-armed 2026-05-26T04:52, deadline 10:52)
+**#3 Replay viewer filter by event kind** (started 2026-05-26T05:08)
 
-**HOOK BUG FIXED:** stop-guard.ps1 had an anti-loop bypass that exited 0 the
-moment `stop_hook_active=true`. Meant marathon could only block ONE stop attempt
-then silently terminate. Live regression — user reported "автоматический режим
-снова завершился слишком рано" at 04:41 after only 45 min productive work.
-
-Fix: replaced bypass with sliding-window rate limit. Counter at
-`.claude/_stop_count` tracks Stop events in the last 1h. Hook returns exit 2
-indefinitely UNLESS rate exceeds 240 blocks/hour (= 1 every 15s = model
-genuinely stuck in degenerate loop). Tested both branches: normal exit 2 with
-stop_hook_active=true now blocks correctly; planted 241 entries → next block
-let through. Both verified.
-
-Marathon retry mandate (from user 2026-05-26T04:41): "пофвторить" — continue
-productive work for fresh 6h window.
-
-Pulling next backlog item to start.
+## Done log (newest at top)
+- **2026-05-26T05:07** — **v0.0.10 released**: overlay bar drag + full snippet CRUD modal. Backlog #1 + #2 closed.
+- **2026-05-26T04:55** — **HOOK FIX**: stop-guard.ps1 anti-loop bypass replaced with sliding-window rate limit. User-reported "автоматический режим снова завершился слишком рано". Counter at .claude/_stop_count tracks Stop events; blocks ≥240/hr → safety rail allows stop (genuine loop). Tested both branches.
 
 ## Marathon summary (for user wake-up, refreshed 2026-05-26T00:55)
 
