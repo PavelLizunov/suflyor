@@ -11,6 +11,35 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.60 (2026-05-26) — QOL block 5, #8
+
+**Session stats dashboard panel.**
+
+New Settings sidebar item `📊 Stats` (after `🔧 Updates · diagnostics`).
+Lazy-loads on first open via new Tauri command
+`read_all_session_stats` — walks every `.jsonl` in `sessions/`, reads
+each line once, aggregates:
+
+- Total sessions count (+ closed count if app crashed mid-session)
+- Total runtime (hours + minutes)
+- Total AI requests + tiles spawned
+- Total cost in USD
+- 30-day bar chart of session count per day (oldest left → newest
+  right, tooltip on hover)
+- Top-5 most-frequent tile question prefixes (normalized to lowercase,
+  whitespace collapsed, first 60 chars)
+
+Backend includes a public-domain civil-from-days date conversion
+(`ymd_from_unix_ms`) so we don't pull in chrono just for the "YYYY-MM-
+DD" buckets. Files >50 MB are skipped to keep the pass fast (typical
+1h-session journal ≈ 200 KB).
+
+Refresh button re-reads the directory. All bilingual.
+
+Use case: "how much have I spent on Claude this month?" — one click,
+exact number. Or "what question keeps coming up across interviews?" —
+top-5 list shows recurring topics for prep focus.
+
 ### → v0.0.59 (2026-05-26) — QOL block 5, #7
 
 **Meeting-ending auto-detector — 🏁 chip in overlay.**

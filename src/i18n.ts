@@ -59,6 +59,30 @@ const strings = {
   "nav.stealth":              { ru: "Скрытность",         en: "Stealth" },
   "nav.hotkeys":              { ru: "Хоткеи",             en: "Hotkeys" },
   "nav.advanced":             { ru: "Обновления · диагностика", en: "Updates · diagnostics" },
+  "nav.stats":                { ru: "Статистика",              en: "Stats" },
+
+  // Stats dashboard (v0.0.60)
+  "stats.title":              { ru: "📊 Статистика по всем сессиям", en: "📊 Stats across all sessions" },
+  "stats.refresh":            { ru: "🔄 Обновить",             en: "🔄 Refresh" },
+  "stats.busy":               { ru: "⏳ Читаю…",                en: "⏳ Reading…" },
+  "stats.refresh.tip":        {
+    ru: "Перечитать все JSONL в %APPDATA%\\overlay-mvp\\sessions",
+    en: "Re-read all JSONL in %APPDATA%\\overlay-mvp\\sessions",
+  },
+  "stats.empty":              { ru: "Сессий нет — стартани одну в overlay.", en: "No sessions yet — start one from the overlay." },
+  "stats.summary.title":      { ru: "🧮 Суммарно",             en: "🧮 Summary" },
+  "stats.row.sessions":       { ru: "Сессий всего",            en: "Total sessions" },
+  "stats.closed":             { ru: "закрытых",                en: "closed" },
+  "stats.row.duration":       { ru: "Время записи",            en: "Total runtime" },
+  "stats.row.ai":             { ru: "AI запросов",             en: "AI requests" },
+  "stats.row.tiles":          { ru: "Тайлов заспавнено",       en: "Tiles spawned" },
+  "stats.row.cost":           { ru: "Общая стоимость (USD)",   en: "Total cost (USD)" },
+  "stats.daily.title":        { ru: "📅 Сессии за последние 30 дней", en: "📅 Sessions over last 30 days" },
+  "stats.daily.hint":         {
+    ru: "По колонке за день, слева — старее. Tooltip показывает дату + число.",
+    en: "One bar per day, oldest on the left. Hover for date + count.",
+  },
+  "stats.top.title":          { ru: "🔥 Топ-5 повторяющихся вопросов", en: "🔥 Top-5 recurring questions" },
 
   // ── Nav misc ────────────────────────────────────────────────────────
   "nav.filter.placeholder":   { ru: "фильтр…",            en: "filter…" },

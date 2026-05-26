@@ -178,6 +178,29 @@ export default function Settings() {
       return next;
     });
   };
+  // v0.0.60: session stats — lazy-loaded when user opens the Stats
+  // panel for the first time. Refresh button re-reads. Null = not
+  // loaded yet; spinner shown. (useEffect that auto-loads on tab open
+  // is declared later, after `activeSection` is in scope.)
+  type Stats = {
+    sessions_total: number;
+    sessions_closed: number;
+    duration_total_sec: number;
+    ai_requests_total: number;
+    tiles_spawned_total: number;
+    total_cost_usd: number;
+    daily_last_30: [string, number][];
+    top_questions: [string, number][];
+  };
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [statsBusy, setStatsBusy] = useState(false);
+  const loadStats = useCallback(() => {
+    setStatsBusy(true);
+    invoke<Stats>("read_all_session_stats")
+      .then((s) => setStats(s))
+      .catch((e) => console.warn("read_all_session_stats:", e))
+      .finally(() => setStatsBusy(false));
+  }, []);
   // Bridge probe — tests ai_base_url + ai_bearer with a cheap 1-token POST.
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
   const [bridgeBusy, setBridgeBusy] = useState(false);
@@ -197,6 +220,14 @@ export default function Settings() {
   // instead of moving them — preserves all save/load field bindings.
   const [activeSection, setActiveSection] = useState<string>("profile");
   const [navFilter, setNavFilter] = useState("");
+  // v0.0.60: auto-load stats when user switches to the Stats panel for
+  // the first time. Placed after activeSection declaration to keep
+  // hook order stable.
+  useEffect(() => {
+    if (activeSection === "stats" && stats === null && !statsBusy) {
+      loadStats();
+    }
+  }, [activeSection, stats, statsBusy, loadStats]);
   // v0.0.42: i18n. Resolve the UI language from cfg on every render.
   // Defaults to "ru" when cfg is null (initial paint before load_config
   // completes) and for any value other than the explicit "en". This is
@@ -605,6 +636,7 @@ export default function Settings() {
               { id: "stealth", icon: "🫥", label: t("nav.stealth", lang) },
               { id: "hotkeys", icon: "⌨", label: t("nav.hotkeys", lang) },
               { id: "advanced", icon: "🔧", label: t("nav.advanced", lang) },
+              { id: "stats", icon: "📊", label: t("nav.stats", lang) },
             ];
             const q = navFilter.trim().toLowerCase();
             const filtered = q
@@ -1883,6 +1915,114 @@ export default function Settings() {
             {t("adv.export.note", lang)}
           </div>
         </div>
+      </div>)}
+
+      {/* v0.0.60: Session stats dashboard. Lazy-loads on first open. */}
+      {activeSection === "stats" && (<div className="settings-section">
+        <h3>
+          {t("stats.title", lang)}
+          <button
+            className="btn secondary"
+            style={{ height: 22, padding: "0 8px", fontSize: 11, marginLeft: 8 }}
+            onClick={loadStats}
+            disabled={statsBusy}
+            title={t("stats.refresh.tip", lang)}
+          >
+            {statsBusy ? t("stats.busy", lang) : t("stats.refresh", lang)}
+          </button>
+        </h3>
+        {!stats && !statsBusy && (
+          <div style={{ fontSize: 12, color: "var(--c-text-mute)" }}>{t("stats.empty", lang)}</div>
+        )}
+        {stats && (
+          <>
+            <div className="card">
+              <div className="card-title">{t("stats.summary.title", lang)}</div>
+              <div className="card-row">
+                <div className="row-label">{t("stats.row.sessions", lang)}</div>
+                <div className="row-control" style={{ fontFamily: "monospace" }}>
+                  {stats.sessions_total}
+                  {stats.sessions_closed < stats.sessions_total && (
+                    <span style={{ color: "var(--c-text-mute)", marginLeft: 8, fontSize: 11 }}>
+                      ({stats.sessions_closed} {t("stats.closed", lang)})
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="card-row">
+                <div className="row-label">{t("stats.row.duration", lang)}</div>
+                <div className="row-control" style={{ fontFamily: "monospace" }}>
+                  {(() => {
+                    const h = Math.floor(stats.duration_total_sec / 3600);
+                    const m = Math.floor((stats.duration_total_sec % 3600) / 60);
+                    return `${h}h ${m}m`;
+                  })()}
+                </div>
+              </div>
+              <div className="card-row">
+                <div className="row-label">{t("stats.row.ai", lang)}</div>
+                <div className="row-control" style={{ fontFamily: "monospace" }}>
+                  {stats.ai_requests_total}
+                </div>
+              </div>
+              <div className="card-row">
+                <div className="row-label">{t("stats.row.tiles", lang)}</div>
+                <div className="row-control" style={{ fontFamily: "monospace" }}>
+                  {stats.tiles_spawned_total}
+                </div>
+              </div>
+              <div className="card-row">
+                <div className="row-label">{t("stats.row.cost", lang)}</div>
+                <div className="row-control" style={{ fontFamily: "monospace" }}>
+                  ${stats.total_cost_usd.toFixed(4)}
+                </div>
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="card-title">{t("stats.daily.title", lang)}</div>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 80, padding: "4px 0" }}>
+                {(() => {
+                  const maxN = Math.max(1, ...stats.daily_last_30.map(([, n]) => n));
+                  // Reverse so oldest is on the left, newest on the right.
+                  return stats.daily_last_30.slice().reverse().map(([day, n]) => {
+                    const h = Math.max(2, Math.round((n / maxN) * 70));
+                    return (
+                      <div
+                        key={day}
+                        title={`${day}: ${n}`}
+                        style={{
+                          flex: 1,
+                          minWidth: 4,
+                          height: h,
+                          background: n > 0 ? "var(--c-accent, #818cf8)" : "var(--c-border-soft)",
+                          borderRadius: 1,
+                        }}
+                      />
+                    );
+                  });
+                })()}
+              </div>
+              <div className="row-hint">{t("stats.daily.hint", lang)}</div>
+            </div>
+
+            {stats.top_questions.length > 0 && (
+              <div className="card">
+                <div className="card-title">{t("stats.top.title", lang)}</div>
+                {stats.top_questions.map(([q, n], i) => (
+                  <div key={i} className="card-row">
+                    <div className="row-label" style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {q}
+                    </div>
+                    <div className="row-control" style={{ fontFamily: "monospace", minWidth: 40, textAlign: "right" }}>
+                      {n}×
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>)}
 
         </section>

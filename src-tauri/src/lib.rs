@@ -1915,6 +1915,185 @@ fn load_session(
     Ok(events)
 }
 
+/// v0.0.60 (shipped as v0.0.60): aggregate stats over all session
+/// JSONLs. Cheap pass — reads each file once, only looks at
+/// `session_start` + `session_summary` events (skips the per-line
+/// detail). Returns one big payload the frontend renders.
+#[derive(Debug, Serialize)]
+struct SessionStats {
+    /// Total session files in the sessions dir.
+    sessions_total: u32,
+    /// Sessions that contain a `session_summary` event (i.e. cleanly
+    /// closed). The difference (`sessions_total - sessions_closed`) is
+    /// sessions where the app crashed mid-meeting.
+    sessions_closed: u32,
+    /// Total wall-clock duration across all closed sessions, in seconds.
+    /// Open sessions contribute 0 (no end timestamp).
+    duration_total_sec: u64,
+    /// Total AI requests across all sessions.
+    ai_requests_total: u64,
+    /// Total tiles spawned across all sessions.
+    tiles_spawned_total: u64,
+    /// Sum of `total_cost_microcents` from every SessionSummary, in USD
+    /// (divided by 100M for display).
+    total_cost_usd: f64,
+    /// Per-day session counts for the last 30 days (newest first).
+    /// Tuple = ("YYYY-MM-DD", count).
+    daily_last_30: Vec<(String, u32)>,
+    /// Top-5 most-frequent tile question prefixes (first 60 chars,
+    /// case-insensitive), sorted by count desc.
+    top_questions: Vec<(String, u32)>,
+}
+
+#[tauri::command]
+fn read_all_session_stats(window: tauri::WebviewWindow) -> Result<SessionStats, String> {
+    assert_overlay(&window)?;
+    let dir = journal::sessions_dir().map_err(|e| e.to_string())?;
+    if !dir.exists() {
+        return Ok(SessionStats {
+            sessions_total: 0,
+            sessions_closed: 0,
+            duration_total_sec: 0,
+            ai_requests_total: 0,
+            tiles_spawned_total: 0,
+            total_cost_usd: 0.0,
+            daily_last_30: vec![],
+            top_questions: vec![],
+        });
+    }
+
+    let mut sessions_total: u32 = 0;
+    let mut sessions_closed: u32 = 0;
+    let mut duration_total_ms: u64 = 0;
+    let mut ai_requests_total: u64 = 0;
+    let mut tiles_spawned_total: u64 = 0;
+    let mut total_cost_microcents: u128 = 0;
+    let mut daily_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    let mut question_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+
+    let entries = std::fs::read_dir(&dir).map_err(|e| e.to_string())?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) != Some("jsonl") {
+            continue;
+        }
+        let Ok(meta) = entry.metadata() else { continue; };
+        if !meta.is_file() { continue; }
+        // Skip absurdly large files to keep this fast.
+        if meta.len() > 50 * 1024 * 1024 { continue; }
+        let Ok(content) = std::fs::read_to_string(&path) else { continue; };
+
+        sessions_total += 1;
+        let mut has_summary = false;
+
+        // Day bucket from session_start unix_ms — fall back to file mtime
+        // if the session_start line is missing/malformed.
+        let mut day_bucket: Option<String> = None;
+
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() { continue; }
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else { continue; };
+            let kind = v["kind"].as_str().unwrap_or("");
+            match kind {
+                "session_start" => {
+                    // Take first session_start timestamp seen. Use match-
+                    // guard form to satisfy clippy::collapsible_match.
+                    if let (None, Some(ts)) = (day_bucket.as_ref(), v["unix_ms"].as_i64()) {
+                        day_bucket = Some(ymd_from_unix_ms(ts));
+                    }
+                }
+                "session_summary" => {
+                    has_summary = true;
+                    if let Some(d) = v["duration_ms"].as_u64() { duration_total_ms += d; }
+                    if let Some(n) = v["ai_requests_total"].as_u64() { ai_requests_total += n; }
+                    if let Some(n) = v["tiles_spawned"].as_u64() { tiles_spawned_total += n; }
+                    if let Some(c) = v["total_cost_microcents"].as_u64() {
+                        total_cost_microcents += c as u128;
+                    }
+                }
+                "tile_spawn" => {
+                    if let Some(q) = v["question"].as_str() {
+                        // Normalise: lowercase, collapse whitespace, take first 60 chars.
+                        let q = q.to_lowercase();
+                        let normalized: String = q.split_whitespace().collect::<Vec<_>>().join(" ");
+                        let trimmed: String = normalized.chars().take(60).collect();
+                        if !trimmed.is_empty() {
+                            *question_counts.entry(trimmed).or_insert(0) += 1;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        if has_summary {
+            sessions_closed += 1;
+        }
+        // Fall back to file mtime for bucketing if no session_start ts.
+        let bucket = day_bucket.unwrap_or_else(|| {
+            let mtime = meta
+                .modified()
+                .ok()
+                .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(0);
+            ymd_from_unix_ms(mtime)
+        });
+        *daily_counts.entry(bucket).or_insert(0) += 1;
+    }
+
+    // Last 30 days from today, newest first. Missing days emit 0.
+    let today_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    let mut daily_last_30: Vec<(String, u32)> = Vec::with_capacity(30);
+    for day_offset in 0..30 {
+        let ts = today_ms - day_offset as i64 * 86_400_000;
+        let ymd = ymd_from_unix_ms(ts);
+        let count = *daily_counts.get(&ymd).unwrap_or(&0);
+        daily_last_30.push((ymd, count));
+    }
+
+    // Top-5 question prefixes by count desc.
+    let mut top: Vec<(String, u32)> = question_counts.into_iter().collect();
+    top.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    top.truncate(5);
+
+    Ok(SessionStats {
+        sessions_total,
+        sessions_closed,
+        duration_total_sec: duration_total_ms / 1000,
+        ai_requests_total,
+        tiles_spawned_total,
+        total_cost_usd: total_cost_microcents as f64 / 100_000_000.0,
+        daily_last_30,
+        top_questions: top,
+    })
+}
+
+/// Convert unix-ms timestamp to a "YYYY-MM-DD" string in UTC. We don't
+/// pull chrono just for this — manual math is fine for date bucketing.
+/// Works for any positive timestamp post-epoch.
+fn ymd_from_unix_ms(ms: i64) -> String {
+    let sec = ms / 1000;
+    // Days since 1970-01-01 (UTC).
+    let days = sec / 86_400;
+    // Civil-from-days algorithm, public domain — Howard Hinnant.
+    // Returns (year, month, day) Gregorian.
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u32;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
 /// v0.0.58: render a session JSONL into a human-readable markdown file
 /// and save to Desktop. Pairs with the Replay viewer "📥 Export
 /// markdown" button. Same path-validation as `load_session` — only
@@ -2245,6 +2424,7 @@ pub fn run() {
             list_sessions,
             load_session,
             export_session_markdown,
+            read_all_session_stats,
             set_stealth,
             list_snippets,
             expand_snippet,
