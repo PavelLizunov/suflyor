@@ -11,6 +11,24 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.78 (2026-05-26) — QOL block 5, #26
+
+**Quick clipboard → meeting_context button.**
+
+New `+📋 from clipboard` button in Settings → 👥 Profile (left of
+the existing "Запись 30с" / "Структурировать" buttons). Reads
+clipboard via `navigator.clipboard.readText()`, trims, caps at 8000
+chars (more is almost certainly a mis-paste), and appends to
+`meeting_context` with a `---` divider when context isn't empty.
+
+Use case: chrome-copy a job description / project brief / Slack
+context dump → one click in Settings → context populated. Saves the
+manual select-all → scroll-to-bottom → paste dance, especially when
+the existing context is long enough to scroll.
+
+Error feedback via the existing `recError` chip: "Clipboard is empty"
+or "Clipboard read failed: …" depending on the failure mode.
+
 ### → v0.0.77 (2026-05-26) — QOL block 5, #25
 
 **F1 — toggle hotkey-help popover (global hotkey).**

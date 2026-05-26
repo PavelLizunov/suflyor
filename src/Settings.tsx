@@ -538,6 +538,36 @@ export default function Settings() {
     }
   };
 
+  // v0.0.78: read clipboard and append to meeting_context. Useful for
+  // pasting a freshly-copied job description / project brief without
+  // the full select-all → scroll-to-bottom → paste dance. Trims +
+  // adds a divider if context isn't empty.
+  const appendClipboardToContext = async () => {
+    if (!cfg) return;
+    try {
+      const text = await navigator.clipboard.readText();
+      const trimmed = text.trim();
+      if (!trimmed) {
+        setRecError(lang === "en"
+          ? "Clipboard is empty (or contains non-text)"
+          : "Буфер обмена пуст (или содержит не-текст)");
+        return;
+      }
+      // Cap at 8000 chars — anything longer is almost certainly a
+      // mis-paste and would blow up the token budget anyway.
+      const capped = trimmed.length > 8000 ? trimmed.slice(0, 8000) + "\n\n[…truncated]" : trimmed;
+      const appended = cfg.meeting_context.trim()
+        ? cfg.meeting_context.trim() + "\n\n---\n\n" + capped
+        : capped;
+      update({ meeting_context: appended });
+      setRecError(""); // clear any stale error
+    } catch (e) {
+      setRecError(lang === "en"
+        ? `Clipboard read failed: ${e}`
+        : `Не удалось прочитать буфер: ${e}`);
+    }
+  };
+
   const back = async () => {
     // Restore overlay compact size + clear ?settings query, all via backend
     // so the window resize happens atomically with the route change.
@@ -798,6 +828,20 @@ export default function Settings() {
           })()}
         </div>
         <div className="btn-row" style={{ justifyContent: "flex-start", gap: 8 }}>
+          {/* v0.0.78: quick clipboard append — for pasting job
+              descriptions / project briefs without manual select-all
+              → scroll → paste. Trims, caps at 8000 chars, adds ---
+              divider when context isn't empty. */}
+          <button
+            className="btn secondary"
+            onClick={appendClipboardToContext}
+            disabled={recState !== "idle"}
+            title={lang === "en"
+              ? "Read clipboard and append to context (with divider). Useful for pasting job descriptions."
+              : "Прочитать буфер и дописать в контекст (с разделителем). Удобно для job description."}
+          >
+            {lang === "en" ? "+📋 from clipboard" : "+📋 из буфера"}
+          </button>
           <button
             className="btn secondary"
             onClick={recordPrep}
