@@ -187,6 +187,17 @@ kbd {
 .overlay-bar :where(button, input, select, .no-drag, kbd) {
   -webkit-app-region: no-drag;
 }
+/* v0.0.34: keep direct children of overlay-bar at their natural size.
+   Without `flex-shrink: 0`, default flex would shrink chips/buttons to
+   fit a narrow window — that hides «extra» chips visually. With
+   shrink-0, content overflows when window is too narrow, and the
+   ResizeObserver in Overlay.tsx detects the overflow via scrollWidth
+   and grows the window to fit. Result: window auto-grows to content +
+   50 px; user can drag WIDER freely; can't drag narrower than the
+   intrinsic chips-sum (auto-grows back). */
+.overlay-bar > * {
+  flex-shrink: 0;
+}
 
 /* Status pill on the bar (label + dot) */
 .overlay-bar .status {
@@ -1288,6 +1299,21 @@ body.settings {
   gap: var(--s-2);
   justify-content: flex-end;
   margin-top: var(--s-3);
+}
+
+/* v0.0.34: visual treatment for the Settings outer footer (the Save +
+   Back row pinned at the bottom of the window). User reported the
+   footer didn't *look* fixed — without a separator + bg contrast it
+   reads like a floating control row. Native `.settings-root` already
+   pins it positionally via flex-column + shell `flex:1 1 auto`, so
+   this class is purely visual. */
+.settings-footer {
+  flex: 0 0 auto;
+  margin-top: 0;
+  padding: var(--s-3) var(--s-5);
+  border-top: 1px solid var(--c-border);
+  background: var(--c-bg-2);
+  justify-content: flex-end;
 }
 
 /* --- Replay viewer: current JSX uses .replay-* class grammar ----- */

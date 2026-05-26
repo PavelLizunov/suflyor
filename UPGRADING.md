@@ -11,6 +11,42 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.34 (2026-05-26)
+
+Three live-feedback fixes:
+
+- **Settings footer visually pinned.** User: «футер не зафиксирован».
+  The footer (Back + Save) was positionally fixed via flex-column +
+  shell `flex:1 1 auto` but had NO visual differentiation — same
+  background as the pane, no separator — so it read as a floating
+  control row. Added a `.settings-footer` modifier class with
+  `border-top: 1px solid var(--c-border)` + `background: var(--c-bg-2)`
+  + tighter padding. Layout-wise unchanged; just visually fixed.
+- **Overlay bar: no more 50%-screen cap.** User: «Основной экран
+  должен быть не на 50%, а чтоб все индикаторы умещались +50 пикселей».
+  v0.0.31 capped bar width at `min(screen × 0.5, 1200)`. With many
+  active chips (🔥 + ⏱ + 💰 + cost + screenshot etc.) the bar wanted
+  ≈1000 px but on 1920p screens got capped at 960, hiding the last
+  chip. The cap is gone — bar grows freely to content + 50 px.
+- **Overlay bar is now manually resizable.** User: «я его не растянуть
+  не сузить не могу». The previous ResizeObserver re-asserted width
+  on every fire — because it measured `entry.contentRect.width` of
+  the `.overlay-root` (which stretches to fill the window), the
+  computed desired width equaled current window width + 50, defeating
+  every user drag attempt. Switched to a **grow-only** policy:
+  - Width is derived from `overlay-bar.scrollWidth` (intrinsic content
+    extent, not container width) + 50 px buffer.
+  - Width only `setSize` when `intrinsic > current + 4` (i.e. when
+    chips overflow the current bar). Never shrinks.
+  - User can drag wider freely. User can't drag narrower than
+    intrinsic-content (auto-grows back), which is the correct lower
+    bound — chips would overflow otherwise.
+  - CSS: added `.overlay-bar > * { flex-shrink: 0; }` so bar children
+    keep their natural size (without this, flex's default shrink would
+    let scrollWidth equal offsetWidth always, defeating the intrinsic
+    measurement).
+  - Height continues to auto-grow for transcript-tail / answer-bubble.
+
 ### → v0.0.33 (2026-05-26) 🚨 P0 hang fix
 
 Four live-feedback fixes — most critical first.

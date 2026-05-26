@@ -219,32 +219,38 @@ export default function Overlay() {
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
-      // contentRect doesn't include border. We add a small margin for
-      // padding + safety. Clamp to sane bounds.
+      // v0.0.34: GROW-ONLY width policy + removed 50%-of-screen cap.
+      // User reported being unable to manually resize the bar — the prev
+      // logic recomputed desiredW from contentRect every fire, which
+      // EQUALS the current window width (the root stretches to fill
+      // the window) → setSize echoed the current width + 50 → user's
+      // drag was undone on the next RO fire. Plus the 50% cap meant
+      // chips overflowed on 1280-width screens when many were active.
       //
-      // v0.0.31: max width is now 50% of screen (with abs floor 520, ceil
-      // 1200). User reported v0.0.30 overlay growing past half the screen
-      // on a 1920+ monitor — too dominant for a peripheral HUD. On
-      // 1280×720 → max 640px · 1920×1080 → max 960px · 2560×1440 → max
-      // 1200px (hits the absolute ceiling). screen.availWidth is the
-      // logical screen width (excludes taskbar); for multi-monitor it's
-      // the PRIMARY monitor, which is close enough for a soft cap.
-      const screenW = (typeof window !== "undefined" && window.screen?.availWidth) || 1920;
-      const maxBarW = Math.min(Math.max(Math.floor(screenW * 0.5), 520), 1200);
-      // v0.0.32: padding +30 → +50 per user feedback («запас 50 пикселей»).
-      // Min size = content + 50 px buffer so the last indicator (gear, F-key
-      // strip) never sits flush against the bar edge. Still capped at 50 %
-      // of screen via maxBarW.
-      const desiredW = Math.min(Math.max(Math.ceil(entry.contentRect.width) + 50, 520), maxBarW);
-      const desiredH = Math.min(Math.max(Math.ceil(entry.contentRect.height) + 4, 96), 900);
+      // New policy:
+      //   - Width: only GROW when intrinsic bar content overflows the
+      //     current window (`bar.scrollWidth > currentW`). Never shrink.
+      //     User can drag the window wider freely. They can't drag
+      //     NARROWER than the intrinsic content (chips would overflow,
+      //     bad UX), but that's an acceptable lower bound.
+      //   - Height: same as before — auto-grow to fit transcript-tail +
+      //     answer-bubble. The .overlay-root contentRect is correct here
+      //     because those children genuinely stack below the bar.
+      //   - No screen-relative cap — bar is as wide as it needs.
+      const bar = overlayBarRef.current;
+      const intrinsicBarW = bar ? bar.scrollWidth : 0;
+      const measuredH = Math.ceil(entry.contentRect.height);
+      const desiredH = Math.min(Math.max(measuredH + 4, 96), 900);
       getCurrentWindow().outerSize().then((sz) => {
         getCurrentWindow().scaleFactor().then((scale) => {
           const currentW = Math.round(sz.width / scale);
           const currentH = Math.round(sz.height / scale);
-          // Only resize on > 4px delta on either axis to dampen flicker
-          // and to ignore sub-pixel measurement noise.
-          if (Math.abs(currentW - desiredW) > 4 || Math.abs(currentH - desiredH) > 4) {
-            getCurrentWindow().setSize(new LogicalSize(desiredW, desiredH))
+          // Grow width only when intrinsic content would overflow.
+          // floor 520 keeps a usable minimum for the initial mount.
+          const neededW = Math.max(intrinsicBarW + 50, 520);
+          const targetW = neededW > currentW + 4 ? neededW : currentW;
+          if (Math.abs(currentW - targetW) > 4 || Math.abs(currentH - desiredH) > 4) {
+            getCurrentWindow().setSize(new LogicalSize(targetW, desiredH))
               .catch((err) => console.warn("overlay autoresize:", err));
           }
         }).catch(() => {});

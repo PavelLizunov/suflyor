@@ -1592,11 +1592,11 @@ export default function Settings() {
       </div>
       {/* end v0.0.30 settings-shell (sidebar + pane) */}
 
-      {/* v0.0.32: footer now minimal — just Back + Save. The 5 «сессии /
-         экспорт» buttons moved into the Advanced panel above so the footer
-         never wraps Save to a second line on the default 750-px Settings
-         window. */}
-      <div className="btn-row">
+      {/* v0.0.32: footer minimal — Back + Save. Other 5 buttons moved to
+         Advanced panel. v0.0.34: added `.settings-footer` class for the
+         visual pin treatment (border-top + bg-2) so it reads as fixed
+         instead of floating. */}
+      <div className="btn-row settings-footer">
         {savedFlash && <span style={{ color: "#4ade80", alignSelf: "center" }}>✓ Saved</span>}
         <button className="btn secondary" onClick={back}>← Back to overlay</button>
         <button className="btn" onClick={async () => { await save(); }}>Save</button>
