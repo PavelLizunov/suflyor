@@ -640,9 +640,10 @@ const strings = {
     en: "💰 $X.XXX — accumulated session cost (Claude tokens). Toggle in Settings → Interface",
   },
   // KB palette
+  // v0.0.70: hint at the `/` prefix for snippet search.
   "overlay.palette.placeholder": {
-    ru: "KB поиск: kubernetes / dijkstra / iptables …   (Esc закрыть, Enter раскрыть)",
-    en: "KB search: kubernetes / dijkstra / iptables …   (Esc to close, Enter to expand)",
+    ru: "KB поиск или /сниппет (Esc закрыть · Enter раскрыть)",
+    en: "KB search or /snippet (Esc to close · Enter to expand)",
   },
   "overlay.palette.aria":     { ru: "Поиск по knowledge base", en: "Knowledge base search" },
 

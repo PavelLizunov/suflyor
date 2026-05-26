@@ -143,23 +143,55 @@ export default function Overlay() {
     });
   };
   // Search debounced when palette open + query non-empty.
+  // v0.0.70: `/key` prefix switches search to user snippets (no AI cost,
+  // expand_snippet spawns instantly). Distinguishes via the `source`
+  // field set to "SNIPPET" so expandSelected can route to the right
+  // backend command. Bare snippets list (just `/`) returns top 8.
   useEffect(() => {
     if (!paletteOpen) return;
     const q = paletteQuery.trim();
     if (!q) { setPaletteResults([]); setPaletteIdx(0); return; }
     let cancelled = false;
     const t = setTimeout(() => {
-      invoke<KBHit[]>("kb_search", { query: q, limit: 8 })
-        .then((res) => {
-          if (cancelled || !mountedRef.current) return;
-          setPaletteResults(res);
-          setPaletteIdx(0);
-        })
-        .catch((e) => {
-          if (cancelled || !mountedRef.current) return;
-          console.warn("kb_search:", e);
-          setPaletteResults([]);
-        });
+      if (q.startsWith("/")) {
+        const needle = q.slice(1).toLowerCase().trim();
+        invoke<Array<{ key: string; title?: string; body?: string }>>("list_snippets")
+          .then((all) => {
+            if (cancelled || !mountedRef.current) return;
+            const filtered = all
+              .filter((s) => {
+                if (!needle) return true;
+                return s.key.toLowerCase().includes(needle)
+                  || (s.title ?? "").toLowerCase().includes(needle);
+              })
+              .slice(0, 8)
+              .map((s) => ({
+                key: s.key,
+                heading: s.title || s.key,
+                body: s.body || "",
+                source: "SNIPPET",
+              }));
+            setPaletteResults(filtered);
+            setPaletteIdx(0);
+          })
+          .catch((e) => {
+            if (cancelled || !mountedRef.current) return;
+            console.warn("list_snippets:", e);
+            setPaletteResults([]);
+          });
+      } else {
+        invoke<KBHit[]>("kb_search", { query: q, limit: 8 })
+          .then((res) => {
+            if (cancelled || !mountedRef.current) return;
+            setPaletteResults(res);
+            setPaletteIdx(0);
+          })
+          .catch((e) => {
+            if (cancelled || !mountedRef.current) return;
+            console.warn("kb_search:", e);
+            setPaletteResults([]);
+          });
+      }
     }, 80);
     return () => { cancelled = true; clearTimeout(t); };
   }, [paletteQuery, paletteOpen]);
@@ -250,10 +282,18 @@ export default function Overlay() {
     // v0.0.56: record successful expansion in KB history.
     pushKbHistory(paletteQuery);
     try {
-      await invoke("kb_spawn", { key: hit.key });
+      // v0.0.70: route by source. SNIPPET → expand_snippet (user-defined
+      // pre-written tile, $0); KB sources (GLOSSARY/COMMAND/PATTERN) →
+      // kb_spawn (embedded reference, $0). Both spawn a tile + close
+      // the palette.
+      if (hit.source === "SNIPPET") {
+        await invoke("expand_snippet", { key: hit.key });
+      } else {
+        await invoke("kb_spawn", { key: hit.key });
+      }
       closePalette();
     } catch (e) {
-      console.warn("kb_spawn:", e);
+      console.warn("palette expand:", e);
     }
   };
 

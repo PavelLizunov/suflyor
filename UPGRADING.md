@@ -11,6 +11,26 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.70 (2026-05-26) — QOL block 5, #18
+
+**F4 palette searches snippets via `/key` prefix.**
+
+The F4 KB palette is now also a snippet picker. Type `/elevator` to
+filter user snippets by key+title; type just `/` to see the top 8.
+Enter expands the selected snippet via `expand_snippet` (existing
+backend command) → instant tile, $0 (no AI call).
+
+Plain queries (no `/` prefix) still search the embedded knowledge base
+exactly as before — backward-compatible. `source` field on each result
+distinguishes `SNIPPET` from `GLOSSARY/COMMAND/PATTERN` so the
+expandSelected handler routes to the right backend command.
+
+Use case: in the middle of an interview you want to use a pre-written
+"elevator pitch" snippet — F4 → `/elev` → Enter → tile. 4 keystrokes,
+no Settings dive.
+
+Placeholder text updated to hint at the new prefix.
+
 ### → v0.0.69 (2026-05-26) — QOL block 5, #17
 
 **Tile age indicator (⏱) + reload generation badge (🔄×N).**
