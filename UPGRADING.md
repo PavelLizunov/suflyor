@@ -11,6 +11,40 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.49 (2026-05-26)
+
+Eighth i18n release. Translates the **Replay viewer** (Settings → 📊
+Session Replay). Last remaining major UI surface.
+
+Strings covered:
+- Header: dialog aria, "📊 Session Replay" title (universal — was
+  already English), session-picker dropdown aria + placeholder
+  ("— pick a session —"), Back-to-overlay button + aria
+- Status messages: "Loading…", "Empty session (no events).", "No
+  sessions yet. Start a session from the overlay to populate this
+  list."
+- Filter chips: "Filter:" prefix label, show/hide tooltips with
+  {kind}/{count} interpolation, "↺ reset" button + tooltip
+- Footer: "{n} events · {ai} AI responses" + cost line with both
+  variants (total cost / not tracked)
+
+Row-level inline labels (model=, prep=, lines, min, ms, finish=,
+in-tok, screenshot, etc.) and event-kind row labels (SESSION START,
+SUMMARY, TILE, AI REQ, etc.) intentionally kept as technical English
+— they're field names from the JSONL journal and changing them would
+desync from the on-disk format. Indicator emoji (🎤 🗣 ✓ 📎) stay
+universal.
+
+Replay loads ui_language via get_config on mount — works because
+Replay renders inside the overlay window (?replay=1), passing the
+assert_overlay caller guard.
+
+Still NOT translated:
+- Snippets section in Settings (~40 strings + dynamic + CRUD modal) —
+  deferred indefinitely; user rarely touches once configured
+
+No backend changes.
+
 ### → v0.0.48 (2026-05-26)
 
 Seventh i18n release. Translates the **Overlay bar** (the most visible

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { t, resolveLang, type Lang } from "./i18n";
 
 type SessionInfo = {
   path: string;
@@ -102,6 +103,15 @@ export default function Replay() {
   // Default empty = show all. Stored per-session in state, not localStorage —
   // simpler model + each session has potentially different kinds anyway.
   const [hiddenKinds, setHiddenKinds] = useState<Set<string>>(new Set());
+  // v0.0.49: UI language for Replay chrome. Same pattern as Overlay —
+  // load from config on mount. Replay runs inside the overlay window
+  // (?replay=1) so get_config passes assert_overlay.
+  const [lang, setLang] = useState<Lang>("ru");
+  useEffect(() => {
+    invoke<{ ui_language?: string }>("get_config")
+      .then((c) => setLang(resolveLang(c.ui_language)))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     document.body.classList.add("settings");
@@ -176,38 +186,36 @@ export default function Replay() {
   };
 
   return (
-    <main className="replay-root" aria-label="Session journal replay viewer">
+    <main className="replay-root" aria-label={t("replay.root.aria", lang)}>
       <div className="replay-header" role="banner">
-        <h2 style={{ margin: 0 }}>📊 Session Replay</h2>
+        <h2 style={{ margin: 0 }}>{t("replay.title", lang)}</h2>
         <div className="replay-controls">
           <select
             value={selected}
             onChange={(e) => setSelected(e.target.value)}
             className="replay-select"
-            aria-label="Choose a session to replay"
+            aria-label={t("replay.session.aria", lang)}
           >
-            <option value="">— pick a session —</option>
+            <option value="">{t("replay.session.placeholder", lang)}</option>
             {sessions.map((s) => (
               <option key={s.path} value={s.path}>
                 {s.filename} · {fmtBytes(s.size_bytes)} · {fmtModified(s.modified_unix)}
               </option>
             ))}
           </select>
-          <button className="btn secondary" onClick={back} aria-label="Return to overlay">
-            ← Back to overlay
+          <button className="btn secondary" onClick={back} aria-label={t("replay.back.aria", lang)}>
+            {t("replay.back.button", lang)}
           </button>
         </div>
       </div>
 
       {err && <div className="replay-error">{err}</div>}
-      {loading && <div className="replay-status">Loading…</div>}
+      {loading && <div className="replay-status">{t("replay.loading", lang)}</div>}
       {!loading && !err && selected && events.length === 0 && (
-        <div className="replay-status">Empty session (no events).</div>
+        <div className="replay-status">{t("replay.empty", lang)}</div>
       )}
       {!loading && !selected && sessions.length === 0 && (
-        <div className="replay-status">
-          No sessions yet. Start a session from the overlay to populate this list.
-        </div>
+        <div className="replay-status">{t("replay.no.sessions", lang)}</div>
       )}
 
       {events.length > 0 && kindCounts.length > 1 && (
@@ -222,7 +230,7 @@ export default function Replay() {
           }}
         >
           <span style={{ fontSize: 11, color: "var(--c-text-dim)", alignSelf: "center", marginRight: 4 }}>
-            Filter:
+            {t("replay.filter.label", lang)}
           </span>
           {kindCounts.map(([kind, count]) => {
             const hidden = hiddenKinds.has(kind);
@@ -256,7 +264,9 @@ export default function Replay() {
                   textDecoration: hidden ? "line-through" : "none",
                   cursor: "pointer",
                 }}
-                title={hidden ? `Включить ${kind}` : `Скрыть ${kind} (${count} событий)`}
+                title={hidden
+                  ? t("replay.filter.show.tip", lang).replace("{kind}", kind)
+                  : t("replay.filter.hide.tip", lang).replace("{kind}", kind).replace("{count}", String(count))}
               >
                 {kind} · {count}
               </button>
@@ -275,9 +285,9 @@ export default function Replay() {
                 cursor: "pointer",
                 marginLeft: 4,
               }}
-              title="Show all events"
+              title={t("replay.filter.reset.tip", lang)}
             >
-              ↺ reset
+              {t("replay.filter.reset", lang)}
             </button>
           )}
         </div>
@@ -294,12 +304,14 @@ export default function Replay() {
       {events.length > 0 && (
         <div className="replay-footer">
           <span>
-            {events.length} events · {totalCost.count} AI responses
+            {t("replay.footer.events", lang)
+              .replace("{n}", String(events.length))
+              .replace("{ai}", String(totalCost.count))}
           </span>
           <span>
             {totalCost.sum > 0
-              ? `Total cost: $${totalCost.sum.toFixed(4)}`
-              : "Total cost: — (not tracked in journal yet)"}
+              ? t("replay.footer.cost", lang).replace("{n}", totalCost.sum.toFixed(4))
+              : t("replay.footer.cost.none", lang)}
           </span>
         </div>
       )}

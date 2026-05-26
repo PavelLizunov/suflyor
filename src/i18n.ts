@@ -620,6 +620,50 @@ const strings = {
   "tile.source.manual":       { ru: "ВРУЧНУЮ",                en: "MANUAL" },
   "tile.source.snippet":      { ru: "СНИППЕТ",                en: "SNIPPET" },
   "tile.source.kb":           { ru: "KB",                     en: "KB" },
+
+  // ── Replay viewer (v0.0.49) ────────────────────────────────────────
+  "replay.root.aria":         { ru: "Просмотр журнала сессии", en: "Session journal replay viewer" },
+  "replay.title":             { ru: "📊 Session Replay",      en: "📊 Session Replay" },
+  "replay.session.placeholder": { ru: "— выбери сессию —",    en: "— pick a session —" },
+  "replay.session.aria":      { ru: "Выбрать сессию для просмотра", en: "Choose a session to replay" },
+  "replay.back.button":       { ru: "← К overlay",            en: "← Back to overlay" },
+  "replay.back.aria":         { ru: "Вернуться к overlay",    en: "Return to overlay" },
+  "replay.loading":           { ru: "Загрузка…",              en: "Loading…" },
+  "replay.empty":             { ru: "Пустая сессия (нет событий).", en: "Empty session (no events)." },
+  "replay.no.sessions":       {
+    ru: "Сессий пока нет. Стартани сессию из overlay чтобы заполнить этот список.",
+    en: "No sessions yet. Start a session from the overlay to populate this list.",
+  },
+  "replay.filter.label":      { ru: "Фильтр:",                en: "Filter:" },
+  "replay.filter.show.tip":   { ru: "Включить {kind}",        en: "Show {kind}" },
+  "replay.filter.hide.tip":   { ru: "Скрыть {kind} ({count} событий)", en: "Hide {kind} ({count} events)" },
+  "replay.filter.reset":      { ru: "↺ сбросить",             en: "↺ reset" },
+  "replay.filter.reset.tip":  { ru: "Показать все события",   en: "Show all events" },
+  "replay.footer.events":     { ru: "{n} событий · {ai} AI ответов", en: "{n} events · {ai} AI responses" },
+  "replay.footer.cost":       { ru: "Общая стоимость: ${n}",  en: "Total cost: ${n}" },
+  "replay.footer.cost.none":  {
+    ru: "Общая стоимость: — (ещё не пишется в журнал)",
+    en: "Total cost: — (not tracked in journal yet)",
+  },
+  // Row labels (uppercase by CSS) — Russian variants are short
+  "replay.label.start":       { ru: "SESSION START",          en: "SESSION START" },
+  "replay.label.stop":        { ru: "SESSION STOP",           en: "SESSION STOP" },
+  "replay.label.summary":     { ru: "SUMMARY",                en: "SUMMARY" },
+  "replay.label.detect.on":   { ru: "DETECT ✓",               en: "DETECT ✓" },
+  "replay.label.detect.off":  { ru: "detect",                 en: "detect" },
+  "replay.label.tile":        { ru: "TILE",                   en: "TILE" },
+  "replay.label.unknown":     { ru: "unknown",                en: "unknown" },
+  // Detector reason text
+  "replay.detect.no.trigger": { ru: "нет триггера",           en: "no trigger" },
+  // Row body labels
+  "replay.row.dur":           { ru: "мин",                    en: "min" },
+  "replay.row.lines":         { ru: "{n} строк ({mic}🎤 · {sys}🗣)", en: "{n} lines ({mic}🎤 · {sys}🗣)" },
+  "replay.row.detector":      { ru: "детектор: {t} / {total}", en: "detector: {t} / {total}" },
+  "replay.row.aitiles":       { ru: "{ai} AI · {tiles} тайлов", en: "{ai} AI · {tiles} tiles" },
+  "replay.row.rl":            { ru: " · {n} rate-limited",    en: " · {n} rate-limited" },
+  "replay.row.errors":        { ru: " · {n} ошибок",          en: " · {n} errors" },
+  "replay.row.screenshot":    { ru: "📎 screenshot",          en: "📎 screenshot" },
+  "replay.row.in_tok":        { ru: "~{n} in-tok",            en: "~{n} in-tok" },
 } as const;
 
 export type StringKey = keyof typeof strings;
