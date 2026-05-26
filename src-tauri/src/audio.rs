@@ -7,6 +7,16 @@
 //! Loopback trick: open a *render* endpoint, but initialise its
 //! IAudioClient with Direction::Capture — WASAPI returns the audio
 //! that's being played back. This is the same approach pluely uses.
+//!
+//! Tier 3 note: this module is one of the few exempt from
+//! `clippy::unwrap_used` (12 sites). The unwraps are inside loops
+//! guarded by `byte_q.len() >= 4` etc. — bounds-checked precondition
+//! makes them safe. Rewriting to `.next_chunk::<4>().unwrap_or(...)`
+//! would obscure the invariant. See module-level `#[allow]` below.
+#![allow(
+    clippy::unwrap_used,
+    reason = "bounds-checked precondition makes these pop_front().unwrap() calls safe"
+)]
 
 use anyhow::{anyhow, Context, Result};
 use serde::Serialize;

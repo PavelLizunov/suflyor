@@ -77,6 +77,13 @@ pub fn spawn(
     let stt_semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(6));
 
     tokio::spawn(async move {
+        // `reqwest::Client::builder().build()` only fails if TLS init
+        // fails — that's a process-wide rustls bring-up failure, not a
+        // recoverable runtime condition. Exempt from `expect_used` deny.
+        #[allow(
+            clippy::expect_used,
+            reason = "TLS-init failure is non-recoverable at process startup"
+        )]
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()

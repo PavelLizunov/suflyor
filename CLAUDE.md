@@ -156,6 +156,34 @@ The script does the boring infra — the actual eyeball gate is Claude
 reading the PNG via the `Read` tool. Without that final read, layer 6
 is just bookkeeping. See `scripts/visual_check.ps1`.
 
+### Tier 3 status — Rust selective deny baseline adopted 2026-05-27
+
+`src-tauri/src/lib.rs` denies (non-test compilation only):
+- `clippy::unwrap_used` — exempt: 12 sites in `audio.rs` (module-level
+  `#[allow]` with `reason = "bounds-checked precondition makes ..."`)
+- `clippy::expect_used` — exempt: 1 site in `stt.rs::tokio::spawn` (TLS
+  init), `#[allow]` with rationale
+- `clippy::panic`
+- `missing_docs` — all `pub` items must have doc comments (added to
+  `lib.rs::run()`, crate-level docs to `lib.rs` and `build.rs`)
+
+**Deliberately SKIPPED:**
+- `clippy::pedantic` — surfaces ~67 noisy style suggestions
+  (`must_use_candidate`, `missing_errors_doc`, `cast_possible_truncation`).
+  Not safety findings. Adopt selectively in a future Tier 3.5.
+- `clippy::indexing_slicing` — overlay-mvp's audio decimator + tile-grid
+  math use bounds-checked slicing in tight loops; rewriting to
+  `.get(i)?` would obscure invariants.
+
+`#[cfg_attr(not(test), deny(...))]` keeps test code (which uses
+`unwrap`/`expect` for setup brevity) compiling without per-module
+`#[allow]`. New `tests/copy_contract.rs`-style integration tests already
+add `#![allow(clippy::unwrap_used, clippy::expect_used)]` at module
+top per the methodology.
+
+Verified: `cargo clippy --all-targets -- -D warnings` and `cargo test
+--lib` both green.
+
 ### Tier 2 status — strict TS + ESLint adopted 2026-05-27
 
 **TypeScript:** all flags from the suflyor spec ARE enabled

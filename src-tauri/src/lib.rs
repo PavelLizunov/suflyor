@@ -1,3 +1,28 @@
+//! overlay-mvp library crate. Hosts the Tauri 2 backend for the suflyor
+//! voice/meeting overlay: audio capture, Whisper STT, Claude proxy, tile
+//! window manager, knowledge base, session journaling, and the front-door
+//! Tauri commands the React UI calls.
+//!
+//! Tier 3 deny baseline (per the suflyor GUI strictness spec — selective
+//! adoption, see `CLAUDE.md § Tier 3 status`):
+//!   * `unwrap_used` / `expect_used` / `panic` are DENIED at crate root.
+//!     Test code uses `#![allow(...)]` per the methodology.
+//!   * `missing_docs` DENIED to force a docstring on every public item.
+//!   * `clippy::pedantic` deliberately NOT enabled — surfaced ~67 noisy
+//!     style suggestions on a baseline run that aren't safety findings.
+//!   * `clippy::indexing_slicing` deliberately NOT enabled — overlay-mvp's
+//!     audio decimator and tile-grid math use bounds-checked slicing in
+//!     tight loops; rewriting to `.get(i)?` would obscure invariants
+//!     without buying real safety. Re-evaluate if a bug surfaces.
+
+// Test code uses unwrap/expect liberally for setup; only deny in non-test
+// builds. Test modules MUST add `#![allow(clippy::unwrap_used,
+// clippy::expect_used)]` if they live in non-`tests/` source files.
+#![cfg_attr(
+    not(test),
+    deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, missing_docs)
+)]
+
 mod ai;
 mod audio;
 mod config;
@@ -3245,6 +3270,10 @@ fn export_session_markdown(window: tauri::WebviewWindow, path: String) -> Result
 
 // ── Entry point ──────────────────────────────────────────────────────────
 
+/// Tauri application entry point. Called from `main.rs` (or the mobile
+/// equivalent when targeting Android/iOS). Initialises the global
+/// `env_logger` and the runtime panic hook, then hands off to
+/// `tauri::Builder::default()`.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
