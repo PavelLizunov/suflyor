@@ -129,16 +129,17 @@ Hooks in `.claude/settings.json` enforce R1-R10 (see `.claude/AUTONOMOUS_RULES.m
 All items 1-15 from prior marathon (00:13-00:55) are CLOSED (see Done log).
 Fresh priorities below.
 
-1. **Overlay bar drag fix** — explicitly deferred since v0.0.2 release notes ("Overlay bar drag через `-webkit-app-region` не работает на Windows WebView2 — фикс будет когда-нибудь"). Same pattern as v0.0.1 Settings drag fix: explicit onMouseDown → getCurrentWindow().startDragging() + capability already present. ~30 min.
-2. **Snippet add + edit modal** — 3-field (key, title, body) modal. Triggered from "+ New" button in snippet header + "✎" button per row. Delete already shipped in v0.0.9. ~2h work for proper modal. Big UX win.
-3. **Replay viewer: filter by event kind** — checkbox row at top (transcript/ai/tile/error/detector). Currently shows all 100+ events per session, hard to grep visually.
-4. **Tile Esc-to-close** — currently × button only. Pressing Esc when tile is focused should close it (or unfocus + close on next click). ~15 min.
-5. **Manual spawn from F4 KB palette confirmation** — test with proper coords on secondary display, confirm 5-tile chain has no overlap regression.
-6. **Fresh 6-agent re-review of v0.0.6/0.0.7/0.0.8/0.0.9** — separate from prior single-agent review. Different angles: security, correctness, perf, UX, tests, docs.
-7. **CONTRIBUTING.md** — short doc for forkers: hooks setup, autonomous mode caveat, test command, version-bump checklist.
-8. **README screenshot refresh** — capture v0.0.9 overlay/settings/kb-palette/tile with current UI (post all changes). Current screenshots from v0.0.1.
-9. **`cargo audit` security audit** — check Cargo.lock for known vulns in deps.
-10. **`npm audit` for frontend** — same check on node_modules.
+_All 10 items from the 2026-05-26T04:52 priority list are CLOSED — see Done log._
+
+**Fresh ideas for future blocks** (priority TBD by user):
+
+11. **Ghost-tile cleanup at startup** — Win32 enum on launch, close any orphaned `tile-*` WebView windows from a prior force-killed process. Only matters for developer-killed scenarios, but cheap to add. Needs `windows-rs` crate or raw winapi calls. ~2h.
+12. **Replay filter chips color-coded by kind** — currently all gray. Match the timeline row border colors (`--c-ai`, `--c-mic`, `--c-auto`, etc.). Pure CSS, ~30 min.
+13. **Diagnostic dump button** — Settings → 🆙 Обновления adds a "📊 Создать диагностический отчёт" button that exports sanitized config + last 100 journal events + system info + cargo/npm versions to Desktop. Useful for bug reports. ~2h.
+14. **Live test the v0.0.13 over-budget chip clear** — start session, force a tiny call to push over a $0.0001 budget, hit cap-hit, restart session, verify chip clears instantly (the fix's actual user-visible value). Needs valid bearer + bridge. ~30 min once setup ready.
+15. **Tauri MockRuntime integration tests** — Tauri's `tauri::test::MockRuntime` would let us actually assert that start_session emits cost:update on session boundary. Currently this is only verified by code inspection. ~3h to set up the test harness; pays off long-term.
+16. **`cargo outdated` audit** — already do `cargo audit` (security). `cargo-outdated` would flag deps with available newer versions. Install + run + document. ~30 min.
+17. **Search history in F4 KB palette** — last 5 queries persist across launches; arrow-up cycles through them when input is empty. ~1h.
 
 ## In progress (re-armed 2026-05-26T04:52, deadline 10:52)
 **Decision/Finding log + autonomous wrap** — all priority backlog items closed (#1, 2, 3, 4, 5, 6, 8, 9, 10). Continuing with polish/coverage during remaining marathon time.
