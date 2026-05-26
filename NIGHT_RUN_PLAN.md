@@ -142,9 +142,16 @@ _All 10 items from the 2026-05-26T04:52 priority list are CLOSED — see Done lo
 17. **Search history in F4 KB palette** — last 5 queries persist across launches; arrow-up cycles through them when input is empty. ~1h.
 
 ## In progress (re-armed 2026-05-26T04:52, deadline 10:52)
-**Decision/Finding log + autonomous wrap** — all priority backlog items closed (#1, 2, 3, 4, 5, 6, 8, 9, 10). Continuing with polish/coverage during remaining marathon time.
+**Polish + a11y sweep** — all priority backlog items closed; using remaining marathon time on accessibility (ARIA), color-coding, edge-case tests.
 
 ## Done log (newest at top)
+- **2026-05-26T07:55** — a11y(kb-palette): role=listbox + role=option + aria-selected + role=status aria-live on empty-state. Screen reader now announces KB search results as selectable list with current focus + "no matches" announcements.
+- **2026-05-26T07:50** — a11y(replay): main landmark + role=banner + aria-label on session select + back button. Replay route now properly announced.
+- **2026-05-26T07:45** — a11y(tile): role=dialog + aria-label + aria-pressed on pin button + aria-label on close button. Was 0 ARIA attrs.
+- **2026-05-26T07:30** — **Backlog #12 closed**: ux(replay) filter chips color-coded by kind via chipAccentForKind pure-fn mapping. Matches timeline row border colors.
+- **2026-05-26T07:00** — test(update): 2 new edge case tests for is_strictly_newer (unequal segment counts, non-numeric segments treated as zero). Test count 237 → 239.
+- **2026-05-26T06:50** — docs(architecture): exact file line counts (was ~approx) - several files drifted 30-160 lines.
+- **2026-05-26T06:45** — docs(readme): add tile.png screenshot + tile card section (4-shot README visual set complete).
 - **2026-05-26T06:30** — **Backlog #5 LIVE-VERIFIED**: spawned 6 fresh F7 tiles, got perfect 2×3 grid placement (no overlap). Then closed the middle tile (-784,111) and spawned another via F7 — gap was reused (PASS). v0.0.5 slot-collision fix confirmed working in release v0.0.13. Edge case observed during testing: if overlay-mvp.exe is force-killed mid-flight, WebView2 child windows can persist as orphans; subsequent fresh launch then sees an empty active list and a new spawn at slot 0 will overlap with the orphan window's position. This is not a normal-flow bug — graceful shutdown closes all children. Documented for future awareness.
 - **2026-05-26T06:05** — **v0.0.13 released**: 3 follow-up fixes from post-v0.0.12 agent review. (1) start_session emits cost:update {session_usd: 0} so over-budget chip clears immediately on session restart instead of waiting 60s. (2) Over-budget timer routed through flashFlag + tracked via overBudgetTimerRef (was untracked setTimeout — fresh cap-hit now properly re-extends 60s window instead of an earlier timer clearing it early). (3) Two cost:update listeners consolidated into one. UPGRADING.md corrected for the chip emoji history (v0.0.5 pivoted cost-cap to SOFT, but the dedicated 💰 emoji landed in v0.0.12). All checks clean.
 - **2026-05-26T05:55** — **Agent re-review of v0.0.10-v0.0.12**: found 3 real issues (P1 chip stale-on-restart + P2 stacked-untracked-timers + P2 UPGRADING accuracy). All shipped in v0.0.13 above. Backlog #6 closed.
