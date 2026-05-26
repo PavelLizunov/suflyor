@@ -11,6 +11,29 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.67 (2026-05-26) — QOL block 5, #15
+
+**STT language quick-switch chip in overlay bar (🎙 ru/en/auto).**
+
+New `🎙 <lang>` chip in the overlay bar (between ⏱ timer and ⌥ hotkey
+hint). Shows current `cfg.stt_language` setting: `ru`, `en`, or `авто`/
+`auto` for None. Click cycles `ru → en → auto → ru…`. Backend `set_stt_
+language` Tauri command validates the value (rejects anything except
+`ru`, `en`, or empty), updates `cfg.stt_language` in-memory + persists
+via `config::save`.
+
+STT module reads `cfg.stt_language` on every transcription call, so the
+switch applies on the very next audio chunk — no session restart needed.
+
+Use case: interview mid-flow switches to English ("can you walk me
+through this in English?") — instead of opening Settings → STT →
+language dropdown → save (5 clicks, blocks UI), one chip click flips
+the lang in <100 ms.
+
+The chip respects the existing Settings STT panel: edits there still
+work, and the chip auto-reloads `stt_language` on overlay focus event
+(so changing it in Settings updates the chip without restart).
+
 ### → v0.0.66 (2026-05-26) — QOL block 5, #14
 
 **Detector trigger tester in Settings → 🪟 Auto-tiles.**

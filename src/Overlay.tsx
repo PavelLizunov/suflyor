@@ -90,6 +90,9 @@ export default function Overlay() {
   // running-out indicator without being intrusive.
   const [sessionStartMs, setSessionStartMs] = useState<number | null>(null);
   const [sessionElapsedSec, setSessionElapsedSec] = useState(0);
+  // v0.0.67: STT language chip. Reads cfg on mount/focus + writes via
+  // set_stt_language Tauri command. Cycles ru → en → auto.
+  const [sttLang, setSttLang] = useState<string | null>(null);
   // Failure HUD — 3 dots (audio/stt/ai). null = no signal received yet.
   const [health, setHealth] = useState<HealthPayload | null>(null);
   // Voice coach — live mic WPM / filler density. null = backend hasn't
@@ -505,13 +508,14 @@ export default function Overlay() {
 
   // Load ask-mode + aggressive flag + ui_language from config once on mount.
   useEffect(() => {
-    invoke<{ manual_ask_mode?: string; auto_tile_every_line?: boolean; ui_language?: string }>("get_config")
+    invoke<{ manual_ask_mode?: string; auto_tile_every_line?: boolean; ui_language?: string; stt_language?: string | null }>("get_config")
       .then((c) => {
         if (!mountedRef.current) return;
         const mode = c.manual_ask_mode === "click" ? "click" : "hold";
         setAskMode(mode);
         setAggressive(Boolean(c.auto_tile_every_line));
         setLang(resolveLang(c.ui_language));
+        setSttLang(c.stt_language ?? null);
       })
       .catch((e) => console.warn("get_config:", e));
   }, []);
@@ -528,11 +532,12 @@ export default function Overlay() {
   useEffect(() => {
     const onFocus = () => {
       if (!mountedRef.current) return;
-      invoke<{ auto_tile_every_line?: boolean; ui_language?: string }>("get_config")
+      invoke<{ auto_tile_every_line?: boolean; ui_language?: string; stt_language?: string | null }>("get_config")
         .then((c) => {
           if (!mountedRef.current) return;
           setAggressive(Boolean(c.auto_tile_every_line));
           setLang(resolveLang(c.ui_language));
+          setSttLang(c.stt_language ?? null);
         })
         .catch(() => {});
     };
@@ -934,6 +939,37 @@ export default function Overlay() {
           {status === "answering" && t("overlay.status.answering", lang)}
           {status === "error" && t("overlay.status.error", lang).replace("{msg}", errorText.slice(0, 60))}
         </div>
+        {/* v0.0.67: STT language quick-switch chip. Cycles ru → en →
+            auto. Persisted to cfg via set_stt_language command. */}
+        <button
+          type="button"
+          className="hint"
+          style={{
+            fontFamily: "monospace",
+            fontSize: 11,
+            padding: "0 6px",
+            borderRadius: 4,
+            border: "1px solid var(--c-border-soft)",
+            background: "transparent",
+            cursor: "pointer",
+            color: "var(--c-text-mute)",
+          }}
+          title={lang === "en"
+            ? `STT language: ${sttLang ?? "auto"}. Click to cycle ru → en → auto.`
+            : `Язык STT: ${sttLang ?? "авто"}. Клик чтобы переключить ru → en → авто.`}
+          aria-label={lang === "en" ? "STT language" : "Язык STT"}
+          onClick={async () => {
+            const next = sttLang === "ru" ? "en" : sttLang === "en" ? "" : "ru";
+            try {
+              await invoke("set_stt_language", { lang: next });
+              setSttLang(next === "" ? null : next);
+            } catch (err) {
+              console.warn("set_stt_language:", err);
+            }
+          }}
+        >
+          🎙 {sttLang ?? (lang === "en" ? "auto" : "авто")}
+        </button>
         {/* v0.0.62: session elapsed timer chip. Shown while session
             running (sessionStartMs set). Yellow at 45 min, red at 60. */}
         {sessionStartMs !== null && (

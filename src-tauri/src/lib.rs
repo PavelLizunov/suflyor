@@ -2094,6 +2094,33 @@ fn ymd_from_unix_ms(ms: i64) -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
+/// v0.0.67: Quick-set STT language during a live session without
+/// reopening Settings. Updates `cfg.stt_language` + persists to
+/// config.json. STT module reads cfg on each transcription, so the
+/// change applies on the very next audio chunk.
+///
+/// Accepts: "ru" | "en" | "" (empty = auto-detect). Any other value
+/// is rejected to avoid typos polluting config.
+#[tauri::command]
+fn set_stt_language(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, SharedConfig>,
+    lang: String,
+) -> Result<(), String> {
+    assert_overlay(&window)?;
+    let normalized = lang.trim().to_lowercase();
+    if !normalized.is_empty() && normalized != "ru" && normalized != "en" {
+        return Err(format!("invalid stt language '{normalized}' — must be ru, en, or empty (auto)"));
+    }
+    let next_cfg = {
+        let mut c = state.write();
+        c.stt_language = if normalized.is_empty() { None } else { Some(normalized) };
+        c.clone()
+    };
+    config::save(&next_cfg).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// v0.0.66: detector trigger tester. Runs the real detect_trigger
 /// function on sample text using the current cfg.trigger_keywords.
 /// Returns a human-readable verdict so user can tune trigger_keywords
@@ -2691,6 +2718,7 @@ pub fn run() {
             open_bookmarks,
             generate_cheatsheet,
             test_detector,
+            set_stt_language,
             set_stealth,
             list_snippets,
             expand_snippet,
