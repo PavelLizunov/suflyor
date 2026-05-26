@@ -11,6 +11,26 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.57 (2026-05-26) — QOL block 5, #5
+
+**Snippet usage frecency sort + count badge.**
+
+(Versioned 0.0.57 instead of 0.0.58 — I'm shipping the frecency task
+sooner than test-mic which needs backend audio work.)
+
+Snippets list in Settings → 🪟 Auto-tiles & snippets now sorts by
+usage count descending (most-used first), alphabetical for ties.
+Each snippet row shows a small `N×` badge in accent color when count
+> 0. The `Expand →` button increments the counter on success.
+
+Backed by `localStorage["snippet.uses"]` = `{ [key]: count }` (per-key
+cap at 999 to prevent badge overflow). State + bumper live in
+Settings.tsx; the list `.sort()` runs after `.filter()` on render
+(snapshot via `.slice()` so cfg.snippets stays immutable).
+
+Use case: your most-used snippet (`/k8s-debug` say) bubbles to top
+each session — no scrolling through the 57-snippet default list.
+
 ### → v0.0.56 (2026-05-26) — QOL block 5, #4
 
 **Recent KB searches as quick-pick chips in F4 palette.**

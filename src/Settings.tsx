@@ -156,6 +156,28 @@ export default function Settings() {
   // 2026-05-25: "snippet бесконечно длинный список").
   const [snippetsExpanded, setSnippetsExpanded] = useState(false);
   const [snippetFilter, setSnippetFilter] = useState("");
+  // v0.0.58: snippet usage frecency. Tracks how many times each snippet
+  // has been expanded. Sort list by count desc (most-used first), then
+  // alphabetical for ties. Backed by localStorage 'snippet.uses' as
+  // { [key]: count }. Settings reads on mount; snippet-row Expand
+  // handler increments. Cap at 999 per key (cosmetic, prevents overflow
+  // in the badge UI).
+  const [snipUses, setSnipUses] = useState<Record<string, number>>(() => {
+    try {
+      const raw = localStorage.getItem("snippet.uses");
+      if (!raw) return {};
+      const obj = JSON.parse(raw);
+      return typeof obj === "object" && obj !== null ? obj : {};
+    } catch { return {}; }
+  });
+  const bumpSnipUse = (key: string) => {
+    setSnipUses((prev) => {
+      const next = { ...prev, [key]: Math.min((prev[key] ?? 0) + 1, 999) };
+      try { localStorage.setItem("snippet.uses", JSON.stringify(next)); }
+      catch (err) { console.warn("snippet.uses write failed:", err); }
+      return next;
+    });
+  };
   // Bridge probe — tests ai_base_url + ai_bearer with a cheap 1-token POST.
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
   const [bridgeBusy, setBridgeBusy] = useState(false);
@@ -1342,6 +1364,16 @@ export default function Settings() {
                   s.body.toLowerCase().includes(f) // v0.0.7: search body too
                 );
               })
+              // v0.0.58: sort by usage count desc, then alphabetical. The
+              // .slice() before .sort() keeps the underlying cfg.snippets
+              // array immutable (sort mutates in place).
+              .slice()
+              .sort((a, b) => {
+                const ua = snipUses[a.key] ?? 0;
+                const ub = snipUses[b.key] ?? 0;
+                if (ua !== ub) return ub - ua;
+                return a.key.localeCompare(b.key);
+              })
               .map((s, i) => (
               <div
                 key={s.key + ":" + i}
@@ -1356,6 +1388,24 @@ export default function Settings() {
                 }}
               >
                 <kbd style={{ minWidth: 50, textAlign: "center" }}>/{s.key}</kbd>
+                {/* v0.0.58: usage count badge — only shown if > 0 to
+                    avoid cluttering the row for unused snippets. */}
+                {(snipUses[s.key] ?? 0) > 0 && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      padding: "1px 6px",
+                      borderRadius: 8,
+                      background: "rgba(99, 102, 241, 0.18)",
+                      color: "var(--c-accent, #818cf8)",
+                      fontFamily: "monospace",
+                      userSelect: "none",
+                    }}
+                    title={lang === "en" ? `Used ${snipUses[s.key]}×` : `Использован ${snipUses[s.key]}×`}
+                  >
+                    {snipUses[s.key]}×
+                  </span>
+                )}
                 <span style={{ flex: 1, fontSize: 12 }}>{s.title}</span>
                 <button
                   className="btn secondary"
@@ -1363,6 +1413,8 @@ export default function Settings() {
                   onClick={async () => {
                     try {
                       await invoke("expand_snippet", { key: s.key });
+                      // v0.0.58: bump frecency counter on successful expand.
+                      bumpSnipUse(s.key);
                       showToast("ok", t("snip.expand.toast.ok", lang).replace("{key}", s.key));
                     } catch (e) {
                       showToast("err", t("snip.expand.toast.fail", lang).replace("{err}", String(e)));
