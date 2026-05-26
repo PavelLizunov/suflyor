@@ -5,19 +5,26 @@
 **Pilot scope:** rebuild the React `Replay.tsx` viewer in Slint to test
 the migration plan's assumptions before committing to Phases 1-7.
 
-## TL;DR — Recommendation: **GO with Phase 0.5 prerequisites**
+## TL;DR — Recommendation: **GO** (Phase 0.5 spikes done)
 
-> **Update post-R9 re-review:** The original recommendation was an
-> unqualified GO. An independent re-review (full-Phase-0 audit by a
-> general-purpose subagent that hadn't seen the earlier Day-2 review)
-> flagged that this report had been overselling — it omitted that
-> three plan-listed validations were NOT exercised: Slint MCP server
-> wiring (the migration plan's "killer integration"), HWND-poking
-> for transparent overlay flags (the migration's raison d'être), and
-> the markdown adapter spike (the plan's #1 risk). All three are
-> deferred to a recommended **Phase 0.5** before Phase 1's foundation
-> work begins. Original passing checks below remain valid; just don't
-> mistake them for proof of full migration viability.
+> **Update post-Phase-0.5:** User selected GO with Phase 0.5 spikes;
+> all three are now complete (commits 403289f / ebbcf10 / 5558f8b on
+> the same branch). Net outcome: MCP and markdown spikes succeeded
+> outright; HWND spike succeeded for flag application but uncovered
+> a NEW soft-blocker around Slint's transparent-window compositing.
+> Detailed results in the [Phase 0.5 spike outcomes](#phase-05-spike-outcomes)
+> section below. Recommendation upgraded to plain GO — Phase 1 may
+> start, with the transparency-wiring task added to its Day 1 backlog.
+
+> **Original R9 re-review note (preserved):** The Phase 0 GO
+> recommendation was initially unqualified. An independent re-review
+> (full-Phase-0 audit by a general-purpose subagent that hadn't seen
+> the earlier Day-2 review) flagged that this report had been
+> overselling — it omitted that three plan-listed validations were
+> NOT exercised: Slint MCP server wiring, HWND-poking for transparent
+> overlay flags, and the markdown adapter spike. All three were
+> moved into a recommended **Phase 0.5**, which has now executed
+> (see below).
 
 Slint passed every check the pilot was designed to stress:
 
@@ -221,6 +228,133 @@ React-Vitest section with Slint testing):
 | WesAudio / LibrePCB are the only production proof | Not addressable in pilot | OPEN; track via Slint forum. |
 | 12 weeks solo work starves user of features | Mitigated by keeping `master` (React/Tauri) shippable; Slint work isolated on branches | **MITIGATED for now.** Re-evaluate if Phase 2 settings-panel cost runs over budget. |
 | License: royalty-free attribution feels bad | Decided in [ADR-002](ADR-002-license.md): royalty-free for pet-project scope | **CLOSED.** Re-open if scope changes. |
+
+## Phase 0.5 spike outcomes
+
+Three spikes executed 2026-05-27 02:00-02:20 agent-time
+(commits 403289f, ebbcf10, 5558f8b):
+
+### Spike 1 — HWND-poking transparent overlay (`overlay-spike` binary)
+
+**Outcome:** PARTIAL. EX-flag application works programmatically;
+visible transparency does not compose with Slint's default winit+skia
+backend.
+
+What works:
+- `slint::Window::window_handle()` → `slint::WindowHandle` → call
+  `raw_window_handle::HasWindowHandle::window_handle()` to get the
+  real `RawWindowHandle::Win32` → construct `HWND`. Two-step.
+- Native HWND must be grabbed AFTER first event-loop tick (winit
+  realizes the window lazily); 200 ms single-shot Slint Timer
+  registered before `window.run()` is the reliable pattern.
+- `SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ...)` with WS_EX_TRANSPARENT
+  + WS_EX_TOOLWINDOW applies cleanly (GetWindowLongPtrW confirms).
+- Crate setup: `raw-window-handle = "0.6"`, `windows = "0.62"` with
+  `Win32_Foundation` + `Win32_UI_WindowsAndMessaging` features,
+  `slint` gains `raw-window-handle-06` feature.
+
+What does NOT work:
+- Slint's `background: transparent;` does NOT actually enable per-
+  pixel transparency in the native winit window. The first attempt
+  added `WS_EX_LAYERED` (opaque black window); the second dropped it
+  (still opaque black). Slint 1.16's winit configuration creates an
+  opaque window by default — `with_transparent(true)` isn't reached.
+- The Tauri/WebView2 build achieves transparency via DWM compositing
+  (DwmEnableBlurBehindWindow + DWM attributes). Slint doesn't expose
+  those knobs out of the box.
+
+Phase 1 implications: the HWND-poking pattern is PROVEN (replay the
+200-ms-Timer + raw-window-handle 0.6 + windows 0.62 setup in
+`src-rs/win32.rs`). For transparency, Phase 1 Day 1 needs to either
+(a) patch Slint to expose `with_transparent(true)`, (b) call
+`DwmEnableBlurBehindWindow` via the windows crate as a post-creation
+HWND poke (likely simplest), or (c) live with opaque overlay (would
+defeat one motivation for the migration).
+
+### Spike 2 — Slint MCP server wire-up (success)
+
+**Outcome:** FULL SUCCESS. The migration plan's "killer integration"
+works end-to-end.
+
+What works:
+- Add `i-slint-backend-selector = { version = "=1.16.1", features =
+  ["mcp"] }` to [dependencies]. The mcp feature belongs on the
+  SELECTOR, not on i-slint-backend-testing — that was the initial
+  misread of the docs. Slint pulls i-slint-backend-selector
+  transitively; declaring it as a direct dep with the feature
+  enables it via cargo feature unification.
+- Run the live binary with `SLINT_EMIT_DEBUG_INFO=1
+  SLINT_MCP_PORT=8080`. Stderr prints:
+    "Slint MCP server listening on http://127.0.0.1:8080/mcp"
+- POST /mcp with a JSON-RPC `initialize` request returns a complete
+  protocol response: serverInfo `slint-mcp-embedded` v0.1.0,
+  protocolVersion 2025-06-18, capabilities.tools, and a richly
+  documented tool API: list_windows, get_window_properties,
+  get_element_tree, query_element_descendants, find_elements_by_id,
+  get_element_properties, take_screenshot, click_element,
+  drag_element, set_element_value, invoke_accessibility_action,
+  dispatch_key_event.
+
+Phase 1 / Phase 6 implications: this replaces
+`scripts/visual_check.ps1` + computer-use entirely. Claude Code (any
+MCP-capable agent) connects to the running app via HTTP and drives
+UI testing without OS-level control. Wiring is ONE Cargo.toml entry
++ two runtime env vars; effort is minimal compared to the testing
+power gained.
+
+### Spike 3 — Markdown adapter (success — architecture proven)
+
+**Outcome:** SUCCESS. pulldown-cmark + Slint dynamic-model pipeline
+works. Real Phase 4 effort estimate ~6-8 days, within the plan's
+2-week Phase 4 budget.
+
+What works:
+- `pulldown-cmark = "0.13"` (already transitive via slint-build).
+- Walker pattern: per-event accumulator → flush on End → emit one
+  `MarkdownBlock { kind: int, text: string, lang: string }` per
+  block. Discriminant-based rendering on the .slint side via
+  `if block.kind == N : ...` arms.
+- Renders: H1 / H2 / H3 / paragraph / bullet / code block /
+  horizontal rule. SoftBreak/HardBreak as space; inline `Code`
+  wrapped in backticks (plaintext fallback).
+- Smoke test on src-tauri/knowledge/glossary.md (first 4436 chars
+  → 52 blocks) renders correctly. UTF-8 em-dash preserved through
+  the full pipeline.
+
+What does NOT work (Phase 4 work):
+- Inline emphasis (bold/italic/inline-code) — needs Slint's
+  `StyledText` widget with per-run formatting. Spike renders these
+  as plaintext (italic/bold drop styling; inline code shows literal
+  backticks).
+- syntect color highlighting on code blocks — adds ~200 KB binary +
+  5+ deps. Phase 4 proper.
+- Tables / Links / Images / footnotes / HTML — silently dropped by
+  the spike's `_ => {}` catch-all.
+- Per-block layout sizing — every block currently has no min-height
+  or natural row spacing, so the spike screenshot is dense. Phase 4
+  invests in per-block padding + min-height + responsive wrapping.
+
+Phase 4 effort breakdown (vs plan's 2 weeks):
+- Skeleton (this spike): done
+- Inline emphasis via StyledText runs: 1-2 days
+- syntect wiring + theme: 1 day
+- Tables → GridLayout: 1 day
+- Links → TouchArea + open_url: ½ day
+- Images (HTTP fetch + cache): 1 day
+- Layout polish: ½-1 day
+- Tile-integration glue: 1-2 days
+- TOTAL: ~6-8 working days. NOT a hard blocker.
+
+### Net Phase 0.5 verdict
+
+| Spike | Outcome | Blocker class | Phase impact |
+|---|---|---|---|
+| HWND-poking | Partial — flags work, transparency doesn't | New soft-blocker | Phase 1 Day 1: investigate `DwmEnableBlurBehindWindow` / Slint winit config |
+| MCP wire-up | Full success | None | Phase 6: drop visual_check.ps1 + computer-use, configure Claude Code MCP client |
+| Markdown adapter | Success — architecture proven | None | Phase 4: build on this skeleton, ~6-8 days within plan's 2-week budget |
+
+**Decision:** GO. The Slint migration is viable. Transparency wiring
+becomes a tracked Phase 1 task; everything else is on or under plan.
 
 ## Recommendation for Phase 0.5 + Phase 1+
 
