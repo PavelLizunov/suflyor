@@ -601,24 +601,35 @@ fn export_config(
 ///
 /// Kept fields: snippets, trigger_keywords, hotkeys, audio device prefs,
 /// tile_monitor_name, ai_model choice, response_language, stt_model.
-#[tauri::command]
-fn export_config_safe(
-    window: tauri::WebviewWindow,
-    state: tauri::State<'_, SharedConfig>,
-) -> Result<String, String> {
-    assert_overlay(&window)?;
-    let mut cfg = state.read().clone();
-    // Blank everything an attacker / casual reader shouldn't see if the
-    // backup file leaks. We use empty-string / empty-vec rather than
-    // skipping the field so the recipient's Import sets these to defaults
-    // (which is then visibly empty in the Settings UI — clear signal to
-    // "you need to fill these in").
+/// Pure helper for `export_config_safe`: zeroes out fields that would
+/// leak personal data or secrets if the backup file were shared.
+/// Extracted so we can unit-test field semantics without touching disk.
+///
+/// Blanked fields:
+///   - groq_api_key, ai_bearer       (secrets)
+///   - ai_base_url                   (your LAN IP / network topology)
+///   - meeting_context               (resume, salary, company names)
+///   - context_profiles + active_profile (named personal contexts)
+///
+/// All other fields (snippets, trigger_keywords, ai_model, hotkeys, etc.)
+/// are KEPT so the recipient gets a useful starting point.
+pub(crate) fn blank_share_secrets(mut cfg: Config) -> Config {
     cfg.groq_api_key = String::new();
     cfg.ai_bearer = String::new();
     cfg.ai_base_url = String::new();
     cfg.meeting_context = String::new();
     cfg.context_profiles = Vec::new();
     cfg.active_profile = None;
+    cfg
+}
+
+#[tauri::command]
+fn export_config_safe(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, SharedConfig>,
+) -> Result<String, String> {
+    assert_overlay(&window)?;
+    let cfg = blank_share_secrets(state.read().clone());
     let bytes = serde_json::to_vec_pretty(&cfg).map_err(|e| e.to_string())?;
     let stamp = journal::now_unix_ms() / 1000;
     let desktop = dirs::desktop_dir().or_else(dirs::home_dir).ok_or("no desktop dir")?;
@@ -629,6 +640,96 @@ fn export_config_safe(
         path.display()
     );
     Ok(path.to_string_lossy().to_string())
+}
+
+#[cfg(test)]
+mod export_safe_tests {
+    use super::blank_share_secrets;
+    use crate::config::{Config, ContextProfile};
+
+    fn loaded_cfg() -> Config {
+        let mut c = Config::defaults();
+        c.groq_api_key = "gsk_realsecret".into();
+        c.ai_bearer = "Bearer_REAL".into();
+        c.ai_base_url = "http://192.168.0.142:18902/v1".into();
+        c.meeting_context = "Senior SRE @ MyCorp, salary $200k, target $250k".into();
+        c.context_profiles = vec![
+            ContextProfile { name: "K8s interview".into(), context: "kubernetes stuff".into() },
+        ];
+        c.active_profile = Some("K8s interview".into());
+        c
+    }
+
+    #[test]
+    fn blanks_groq_key() {
+        let c = blank_share_secrets(loaded_cfg());
+        assert_eq!(c.groq_api_key, "");
+    }
+
+    #[test]
+    fn blanks_ai_bearer() {
+        let c = blank_share_secrets(loaded_cfg());
+        assert_eq!(c.ai_bearer, "");
+    }
+
+    #[test]
+    fn blanks_ai_base_url() {
+        // LAN topology leak — friend doesn't need our internal IP.
+        let c = blank_share_secrets(loaded_cfg());
+        assert_eq!(c.ai_base_url, "");
+    }
+
+    #[test]
+    fn blanks_meeting_context() {
+        // Personal — may contain salary, company name, resume excerpts.
+        let c = blank_share_secrets(loaded_cfg());
+        assert_eq!(c.meeting_context, "");
+    }
+
+    #[test]
+    fn blanks_context_profiles_and_active() {
+        let c = blank_share_secrets(loaded_cfg());
+        assert!(c.context_profiles.is_empty());
+        assert!(c.active_profile.is_none());
+    }
+
+    #[test]
+    fn keeps_snippets() {
+        // Generic technical templates — safe to share.
+        let c = blank_share_secrets(loaded_cfg());
+        assert!(!c.snippets.is_empty(), "snippets should be retained");
+    }
+
+    #[test]
+    fn keeps_trigger_keywords() {
+        // Generic DevOps vocab — safe to share.
+        let c = blank_share_secrets(loaded_cfg());
+        assert!(!c.trigger_keywords.is_empty(), "trigger_keywords should be retained");
+    }
+
+    #[test]
+    fn keeps_ai_model_and_response_language() {
+        // Recipient may want to follow same model preferences.
+        let c = blank_share_secrets(loaded_cfg());
+        assert_eq!(c.ai_model, "claude-haiku-4-5");
+        assert_eq!(c.response_language, "ru");
+    }
+
+    #[test]
+    fn keeps_hotkeys() {
+        let c = blank_share_secrets(loaded_cfg());
+        assert_eq!(c.hotkey_ask, "F9");
+    }
+
+    #[test]
+    fn idempotent_safe_export() {
+        // Running twice gives same blanked output — no leak on re-export.
+        let c1 = blank_share_secrets(loaded_cfg());
+        let c2 = blank_share_secrets(c1.clone());
+        assert_eq!(c2.groq_api_key, "");
+        assert_eq!(c2.ai_bearer, "");
+        assert_eq!(c2.ai_base_url, "");
+    }
 }
 
 #[tauri::command]

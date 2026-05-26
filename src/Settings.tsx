@@ -1458,7 +1458,8 @@ export default function Settings() {
                       const t = snipTitle.trim();
                       const b = snipBody.trim();
                       if (!k) { setSnipError("Key обязателен"); return; }
-                      if (!/^[a-z0-9][a-z0-9-_]*$/i.test(k)) {
+                      // No /i flag — toLowerCase() above already canonicalised.
+                      if (!/^[a-z0-9][a-z0-9-_]*$/.test(k)) {
                         setSnipError("Key: только латиница, цифры, '-', '_'. Первый символ — буква/цифра.");
                         return;
                       }
