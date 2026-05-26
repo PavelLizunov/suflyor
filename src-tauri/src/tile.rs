@@ -25,33 +25,53 @@ pub fn reset_seq_counter() {
     TILE_SEQ_COUNTER.store(0, Ordering::SeqCst);
 }
 
-// v0.0.24: bumped tile size after live feedback that 380×280 was too
-// small and user had to resize each tile manually to read answers.
+// v0.0.29: tile dimensions are now PERCENTAGE-based per the picked
+// monitor, with absolute MINIMUMS so tiny screens don't end up with
+// unreadable tiles. User said v0.0.24's fixed 460×360 was «слишком
+// большое» on his real display — wants it to scale.
 //
-// Constraints derived from the grid math (MUST fit MAX_TILES=6 on a
-// typical 1920×1080 monitor with no off-screen tiles):
-//   Width fits 2 column-pairs: 2 * (2W + PAD) + PAD ≤ 1920
-//     → W ≤ (1920 - 3*12)/4 = 471. Picked 460 with 11px safety.
-//   Height fits 2 rows per pair: 2 * (H_MAX + PAD) + PAD ≤ 1080
-//     → H_MAX ≤ (1080 - 36)/2 = 522. Picked 510 with 12px safety.
-// 2 pairs × 2 rows = 4 slots per pair × 2 pairs = 8 ≥ MAX_TILES.
+// Defaults give roughly:
+//   1280× 720 → 340×240 (both clamped to mins)
+//   1456× 819 → 340×240 (still hits min on width, just barely on height)
+//   1536× 864 → 340×240 (min)
+//   1920×1080 → 384×281, h_max 389
+//   2560×1440 → 512×374, h_max 518
+//   3840×2160 → 768×561, h_max 778
 //
-// Size delta vs v0.0.23: 380×280 → 460×360 = +21% width, +29% height.
-// Max height grew 400 → 510 = +28% content area.
-const TILE_W: f64 = 460.0;
-/// Initial height when the tile window is created. TileWindow.tsx's
-/// useLayoutEffect can resize up to TILE_H_MAX after markdown paints.
-const TILE_H: f64 = 360.0;
-/// Worst-case height after markdown auto-grow. MUST match the upper
-/// bound in TileWindow.tsx. Grid uses this for row pitch so a tall
-/// row-0 tile doesn't overlap row-1.
-const TILE_H_MAX: f64 = 510.0;
+// Grid math now passes (w, h_max) per spawn instead of using globals,
+// so MAX_TILES=6 still fits 2 col-pairs × ≥2 rows even on 1280p (since
+// the floors keep ratios sane).
+const TILE_W_PERCENT: f64 = 0.20;     // 20% of monitor width
+const TILE_H_PERCENT: f64 = 0.26;     // 26% of monitor height (initial)
+const TILE_H_MAX_PERCENT: f64 = 0.36; // up to 36% after markdown auto-grow
+const TILE_W_MIN: f64 = 340.0;        // ≥340 keeps markdown legible
+const TILE_H_MIN: f64 = 240.0;
+const TILE_H_MAX_MIN: f64 = 320.0;
+
 const PAD: f64 = 12.0;
 const COLS: usize = 2;
 /// 6 tiles = 2 cols × 3 rows. Top 4 always visible on 1080p, bottom 2
 /// may overflow until TTL-evict (120s) frees space.
 const MAX_TILES: usize = 6;
 const TTL_SECS: u64 = 120;
+
+/// Per-monitor tile dimensions. Computed once per spawn; passed to both
+/// `grid_position` (for layout math) and the WebviewWindowBuilder
+/// `.inner_size(w, h)`. The `h_max` is sent to TileWindow.tsx via URL
+/// param `&mh=N` so its ResizeObserver caps growth to the right value.
+#[derive(Clone, Copy, Debug)]
+struct TileDims {
+    w: f64,
+    h: f64,
+    h_max: f64,
+}
+
+fn tile_dims_for(monitor: &MonitorRect) -> TileDims {
+    let w = (monitor.w * TILE_W_PERCENT).max(TILE_W_MIN);
+    let h = (monitor.h * TILE_H_PERCENT).max(TILE_H_MIN);
+    let h_max = (monitor.h * TILE_H_MAX_PERCENT).max(TILE_H_MAX_MIN);
+    TileDims { w, h, h_max }
+}
 
 #[derive(Clone)]
 struct ActiveTile {
@@ -144,20 +164,18 @@ impl From<&Monitor> for MonitorRect {
 /// pair is full (monitor.h exhausted) wraps LEFTward to the next pair of
 /// columns. Prevents tiles drifting off-screen on portrait/short monitors.
 ///
-/// Row pitch uses TILE_H_MAX (not TILE_H) so a row-0 tile that grows after
-/// markdown render can't overlap the row-1 tile below it. Cost: small visual
-/// gap under short tiles. Worth it — overlap was reported in live test.
+/// Row pitch uses `dims.h_max` (not `dims.h`) so a row-0 tile that grows
+/// after markdown render can't overlap the row-1 tile below it. Cost:
+/// small visual gap under short tiles. Worth it — overlap was reported
+/// in live test.
 ///
-/// v0.0.28: clamp horizontal placement to monitor bounds. Previously on
-/// short monitors (1280×720, 1366×768) where `max_rows=1`, the third
-/// column-pair could land at negative x — tiles rendered fully off-screen
-/// left. Now: cap `pair` to the maximum that still fits within the
-/// monitor's left edge, AND clamp `start_x` so even an edge tile stays
-/// at least `PAD` inside `monitor.x`. Worst case (truly impossible to
-/// fit any pair): all tiles stack on the leftmost in-bounds column.
-fn grid_position(monitor: &MonitorRect, index: usize) -> LogicalPosition<f64> {
-    let total_w = (TILE_W * COLS as f64) + (PAD * (COLS - 1) as f64);
-    let row_h = TILE_H_MAX + PAD;
+/// v0.0.28: clamps `pair` and `start_x` to monitor bounds so a small
+/// monitor (1280×720) doesn't render tiles fully off-screen left.
+/// v0.0.29: `dims` is now passed (percentage-derived per monitor)
+/// instead of using globals — needed for the dynamic per-monitor size.
+fn grid_position(monitor: &MonitorRect, dims: TileDims, index: usize) -> LogicalPosition<f64> {
+    let total_w = (dims.w * COLS as f64) + (PAD * (COLS - 1) as f64);
+    let row_h = dims.h_max + PAD;
     // How many rows of tiles fit in this monitor without falling off the
     // bottom. Always at least 1, otherwise division by zero / no slot.
     let max_rows = (((monitor.h - PAD * 2.0) / row_h).floor() as usize).max(1);
@@ -168,13 +186,8 @@ fn grid_position(monitor: &MonitorRect, index: usize) -> LogicalPosition<f64> {
     let row = local / COLS;
     // Pair pitch = how far each pair-shift moves left.
     let pair_pitch = total_w + PAD;
-    // The leftmost in-bounds pair anchor. start_x for pair=0 sits at the
-    // top-right anchor; subsequent pairs move LEFT by pair_pitch each.
     // Cap `pair` so we don't pass the monitor's left edge.
     let max_pairs = if pair_pitch > 0.0 {
-        // (right_anchor - leftmost_allowed) / pair_pitch
-        // = ((monitor.w - total_w - PAD) - PAD) / pair_pitch
-        // → max pair index that still has start_x ≥ monitor.x + PAD.
         let usable = (monitor.w - total_w - 2.0 * PAD).max(0.0);
         (usable / pair_pitch).floor() as usize
     } else {
@@ -188,7 +201,7 @@ fn grid_position(monitor: &MonitorRect, index: usize) -> LogicalPosition<f64> {
     let start_x = unclamped_start_x.max(monitor.x + PAD);
     let start_y = monitor.y + PAD;
     LogicalPosition::new(
-        start_x + col as f64 * (TILE_W + PAD),
+        start_x + col as f64 * (dims.w + PAD),
         start_y + row as f64 * row_h,
     )
 }
@@ -268,6 +281,10 @@ pub fn spawn_tile_with_highlight(
 
     let monitor = pick_monitor(app, preferred_monitor.as_deref())
         .context("no monitor available")?;
+    // v0.0.29: tile dimensions are now derived per-monitor (percentage-
+    // based with absolute floors). Computed once here and reused for
+    // grid_position + builder.inner_size + the JS resize cap.
+    let dims = tile_dims_for(&monitor);
 
     // Reserve a slot atomically: find FIRST FREE slot (not Vec.len()) so
     // we reuse gaps left by manually-closed / TTL-evicted tiles. Evicts
@@ -312,7 +329,7 @@ pub fn spawn_tile_with_highlight(
             let _ = w.close();
         }
     }
-    let position = grid_position(&monitor, slot);
+    let position = grid_position(&monitor, dims, slot);
 
     // URL-encode question/answer into the route. WebView is sandboxed —
     // params are read in TileWindow.tsx via URLSearchParams.
@@ -338,14 +355,18 @@ pub fn spawn_tile_with_highlight(
         }
         if joined.is_empty() { String::new() } else { format!("&hl={}", joined.join(",")) }
     };
+    // v0.0.29: pass max-height + max-width via URL so TileWindow.tsx
+    // ResizeObserver can use the dynamic per-monitor cap instead of
+    // a hardcoded 510/460. Frontend rounds to int and ignores if absent.
     let route = format!(
-        "index.html?tile=1&id={}&kind={}&seq={}{}&q={}&a={}",
-        id, kind.as_str(), seq, hl_param, q_enc, a_enc
+        "index.html?tile=1&id={}&kind={}&seq={}{}&q={}&a={}&mh={}&mw={}",
+        id, kind.as_str(), seq, hl_param, q_enc, a_enc,
+        dims.h_max.round() as i64, dims.w.round() as i64
     );
 
     let window = match WebviewWindowBuilder::new(app, &label, WebviewUrl::App(route.into()))
         .title("Tile")
-        .inner_size(TILE_W, TILE_H)
+        .inner_size(dims.w, dims.h)
         .position(position.x, position.y)
         .decorations(false)
         .transparent(true)
@@ -539,13 +560,14 @@ mod tests {
     }
 
     /// Each tile in the grid must occupy a distinct rectangle even if it
-    /// auto-grows to TILE_H_MAX after markdown renders. Uses TILE_H_MAX
+    /// auto-grows to dims.h_max after markdown renders. Uses dims.h_max
     /// (worst case) for overlap calc, mirroring the bug in live test where
-    /// row spacing of TILE_H let tall tiles eat into the row below.
+    /// row spacing of dims.h let tall tiles eat into the row below.
     #[test]
     fn grid_positions_do_not_overlap_at_worst_case_height() {
         let m = mock_monitor();
-        let positions: Vec<_> = (0..MAX_TILES).map(|i| grid_position(&m, i)).collect();
+        let d = tile_dims_for(&m);
+        let positions: Vec<_> = (0..MAX_TILES).map(|i| grid_position(&m, d, i)).collect();
         for (i, p1) in positions.iter().enumerate() {
             for (j, p2) in positions.iter().enumerate() {
                 if i == j {
@@ -553,60 +575,55 @@ mod tests {
                 }
                 let dx = (p1.x - p2.x).abs();
                 let dy = (p1.y - p2.y).abs();
-                let overlap = dx < TILE_W && dy < TILE_H_MAX;
+                let overlap = dx < d.w && dy < d.h_max;
                 assert!(
                     !overlap,
                     "tiles {i} and {j} overlap at worst-case height: \
-                     ({}, {}) vs ({}, {}) on {}x{} monitor — TILE_H_MAX={}",
-                    p1.x, p1.y, p2.x, p2.y, m.w, m.h, TILE_H_MAX
+                     ({}, {}) vs ({}, {}) on {}x{} monitor — h_max={}",
+                    p1.x, p1.y, p2.x, p2.y, m.w, m.h, d.h_max
                 );
             }
         }
     }
 
     /// Tiles must stay within monitor bounds (no off-screen rendering).
-    /// The grid now wraps to a NEW column-pair (leftward) when the current
-    /// pair fills vertically — see grid_position. So even on a small/portrait
-    /// monitor every tile up to MAX_TILES should fit on-screen vertically.
+    /// The grid wraps to a NEW column-pair (leftward) when the current pair
+    /// fills vertically — see grid_position.
     #[test]
     fn grid_positions_stay_within_monitor_bounds() {
         let m = mock_monitor();
+        let d = tile_dims_for(&m);
         for i in 0..MAX_TILES {
-            let p = grid_position(&m, i);
+            let p = grid_position(&m, d, i);
             assert!(
-                p.x >= m.x && p.x + TILE_W <= m.x + m.w,
+                p.x >= m.x && p.x + d.w <= m.x + m.w,
                 "tile {i} x={} off horizontally", p.x
             );
             assert!(p.y >= m.y, "tile {i} y={} above monitor top", p.y);
-            // After the wrap-to-next-pair fix: vertical must NOT exceed bottom.
             assert!(
-                p.y + TILE_H_MAX <= m.y + m.h,
-                "tile {i} y={} + height={} = {} exceeds monitor bottom y={} h={} -> bottom {}",
-                p.y, TILE_H_MAX, p.y + TILE_H_MAX, m.y, m.h, m.y + m.h
+                p.y + d.h_max <= m.y + m.h,
+                "tile {i} y={} + h_max={} = {} exceeds monitor bottom y={} h={} -> bottom {}",
+                p.y, d.h_max, p.y + d.h_max, m.y, m.h, m.y + m.h
             );
         }
     }
 
-    /// REGRESSION (S1): on a SHORT monitor (e.g. 1080p in landscape only fits
-    /// 2 rows of 412-px-tall tiles), tiles beyond row 2 must wrap to the
-    /// NEXT column-pair on the left rather than render below the bottom edge.
+    /// REGRESSION (S1): on a SHORT monitor, tiles beyond the first column-pair
+    /// must wrap to the NEXT column-pair on the left rather than render below
+    /// the bottom edge.
     #[test]
     fn grid_wraps_to_next_pair_on_short_monitor() {
-        // v0.0.24: bumped fixture 900 → 1080 to keep "tall enough for 2
-        // rows" semantics after TILE_H_MAX raised 400 → 520. Real Windows
-        // monitors are ≥1080 anyway; 900 was an oddly small fixture.
-        // Math: 2 * (TILE_H_MAX + PAD) + 2*PAD = 2*(520+12)+24 = 1088,
-        // but the max_rows formula uses (h - PAD*2) / row_h so for h=1080:
-        // (1080-24)/532 = 1.98 → floor = 1. Bumped to 1100 to give 2 rows.
-        let m = MonitorRect { x: 0.0, y: 0.0, w: 1920.0, h: 1100.0 };
-        let row_h = TILE_H_MAX + PAD;
+        // v0.0.29: 1100h is no longer "short" since dims.h_max scales down on
+        // small monitors. Use 1080p — math: dims.h_max = max(1080*0.36, 320)
+        // = 388.8 → row_h = 400.8. max_rows = (1080-24)/400.8 = 2.63 → 2.
+        let m = MonitorRect { x: 0.0, y: 0.0, w: 1920.0, h: 1080.0 };
+        let d = tile_dims_for(&m);
+        let row_h = d.h_max + PAD;
         let max_rows = (((m.h - PAD * 2.0) / row_h).floor() as usize).max(1);
-        assert!(max_rows >= 2, "test fixture should allow ≥2 rows");
-        // Tile at index `per_pair` (first slot of pair 2) must move LEFT
-        // by one column-pair width.
-        let p0 = grid_position(&m, 0);
+        assert!(max_rows >= 2, "test fixture should allow ≥2 rows, got {max_rows}");
+        let p0 = grid_position(&m, d, 0);
         let per_pair = COLS * max_rows;
-        let p_next = grid_position(&m, per_pair);
+        let p_next = grid_position(&m, d, per_pair);
         assert!(
             p_next.x < p0.x,
             "first tile of pair 2 should be left of pair 1 — got pair1.x={} pair2.x={}",
@@ -614,33 +631,33 @@ mod tests {
         );
         // All MAX_TILES must still be on-screen vertically.
         for i in 0..MAX_TILES {
-            let p = grid_position(&m, i);
+            let p = grid_position(&m, d, i);
             assert!(
-                p.y + TILE_H_MAX <= m.y + m.h,
+                p.y + d.h_max <= m.y + m.h,
                 "tile {i} off-screen vertically on short monitor"
             );
         }
     }
 
     /// v0.0.28 REGRESSION: on a 1280×720 monitor (cheap laptop), the
-    /// pre-fix grid math gave start_x = -1564 for tile slot 4 — tiles 4-5
+    /// pre-fix grid math gave start_x ≪ 0 for tile slot 4 — tiles 4-5
     /// rendered fully off-screen LEFT. The clamp must keep every slot
-    /// at least PAD inside the monitor's left edge. Caught by review agent
-    /// on v0.0.20→v0.0.27 diff.
+    /// at least PAD inside the monitor's left edge.
     #[test]
     fn grid_positions_stay_horizontal_on_720p_laptop() {
         let m = MonitorRect { x: 0.0, y: 0.0, w: 1280.0, h: 720.0 };
+        let d = tile_dims_for(&m);
         for i in 0..MAX_TILES {
-            let p = grid_position(&m, i);
+            let p = grid_position(&m, d, i);
             assert!(
                 p.x >= m.x,
                 "tile {i} x={} fell off monitor LEFT (m.x={}) on 720p laptop",
                 p.x, m.x
             );
             assert!(
-                p.x + TILE_W <= m.x + m.w + 1.0,
+                p.x + d.w <= m.x + m.w + 1.0,
                 "tile {i} right edge {} past monitor right {} on 720p laptop",
-                p.x + TILE_W, m.x + m.w
+                p.x + d.w, m.x + m.w
             );
         }
     }
@@ -652,34 +669,61 @@ mod tests {
     fn grid_positions_respect_non_zero_monitor_origin() {
         // 1280-wide secondary monitor anchored at x=1920 (right of primary).
         let m = MonitorRect { x: 1920.0, y: 0.0, w: 1280.0, h: 720.0 };
+        let d = tile_dims_for(&m);
         for i in 0..MAX_TILES {
-            let p = grid_position(&m, i);
+            let p = grid_position(&m, d, i);
             assert!(
                 p.x >= m.x,
                 "tile {i} x={} fell off secondary monitor LEFT (m.x={})",
                 p.x, m.x
             );
             assert!(
-                p.x + TILE_W <= m.x + m.w + 1.0,
+                p.x + d.w <= m.x + m.w + 1.0,
                 "tile {i} extends past secondary monitor right edge",
             );
         }
+    }
+
+    /// v0.0.29 — tile_dims_for produces sensible per-monitor sizes.
+    #[test]
+    fn tile_dims_scale_with_monitor_and_respect_floors() {
+        // Large monitor: percentage-based.
+        let big = MonitorRect { x: 0.0, y: 0.0, w: 1920.0, h: 1080.0 };
+        let d = tile_dims_for(&big);
+        assert!((d.w - 384.0).abs() < 0.1, "1920 × 0.20 = 384, got {}", d.w);
+        assert!((d.h - 280.8).abs() < 0.1, "1080 × 0.26 = 280.8, got {}", d.h);
+        assert!((d.h_max - 388.8).abs() < 0.1, "1080 × 0.36 = 388.8, got {}", d.h_max);
+        assert!(d.w > d.h, "wider than tall (landscape tile)");
+
+        // Small monitor: floors kick in.
+        let small = MonitorRect { x: 0.0, y: 0.0, w: 1280.0, h: 720.0 };
+        let d = tile_dims_for(&small);
+        assert_eq!(d.w, TILE_W_MIN, "1280 × 0.20 = 256 → clamped to floor");
+        assert_eq!(d.h, TILE_H_MIN, "720 × 0.26 = 187 → clamped to floor");
+        assert_eq!(d.h_max, TILE_H_MAX_MIN, "720 × 0.36 = 259 → clamped to floor");
+
+        // 4K monitor: scales up.
+        let huge = MonitorRect { x: 0.0, y: 0.0, w: 3840.0, h: 2160.0 };
+        let d = tile_dims_for(&huge);
+        assert!((d.w - 768.0).abs() < 0.1, "3840 × 0.20 = 768, got {}", d.w);
+        assert!((d.h - 561.6).abs() < 0.1, "2160 × 0.26 = 561.6, got {}", d.h);
     }
 
     /// Top-right anchor: first tile's right edge should hug monitor's right edge.
     #[test]
     fn first_tile_is_anchored_top_right() {
         let m = mock_monitor();
-        let p0 = grid_position(&m, 0);
+        let d = tile_dims_for(&m);
+        let p0 = grid_position(&m, d, 0);
         // Position 0 is left column. Right column position 1 should have
         // its right edge near monitor's right edge (within PAD).
-        let p1 = grid_position(&m, 1);
-        let right_edge = p1.x + TILE_W;
+        let p1 = grid_position(&m, d, 1);
+        let right_edge = p1.x + d.w;
         assert!(
             (m.x + m.w - right_edge - PAD).abs() < 1.0,
             "tile 1 right edge {right_edge} should be near monitor right {}", m.x + m.w
         );
-        assert!(p0.y < m.y + TILE_H, "first row should be at the top");
+        assert!(p0.y < m.y + d.h, "first row should be at the top");
     }
 
     #[test]

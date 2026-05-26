@@ -1,6 +1,6 @@
 [package]
 name = "overlay-mvp"
-version = "0.0.28"
+version = "0.0.29"
 description = "Minimal AI meeting overlay"
 authors = ["x3d_mutant"]
 edition = "2021"

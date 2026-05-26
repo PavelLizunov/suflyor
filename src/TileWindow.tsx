@@ -87,10 +87,15 @@ export default function TileWindow() {
       if (!el) return;
       // Wait one frame so markdown has painted.
       await new Promise((r) => requestAnimationFrame(r));
-      // v0.0.24: cap 510 matches tile.rs TILE_H_MAX. Width 460 matches.
-      // Min 280 keeps super-short answers from being a pill.
-      const desiredH = Math.min(Math.max(el.scrollHeight + 16, 280), 510);
-      const desiredW = 460;
+      // v0.0.29: max W/H come from URL params (mw/mh) — Rust computed
+      // these per-monitor as percentage of screen with absolute floors.
+      // Fall back to the v0.0.24 hardcoded values if missing (e.g. someone
+      // hand-opens the tile route).
+      const params = new URLSearchParams(window.location.search);
+      const maxH = Math.max(parseInt(params.get("mh") || "0", 10) || 510, 280);
+      const maxW = Math.max(parseInt(params.get("mw") || "0", 10) || 460, 320);
+      const desiredH = Math.min(Math.max(el.scrollHeight + 16, 240), maxH);
+      const desiredW = maxW;
       try {
         const w = getCurrentWindow();
         await w.setSize(new LogicalSize(desiredW, desiredH));

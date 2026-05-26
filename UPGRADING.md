@@ -11,6 +11,39 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.29 (2026-05-26)
+
+**Tile size is now percentage of monitor with absolute floor.** User
+said v0.0.24's fixed `460×360` (with auto-grow cap `510`) was «слишком
+большое» on his real display — wants it to scale.
+
+- New constants in `src-tauri/src/tile.rs`:
+  - `TILE_W_PERCENT = 0.20` — 20% of picked-monitor width
+  - `TILE_H_PERCENT = 0.26` — 26% of picked-monitor height (initial)
+  - `TILE_H_MAX_PERCENT = 0.36` — auto-grow cap after markdown
+  - `TILE_W_MIN = 340.0` — absolute floor (keeps markdown legible)
+  - `TILE_H_MIN = 240.0` · `TILE_H_MAX_MIN = 320.0`
+- Computed per-spawn via `tile_dims_for(monitor)` and passed to:
+  - `grid_position(monitor, dims, index)` — was using globals before
+  - `WebviewWindowBuilder::inner_size(dims.w, dims.h)`
+  - URL params `&mh=N&mw=N` so `TileWindow.tsx` ResizeObserver caps
+    growth to the right per-monitor value
+- Sample sizes:
+  - 1280× 720 → 340×240 (both clamped to mins)
+  - 1920×1080 → 384×281 (h_max 389)
+  - 2560×1440 → 512×374 (h_max 518)
+  - 3840×2160 → 768×561 (h_max 778)
+- New unit test `tile_dims_scale_with_monitor_and_respect_floors` locks
+  in the math at 1920/1280/3840 widths.
+- 5 existing grid tests refactored to call `tile_dims_for` then pass
+  `dims` to `grid_position`. Test fixture for the «short monitor»
+  regression bumped 1100 → 1080 since dims now scale down (h_max=388
+  on 1080p fits 2 rows easily).
+
+No config field for the percentages yet — defaults are baked. Easy to
+add later if you want per-monitor tuning. Old `TILE_W`/`TILE_H`/
+`TILE_H_MAX` consts removed entirely.
+
 ### → v0.0.28 (2026-05-26) ⚠️ default change
 
 **Cost-cap default flipped 1.00 → 0 (chip OFF) per user request.**
