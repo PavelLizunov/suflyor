@@ -72,6 +72,22 @@ Static checks are necessary but NOT sufficient. They don't see runtime
 layout feedback loops. See `POST_MORTEM_v0034.md` for the full incident
 analysis.
 
+## i18n (RU + EN, since v0.0.42)
+
+Typed-strings module at `src/i18n.ts`. ~212 keys × 2 langs. Pattern:
+```ts
+import { t, resolveLang, type Lang } from "./i18n";
+const lang: Lang = resolveLang(cfg?.ui_language); // "ru" default
+<button title={t("settings.save", lang)}>{t("settings.save", lang)}</button>
+```
+`{placeholder}` interpolation via `.replace("{token}", value)` — no
+helper. Adding a new string: append to the const map in `i18n.ts`
+(TS will type-check usage at call sites). Adding a new component:
+load `cfg.ui_language` from `get_config` on mount (overlay/settings/
+replay all in the overlay window can do this). Tile windows can't
+call `get_config` (gated by `assert_overlay`) — `tile.rs` bakes
+`&lang=ru|en` into the spawn URL via `app.try_state::<SharedConfig>()`.
+
 ## Knowledge base
 
 Embedded reference at `src-tauri/knowledge/{glossary,commands,patterns}.md`
