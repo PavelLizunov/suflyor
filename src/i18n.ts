@@ -714,6 +714,66 @@ const strings = {
   // ── Toast + modal generic strings (v0.0.51 — caught by agent review) ─
   "toast.close":              { ru: "Закрыть",                en: "Close" },
   "modal.confirm.default":    { ru: "Подтвердить",            en: "Confirm" },
+  "common.save":              { ru: "Сохранить",              en: "Save" },
+
+  // ── Snippets list + CRUD modal (v0.0.52) ───────────────────────────
+  // Per-snippet row buttons
+  "snip.expand.button":       { ru: "Развернуть →",          en: "Expand →" },
+  "snip.expand.tip":          {
+    ru: "Открыть тайл со снипетом /{key}",
+    en: "Open a tile with snippet /{key}",
+  },
+  "snip.expand.toast.ok":     { ru: "/{key} развёрнут как тайл", en: "/{key} expanded as tile" },
+  "snip.expand.toast.fail":   { ru: "Expand failed: {err}",   en: "Expand failed: {err}" },
+  "snip.edit.button.tip":     {
+    ru: "Редактировать /{key} (title + body)",
+    en: "Edit /{key} (title + body)",
+  },
+  "snip.edit.modal.title":    { ru: "✎ Редактировать /{key}", en: "✎ Edit /{key}" },
+  "snip.edit.toast.ok":       { ru: "/{key} обновлён",        en: "/{key} updated" },
+  "snip.edit.toast.fail":     { ru: "Не сохранилось: {err}",  en: "Failed to save: {err}" },
+  "snip.delete.button.tip":   { ru: "Удалить snippet /{key} (с подтверждением)", en: "Delete snippet /{key} (with confirmation)" },
+  "snip.delete.confirm":      {
+    ru: "Удалить snippet /{key}?\n\nТекст: «{title}»\n\nВосстановить можно только через Import конфига или дефолты (пустой массив snippets в config.json → авто-заполнится из defaults).",
+    en: "Delete snippet /{key}?\n\nText: «{title}»\n\nRestoration is only possible via Import config or defaults (empty snippets array in config.json → auto-fills from defaults).",
+  },
+  "snip.delete.toast.ok":     { ru: "/{key} удалён · {n} snippets осталось", en: "/{key} deleted · {n} snippets remaining" },
+  "snip.delete.toast.fail":   { ru: "Удаление не сохранилось: {err}", en: "Delete didn't save: {err}" },
+  // Modal form labels
+  "snip.modal.key.label":     {
+    ru: "Key (короткий идентификатор, используется как /{key})",
+    en: "Key (short identifier, used as /{key})",
+  },
+  "snip.modal.key.placeholder": { ru: "k8s-ops",              en: "k8s-ops" },
+  "snip.modal.key.locked.hint": {
+    ru: "Key неизменяем при редактировании (snippet идентифицируется по key). Чтобы переименовать — удали и создай новый.",
+    en: "Key is immutable when editing (snippet is identified by key). To rename — delete and create a new one.",
+  },
+  "snip.modal.title.label":   {
+    ru: "Title (отображается в Snippets списке + в заголовке тайла)",
+    en: "Title (shown in the Snippets list + tile header)",
+  },
+  "snip.modal.title.placeholder": {
+    ru: "Kubernetes troubleshoot — 5-step framework",
+    en: "Kubernetes troubleshoot — 5-step framework",
+  },
+  "snip.modal.body.label":    {
+    ru: "Body (markdown, рендерится в тайле — поддерживает заголовки, списки, code blocks)",
+    en: "Body (markdown, rendered in the tile — supports headings, lists, code blocks)",
+  },
+  "snip.modal.body.placeholder": {
+    ru: "1. Check pod status: `kubectl get pods`\n2. Logs: `kubectl logs <pod>`\n3. ...",
+    en: "1. Check pod status: `kubectl get pods`\n2. Logs: `kubectl logs <pod>`\n3. ...",
+  },
+  // Validation errors
+  "snip.error.key.required":  { ru: "Key обязателен",         en: "Key is required" },
+  "snip.error.key.format":    {
+    ru: "Key: только латиница, цифры, '-', '_'. Первый символ — буква/цифра.",
+    en: "Key: only latin letters, digits, '-', '_'. First char must be letter/digit.",
+  },
+  "snip.error.title.required": { ru: "Title обязателен",      en: "Title is required" },
+  "snip.error.body.required": { ru: "Body не может быть пустым", en: "Body can't be empty" },
+  "snip.error.key.dup":       { ru: "Snippet с key /{key} уже существует. Выбери другой key.", en: "Snippet with key /{key} already exists. Pick a different key." },
 } as const;
 
 export type StringKey = keyof typeof strings;

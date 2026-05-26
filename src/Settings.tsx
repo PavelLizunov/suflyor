@@ -1304,21 +1304,21 @@ export default function Settings() {
                   onClick={async () => {
                     try {
                       await invoke("expand_snippet", { key: s.key });
-                      showToast("ok", `/${s.key} развёрнут как тайл`);
+                      showToast("ok", t("snip.expand.toast.ok", lang).replace("{key}", s.key));
                     } catch (e) {
-                      showToast("err", `Expand failed: ${e}`);
+                      showToast("err", t("snip.expand.toast.fail", lang).replace("{err}", String(e)));
                     }
                   }}
-                  title={`Открыть тайл со снипетом /${s.key}`}
+                  title={t("snip.expand.tip", lang).replace("{key}", s.key)}
                 >
-                  Expand →
+                  {t("snip.expand.button", lang)}
                 </button>
                 <button
                   className="btn secondary"
                   style={{ height: 24, padding: "0 8px", fontSize: 12 }}
                   onClick={async () => {
                     const edited = await showSnippetEdit(
-                      `✎ Edit /${s.key}`,
+                      t("snip.edit.modal.title", lang).replace("{key}", s.key),
                       { key: s.key, title: s.title, body: s.body },
                       false,
                       [],
@@ -1334,13 +1334,13 @@ export default function Settings() {
                     setCfg(next);
                     try {
                       await invoke("save_config", { newCfg: next });
-                      showToast("ok", `/${s.key} обновлён`);
+                      showToast("ok", t("snip.edit.toast.ok", lang).replace("{key}", s.key));
                     } catch (e) {
-                      showToast("err", `Не сохранилось: ${e}`);
+                      showToast("err", t("snip.edit.toast.fail", lang).replace("{err}", String(e)));
                       setCfg(cfg);
                     }
                   }}
-                  title={`Редактировать /${s.key} (title + body)`}
+                  title={t("snip.edit.button.tip", lang).replace("{key}", s.key)}
                 >
                   ✎
                 </button>
@@ -1357,22 +1357,22 @@ export default function Settings() {
                     // modal — deferred to v0.1.0. For now users can still
                     // create new snippets via config.json directly.
                     const ok = await showConfirm(
-                      `Удалить snippet /${s.key}?\n\nТекст: «${s.title}»\n\nВосстановить можно только через Import конфига или дефолты (пустой массив snippets в config.json → авто-заполнится из defaults).`,
-                      { confirmLabel: "Удалить", danger: true },
+                      t("snip.delete.confirm", lang).replace("{key}", s.key).replace("{title}", s.title),
+                      { confirmLabel: t("common.delete", lang), danger: true },
                     );
                     if (!ok) return;
                     const next = { ...cfg, snippets: cfg.snippets.filter(x => x.key !== s.key) };
                     setCfg(next);
                     try {
                       await invoke("save_config", { newCfg: next });
-                      showToast("ok", `/${s.key} удалён · ${next.snippets.length} snippets осталось`);
+                      showToast("ok", t("snip.delete.toast.ok", lang).replace("{key}", s.key).replace("{n}", String(next.snippets.length)));
                     } catch (e) {
-                      showToast("err", `Удаление не сохранилось: ${e}`);
+                      showToast("err", t("snip.delete.toast.fail", lang).replace("{err}", String(e)));
                       // Roll back the optimistic UI update.
                       setCfg(cfg);
                     }
                   }}
-                  title={`Удалить snippet /${s.key} (с подтверждением)`}
+                  title={t("snip.delete.button.tip", lang).replace("{key}", s.key)}
                 >
                   🗑
                 </button>
@@ -1871,7 +1871,7 @@ export default function Settings() {
             {modal.kind === "snippet" && (
               <>
                 <div className="field">
-                  <label>Key (короткий идентификатор, используется как `/{snipKey || "key"}`)</label>
+                  <label>{t("snip.modal.key.label", lang).replace("{key}", snipKey || "key")}</label>
                   <input
                     type="text"
                     autoFocus={modal.isNew}
@@ -1881,32 +1881,32 @@ export default function Settings() {
                       setSnipKey(e.target.value.trim().toLowerCase());
                       setSnipError("");
                     }}
-                    placeholder="k8s-ops"
+                    placeholder={t("snip.modal.key.placeholder", lang)}
                   />
                   {!modal.isNew && (
                     <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
-                      Key неизменяем при редактировании (snippet идентифицируется по key). Чтобы переименовать — удали и создай новый.
+                      {t("snip.modal.key.locked.hint", lang)}
                     </div>
                   )}
                 </div>
                 <div className="field">
-                  <label>Title (отображается в Snippets списке + в заголовке тайла)</label>
+                  <label>{t("snip.modal.title.label", lang)}</label>
                   <input
                     type="text"
                     autoFocus={!modal.isNew}
                     value={snipTitle}
                     onChange={(e) => { setSnipTitle(e.target.value); setSnipError(""); }}
-                    placeholder="Kubernetes troubleshoot — 5-step framework"
+                    placeholder={t("snip.modal.title.placeholder", lang)}
                   />
                 </div>
                 <div className="field">
-                  <label>Body (markdown, рендерится в тайле — поддерживает заголовки, списки, code blocks)</label>
+                  <label>{t("snip.modal.body.label", lang)}</label>
                   <textarea
                     rows={8}
                     style={{ width: "100%", fontFamily: "var(--font-mono, monospace)", fontSize: 12 }}
                     value={snipBody}
                     onChange={(e) => { setSnipBody(e.target.value); setSnipError(""); }}
-                    placeholder={"1. Check pod status: `kubectl get pods`\n2. Logs: `kubectl logs <pod>`\n3. ..."}
+                    placeholder={t("snip.modal.body.placeholder", lang)}
                   />
                 </div>
                 {snipError && (
@@ -1925,24 +1925,27 @@ export default function Settings() {
                   <button
                     className="btn"
                     onClick={() => {
+                      // NOTE: rename `t` → `title` to avoid shadowing the
+                      // imported t() translation function (agent v0.0.51
+                      // review caught this footgun).
                       const k = snipKey.trim().toLowerCase();
-                      const t = snipTitle.trim();
+                      const title = snipTitle.trim();
                       const b = snipBody.trim();
-                      if (!k) { setSnipError("Key обязателен"); return; }
+                      if (!k) { setSnipError(t("snip.error.key.required", lang)); return; }
                       // No /i flag — toLowerCase() above already canonicalised.
                       if (!/^[a-z0-9][a-z0-9-_]*$/.test(k)) {
-                        setSnipError("Key: только латиница, цифры, '-', '_'. Первый символ — буква/цифра.");
+                        setSnipError(t("snip.error.key.format", lang));
                         return;
                       }
-                      if (!t) { setSnipError("Title обязателен"); return; }
-                      if (!b) { setSnipError("Body не может быть пустым"); return; }
+                      if (!title) { setSnipError(t("snip.error.title.required", lang)); return; }
+                      if (!b) { setSnipError(t("snip.error.body.required", lang)); return; }
                       if (modal.isNew && modal.existingKeys.includes(k)) {
-                        setSnipError(`Snippet с key /${k} уже существует. Выбери другой key.`);
+                        setSnipError(t("snip.error.key.dup", lang).replace("{key}", k));
                         return;
                       }
-                      modal.onSubmit({ key: k, title: t, body: b });
+                      modal.onSubmit({ key: k, title, body: b });
                     }}
-                  >Сохранить</button>
+                  >{t("common.save", lang)}</button>
                 </div>
               </>
             )}

@@ -11,6 +11,46 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.52 (2026-05-26)
+
+i18n marathon close-out — translates the previously-deferred **Snippets
+CRUD modal** + per-snippet row action buttons. After this release,
+literally every visible UI string in the app is RU+EN.
+
+Coverage:
+- **Per-snippet row buttons**: Expand → · ✎ Edit · 🗑 Delete with
+  tooltips templated as `{key}` (the snippet's `/key` identifier),
+  Expand/Edit/Delete success + fail toast templates with `{key}` +
+  `{err}` + `{n}` (remaining count) interpolation
+- **Delete confirmation modal**: full body text with `{key}` and
+  `{title}` interp (restoration-via-Import-config hint included)
+- **Edit modal title**: ✎ Edit /{key} interp
+- **CRUD modal form** (shown when adding/editing a snippet):
+  - Key field: label with `/{key}` preview interp, placeholder, the
+    "locked when editing" explanatory hint
+  - Title field: label + placeholder
+  - Body field: label + multi-line placeholder
+  - **5 inline validation errors**: key required, key format (latin +
+    digits + `-`/`_`), title required, body required, key-duplicate
+    (with `{key}` interp)
+  - Save button → uses new `common.save` key
+
+Cleanup:
+- **Fixed variable shadowing of `t`** at Settings.tsx ~1929 (agent
+  v0.0.51 review flagged this as a footgun). Renamed local
+  `const t = snipTitle.trim()` to `const title = ...` so the imported
+  `t()` translation helper remains accessible in that handler scope.
+
+Added 18 new i18n keys. Translation map: 217 → 235 keys × 2 langs =
+470 entries.
+
+**EVERY visible UI string is now translated**, including the previously
+"deferred indefinitely" snippets CRUD path. The only Russian text left
+in the binary is in source-code comments + tray menu (Rust-side
+rebuild only at startup — would need separate work to translate).
+
+No backend changes.
+
 ### → v0.0.51 (2026-05-26)
 
 Agent-review hotfix on top of v0.0.50. Independent review agent
