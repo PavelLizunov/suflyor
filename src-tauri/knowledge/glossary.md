@@ -3867,3 +3867,36 @@ Ensemble of decision trees. Simple, often surprisingly good baseline.
 
 ## decision-tree
 Tree of feature splits. Interpretable, weak alone. Foundation for forests + boosting.
+
+## shell-or-operator — || (OR)
+`cmd1 || cmd2` — runs `cmd2` ONLY if `cmd1` failed (exit code != 0).
+Short-circuit: if first succeeds, second is skipped. Common idiom:
+`mkdir foo || exit 1` (abort if mkdir fails), `grep ERROR log || echo OK`.
+
+## shell-and-operator — && (AND)
+`cmd1 && cmd2` — runs `cmd2` ONLY if `cmd1` succeeded (exit code = 0).
+Short-circuit: if first fails, second is skipped. Common idiom:
+`./configure && make && make install`, `cd /tmp && ./build.sh`.
+
+## shell-exit-status — $?
+Bash variable holding the exit code of the last command. 0 = success,
+non-zero = failure (1 generic, 127 command-not-found, 130 Ctrl+C/SIGINT,
+137 SIGKILL/OOM, 143 SIGTERM). Check after: `cmd; if [ $? -ne 0 ]; then ...`.
+
+## shell-set-e — set -e
+Bash strict mode option: exit on any error. Equivalent to adding `|| exit`
+after every command. Combine with `set -u` (no undefined vars) and
+`set -o pipefail` (any failure in a pipeline kills the whole). Idiom:
+`set -euo pipefail` at top of scripts.
+
+## shell-pipefail
+`set -o pipefail` — without this, `false | true` succeeds (only last cmd
+matters). With pipefail, exit code = first non-zero in the pipe. Catches
+silent failures: `grep ERROR log | wc -l` would lie about "0 errors" if
+grep itself crashed.
+
+## systemd-restart-on-failure
+`Restart=on-failure` in unit file = auto-restart if process exits with
+non-zero code. Pair with `RestartSec=5s` for backoff. Other values:
+`always`, `on-success`, `on-abnormal` (signal/timeout). Use
+`systemctl status svc` to see last exit code.
