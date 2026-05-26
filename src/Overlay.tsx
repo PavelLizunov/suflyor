@@ -1147,8 +1147,17 @@ export default function Overlay() {
             it's distinguishable from STT chip at a glance. */}
         {(() => {
           const isHaiku = aiModel.includes("haiku");
-          const short = isHaiku ? "hk" : aiModel.includes("sonnet") ? "sn" : aiModel.includes("opus") ? "op" : "?";
-          const next = isHaiku ? "claude-sonnet-4-6" : "claude-haiku-4-5";
+          const isSonnet = aiModel.includes("sonnet");
+          const isOpus = aiModel.includes("opus");
+          const short = isHaiku ? "hk" : isSonnet ? "sn" : isOpus ? "op" : "?";
+          // v0.0.86 P1 fix: preserve unknown / opus models on chip click.
+          // Previously the chip silently mapped opus → haiku, wiping the
+          // user's opus selection on first click. Now: only haiku ↔ sonnet
+          // are cyclable (the two interesting live-answer choices); opus
+          // and any future unrecognized model are "locked" — clicking
+          // shows a tooltip explaining they must be changed via Settings.
+          const canCycle = isHaiku || isSonnet;
+          const next = isHaiku ? "claude-sonnet-4-6" : isSonnet ? "claude-haiku-4-5" : aiModel;
           return (
             <button
               type="button"
@@ -1159,15 +1168,21 @@ export default function Overlay() {
                 padding: "0 6px",
                 borderRadius: 4,
                 border: "1px solid var(--c-border-soft)",
-                background: isHaiku ? "transparent" : "rgba(140, 100, 220, 0.16)",
-                cursor: "pointer",
+                background: isHaiku ? "transparent" : isSonnet ? "rgba(140, 100, 220, 0.16)" : "rgba(180, 80, 80, 0.12)",
+                cursor: canCycle ? "pointer" : "not-allowed",
                 color: "var(--c-text-mute)",
+                opacity: canCycle ? 1 : 0.7,
               }}
-              title={lang === "en"
-                ? `AI model: ${aiModel}. Click to switch to ${next}.`
-                : `AI модель: ${aiModel}. Клик чтобы переключить на ${next}.`}
+              title={canCycle
+                ? (lang === "en"
+                    ? `AI model: ${aiModel}. Click to switch to ${next}.`
+                    : `AI модель: ${aiModel}. Клик чтобы переключить на ${next}.`)
+                : (lang === "en"
+                    ? `AI model: ${aiModel} (locked — chip only cycles haiku ↔ sonnet). Change via Settings → AI → Models.`
+                    : `AI модель: ${aiModel} (заблокировано — чип только haiku ↔ sonnet). Изменить через Настройки → AI → Models.`)}
               aria-label={lang === "en" ? "AI model" : "AI модель"}
               onClick={async () => {
+                if (!canCycle) return; // preserve opus / unknown
                 try {
                   await invoke("set_ai_model", { model: next });
                   setAiModel(next);
@@ -1274,10 +1289,16 @@ export default function Overlay() {
           aria-label={lang === "en" ? "Toggle all tiles" : "Переключить все тайлы"}
           aria-pressed={allCollapsed}
           onClick={() => {
-            const next = !allCollapsed;
-            emit(next ? "tile:collapse-all" : "tile:expand-all")
-              .catch((e) => console.warn("collapse-all emit:", e));
-            setAllCollapsed(next);
+            // v0.0.86 P1 fix: use updater form so this chip and the F7
+            // hotkey handler agree on what "next" means under rapid
+            // alternation. Reading allCollapsed directly here would let
+            // React batch a stale read with a pending F7 setState.
+            setAllCollapsed((v) => {
+              const next = !v;
+              emit(next ? "tile:collapse-all" : "tile:expand-all")
+                .catch((e) => console.warn("collapse-all emit:", e));
+              return next;
+            });
           }}
         >
           📦

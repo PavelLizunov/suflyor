@@ -11,6 +11,30 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.86 (2026-05-26) — QOL block 5 audit hotfix (2 P1 fixes)
+
+**P1: 📦 collapse-all chip raced with F7 hotkey under rapid alternation.**
+Chip onClick re-read `allCollapsed` directly while F7 used the
+`setAllCollapsed(v => ...)` updater form. React batched the chip's
+stale read against pending F7 state, drifting chip and tile state.
+Chip now uses updater form too — emit happens inside the closure so
+the emit and the state flip always agree on `next`.
+
+**P1: 🧠 AI model chip wiped opus on first click.**
+v0.0.72 chip logic was `isHaiku ? sonnet : haiku` — clicking when
+current model was opus silently mapped to haiku, losing the opus
+selection. Chip now preserves unknown / opus models: clicking only
+cycles when current is haiku or sonnet, otherwise shows "locked"
+state (red tint, not-allowed cursor) with tooltip pointing to
+Settings → AI → Models. Tinted background distinguishes:
+- haiku: transparent
+- sonnet: purple (140, 100, 220, 0.16)
+- opus / unknown: red (180, 80, 80, 0.12)
+
+Both fixes from same code-review agent that found v0.0.85's P0/P1
+issues. Lower priority than v0.0.85 (data-correctness vs UX-drift)
+but worth shipping while context is fresh.
+
 ### → v0.0.85 (2026-05-26) — QOL block 5 hotfix from audit (3 fixes)
 
 **P0 fix: F7 double-registration collision.**
