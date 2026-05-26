@@ -543,7 +543,12 @@ fn last_session_summary(
         .map(|e| e.path())
         .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("jsonl"))
         .collect();
-    files.sort();
+    // v0.0.87 P1 fix: sort by mtime, not lex. Current filename scheme
+    // is timestamp-prefixed so lex matches mtime in practice — but a
+    // manual rename / copy / future scheme change would break "latest"
+    // detection. Mtime is the authoritative answer to "which is newest".
+    // Pattern matches dump_diagnostics (lib.rs:1881).
+    files.sort_by_key(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok());
     let Some(last) = files.last() else { return Ok(None) };
 
     // Read first ~3 lines for SessionStart event.
@@ -2691,7 +2696,10 @@ fn try_auto_export_latest_to_desktop() -> Result<std::path::PathBuf, String> {
         .map(|e| e.path())
         .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("jsonl"))
         .collect();
-    files.sort();
+    // v0.0.87 P1 fix: mtime sort, not lex. See last_session_summary
+    // for rationale. Auto-export running quit-time should grab the
+    // most recently *modified* journal regardless of name.
+    files.sort_by_key(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok());
     let latest = files.last().ok_or_else(|| "no session journals found".to_string())?;
     let meta = std::fs::metadata(latest).map_err(|e| e.to_string())?;
     if meta.len() == 0 {

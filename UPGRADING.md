@@ -11,6 +11,21 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.87 (2026-05-26) — QOL block 5 audit hotfix (P1 #4)
+
+**Session journal "latest" detection now uses mtime, not lex sort.**
+
+Two helpers (`last_session_summary` for crash-recovery banner +
+`try_auto_export_latest_to_desktop` for v0.0.73 auto-export) sorted
+journal files lexicographically and took the last. The current
+filename scheme is timestamp-prefixed so lex matches mtime in
+practice — but any manual rename / copy / future filename change
+would break "latest" detection. Both now use
+`files.sort_by_key(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok())`,
+matching the existing pattern in `dump_diagnostics`.
+
+Pure correctness fix — no behavior change for normal users today.
+
 ### → v0.0.86 (2026-05-26) — QOL block 5 audit hotfix (2 P1 fixes)
 
 **P1: 📦 collapse-all chip raced with F7 hotkey under rapid alternation.**
