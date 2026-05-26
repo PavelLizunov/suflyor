@@ -8,15 +8,17 @@ Pet project, **v0.0.95**. Под одного пользователя. Без c
 
 Тонкий transparent бар сверху: статус Listening, 3 HUD-dot (audio/stt/ai), push-to-talk кнопки для mic и system audio, hotkey подсказка, шестерёнка Settings.
 
-### 🚀 New in v0.0.89 (QOL block 5, 23 releases)
+### 🚀 New in v0.0.95 (QOL block 5, 29 releases)
 
-Overlay bar chips (left → right after status): **$ cost · 🎙 STT lang · 🧠 AI model · 🎤/🔇 mic mute · 🎯 stealth · 📦 collapse-all · ⏱ timer · F1-F11 ℹ · ⭐ bookmark · 💡 followups · ⚙ Settings**. Click any chip to toggle; tooltip shows current state.
+Overlay bar chips (left → right after status): **$ cost · 🎙 STT lang · 🧠 AI model · 🎤/🔇 mic mute · 🎯 stealth · 📦 collapse-all · 🔒 pin-all · ⏱ timer · F1-F11 ℹ · ⭐ bookmark · 💡 followups · ⚙ Settings**. Click any chip to toggle; tooltip shows current state.
 
-Tile chrome (per-tile): **source label · ⏱ age · 🔄×N reload generation · 📌 pin · 🔄 reload · 🌐 translate · ▾/▴ collapse · × close**.
+Tile chrome (per-tile): **source label · ⏱ age · 🔄×N reload gen · Nw word count · 📌 pin · 📋 copy question · 🔄 reload · 🌐 translate · ▾/▴ collapse · × close**.
 
-New hotkeys: **F1** (help popover) · **F2** (cycle context profile) · **F7** (collapse all tiles).
+New hotkeys: **F1** help · **F2** cycle profile · **F7** collapse-all.
 
-Quality-of-life backend additions: F4 palette searches user snippets via `/key` prefix, qa_cache (avoids duplicate AI calls for the same question within 10 min), auto-export session to Desktop on quit (opt-in), +📋 clipboard → meeting_context button, 🧪 mic test card in Settings → Audio.
+F4 palette: KB search · `/snippet` quick-pick · `+key body` inline snippet add (v0.0.95).
+
+Backend: qa_cache (skip duplicate AI calls within 10 min), auto-export session to Desktop on quit (opt-in), 🧪 mic test in Settings → Audio.
 
 ### F4 — Knowledge Base palette (1643 entries)
 
