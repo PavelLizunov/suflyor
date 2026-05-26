@@ -1,4 +1,4 @@
-# Security audit snapshot — 2026-05-26 (v0.0.11)
+# Security audit snapshot — 2026-05-26 (v0.0.15)
 
 ## Cargo (Rust deps): `cargo audit`
 
@@ -65,9 +65,17 @@ Applied to 25 sensitive commands. Tested live: tile calls to e.g. `export_config
 
 ### Plaintext HTTP warning
 
-When `ai_base_url` starts with `http://`, Settings shows a yellow chip: "Plaintext HTTP — bearer token + prompts travel in clear. Use https:// (Caddy/Nginx in front) for any non-localhost deployment."
+When `ai_base_url` starts with `http://` AND host is NOT loopback (`127.0.0.1` / `localhost` / `[::1]` / `::1`), Settings shows a yellow chip: "Plaintext HTTP to non-localhost ({host}) — bearer token + prompts travel in clear. Use https:// (Caddy/Nginx in front) for any non-localhost deployment."
 
-Backend doesn't block plaintext — user might be on a LAN-only setup where it's deliberate. UI nudges, doesn't enforce.
+Backend doesn't block plaintext — user might be on a LAN-only setup where it's deliberate. UI nudges, doesn't enforce. Loopback case (v0.0.15+) is suppressed because traffic never leaves the machine — no actual exposure.
+
+### Diagnostic dump (v0.0.15+)
+
+Settings → 🆙 Обновления → 📊 Диагностический дамп writes a single sanitized markdown to Desktop for bug reports. Includes:
+- Sanitized config (uses `blank_share_secrets` — same 10-test-covered fn as Export-share)
+- App version + OS/arch
+- Last 50 lines of latest session journal — runs through `sanitize_diagnostic_text` which redacts `gsk_*`, `Bearer *`, `sk-*` token patterns (5 unit tests cover each). The journal output flags that `ai_request` events still contain `system_prompt`/`user_prompt` (which embed `meeting_context`) — user reviews before sharing
+- Crash report content (if present) — same `sanitize_diagnostic_text` redaction applied
 
 ### Markdown XSS
 
@@ -79,7 +87,7 @@ TileWindow renders AI responses via ReactMarkdown + remark-gfm. Default config s
 
 ## Conclusions
 
-Personal-use app, but no actionable security issues found in the v0.0.11 codebase. Re-audit:
+Personal-use app, but no actionable security issues found in the v0.0.15 codebase. Re-audit:
 - Annually
 - After any major dependency bump
 - After any change touching `assert_overlay`-protected commands
