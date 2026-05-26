@@ -80,6 +80,7 @@ type Config = {
   post_meeting_debrief_enabled?: boolean;
   max_session_cost_usd?: number;
   detector_skip_mic?: boolean;
+  auto_tile_every_line?: boolean;
 };
 
 type BridgeStatus = {
@@ -734,6 +735,20 @@ export default function Settings() {
           </label>
           <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
             ON по умолчанию. Без этого детектор фаерит и на ваших фразах типа «Я работал с Kubernetes…» — лишние тайлы. Выключи только если хочешь подсказки по обеим сторонам.
+          </div>
+        </div>
+        <div className="field">
+          <label>
+            <input
+              type="checkbox"
+              checked={cfg.auto_tile_every_line ?? false}
+              onChange={(e) => update({ auto_tile_every_line: e.target.checked })}
+              style={{ marginRight: 6 }}
+            />
+            <strong>🔥 AGGRESSIVE MODE — спавнить тайл на каждую строку транскрипта (v0.0.18+)</strong>
+          </label>
+          <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
+            <strong>OFF по умолчанию.</strong> Включи если детектор молчит а ты хочешь чтобы AI отвечал на ВСЁ что слышно. Bypass'ит «вопрос/не вопрос» проверку — каждая строка от Whisper (длиннее 5 символов) → тайл. Rate-limit бампается с 15 до 60 тайлов/мин. Расход AI взлетит соответственно — но cost cap всё равно soft warning, не блокирует. Используй вместе с «Детектор игнорирует ваш голос» (можно отключить если хочешь подсказки и на свои фразы).
           </div>
         </div>
         <div className="field">

@@ -96,6 +96,27 @@ pub struct Config {
     #[serde(default = "default_detector_skip_mic")]
     pub detector_skip_mic: bool,
 
+    /// **AGGRESSIVE MODE** (v0.0.18). When true, `maybe_spawn_tile` skips
+    /// the question/keyword detector entirely and treats EVERY transcript
+    /// line as a trigger. Combined with `detector_skip_mic=false` this
+    /// effectively spawns a tile for every audio chunk Whisper produces.
+    ///
+    /// Use cases:
+    ///   - You're paying for AI and want maximum coverage regardless of
+    ///     whether the line "sounds like a question"
+    ///   - You're testing the pipeline end-to-end
+    ///   - Whisper is dropping `?` and the candidate's monologue is what
+    ///     you actually want suggestions on
+    ///
+    /// Trade-off: cost. With this on, expect 30-50 tiles per minute of
+    /// continuous speech, each = one Haiku call. Soft cost cap chip still
+    /// fires but doesn't block. Also bumps internal MAX_TILES_PER_MIN from
+    /// 15 to 60 so the rate-limiter doesn't strangle aggressive mode.
+    ///
+    /// Default OFF — out of the box behaviour stays the same.
+    #[serde(default)]
+    pub auto_tile_every_line: bool,
+
     /// Hotkeys (cross-platform syntax, e.g. "F9", "CmdOrCtrl+Shift+A").
     pub hotkey_ask: String,
     pub hotkey_screenshot: String,
@@ -164,6 +185,7 @@ impl Config {
             post_meeting_debrief_enabled: default_post_meeting_debrief_enabled(),
             max_session_cost_usd: default_max_session_cost_usd(),
             detector_skip_mic: default_detector_skip_mic(),
+            auto_tile_every_line: false,
         }
     }
 }

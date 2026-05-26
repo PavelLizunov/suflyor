@@ -11,6 +11,26 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.18 (2026-05-26)
+
+- **New config field** (auto-defaulted via serde):
+  - `auto_tile_every_line: bool` = `false`
+- **New: AGGRESSIVE MODE.** Settings → 🪟 Auto-tiles →
+  **🔥 «спавнить тайл на каждую строку транскрипта»** checkbox. When ON:
+  - `maybe_spawn_tile` skips `detect_trigger` entirely. Every transcript
+    line (≥5 chars) → tile, regardless of whether it «sounds like a
+    question».
+  - Internal `MAX_TILES_PER_MIN` bumps from 15 → 60 so the rate-limiter
+    doesn't strangle aggressive throughput.
+  - Use case: video / interview where Whisper isn't producing `?` and
+    the candidate's own monologue is what you want suggestions on. Or
+    just to confirm the AI pipeline is healthy without waiting for a
+    «question» to surface.
+  - Cost: ~30-50 tiles/min of continuous speech, each one Haiku call.
+    Soft cost-cap chip still fires but does not block. Plan accordingly.
+- Default OFF — existing users see no behaviour change unless they
+  explicitly opt in.
+
 ### → v0.0.17 (2026-05-26)
 
 - **No config schema change.**

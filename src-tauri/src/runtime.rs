@@ -594,6 +594,12 @@ pub fn find_last_line_from_source(
 /// (live test showed 0 rate-limit hits even at peak).
 const MAX_TILES_PER_MIN: usize = 15;
 
+/// Bumped rate-limit when `auto_tile_every_line` is on. Whisper produces
+/// ~30-50 transcript lines per minute of continuous speech; the regular
+/// 15/min cap would strangle aggressive mode immediately. 60/min ≈ 1/sec
+/// matches the actual transcript throughput.
+const MAX_TILES_PER_MIN_AGGRESSIVE: usize = 60;
+
 /// Confidence gate for KB context injection: does every alphanumeric token of
 /// the KB entry's key appear as a token in the trigger?
 ///
@@ -627,10 +633,11 @@ async fn maybe_spawn_tile(
     tiles: SharedTiles,
     text: String,
 ) {
-    let (enabled, trigger_keywords, base_url, bearer, model, response_language, meeting_context) = {
+    let (enabled, every_line, trigger_keywords, base_url, bearer, model, response_language, meeting_context) = {
         let c = cfg.read();
         (
             c.auto_tiles_enabled,
+            c.auto_tile_every_line,
             c.trigger_keywords.clone(),
             c.ai_base_url.clone(),
             c.ai_bearer.clone(),
@@ -644,8 +651,20 @@ async fn maybe_spawn_tile(
     }
 
     let journal = rt.lock().journal.clone().unwrap_or_default();
-    let detected = detect_trigger(&text, &trigger_keywords);
+    // AGGRESSIVE MODE (v0.0.18): bypass detect_trigger and treat every
+    // line as a Question. We still log a detector_decision event so
+    // Replay viewer can show the audit trail, but with trigger_kind
+    // "every_line" so it's obvious why we fired.
+    let detected = if every_line {
+        // Only skip empty / very short lines (Whisper sometimes emits
+        // single-char artefacts that aren't worth a tile).
+        if text.trim().chars().count() < 5 { None }
+        else { Some(Trigger::Question(text.clone())) }
+    } else {
+        detect_trigger(&text, &trigger_keywords)
+    };
     let (triggered, trigger_kind): (bool, Option<String>) = match &detected {
+        Some(Trigger::Question(_)) if every_line => (true, Some("every_line".into())),
         Some(Trigger::Question(_)) => (true, Some("question".into())),
         Some(Trigger::Keyword(kw, _)) => (true, Some(format!("keyword:{kw}"))),
         None => (false, None),
@@ -670,11 +689,13 @@ async fn maybe_spawn_tile(
                 break;
             }
         }
-        if s.recent_tile_triggers.len() >= MAX_TILES_PER_MIN {
+        let cap = if every_line { MAX_TILES_PER_MIN_AGGRESSIVE } else { MAX_TILES_PER_MIN };
+        if s.recent_tile_triggers.len() >= cap {
             log::warn!(
-                "tile rate-limit hit ({}/{} in last 60s) — dropping trigger from text: {}",
+                "tile rate-limit hit ({}/{} in last 60s, aggressive={}) — dropping trigger from text: {}",
                 s.recent_tile_triggers.len(),
-                MAX_TILES_PER_MIN,
+                cap,
+                every_line,
                 text.chars().take(60).collect::<String>()
             );
             journal.write(&JournalEvent::RateLimited {
