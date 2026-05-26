@@ -11,6 +11,20 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.13 (2026-05-26)
+
+- **No config schema change.**
+- Three follow-ups from post-v0.0.12 review:
+  1. `start_session` now emits `cost:update {session_usd: 0}` so a stale
+     "💰 over budget" chip from a prior session clears immediately on
+     restart (previously had to wait for its 60s timer).
+  2. Over-budget timer is now tracked via `overBudgetTimerRef` and routed
+     through the existing `flashFlag` helper — a fresh cap-hit properly
+     re-extends the 60s window instead of an earlier timer clearing the
+     chip mid-burst.
+  3. Collapsed the two `cost:update` listeners into one (smaller cleanup
+     surface).
+
 ### → v0.0.12 (2026-05-26)
 
 - **No config schema change.**
@@ -64,9 +78,10 @@ for download. No auto-install (no code signing — by design).
 
 - **Cost cap pivoted from HARD BLOCK to SOFT WARNING.** Previously,
   crossing `max_session_cost_usd` blocked all new AI calls until session
-  restart. Now AI keeps working and a yellow "💰 over budget" chip
-  appears in the overlay. Rationale: blocking AI in the middle of an
-  interview was bad UX.
+  restart. Now AI keeps working. v0.0.5-v0.0.11 reused the yellow
+  "⏱ rate-limited" chip to signal the overage (one chip, two meanings);
+  v0.0.12 split it into a dedicated "💰 over budget" chip. Rationale for
+  the pivot: blocking AI in the middle of an interview was bad UX.
 - **Tile slot collision fix (CRITICAL).** Closing a non-last tile via ×
   could cause the next spawn to land on a still-occupied slot. Fix:
   per-tile `slot` field + first-free pick via HashSet diff. Eviction

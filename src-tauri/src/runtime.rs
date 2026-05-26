@@ -381,6 +381,15 @@ pub async fn start_session(
         }
     }
 
+    // Tell the overlay that cost is back to zero so chips that depend on
+    // session_usd (running-cost display, "💰 over budget" auto-clear) get a
+    // chance to reset. Without this emit, every other cost:update event in
+    // the codebase only fires after a successful AI call (always with
+    // total > 0), so the UI never sees a session_usd: 0 signal and the
+    // over-budget chip can linger from a prior session until its 60s timer
+    // fires. Found by post-v0.0.12 agent review.
+    let _ = app.emit_to("overlay", "cost:update", serde_json::json!({ "session_usd": 0.0_f64 }));
+
     // Open a fresh journal for this session.
     let journal = match Journal::open_new_session() {
         Ok(j) => j,

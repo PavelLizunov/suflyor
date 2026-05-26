@@ -176,6 +176,7 @@ export default function Overlay() {
   const rateTimerRef = useRef<TimerHandle | null>(null);
   const errorTimerRef = useRef<TimerHandle | null>(null);
   const startSessionTimerRef = useRef<TimerHandle | null>(null);
+  const overBudgetTimerRef = useRef<TimerHandle | null>(null);
   // Mounted-flag for promise resolutions that may land after unmount
   // (StrictMode double-mount, settings round-trip).
   const mountedRef = useRef(true);
@@ -188,7 +189,7 @@ export default function Overlay() {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      for (const r of [screenshotTimerRef, rateTimerRef, errorTimerRef, startSessionTimerRef]) {
+      for (const r of [screenshotTimerRef, rateTimerRef, errorTimerRef, startSessionTimerRef, overBudgetTimerRef]) {
         if (r.current) {
           clearTimeout(r.current);
           r.current = null;
@@ -412,8 +413,10 @@ export default function Overlay() {
     unlistens.push(
       listen<{ session_usd: number }>("cost:update", (e) => {
         setSessionCost(e.payload.session_usd);
+        // start_session emits {session_usd: 0} so a stale chip from the prior
+        // session clears immediately. Cancel any pending 60s auto-clear too.
         if (e.payload.session_usd === 0 && mountedRef.current) {
-          setOverBudget(false);
+          flashFlag(overBudgetTimerRef, setOverBudget, false, 0);
         }
       })
     );
@@ -426,12 +429,10 @@ export default function Overlay() {
     unlistens.push(
       listen<{ reason: string; source: string; blocking?: boolean }>("cost:cap-hit", (e) => {
         if (!mountedRef.current) return;
-        setOverBudget(true);
-        // Auto-clear after 60s. Counter resets on next start_session anyway,
-        // but user might keep this session running for a while past the cap.
-        setTimeout(() => {
-          if (mountedRef.current) setOverBudget(false);
-        }, 60_000);
+        // Use flashFlag so a fresh cap-hit re-extends the 60s window (instead
+        // of leaving the original timer running to clear-early) AND so the
+        // timer is tracked in overBudgetTimerRef for unmount cleanup.
+        flashFlag(overBudgetTimerRef, setOverBudget, true, 60_000);
         console.warn(`over budget (source=${e.payload.source}): ${e.payload.reason}`);
       })
     );
