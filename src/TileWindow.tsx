@@ -3,6 +3,7 @@ import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { t, resolveLang, type Lang } from "./i18n";
 
 export default function TileWindow() {
   // Params from URL ?tile=1&id=...&kind=...&q=...&a=...
@@ -46,14 +47,21 @@ export default function TileWindow() {
   const [answer] = useState(answerInitial);
   const [pinned, setPinned] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  // v0.0.48: language for tile chrome. tile-* windows have a narrow
+  // capability set but get_config is allowed via assert_overlay's caller
+  // check — wait, actually it isn't. Tile windows can't call get_config.
+  // So we load from URL param ?lang= which the spawn_tile backend will
+  // pass through starting v0.0.48. Falls back to "ru" if missing.
+  const lang: Lang = resolveLang(params.get("lang"));
 
   // Bar label by trigger source — shown uppercase via CSS text-transform.
   // Don't repeat 📌 here (the pin button is right next to it).
+  // v0.0.48 i18n: the icon stays universal; only the word part gets t()'d.
   const sourceLabel =
-    kind === "system" ? "🔊 system" :
-    kind === "mic"    ? "🎤 mic" :
-    kind === "manual" ? "manual · F6" :
-                        "auto · detector";
+    kind === "system" ? `🔊 ${lang === "en" ? "system" : "система"}` :
+    kind === "mic"    ? `🎤 ${lang === "en" ? "mic" : "микр"}` :
+    kind === "manual" ? (lang === "en" ? "manual · F6" : "вручную · F6") :
+                        (lang === "en" ? "auto · detector" : "авто · детектор");
 
   useEffect(() => {
     document.body.classList.add("tile");
@@ -186,7 +194,7 @@ export default function TileWindow() {
         {seq !== null && (
           <span
             className="tile-seq"
-            title={`Тайл #${seq} в этой сессии`}
+            title={lang === "en" ? `Tile #${seq} in this session` : `Тайл #${seq} в этой сессии`}
             aria-label={`Tile sequence number ${seq}`}
             style={{
               display: "inline-block",
@@ -209,8 +217,8 @@ export default function TileWindow() {
           className="tile-pin"
           data-pinned={pinned ? "true" : undefined}
           onClick={togglePin}
-          title={pinned ? "Pinned — no auto-close" : "Pin (cancel auto-close)"}
-          aria-label={pinned ? "Unpin tile (re-enable auto-close)" : "Pin tile (disable auto-close)"}
+          title={pinned ? t("tile.unpin.tip", lang) : t("tile.pin.tip", lang)}
+          aria-label={pinned ? t("tile.unpin.aria", lang) : t("tile.pin.aria", lang)}
           aria-pressed={pinned}
         >
           📌
@@ -218,8 +226,8 @@ export default function TileWindow() {
         <button
           className="tile-close"
           onClick={close}
-          title="Close now"
-          aria-label="Close tile"
+          title={t("tile.close.tip", lang)}
+          aria-label={t("tile.close.aria", lang)}
         >
           ×
         </button>

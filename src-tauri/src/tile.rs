@@ -358,10 +358,20 @@ pub fn spawn_tile_with_highlight(
     // v0.0.29: pass max-height + max-width via URL so TileWindow.tsx
     // ResizeObserver can use the dynamic per-monitor cap instead of
     // a hardcoded 510/460. Frontend rounds to int and ignores if absent.
+    // v0.0.48: pass &lang= so TileWindow.tsx can localize close/pin
+    // tooltips + source label. Tile windows can't call get_config
+    // (assert_overlay gates it), so we pull ui_language from shared
+    // state right here at spawn time.
+    let ui_lang: String = app
+        .try_state::<crate::config::SharedConfig>()
+        .map(|s| s.read().ui_language.clone())
+        .unwrap_or_else(|| "ru".to_string());
+    let lang_param = if ui_lang == "en" { "&lang=en" } else { "&lang=ru" };
     let route = format!(
-        "index.html?tile=1&id={}&kind={}&seq={}{}&q={}&a={}&mh={}&mw={}",
+        "index.html?tile=1&id={}&kind={}&seq={}{}&q={}&a={}&mh={}&mw={}{}",
         id, kind.as_str(), seq, hl_param, q_enc, a_enc,
-        dims.h_max.round() as i64, dims.w.round() as i64
+        dims.h_max.round() as i64, dims.w.round() as i64,
+        lang_param
     );
 
     let window = match WebviewWindowBuilder::new(app, &label, WebviewUrl::App(route.into()))

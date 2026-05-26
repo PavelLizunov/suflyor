@@ -11,6 +11,48 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.48 (2026-05-26)
+
+Seventh i18n release. Translates the **Overlay bar** (the most visible
+surface — user sees it every second) and **Tile chrome** (close + pin
++ source label).
+
+Strings covered in Overlay.tsx:
+- Drag tooltip
+- Status text (Stopped · Paused · Listening · Asking AI… · Answering ·
+  Error with {msg} interpolation)
+- Health-HUD aria-label
+- PTT button labels (hold/ask), tooltips for system/mic with hold-vs-
+  click variants, aria-labels with recording-state variants
+- Chips: 📸 ready (aria), 🔥 aggressive (aria + tip), ⏱ rate-limited,
+  💰 over budget (aria + tip), 💰 $X.XXX (cost tip + aria), ⚠
+  hotkey-warnings (tip + aria)
+- Help popover button: aria + tip
+- Settings gear: tip + aria
+- Help popover content: dialog aria, Hotkeys title, all 8 hotkey
+  descriptions (F3/F4/F6/F8/F9/F10/F11/Ctrl+Alt+W), Indicators title,
+  all 9 indicator descriptions
+- KB palette: dialog aria + search input placeholder
+
+Strings covered in TileWindow.tsx:
+- Source label (system/mic/manual/auto·detector)
+- Tile #N tooltip
+- Pin/Unpin tooltips + aria-labels
+- Close button tooltip + aria-label
+
+To support tile chrome i18n, `tile.rs` now embeds `&lang=ru|en` in
+the tile URL when spawning. Tiles can't call `get_config` (gated by
+`assert_overlay` caller guard), so the language is baked into the URL
+at spawn time. Pulled from `SharedConfig.ui_language` via
+`app.try_state::<SharedConfig>()`.
+
+Still NOT translated (v0.0.49+):
+- Snippets section in Settings (~40 strings + dynamic + CRUD modal)
+- Replay viewer
+
+No new config fields. The `ui_language` field from v0.0.42 powers
+both the overlay AND the tiles via the new URL-param plumbing.
+
 ### → v0.0.47 (2026-05-26)
 
 Sixth i18n release. Translates the **Advanced (Updates · Diagnostics)**

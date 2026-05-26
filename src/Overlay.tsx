@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow, currentMonitor, LogicalSize } from "@tauri-apps/api/window";
+import { t, resolveLang, type Lang } from "./i18n";
 
 type AudioSource = "system" | "mic";
 
@@ -92,6 +93,10 @@ export default function Overlay() {
   // error.
   const [hotkeyHelpOpen, setHotkeyHelpOpen] = useState(false);
   const originalHelpSizeRef = useRef<{ w: number; h: number } | null>(null);
+  // v0.0.48: UI language for overlay chrome. Loaded from config on mount
+  // (same useEffect that reads manual_ask_mode + auto_tile_every_line).
+  // Defaults to "ru" until config arrives — same pattern as Settings.
+  const [lang, setLang] = useState<Lang>("ru");
   // Search debounced when palette open + query non-empty.
   useEffect(() => {
     if (!paletteOpen) return;
@@ -428,30 +433,37 @@ export default function Overlay() {
   // warning per v0.0.28; user said unlimited budget).
   const [aggressive, setAggressive] = useState(false);
 
-  // Load ask-mode + aggressive flag from config once on mount.
+  // Load ask-mode + aggressive flag + ui_language from config once on mount.
   useEffect(() => {
-    invoke<{ manual_ask_mode?: string; auto_tile_every_line?: boolean }>("get_config")
+    invoke<{ manual_ask_mode?: string; auto_tile_every_line?: boolean; ui_language?: string }>("get_config")
       .then((c) => {
         if (!mountedRef.current) return;
         const mode = c.manual_ask_mode === "click" ? "click" : "hold";
         setAskMode(mode);
         setAggressive(Boolean(c.auto_tile_every_line));
+        setLang(resolveLang(c.ui_language));
       })
       .catch((e) => console.warn("get_config:", e));
   }, []);
 
-  // Re-read aggressive flag on window-focus as a safety net. NOTE: in the
-  // common Settings → overlay path the overlay actually unmounts (Settings
-  // lives in the same window under `?settings=1`), so the mount-time
-  // useEffect above is what restores the chip then. This focus listener
-  // covers the secondary case where the user alt-tabs away from the entire
-  // suflyor window and back after editing config via some other route
-  // (e.g. hand-editing %APPDATA%\overlay-mvp\config.json in Notepad).
+  // Re-read aggressive flag + ui_language on window-focus as a safety net.
+  // NOTE: in the common Settings → overlay path the overlay actually
+  // unmounts (Settings lives in the same window under `?settings=1`), so
+  // the mount-time useEffect above is what restores the chip then. This
+  // focus listener covers the secondary case where the user alt-tabs away
+  // from the entire suflyor window and back after editing config via some
+  // other route (e.g. hand-editing %APPDATA%\overlay-mvp\config.json in
+  // Notepad). v0.0.48 also re-reads ui_language so switching language in
+  // Settings + Save reflects on the overlay without an app restart.
   useEffect(() => {
     const onFocus = () => {
       if (!mountedRef.current) return;
-      invoke<{ auto_tile_every_line?: boolean }>("get_config")
-        .then((c) => mountedRef.current && setAggressive(Boolean(c.auto_tile_every_line)))
+      invoke<{ auto_tile_every_line?: boolean; ui_language?: string }>("get_config")
+        .then((c) => {
+          if (!mountedRef.current) return;
+          setAggressive(Boolean(c.auto_tile_every_line));
+          setLang(resolveLang(c.ui_language));
+        })
         .catch(() => {});
     };
     window.addEventListener("focus", onFocus);
@@ -819,7 +831,7 @@ export default function Overlay() {
             console.warn("overlay startDragging failed:", err);
           });
         }}
-        title="Перетащи за пустую область бара, чтобы подвинуть overlay"
+        title={t("overlay.drag.tip", lang)}
       >
         <div className={dotClass} aria-hidden="true" />
         <div
@@ -827,15 +839,15 @@ export default function Overlay() {
           role="status"
           aria-live="polite"
         >
-          {status === "stopped" && "Stopped"}
-          {status === "paused" && "⏸ Paused (F8 to resume)"}
-          {status === "listening" && "Listening"}
-          {status === "thinking" && "Asking AI…"}
-          {status === "answering" && "Answering"}
-          {status === "error" && `Error: ${errorText.slice(0, 60)}`}
+          {status === "stopped" && t("overlay.status.stopped", lang)}
+          {status === "paused" && t("overlay.status.paused", lang)}
+          {status === "listening" && t("overlay.status.listening", lang)}
+          {status === "thinking" && t("overlay.status.thinking", lang)}
+          {status === "answering" && t("overlay.status.answering", lang)}
+          {status === "error" && t("overlay.status.error", lang).replace("{msg}", errorText.slice(0, 60))}
         </div>
         {health && (
-          <span className="health-hud" aria-label="Subsystem health">
+          <span className="health-hud" aria-label={t("overlay.health.aria", lang)}>
             {(["audio", "stt", "ai"] as const).map((k) => {
               const state = health[k];
               const ageMs = health[`${k}_age_ms` as const];
@@ -871,7 +883,7 @@ export default function Overlay() {
             )}
           </span>
         )}
-        {hasScreenshot && <span className="hint" aria-label="Screenshot ready">📸 ready</span>}
+        {hasScreenshot && <span className="hint" aria-label={t("overlay.screenshot.aria", lang)}>{t("overlay.screenshot.text", lang)}</span>}
         {aggressive && (
           <span
             className="hint"
@@ -883,14 +895,14 @@ export default function Overlay() {
               background: "rgba(251, 146, 60, 0.15)",
               border: "1px solid rgba(251, 146, 60, 0.4)",
             }}
-            aria-label="Aggressive mode is enabled — tile spawns on every transcript line"
-            title="🔥 AGGRESSIVE MODE ON — тайл на КАЖДУЮ строку транскрипта (bypass детектора, до 60 тайлов/мин). Отключить: Settings → 🪟 Auto-tiles → снять галку «спавнить тайл на каждую строку»"
+            aria-label={t("overlay.aggressive.aria", lang)}
+            title={t("overlay.aggressive.tip", lang)}
           >
             🔥 aggressive
           </span>
         )}
         {rateLimited && (
-          <span className="hint" style={{ color: "#facc15" }} aria-label="Rate limited">
+          <span className="hint" style={{ color: "#facc15" }} aria-label={t("overlay.ratelimit.aria", lang)}>
             ⏱ rate-limited
           </span>
         )}
@@ -898,8 +910,8 @@ export default function Overlay() {
           <span
             className="hint"
             style={{ color: "#facc15" }}
-            aria-label="Session cost over configured budget"
-            title="Сессия превысила Soft budget warning (Settings → AI proxy). AI продолжает работать — это passive notice."
+            aria-label={t("overlay.overbudget.aria", lang)}
+            title={t("overlay.overbudget.tip", lang)}
           >
             💰 over budget
           </span>
@@ -907,8 +919,8 @@ export default function Overlay() {
         {showCost && sessionCost > 0 && (
           <span
             className="hint"
-            title="Accumulated session cost (Claude tokens) — toggle in Settings → UI"
-            aria-label={`Session cost ${sessionCost.toFixed(3)} dollars`}
+            title={t("overlay.cost.tip", lang)}
+            aria-label={t("overlay.cost.aria", lang).replace("{usd}", sessionCost.toFixed(3))}
           >
             💰 ${sessionCost.toFixed(3)}
           </span>
@@ -916,9 +928,9 @@ export default function Overlay() {
         {hotkeyWarnings.length > 0 && (
           <span
             className="hint"
-            title={`Hotkey issues:\n${hotkeyWarnings.join("\n")}`}
+            title={t("overlay.hotkey.warn.tip", lang).replace("{warnings}", hotkeyWarnings.join("\n"))}
             style={{ color: "#facc15", cursor: "help" }}
-            aria-label={`${hotkeyWarnings.length} hotkey warning(s)`}
+            aria-label={t("overlay.hotkey.warn.aria", lang).replace("{n}", String(hotkeyWarnings.length))}
           >
             ⚠ {hotkeyWarnings.length}
           </span>
@@ -931,16 +943,20 @@ export default function Overlay() {
             askMode === "hold"
               ? isRec
                 ? `${icon} ⏺ ${elapsedSec.toFixed(1)}s`
-                : `${icon} hold`
-              : `${icon} ask`;
+                : `${icon} ${t("overlay.ptt.hold", lang)}`
+              : `${icon} ${t("overlay.ptt.ask", lang)}`;
           const ariaLabel =
             askMode === "hold"
-              ? `${src === "system" ? "System" : "Microphone"} push-to-talk${isRec ? " — recording" : ""}`
-              : `Ask AI about recent ${src === "system" ? "system" : "microphone"} lines`;
+              ? src === "system"
+                ? t(isRec ? "overlay.ptt.system.aria.hold.rec" : "overlay.ptt.system.aria.hold", lang)
+                : t(isRec ? "overlay.ptt.mic.aria.hold.rec" : "overlay.ptt.mic.aria.hold", lang)
+              : src === "system"
+                ? t("overlay.ptt.system.aria.click", lang)
+                : t("overlay.ptt.mic.aria.click", lang);
           const title =
             askMode === "hold"
-              ? `Зажми чтобы записать ${src === "system" ? "СОБЕСЕДНИКА" : "ПОЛЬЗОВАТЕЛЯ"}, отпусти чтобы спросить AI`
-              : `Спросить AI про последние реплики ${src === "system" ? "СОБЕСЕДНИКА" : "ПОЛЬЗОВАТЕЛЯ"}`;
+              ? t(src === "system" ? "overlay.ptt.system.hold" : "overlay.ptt.mic.hold", lang)
+              : t(src === "system" ? "overlay.ptt.system.click" : "overlay.ptt.mic.click", lang);
           return (
             <button
               key={src}
@@ -962,8 +978,8 @@ export default function Overlay() {
           type="button"
           onClick={() => setHotkeyHelpOpen((v) => !v)}
           aria-expanded={hotkeyHelpOpen}
-          aria-label="Hotkey legend — click to expand"
-          title="Click для расшифровки всех hotkey'ев"
+          aria-label={t("overlay.help.aria", lang)}
+          title={t("overlay.help.tip", lang)}
           style={{
             border: "none",
             background: "transparent",
@@ -976,8 +992,8 @@ export default function Overlay() {
         <button
           className="icon-btn icon-only"
           onClick={openSettings}
-          title="Settings"
-          aria-label="Open settings"
+          title={t("overlay.gear.tip", lang)}
+          aria-label={t("overlay.gear.aria", lang)}
         >
           ⚙
         </button>
@@ -989,7 +1005,7 @@ export default function Overlay() {
       {hotkeyHelpOpen && (
         <div
           role="dialog"
-          aria-label="Hotkey reference"
+          aria-label={t("overlay.help.dialog.aria", lang)}
           onClick={() => setHotkeyHelpOpen(false)}
           style={{
             position: "absolute",
@@ -1010,19 +1026,19 @@ export default function Overlay() {
           }}
         >
           <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--c-text-mute)" }}>
-            Hotkeys (global) — click anywhere to close
+            {t("overlay.help.hk.title", lang)}
           </div>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <tbody>
               {[
-                ["F3", "Reask — повторить последний вопрос со свежим контекстом"],
-                ["F4", "KB palette — поиск в knowledge base (1643 entries)"],
-                ["F6", "Manual tile — спавнить тайл из последней реплики"],
-                ["F8", "Pause / Resume — пауза/возобновить сессию"],
-                ["F9", "Ask AI — спросить AI сейчас (со screenshot если есть)"],
-                ["F10", "Screenshot — захват для следующего F9"],
-                ["F11", "PANIC HIDE — скрыть overlay + все тайлы"],
-                ["Ctrl+Alt+W", "Close all tiles (кроме pinned)"],
+                ["F3", t("overlay.help.hk.f3", lang)],
+                ["F4", t("overlay.help.hk.f4", lang)],
+                ["F6", t("overlay.help.hk.f6", lang)],
+                ["F8", t("overlay.help.hk.f8", lang)],
+                ["F9", t("overlay.help.hk.f9", lang)],
+                ["F10", t("overlay.help.hk.f10", lang)],
+                ["F11", t("overlay.help.hk.f11", lang)],
+                ["Ctrl+Alt+W", t("overlay.help.hk.ctrl_w", lang)],
               ].map(([key, desc]) => (
                 <tr key={key}>
                   <td style={{ padding: "2px 8px 2px 0", verticalAlign: "top", width: 40 }}>
@@ -1055,20 +1071,20 @@ export default function Overlay() {
             letterSpacing: "0.05em",
             color: "var(--c-text-mute)",
           }}>
-            Indicators — что значат точки и чипы
+            {t("overlay.help.ind.title", lang)}
           </div>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <tbody>
               {[
-                ["audio", "🟢 audio — capture работает (зелёный = ok, жёлтый = thinking, серый = idle, красный = error)"],
-                ["stt", "🟢 stt — Whisper транскрибирует (loops каждые 2-5 сек)"],
-                ["ai", "🟢 ai — Claude отвечает на тайлах (purple flash = active request)"],
-                ["🎙", "🎙 wpm — voice coach: ваш темп речи + filler-words за 60 сек (mic only)"],
-                ["📸", "📸 ready — screenshot захвачен (F10) и прикрепится к следующему F9 ask"],
-                ["🔥", "🔥 aggressive — bypass-режим, тайл на каждую строку транскрипта (Settings → Auto-tiles)"],
-                ["⏱", "⏱ rate-limited — backend временно throttles (3 сек cooldown), AI запросы пропускаются"],
-                ["💰", "💰 over budget — сессия превысила Soft budget warning (Settings → AI proxy). AI работает дальше"],
-                ["💰 $", "💰 $X.XXX — накопленная стоимость сессии (Claude tokens). Toggle в Settings → Interface"],
+                ["audio", t("overlay.help.ind.audio", lang)],
+                ["stt", t("overlay.help.ind.stt", lang)],
+                ["ai", t("overlay.help.ind.ai", lang)],
+                ["🎙", t("overlay.help.ind.mic", lang)],
+                ["📸", t("overlay.help.ind.screenshot", lang)],
+                ["🔥", t("overlay.help.ind.aggressive", lang)],
+                ["⏱", t("overlay.help.ind.ratelimit", lang)],
+                ["💰", t("overlay.help.ind.overbudget", lang)],
+                ["💰 $", t("overlay.help.ind.cost", lang)],
               ].map(([label, desc]) => (
                 <tr key={label}>
                   <td style={{ padding: "2px 8px 2px 0", verticalAlign: "top", width: 40 }}>
@@ -1090,7 +1106,7 @@ export default function Overlay() {
       )}
 
       {paletteOpen && (
-        <div className="kb-palette" role="dialog" aria-label="Knowledge base search">
+        <div className="kb-palette" role="dialog" aria-label={t("overlay.palette.aria", lang)}>
           <input
             ref={paletteInputRef}
             type="text"
@@ -1103,7 +1119,7 @@ export default function Overlay() {
               else if (e.key === "ArrowDown") { e.preventDefault(); setPaletteIdx((i) => Math.min(i + 1, Math.max(0, paletteResults.length - 1))); }
               else if (e.key === "ArrowUp") { e.preventDefault(); setPaletteIdx((i) => Math.max(0, i - 1)); }
             }}
-            placeholder="KB search: kubernetes / dijkstra / iptables …   (Esc to close, Enter to expand)"
+            placeholder={t("overlay.palette.placeholder", lang)}
             spellCheck={false}
             autoComplete="off"
             autoCapitalize="none"

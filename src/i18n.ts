@@ -473,6 +473,153 @@ const strings = {
     ru: "Full export = все настройки + ключи (для миграции на свою машину). Share export = без секретов, безопасно для GitHub issue.",
     en: "Full export = all settings + keys (for migrating to your own machine). Share export = without secrets, safe for GitHub issue.",
   },
+
+  // ── Overlay bar (v0.0.48) ──────────────────────────────────────────
+  // Drag tooltip
+  "overlay.drag.tip":         {
+    ru: "Перетащи за пустую область бара, чтобы подвинуть overlay",
+    en: "Drag an empty area of the bar to move the overlay",
+  },
+  // Status text
+  "overlay.status.stopped":   { ru: "Stopped",                en: "Stopped" },
+  "overlay.status.paused":    { ru: "⏸ Pause (F8 чтобы возобновить)", en: "⏸ Paused (F8 to resume)" },
+  "overlay.status.listening": { ru: "Слушаю",                 en: "Listening" },
+  "overlay.status.thinking":  { ru: "Спрашиваю AI…",          en: "Asking AI…" },
+  "overlay.status.answering": { ru: "Отвечаю",                en: "Answering" },
+  "overlay.status.error":     { ru: "Ошибка: {msg}",          en: "Error: {msg}" },
+  "overlay.health.aria":      { ru: "Статус подсистем",       en: "Subsystem health" },
+  // Coach pill
+  "overlay.coach.tip":        {
+    ru: "Voice coach (вы, последние 60 сек):\n  темп: {wpm} wpm ({pace})\n  паразиты: {fillers} / {words} слов{per100}",
+    en: "Voice coach (you, last 60s):\n  pace: {wpm} wpm ({pace})\n  fillers: {fillers} / {words} words{per100}",
+  },
+  // Chips
+  "overlay.screenshot.aria":  { ru: "Screenshot готов",       en: "Screenshot ready" },
+  "overlay.screenshot.text":  { ru: "📸 готов",               en: "📸 ready" },
+  "overlay.aggressive.aria":  { ru: "Aggressive mode включён — тайл на каждую строку транскрипта", en: "Aggressive mode is enabled — tile spawns on every transcript line" },
+  "overlay.aggressive.tip":   {
+    ru: "🔥 AGGRESSIVE MODE ON — тайл на КАЖДУЮ строку транскрипта (bypass детектора, до 60 тайлов/мин). Отключить: Settings → 🪟 Auto-tiles → снять галку «спавнить тайл на каждую строку»",
+    en: "🔥 AGGRESSIVE MODE ON — tile on EVERY transcript line (detector bypass, up to 60 tiles/min). Disable: Settings → 🪟 Auto-tiles → uncheck «spawn tile on every line»",
+  },
+  "overlay.ratelimit.aria":   { ru: "Rate-limited",           en: "Rate limited" },
+  "overlay.overbudget.aria":  { ru: "Сессия превысила настроенный бюджет", en: "Session cost over configured budget" },
+  "overlay.overbudget.tip":   {
+    ru: "Сессия превысила Soft budget warning (Settings → AI proxy). AI продолжает работать — это passive notice.",
+    en: "Session exceeded Soft budget warning (Settings → AI proxy). AI keeps working — this is a passive notice.",
+  },
+  "overlay.cost.tip":         {
+    ru: "Накопленная стоимость сессии (Claude tokens) — переключить в Settings → UI",
+    en: "Accumulated session cost (Claude tokens) — toggle in Settings → UI",
+  },
+  "overlay.cost.aria":        { ru: "Стоимость сессии {usd} долларов", en: "Session cost {usd} dollars" },
+  "overlay.hotkey.warn.tip":  { ru: "Проблемы с хоткеями:\n{warnings}", en: "Hotkey issues:\n{warnings}" },
+  "overlay.hotkey.warn.aria": { ru: "{n} проблем(ы) с хоткеями", en: "{n} hotkey warning(s)" },
+  // PTT buttons
+  "overlay.ptt.system.hold":  {
+    ru: "Зажми чтобы записать СОБЕСЕДНИКА, отпусти чтобы спросить AI",
+    en: "Hold to record the OTHER SIDE, release to ask AI",
+  },
+  "overlay.ptt.mic.hold":     {
+    ru: "Зажми чтобы записать СЕБЯ, отпусти чтобы спросить AI",
+    en: "Hold to record YOURSELF, release to ask AI",
+  },
+  "overlay.ptt.system.click": {
+    ru: "Спросить AI про последние реплики СОБЕСЕДНИКА",
+    en: "Ask AI about recent OTHER SIDE lines",
+  },
+  "overlay.ptt.mic.click":    {
+    ru: "Спросить AI про последние реплики СЕБЯ",
+    en: "Ask AI about recent MICROPHONE lines",
+  },
+  "overlay.ptt.system.aria.hold":      { ru: "Push-to-talk собеседник", en: "System push-to-talk" },
+  "overlay.ptt.system.aria.hold.rec":  { ru: "Push-to-talk собеседник — запись", en: "System push-to-talk — recording" },
+  "overlay.ptt.mic.aria.hold":         { ru: "Push-to-talk микрофон",  en: "Microphone push-to-talk" },
+  "overlay.ptt.mic.aria.hold.rec":     { ru: "Push-to-talk микрофон — запись", en: "Microphone push-to-talk — recording" },
+  "overlay.ptt.system.aria.click":     { ru: "Спросить AI про последние реплики собеседника", en: "Ask AI about recent system lines" },
+  "overlay.ptt.mic.aria.click":        { ru: "Спросить AI про последние реплики микрофона", en: "Ask AI about recent microphone lines" },
+  "overlay.ptt.hold":         { ru: "удерж.",                 en: "hold" },
+  "overlay.ptt.ask":          { ru: "спр.",                   en: "ask" },
+  // Help popover button
+  "overlay.help.aria":        { ru: "Расшифровка хоткеев — клик чтобы раскрыть", en: "Hotkey legend — click to expand" },
+  "overlay.help.tip":         { ru: "Click для расшифровки всех hotkey'ев", en: "Click to expand all hotkey descriptions" },
+  // Settings gear
+  "overlay.gear.tip":         { ru: "Настройки",              en: "Settings" },
+  "overlay.gear.aria":        { ru: "Открыть настройки",      en: "Open settings" },
+  // Help popover content
+  "overlay.help.dialog.aria": { ru: "Справка по хоткеям",     en: "Hotkey reference" },
+  "overlay.help.hk.title":    {
+    ru: "Хоткеи (global) — клик в любом месте чтобы закрыть",
+    en: "Hotkeys (global) — click anywhere to close",
+  },
+  "overlay.help.hk.f3":       { ru: "Reask — повторить последний вопрос со свежим контекстом", en: "Reask — repeat the last question with fresh context" },
+  "overlay.help.hk.f4":       { ru: "KB palette — поиск в knowledge base (1643 entries)", en: "KB palette — search the knowledge base (1643 entries)" },
+  "overlay.help.hk.f6":       { ru: "Manual tile — спавнить тайл из последней реплики", en: "Manual tile — spawn a tile from the last line" },
+  "overlay.help.hk.f8":       { ru: "Pause / Resume — пауза/возобновить сессию", en: "Pause / Resume — pause/resume the session" },
+  "overlay.help.hk.f9":       { ru: "Ask AI — спросить AI сейчас (со screenshot если есть)", en: "Ask AI — ask AI now (with screenshot if present)" },
+  "overlay.help.hk.f10":      { ru: "Screenshot — захват для следующего F9", en: "Screenshot — capture for the next F9" },
+  "overlay.help.hk.f11":      { ru: "PANIC HIDE — скрыть overlay + все тайлы", en: "PANIC HIDE — hide overlay + all tiles" },
+  "overlay.help.hk.ctrl_w":   { ru: "Close all tiles (кроме pinned)", en: "Close all tiles (except pinned)" },
+  // Indicators legend
+  "overlay.help.ind.title":   {
+    ru: "Индикаторы — что значат точки и чипы",
+    en: "Indicators — what the dots and chips mean",
+  },
+  "overlay.help.ind.audio":   {
+    ru: "🟢 audio — capture работает (зелёный = ok, жёлтый = thinking, серый = idle, красный = error)",
+    en: "🟢 audio — capture working (green = ok, yellow = thinking, gray = idle, red = error)",
+  },
+  "overlay.help.ind.stt":     {
+    ru: "🟢 stt — Whisper транскрибирует (loops каждые 2-5 сек)",
+    en: "🟢 stt — Whisper transcribing (loops every 2-5 sec)",
+  },
+  "overlay.help.ind.ai":      {
+    ru: "🟢 ai — Claude отвечает на тайлах (purple flash = active request)",
+    en: "🟢 ai — Claude responding on tiles (purple flash = active request)",
+  },
+  "overlay.help.ind.mic":     {
+    ru: "🎙 wpm — voice coach: ваш темп речи + filler-words за 60 сек (mic only)",
+    en: "🎙 wpm — voice coach: your speech pace + filler-words over 60 sec (mic only)",
+  },
+  "overlay.help.ind.screenshot": {
+    ru: "📸 ready — screenshot захвачен (F10) и прикрепится к следующему F9 ask",
+    en: "📸 ready — screenshot captured (F10) and will attach to the next F9 ask",
+  },
+  "overlay.help.ind.aggressive": {
+    ru: "🔥 aggressive — bypass-режим, тайл на каждую строку транскрипта (Settings → Auto-tiles)",
+    en: "🔥 aggressive — bypass mode, tile on every transcript line (Settings → Auto-tiles)",
+  },
+  "overlay.help.ind.ratelimit": {
+    ru: "⏱ rate-limited — backend временно throttles (3 сек cooldown), AI запросы пропускаются",
+    en: "⏱ rate-limited — backend temporarily throttles (3 sec cooldown), AI requests are skipped",
+  },
+  "overlay.help.ind.overbudget": {
+    ru: "💰 over budget — сессия превысила Soft budget warning (Settings → AI proxy). AI работает дальше",
+    en: "💰 over budget — session exceeded Soft budget warning (Settings → AI proxy). AI keeps working",
+  },
+  "overlay.help.ind.cost":    {
+    ru: "💰 $X.XXX — накопленная стоимость сессии (Claude tokens). Переключить в Settings → Interface",
+    en: "💰 $X.XXX — accumulated session cost (Claude tokens). Toggle in Settings → Interface",
+  },
+  // KB palette
+  "overlay.palette.placeholder": {
+    ru: "KB поиск: kubernetes / dijkstra / iptables …   (Esc закрыть, Enter раскрыть)",
+    en: "KB search: kubernetes / dijkstra / iptables …   (Esc to close, Enter to expand)",
+  },
+  "overlay.palette.aria":     { ru: "Поиск по knowledge base", en: "Knowledge base search" },
+
+  // ── Tile chrome (v0.0.48) ──────────────────────────────────────────
+  "tile.close.tip":           { ru: "Закрыть тайл",           en: "Close tile" },
+  "tile.close.aria":          { ru: "Закрыть",                en: "Close" },
+  "tile.pin.tip":             { ru: "Запинить (отключить авто-закрытие)", en: "Pin (disable auto-close)" },
+  "tile.unpin.tip":           { ru: "Открепить",              en: "Unpin" },
+  "tile.pin.aria":            { ru: "Запинить тайл",          en: "Pin tile" },
+  "tile.unpin.aria":          { ru: "Открепить тайл",         en: "Unpin tile" },
+  "tile.source.auto":         { ru: "AUTO · ДЕТЕКТОР",        en: "AUTO · DETECTOR" },
+  "tile.source.mic":          { ru: "MIC",                    en: "MIC" },
+  "tile.source.system":       { ru: "SYSTEM",                 en: "SYSTEM" },
+  "tile.source.manual":       { ru: "ВРУЧНУЮ",                en: "MANUAL" },
+  "tile.source.snippet":      { ru: "СНИППЕТ",                en: "SNIPPET" },
+  "tile.source.kb":           { ru: "KB",                     en: "KB" },
 } as const;
 
 export type StringKey = keyof typeof strings;
