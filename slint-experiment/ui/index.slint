@@ -1,9 +1,10 @@
 // Single compilation root for build.rs — slint_build::compile() only
 // emits one output file, so multiple compile() calls clobber each other.
-// Importing both component files here and re-exporting them lets each
+// Importing each component file here and re-exporting them lets each
 // binary access whatever it needs via `slint::include_modules!()`.
 
 import { MainWindow, FilterChip, ReplayEvent } from "replay.slint";
 import { OverlaySpike } from "overlay_spike.slint";
+import { MarkdownSpike, MarkdownBlock } from "markdown_spike.slint";
 
-export { MainWindow, FilterChip, ReplayEvent, OverlaySpike }
+export { MainWindow, FilterChip, ReplayEvent, OverlaySpike, MarkdownSpike, MarkdownBlock }

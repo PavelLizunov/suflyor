@@ -1,0 +1,153 @@
+// Phase 0.5 spike 3 — markdown adapter window.
+//
+// Renders a Vec<MarkdownBlock> from the Rust side. Each block has a
+// `kind` int discriminant + content fields that may be unused per kind:
+//
+//   0 = Paragraph    → block.text rendered as flowing text
+//   1 = H1           → block.text rendered larger + bolder
+//   2 = H2           → block.text rendered large + bold
+//   3 = H3           → block.text rendered medium + bold
+//   4 = BulletItem   → block.text rendered with • prefix
+//   5 = CodeBlock    → block.text rendered monospace in a box
+//   6 = HorizontalRule → horizontal divider
+//
+// Slint .slint doesn't have ADTs / enums-with-payload, so this flat
+// struct + kind discriminant is the standard pattern. Phase 4 would
+// upgrade to per-block dedicated components.
+
+import { ScrollView } from "std-widgets.slint";
+
+export struct MarkdownBlock {
+    kind: int,
+    text: string,
+    lang: string,  // for CodeBlock; unused for others
+}
+
+export component MarkdownSpike inherits Window {
+    title: "Slint markdown adapter spike";
+    preferred-width: 720px;
+    preferred-height: 600px;
+    min-width: 320px;
+    min-height: 240px;
+    background: #14161e;
+
+    in-out property <[MarkdownBlock]> blocks: [];
+    in-out property <string> source-name: "(no source loaded)";
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 8px;
+
+        // Header bar with the source filename + block count.
+        HorizontalLayout {
+            spacing: 12px;
+            Text {
+                text: "Markdown spike";
+                font-size: 16px;
+                font-weight: 700;
+                color: #e8e8ec;
+            }
+            Text {
+                text: root.source-name + " · " + root.blocks.length + " blocks";
+                font-size: 11px;
+                color: #999;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle {
+            background: #2a2c3a;
+            height: 1px;
+        }
+
+        // Rendered markdown.
+        ScrollView {
+            vertical-stretch: 1;
+            VerticalLayout {
+                spacing: 6px;
+
+                for block[i] in root.blocks: Rectangle {
+                    background: transparent;
+                    horizontal-stretch: 1;
+
+                    // H1
+                    if block.kind == 1 : Text {
+                        text: block.text;
+                        font-size: 22px;
+                        font-weight: 700;
+                        color: #e8e8ec;
+                        wrap: word-wrap;
+                    }
+                    // H2
+                    if block.kind == 2 : Text {
+                        text: block.text;
+                        font-size: 17px;
+                        font-weight: 700;
+                        color: #c8c8cc;
+                        wrap: word-wrap;
+                    }
+                    // H3
+                    if block.kind == 3 : Text {
+                        text: block.text;
+                        font-size: 14px;
+                        font-weight: 700;
+                        color: #a8a8ac;
+                        wrap: word-wrap;
+                    }
+                    // Paragraph
+                    if block.kind == 0 : Text {
+                        text: block.text;
+                        font-size: 13px;
+                        color: #b8b8bc;
+                        wrap: word-wrap;
+                    }
+                    // BulletItem — render with • prefix
+                    if block.kind == 4 : HorizontalLayout {
+                        padding-left: 16px;
+                        spacing: 8px;
+                        Text {
+                            text: "•";
+                            font-size: 13px;
+                            color: #6cf;
+                            width: 12px;
+                        }
+                        Text {
+                            text: block.text;
+                            font-size: 13px;
+                            color: #b8b8bc;
+                            wrap: word-wrap;
+                        }
+                    }
+                    // CodeBlock — monospace in a darker box
+                    if block.kind == 5 : Rectangle {
+                        background: #0d0f15;
+                        border-radius: 4px;
+                        border-width: 1px;
+                        border-color: #2a2c3a;
+                        VerticalLayout {
+                            padding: 10px;
+                            spacing: 0px;
+                            if block.lang != "" : Text {
+                                text: block.lang;
+                                font-size: 9px;
+                                color: #666;
+                            }
+                            Text {
+                                text: block.text;
+                                font-size: 12px;
+                                color: #d8e8f8;
+                                font-family: "Consolas";  // monospace fallback
+                                wrap: no-wrap;
+                            }
+                        }
+                    }
+                    // HorizontalRule
+                    if block.kind == 6 : Rectangle {
+                        background: #2a2c3a;
+                        height: 1px;
+                    }
+                }
+            }
+        }
+    }
+}

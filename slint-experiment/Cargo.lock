@@ -4539,6 +4539,7 @@ dependencies = [
  "dirs",
  "i-slint-backend-selector",
  "i-slint-backend-testing",
+ "pulldown-cmark",
  "raw-window-handle",
  "serde_json",
  "slint",
