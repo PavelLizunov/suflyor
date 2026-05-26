@@ -1,6 +1,19 @@
 # suflyor — architecture overview
 
-**Audience:** developer forking or auditing the codebase. Last updated for v0.0.9 + post-marathon test commits (227 tests, autonomous run 2026-05-26).
+**Audience:** developer forking or auditing the codebase. Last full pass for v0.0.9 (227 tests). Touched up for v0.0.50 — current test count 255, see "Major additions since v0.0.9" below for what's new.
+
+## Major additions since v0.0.9 (v0.0.10 → v0.0.50)
+
+- **Knowledge base** (v0.0.10–v0.0.11): embedded glossary + commands + patterns (~1700 entries) in `src-tauri/knowledge/*.md`, exposed via `kb_search`/`kb_get`/`kb_stats`/`kb_spawn` Tauri commands. F4 in overlay opens KB palette.
+- **Push-to-talk + voice coach** (v0.0.17): hold mic/system buttons in overlay, dedicated WASAPI capture per hold, live WPM/filler-density pill, opt-in post-meeting debrief Sonnet tile.
+- **Anti-hallucination** (v0.0.20+): pre-Whisper noise gate + post-Whisper output filter (artefact dictionary + repetition detector).
+- **Aggressive mode** (v0.0.18): bypass detector, tile per transcript line, 60 tiles/min cap.
+- **One-click update** (v0.0.23): backend `download_and_install_update` downloads NSIS + spawns + quit_app.
+- **Settings sidebar redesign** (v0.0.30) per Claude Design handoff: 4 groups + 11 panels + active-panel conditional render, pinned-bottom group.
+- **6-gate release verification** (v0.0.35) after a P0 infinite-grow bug shipped in v0.0.34 — see `RELEASE_CHECKLIST.md`.
+- **Settings polish** (v0.0.37–v0.0.40): all panels migrated from legacy `.field` to design `.card`/`.switch-row`/`.card-row` template.
+- **Sticky header/footer fix** (v0.0.41): removed conflicting `.settings-root` override that broke flex pin; `open_settings` window clamps to `monitor_h - 40`.
+- **i18n** (v0.0.42–v0.0.50): RU+EN UI with live switching. `src/i18n.ts` typed strings map (212 keys × 2 langs). Backend adds `ui_language: String` to Config. Tile chrome receives lang via URL param (tiles can't call `get_config`). See `docs/I18N_PLAN.md` for the implementation log.
 
 ## 3-tier data flow
 
