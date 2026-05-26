@@ -53,6 +53,36 @@ function asBool(v: unknown): boolean {
   return v === true;
 }
 
+// Map journal event kinds to the CSS variable used as the timeline
+// row's left-border accent color, so the filter chip border matches
+// what the user sees in the rows below. Kinds without a clear color
+// fall back to neutral var(--c-border-soft).
+function chipAccentForKind(kind: string): string {
+  switch (kind) {
+    case "session_start":
+    case "session_stop":
+    case "session_summary":
+      return "var(--c-mic, #34d399)";
+    case "transcript_line":
+      return "var(--c-text-mute, #6b7280)";
+    case "ai_request":
+    case "ai_response":
+      return "var(--c-ai, #818cf8)";
+    case "tile_spawn":
+      return "var(--c-auto, #f472b6)";
+    case "detector_decision":
+      // No on/off split at the chip level (we don't know which subset),
+      // pick the "on" color so it still reads as a meaningful kind.
+      return "var(--c-mic, #34d399)";
+    case "rate_limited":
+      return "#facc15"; // yellow, matches the overlay rate-limited chip
+    case "error":
+      return "#f87171"; // red, matches the timeline error row
+    default:
+      return "var(--c-border-soft)";
+  }
+}
+
 // Journal stores cost as `cost_microcents` (u64 microcents = 10⁻⁸ USD)
 // to avoid f64 drift. Legacy entries may also carry `cost_usd` directly.
 function eventCost(e: JournalEvent): number {
@@ -195,6 +225,11 @@ export default function Replay() {
           </span>
           {kindCounts.map(([kind, count]) => {
             const hidden = hiddenKinds.has(kind);
+            // Color-code chip border to match the timeline row's accent color
+            // for each kind. Makes visual scanning faster: a glance at the
+            // chip strip shows the same colors you see in the timeline below.
+            // Kinds not in this map fall back to neutral --c-border-soft.
+            const accent = chipAccentForKind(kind);
             return (
               <button
                 key={kind}
@@ -208,7 +243,7 @@ export default function Replay() {
                   padding: "2px 8px",
                   fontSize: 11,
                   borderRadius: 12,
-                  border: "1px solid var(--c-border-soft)",
+                  border: `1px solid ${hidden ? "var(--c-border-soft)" : accent}`,
                   background: hidden ? "transparent" : "var(--c-bg-2)",
                   color: hidden ? "var(--c-text-dim)" : "var(--c-text)",
                   textDecoration: hidden ? "line-through" : "none",
