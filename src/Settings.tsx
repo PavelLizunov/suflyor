@@ -160,6 +160,12 @@ export default function Settings() {
   // instead of moving them — preserves all save/load field bindings.
   const [activeSection, setActiveSection] = useState<string>("profile");
   const [navFilter, setNavFilter] = useState("");
+  // v0.0.36 (agent P1): track the 2-sec setTimeout that fires quit_app
+  // after a successful download_and_install_update spawn. Without this
+  // ref, if Settings unmounts (e.g. user clicks Back to overlay), the
+  // timer still fires and kills the app while the user is back on the
+  // bar. Now we clear it in the unmount cleanup below.
+  const quitAfterDownloadTimerRef = useRef<number | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
   // Pending modal resolver — captured so unmount can reject open prompts
@@ -189,6 +195,14 @@ export default function Settings() {
     return () => {
       mountedRef.current = false;
       if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+      // v0.0.36 (agent P1): cancel the 2-sec quit-after-download timer
+      // if Settings unmounts before it fires (e.g. user clicked Back to
+      // overlay during the 2-sec UAC wait). Otherwise the app would
+      // quit while the user is back on the bar.
+      if (quitAfterDownloadTimerRef.current) {
+        window.clearTimeout(quitAfterDownloadTimerRef.current);
+        quitAfterDownloadTimerRef.current = null;
+      }
       // Resolve any pending modal so awaiting callers don't hang.
       if (pendingModalRejectRef.current) {
         pendingModalRejectRef.current();
@@ -555,9 +569,23 @@ export default function Settings() {
                   "group" in it ? false : it.label.toLowerCase().includes(q) || it.id.includes(q),
                 )
               : items;
+            // v0.0.36 (agent P1): identify the LAST group in the filtered
+            // list so we can give it an explicit `.nav-group-pinned`
+            // class. Was using CSS `:nth-last-of-type(1)` which is
+            // brittle — any future div added after the group breaks
+            // the bottom-pinned layout. Now: explicit class.
+            const lastGroupIdx = (() => {
+              for (let i = filtered.length - 1; i >= 0; i--) {
+                if ("group" in filtered[i]) return i;
+              }
+              return -1;
+            })();
             return filtered.map((it, i) =>
               "group" in it ? (
-                <div key={`g${i}`} className="nav-group">
+                <div
+                  key={`g${i}`}
+                  className={"nav-group" + (i === lastGroupIdx ? " nav-group-pinned" : "")}
+                >
                   {it.group}
                 </div>
               ) : (
@@ -1382,7 +1410,15 @@ export default function Settings() {
                       // Give the OS a moment to bring up the UAC prompt
                       // before we kill ourselves; otherwise the user can
                       // miss the prompt and think nothing happened.
-                      setTimeout(() => {
+                      //
+                      // v0.0.36 (agent P1): timer ID stored in ref so
+                      // unmount cleanup can clear it. Previously, if user
+                      // clicked Back to overlay during the 2-sec window,
+                      // Settings unmounted but quit_app still fired,
+                      // killing the app while user was back on the bar.
+                      quitAfterDownloadTimerRef.current = window.setTimeout(() => {
+                        quitAfterDownloadTimerRef.current = null;
+                        if (!mountedRef.current) return;
                         invoke("quit_app").catch(() => {
                           // Fallback if quit_app refuses: hard exit by
                           // closing the overlay window which is the only

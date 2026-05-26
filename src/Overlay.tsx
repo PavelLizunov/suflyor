@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+import { getCurrentWindow, currentMonitor, LogicalSize } from "@tauri-apps/api/window";
 
 type AudioSource = "system" | "mic";
 
@@ -80,6 +80,18 @@ export default function Overlay() {
   const [paletteResults, setPaletteResults] = useState<KBHit[]>([]);
   const [paletteIdx, setPaletteIdx] = useState(0);
   const paletteInputRef = useRef<HTMLInputElement | null>(null);
+  // v0.0.21: visible hotkey legend popover open/closed state.
+  // v0.0.33 doubled popover height by adding the indicator legend.
+  // v0.0.36 (agent P0): popover paints inside `.overlay-root` which
+  // has `overflow: hidden`, AND it's `position: absolute` so it
+  // doesn't contribute to contentRect → ResizeObserver doesn't grow
+  // the OS window → bottom half of the popover is invisible. Mirror
+  // the palette resize pattern: stash original size, grow on open,
+  // restore on close. Declared up here (was at L220) so the resize
+  // useEffect below can reference it without a forward-reference TS
+  // error.
+  const [hotkeyHelpOpen, setHotkeyHelpOpen] = useState(false);
+  const originalHelpSizeRef = useRef<{ w: number; h: number } | null>(null);
   // Search debounced when palette open + query non-empty.
   useEffect(() => {
     if (!paletteOpen) return;
@@ -129,6 +141,36 @@ export default function Overlay() {
       w.setSize(new LogicalSize(w0, h0)).catch((e) => console.warn("palette restore:", e));
     }
   }, [paletteOpen]);
+  // v0.0.36 (agent P0): hotkey-help popover is `position: absolute`
+  // inside `.overlay-root { overflow: hidden }` → does NOT contribute
+  // to contentRect → ResizeObserver doesn't grow the OS window → the
+  // bottom of the popover is invisibly clipped. Mirror palette: stash
+  // current size, grow to fit (~500 px tall covers the hotkey table +
+  // indicator legend with slack), restore on close.
+  useEffect(() => {
+    const w = getCurrentWindow();
+    if (hotkeyHelpOpen) {
+      (async () => {
+        try {
+          const size = await w.outerSize();
+          const scale = await w.scaleFactor();
+          originalHelpSizeRef.current = {
+            w: Math.round(size.width / scale),
+            h: Math.round(size.height / scale),
+          };
+          // Keep current width; grow height to fit the popover.
+          // 8 hotkey rows + 9 indicator rows + 2 headers + padding.
+          // v0.0.36 smoke test: 500 cut off the bottom 2 indicator
+          // rows (💰 over budget, 💰 $). Bumped to 600 with slack.
+          await w.setSize(new LogicalSize(originalHelpSizeRef.current.w, 600));
+        } catch (e) { console.warn("help-popover resize:", e); }
+      })();
+    } else if (originalHelpSizeRef.current) {
+      const { w: w0, h: h0 } = originalHelpSizeRef.current;
+      originalHelpSizeRef.current = null;
+      w.setSize(new LogicalSize(w0, h0)).catch((e) => console.warn("help-popover restore:", e));
+    }
+  }, [hotkeyHelpOpen]);
   // Esc-anywhere closes the palette — the input's own onKeyDown only fires
   // while the input has focus, but in practice focus can land on result
   // items or get lost to driver clicks. A window-level keydown effect is
@@ -181,8 +223,8 @@ export default function Overlay() {
   // start a new session while the previous stop is still tearing down
   // WASAPI. Audio device race was crashing the app mid-call.
   const pauseInFlightRef = useRef(false);
-  // v0.0.21: visible hotkey legend popover open/closed state.
-  const [hotkeyHelpOpen, setHotkeyHelpOpen] = useState(false);
+  // hotkeyHelpOpen + originalHelpSizeRef moved to top with paletteOpen
+  // (forward-reference TS error from the resize useEffect above).
   // Mounted-flag for promise resolutions that may land after unmount
   // (StrictMode double-mount, settings round-trip).
   const mountedRef = useRef(true);
@@ -219,9 +261,33 @@ export default function Overlay() {
   // policy would never shrink it back. We do ONE shrink-allowed fit on
   // the first RO fire of each session; after that, grow-only.
   const initialFitDoneRef = useRef(false);
+  // v0.0.36 (agent P2): cap by CURRENT monitor's width, not
+  // window.screen.availWidth (primary monitor only). User who drags
+  // the overlay to a wider secondary monitor was previously stuck
+  // with the primary monitor's cap. Tauri's currentMonitor() returns
+  // the screen the window is on. Refreshed on `move` events.
+  const currentMonitorWRef = useRef<number>(1920);
+  useEffect(() => {
+    const w = getCurrentWindow();
+    const refresh = async () => {
+      try {
+        const m = await currentMonitor();
+        if (m) {
+          // m.size is in PHYSICAL pixels; divide by scaleFactor for logical.
+          const scale = m.scaleFactor;
+          currentMonitorWRef.current = Math.round(m.size.width / scale);
+        }
+      } catch { /* monitor info unavailable — keep default */ }
+    };
+    refresh();
+    let unlistenFn: (() => void) | null = null;
+    w.onMoved(() => { refresh(); }).then((u) => { unlistenFn = u; }).catch(() => {});
+    return () => { if (unlistenFn) unlistenFn(); };
+  }, []);
   useEffect(() => {
     if (!overlayRootRef.current) return;
     if (paletteOpen) return; // RO disabled while palette is open
+    if (hotkeyHelpOpen) return; // v0.0.36: same gate for help popover
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
@@ -262,11 +328,15 @@ export default function Overlay() {
         getCurrentWindow().scaleFactor().then((scale) => {
           const currentW = Math.round(sz.width / scale);
           const currentH = Math.round(sz.height / scale);
-          // Hard ceiling: screen width - 20 px so even with a bug the
-          // window can never escape the visible monitor. Floor 520
-          // keeps a usable minimum on first paint.
-          const screenW = (typeof window !== "undefined" && window.screen?.availWidth) || 1920;
-          const maxAllowedW = Math.max(520, screenW - 20);
+          // Hard ceiling: CURRENT monitor width - 20 px so even with a
+          // bug the window can never escape the visible monitor. Floor
+          // 520 keeps a usable minimum on first paint.
+          // v0.0.36: switched from `window.screen.availWidth` (primary
+          // monitor only) to `currentMonitorWRef` (Tauri's currentMonitor,
+          // updated on window move). User who drags overlay to a wider
+          // secondary monitor now correctly gets the wider cap.
+          const monitorW = currentMonitorWRef.current;
+          const maxAllowedW = Math.max(520, monitorW - 20);
           const neededW = Math.min(Math.max(intrinsicBarW + 50, 520), maxAllowedW);
           // GROW-ONLY after the initial fit. On the FIRST RO fire of
           // this session we allow SHRINK too — this corrects a persisted
@@ -287,7 +357,7 @@ export default function Overlay() {
     });
     ro.observe(overlayRootRef.current);
     return () => ro.disconnect();
-  }, [paletteOpen]);
+  }, [paletteOpen, hotkeyHelpOpen]);
 
   // v0.0.25: re-assert always-on-top every 3s. User complaint: overlay
   // bar sometimes goes BEHIND other always-on-top windows (Zoom call

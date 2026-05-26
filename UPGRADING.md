@@ -11,6 +11,42 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.36 (2026-05-26)
+
+Agent-review findings on the v0.0.30→v0.0.35 block. **P0 hotfix**
+inside, plus 2 P1 + 1 P2.
+
+- **(P0) ℹ hotkey-help popover was clipped.** v0.0.33 added the
+  indicator legend, doubling the popover height to ~400 px. The
+  popover is `position: absolute` inside `.overlay-root { overflow:
+  hidden }` → doesn't contribute to contentRect → ResizeObserver
+  never grew the OS window → bottom half invisibly clipped. Users
+  who clicked ℹ saw only the Hotkeys table, no Indicator legend.
+  Fix: explicit setSize-to-500 on toggle (mirrors palette pattern).
+  RO also gated by `hotkeyHelpOpen` so it doesn't fight the manual
+  resize.
+- **(P1) `download_and_install_update` setTimeout cleanup.** The
+  2-second `setTimeout(quit_app, 2000)` after spawn was not stored
+  in a ref, so if user clicked Back to overlay during the window
+  Settings unmounted but the timer still fired → app quit while
+  user was back on the bar. Fix: store timer ID in
+  `quitAfterDownloadTimerRef`, clear in unmount cleanup, plus
+  `mountedRef.current` guard inside the callback.
+- **(P1) Sidebar bottom-pin CSS selector hardened.** Was
+  `.settings-nav .nav-group:nth-last-of-type(1)` — matches by tag,
+  not class. Any future `<div>` added inside `.settings-nav` after
+  the «Приложение» group would silently break the bottom-pinned
+  layout. Now: explicit `.nav-group-pinned` class applied by JSX
+  based on a `lastGroupIdx` computation. Type-safe, intent-revealing.
+- **(P2) Overlay bar width cap uses CURRENT monitor.** Was
+  `window.screen.availWidth - 20` (primary monitor only). User who
+  drags overlay to a wider secondary monitor was stuck with the
+  primary cap. Now: Tauri's `currentMonitor()` cached in
+  `currentMonitorWRef`, refreshed on `onMoved` events.
+
+255/255 lib tests still pass; tsc clean; vite build clean. **Passed
+all 6 release-checklist gates** before push.
+
 ### → v0.0.35 (2026-05-26) 🚨 P0 hotfix for v0.0.34
 
 **v0.0.34 shipped a P0 infinite-grow bug.** User reported: «в 0.34 при
