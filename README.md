@@ -30,6 +30,28 @@ Header показывает источник (AUTO · DETECTOR / MIC / SYSTEM / 
 
 Settings → 🆙 Обновления → «🔍 Проверить обновления». Запрос на GitHub Releases API (~1 KB JSON), если есть новее — показывает release notes + кнопка «⬇ Открыть страницу скачивания» (в браузере). Без auto-install — пользователь сам жмёт MSI.
 
+### 📊 Session Replay viewer
+
+Footer Settings → «📊 Session Replay» (или прямо `?replay=1` в URL) — таймлайн всех событий из JSONL-журналов в `%APPDATA%\overlay-mvp\sessions\`. Выбираешь сессию из dropdown'а, видишь:
+
+- transcript_line (mic/system, цветовая кодировка)
+- detector_decision (triggered ✓ / skipped)
+- ai_request / ai_response (с моделью и токенами)
+- tile_spawn (kind + question)
+- session_summary (длительность, AI-вызовов, $)
+
+Фильтр-чипы вверху (v0.0.11+) скрывают отдельные kind'ы — полезно когда транскрипт зашумляет таймлайн. v0.0.14+ чипы color-coded по kind'у (совпадают с border'ами строк ниже).
+
+### 📊 Диагностический дамп (v0.0.15+)
+
+Settings → 🆙 Обновления → «📊 Диагностический дамп». Один клик — sanitized .md на Desktop:
+- Config без секретов (groq_api_key, ai_bearer, ai_base_url, meeting_context, profiles обнулены)
+- App version + OS/arch
+- Последние 50 строк свежего journal (v0.0.16 redacts gsk_/Bearer/sk- паттерны)
+- Crash report (если был startup panic)
+
+Прикладывай к bug report'у вместо ручного поиска в AppData + редактирования секретов.
+
 ## Установка
 
 1. Скачать MSI из [Releases](https://github.com/PavelLizunov/suflyor/releases)
