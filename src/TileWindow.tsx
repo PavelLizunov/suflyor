@@ -87,10 +87,10 @@ export default function TileWindow() {
       if (!el) return;
       // Wait one frame so markdown has painted.
       await new Promise((r) => requestAnimationFrame(r));
-      // Cap at 400 — MUST match tile.rs TILE_H_MAX. Anything taller
-      // makes the next-row tile overlap on a 1080p monitor.
-      const desiredH = Math.min(Math.max(el.scrollHeight + 16, 220), 400);
-      const desiredW = 380;
+      // v0.0.24: cap 510 matches tile.rs TILE_H_MAX. Width 460 matches.
+      // Min 280 keeps super-short answers from being a pill.
+      const desiredH = Math.min(Math.max(el.scrollHeight + 16, 280), 510);
+      const desiredW = 460;
       try {
         const w = getCurrentWindow();
         await w.setSize(new LogicalSize(desiredW, desiredH));

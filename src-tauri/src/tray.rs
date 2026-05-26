@@ -18,10 +18,13 @@ pub fn setup(app: &AppHandle) -> Result<()> {
     let show = MenuItem::with_id(app, "show", "Show overlay", true, None::<&str>)?;
     let hide = MenuItem::with_id(app, "hide", "Hide overlay", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
+    let close_tiles = MenuItem::with_id(
+        app, "close_all_tiles", "Close all tiles (Ctrl+Alt+W)", true, None::<&str>,
+    )?;
     let sep = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
-    let menu = Menu::with_items(app, &[&show, &hide, &settings, &sep, &quit])?;
+    let menu = Menu::with_items(app, &[&show, &hide, &settings, &close_tiles, &sep, &quit])?;
 
     // Use embedded PNG (bundled by tauri-build from icons/).
     let icon = app
@@ -47,6 +50,13 @@ fn handle_menu(app: &AppHandle, event: MenuEvent) {
         "show" => show_overlay(app, false),
         "hide" => hide_overlay(app),
         "settings" => open_settings(app),
+        "close_all_tiles" => {
+            // v0.0.24: nuke every unpinned tile so the user can recover
+            // from an aggressive-mode flood without quitting.
+            let tiles = app.state::<SharedTiles>().inner().clone();
+            let n = crate::tile::close_all_unpinned(app, &tiles);
+            log::info!("tray Close-all-tiles: {n} closed");
+        }
         "quit" => {
             // Stop the active session before exit so the JSONL journal
             // closes cleanly with SessionStop + SessionSummary (P0-1).

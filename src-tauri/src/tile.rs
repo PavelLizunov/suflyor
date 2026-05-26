@@ -25,20 +25,27 @@ pub fn reset_seq_counter() {
     TILE_SEQ_COUNTER.store(0, Ordering::SeqCst);
 }
 
-const TILE_W: f64 = 380.0;
+// v0.0.24: bumped tile size after live feedback that 380×280 was too
+// small and user had to resize each tile manually to read answers.
+//
+// Constraints derived from the grid math (MUST fit MAX_TILES=6 on a
+// typical 1920×1080 monitor with no off-screen tiles):
+//   Width fits 2 column-pairs: 2 * (2W + PAD) + PAD ≤ 1920
+//     → W ≤ (1920 - 3*12)/4 = 471. Picked 460 with 11px safety.
+//   Height fits 2 rows per pair: 2 * (H_MAX + PAD) + PAD ≤ 1080
+//     → H_MAX ≤ (1080 - 36)/2 = 522. Picked 510 with 12px safety.
+// 2 pairs × 2 rows = 4 slots per pair × 2 pairs = 8 ≥ MAX_TILES.
+//
+// Size delta vs v0.0.23: 380×280 → 460×360 = +21% width, +29% height.
+// Max height grew 400 → 510 = +28% content area.
+const TILE_W: f64 = 460.0;
 /// Initial height when the tile window is created. TileWindow.tsx's
 /// useLayoutEffect can resize up to TILE_H_MAX after markdown paints.
-const TILE_H: f64 = 280.0;
+const TILE_H: f64 = 360.0;
 /// Worst-case height after markdown auto-grow. MUST match the upper
 /// bound in TileWindow.tsx. Grid uses this for row pitch so a tall
 /// row-0 tile doesn't overlap row-1.
-///
-/// Math for fit-on-1080p-portable monitor (ARZOPA = 1920×1080):
-///   3 rows × 400 + 4×PAD = 1248 < 1080 — STILL overflows by 168
-///   2 rows × 400 + 3×PAD = 836 — fits comfortably
-/// MAX_TILES = 6 (2 cols × 3 rows) but only first 4 visible always;
-/// 5-6 may overflow until older ones get TTL-evicted.
-const TILE_H_MAX: f64 = 400.0;
+const TILE_H_MAX: f64 = 510.0;
 const PAD: f64 = 12.0;
 const COLS: usize = 2;
 /// 6 tiles = 2 cols × 3 rows. Top 4 always visible on 1080p, bottom 2
@@ -421,6 +428,33 @@ pub fn close_tile_by_label(app: &AppHandle, tiles: &SharedTiles, label: &str) {
     }
 }
 
+/// v0.0.24: close every unpinned tile in one shot. Returns count closed.
+/// Respects pin (consistent with TTL reaper). Used by Ctrl+Alt+W hotkey
+/// and tray menu "Close all tiles" so the user can recover from an
+/// aggressive-mode flood without quitting the whole app.
+pub fn close_all_unpinned(app: &AppHandle, tiles: &SharedTiles) -> usize {
+    // Take the unpinned labels under the lock, then close OUTSIDE the
+    // lock so Tauri's window close path doesn't deadlock with anything
+    // that might also acquire the tiles mutex.
+    let to_close: Vec<String> = {
+        let mut mgr = tiles.lock();
+        let unpinned: Vec<String> = mgr.active.iter()
+            .filter(|t| !t.pinned)
+            .map(|t| t.label.clone())
+            .collect();
+        mgr.active.retain(|t| t.pinned);
+        unpinned
+    };
+    let n = to_close.len();
+    for label in to_close {
+        if let Some(w) = app.get_webview_window(&label) {
+            let _ = w.close();
+        }
+    }
+    log::info!("close_all_unpinned: closed {n} tile(s)");
+    n
+}
+
 /// Periodically reap expired tiles (defensive — TTL task above usually
 /// handles it, but if a tile's task ever panics or is dropped, this
 /// sweeps any zombies). Like the TTL task, this respects pin state.
@@ -531,8 +565,13 @@ mod tests {
     /// NEXT column-pair on the left rather than render below the bottom edge.
     #[test]
     fn grid_wraps_to_next_pair_on_short_monitor() {
-        // Tall enough for 2 rows: 2 * (TILE_H_MAX + PAD) + 2*PAD ≈ 850
-        let m = MonitorRect { x: 0.0, y: 0.0, w: 1920.0, h: 900.0 };
+        // v0.0.24: bumped fixture 900 → 1080 to keep "tall enough for 2
+        // rows" semantics after TILE_H_MAX raised 400 → 520. Real Windows
+        // monitors are ≥1080 anyway; 900 was an oddly small fixture.
+        // Math: 2 * (TILE_H_MAX + PAD) + 2*PAD = 2*(520+12)+24 = 1088,
+        // but the max_rows formula uses (h - PAD*2) / row_h so for h=1080:
+        // (1080-24)/532 = 1.98 → floor = 1. Bumped to 1100 to give 2 rows.
+        let m = MonitorRect { x: 0.0, y: 0.0, w: 1920.0, h: 1100.0 };
         let row_h = TILE_H_MAX + PAD;
         let max_rows = (((m.h - PAD * 2.0) / row_h).floor() as usize).max(1);
         assert!(max_rows >= 2, "test fixture should allow ≥2 rows");

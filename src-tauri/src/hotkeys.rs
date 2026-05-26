@@ -8,7 +8,7 @@
 
 use crate::config::SharedConfig;
 use tauri::{AppHandle, Emitter, Manager};
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 /// Register all hotkeys. Returns a vector of human-readable warnings —
 /// empty when everything registered cleanly.
@@ -116,6 +116,33 @@ pub fn register_all(app: &AppHandle, _cfg: SharedConfig) -> Vec<String> {
             .await;
         });
     });
+
+    // v0.0.24: Ctrl+Alt+W — close every unpinned tile in one shot.
+    // Useful when aggressive mode floods the screen with answers and the
+    // user wants a clean slate without quitting the whole session.
+    // F-key collisions: F1-F11 are already taken; F12 is reserved by
+    // Windows. Chord modifier avoids both. W = "close all Windows".
+    let app_h = app.clone();
+    let result = app
+        .global_shortcut()
+        .on_shortcut(
+            Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyW),
+            move |_a, _s, event| {
+                if event.state == ShortcutState::Pressed {
+                    let app = app_h.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let tiles = app.state::<crate::tile::SharedTiles>();
+                        let n = crate::tile::close_all_unpinned(&app, tiles.inner());
+                        log::info!("Ctrl+Alt+W: closed {n} tile(s)");
+                    });
+                }
+            },
+        );
+    if let Err(e) = result {
+        let msg = format!("Ctrl+Alt+W (close all tiles): {e}");
+        log::warn!("hotkey skipped — {msg}");
+        warnings.push(msg);
+    }
 
     // F7 — DEBUG: spawn a hardcoded test tile
     let app_h = app.clone();

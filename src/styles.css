@@ -317,7 +317,12 @@ kbd {
   position: fixed;
   display: flex;
   flex-direction: column;
-  background: var(--c-glass-bg-strong);
+  /* v0.0.24: bumped bg opacity (was --c-glass-bg-strong which can be
+   * quite see-through). Solid-ish bg helps with two reported issues:
+   * (1) close × is now clearly visible against content vs see-through
+   * background; (2) clicks at glassy edges sometimes pass through to
+   * underlying windows on Windows DWM — opaque-ish bg prevents that. */
+  background: rgba(20, 22, 30, 0.92);
   backdrop-filter: blur(22px) saturate(140%);
   -webkit-backdrop-filter: blur(22px) saturate(140%);
   border: 1px solid var(--c-glass-border);
@@ -325,8 +330,8 @@ kbd {
   box-shadow: var(--c-glass-shadow);
   overflow: hidden;
   font-size: var(--fs-13);
-  max-width: 380px;                    /* matches JS setSize cap      */
-  max-height: 400px;
+  max-width: 480px;                    /* matches JS setSize cap (v0.0.24) */
+  max-height: 510px;
 }
 
 /* Kind-color is carried by border + shadow + bar — never by fills.
@@ -350,10 +355,12 @@ kbd {
   display: flex;
   align-items: center;
   gap: var(--s-2);
-  height: 22px;
+  /* v0.0.24: bar height 22 → 30 so the +30%-bigger close/pin buttons
+   * have proper breathing room. User complaint: «× не видно». */
+  height: 30px;
   padding: 0 var(--s-2) 0 var(--s-3);
-  background: color-mix(in srgb, var(--kind, var(--c-border)) 22%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--kind, var(--c-border)) 40%, transparent);
+  background: color-mix(in srgb, var(--kind, var(--c-border)) 28%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--kind, var(--c-border)) 50%, transparent);
   font-size: var(--fs-11);
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -370,22 +377,33 @@ kbd {
   white-space: nowrap;
 }
 
+/* v0.0.24: bumped 18×18 → 24×24 with visible default background.
+ * Was barely findable on a glass tile. Now hover gives clear feedback. */
 .tile-close {
   -webkit-app-region: no-drag;
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   display: inline-grid;
   place-items: center;
   border-radius: var(--r-1);
-  color: var(--c-text-mute);
-  font-size: var(--fs-13);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--c-text);
+  font-size: 16px;
+  font-weight: 600;
   line-height: 1;
   transition: background var(--dur-base) var(--ease),
               color var(--dur-base) var(--ease);
 }
 .tile-close:hover {
-  background: color-mix(in srgb, #ffffff 10%, transparent);
-  color: var(--c-text);
+  background: rgba(255, 0, 0, 0.4);  /* close = clear destructive cue */
+  color: white;
+}
+.tile-close[data-pinned="true"] {
+  background: rgba(250, 204, 21, 0.35);  /* pinned tiles glow yellow */
+  color: #facc15;
+}
+.tile-close[data-pinned="true"]:hover {
+  background: rgba(250, 204, 21, 0.55);
 }
 
 /* Question (interviewer line) — neutral so kind only shows on chrome.

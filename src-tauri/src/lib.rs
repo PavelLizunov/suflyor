@@ -473,6 +473,18 @@ fn close_tile(
     tile::close_tile_by_label(&app, tiles.inner(), &label);
 }
 
+/// v0.0.24: nuclear "close every tile" — used by the Ctrl+Alt+W hotkey
+/// and tray menu item. Helpful when aggressive mode floods the screen
+/// or the user wants a clean slate without quitting the whole app.
+/// Respects pin: pinned tiles stay (consistent with TTL reaper behavior).
+#[tauri::command]
+fn close_all_tiles(
+    app: tauri::AppHandle,
+    tiles: tauri::State<'_, SharedTiles>,
+) -> usize {
+    tile::close_all_unpinned(&app, tiles.inner())
+}
+
 #[tauri::command]
 fn pin_tile(
     tiles: tauri::State<'_, SharedTiles>,
@@ -1868,6 +1880,7 @@ pub fn run() {
             prep_structure,
             spawn_tile,
             close_tile,
+            close_all_tiles,
             pin_tile,
             ask_from_mic,
             ask_from_system,

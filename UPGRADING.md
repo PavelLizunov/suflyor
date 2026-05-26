@@ -11,6 +11,34 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.24 (2026-05-26)
+
+Bug-report sweep — user reported 6 UX issues during live session.
+Addressed 4 directly, 2 deferred pending more info:
+
+- **Bigger close/pin buttons.** 18×18 → 24×24 with visible background.
+  Close button gets red-tint on hover (clear destructive cue), pin
+  button gets yellow tint when active. Был жалоба «крестика не видно».
+- **Bigger tile default size.** 380×280 → 460×360 initial, max 510px
+  tall (vs 400). +21% width / +29% height for content. Чтобы не
+  растягивать каждое окно руками. Grid math validated for 1920×1080
+  (fits 2 column-pairs × 2 rows = 8 slots ≥ MAX_TILES=6).
+- **Less transparent tile background.** Glass bg → opaque rgba(20,22,30,0.92).
+  Two birds: (a) close × clearly visible against content; (b) edge clicks
+  no longer pass through to underlying windows on certain Windows DWM
+  modes (could be the "перестают быть кликабельными" report root cause).
+- **Ctrl+Alt+W: close all tiles.** New global hotkey + tray menu item
+  «Close all tiles». Respects pinned tiles. Helps recover from
+  aggressive-mode flood without quitting the session.
+
+Deferred pending repro:
+- «Окна слишком далеко». Tiles spawn on secondary monitor by design;
+  if user's secondary is physically inconvenient, will add a config
+  `tile_spawn_target: primary|secondary|overlay-monitor` in v0.0.25.
+- «При выборе окна блокируются все остальные». If the transparency
+  fix above doesn't resolve it, need a screencast to understand the
+  exact mechanism.
+
 ### → v0.0.23 (2026-05-26)
 
 - **🚀 One-click update.** Settings → 🆙 Обновления → новая кнопка
