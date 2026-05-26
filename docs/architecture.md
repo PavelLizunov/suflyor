@@ -55,7 +55,7 @@ React TileWindow renders ReactMarkdown + remark-gfm
 
 **Caller-window guard:**
 
-`assert_overlay(window)` is called at the top of 25 sensitive Tauri commands. Rejects any call from non-overlay window (e.g. a tile rendering AI markdown can't `invoke("export_config")` to leak the bearer + Groq key). Catches markdown-driven prompt injection.
+`assert_overlay(window)` is called at the top of 32 sensitive Tauri commands (of 39 total). Rejects any call from non-overlay window (e.g. a tile rendering AI markdown can't `invoke("export_config")` to leak the bearer + Groq key). Catches markdown-driven prompt injection.
 
 Unprotected commands (read-only or low-blast-radius): `list_audio_devices`, `kb_search`, `kb_get`, `kb_stats`, `list_snippets`, `close_tile`, `pin_tile`, `list_monitors`.
 
