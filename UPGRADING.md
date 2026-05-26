@@ -11,6 +11,18 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.19 (2026-05-26)
+
+- **No config schema change.**
+- Каждый тайл теперь показывает в заголовке `#N` — sequence number в
+  пределах сессии. Без этого с aggressive mode (v0.0.18+) при 30-60
+  тайлов в минуту невозможно понять какой новее — слоты переиспользуются
+  при evict и новый тайл может оказаться не в правом нижнем углу.
+- Backend: новая static `TILE_SEQ_COUNTER: AtomicU64` в `tile.rs`,
+  fetch_add при каждом спавне, передаётся через URL param `?seq=N`.
+  `start_session` ресетит счётчик в 0.
+- Old MSI без seq param → бейдж не рендерится (graceful).
+
 ### → v0.0.18 (2026-05-26)
 
 - **New config field** (auto-defaulted via serde):

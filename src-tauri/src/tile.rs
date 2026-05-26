@@ -6,10 +6,24 @@
 use anyhow::{Context, Result};
 use parking_lot::Mutex;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tauri::{
     AppHandle, LogicalPosition, Manager, Monitor, WebviewUrl, WebviewWindowBuilder,
 };
+
+/// Monotonically-increasing tile sequence number, displayed in each tile's
+/// header as `#N` so the user can read tiles in chronological order even
+/// when the grid is full and slots are being reused. v0.0.19. Process-
+/// global (not per-session) — runtime.rs's session_start_seq snapshot
+/// makes the per-session reset semantics if we ever want them.
+static TILE_SEQ_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Reset counter on session_start so each fresh session begins at #1.
+/// Called from runtime::start_session.
+pub fn reset_seq_counter() {
+    TILE_SEQ_COUNTER.store(0, Ordering::SeqCst);
+}
 
 const TILE_W: f64 = 380.0;
 /// Initial height when the tile window is created. TileWindow.tsx's
@@ -253,9 +267,12 @@ pub fn spawn_tile_with_stealth(
     // params are read in TileWindow.tsx via URLSearchParams.
     let q_enc = urlencoding_min(&question);
     let a_enc = urlencoding_min(&answer);
+    // v0.0.19: per-tile sequence number for chronological reading order.
+    // Fetch-add — atomic so concurrent spawns get unique numbers.
+    let seq = TILE_SEQ_COUNTER.fetch_add(1, Ordering::SeqCst) + 1;
     let route = format!(
-        "index.html?tile=1&id={}&kind={}&q={}&a={}",
-        id, kind.as_str(), q_enc, a_enc
+        "index.html?tile=1&id={}&kind={}&seq={}&q={}&a={}",
+        id, kind.as_str(), seq, q_enc, a_enc
     );
 
     let window = match WebviewWindowBuilder::new(app, &label, WebviewUrl::App(route.into()))

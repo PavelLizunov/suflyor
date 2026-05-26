@@ -24,6 +24,12 @@ export default function TileWindow() {
   // Defaults to 'auto' so old code paths still get a sensible class.
   const kindRaw = params.get("kind") || "auto";
   const kind = ["auto", "system", "mic", "manual"].includes(kindRaw) ? kindRaw : "auto";
+  // v0.0.19: per-session sequence number — backend increments on each
+  // spawn so the user can read tiles in chronological order even when
+  // the grid is full and slots are being reused (esp. aggressive mode).
+  // Old backend without seq param → undefined → don't render the badge.
+  const seqRaw = params.get("seq");
+  const seq = seqRaw && /^\d+$/.test(seqRaw) ? parseInt(seqRaw, 10) : null;
 
   const [answer] = useState(answerInitial);
   const [pinned, setPinned] = useState(false);
@@ -112,6 +118,27 @@ export default function TileWindow() {
       aria-label={`AI answer tile from ${sourceLabel}`}
     >
       <div className="tile-bar" data-tauri-drag-region>
+        {seq !== null && (
+          <span
+            className="tile-seq"
+            title={`Тайл #${seq} в этой сессии`}
+            aria-label={`Tile sequence number ${seq}`}
+            style={{
+              display: "inline-block",
+              padding: "1px 6px",
+              marginRight: 6,
+              fontSize: 10,
+              fontWeight: 700,
+              fontFamily: "monospace",
+              borderRadius: 8,
+              background: "rgba(255,255,255,0.15)",
+              color: "rgba(255,255,255,0.85)",
+              userSelect: "none",
+            }}
+          >
+            #{seq}
+          </span>
+        )}
         <span className="tile-source" title={sourceLabel}>{sourceLabel}</span>
         <button
           className="tile-close"

@@ -390,6 +390,11 @@ pub async fn start_session(
     // fires. Found by post-v0.0.12 agent review.
     let _ = app.emit_to("overlay", "cost:update", serde_json::json!({ "session_usd": 0.0_f64 }));
 
+    // v0.0.19: reset tile sequence counter so each session starts at #1.
+    // Without this the counter keeps climbing across sessions in the same
+    // process — confusing when the user expects "this is the first tile".
+    crate::tile::reset_seq_counter();
+
     // Open a fresh journal for this session.
     let journal = match Journal::open_new_session() {
         Ok(j) => j,
