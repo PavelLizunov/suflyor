@@ -105,7 +105,12 @@ export default function TileWindow() {
   };
 
   return (
-    <div ref={rootRef} className={`tile-root tile-kind-${kind}`}>
+    <div
+      ref={rootRef}
+      className={`tile-root tile-kind-${kind}`}
+      role="dialog"
+      aria-label={`AI answer tile from ${sourceLabel}`}
+    >
       <div className="tile-bar" data-tauri-drag-region>
         <span className="tile-source" title={sourceLabel}>{sourceLabel}</span>
         <button
@@ -113,6 +118,8 @@ export default function TileWindow() {
           data-pinned={pinned ? "true" : undefined}
           onClick={togglePin}
           title={pinned ? "Pinned — no auto-close" : "Pin (cancel auto-close)"}
+          aria-label={pinned ? "Unpin tile (re-enable auto-close)" : "Pin tile (disable auto-close)"}
+          aria-pressed={pinned}
         >
           📌
         </button>
@@ -120,12 +127,13 @@ export default function TileWindow() {
           className="tile-close"
           onClick={close}
           title="Close now"
+          aria-label="Close tile"
         >
           ×
         </button>
       </div>
       <div className="tile-q" title={question}>{question}</div>
-      <div className="tile-body markdown">
+      <div className="tile-body markdown" role="region" aria-label="AI answer body">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer}</ReactMarkdown>
       </div>
     </div>
