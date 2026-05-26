@@ -1381,8 +1381,7 @@ export default function Settings() {
           </div>
         )}
         <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 8 }}>
-          Редактирование снипетов через JSON: <code>%APPDATA%\overlay-mvp\config.json</code> → массив <code>snippets</code>.
-          В будущей версии — palette через F4 и UI редактор прямо здесь.
+          {t("snippets.json.hint.before", lang)}<code>%APPDATA%\overlay-mvp\config.json</code>{t("snippets.json.hint.middle", lang)}<code>snippets</code>{t("snippets.json.hint.after", lang)}
         </div>
       </div>)}
 
@@ -1800,8 +1799,8 @@ export default function Settings() {
           <button
             className="settings-toast-close"
             onClick={() => setToast(null)}
-            aria-label="Закрыть"
-            title="Закрыть"
+            aria-label={t("toast.close", lang)}
+            title={t("toast.close", lang)}
           >×</button>
         </div>
       )}
@@ -1865,7 +1864,7 @@ export default function Settings() {
                   className={modal.danger ? "btn settings-modal-danger" : "btn"}
                   onClick={modal.onYes}
                 >
-                  {modal.confirmLabel ?? "Подтвердить"}
+                  {modal.confirmLabel ?? t("modal.confirm.default", lang)}
                 </button>
               </div>
             )}

@@ -701,6 +701,19 @@ const strings = {
     ru: "Свёрнуто чтобы Settings не превращался в портянку. Жми «показать» сверху · или используй F4 (KB palette) во время сессии — там же доступны.",
     en: "Collapsed so Settings doesn't become a long scroll. Click «show» at the top · or use F4 (KB palette) during a session — they're available there too.",
   },
+  "snippets.json.hint.before": {
+    ru: "Редактирование снипетов через JSON: ",
+    en: "Edit snippets via JSON: ",
+  },
+  "snippets.json.hint.middle": { ru: " → массив ", en: " → array " },
+  "snippets.json.hint.after": {
+    ru: ". В будущей версии — palette через F4 и UI редактор прямо здесь.",
+    en: ". A future version will add a palette via F4 and an inline UI editor here.",
+  },
+
+  // ── Toast + modal generic strings (v0.0.51 — caught by agent review) ─
+  "toast.close":              { ru: "Закрыть",                en: "Close" },
+  "modal.confirm.default":    { ru: "Подтвердить",            en: "Confirm" },
 } as const;
 
 export type StringKey = keyof typeof strings;

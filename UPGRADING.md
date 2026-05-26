@@ -11,6 +11,43 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.51 (2026-05-26)
+
+Agent-review hotfix on top of v0.0.50. Independent review agent
+caught 3 legitimate i18n misses OUTSIDE the deferred snippets-CRUD
+scope:
+
+1. **Snippets "Edit via JSON" footer note** (Settings.tsx ~1384) —
+   inline hint with `<code>` tags split into 3 parts (before/middle/
+   after) wrapping the `%APPDATA%\overlay-mvp\config.json` and
+   `snippets` literals. Each part now via t().
+2. **Toast close button** (Settings.tsx ~1803) — aria-label + title
+   were always hardcoded "Закрыть" regardless of UI language. Now
+   `t("toast.close", lang)`.
+3. **Default modal confirm label** (Settings.tsx ~1868) — when a
+   showConfirm caller doesn't pass `confirmLabel`, the fallback was
+   hardcoded "Подтвердить" (Russian). Now `t("modal.confirm.default",
+   lang)`. Caller-supplied labels (which already use `t()` at the
+   call site, e.g. `t("settings.quit.confirm.label", lang)`) keep
+   working as before — this fallback only fires when the caller is
+   lazy.
+
+Plus i18n entries cleaned up — added 5 new keys:
+`snippets.json.hint.{before,middle,after}`, `toast.close`,
+`modal.confirm.default`.
+
+Still NOT translated (deferred indefinitely):
+- showSnippetEdit CRUD modal (3-field form + validation messages +
+  per-snippet expand/delete row buttons) — agent's P1 finding
+  matched my v0.0.50 acknowledgement; user almost never opens this
+- TileWindow sourceLabel inline ternaries (agent P2) — not via t(),
+  but encoded in the same i18n.ts file so easy to extend later
+- 1-frame stale "ru" flash on first overlay mount before
+  `get_config` resolves (agent P2) — cosmetic, can be fixed by
+  pre-fetching at index.html level if it ever becomes an issue
+
+No backend changes.
+
 ### → v0.0.50 (2026-05-26)
 
 Ninth and (likely) final i18n release. Mops up the remaining
