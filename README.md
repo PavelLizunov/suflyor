@@ -14,6 +14,12 @@ Pet project, **v0.0.13**. Под одного пользователя. Без c
 
 Поиск по embedded базе (glossary + commands + patterns). Enter → tile с найденным контентом на второстепенном мониторе (или primary, если он один). Без AI-вызова, $0.
 
+### Tile card (Q/A на второстепенном мониторе)
+
+![Tile](docs/screenshots/tile.png)
+
+Header показывает источник (AUTO · DETECTOR / MIC / SYSTEM / MANUAL — цветовая кодировка), вопрос как заголовок, ответ с ReactMarkdown + GFM. 📌 — pin (отключает TTL), × — закрыть. Esc тоже закрывает (v0.0.11). Размер 380×280 px минимум, авто-расширяется до 400 после рендера markdown. Transparent — фон видно сквозь карточку (опционально stealth-режим в Settings).
+
 ### Settings (⚙ или tray)
 
 ![Settings](docs/screenshots/settings.png)
