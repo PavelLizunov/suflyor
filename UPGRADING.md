@@ -26,6 +26,25 @@ for download. No auto-install (no code signing — by design).
 
 Two code-review agent passes ran on the diff. First found 3 P0/P1 (shipped .85, .86, .87). Second pass running at time of v0.0.88 ship.
 
+### → v0.0.97 (2026-05-26) — ✏️ Edit question + re-ask tile button
+
+New ✏️ button in tile chrome (between collapse-all chip 📋 and 🔄
+reload). Click → tile-q text becomes an editable input. Press Enter
+→ re-asks via the v0.0.68 reload bridge with the EDITED question
+text (not the original). Press Esc → cancels and restores original.
+
+Reuses existing `tile_reload` backend — just passes a different
+`question` payload than v0.0.68's "use original" flow.
+
+Use case: 🔄 reload re-asks the same question (useful when AI was
+just off-target). ✏️ edit lets you correct a Whisper mishearing
+("Кубернетес" → "kubernetes networking deep dive") before re-asking,
+or pivot the question entirely. Generation counter still bumps so the
+respawned tile shows 🔄×N+1 — both flows count as "I'm refining
+this".
+
+Pure frontend extension; no backend changes.
+
 ### → v0.0.96 (2026-05-26) — Audit #3 fixes + Replay flag badge
 
 Three findings from code-review agent #3 + 1 polish:

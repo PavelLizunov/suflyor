@@ -64,6 +64,12 @@ export default function TileWindow() {
   // Stored per-tile in React state (not persisted); auto-resize effect
   // shrinks/restores window height accordingly.
   const [collapsed, setCollapsed] = useState(false);
+  // v0.0.97: edit-question state. Click ✏️ → editingQuestion swaps
+  // to a controlled string + the tile-q div renders as an input.
+  // Enter triggers tile:reload-request with the edited text (reuses
+  // the v0.0.68 bridge — same backend path as 🔄 reload). Esc cancels.
+  const [editingQuestion, setEditingQuestion] = useState<string | null>(null);
+
   // v0.0.69: track tile age + reload generation. spawnedAt = mount time
   // (no backend plumbing needed; tile lifetime starts on this React
   // mount). ageStr re-computed every 5s by a setInterval — formatted
@@ -528,6 +534,32 @@ export default function TileWindow() {
         >
           {reloading ? "⏳" : "🔄"}
         </button>
+        {/* v0.0.97: ✏️ edit question — opens inline input for the
+            tile's question, Enter re-asks with the edited text via
+            the v0.0.68 reload bridge (passes the edited question
+            payload instead of the original). Esc cancels. */}
+        <button
+          className="tile-edit-q"
+          onClick={() => {
+            if (reloading) return;
+            setEditingQuestion(question);
+          }}
+          disabled={reloading}
+          title={lang === "en"
+            ? "Edit question and re-ask (Enter to submit, Esc to cancel)"
+            : "Изменить вопрос и переспросить (Enter — отправить, Esc — отменить)"}
+          aria-label={lang === "en" ? "Edit question" : "Изменить вопрос"}
+          style={{
+            background: "transparent",
+            border: "none",
+            cursor: reloading ? "wait" : "pointer",
+            opacity: reloading ? 0.5 : 0.85,
+            padding: "0 6px",
+            fontSize: 13,
+          }}
+        >
+          ✏️
+        </button>
         {/* v0.0.93: 📋 copy question to clipboard. Useful for pasting
             into Slack/email/notes. Confirmation: button briefly shows
             "✓" for 1.2s. Pure frontend, no backend. */}
@@ -566,14 +598,62 @@ export default function TileWindow() {
       {/* v0.0.71: hide question + body when collapsed. CSS display:none
           via inline style — simpler than a conditional render and keeps
           the React tree (and hljs class attributions) stable so toggling
-          back is instant with no reflow flash. */}
-      <div
-        className="tile-q"
-        title={question}
-        style={collapsed ? { display: "none" } : undefined}
-      >
-        {renderWithHighlights(question)}
-      </div>
+          back is instant with no reflow flash.
+          v0.0.97: swap to input when editingQuestion !== null. Enter
+          re-asks with the edited text via tile:reload-request. Esc
+          cancels and restores question display. */}
+      {editingQuestion !== null ? (
+        <input
+          autoFocus
+          type="text"
+          value={editingQuestion}
+          onChange={(e) => setEditingQuestion(e.target.value)}
+          onKeyDown={async (e) => {
+            if (e.key === "Escape") {
+              setEditingQuestion(null);
+              return;
+            }
+            if (e.key === "Enter") {
+              const edited = editingQuestion.trim();
+              if (!edited) return;
+              setEditingQuestion(null);
+              if (reloading) return;
+              setReloading(true);
+              try {
+                await emit("tile:reload-request", {
+                  label: `tile-${id}`,
+                  question: edited,
+                  currentGeneration: generation,
+                });
+              } catch (err) {
+                console.warn("tile edit reload emit:", err);
+                setReloading(false);
+              }
+            }
+          }}
+          onBlur={() => setEditingQuestion(null)}
+          style={collapsed ? { display: "none" } : {
+            width: "100%",
+            boxSizing: "border-box",
+            padding: "6px 8px",
+            fontSize: 13,
+            fontWeight: 500,
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.2)",
+            borderRadius: 4,
+            color: "inherit",
+            outline: "none",
+          }}
+        />
+      ) : (
+        <div
+          className="tile-q"
+          title={question}
+          style={collapsed ? { display: "none" } : undefined}
+        >
+          {renderWithHighlights(question)}
+        </div>
+      )}
       <div
         className="tile-body markdown"
         role="region"
