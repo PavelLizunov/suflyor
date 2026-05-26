@@ -11,6 +11,26 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.76 (2026-05-26) — QOL block 5, #24
+
+**Polish: audio refresh button + meeting_context char counter.**
+
+Two small Settings improvements:
+
+1. **Settings → Audio: 🔄 refresh devices** button next to the
+   "Devices" heading. Re-enumerates input/output via
+   `list_audio_devices` on click. Useful after plugging in a USB
+   headset / mic without restarting the app.
+
+2. **Settings → Profile: meeting_context char counter** under the
+   textarea. Shows live count + color-coded hint:
+   - <1500: dim "(plenty of room for transcript context)"
+   - 1500-2000: neutral
+   - 2000-3000: amber "(getting long — consider trimming)"
+   - 3000+: red "(very long — will eat AI input tokens)"
+
+Pure frontend. No backend changes.
+
 ### → v0.0.75 (2026-05-26) — QOL block 5, #23
 
 **🔇 Mic-only mute chip in overlay bar (cough/sneeze without polluting transcript).**

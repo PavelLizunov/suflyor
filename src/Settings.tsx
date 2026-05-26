@@ -763,6 +763,39 @@ export default function Settings() {
             onChange={(e) => update({ meeting_context: e.target.value })}
             placeholder={t("meeting.placeholder", lang)}
           />
+          {/* v0.0.76: live char counter. ~2000 chars is the soft sweet
+              spot — beyond that the system prompt eats AI input tokens
+              that could be used for transcript context. Colors: dim
+              under 1500, neutral 1500-2000, amber 2000-3000, red 3000+. */}
+          {(() => {
+            const n = cfg.meeting_context.length;
+            const color = n < 1500
+              ? "var(--c-text-dim)"
+              : n < 2000
+                ? "var(--c-text-mute)"
+                : n < 3000
+                  ? "#d49b32"
+                  : "#d05050";
+            const hint = lang === "en"
+              ? (n < 2000
+                  ? "(plenty of room for transcript context)"
+                  : n < 3000
+                    ? "(getting long — consider trimming)"
+                    : "(very long — will eat AI input tokens)")
+              : (n < 2000
+                  ? "(достаточно места для контекста транскрипта)"
+                  : n < 3000
+                    ? "(длинновато — стоит подсократить)"
+                    : "(очень длинно — будет жрать input-токены)");
+            return (
+              <div
+                style={{ fontSize: 11, color, marginTop: 4, fontFamily: "monospace", textAlign: "right" }}
+                aria-live="polite"
+              >
+                {n.toLocaleString()} {lang === "en" ? "chars" : "симв."} {hint}
+              </div>
+            );
+          })()}
         </div>
         <div className="btn-row" style={{ justifyContent: "flex-start", gap: 8 }}>
           <button
@@ -813,7 +846,27 @@ export default function Settings() {
       </div>)}
 
       {activeSection === "audio" && (<div className="settings-section">
-        <h3>{t("audio.devices.title", lang)}</h3>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <h3 style={{ margin: 0 }}>{t("audio.devices.title", lang)}</h3>
+          {/* v0.0.76: refresh devices button. Mount-time enumeration
+              misses devices plugged in after Settings opened. One-click
+              re-enumerate without app restart. */}
+          <button
+            type="button"
+            className="btn secondary"
+            style={{ fontSize: 12, padding: "4px 10px" }}
+            title={lang === "en"
+              ? "Re-enumerate input/output devices (useful after plugging in a USB headset / mic)"
+              : "Перечитать список устройств (полезно после подключения USB-гарнитуры / микрофона)"}
+            onClick={() => {
+              invoke<DeviceList>("list_audio_devices")
+                .then((d) => { if (mountedRef.current) setDevices(d); })
+                .catch((e) => console.warn("list_audio_devices refresh:", e));
+            }}
+          >
+            🔄 {lang === "en" ? "Refresh" : "Обновить"}
+          </button>
+        </div>
         <div className="field">
           <label>{t("audio.mic.label", lang)}</label>
           <select
