@@ -1261,6 +1261,25 @@ export default function Settings() {
               </button>
             </div>
           )}
+          <div style={{ marginTop: 12 }}>
+            <button
+              className="btn secondary"
+              onClick={async () => {
+                try {
+                  const path = await invoke<string>("dump_diagnostics");
+                  showToast("ok", `Диагностика сохранена: ${path}`);
+                } catch (e) {
+                  showToast("err", `Не получилось: ${e}`);
+                }
+              }}
+              title="Сохранить sanitized config + последние 50 событий журнала + crash report (если есть) одним .md файлом на Desktop — приложи к bug report"
+            >
+              📊 Диагностический дамп
+            </button>
+            <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
+              Saves to Desktop. Secrets (groq_api_key, ai_bearer, ai_base_url, meeting_context, profiles) blanked.
+            </div>
+          </div>
         </div>
       </div>
 

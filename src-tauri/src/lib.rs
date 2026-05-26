@@ -648,6 +648,80 @@ fn export_config_safe(
     Ok(path.to_string_lossy().to_string())
 }
 
+/// Write a markdown diagnostic dump to Desktop combining sanitized config
+/// + app version + most recent session journal tail + crash report (if any).
+/// Useful when filing a bug report — one file the user can attach without
+/// worrying about leaking the bridge bearer or Groq key.
+#[tauri::command]
+fn dump_diagnostics(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, SharedConfig>,
+) -> Result<String, String> {
+    assert_overlay(&window)?;
+    let cfg = blank_share_secrets(state.read().clone());
+    let cfg_json = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
+
+    let app_version = env!("CARGO_PKG_VERSION");
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+
+    // Latest session journal tail (last 50 lines so the report stays under
+    // ~50 KB even for chatty sessions).
+    let journal_tail = journal::sessions_dir()
+        .ok()
+        .and_then(|dir| {
+            std::fs::read_dir(&dir).ok().and_then(|rd| {
+                rd.filter_map(|e| e.ok())
+                    .filter(|e| {
+                        e.path()
+                            .extension()
+                            .and_then(|s| s.to_str())
+                            .map(|s| s.eq_ignore_ascii_case("jsonl"))
+                            .unwrap_or(false)
+                    })
+                    .max_by_key(|e| e.metadata().and_then(|m| m.modified()).ok())
+                    .map(|e| e.path())
+            })
+        })
+        .and_then(|path| std::fs::read_to_string(&path).ok().map(|s| (path, s)))
+        .map(|(path, content)| {
+            let lines: Vec<&str> = content.lines().collect();
+            let tail_start = lines.len().saturating_sub(50);
+            let tail = lines[tail_start..].join("\n");
+            format!("**File:** `{}`\n**Tail (last {} lines):**\n```jsonl\n{}\n```", path.display(), lines.len() - tail_start, tail)
+        })
+        .unwrap_or_else(|| "_no session journal found_".to_string());
+
+    // Optional crash report (inline the same path-resolution as
+    // crash_report_path so we don't need to fake a WebviewWindow).
+    let crash = dirs::config_dir()
+        .map(|d| d.join("overlay-mvp").join("crash-report.txt"))
+        .filter(|p| p.exists())
+        .and_then(|p| std::fs::read_to_string(&p).ok())
+        .map(|s| format!("```\n{s}\n```"))
+        .unwrap_or_else(|| "_no crash report on disk_".to_string());
+
+    let report = format!(
+        "# Suflyor diagnostic dump\n\n\
+         **App version:** v{app_version}\n\
+         **Platform:** {os}/{arch}\n\n\
+         ## Sanitized config\n\n\
+         Secrets (groq_api_key, ai_bearer, ai_base_url, meeting_context, profiles) are blanked.\n\n\
+         ```json\n{cfg_json}\n```\n\n\
+         ## Latest session journal (tail)\n\n\
+         {journal_tail}\n\n\
+         ## Crash report\n\n\
+         {crash}\n"
+    );
+
+    let stamp = journal::now_unix_ms() / 1000;
+    let desktop = dirs::desktop_dir().or_else(dirs::home_dir).ok_or("no desktop dir")?;
+    let path = desktop.join(format!("suflyor-diagnostic-{stamp}.md"));
+    std::fs::write(&path, report).map_err(|e| e.to_string())?;
+    log::info!("diagnostic dump written to {}", path.display());
+    Ok(path.to_string_lossy().to_string())
+}
+
 #[cfg(test)]
 mod export_safe_tests {
     use super::blank_share_secrets;
@@ -1538,6 +1612,7 @@ pub fn run() {
             check_bridge,
             check_update,
             crash_report_path,
+            dump_diagnostics,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| {
