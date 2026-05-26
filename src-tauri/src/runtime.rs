@@ -7,7 +7,7 @@
 use crate::ai::{self, AiEvent};
 use crate::audio::{self, AudioSource, CaptureHandle};
 use crate::config::SharedConfig;
-use crate::journal::{Journal, JournalEvent, now_unix_ms};
+use crate::journal::{now_unix_ms, Journal, JournalEvent};
 use crate::stt;
 use crate::tile::SharedTiles;
 
@@ -186,7 +186,9 @@ impl HealthSignals {
 /// learns to ignore. "Так" was a candidate but it's also a common
 /// declarative ("так, дальше:") that good speakers use; left out.
 pub(crate) const FILLERS_RU: &[&str] = &[
-    "эм", "эмм", "эмммм",
+    "эм",
+    "эмм",
+    "эмммм",
     "ну",
     "вот",
     "значит",
@@ -316,7 +318,13 @@ pub(crate) fn snapshot_speech_coach(rt: &SharedRuntime, now_ms: u64) -> SpeechCo
         Some(w) if w <= 180 => "ok",
         Some(_) => "fast",
     };
-    SpeechCoachPayload { words_60s: words, fillers_60s: fillers, filler_per_100, wpm, pace }
+    SpeechCoachPayload {
+        words_60s: words,
+        fillers_60s: fillers,
+        filler_per_100,
+        wpm,
+        pace,
+    }
 }
 
 /// Owned by RuntimeState while a push-to-talk hold is active.
@@ -350,7 +358,8 @@ const TRANSCRIPT_MAX_LINES: usize = 80;
 #[inline]
 fn bump_health_ai(rt: &SharedRuntime) {
     let h = rt.lock().health.clone();
-    h.last_ai_ok_ms.store(now_unix_ms() as u64, Ordering::Relaxed);
+    h.last_ai_ok_ms
+        .store(now_unix_ms() as u64, Ordering::Relaxed);
 }
 
 /// Remember the last question+answer surfaced to the user. F3 Reask
@@ -423,7 +432,11 @@ pub async fn start_session(
     // total > 0), so the UI never sees a session_usd: 0 signal and the
     // over-budget chip can linger from a prior session until its 60s timer
     // fires. Found by post-v0.0.12 agent review.
-    let _ = app.emit_to("overlay", "cost:update", serde_json::json!({ "session_usd": 0.0_f64 }));
+    let _ = app.emit_to(
+        "overlay",
+        "cost:update",
+        serde_json::json!({ "session_usd": 0.0_f64 }),
+    );
 
     // v0.0.19: reset tile sequence counter so each session starts at #1.
     // Without this the counter keeps climbing across sessions in the same
@@ -471,7 +484,14 @@ pub async fn start_session(
 
     let (audio_rx, handle) = audio::start_capture(mic_dev, sys_dev)?;
     let health = rt.lock().health.clone();
-    let mut stt_rx = stt::spawn(audio_rx, groq_key, language, whisper_prompt, stt_model, health.clone());
+    let mut stt_rx = stt::spawn(
+        audio_rx,
+        groq_key,
+        language,
+        whisper_prompt,
+        stt_model,
+        health.clone(),
+    );
 
     rt.lock().capture = Some(handle);
 
@@ -555,9 +575,7 @@ pub async fn start_session(
             // the user to stop the session. Detector is per-text on the
             // captured side only (system audio) — your own "thanks" to
             // the interviewer shouldn't trigger.
-            if line.source == AudioSource::System
-                && meeting_ending_phrase_match(&line.text)
-            {
+            if line.source == AudioSource::System && meeting_ending_phrase_match(&line.text) {
                 let mut s = rt_for_task.lock();
                 if !s.meeting_ending_emitted {
                     s.meeting_ending_emitted = true;
@@ -649,9 +667,13 @@ mod meeting_ending_tests {
 
     #[test]
     fn detects_en_common_goodbyes() {
-        assert!(meeting_ending_phrase_match("Well, thanks for your time today."));
+        assert!(meeting_ending_phrase_match(
+            "Well, thanks for your time today."
+        ));
         assert!(meeting_ending_phrase_match("We'll be in touch by Friday."));
-        assert!(meeting_ending_phrase_match("Any final questions before we wrap?"));
+        assert!(meeting_ending_phrase_match(
+            "Any final questions before we wrap?"
+        ));
         assert!(meeting_ending_phrase_match("Let's wrap up here."));
     }
 
@@ -782,8 +804,7 @@ pub(crate) fn kb_key_matches_trigger(key: &str, trigger: &str) -> bool {
         .split(|c: char| !c.is_alphanumeric())
         .filter(|s| !s.is_empty())
         .collect();
-    !entry_tokens.is_empty()
-        && entry_tokens.iter().all(|t| trig_tokens.contains(t))
+    !entry_tokens.is_empty() && entry_tokens.iter().all(|t| trig_tokens.contains(t))
 }
 
 async fn maybe_spawn_tile(
@@ -793,7 +814,16 @@ async fn maybe_spawn_tile(
     tiles: SharedTiles,
     text: String,
 ) {
-    let (enabled, every_line, trigger_keywords, base_url, bearer, model, response_language, meeting_context) = {
+    let (
+        enabled,
+        every_line,
+        trigger_keywords,
+        base_url,
+        bearer,
+        model,
+        response_language,
+        meeting_context,
+    ) = {
         let c = cfg.read();
         (
             c.auto_tiles_enabled,
@@ -818,8 +848,11 @@ async fn maybe_spawn_tile(
     let detected = if every_line {
         // Only skip empty / very short lines (Whisper sometimes emits
         // single-char artefacts that aren't worth a tile).
-        if text.trim().chars().count() < 5 { None }
-        else { Some(Trigger::Question(text.clone())) }
+        if text.trim().chars().count() < 5 {
+            None
+        } else {
+            Some(Trigger::Question(text.clone()))
+        }
     } else {
         detect_trigger(&text, &trigger_keywords)
     };
@@ -849,7 +882,11 @@ async fn maybe_spawn_tile(
                 break;
             }
         }
-        let cap = if every_line { MAX_TILES_PER_MIN_AGGRESSIVE } else { MAX_TILES_PER_MIN };
+        let cap = if every_line {
+            MAX_TILES_PER_MIN_AGGRESSIVE
+        } else {
+            MAX_TILES_PER_MIN
+        };
         if s.recent_tile_triggers.len() >= cap {
             log::warn!(
                 "tile rate-limit hit ({}/{} in last 60s, aggressive={}) — dropping trigger from text: {}",
@@ -879,7 +916,8 @@ async fn maybe_spawn_tile(
     // normalized prefix was used to spawn a tile in last 60s, skip.
     // Stops the "same keyword 3× in 30s" spam pattern.
     {
-        let normalized: String = text.to_lowercase()
+        let normalized: String = text
+            .to_lowercase()
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ")
@@ -890,7 +928,10 @@ async fn maybe_spawn_tile(
         let now = std::time::Instant::now();
         let cutoff = now - std::time::Duration::from_secs(60);
         s.recent_question_prefixes.retain(|(_, ts)| *ts > cutoff);
-        if s.recent_question_prefixes.iter().any(|(prefix, _)| prefix == &normalized) {
+        if s.recent_question_prefixes
+            .iter()
+            .any(|(prefix, _)| prefix == &normalized)
+        {
             log::info!("tile dedup: skipping recently-spawned question prefix: {normalized}");
             return;
         }
@@ -926,8 +967,7 @@ async fn maybe_spawn_tile(
         response_language,
         ctx_hash,
         kw_hash,
-        text
-            .to_lowercase()
+        text.to_lowercase()
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ")
@@ -942,7 +982,8 @@ async fn maybe_spawn_tile(
         let ttl = std::time::Duration::from_secs(600);
         // Prune stale entries opportunistically — cheap O(n) walk
         // since cache stays tiny (<100 entries even in long sessions).
-        s.qa_cache.retain(|_, (_, ts)| now.duration_since(*ts) < ttl);
+        s.qa_cache
+            .retain(|_, (_, ts)| now.duration_since(*ts) < ttl);
         s.qa_cache.get(&cache_key).map(|(a, _)| a.clone())
     };
     if let Some(cached_answer) = cache_hit {
@@ -1095,18 +1136,22 @@ async fn maybe_spawn_tile(
 
     // Non-streaming — we need the full answer before spawning the tile.
     let t0 = std::time::Instant::now();
-    let (answer, usage) = match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512).await {
-        Ok((t, u)) => { bump_health_ai(&rt); (t.trim().to_string(), u) },
-        Err(e) => {
-            log::warn!("auto-tile AI failed: {e:#}");
-            journal.write(&JournalEvent::Error {
-                unix_ms: now_unix_ms(),
-                module: "auto_tile_ai",
-                message: &format!("{e:#}"),
-            });
-            return;
-        }
-    };
+    let (answer, usage) =
+        match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512).await {
+            Ok((t, u)) => {
+                bump_health_ai(&rt);
+                (t.trim().to_string(), u)
+            }
+            Err(e) => {
+                log::warn!("auto-tile AI failed: {e:#}");
+                journal.write(&JournalEvent::Error {
+                    unix_ms: now_unix_ms(),
+                    module: "auto_tile_ai",
+                    message: &format!("{e:#}"),
+                });
+                return;
+            }
+        };
     let latency_ms = t0.elapsed().as_millis() as u64;
 
     // v0.0.79: cache the answer so future identical questions in this
@@ -1121,7 +1166,8 @@ async fn maybe_spawn_tile(
             // by collecting expired keys — O(n log n) but only fires
             // once per session if at all.
             let now = std::time::Instant::now();
-            let mut by_age: Vec<(String, std::time::Duration)> = s.qa_cache
+            let mut by_age: Vec<(String, std::time::Duration)> = s
+                .qa_cache
                 .iter()
                 .map(|(k, (_, ts))| (k.clone(), now.duration_since(*ts)))
                 .collect();
@@ -1130,7 +1176,8 @@ async fn maybe_spawn_tile(
                 s.qa_cache.remove(&k);
             }
         }
-        s.qa_cache.insert(cache_key, (answer.clone(), std::time::Instant::now()));
+        s.qa_cache
+            .insert(cache_key, (answer.clone(), std::time::Instant::now()));
     }
 
     // Accumulate cost + notify UI.
@@ -1197,11 +1244,14 @@ async fn maybe_spawn_tile(
             // "kubernetes operator" that don't tokenise the same way.
             if hits.len() < 8 {
                 for kw in trigger_keywords.split_whitespace() {
-                    if kw.len() >= 4 && q_lower.contains(&kw.to_lowercase())
+                    if kw.len() >= 4
+                        && q_lower.contains(&kw.to_lowercase())
                         && !hits.iter().any(|h| h.eq_ignore_ascii_case(kw))
                     {
                         hits.push(kw.to_string());
-                        if hits.len() >= 8 { break; }
+                        if hits.len() >= 8 {
+                            break;
+                        }
                     }
                 }
             }
@@ -1210,7 +1260,16 @@ async fn maybe_spawn_tile(
     };
 
     store_last_qa(&rt, &question_label, &answer);
-    match crate::tile::spawn_tile_with_highlight(&app, &tiles, question_label.clone(), answer.clone(), preferred_monitor, stealth, crate::tile::TileKind::Auto, highlights) {
+    match crate::tile::spawn_tile_with_highlight(
+        &app,
+        &tiles,
+        question_label.clone(),
+        answer.clone(),
+        preferred_monitor,
+        stealth,
+        crate::tile::TileKind::Auto,
+        highlights,
+    ) {
         Ok(label) => {
             journal.write(&JournalEvent::TileSpawn {
                 unix_ms: now_unix_ms(),
@@ -1279,8 +1338,10 @@ fn build_auto_tile_prompts(
     response_language: &str,
 ) -> (String, String) {
     let lang_block = match response_language {
-        "ru" => "Отвечай ИСКЛЮЧИТЕЛЬНО на русском языке. Английский только для \
-                 названий технологий и команд (e.g. `kubectl get pods`).",
+        "ru" => {
+            "Отвечай ИСКЛЮЧИТЕЛЬНО на русском языке. Английский только для \
+                 названий технологий и команд (e.g. `kubectl get pods`)."
+        }
         "en" => "Respond exclusively in English.",
         _ => "Respond in the same language as the user transcript.",
     };
@@ -1367,8 +1428,22 @@ fn strip_filler_prefix(lower: &str) -> String {
     // Word-only fillers (no trailing space). Boundary is detected by the
     // next char being non-alnum — handles "вот," / "так." / "ну!" etc.
     const FILLERS: &[&str] = &[
-        "а", "ну", "вот", "так", "и", "ладно", "хорошо", "слушай",
-        "ой", "эх", "ага", "угу", "да", "ок", "о'кей", "окей",
+        "а",
+        "ну",
+        "вот",
+        "так",
+        "и",
+        "ладно",
+        "хорошо",
+        "слушай",
+        "ой",
+        "эх",
+        "ага",
+        "угу",
+        "да",
+        "ок",
+        "о'кей",
+        "окей",
     ];
     let trim_punct = |s: &str| -> String {
         s.trim_start_matches(|c: char| !c.is_alphanumeric() && c != '?')
@@ -1405,7 +1480,10 @@ pub fn detect_trigger(text: &str, keyword_list: &str) -> Option<Trigger> {
     // Whisper artefact filter — if the transcript is mostly weird characters
     // or has too few real word-like tokens, skip to avoid spam AI calls.
     if !looks_like_real_speech(trimmed) {
-        log::debug!("detector noise-filter: '{}'", trimmed.chars().take(60).collect::<String>());
+        log::debug!(
+            "detector noise-filter: '{}'",
+            trimmed.chars().take(60).collect::<String>()
+        );
         return None;
     }
     let lower = trimmed.to_lowercase();
@@ -1426,7 +1504,8 @@ pub fn detect_trigger(text: &str, keyword_list: &str) -> Option<Trigger> {
         } else {
             log::debug!(
                 "detector skip short-? utterance ({} words): '{}'",
-                word_count, trimmed.chars().take(80).collect::<String>()
+                word_count,
+                trimmed.chars().take(80).collect::<String>()
             );
         }
     }
@@ -1450,22 +1529,51 @@ pub fn detect_trigger(text: &str, keyword_list: &str) -> Option<Trigger> {
         // ("Когда X, Y" = "When X, Y" — statement). Real "Когда?" questions
         // almost always end in '?' and are caught by step 1.
         // "где" / "кто" / "чей" similarly excluded — high FP-to-TP ratio.
-        "что ", "как ", "почему ", "зачем ",
-        "какой ", "какая ", "какое ", "какие ", "сколько ", "чем ",
+        "что ",
+        "как ",
+        "почему ",
+        "зачем ",
+        "какой ",
+        "какая ",
+        "какое ",
+        "какие ",
+        "сколько ",
+        "чем ",
         // Request verbs — interview pattern
-        "расскажи", "опиши", "поясни", "объясни", "поделись",
-        "приведи пример", "приведите пример",
+        "расскажи",
+        "опиши",
+        "поясни",
+        "объясни",
+        "поделись",
+        "приведи пример",
+        "приведите пример",
         // Hypothetical scenario openers
-        "допустим", "представь", "представим", "если у тебя", "если у вас",
-        "с чего", "с какого",
+        "допустим",
+        "представь",
+        "представим",
+        "если у тебя",
+        "если у вас",
+        "с чего",
+        "с какого",
         // Meta-question openers — interviewer signalling a question is coming
         // ("давай спросим у тебя…", "давай обсудим…", "поговорим про…").
         // Task #103 followup — these were missed before detector v4.
-        "давай спросим", "давай обсудим", "давай поговорим", "давай разберём",
-        "давай разберем", "поговорим про", "поговорим о", "обсудим",
+        "давай спросим",
+        "давай обсудим",
+        "давай поговорим",
+        "давай разберём",
+        "давай разберем",
+        "поговорим про",
+        "поговорим о",
+        "обсудим",
         // English-mixed (interviews often switch). Include request verbs
         // like "tell me" — many interviewers code-switch mid-sentence.
-        "how ", "what ", "why ", "explain ", "describe ", "tell me ",
+        "how ",
+        "what ",
+        "why ",
+        "explain ",
+        "describe ",
+        "tell me ",
     ];
     // Strip optional filler prefix words ("а", "ну", "вот", "так", "и")
     // before checking — they're common conversational starters before a
@@ -1508,7 +1616,10 @@ pub fn detect_trigger(text: &str, keyword_list: &str) -> Option<Trigger> {
         }
     }
 
-    log::debug!("detector skipped: '{}'", trimmed.chars().take(80).collect::<String>());
+    log::debug!(
+        "detector skipped: '{}'",
+        trimmed.chars().take(80).collect::<String>()
+    );
     None
 }
 
@@ -1517,12 +1628,7 @@ pub fn detect_trigger(text: &str, keyword_list: &str) -> Option<Trigger> {
 /// with the refined response. Useful when the conversation has moved
 /// past the previous trigger and the original answer is now too
 /// shallow or off-target.
-pub async fn reask_last(
-    app: AppHandle,
-    cfg: SharedConfig,
-    rt: SharedRuntime,
-    tiles: SharedTiles,
-) {
+pub async fn reask_last(app: AppHandle, cfg: SharedConfig, rt: SharedRuntime, tiles: SharedTiles) {
     let (last_q, last_a) = {
         let s = rt.lock();
         match (s.last_question.clone(), s.last_answer.clone()) {
@@ -1614,39 +1720,60 @@ pub async fn reask_last(
         input_tokens_est,
     });
     let t0 = std::time::Instant::now();
-    let (answer, usage) = match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512).await {
-        Ok(t) => { bump_health_ai(&rt); t }
-        Err(e) => {
-            log::warn!("reask_last AI failed: {e:#}");
-            journal.write(&JournalEvent::Error {
-                unix_ms: now_unix_ms(), module: "reask", message: &format!("{e:#}"),
-            });
-            let _ = app.emit_to(
-                "overlay", "tile:error",
-                serde_json::json!({ "message": format!("Reask AI error: {}", e) }),
-            );
-            return;
-        }
-    };
+    let (answer, usage) =
+        match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512).await {
+            Ok(t) => {
+                bump_health_ai(&rt);
+                t
+            }
+            Err(e) => {
+                log::warn!("reask_last AI failed: {e:#}");
+                journal.write(&JournalEvent::Error {
+                    unix_ms: now_unix_ms(),
+                    module: "reask",
+                    message: &format!("{e:#}"),
+                });
+                let _ = app.emit_to(
+                    "overlay",
+                    "tile:error",
+                    serde_json::json!({ "message": format!("Reask AI error: {}", e) }),
+                );
+                return;
+            }
+        };
     let micro = ai::cost_microcents(&model, usage.input, usage.output);
     let total = {
         let mut s = rt.lock();
         s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
         (s.session_cost_microcents as f64) / 100_000_000.0
     };
-    let _ = app.emit_to("overlay", "cost:update", serde_json::json!({ "session_usd": total }));
+    let _ = app.emit_to(
+        "overlay",
+        "cost:update",
+        serde_json::json!({ "session_usd": total }),
+    );
     journal.write(&JournalEvent::AiResponse {
-        unix_ms: now_unix_ms(), purpose: "reask", model: &model,
-        latency_ms: t0.elapsed().as_millis() as u64, finish_reason: "stop", text: &answer,
-        output_tokens_est: usage.output, cost_microcents: micro,
+        unix_ms: now_unix_ms(),
+        purpose: "reask",
+        model: &model,
+        latency_ms: t0.elapsed().as_millis() as u64,
+        finish_reason: "stop",
+        text: &answer,
+        output_tokens_est: usage.output,
+        cost_microcents: micro,
     });
 
     // Spawn as Manual kind (gray) to visually distinguish from the original.
     let display_q = format!("🔁 reask: {last_q}");
     store_last_qa(&rt, &display_q, answer.trim());
     if let Err(e) = crate::tile::spawn_tile_with_stealth(
-        &app, &tiles, display_q.clone(), answer.trim().to_string(),
-        preferred_monitor, stealth, crate::tile::TileKind::Manual,
+        &app,
+        &tiles,
+        display_q.clone(),
+        answer.trim().to_string(),
+        preferred_monitor,
+        stealth,
+        crate::tile::TileKind::Manual,
     ) {
         log::warn!("reask spawn_tile failed: {e:#}");
     }
@@ -1681,15 +1808,29 @@ pub fn stop_session(
         // Without this, after stop_session the dots froze on whatever
         // color they had at the moment of stop — looked like "everything
         // is still working" when actually nothing is running.
-        guard.health.last_audio_frame_ms.store(0, std::sync::atomic::Ordering::Relaxed);
-        guard.health.last_stt_ok_ms.store(0, std::sync::atomic::Ordering::Relaxed);
-        guard.health.last_ai_ok_ms.store(0, std::sync::atomic::Ordering::Relaxed);
+        guard
+            .health
+            .last_audio_frame_ms
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        guard
+            .health
+            .last_stt_ok_ms
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        guard
+            .health
+            .last_ai_ok_ms
+            .store(0, std::sync::atomic::Ordering::Relaxed);
         // Snapshot before closing journal (debrief reads from this snapshot,
         // not from the live transcript — which may keep growing if a stray
         // STT result lands after stop).
         let snap: Vec<TranscriptLine> = guard.transcript.iter().cloned().collect();
         guard.transcript.clear();
-        let started_at = guard.journal.as_ref().and_then(|j| j.snapshot_counters()).map(|c| c.start_unix_ms).unwrap_or(0);
+        let started_at = guard
+            .journal
+            .as_ref()
+            .and_then(|j| j.snapshot_counters())
+            .map(|c| c.start_unix_ms)
+            .unwrap_or(0);
         if let Some(j) = guard.journal.take() {
             close_journal_with_summary(j);
         }
@@ -1706,7 +1847,10 @@ pub fn stop_session(
     // Disabled if config flag set OFF or if AI bearer is empty.
     let now = now_unix_ms();
     let duration_ms = now.saturating_sub(session_started_at);
-    let mic_lines = transcript_snapshot.iter().filter(|l| matches!(l.source, AudioSource::Mic)).count();
+    let mic_lines = transcript_snapshot
+        .iter()
+        .filter(|l| matches!(l.source, AudioSource::Mic))
+        .count();
     // Pre-compute the same mic-text that the debrief runner would build,
     // so should_run_debrief can short-circuit on tiny text BEFORE the Sonnet
     // call goes out (P0-2 fix from review 2026-05-25 — previously the
@@ -1768,10 +1912,7 @@ pub(crate) fn detector_allows(source: AudioSource, skip_mic: bool) -> bool {
     }
 }
 
-pub(crate) fn over_cost_budget(
-    cap_usd: f64,
-    current_microcents: u64,
-) -> Option<String> {
+pub(crate) fn over_cost_budget(cap_usd: f64, current_microcents: u64) -> Option<String> {
     if cap_usd <= 0.0 {
         return None; // disabled
     }
@@ -1928,7 +2069,9 @@ fn close_journal_with_summary(j: Journal) {
             total_cost_microcents: counters.total_cost_microcents,
         });
     }
-    j.write(&JournalEvent::SessionStop { unix_ms: now_unix_ms() });
+    j.write(&JournalEvent::SessionStop {
+        unix_ms: now_unix_ms(),
+    });
     j.close();
 }
 
@@ -1964,7 +2107,10 @@ pub async fn manual_ask_source(
     }
 
     // Cost budget WARN (not block) — manual ask is user-initiated.
-    let (cap_usd, current_micro) = (cfg.read().max_session_cost_usd, rt.lock().session_cost_microcents);
+    let (cap_usd, current_micro) = (
+        cfg.read().max_session_cost_usd,
+        rt.lock().session_cost_microcents,
+    );
     if let Some(reason) = over_cost_budget(cap_usd, current_micro) {
         let _ = app.emit_to(
             "overlay",
@@ -1976,9 +2122,13 @@ pub async fn manual_ask_source(
     let (base_url, bearer, model, response_language, meeting_context, preferred_monitor, stealth) = {
         let c = cfg.read();
         (
-            c.ai_base_url.clone(), c.ai_bearer.clone(), c.ai_model.clone(),
-            c.response_language.clone(), c.meeting_context.clone(),
-            c.tile_monitor_name.clone(), c.stealth_enabled,
+            c.ai_base_url.clone(),
+            c.ai_bearer.clone(),
+            c.ai_model.clone(),
+            c.response_language.clone(),
+            c.meeting_context.clone(),
+            c.tile_monitor_name.clone(),
+            c.stealth_enabled,
         )
     };
 
@@ -2020,30 +2170,48 @@ pub async fn manual_ask_source(
     });
     let t0 = std::time::Instant::now();
 
-    let (answer, usage) = match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512).await {
-        Ok(t) => { bump_health_ai(&rt); t }
-        Err(e) => {
-            log::warn!("manual_ask_source AI failed: {e:#}");
-            journal.write(&JournalEvent::Error {
-                unix_ms: now_unix_ms(), module: purpose, message: &format!("{e:#}"),
-            });
-            return;
-        }
-    };
+    let (answer, usage) =
+        match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512).await {
+            Ok(t) => {
+                bump_health_ai(&rt);
+                t
+            }
+            Err(e) => {
+                log::warn!("manual_ask_source AI failed: {e:#}");
+                journal.write(&JournalEvent::Error {
+                    unix_ms: now_unix_ms(),
+                    module: purpose,
+                    message: &format!("{e:#}"),
+                });
+                return;
+            }
+        };
     let micro = ai::cost_microcents(&model, usage.input, usage.output);
     let total = {
         let mut s = rt.lock();
         s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
         (s.session_cost_microcents as f64) / 100_000_000.0
     };
-    let _ = app.emit_to("overlay", "cost:update", serde_json::json!({ "session_usd": total }));
+    let _ = app.emit_to(
+        "overlay",
+        "cost:update",
+        serde_json::json!({ "session_usd": total }),
+    );
     journal.write(&JournalEvent::AiResponse {
-        unix_ms: now_unix_ms(), purpose, model: &model,
-        latency_ms: t0.elapsed().as_millis() as u64, finish_reason: "stop", text: &answer,
-        output_tokens_est: usage.output, cost_microcents: micro,
+        unix_ms: now_unix_ms(),
+        purpose,
+        model: &model,
+        latency_ms: t0.elapsed().as_millis() as u64,
+        finish_reason: "stop",
+        text: &answer,
+        output_tokens_est: usage.output,
+        cost_microcents: micro,
     });
 
-    let icon = match source { AudioSource::System => "🔊", AudioSource::Mic => "🎤" };
+    let icon = match source {
+        AudioSource::System => "🔊",
+        AudioSource::Mic => "🎤",
+    };
     let question = format!("{icon} {trigger_text}");
     let kind = match source {
         AudioSource::System => crate::tile::TileKind::System,
@@ -2051,10 +2219,19 @@ pub async fn manual_ask_source(
     };
     store_last_qa(&rt, &question, answer.trim());
     match crate::tile::spawn_tile_with_stealth(
-        &app, &tiles, question.clone(), answer.trim().to_string(), preferred_monitor, stealth, kind,
+        &app,
+        &tiles,
+        question.clone(),
+        answer.trim().to_string(),
+        preferred_monitor,
+        stealth,
+        kind,
     ) {
         Ok(label) => journal.write(&JournalEvent::TileSpawn {
-            unix_ms: now_unix_ms(), label: &label, question: &question, answer: &answer,
+            unix_ms: now_unix_ms(),
+            label: &label,
+            question: &question,
+            answer: &answer,
         }),
         Err(e) => log::warn!("manual ask spawn_tile failed: {e:#}"),
     }
@@ -2066,11 +2243,7 @@ pub async fn manual_ask_source(
 /// stored in RuntimeState; manual_ask_window_end consumes them on release.
 ///
 /// Returns the start timestamp (unix ms) for UI tracking.
-pub fn manual_ask_window_start(
-    rt: SharedRuntime,
-    cfg: SharedConfig,
-    source: AudioSource,
-) -> u64 {
+pub fn manual_ask_window_start(rt: SharedRuntime, cfg: SharedConfig, source: AudioSource) -> u64 {
     let now = crate::journal::now_unix_ms() as u64;
     // If a previous PTT is still active, cancel it + JOIN its thread (with
     // bounded wait) so spamming the button doesn't leak WASAPI sessions.
@@ -2100,7 +2273,8 @@ pub fn manual_ask_window_start(
     let thread_result = std::thread::Builder::new()
         .name(format!("ptt-{:?}", source))
         .spawn(move || {
-            let res = crate::audio::record_source_until_stop(source, mic_dev, sys_dev, stop_for_thread);
+            let res =
+                crate::audio::record_source_until_stop(source, mic_dev, sys_dev, stop_for_thread);
             let payload = res.map_err(|e| format!("{e:#}"));
             // Log on error so the surface is visible even if the receiver
             // dropped (race with rapid cancel).
@@ -2160,13 +2334,21 @@ pub async fn manual_ask_window_end(
         return;
     };
     if ptt.source != source {
-        log::warn!("PTT end source mismatch: held={:?}, end={:?}", ptt.source, source);
+        log::warn!(
+            "PTT end source mismatch: held={:?}, end={:?}",
+            ptt.source,
+            source
+        );
         // Still consume the receiver so the thread doesn't leak.
     }
 
     let now = crate::journal::now_unix_ms() as u64;
     let duration_ms = now.saturating_sub(ptt.start_ms);
-    log::info!("PTT hold end: {:?} after {}ms — awaiting samples", ptt.source, duration_ms);
+    log::info!(
+        "PTT hold end: {:?} after {}ms — awaiting samples",
+        ptt.source,
+        duration_ms
+    );
 
     // Signal stop and await samples. Channel carries Result so we can
     // surface the real WASAPI/COM failure to the UI instead of the prior
@@ -2201,7 +2383,9 @@ pub async fn manual_ask_window_end(
     if let Some(handle) = ptt.thread {
         let _ = std::thread::Builder::new()
             .name("ptt-end-join".into())
-            .spawn(move || { let _ = handle.join(); });
+            .spawn(move || {
+                let _ = handle.join();
+            });
     }
 
     if samples.len() < (crate::audio::TARGET_SAMPLE_RATE as usize / 4) {
@@ -2287,7 +2471,10 @@ pub async fn manual_ask_window_end(
     // Post-Whisper hallucination filter — drop "subscribe to my channel",
     // repetition loops, punctuation-only output.
     if crate::stt::is_likely_hallucination(&transcribed) {
-        log::info!("PTT dropped hallucination: '{}'", transcribed.chars().take(80).collect::<String>());
+        log::info!(
+            "PTT dropped hallucination: '{}'",
+            transcribed.chars().take(80).collect::<String>()
+        );
         let _ = app.emit_to(
             "overlay",
             "tile:error",
@@ -2324,9 +2511,13 @@ pub async fn manual_ask_window_end(
     let (base_url, bearer, model, response_language, meeting_context, preferred_monitor, stealth) = {
         let c = cfg.read();
         (
-            c.ai_base_url.clone(), c.ai_bearer.clone(), c.ai_model.clone(),
-            c.response_language.clone(), c.meeting_context.clone(),
-            c.tile_monitor_name.clone(), c.stealth_enabled,
+            c.ai_base_url.clone(),
+            c.ai_bearer.clone(),
+            c.ai_model.clone(),
+            c.response_language.clone(),
+            c.meeting_context.clone(),
+            c.tile_monitor_name.clone(),
+            c.stealth_enabled,
         )
     };
     let recent_context = select_recent_lines_labeled(&rt.lock().transcript, 5);
@@ -2349,8 +2540,14 @@ pub async fn manual_ask_window_end(
     let usr_full = user_prompt.clone();
     let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
     let messages = vec![
-        ai::ChatMessage { role: "system".into(), content: ai::MessageContent::Text(system_prompt) },
-        ai::ChatMessage { role: "user".into(), content: ai::MessageContent::Text(user_prompt) },
+        ai::ChatMessage {
+            role: "system".into(),
+            content: ai::MessageContent::Text(system_prompt),
+        },
+        ai::ChatMessage {
+            role: "user".into(),
+            content: ai::MessageContent::Text(user_prompt),
+        },
     ];
 
     journal.write(&JournalEvent::AiRequest {
@@ -2364,28 +2561,48 @@ pub async fn manual_ask_window_end(
     });
     let t0 = std::time::Instant::now();
 
-    let (answer, usage) = match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512).await {
-        Ok(t) => { bump_health_ai(&rt); t }
-        Err(e) => {
-            log::warn!("PTT AI failed: {e:#}");
-            journal.write(&JournalEvent::Error { unix_ms: now_unix_ms(), module: purpose, message: &format!("{e:#}") });
-            return;
-        }
-    };
+    let (answer, usage) =
+        match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512).await {
+            Ok(t) => {
+                bump_health_ai(&rt);
+                t
+            }
+            Err(e) => {
+                log::warn!("PTT AI failed: {e:#}");
+                journal.write(&JournalEvent::Error {
+                    unix_ms: now_unix_ms(),
+                    module: purpose,
+                    message: &format!("{e:#}"),
+                });
+                return;
+            }
+        };
     let micro = ai::cost_microcents(&model, usage.input, usage.output);
     let total = {
         let mut s = rt.lock();
         s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
         (s.session_cost_microcents as f64) / 100_000_000.0
     };
-    let _ = app.emit_to("overlay", "cost:update", serde_json::json!({ "session_usd": total }));
+    let _ = app.emit_to(
+        "overlay",
+        "cost:update",
+        serde_json::json!({ "session_usd": total }),
+    );
     journal.write(&JournalEvent::AiResponse {
-        unix_ms: now_unix_ms(), purpose, model: &model,
-        latency_ms: t0.elapsed().as_millis() as u64, finish_reason: "stop", text: &answer,
-        output_tokens_est: usage.output, cost_microcents: micro,
+        unix_ms: now_unix_ms(),
+        purpose,
+        model: &model,
+        latency_ms: t0.elapsed().as_millis() as u64,
+        finish_reason: "stop",
+        text: &answer,
+        output_tokens_est: usage.output,
+        cost_microcents: micro,
     });
 
-    let icon = match source { AudioSource::System => "🔊⏺", AudioSource::Mic => "🎤⏺" };
+    let icon = match source {
+        AudioSource::System => "🔊⏺",
+        AudioSource::Mic => "🎤⏺",
+    };
     let snippet: String = transcribed.chars().take(80).collect();
     let question = format!("{icon} {snippet}");
     let kind = match source {
@@ -2394,10 +2611,19 @@ pub async fn manual_ask_window_end(
     };
     store_last_qa(&rt, &question, answer.trim());
     match crate::tile::spawn_tile_with_stealth(
-        &app, &tiles, question.clone(), answer.trim().to_string(), preferred_monitor, stealth, kind,
+        &app,
+        &tiles,
+        question.clone(),
+        answer.trim().to_string(),
+        preferred_monitor,
+        stealth,
+        kind,
     ) {
         Ok(label) => journal.write(&JournalEvent::TileSpawn {
-            unix_ms: now_unix_ms(), label: &label, question: &question, answer: &answer,
+            unix_ms: now_unix_ms(),
+            label: &label,
+            question: &question,
+            answer: &answer,
         }),
         Err(e) => log::warn!("PTT spawn_tile failed: {e:#}"),
     }
@@ -2407,7 +2633,12 @@ pub async fn manual_ask_window_end(
 /// trigger but passes the last 8 lines of cross-source context to the AI.
 /// Bypasses the detector so the user can force a suggestion when auto-tile
 /// skipped the question.
-pub async fn manual_spawn_tile(app: AppHandle, cfg: SharedConfig, rt: SharedRuntime, tiles: SharedTiles) {
+pub async fn manual_spawn_tile(
+    app: AppHandle,
+    cfg: SharedConfig,
+    rt: SharedRuntime,
+    tiles: SharedTiles,
+) {
     let (recent, last_line): (Vec<String>, Option<TranscriptLine>) = {
         let s = rt.lock();
         let lines = select_recent_lines_labeled(&s.transcript, 8);
@@ -2424,7 +2655,10 @@ pub async fn manual_spawn_tile(app: AppHandle, cfg: SharedConfig, rt: SharedRunt
     };
 
     // Cost budget WARN (not block) — F6 is user-initiated.
-    let (cap_usd, current_micro) = (cfg.read().max_session_cost_usd, rt.lock().session_cost_microcents);
+    let (cap_usd, current_micro) = (
+        cfg.read().max_session_cost_usd,
+        rt.lock().session_cost_microcents,
+    );
     if let Some(reason) = over_cost_budget(cap_usd, current_micro) {
         let _ = app.emit_to(
             "overlay",
@@ -2436,20 +2670,20 @@ pub async fn manual_spawn_tile(app: AppHandle, cfg: SharedConfig, rt: SharedRunt
     let (base_url, bearer, model, response_language, meeting_context, preferred_monitor, stealth) = {
         let c = cfg.read();
         (
-            c.ai_base_url.clone(), c.ai_bearer.clone(), c.ai_model.clone(),
-            c.response_language.clone(), c.meeting_context.clone(),
-            c.tile_monitor_name.clone(), c.stealth_enabled,
+            c.ai_base_url.clone(),
+            c.ai_bearer.clone(),
+            c.ai_model.clone(),
+            c.response_language.clone(),
+            c.meeting_context.clone(),
+            c.tile_monitor_name.clone(),
+            c.stealth_enabled,
         )
     };
     // Use the same structured prompt builder as auto-tile — recent
     // transcript window + meeting context, treated as a Question.
     let trigger = Trigger::Question(line.text.clone());
-    let (sys_full, usr_full) = build_auto_tile_prompts(
-        &trigger,
-        &recent,
-        &meeting_context,
-        &response_language,
-    );
+    let (sys_full, usr_full) =
+        build_auto_tile_prompts(&trigger, &recent, &meeting_context, &response_language);
     let messages = vec![
         ai::ChatMessage {
             role: "system".into(),
@@ -2471,31 +2705,59 @@ pub async fn manual_spawn_tile(app: AppHandle, cfg: SharedConfig, rt: SharedRunt
         input_tokens_est: ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4,
     });
     let t0 = std::time::Instant::now();
-    let (answer, usage) = match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512).await {
-        Ok(t) => { bump_health_ai(&rt); t }
-        Err(e) => {
-            log::warn!("manual_spawn_tile AI failed: {e:#}");
-            journal.write(&JournalEvent::Error { unix_ms: now_unix_ms(), module: "manual_spawn", message: &format!("{e:#}") });
-            return;
-        }
-    };
+    let (answer, usage) =
+        match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512).await {
+            Ok(t) => {
+                bump_health_ai(&rt);
+                t
+            }
+            Err(e) => {
+                log::warn!("manual_spawn_tile AI failed: {e:#}");
+                journal.write(&JournalEvent::Error {
+                    unix_ms: now_unix_ms(),
+                    module: "manual_spawn",
+                    message: &format!("{e:#}"),
+                });
+                return;
+            }
+        };
     let micro = ai::cost_microcents(&model, usage.input, usage.output);
     let total = {
         let mut s = rt.lock();
         s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
         (s.session_cost_microcents as f64) / 100_000_000.0
     };
-    let _ = app.emit_to("overlay", "cost:update", serde_json::json!({ "session_usd": total }));
+    let _ = app.emit_to(
+        "overlay",
+        "cost:update",
+        serde_json::json!({ "session_usd": total }),
+    );
     journal.write(&JournalEvent::AiResponse {
-        unix_ms: now_unix_ms(), purpose: "manual_spawn", model: &model,
-        latency_ms: t0.elapsed().as_millis() as u64, finish_reason: "stop", text: &answer,
-        output_tokens_est: usage.output, cost_microcents: micro,
+        unix_ms: now_unix_ms(),
+        purpose: "manual_spawn",
+        model: &model,
+        latency_ms: t0.elapsed().as_millis() as u64,
+        finish_reason: "stop",
+        text: &answer,
+        output_tokens_est: usage.output,
+        cost_microcents: micro,
     });
     let question = format!("✋ {}", line.text);
     store_last_qa(&rt, &question, answer.trim());
-    match crate::tile::spawn_tile_with_stealth(&app, &tiles, question.clone(), answer.trim().to_string(), preferred_monitor, stealth, crate::tile::TileKind::Manual) {
+    match crate::tile::spawn_tile_with_stealth(
+        &app,
+        &tiles,
+        question.clone(),
+        answer.trim().to_string(),
+        preferred_monitor,
+        stealth,
+        crate::tile::TileKind::Manual,
+    ) {
         Ok(label) => journal.write(&JournalEvent::TileSpawn {
-            unix_ms: now_unix_ms(), label: &label, question: &question, answer: &answer,
+            unix_ms: now_unix_ms(),
+            label: &label,
+            question: &question,
+            answer: &answer,
         }),
         Err(e) => log::warn!("manual spawn_tile failed: {e:#}"),
     }
@@ -2605,10 +2867,9 @@ pub async fn ask(app: AppHandle, cfg: SharedConfig, rt: SharedRuntime) {
                 AiEvent::Delta { text } => {
                     // Lock-free atomic store per token — replaces previous
                     // `bump_health_ai(&rt_clone)` that took a Mutex per call.
-                    health_for_stream.last_ai_ok_ms.store(
-                        now_unix_ms() as u64,
-                        Ordering::Relaxed,
-                    );
+                    health_for_stream
+                        .last_ai_ok_ms
+                        .store(now_unix_ms() as u64, Ordering::Relaxed);
                     accumulated.push_str(text);
                 }
                 AiEvent::Done { reason } => finish = reason.clone(),
@@ -2789,9 +3050,8 @@ mod tests {
             (vec!["normal line".to_string()], "Senior SRE"),
             (vec!["a".to_string(); 50], "x".repeat(2000).as_str()),
         ] {
-            let (sys, _usr) = build_auto_tile_prompts(
-                &Trigger::Question("q".into()), lines, ctx, "ru",
-            );
+            let (sys, _usr) =
+                build_auto_tile_prompts(&Trigger::Question("q".into()), lines, ctx, "ru");
             assert!(
                 sys.contains("БЕЗОПАСНОСТЬ"),
                 "system prompt missing anti-injection block for input shape {lines:?}"
@@ -2807,22 +3067,24 @@ mod tests {
     /// makes up answers to malformed transcripts.
     #[test]
     fn prompt_contains_garbage_and_offtopic_guards() {
-        let (sys, _) = build_auto_tile_prompts(
-            &Trigger::Question("test".into()), &[], "", "ru",
-        );
+        let (sys, _) = build_auto_tile_prompts(&Trigger::Question("test".into()), &[], "", "ru");
         assert!(sys.contains("мусор"), "missing garbage-input rule");
         assert!(sys.contains("повтори?"), "missing 'повтори?' fallback");
-        assert!(sys.contains("не про техническую"), "missing off-topic short-circuit");
-        assert!(sys.contains("НЕ ВЫДУМЫВАЙ"), "missing 'don't fabricate' rule");
+        assert!(
+            sys.contains("не про техническую"),
+            "missing off-topic short-circuit"
+        );
+        assert!(
+            sys.contains("НЕ ВЫДУМЫВАЙ"),
+            "missing 'don't fabricate' rule"
+        );
     }
 
     /// Whisper artifact recovery hints must be in the prompt — these are
     /// the canonical Cyrillic-mangling → Latin recoveries.
     #[test]
     fn prompt_contains_whisper_artifact_recovery_hints() {
-        let (sys, _) = build_auto_tile_prompts(
-            &Trigger::Question("test".into()), &[], "", "ru",
-        );
+        let (sys, _) = build_auto_tile_prompts(&Trigger::Question("test".into()), &[], "", "ru");
         assert!(sys.contains("К87С") || sys.contains("K8s"));
         assert!(sys.contains("гинкс") || sys.contains("nginx"));
         // Newly added in morning addendum:
@@ -2845,28 +3107,33 @@ mod tests {
             "ru",
         );
         assert!(usr.contains("Что такое kubernetes?"));
-        assert!(usr.contains("реплика номер 49"), "missing newest transcript lines");
+        assert!(
+            usr.contains("реплика номер 49"),
+            "missing newest transcript lines"
+        );
     }
 
     /// Empty transcript must not crash + still produce coherent prompt.
     #[test]
     fn prompt_handles_empty_transcript() {
-        let (sys, usr) = build_auto_tile_prompts(
-            &Trigger::Question("q?".into()), &[], "", "ru",
-        );
+        let (sys, usr) = build_auto_tile_prompts(&Trigger::Question("q?".into()), &[], "", "ru");
         assert!(!sys.is_empty());
         assert!(!usr.is_empty());
-        assert!(usr.contains("транскрипт пуст") || usr.contains("(транскрипт пуст)"),
-            "empty-transcript placeholder missing");
+        assert!(
+            usr.contains("транскрипт пуст") || usr.contains("(транскрипт пуст)"),
+            "empty-transcript placeholder missing"
+        );
     }
 
     /// Russian language rule must dominate when response_language="ru".
     #[test]
     fn prompt_enforces_russian_response_when_configured() {
-        let (sys, _) = build_auto_tile_prompts(
-            &Trigger::Question("how to scale?".into()), &[], "", "ru",
+        let (sys, _) =
+            build_auto_tile_prompts(&Trigger::Question("how to scale?".into()), &[], "", "ru");
+        assert!(
+            sys.contains("ИСКЛЮЧИТЕЛЬНО на русском"),
+            "missing strict Russian rule"
         );
-        assert!(sys.contains("ИСКЛЮЧИТЕЛЬНО на русском"), "missing strict Russian rule");
     }
 
     /// Off-topic question handler is still present even when meeting context
@@ -2874,7 +3141,10 @@ mod tests {
     #[test]
     fn prompt_offtopic_guard_present_with_empty_context() {
         let (sys, _) = build_auto_tile_prompts(
-            &Trigger::Question("Какая погода в Москве?".into()), &[], "", "ru",
+            &Trigger::Question("Какая погода в Москве?".into()),
+            &[],
+            "",
+            "ru",
         );
         assert!(sys.contains("не про техническую"));
     }
@@ -2889,7 +3159,8 @@ mod tests {
 
     #[test]
     fn detect_keyword() {
-        match detect_trigger("Мы используем etcd для consensus", "kubernetes etcd istio") {
+        match detect_trigger("Мы используем etcd для consensus", "kubernetes etcd istio")
+        {
             Some(Trigger::Keyword(kw, _)) => assert_eq!(kw, "etcd"),
             _ => panic!("expected keyword trigger"),
         }
@@ -2909,8 +3180,14 @@ mod tests {
 
     #[test]
     fn kb_match_single_token_key() {
-        assert!(kb_key_matches_trigger("kubernetes", "Какой-нибудь Kubernetes?"));
-        assert!(kb_key_matches_trigger("etcd", "Расскажи как работает etcd внутри"));
+        assert!(kb_key_matches_trigger(
+            "kubernetes",
+            "Какой-нибудь Kubernetes?"
+        ));
+        assert!(kb_key_matches_trigger(
+            "etcd",
+            "Расскажи как работает etcd внутри"
+        ));
     }
 
     #[test]
@@ -2923,7 +3200,10 @@ mod tests {
             "как сделать kubectl debug на упавшем поде",
         ));
         // Both tokens of the key must appear; one missing → no match.
-        assert!(!kb_key_matches_trigger("kubectl-debug", "kubectl plan apply"));
+        assert!(!kb_key_matches_trigger(
+            "kubectl-debug",
+            "kubectl plan apply"
+        ));
         assert!(!kb_key_matches_trigger("kubectl-debug", "debug a pod"));
     }
 
@@ -2931,7 +3211,10 @@ mod tests {
     fn kb_match_is_case_insensitive() {
         assert!(kb_key_matches_trigger("Kubernetes", "kubernetes pods"));
         assert!(kb_key_matches_trigger("kubernetes", "KUBERNETES POD"));
-        assert!(kb_key_matches_trigger("Git-Recovery", "git recovery please"));
+        assert!(kb_key_matches_trigger(
+            "Git-Recovery",
+            "git recovery please"
+        ));
     }
 
     #[test]
@@ -3021,7 +3304,10 @@ mod tests {
         push_speech_window(&rt, now - 2_000, 3, 1); // <5s span, <5 words
         let snap = snapshot_speech_coach(&rt, now);
         assert!(snap.wpm.is_none(), "insufficient data shouldn't report WPM");
-        assert!(snap.filler_per_100.is_none(), "insufficient data shouldn't report density");
+        assert!(
+            snap.filler_per_100.is_none(),
+            "insufficient data shouldn't report density"
+        );
         assert_eq!(snap.pace, "idle");
     }
 
@@ -3032,7 +3318,11 @@ mod tests {
         // 60 words across 60s = 60 WPM → low
         push_speech_window(&rt, now - 60_000, 60, 0);
         let snap = snapshot_speech_coach(&rt, now);
-        assert_eq!(snap.pace, "low", "60 WPM should be 'low'; got {:?}", snap.wpm);
+        assert_eq!(
+            snap.pace, "low",
+            "60 WPM should be 'low'; got {:?}",
+            snap.wpm
+        );
     }
 
     #[test]
@@ -3126,7 +3416,7 @@ mod tests {
     #[test]
     fn detector_regression_candidate_voice_no_spawn() {
         let source = AudioSource::Mic; // candidate speaking
-        let cfg_skip_mic = true;       // default v0.0.2+
+        let cfg_skip_mic = true; // default v0.0.2+
         assert!(
             !detector_allows(source, cfg_skip_mic),
             "candidate's own mic line must NOT trigger detector when skip_mic=true"
@@ -3156,7 +3446,10 @@ mod tests {
         assert!(r.is_some());
         let msg = r.unwrap();
         assert!(msg.contains("over budget"), "got: {msg}");
-        assert!(msg.contains("$1.01") || msg.contains("$1.0100"), "shows current spend; got: {msg}");
+        assert!(
+            msg.contains("$1.01") || msg.contains("$1.0100"),
+            "shows current spend; got: {msg}"
+        );
     }
 
     #[test]
@@ -3246,7 +3539,11 @@ mod tests {
         // Live FP: "А когда он загрузился, ему мастер-сервер отдает все параметры."
         // 'когда' here = temporal "when", not interrogative.
         assert!(
-            detect_trigger("А когда он загрузился, ему мастер-сервер отдает все параметры", "").is_none(),
+            detect_trigger(
+                "А когда он загрузился, ему мастер-сервер отдает все параметры",
+                ""
+            )
+            .is_none(),
             "v3: 'когда' as temporal conjunction should not trigger"
         );
     }
@@ -3265,7 +3562,11 @@ mod tests {
     fn skip_chto_as_relative_in_explanation() {
         // Live FP: "Используется, что собирается ISO-шник"
         assert!(
-            detect_trigger("Там такое же самое используется, что собирается ISO-шник", "").is_none(),
+            detect_trigger(
+                "Там такое же самое используется, что собирается ISO-шник",
+                ""
+            )
+            .is_none(),
             "v3: 'что собирается' = relative clause, not a question"
         );
     }
@@ -3379,7 +3680,8 @@ mod tests {
     fn keyword_devops_basics_match() {
         let keywords = "kubernetes nginx prometheus";
         // Mention of nginx as keyword.
-        match detect_trigger("мы используем nginx в качестве reverse proxy", keywords) {
+        match detect_trigger("мы используем nginx в качестве reverse proxy", keywords)
+        {
             Some(Trigger::Keyword(kw, _)) => assert_eq!(kw, "nginx"),
             other => panic!("expected nginx keyword, got {other:?}"),
         }
@@ -3404,7 +3706,7 @@ mod tests {
     fn noise_filter_rejects_too_few_words() {
         assert!(!looks_like_real_speech("ok"));
         assert!(!looks_like_real_speech("да!"));
-        assert!(!looks_like_real_speech("в как"));  // 2 short tokens, both <3 chars
+        assert!(!looks_like_real_speech("в как")); // 2 short tokens, both <3 chars
     }
 
     #[test]
@@ -3421,7 +3723,9 @@ mod tests {
     #[test]
     fn noise_filter_accepts_normal_speech_with_punct() {
         // Plenty of alnum chars even with commas/dots
-        assert!(looks_like_real_speech("Ну вот, допустим, у нас есть кластер."));
+        assert!(looks_like_real_speech(
+            "Ну вот, допустим, у нас есть кластер."
+        ));
     }
 
     #[test]
@@ -3522,7 +3826,11 @@ mod tests {
         let mut t = VecDeque::new();
         for i in 0..10 {
             t.push_back(mk_line(
-                if i % 2 == 0 { AudioSource::Mic } else { AudioSource::System },
+                if i % 2 == 0 {
+                    AudioSource::Mic
+                } else {
+                    AudioSource::System
+                },
                 &format!("line{i}"),
             ));
         }
@@ -3600,13 +3908,7 @@ mod tests {
         }
 
         // These should NOT trigger — quiet acknowledgements, fillers, etc.
-        let non_triggering = [
-            "да-да понял",
-            "угу",
-            "ну вот так",
-            "конечно",
-            "так точно",
-        ];
+        let non_triggering = ["да-да понял", "угу", "ну вот так", "конечно", "так точно"];
         for text in non_triggering.iter() {
             assert!(
                 detect_trigger(text, kws).is_none(),

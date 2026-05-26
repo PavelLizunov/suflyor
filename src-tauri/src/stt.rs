@@ -97,18 +97,21 @@ pub fn spawn(
             let rms = rms_i16(&chunk.pcm_i16);
             // Every ~5s log the max RMS we saw — helps diagnose silent/missing capture.
             let entry = max_rms_log.entry(chunk.source).or_insert((0.0, 0));
-            if rms > entry.0 { entry.0 = rms; }
+            if rms > entry.0 {
+                entry.0 = rms;
+            }
             entry.1 = entry.1.saturating_add(1);
             if entry.1 >= 25 {
                 log::info!(
                     "STT [{:?}] last 5s max-RMS={:.1} (VAD threshold {})",
-                    chunk.source, entry.0, VAD_RMS_THRESHOLD
+                    chunk.source,
+                    entry.0,
+                    VAD_RMS_THRESHOLD
                 );
                 entry.0 = 0.0;
                 entry.1 = 0;
             }
-            let chunk_duration_ms =
-                (chunk.pcm_i16.len() as u64 * 1000) / TARGET_SAMPLE_RATE as u64;
+            let chunk_duration_ms = (chunk.pcm_i16.len() as u64 * 1000) / TARGET_SAMPLE_RATE as u64;
 
             utt.samples.extend_from_slice(&chunk.pcm_i16);
             utt.last_ts_ms = chunk.timestamp_ms;
@@ -147,7 +150,8 @@ pub fn spawn(
                 if !speech_like {
                     log::info!(
                         "noise-gate dropped {:?} buffer ({:.1}s) — pre-Whisper",
-                        chunk.source, dur_sec
+                        chunk.source,
+                        dur_sec
                     );
                 }
                 if to_send.had_voice && dur_sec >= MIN_UTTERANCE_SEC && speech_like {
@@ -163,7 +167,10 @@ pub fn spawn(
                     let sem = stt_semaphore.clone();
                     log::info!(
                         "STT submitting {:?}: {} samples ({:.1}s, model={})",
-                        src, sample_count, dur_sec, stt_model
+                        src,
+                        sample_count,
+                        dur_sec,
+                        stt_model
                     );
                     tokio::spawn(async move {
                         // Bound concurrent Whisper calls — wait if 6 already in flight.
@@ -349,13 +356,13 @@ pub fn is_likely_hallucination(text: &str) -> bool {
         }
         // Same 2-word phrase repeated ("опыт работы опыт работы опыт работы")
         if words.len() >= 6 && words.len().is_multiple_of(2) {
-            let pair_match = (0..words.len() / 2).all(|i| {
-                words[2 * i] == words[0] && words[2 * i + 1] == words[1]
-            });
+            let pair_match = (0..words.len() / 2)
+                .all(|i| words[2 * i] == words[0] && words[2 * i + 1] == words[1]);
             if pair_match {
                 log::info!(
                     "hallucination filter: dropped — 2-word loop of '{} {}'",
-                    words[0], words[1]
+                    words[0],
+                    words[1]
                 );
                 return true;
             }
@@ -369,10 +376,7 @@ fn rms_i16(samples: &[i16]) -> f32 {
     if samples.is_empty() {
         return 0.0;
     }
-    let sum: f64 = samples
-        .iter()
-        .map(|&s| (s as f64).powi(2))
-        .sum();
+    let sum: f64 = samples.iter().map(|&s| (s as f64).powi(2)).sum();
     (sum / samples.len() as f64).sqrt() as f32
 }
 
@@ -453,7 +457,11 @@ async fn transcribe_once_attempt(
         .mime_str("audio/wav")?;
 
     // Use configured model; fall back to default if empty.
-    let model = if stt_model.is_empty() { DEFAULT_GROQ_MODEL } else { stt_model };
+    let model = if stt_model.is_empty() {
+        DEFAULT_GROQ_MODEL
+    } else {
+        stt_model
+    };
     let mut form = reqwest::multipart::Form::new()
         .text("model", model.to_string())
         .text("response_format", "json")
@@ -556,8 +564,10 @@ pub fn build_whisper_prompt(keywords: &str, meeting_context: &str) -> Option<Str
     // Lead with the canonical tech vocab so Whisper biases strongest here.
     // "Англоязычные термины пишутся латиницей" hints the decoder to keep
     // Latin spellings for the listed words even when audio is ambiguous.
-    out.push_str("Технический разговор о DevOps и SRE. Англоязычные термины \
-                  пишутся латиницей: ");
+    out.push_str(
+        "Технический разговор о DevOps и SRE. Англоязычные термины \
+                  пишутся латиницей: ",
+    );
 
     // BUDGET ALLOCATION: vocab is generic, user keywords are specific.
     // When the expanded vocab would consume the whole 800-char budget,
@@ -565,12 +575,20 @@ pub fn build_whisper_prompt(keywords: &str, meeting_context: &str) -> Option<Str
     // by `whisper_prompt_includes_keywords_for_bias` test). Reserve at
     // minimum 180 chars for keywords + 100 for context if those inputs
     // are present, then trim vocab to whatever's left.
-    let kw_joined = if !kw.is_empty() { Some(kw.join(", ")) } else { None };
+    let kw_joined = if !kw.is_empty() {
+        Some(kw.join(", "))
+    } else {
+        None
+    };
     let kw_section_len = kw_joined
         .as_ref()
         .map(|s| ". Дополнительно: ".chars().count() + s.chars().count())
         .unwrap_or(0);
-    let ctx_section_min = if !ctx.is_empty() { ". Контекст: ".chars().count() + 80 } else { 0 };
+    let ctx_section_min = if !ctx.is_empty() {
+        ". Контекст: ".chars().count() + 80
+    } else {
+        0
+    };
     let header_used = out.chars().count();
     let vocab_budget = MAX_CHARS
         .saturating_sub(header_used)
@@ -581,10 +599,7 @@ pub fn build_whisper_prompt(keywords: &str, meeting_context: &str) -> Option<Str
     } else {
         // Truncate vocab on whitespace boundary so we don't end mid-token
         // (Whisper would otherwise treat "kuberne" as a noise token).
-        let trimmed: String = CANONICAL_TECH_VOCAB
-            .chars()
-            .take(vocab_budget)
-            .collect();
+        let trimmed: String = CANONICAL_TECH_VOCAB.chars().take(vocab_budget).collect();
         let cut = trimmed.rfind(' ').unwrap_or(trimmed.len());
         out.push_str(&trimmed[..cut]);
     }
@@ -636,13 +651,13 @@ fn encode_wav_pcm_i16_mono_16k(pcm: &[i16]) -> Result<Vec<u8>> {
 
     // fmt chunk
     out.write_all(b"fmt ")?;
-    out.write_all(&16u32.to_le_bytes())?;                  // chunk size
-    out.write_all(&1u16.to_le_bytes())?;                   // PCM
-    out.write_all(&1u16.to_le_bytes())?;                   // mono
-    out.write_all(&TARGET_SAMPLE_RATE.to_le_bytes())?;     // sample rate
+    out.write_all(&16u32.to_le_bytes())?; // chunk size
+    out.write_all(&1u16.to_le_bytes())?; // PCM
+    out.write_all(&1u16.to_le_bytes())?; // mono
+    out.write_all(&TARGET_SAMPLE_RATE.to_le_bytes())?; // sample rate
     out.write_all(&(TARGET_SAMPLE_RATE * 2).to_le_bytes())?; // byte rate
-    out.write_all(&2u16.to_le_bytes())?;                   // block align
-    out.write_all(&16u16.to_le_bytes())?;                  // bits per sample
+    out.write_all(&2u16.to_le_bytes())?; // block align
+    out.write_all(&16u16.to_le_bytes())?; // bits per sample
 
     // data chunk
     out.write_all(b"data")?;
@@ -688,7 +703,10 @@ mod tests {
         let reader = hound::WavReader::new(cursor).expect("hound must accept our WAV");
         let spec = reader.spec();
         assert_eq!(spec.channels, 1, "must be mono");
-        assert_eq!(spec.sample_rate, 16_000, "must be 16 kHz (Whisper requirement)");
+        assert_eq!(
+            spec.sample_rate, 16_000,
+            "must be 16 kHz (Whisper requirement)"
+        );
         assert_eq!(spec.bits_per_sample, 16);
         assert_eq!(spec.sample_format, hound::SampleFormat::Int);
 
@@ -820,7 +838,10 @@ mod tests {
         // the per-user budget is reserved (e.g. 500-char trigger_keywords).
         // The bias for highest-priority terms is still preserved.
         let p = build_whisper_prompt("etcd", "").unwrap();
-        assert!(p.contains("kubernetes"), "canonical vocab must include kubernetes");
+        assert!(
+            p.contains("kubernetes"),
+            "canonical vocab must include kubernetes"
+        );
         assert!(p.contains("docker"));
         assert!(p.contains("gitlab"));
         assert!(p.contains("ansible"));
@@ -828,7 +849,10 @@ mod tests {
         // Canonical vocab appears before user keywords
         let canon_pos = p.find("kubernetes").unwrap();
         let user_pos = p.find("etcd").unwrap();
-        assert!(canon_pos < user_pos, "canonical vocab must precede user keywords");
+        assert!(
+            canon_pos < user_pos,
+            "canonical vocab must precede user keywords"
+        );
     }
 
     #[test]
@@ -860,23 +884,35 @@ mod tests {
     #[test]
     fn whisper_prompt_keywords_only_no_context_section() {
         let p = build_whisper_prompt("kubernetes", "").unwrap();
-        assert!(!p.contains("Контекст:"), "no context section when context empty");
+        assert!(
+            !p.contains("Контекст:"),
+            "no context section when context empty"
+        );
     }
 
     #[test]
     fn whisper_prompt_context_only_no_terms_section() {
         let p = build_whisper_prompt("", "Interview about cloud infra").unwrap();
-        assert!(!p.contains("Термины:"), "no terms section when keywords empty");
+        assert!(
+            !p.contains("Термины:"),
+            "no terms section when keywords empty"
+        );
         assert!(p.contains("Interview"));
     }
 
     #[test]
     fn whisper_prompt_skips_context_when_budget_exhausted() {
         // Keywords fill the entire 800-char budget — context must NOT be appended.
-        let huge_kw: String = (0..500).map(|i| format!("verylongtermname{i:04}")).collect::<Vec<_>>().join(" ");
+        let huge_kw: String = (0..500)
+            .map(|i| format!("verylongtermname{i:04}"))
+            .collect::<Vec<_>>()
+            .join(" ");
         let p = build_whisper_prompt(&huge_kw, "context that should be dropped").unwrap();
         // The kw budget is full; "Контекст:" should be absent.
-        assert!(!p.contains("Контекст:"), "context must be dropped when keyword budget overflows");
+        assert!(
+            !p.contains("Контекст:"),
+            "context must be dropped when keyword budget overflows"
+        );
     }
 
     // ── Anti-hallucination tests ──
@@ -898,7 +934,8 @@ mod tests {
     fn noise_gate_rejects_silence_plus_one_spike() {
         // 2s silence + 100ms loud spike. Voice ratio < 25% → drop.
         let mut buf = vec![0i16; 32000];
-        for sample in buf.iter_mut().take(1600) {  // 100ms at start
+        for sample in buf.iter_mut().take(1600) {
+            // 100ms at start
             *sample = 5000;
         }
         assert!(!buffer_likely_speech(&buf), "isolated spike isn't speech");
@@ -910,7 +947,10 @@ mod tests {
         let speech: Vec<i16> = (0..32000)
             .map(|i| ((i as f32 * 0.1).sin() * 5000.0) as i16)
             .collect();
-        assert!(buffer_likely_speech(&speech), "sustained signal should pass");
+        assert!(
+            buffer_likely_speech(&speech),
+            "sustained signal should pass"
+        );
     }
 
     #[test]
@@ -935,16 +975,25 @@ mod tests {
         assert!(is_likely_hallucination("опыт опыт опыт опыт"));
         assert!(is_likely_hallucination("foo foo foo"));
         // 2-word loop
-        assert!(is_likely_hallucination("опыт работы опыт работы опыт работы"));
+        assert!(is_likely_hallucination(
+            "опыт работы опыт работы опыт работы"
+        ));
     }
 
     #[test]
     fn hallucination_filter_accepts_real_speech() {
         assert!(!is_likely_hallucination("А что такое etcd?"));
-        assert!(!is_likely_hallucination("Расскажи как ты диагностировал бы такое"));
-        assert!(!is_likely_hallucination("Спасибо за ответ"), "not a YT phrase");
+        assert!(!is_likely_hallucination(
+            "Расскажи как ты диагностировал бы такое"
+        ));
+        assert!(
+            !is_likely_hallucination("Спасибо за ответ"),
+            "not a YT phrase"
+        );
         // Edge: repeated word but not a loop.
-        assert!(!is_likely_hallucination("опыт работы и опыт жизни — оба важны"));
+        assert!(!is_likely_hallucination(
+            "опыт работы и опыт жизни — оба важны"
+        ));
     }
 
     #[test]

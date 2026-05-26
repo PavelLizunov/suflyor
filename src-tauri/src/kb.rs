@@ -149,7 +149,11 @@ pub fn search(query: &str, limit: usize) -> Vec<KBEntry> {
         }
     }
     scored.sort_by_key(|(rank, _)| *rank);
-    scored.into_iter().take(limit).map(|(_, e)| e.clone()).collect()
+    scored
+        .into_iter()
+        .take(limit)
+        .map(|(_, e)| e.clone())
+        .collect()
 }
 
 /// Get a single entry by exact key (case-insensitive). Used by `/keyname`
@@ -171,7 +175,12 @@ pub struct KBStats {
 
 pub fn stats() -> KBStats {
     let entries = all();
-    let mut stats = KBStats { total: entries.len(), glossary: 0, commands: 0, patterns: 0 };
+    let mut stats = KBStats {
+        total: entries.len(),
+        glossary: 0,
+        commands: 0,
+        patterns: 0,
+    };
     for e in entries {
         match e.source {
             "glossary" => stats.glossary += 1,
@@ -193,8 +202,16 @@ mod tests {
     #[test]
     fn all_loads_three_sources_with_floors() {
         let s = stats();
-        assert!(s.total >= 1500, "KB total {} below floor 1500 — was a file truncated?", s.total);
-        assert!(s.glossary >= 1000, "glossary {} below floor 1000", s.glossary);
+        assert!(
+            s.total >= 1500,
+            "KB total {} below floor 1500 — was a file truncated?",
+            s.total
+        );
+        assert!(
+            s.glossary >= 1000,
+            "glossary {} below floor 1000",
+            s.glossary
+        );
         assert!(s.commands >= 100, "commands {} below floor 100", s.commands);
         assert!(s.patterns >= 100, "patterns {} below floor 100", s.patterns);
         // sanity: source tags are correctly populated
@@ -210,7 +227,12 @@ mod tests {
     fn every_entry_well_formed() {
         for e in all() {
             assert!(!e.key.is_empty(), "empty key in heading: {}", e.heading);
-            assert_eq!(e.key, e.key.trim().to_lowercase(), "key not normalized: {}", e.key);
+            assert_eq!(
+                e.key,
+                e.key.trim().to_lowercase(),
+                "key not normalized: {}",
+                e.key
+            );
             assert!(!e.heading.is_empty());
             assert!(!e.body.is_empty(), "empty body for {}", e.key);
         }
@@ -221,7 +243,10 @@ mod tests {
     fn search_exact_key_wins() {
         let results = search("kubernetes", 5);
         assert!(!results.is_empty(), "no results for 'kubernetes'");
-        assert_eq!(results[0].key, "kubernetes", "exact-match should rank first");
+        assert_eq!(
+            results[0].key, "kubernetes",
+            "exact-match should rank first"
+        );
     }
 
     /// Search ranks "starts-with" above plain body containment.
@@ -266,10 +291,18 @@ mod tests {
     #[test]
     fn heading_lower_and_body_lower_populated_at_parse() {
         for e in all().iter().take(50) {
-            assert_eq!(e.heading_lower, e.heading.to_lowercase(),
-                "heading_lower out of sync for {}", e.key);
-            assert_eq!(e.body_lower, e.body.to_lowercase(),
-                "body_lower out of sync for {}", e.key);
+            assert_eq!(
+                e.heading_lower,
+                e.heading.to_lowercase(),
+                "heading_lower out of sync for {}",
+                e.key
+            );
+            assert_eq!(
+                e.body_lower,
+                e.body.to_lowercase(),
+                "body_lower out of sync for {}",
+                e.key
+            );
         }
     }
 
@@ -288,7 +321,10 @@ mod tests {
         let elapsed_ms = start.elapsed().as_millis();
         // Pre-cap on a debug build this would take many seconds; cap +
         // pre-lowered fields keep it well under a second.
-        assert!(elapsed_ms < 500, "search took {elapsed_ms}ms — query cap or body cache broken?");
+        assert!(
+            elapsed_ms < 500,
+            "search took {elapsed_ms}ms — query cap or body cache broken?"
+        );
     }
 
     /// Normal-sized query against the same content still returns the

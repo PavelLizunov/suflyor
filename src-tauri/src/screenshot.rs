@@ -20,9 +20,7 @@ pub fn capture_primary_jpeg() -> Result<String> {
     let mut buf = Vec::with_capacity(256 * 1024);
     let mut writer = Cursor::new(&mut buf);
     let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut writer, 70);
-    image
-        .write_with_encoder(encoder)
-        .context("encode jpeg")?;
+    image.write_with_encoder(encoder).context("encode jpeg")?;
 
     let b64 = base64::engine::general_purpose::STANDARD.encode(&buf);
     Ok(format!("data:image/jpeg;base64,{b64}"))

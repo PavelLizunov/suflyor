@@ -26,7 +26,8 @@ fn get_default_device(dir: &Direction) -> Result<wasapi::Device> {
 
 fn device_collection(dir: &Direction) -> Result<wasapi::DeviceCollection> {
     let e = DeviceEnumerator::new().context("DeviceEnumerator::new")?;
-    e.get_device_collection(dir).context("get_device_collection")
+    e.get_device_collection(dir)
+        .context("get_device_collection")
 }
 
 /// Target format for downstream STT.
@@ -57,10 +58,7 @@ pub struct DeviceList {
 
 /// Enumerate render + capture endpoints for settings dropdowns.
 pub fn list_devices() -> Result<DeviceList> {
-    wasapi::initialize_mta()
-        .ok()
-        .map(|_| ())
-        .unwrap_or(());
+    wasapi::initialize_mta().ok().map(|_| ()).unwrap_or(());
 
     Ok(DeviceList {
         outputs: enumerate(&Direction::Render).unwrap_or_default(),
@@ -124,13 +122,9 @@ pub fn start_capture(
         thread::Builder::new()
             .name("audio-system".into())
             .spawn(move || {
-                if let Err(e) = capture_thread(
-                    AudioSource::System,
-                    Direction::Render,
-                    sys_device,
-                    tx,
-                    stop,
-                ) {
+                if let Err(e) =
+                    capture_thread(AudioSource::System, Direction::Render, sys_device, tx, stop)
+                {
                     log::error!("system audio capture failed: {e:#}");
                 }
             })?;
@@ -143,13 +137,9 @@ pub fn start_capture(
         thread::Builder::new()
             .name("audio-mic".into())
             .spawn(move || {
-                if let Err(e) = capture_thread(
-                    AudioSource::Mic,
-                    Direction::Capture,
-                    mic_device,
-                    tx,
-                    stop,
-                ) {
+                if let Err(e) =
+                    capture_thread(AudioSource::Mic, Direction::Capture, mic_device, tx, stop)
+                {
                     log::error!("microphone capture failed: {e:#}");
                 }
             })?;
@@ -439,7 +429,8 @@ pub fn record_mic_blocking(duration_ms: u64, mic_device: Option<String>) -> Resu
     let ratio = actual_rate as f64 / TARGET_SAMPLE_RATE as f64;
     let deadline = Instant::now() + std::time::Duration::from_millis(duration_ms);
     let mut byte_q: VecDeque<u8> = VecDeque::with_capacity(64 * 1024);
-    let mut f32_all: Vec<f32> = Vec::with_capacity((actual_rate as usize) * (duration_ms as usize) / 1000);
+    let mut f32_all: Vec<f32> =
+        Vec::with_capacity((actual_rate as usize) * (duration_ms as usize) / 1000);
 
     while Instant::now() < deadline {
         if event.wait_for_event(500).is_err() {
@@ -549,7 +540,10 @@ mod tests {
         assert_eq!(out.len(), input.len());
         // Check sign + approximate magnitude on bounds.
         assert_eq!(out[0], 0);
-        assert!((out[3] - i16::MAX).abs() <= 1, "max should round to i16::MAX");
+        assert!(
+            (out[3] - i16::MAX).abs() <= 1,
+            "max should round to i16::MAX"
+        );
     }
 
     #[test]

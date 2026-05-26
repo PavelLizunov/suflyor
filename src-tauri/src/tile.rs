@@ -5,12 +5,10 @@
 
 use anyhow::{Context, Result};
 use parking_lot::Mutex;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tauri::{
-    AppHandle, LogicalPosition, Manager, Monitor, WebviewUrl, WebviewWindowBuilder,
-};
+use tauri::{AppHandle, LogicalPosition, Manager, Monitor, WebviewUrl, WebviewWindowBuilder};
 
 /// Monotonically-increasing tile sequence number, displayed in each tile's
 /// header as `#N` so the user can read tiles in chronological order even
@@ -41,10 +39,10 @@ pub fn reset_seq_counter() {
 // Grid math now passes (w, h_max) per spawn instead of using globals,
 // so MAX_TILES=6 still fits 2 col-pairs × ≥2 rows even on 1280p (since
 // the floors keep ratios sane).
-const TILE_W_PERCENT: f64 = 0.20;     // 20% of monitor width
-const TILE_H_PERCENT: f64 = 0.26;     // 26% of monitor height (initial)
+const TILE_W_PERCENT: f64 = 0.20; // 20% of monitor width
+const TILE_H_PERCENT: f64 = 0.26; // 26% of monitor height (initial)
 const TILE_H_MAX_PERCENT: f64 = 0.36; // up to 36% after markdown auto-grow
-const TILE_W_MIN: f64 = 340.0;        // ≥340 keeps markdown legible
+const TILE_W_MIN: f64 = 340.0; // ≥340 keeps markdown legible
 const TILE_H_MIN: f64 = 240.0;
 const TILE_H_MAX_MIN: f64 = 320.0;
 
@@ -123,10 +121,7 @@ fn pick_monitor(app: &AppHandle, preferred_name: Option<&str>) -> Option<Monitor
     // 2. First non-primary monitor (the user explicitly wants tiles on the
     //    second screen — Zoom on monitor #1, tiles on monitor #2)
     if monitors.len() > 1 {
-        if let Some(m) = monitors
-            .iter()
-            .find(|m| m.name().cloned() != primary_name)
-        {
+        if let Some(m) = monitors.iter().find(|m| m.name().cloned() != primary_name) {
             return Some(MonitorRect::from(m));
         }
     }
@@ -194,8 +189,7 @@ fn grid_position(monitor: &MonitorRect, dims: TileDims, index: usize) -> Logical
         0
     };
     let pair = pair.min(max_pairs);
-    let unclamped_start_x =
-        monitor.x + monitor.w - total_w - PAD - pair as f64 * pair_pitch;
+    let unclamped_start_x = monitor.x + monitor.w - total_w - PAD - pair as f64 * pair_pitch;
     // Final safety: clamp to monitor left edge (handles the impossible-
     // to-fit-even-one-pair case on absurdly narrow displays).
     let start_x = unclamped_start_x.max(monitor.x + PAD);
@@ -249,7 +243,16 @@ pub fn spawn_tile_with_stealth(
     stealth: bool,
     kind: TileKind,
 ) -> Result<String> {
-    spawn_tile_with_highlight(app, tiles, question, answer, preferred_monitor, stealth, kind, Vec::new())
+    spawn_tile_with_highlight(
+        app,
+        tiles,
+        question,
+        answer,
+        preferred_monitor,
+        stealth,
+        kind,
+        Vec::new(),
+    )
 }
 
 /// v0.0.20: like `spawn_tile_with_stealth` but accepts a list of keywords
@@ -266,7 +269,17 @@ pub fn spawn_tile_with_highlight(
     kind: TileKind,
     highlights: Vec<String>,
 ) -> Result<String> {
-    spawn_tile_with_generation(app, tiles, question, answer, preferred_monitor, stealth, kind, highlights, 0)
+    spawn_tile_with_generation(
+        app,
+        tiles,
+        question,
+        answer,
+        preferred_monitor,
+        stealth,
+        kind,
+        highlights,
+        0,
+    )
 }
 
 /// v0.0.69: like `spawn_tile_with_highlight` but also carries a
@@ -296,8 +309,8 @@ pub fn spawn_tile_with_generation(
     );
     let label = format!("tile-{id}");
 
-    let monitor = pick_monitor(app, preferred_monitor.as_deref())
-        .context("no monitor available")?;
+    let monitor =
+        pick_monitor(app, preferred_monitor.as_deref()).context("no monitor available")?;
     // v0.0.29: tile dimensions are now derived per-monitor (percentage-
     // based with absolute floors). Computed once here and reused for
     // grid_position + builder.inner_size + the JS resize cap.
@@ -364,13 +377,21 @@ pub fn spawn_tile_with_generation(
         let mut joined: Vec<String> = Vec::new();
         let mut total = 0usize;
         for kw in highlights.iter().take(8) {
-            if kw.is_empty() { continue; }
+            if kw.is_empty() {
+                continue;
+            }
             let enc = urlencoding_min(kw);
-            if total + enc.len() + 1 > 150 { break; }
+            if total + enc.len() + 1 > 150 {
+                break;
+            }
             total += enc.len() + 1;
             joined.push(enc);
         }
-        if joined.is_empty() { String::new() } else { format!("&hl={}", joined.join(",")) }
+        if joined.is_empty() {
+            String::new()
+        } else {
+            format!("&hl={}", joined.join(","))
+        }
     };
     // v0.0.29: pass max-height + max-width via URL so TileWindow.tsx
     // ResizeObserver can use the dynamic per-monitor cap instead of
@@ -386,7 +407,11 @@ pub fn spawn_tile_with_generation(
             (c.ui_language.clone(), c.tile_font_size)
         })
         .unwrap_or_else(|| ("ru".to_string(), 12));
-    let lang_param = if ui_lang == "en" { "&lang=en" } else { "&lang=ru" };
+    let lang_param = if ui_lang == "en" {
+        "&lang=en"
+    } else {
+        "&lang=ru"
+    };
     // v0.0.55: tile font size baked into URL so the tile can apply it
     // at mount without an IPC call. Clamp to [11, 18] defensively —
     // an out-of-range config file shouldn't crash the tile renderer.
@@ -401,9 +426,17 @@ pub fn spawn_tile_with_generation(
     };
     let route = format!(
         "index.html?tile=1&id={}&kind={}&seq={}{}&q={}&a={}&mh={}&mw={}{}&fs={}{}",
-        id, kind.as_str(), seq, hl_param, q_enc, a_enc,
-        dims.h_max.round() as i64, dims.w.round() as i64,
-        lang_param, fs_clamped, gen_param
+        id,
+        kind.as_str(),
+        seq,
+        hl_param,
+        q_enc,
+        a_enc,
+        dims.h_max.round() as i64,
+        dims.w.round() as i64,
+        lang_param,
+        fs_clamped,
+        gen_param
     );
 
     let window = match WebviewWindowBuilder::new(app, &label, WebviewUrl::App(route.into()))
@@ -479,7 +512,10 @@ pub fn spawn_tile_with_generation(
         }
     });
 
-    log::info!("tile spawned: label={label} q='{}'", question.chars().take(60).collect::<String>());
+    log::info!(
+        "tile spawned: label={label} q='{}'",
+        question.chars().take(60).collect::<String>()
+    );
     Ok(label)
 }
 
@@ -539,7 +575,9 @@ pub fn close_all_unpinned(app: &AppHandle, tiles: &SharedTiles) -> usize {
     // that might also acquire the tiles mutex.
     let to_close: Vec<String> = {
         let mut mgr = tiles.lock();
-        let unpinned: Vec<String> = mgr.active.iter()
+        let unpinned: Vec<String> = mgr
+            .active
+            .iter()
             .filter(|t| !t.pinned)
             .map(|t| t.label.clone())
             .collect();
@@ -609,7 +647,12 @@ mod tests {
 
     fn mock_monitor() -> MonitorRect {
         // 1920x1080 at origin (0, 0) — typical primary.
-        MonitorRect { x: 0.0, y: 0.0, w: 1920.0, h: 1080.0 }
+        MonitorRect {
+            x: 0.0,
+            y: 0.0,
+            w: 1920.0,
+            h: 1080.0,
+        }
     }
 
     /// Each tile in the grid must occupy a distinct rectangle even if it
@@ -650,13 +693,19 @@ mod tests {
             let p = grid_position(&m, d, i);
             assert!(
                 p.x >= m.x && p.x + d.w <= m.x + m.w,
-                "tile {i} x={} off horizontally", p.x
+                "tile {i} x={} off horizontally",
+                p.x
             );
             assert!(p.y >= m.y, "tile {i} y={} above monitor top", p.y);
             assert!(
                 p.y + d.h_max <= m.y + m.h,
                 "tile {i} y={} + h_max={} = {} exceeds monitor bottom y={} h={} -> bottom {}",
-                p.y, d.h_max, p.y + d.h_max, m.y, m.h, m.y + m.h
+                p.y,
+                d.h_max,
+                p.y + d.h_max,
+                m.y,
+                m.h,
+                m.y + m.h
             );
         }
     }
@@ -669,18 +718,27 @@ mod tests {
         // v0.0.29: 1100h is no longer "short" since dims.h_max scales down on
         // small monitors. Use 1080p — math: dims.h_max = max(1080*0.36, 320)
         // = 388.8 → row_h = 400.8. max_rows = (1080-24)/400.8 = 2.63 → 2.
-        let m = MonitorRect { x: 0.0, y: 0.0, w: 1920.0, h: 1080.0 };
+        let m = MonitorRect {
+            x: 0.0,
+            y: 0.0,
+            w: 1920.0,
+            h: 1080.0,
+        };
         let d = tile_dims_for(&m);
         let row_h = d.h_max + PAD;
         let max_rows = (((m.h - PAD * 2.0) / row_h).floor() as usize).max(1);
-        assert!(max_rows >= 2, "test fixture should allow ≥2 rows, got {max_rows}");
+        assert!(
+            max_rows >= 2,
+            "test fixture should allow ≥2 rows, got {max_rows}"
+        );
         let p0 = grid_position(&m, d, 0);
         let per_pair = COLS * max_rows;
         let p_next = grid_position(&m, d, per_pair);
         assert!(
             p_next.x < p0.x,
             "first tile of pair 2 should be left of pair 1 — got pair1.x={} pair2.x={}",
-            p0.x, p_next.x
+            p0.x,
+            p_next.x
         );
         // All MAX_TILES must still be on-screen vertically.
         for i in 0..MAX_TILES {
@@ -698,19 +756,26 @@ mod tests {
     /// at least PAD inside the monitor's left edge.
     #[test]
     fn grid_positions_stay_horizontal_on_720p_laptop() {
-        let m = MonitorRect { x: 0.0, y: 0.0, w: 1280.0, h: 720.0 };
+        let m = MonitorRect {
+            x: 0.0,
+            y: 0.0,
+            w: 1280.0,
+            h: 720.0,
+        };
         let d = tile_dims_for(&m);
         for i in 0..MAX_TILES {
             let p = grid_position(&m, d, i);
             assert!(
                 p.x >= m.x,
                 "tile {i} x={} fell off monitor LEFT (m.x={}) on 720p laptop",
-                p.x, m.x
+                p.x,
+                m.x
             );
             assert!(
                 p.x + d.w <= m.x + m.w + 1.0,
                 "tile {i} right edge {} past monitor right {} on 720p laptop",
-                p.x + d.w, m.x + m.w
+                p.x + d.w,
+                m.x + m.w
             );
         }
     }
@@ -721,14 +786,20 @@ mod tests {
     #[test]
     fn grid_positions_respect_non_zero_monitor_origin() {
         // 1280-wide secondary monitor anchored at x=1920 (right of primary).
-        let m = MonitorRect { x: 1920.0, y: 0.0, w: 1280.0, h: 720.0 };
+        let m = MonitorRect {
+            x: 1920.0,
+            y: 0.0,
+            w: 1280.0,
+            h: 720.0,
+        };
         let d = tile_dims_for(&m);
         for i in 0..MAX_TILES {
             let p = grid_position(&m, d, i);
             assert!(
                 p.x >= m.x,
                 "tile {i} x={} fell off secondary monitor LEFT (m.x={})",
-                p.x, m.x
+                p.x,
+                m.x
             );
             assert!(
                 p.x + d.w <= m.x + m.w + 1.0,
@@ -741,25 +812,55 @@ mod tests {
     #[test]
     fn tile_dims_scale_with_monitor_and_respect_floors() {
         // Large monitor: percentage-based.
-        let big = MonitorRect { x: 0.0, y: 0.0, w: 1920.0, h: 1080.0 };
+        let big = MonitorRect {
+            x: 0.0,
+            y: 0.0,
+            w: 1920.0,
+            h: 1080.0,
+        };
         let d = tile_dims_for(&big);
         assert!((d.w - 384.0).abs() < 0.1, "1920 × 0.20 = 384, got {}", d.w);
-        assert!((d.h - 280.8).abs() < 0.1, "1080 × 0.26 = 280.8, got {}", d.h);
-        assert!((d.h_max - 388.8).abs() < 0.1, "1080 × 0.36 = 388.8, got {}", d.h_max);
+        assert!(
+            (d.h - 280.8).abs() < 0.1,
+            "1080 × 0.26 = 280.8, got {}",
+            d.h
+        );
+        assert!(
+            (d.h_max - 388.8).abs() < 0.1,
+            "1080 × 0.36 = 388.8, got {}",
+            d.h_max
+        );
         assert!(d.w > d.h, "wider than tall (landscape tile)");
 
         // Small monitor: floors kick in.
-        let small = MonitorRect { x: 0.0, y: 0.0, w: 1280.0, h: 720.0 };
+        let small = MonitorRect {
+            x: 0.0,
+            y: 0.0,
+            w: 1280.0,
+            h: 720.0,
+        };
         let d = tile_dims_for(&small);
         assert_eq!(d.w, TILE_W_MIN, "1280 × 0.20 = 256 → clamped to floor");
         assert_eq!(d.h, TILE_H_MIN, "720 × 0.26 = 187 → clamped to floor");
-        assert_eq!(d.h_max, TILE_H_MAX_MIN, "720 × 0.36 = 259 → clamped to floor");
+        assert_eq!(
+            d.h_max, TILE_H_MAX_MIN,
+            "720 × 0.36 = 259 → clamped to floor"
+        );
 
         // 4K monitor: scales up.
-        let huge = MonitorRect { x: 0.0, y: 0.0, w: 3840.0, h: 2160.0 };
+        let huge = MonitorRect {
+            x: 0.0,
+            y: 0.0,
+            w: 3840.0,
+            h: 2160.0,
+        };
         let d = tile_dims_for(&huge);
         assert!((d.w - 768.0).abs() < 0.1, "3840 × 0.20 = 768, got {}", d.w);
-        assert!((d.h - 561.6).abs() < 0.1, "2160 × 0.26 = 561.6, got {}", d.h);
+        assert!(
+            (d.h - 561.6).abs() < 0.1,
+            "2160 × 0.26 = 561.6, got {}",
+            d.h
+        );
     }
 
     /// Top-right anchor: first tile's right edge should hug monitor's right edge.
@@ -774,7 +875,8 @@ mod tests {
         let right_edge = p1.x + d.w;
         assert!(
             (m.x + m.w - right_edge - PAD).abs() < 1.0,
-            "tile 1 right edge {right_edge} should be near monitor right {}", m.x + m.w
+            "tile 1 right edge {right_edge} should be near monitor right {}",
+            m.x + m.w
         );
         assert!(p0.y < m.y + d.h, "first row should be at the top");
     }
@@ -813,9 +915,27 @@ mod tests {
         let mgr = shared();
         {
             let mut m = mgr.lock();
-            m.active.push(ActiveTile { id: "a".into(), label: "tile-1".into(), created: Instant::now(), pinned: false, slot: 0 });
-            m.active.push(ActiveTile { id: "b".into(), label: "tile-2".into(), created: Instant::now(), pinned: false, slot: 1 });
-            m.active.push(ActiveTile { id: "c".into(), label: "tile-3".into(), created: Instant::now(), pinned: false, slot: 2 });
+            m.active.push(ActiveTile {
+                id: "a".into(),
+                label: "tile-1".into(),
+                created: Instant::now(),
+                pinned: false,
+                slot: 0,
+            });
+            m.active.push(ActiveTile {
+                id: "b".into(),
+                label: "tile-2".into(),
+                created: Instant::now(),
+                pinned: false,
+                slot: 1,
+            });
+            m.active.push(ActiveTile {
+                id: "c".into(),
+                label: "tile-3".into(),
+                created: Instant::now(),
+                pinned: false,
+                slot: 2,
+            });
         }
         assert!(set_tile_pinned(&mgr, "tile-2", true), "should find tile-2");
         {
@@ -848,7 +968,11 @@ mod tests {
             });
         }
         assert!(take_if_unpinned(&mgr, "tile-1"));
-        assert_eq!(mgr.lock().active.len(), 0, "tile must be removed from active");
+        assert_eq!(
+            mgr.lock().active.len(),
+            0,
+            "tile must be removed from active"
+        );
     }
 
     #[test]
@@ -896,8 +1020,14 @@ mod tests {
         // TTL fires first → tile removed; subsequent set_pin must fail.
         let took = take_if_unpinned(&mgr, "tile-race");
         let pinned_after = set_tile_pinned(&mgr, "tile-race", true);
-        assert!(took, "take should succeed when called first on unpinned tile");
-        assert!(!pinned_after, "pin must not silently succeed on already-removed tile");
+        assert!(
+            took,
+            "take should succeed when called first on unpinned tile"
+        );
+        assert!(
+            !pinned_after,
+            "pin must not silently succeed on already-removed tile"
+        );
     }
 
     // ── reap_expired (atomic core of reaper_tick) ──
@@ -907,20 +1037,41 @@ mod tests {
         let mgr = shared();
         let now = Instant::now();
         let old = now - Duration::from_secs(200); // older than TTL + grace
-        let new = now - Duration::from_secs(5);   // fresh
+        let new = now - Duration::from_secs(5); // fresh
         {
             let mut m = mgr.lock();
             // Old, unpinned — must be reaped
-            m.active.push(ActiveTile { id: "a".into(), label: "old-unpinned".into(), created: old, pinned: false, slot: 0 });
+            m.active.push(ActiveTile {
+                id: "a".into(),
+                label: "old-unpinned".into(),
+                created: old,
+                pinned: false,
+                slot: 0,
+            });
             // Old, pinned — must survive
-            m.active.push(ActiveTile { id: "b".into(), label: "old-pinned".into(), created: old, pinned: true, slot: 1 });
+            m.active.push(ActiveTile {
+                id: "b".into(),
+                label: "old-pinned".into(),
+                created: old,
+                pinned: true,
+                slot: 1,
+            });
             // New, unpinned — must survive (not yet expired)
-            m.active.push(ActiveTile { id: "c".into(), label: "new-unpinned".into(), created: new, pinned: false, slot: 2 });
+            m.active.push(ActiveTile {
+                id: "c".into(),
+                label: "new-unpinned".into(),
+                created: new,
+                pinned: false,
+                slot: 2,
+            });
         }
         let reaped = reap_expired(&mgr, now, Duration::from_secs(125)); // TTL + 5
         assert_eq!(reaped, vec!["old-unpinned".to_string()]);
         let labels: Vec<_> = mgr.lock().active.iter().map(|t| t.label.clone()).collect();
-        assert_eq!(labels, vec!["old-pinned".to_string(), "new-unpinned".into()]);
+        assert_eq!(
+            labels,
+            vec!["old-pinned".to_string(), "new-unpinned".into()]
+        );
     }
 
     #[test]
@@ -937,13 +1088,23 @@ mod tests {
         {
             let mut m = mgr.lock();
             // Created exactly now — duration_since == 0
-            m.active.push(ActiveTile { id: "x".into(), label: "fresh".into(), created: now, pinned: false, slot: 0 });
+            m.active.push(ActiveTile {
+                id: "x".into(),
+                label: "fresh".into(),
+                created: now,
+                pinned: false,
+                slot: 0,
+            });
         }
         // Sleep a microsecond so now elapses
         std::thread::sleep(Duration::from_millis(2));
         let later = Instant::now();
         let reaped = reap_expired(&mgr, later, Duration::from_millis(1));
-        assert_eq!(reaped, vec!["fresh".to_string()], "any duration > grace should reap");
+        assert_eq!(
+            reaped,
+            vec!["fresh".to_string()],
+            "any duration > grace should reap"
+        );
     }
 
     /// Pure-fn helper that mirrors the slot-picking logic inside spawn_tile.

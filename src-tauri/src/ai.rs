@@ -90,7 +90,11 @@ async fn stream_inner(
     // SECURITY: do NOT log the full URL — the configured ai_base_url often
     // contains the user's LAN IP / proxy port (network topology leak in
     // crash dumps / support bundles). Surface only model + message count.
-    log::info!("AI stream → /chat/completions (model={}, msgs={})", model, messages.len());
+    log::info!(
+        "AI stream → /chat/completions (model={}, msgs={})",
+        model,
+        messages.len()
+    );
 
     let resp = client
         .post(&url)
@@ -132,7 +136,9 @@ async fn stream_inner(
                 if payload == "[DONE]" {
                     log::info!("AI stream got [DONE]: deltas={}", delta_count);
                     let _ = tx
-                        .send(AiEvent::Done { reason: "stop".into() })
+                        .send(AiEvent::Done {
+                            reason: "stop".into(),
+                        })
                         .await;
                     return Ok(());
                 }
@@ -144,11 +150,7 @@ async fn stream_inner(
 
                 if !id_sent {
                     if let Some(id) = v.get("id").and_then(|x| x.as_str()) {
-                        let _ = tx
-                            .send(AiEvent::Start {
-                                id: id.to_string(),
-                            })
-                            .await;
+                        let _ = tx.send(AiEvent::Start { id: id.to_string() }).await;
                         id_sent = true;
                     }
                 }
@@ -244,7 +246,9 @@ pub fn cost_microcents(model: &str, input_tokens: u64, output_tokens: u64) -> u6
     // microcents per token = price_per_million_usd × 100_000_000 / 1_000_000 = price × 100
     let micro_in = (p_in_per_m * 100.0) as u64; // microcents per input token
     let micro_out = (p_out_per_m * 100.0) as u64;
-    input_tokens.saturating_mul(micro_in).saturating_add(output_tokens.saturating_mul(micro_out))
+    input_tokens
+        .saturating_mul(micro_in)
+        .saturating_add(output_tokens.saturating_mul(micro_out))
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -280,7 +284,11 @@ pub async fn complete_with_usage(
         match complete_once(base_url, bearer, model, messages.clone(), max_tokens).await {
             Ok(ok) => {
                 if attempt > 1 {
-                    log::info!("AI complete recovered on attempt {}/{}", attempt, MAX_ATTEMPTS);
+                    log::info!(
+                        "AI complete recovered on attempt {}/{}",
+                        attempt,
+                        MAX_ATTEMPTS
+                    );
                 }
                 return Ok(ok);
             }
@@ -298,7 +306,9 @@ pub async fn complete_with_usage(
                 let delay_ms = 1000u64 * (1u64 << (attempt - 1)); // 1s, 2s, 4s
                 log::warn!(
                     "AI complete attempt {}/{} failed: {msg} — retrying in {}ms",
-                    attempt, MAX_ATTEMPTS, delay_ms
+                    attempt,
+                    MAX_ATTEMPTS,
+                    delay_ms
                 );
                 tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
             }
@@ -339,9 +349,18 @@ async fn complete_once(
 
     // SECURITY: don't log the host portion of the URL (LAN IP/topology). See
     // the matching comment on stream_chat above for the rationale.
-    log::info!("AI complete → /chat/completions (model={}, msgs={})", model, messages.len());
+    log::info!(
+        "AI complete → /chat/completions (model={}, msgs={})",
+        model,
+        messages.len()
+    );
 
-    let resp = client.post(&url).bearer_auth(bearer).json(&body).send().await
+    let resp = client
+        .post(&url)
+        .bearer_auth(bearer)
+        .json(&body)
+        .send()
+        .await
         .context("POST chat/completions")?;
     if !resp.status().is_success() {
         let status = resp.status();
@@ -359,8 +378,16 @@ async fn complete_once(
         .unwrap_or("")
         .to_string();
     let usage = TokenUsage {
-        input: v.get("usage").and_then(|u| u.get("prompt_tokens")).and_then(|n| n.as_u64()).unwrap_or(0),
-        output: v.get("usage").and_then(|u| u.get("completion_tokens")).and_then(|n| n.as_u64()).unwrap_or(0),
+        input: v
+            .get("usage")
+            .and_then(|u| u.get("prompt_tokens"))
+            .and_then(|n| n.as_u64())
+            .unwrap_or(0),
+        output: v
+            .get("usage")
+            .and_then(|u| u.get("completion_tokens"))
+            .and_then(|n| n.as_u64())
+            .unwrap_or(0),
     };
     Ok((text, usage))
 }
@@ -372,8 +399,7 @@ pub async fn complete(
     messages: Vec<ChatMessage>,
     max_tokens: u32,
 ) -> Result<String> {
-    let (text, _usage) =
-        complete_with_usage(base_url, bearer, model, messages, max_tokens).await?;
+    let (text, _usage) = complete_with_usage(base_url, bearer, model, messages, max_tokens).await?;
     Ok(text)
 }
 
@@ -390,8 +416,10 @@ pub fn build_request(
 
     // System prompt: explicit role + meeting context + strict output rules.
     let lang_block = match response_language {
-        "ru" => "ВАЖНО: отвечай ИСКЛЮЧИТЕЛЬНО на русском языке. \
-                 Английский только для названий технологий и команд (e.g. `kubectl`).",
+        "ru" => {
+            "ВАЖНО: отвечай ИСКЛЮЧИТЕЛЬНО на русском языке. \
+                 Английский только для названий технологий и команд (e.g. `kubectl`)."
+        }
         "en" => "Respond exclusively in English.",
         _ => "Respond in the user's language.",
     };
@@ -559,7 +587,10 @@ mod tests {
     fn cost_microcents_haiku_known_value() {
         // Haiku: $1/M input + $5/M output. 1M input + 1M output = $6 = 600M microcents.
         // microcents per token: input=100, output=500
-        assert_eq!(cost_microcents("claude-haiku-4-5", 1_000_000, 1_000_000), 600_000_000);
+        assert_eq!(
+            cost_microcents("claude-haiku-4-5", 1_000_000, 1_000_000),
+            600_000_000
+        );
     }
 
     #[test]
@@ -576,7 +607,10 @@ mod tests {
         // Per pricing_per_million fallback.
         let m_known = cost_microcents("claude-sonnet-4-5", 1000, 1000);
         let m_unknown = cost_microcents("qwen-14b", 1000, 1000);
-        assert_eq!(m_known, m_unknown, "unknown model should fall back to sonnet pricing");
+        assert_eq!(
+            m_known, m_unknown,
+            "unknown model should fall back to sonnet pricing"
+        );
     }
 
     #[test]
@@ -666,7 +700,9 @@ mod tests {
             None,
         );
         if let MessageContent::Parts(parts) = &msgs[1].content {
-            assert!(parts.iter().any(|p| matches!(p, ContentPart::ImageUrl { .. })));
+            assert!(parts
+                .iter()
+                .any(|p| matches!(p, ContentPart::ImageUrl { .. })));
         } else {
             panic!("user content should be parts when screenshot attached");
         }

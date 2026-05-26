@@ -253,7 +253,9 @@ mod eval_module {
             }
             for e in events.iter().filter(|e| {
                 e.get("kind").and_then(|k| k.as_str()) == Some("detector_decision")
-                    && e.get("triggered").and_then(|b| b.as_bool()).unwrap_or(false)
+                    && e.get("triggered")
+                        .and_then(|b| b.as_bool())
+                        .unwrap_or(false)
             }) {
                 let text = e.get("text").and_then(|t| t.as_str()).unwrap_or("");
                 let normalized = normalize_for_quiet_match(text);
@@ -454,7 +456,10 @@ mod eval_module {
             match kind {
                 "transcript_line" => agg.transcript_lines += 1,
                 "detector_decision" => {
-                    if e.get("triggered").and_then(|b| b.as_bool()).unwrap_or(false) {
+                    if e.get("triggered")
+                        .and_then(|b| b.as_bool())
+                        .unwrap_or(false)
+                    {
                         agg.triggered += 1;
                     } else {
                         agg.skipped += 1;
@@ -499,7 +504,10 @@ mod eval_module {
         // ── Whisper accuracy ──
         let found_count = terms.iter().filter(|t| t.found).count();
         let total = terms.len();
-        let pct = found_count.saturating_mul(100).checked_div(total).unwrap_or(100);
+        let pct = found_count
+            .saturating_mul(100)
+            .checked_div(total)
+            .unwrap_or(100);
         out.push_str(&format!(
             "## Whisper accuracy\n\n{}/{} terms found ({}%)\n\n",
             found_count, total, pct
@@ -523,7 +531,10 @@ mod eval_module {
         // ── Detector recall ──
         let trig_hit = triggers.iter().filter(|t| t.triggered).count();
         let trig_total = triggers.len();
-        let trig_pct = trig_hit.saturating_mul(100).checked_div(trig_total).unwrap_or(100);
+        let trig_pct = trig_hit
+            .saturating_mul(100)
+            .checked_div(trig_total)
+            .unwrap_or(100);
         out.push_str(&format!(
             "## Detector recall\n\n{}/{} expected triggers fired ({}%)\n\n",
             trig_hit, trig_total, trig_pct
@@ -563,10 +574,7 @@ mod eval_module {
             out.push_str("(recounted from events — no session_summary present)\n\n");
         }
         out.push_str(&format!("- Duration: {:.1} min\n", agg.duration_min));
-        out.push_str(&format!(
-            "- Transcript: {} lines\n",
-            agg.transcript_lines
-        ));
+        out.push_str(&format!("- Transcript: {} lines\n", agg.transcript_lines));
         out.push_str(&format!(
             "- Detector: {} triggered / {} skipped\n",
             agg.triggered, agg.skipped
@@ -609,12 +617,19 @@ mod tests {
             duration_sec: None,
             domain: vec!["devops".into()],
             expected_terms: vec![
-                ExpectedTerm { canonical: "kubernetes".into(), aliases: vec!["k8s".into()] },
-                ExpectedTerm { canonical: "etcd".into(), aliases: vec![] },
+                ExpectedTerm {
+                    canonical: "kubernetes".into(),
+                    aliases: vec!["k8s".into()],
+                },
+                ExpectedTerm {
+                    canonical: "etcd".into(),
+                    aliases: vec![],
+                },
             ],
-            expected_triggers: vec![
-                ExpectedTrigger { text_match: "что такое pod".into(), must_trigger: true },
-            ],
+            expected_triggers: vec![ExpectedTrigger {
+                text_match: "что такое pod".into(),
+                must_trigger: true,
+            }],
             expected_quiet: vec!["угу".into()],
             answer_quality_notes: None,
         }
@@ -721,7 +736,10 @@ mod tests {
             true,
         )];
         let fp = check_quiet(&gt, &events);
-        assert!(fp.is_empty(), "real question containing filler chars must NOT be FP");
+        assert!(
+            fp.is_empty(),
+            "real question containing filler chars must NOT be FP"
+        );
     }
 
     #[test]
@@ -846,7 +864,10 @@ mod tests {
         // Strict: "отличается" must appear as a real token (stem-matched).
         assert!(text_matches_loosely("отличается", "чем отличается docker?"));
         // But not in unrelated speech where no token shares the stem.
-        assert!(!text_matches_loosely("отличается", "сегодня хорошая погода"));
+        assert!(!text_matches_loosely(
+            "отличается",
+            "сегодня хорошая погода"
+        ));
     }
 
     #[test]
@@ -864,17 +885,26 @@ mod tests {
     #[test]
     fn fuzzy_canonicalises_known_loanwords() {
         // Token-level alias mapping bridges Latin/Cyrillic for loanwords.
-        assert!(text_matches_loosely("ansible роли", "А расскажи про ансибл роли?"));
+        assert!(text_matches_loosely(
+            "ansible роли",
+            "А расскажи про ансибл роли?"
+        ));
         // Words without alias entries (like 'pods'/'поды') won't auto-bridge —
         // that's a design choice, not a bug. If a domain needs the mapping,
         // add to ALIASES.
-        assert!(text_matches_loosely("docker контейнер", "запустить docker контейнер"));
+        assert!(text_matches_loosely(
+            "docker контейнер",
+            "запустить docker контейнер"
+        ));
     }
 
     #[test]
     fn fuzzy_fast_path_still_works() {
         // Exact substring should hit stage A without modification.
-        assert!(text_matches_loosely("docker run", "пишем docker run hello-world"));
+        assert!(text_matches_loosely(
+            "docker run",
+            "пишем docker run hello-world"
+        ));
     }
 
     #[test]

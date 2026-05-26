@@ -245,7 +245,9 @@ fn bump_counters(c: &mut SessionCounters, event: &JournalEvent<'_>) {
         JournalEvent::AiRequest { .. } => {
             c.ai_requests_total = c.ai_requests_total.saturating_add(1);
         }
-        JournalEvent::AiResponse { cost_microcents, .. } => {
+        JournalEvent::AiResponse {
+            cost_microcents, ..
+        } => {
             c.ai_responses_ok = c.ai_responses_ok.saturating_add(1);
             c.total_cost_microcents = c.total_cost_microcents.saturating_add(*cost_microcents);
         }
@@ -288,11 +290,7 @@ pub const MAX_TOTAL_BYTES: u64 = 500 * 1024 * 1024; // 500 MB
 /// Like `prune_old_sessions` but ALSO enforces a total-size budget. After
 /// the count-based prune, if the remaining files still exceed `max_bytes`,
 /// delete the oldest until under the budget. Returns total files deleted.
-pub fn prune_old_sessions_with_size_cap(
-    dir: &Path,
-    keep: usize,
-    max_bytes: u64,
-) -> Result<usize> {
+pub fn prune_old_sessions_with_size_cap(dir: &Path, keep: usize, max_bytes: u64) -> Result<usize> {
     let mut entries: Vec<(SystemTime, u64, PathBuf)> = Vec::new();
     for e in std::fs::read_dir(dir).context("read sessions dir")? {
         let Ok(e) = e else { continue };
@@ -335,7 +333,9 @@ pub fn prune_old_sessions_with_size_cap(
                         deleted += 1;
                         log::info!(
                             "journal pruned by size budget: {} ({} bytes); {} bytes remain",
-                            path.display(), size, remaining
+                            path.display(),
+                            size,
+                            remaining
                         );
                     }
                     Err(e) => log::warn!("could not prune (size) {}: {e}", path.display()),
@@ -551,7 +551,7 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("overlay-sizecap-zero-{}", now_unix_ms()));
         std::fs::create_dir_all(&tmp).unwrap();
         make_jsonl_files(&tmp, 5, 10_000); // 5 files × 10 KB = 50 KB
-        // keep=10 (no count prune), max_bytes=0 (disabled) → 0 deleted.
+                                           // keep=10 (no count prune), max_bytes=0 (disabled) → 0 deleted.
         let deleted = prune_old_sessions_with_size_cap(&tmp, 10, 0).unwrap();
         assert_eq!(deleted, 0, "max_bytes=0 should disable size cap");
         std::fs::remove_dir_all(&tmp).ok();
@@ -562,7 +562,7 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("overlay-sizecap-under-{}", now_unix_ms()));
         std::fs::create_dir_all(&tmp).unwrap();
         make_jsonl_files(&tmp, 3, 1000); // 3 KB total
-        // 10 KB cap, 3 KB used → no prune.
+                                         // 10 KB cap, 3 KB used → no prune.
         let deleted = prune_old_sessions_with_size_cap(&tmp, 100, 10_000).unwrap();
         assert_eq!(deleted, 0);
         std::fs::remove_dir_all(&tmp).ok();
@@ -573,12 +573,13 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("overlay-sizecap-oldest-{}", now_unix_ms()));
         std::fs::create_dir_all(&tmp).unwrap();
         let files = make_jsonl_files(&tmp, 5, 10_000); // 50 KB total
-        // 25 KB cap → must delete 3 oldest (15 KB+ for total ≤ 25 KB after).
-        // After deleting 3 oldest, remaining = 2 × 10 KB = 20 KB ≤ 25 KB ✓.
+                                                       // 25 KB cap → must delete 3 oldest (15 KB+ for total ≤ 25 KB after).
+                                                       // After deleting 3 oldest, remaining = 2 × 10 KB = 20 KB ≤ 25 KB ✓.
         let deleted = prune_old_sessions_with_size_cap(&tmp, 100, 25_000).unwrap();
         assert_eq!(deleted, 3, "should delete 3 oldest to fit under 25 KB cap");
         // Verify the 2 NEWEST survive.
-        let survivors: Vec<_> = std::fs::read_dir(&tmp).unwrap()
+        let survivors: Vec<_> = std::fs::read_dir(&tmp)
+            .unwrap()
             .filter_map(|e| e.ok())
             .map(|e| e.path())
             .collect();
@@ -593,8 +594,8 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("overlay-sizecap-combo-{}", now_unix_ms()));
         std::fs::create_dir_all(&tmp).unwrap();
         make_jsonl_files(&tmp, 6, 10_000); // 6 × 10 KB = 60 KB
-        // keep=4 (count prune evicts 2), then 40 KB → cap 25 KB → evict 2 more.
-        // Total deleted = 4 (2 by count, 2 by size).
+                                           // keep=4 (count prune evicts 2), then 40 KB → cap 25 KB → evict 2 more.
+                                           // Total deleted = 4 (2 by count, 2 by size).
         let deleted = prune_old_sessions_with_size_cap(&tmp, 4, 25_000).unwrap();
         assert_eq!(deleted, 4, "2 by count + 2 by size = 4 total");
         let remaining = std::fs::read_dir(&tmp).unwrap().count();
@@ -607,8 +608,8 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("overlay-sizecap-exact-{}", now_unix_ms()));
         std::fs::create_dir_all(&tmp).unwrap();
         make_jsonl_files(&tmp, 2, 10_000); // 20 KB total
-        // 20 KB cap, 20 KB used — boundary case. Total > cap? `total > max_bytes`
-        // check uses strict >. Equal → no prune.
+                                           // 20 KB cap, 20 KB used — boundary case. Total > cap? `total > max_bytes`
+                                           // check uses strict >. Equal → no prune.
         let deleted = prune_old_sessions_with_size_cap(&tmp, 100, 20_000).unwrap();
         assert_eq!(deleted, 0, "at-boundary total should NOT trigger prune");
         std::fs::remove_dir_all(&tmp).ok();
@@ -619,9 +620,30 @@ mod tests {
     #[test]
     fn bump_transcript_lines_per_source() {
         let mut c = SessionCounters::default();
-        bump_counters(&mut c, &JournalEvent::TranscriptLine { unix_ms: 0, source: "mic", text: "" });
-        bump_counters(&mut c, &JournalEvent::TranscriptLine { unix_ms: 0, source: "system", text: "" });
-        bump_counters(&mut c, &JournalEvent::TranscriptLine { unix_ms: 0, source: "mic", text: "" });
+        bump_counters(
+            &mut c,
+            &JournalEvent::TranscriptLine {
+                unix_ms: 0,
+                source: "mic",
+                text: "",
+            },
+        );
+        bump_counters(
+            &mut c,
+            &JournalEvent::TranscriptLine {
+                unix_ms: 0,
+                source: "system",
+                text: "",
+            },
+        );
+        bump_counters(
+            &mut c,
+            &JournalEvent::TranscriptLine {
+                unix_ms: 0,
+                source: "mic",
+                text: "",
+            },
+        );
         assert_eq!(c.transcript_mic, 2);
         assert_eq!(c.transcript_system, 1);
     }
@@ -629,7 +651,14 @@ mod tests {
     #[test]
     fn bump_transcript_unknown_source_ignored() {
         let mut c = SessionCounters::default();
-        bump_counters(&mut c, &JournalEvent::TranscriptLine { unix_ms: 0, source: "weird", text: "" });
+        bump_counters(
+            &mut c,
+            &JournalEvent::TranscriptLine {
+                unix_ms: 0,
+                source: "weird",
+                text: "",
+            },
+        );
         assert_eq!(c.transcript_mic, 0);
         assert_eq!(c.transcript_system, 0);
     }
@@ -637,15 +666,33 @@ mod tests {
     #[test]
     fn bump_detector_decision_split_by_triggered() {
         let mut c = SessionCounters::default();
-        bump_counters(&mut c, &JournalEvent::DetectorDecision {
-            unix_ms: 0, text: "", triggered: true, trigger_kind: Some("question"),
-        });
-        bump_counters(&mut c, &JournalEvent::DetectorDecision {
-            unix_ms: 0, text: "", triggered: false, trigger_kind: None,
-        });
-        bump_counters(&mut c, &JournalEvent::DetectorDecision {
-            unix_ms: 0, text: "", triggered: false, trigger_kind: None,
-        });
+        bump_counters(
+            &mut c,
+            &JournalEvent::DetectorDecision {
+                unix_ms: 0,
+                text: "",
+                triggered: true,
+                trigger_kind: Some("question"),
+            },
+        );
+        bump_counters(
+            &mut c,
+            &JournalEvent::DetectorDecision {
+                unix_ms: 0,
+                text: "",
+                triggered: false,
+                trigger_kind: None,
+            },
+        );
+        bump_counters(
+            &mut c,
+            &JournalEvent::DetectorDecision {
+                unix_ms: 0,
+                text: "",
+                triggered: false,
+                trigger_kind: None,
+            },
+        );
         assert_eq!(c.detector_triggered, 1);
         assert_eq!(c.detector_skipped, 2);
     }
@@ -653,14 +700,32 @@ mod tests {
     #[test]
     fn bump_ai_response_accumulates_cost_microcents() {
         let mut c = SessionCounters::default();
-        bump_counters(&mut c, &JournalEvent::AiResponse {
-            unix_ms: 0, purpose: "live_ask", model: "haiku", latency_ms: 100,
-            finish_reason: "stop", text: "", output_tokens_est: 0, cost_microcents: 12_345,
-        });
-        bump_counters(&mut c, &JournalEvent::AiResponse {
-            unix_ms: 0, purpose: "auto_tile", model: "haiku", latency_ms: 200,
-            finish_reason: "stop", text: "", output_tokens_est: 0, cost_microcents: 6_789,
-        });
+        bump_counters(
+            &mut c,
+            &JournalEvent::AiResponse {
+                unix_ms: 0,
+                purpose: "live_ask",
+                model: "haiku",
+                latency_ms: 100,
+                finish_reason: "stop",
+                text: "",
+                output_tokens_est: 0,
+                cost_microcents: 12_345,
+            },
+        );
+        bump_counters(
+            &mut c,
+            &JournalEvent::AiResponse {
+                unix_ms: 0,
+                purpose: "auto_tile",
+                model: "haiku",
+                latency_ms: 200,
+                finish_reason: "stop",
+                text: "",
+                output_tokens_est: 0,
+                cost_microcents: 6_789,
+            },
+        );
         assert_eq!(c.ai_responses_ok, 2);
         assert_eq!(c.total_cost_microcents, 19_134);
     }
@@ -671,27 +736,59 @@ mod tests {
             total_cost_microcents: u64::MAX - 10,
             ..Default::default()
         };
-        bump_counters(&mut c, &JournalEvent::AiResponse {
-            unix_ms: 0, purpose: "x", model: "y", latency_ms: 0,
-            finish_reason: "stop", text: "", output_tokens_est: 0, cost_microcents: 1_000_000,
-        });
-        assert_eq!(c.total_cost_microcents, u64::MAX, "should saturate, not wrap");
+        bump_counters(
+            &mut c,
+            &JournalEvent::AiResponse {
+                unix_ms: 0,
+                purpose: "x",
+                model: "y",
+                latency_ms: 0,
+                finish_reason: "stop",
+                text: "",
+                output_tokens_est: 0,
+                cost_microcents: 1_000_000,
+            },
+        );
+        assert_eq!(
+            c.total_cost_microcents,
+            u64::MAX,
+            "should saturate, not wrap"
+        );
     }
 
     #[test]
     fn bump_session_meta_events_do_not_count() {
         let mut c = SessionCounters::default();
-        bump_counters(&mut c, &JournalEvent::SessionStart {
-            unix_ms: 0, meeting_context_chars: 100, ai_model: "haiku",
-            prep_model: "sonnet", stt_language: None, response_language: "ru",
-        });
+        bump_counters(
+            &mut c,
+            &JournalEvent::SessionStart {
+                unix_ms: 0,
+                meeting_context_chars: 100,
+                ai_model: "haiku",
+                prep_model: "sonnet",
+                stt_language: None,
+                response_language: "ru",
+            },
+        );
         bump_counters(&mut c, &JournalEvent::SessionStop { unix_ms: 0 });
-        bump_counters(&mut c, &JournalEvent::SessionSummary {
-            unix_ms: 0, duration_ms: 0, transcript_lines: 0,
-            transcript_mic: 0, transcript_system: 0, detector_triggered: 0,
-            detector_skipped: 0, ai_requests_total: 0, ai_responses_ok: 0,
-            ai_errors: 0, tiles_spawned: 0, rate_limited: 0, total_cost_microcents: 0,
-        });
+        bump_counters(
+            &mut c,
+            &JournalEvent::SessionSummary {
+                unix_ms: 0,
+                duration_ms: 0,
+                transcript_lines: 0,
+                transcript_mic: 0,
+                transcript_system: 0,
+                detector_triggered: 0,
+                detector_skipped: 0,
+                ai_requests_total: 0,
+                ai_responses_ok: 0,
+                ai_errors: 0,
+                tiles_spawned: 0,
+                rate_limited: 0,
+                total_cost_microcents: 0,
+            },
+        );
         // Nothing should have incremented.
         assert_eq!(c.transcript_mic, 0);
         assert_eq!(c.ai_requests_total, 0);
@@ -701,31 +798,89 @@ mod tests {
     fn bump_full_event_mix_aggregates_correctly() {
         let mut c = SessionCounters::default();
         // Simulate a mini-session: 2 mic + 1 sys lines, 1 detected, 1 ai req, 1 ai resp, 1 tile, 1 error.
-        bump_counters(&mut c, &JournalEvent::TranscriptLine { unix_ms: 1, source: "mic", text: "a" });
-        bump_counters(&mut c, &JournalEvent::TranscriptLine { unix_ms: 2, source: "mic", text: "b" });
-        bump_counters(&mut c, &JournalEvent::TranscriptLine { unix_ms: 3, source: "system", text: "c?" });
-        bump_counters(&mut c, &JournalEvent::DetectorDecision {
-            unix_ms: 4, text: "c?", triggered: true, trigger_kind: Some("question"),
-        });
-        bump_counters(&mut c, &JournalEvent::AiRequest {
-            unix_ms: 5, purpose: "auto_tile", model: "haiku",
-            system_prompt: "sys", user_prompt: "usr",
-            attached_screenshot: false, input_tokens_est: 100,
-        });
-        bump_counters(&mut c, &JournalEvent::AiResponse {
-            unix_ms: 6, purpose: "auto_tile", model: "haiku",
-            latency_ms: 500, finish_reason: "stop",
-            text: "answer", output_tokens_est: 50, cost_microcents: 500,
-        });
-        bump_counters(&mut c, &JournalEvent::TileSpawn {
-            unix_ms: 7, label: "tile-1", question: "c?", answer: "answer",
-        });
-        bump_counters(&mut c, &JournalEvent::RateLimited {
-            unix_ms: 8, what: "auto_tile", text: "skipped",
-        });
-        bump_counters(&mut c, &JournalEvent::Error {
-            unix_ms: 9, module: "auto_tile_ai", message: "timeout",
-        });
+        bump_counters(
+            &mut c,
+            &JournalEvent::TranscriptLine {
+                unix_ms: 1,
+                source: "mic",
+                text: "a",
+            },
+        );
+        bump_counters(
+            &mut c,
+            &JournalEvent::TranscriptLine {
+                unix_ms: 2,
+                source: "mic",
+                text: "b",
+            },
+        );
+        bump_counters(
+            &mut c,
+            &JournalEvent::TranscriptLine {
+                unix_ms: 3,
+                source: "system",
+                text: "c?",
+            },
+        );
+        bump_counters(
+            &mut c,
+            &JournalEvent::DetectorDecision {
+                unix_ms: 4,
+                text: "c?",
+                triggered: true,
+                trigger_kind: Some("question"),
+            },
+        );
+        bump_counters(
+            &mut c,
+            &JournalEvent::AiRequest {
+                unix_ms: 5,
+                purpose: "auto_tile",
+                model: "haiku",
+                system_prompt: "sys",
+                user_prompt: "usr",
+                attached_screenshot: false,
+                input_tokens_est: 100,
+            },
+        );
+        bump_counters(
+            &mut c,
+            &JournalEvent::AiResponse {
+                unix_ms: 6,
+                purpose: "auto_tile",
+                model: "haiku",
+                latency_ms: 500,
+                finish_reason: "stop",
+                text: "answer",
+                output_tokens_est: 50,
+                cost_microcents: 500,
+            },
+        );
+        bump_counters(
+            &mut c,
+            &JournalEvent::TileSpawn {
+                unix_ms: 7,
+                label: "tile-1",
+                question: "c?",
+                answer: "answer",
+            },
+        );
+        bump_counters(
+            &mut c,
+            &JournalEvent::RateLimited {
+                unix_ms: 8,
+                what: "auto_tile",
+                text: "skipped",
+            },
+        );
+        bump_counters(
+            &mut c,
+            &JournalEvent::Error {
+                unix_ms: 9,
+                module: "auto_tile_ai",
+                message: "timeout",
+            },
+        );
         assert_eq!(c.transcript_mic, 2);
         assert_eq!(c.transcript_system, 1);
         assert_eq!(c.detector_triggered, 1);
@@ -741,9 +896,23 @@ mod tests {
     fn snapshot_counters_returns_independent_clone() {
         // After snapshot, further bumps should NOT affect the snapshot.
         let mut c = SessionCounters::default();
-        bump_counters(&mut c, &JournalEvent::TranscriptLine { unix_ms: 0, source: "mic", text: "" });
+        bump_counters(
+            &mut c,
+            &JournalEvent::TranscriptLine {
+                unix_ms: 0,
+                source: "mic",
+                text: "",
+            },
+        );
         let snap = c.clone();
-        bump_counters(&mut c, &JournalEvent::TranscriptLine { unix_ms: 0, source: "mic", text: "" });
+        bump_counters(
+            &mut c,
+            &JournalEvent::TranscriptLine {
+                unix_ms: 0,
+                source: "mic",
+                text: "",
+            },
+        );
         assert_eq!(snap.transcript_mic, 1, "snapshot frozen at 1");
         assert_eq!(c.transcript_mic, 2, "live counter advanced to 2");
     }
@@ -751,11 +920,19 @@ mod tests {
     #[test]
     fn session_summary_serializes_with_kind_tag() {
         let ev = JournalEvent::SessionSummary {
-            unix_ms: 1000, duration_ms: 5000,
-            transcript_lines: 10, transcript_mic: 4, transcript_system: 6,
-            detector_triggered: 2, detector_skipped: 8,
-            ai_requests_total: 2, ai_responses_ok: 2, ai_errors: 0,
-            tiles_spawned: 2, rate_limited: 0, total_cost_microcents: 12_500,
+            unix_ms: 1000,
+            duration_ms: 5000,
+            transcript_lines: 10,
+            transcript_mic: 4,
+            transcript_system: 6,
+            detector_triggered: 2,
+            detector_skipped: 8,
+            ai_requests_total: 2,
+            ai_responses_ok: 2,
+            ai_errors: 0,
+            tiles_spawned: 2,
+            rate_limited: 0,
+            total_cost_microcents: 12_500,
         };
         let s = serde_json::to_string(&ev).unwrap();
         assert!(s.contains(r#""kind":"session_summary""#));

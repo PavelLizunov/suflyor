@@ -21,22 +21,22 @@ pub struct Config {
     pub active_profile: Option<String>,
 
     /// Audio device names (exact match against WASAPI enumeration).
-    pub mic_device: Option<String>,            // e.g. "Headset Microphone (A50 Mic)"
-    pub system_audio_device: Option<String>,   // e.g. "Line (A50 Stream Out)"
+    pub mic_device: Option<String>, // e.g. "Headset Microphone (A50 Mic)"
+    pub system_audio_device: Option<String>, // e.g. "Line (A50 Stream Out)"
 
     /// AI proxy (OpenAI-compatible) — your Linux bridge.
-    pub ai_base_url: String,                   // e.g. "http://192.168.0.142:18902/v1"
-    pub ai_bearer: String,                     // BRIDGE_SECRET
-    pub ai_model: String,                      // Live answers — fast, default claude-haiku-4-5
-    pub prep_model: String,                    // Pre-meeting context structuring — smart, default claude-sonnet-4-5
+    pub ai_base_url: String, // e.g. "http://192.168.0.142:18902/v1"
+    pub ai_bearer: String,  // BRIDGE_SECRET
+    pub ai_model: String,   // Live answers — fast, default claude-haiku-4-5
+    pub prep_model: String, // Pre-meeting context structuring — smart, default claude-sonnet-4-5
 
     /// Language tag (ISO 639-1) the assistant should ALWAYS respond in.
     /// Injected into the system prompt at runtime.
-    pub response_language: String,             // e.g. "ru"
+    pub response_language: String, // e.g. "ru"
 
     /// Groq Whisper STT.
     pub groq_api_key: String,
-    pub stt_language: Option<String>,          // None = auto-detect, "ru" = forced Russian
+    pub stt_language: Option<String>, // None = auto-detect, "ru" = forced Russian
     /// Groq Whisper model: "whisper-large-v3" (most accurate, slower) vs
     /// "whisper-large-v3-turbo" (~3× faster, slightly less accurate).
     /// Default: large-v3 — accuracy beats latency for interview use.
@@ -341,7 +341,8 @@ fn default_trigger_keywords() -> String {
         \
         backup snapshot restore disaster-recovery rto rpo failover failback \
         active-passive active-active region availability-zone\
-    ".into()
+    "
+    .into()
 }
 
 /// Massive default snippet library — 50+ pre-written templates covering
@@ -1478,8 +1479,14 @@ mod tests {
         original.ai_model = "claude-opus-4-7".into();
         original.stealth_enabled = true;
         original.context_profiles = vec![
-            ContextProfile { name: "k8s".into(), context: "kubernetes intro".into() },
-            ContextProfile { name: "aws".into(), context: "aws basics".into() },
+            ContextProfile {
+                name: "k8s".into(),
+                context: "kubernetes intro".into(),
+            },
+            ContextProfile {
+                name: "aws".into(),
+                context: "aws basics".into(),
+            },
         ];
         original.active_profile = Some("k8s".into());
 
@@ -1533,15 +1540,22 @@ mod tests {
         // Cost cap default — 0.0 since v0.0.28 means chip is OFF.
         // Old installs (with explicit value in their config.json) keep
         // their value via the per-field serde(default=...) loader.
-        assert!(d.max_session_cost_usd.abs() < 0.001,
-            "max_session_cost_usd default should be 0.0 (chip off), got {}", d.max_session_cost_usd);
+        assert!(
+            d.max_session_cost_usd.abs() < 0.001,
+            "max_session_cost_usd default should be 0.0 (chip off), got {}",
+            d.max_session_cost_usd
+        );
         // detector_skip_mic ON by default — fix for live regression #96
         // (candidate's own voice shouldn't trigger explanation tiles).
-        assert!(d.detector_skip_mic,
-            "detector_skip_mic default should be true (interview use-case)");
+        assert!(
+            d.detector_skip_mic,
+            "detector_skip_mic default should be true (interview use-case)"
+        );
         // post_meeting_debrief OFF by default — opt-in per privacy/cost.
-        assert!(!d.post_meeting_debrief_enabled,
-            "post_meeting_debrief_enabled default should be false (opt-in only)");
+        assert!(
+            !d.post_meeting_debrief_enabled,
+            "post_meeting_debrief_enabled default should be false (opt-in only)"
+        );
     }
 
     /// Old config files (pre-v0.0.2) lack the new fields. Serde must
@@ -1562,12 +1576,18 @@ mod tests {
         let cfg: Config = serde_json::from_str(pre_v002).expect("must parse old config");
         // Field defaults MUST be applied via serde(default=...) on the
         // field itself:
-        assert!(cfg.max_session_cost_usd.abs() < 0.001,
-            "missing field should fall to 0.0 (cap off) — v0.0.28 default");
-        assert!(cfg.detector_skip_mic,
-            "missing field should fall to true (mic skipped), not false");
-        assert!(!cfg.post_meeting_debrief_enabled,
-            "missing field should fall to false (opt-in)");
+        assert!(
+            cfg.max_session_cost_usd.abs() < 0.001,
+            "missing field should fall to 0.0 (cap off) — v0.0.28 default"
+        );
+        assert!(
+            cfg.detector_skip_mic,
+            "missing field should fall to true (mic skipped), not false"
+        );
+        assert!(
+            !cfg.post_meeting_debrief_enabled,
+            "missing field should fall to false (opt-in)"
+        );
     }
 
     /// Config with EXPLICIT positive cost cap should NOT be overridden
@@ -1576,8 +1596,10 @@ mod tests {
     fn explicit_positive_cost_cap_preserved() {
         let with_cap = r#"{ "max_session_cost_usd": 2.50 }"#;
         let cfg: Config = serde_json::from_str(with_cap).expect("must parse");
-        assert!((cfg.max_session_cost_usd - 2.50).abs() < 0.001,
-            "explicit positive cap must NOT be replaced with 0.0 default");
+        assert!(
+            (cfg.max_session_cost_usd - 2.50).abs() < 0.001,
+            "explicit positive cap must NOT be replaced with 0.0 default"
+        );
     }
 
     /// Config with EXPLICIT 0 for cost cap stays at 0 (was a meaningful
@@ -1601,9 +1623,17 @@ mod tests {
         // Catch a typo by checking each model resolves to a non-fallback price.
         // Fallback (unknown) is sonnet's price; haiku must NOT be that.
         let (haiku_in, _) = pricing_per_million(&d.ai_model);
-        assert!(haiku_in < 3.0, "default ai_model {} hit fallback pricing", d.ai_model);
+        assert!(
+            haiku_in < 3.0,
+            "default ai_model {} hit fallback pricing",
+            d.ai_model
+        );
         let (prep_in, _) = pricing_per_million(&d.prep_model);
-        assert!(prep_in <= 15.0, "default prep_model {} unreasonably expensive", d.prep_model);
+        assert!(
+            prep_in <= 15.0,
+            "default prep_model {} unreasonably expensive",
+            d.prep_model
+        );
     }
 
     /// REGRESSION: trigger_keywords must include the basic terms that
@@ -1612,7 +1642,14 @@ mod tests {
     #[test]
     fn trigger_keywords_default_includes_core_devops_terms() {
         let kws = Config::defaults().trigger_keywords;
-        for required in ["kubernetes", "etcd", "postgres", "linux", "nginx", "prometheus"] {
+        for required in [
+            "kubernetes",
+            "etcd",
+            "postgres",
+            "linux",
+            "nginx",
+            "prometheus",
+        ] {
             assert!(
                 kws.contains(required),
                 "default trigger_keywords missing core term '{required}'"
@@ -1625,7 +1662,12 @@ mod tests {
     #[test]
     fn default_hotkeys_have_sensible_format() {
         let d = Config::defaults();
-        for hk in [&d.hotkey_ask, &d.hotkey_screenshot, &d.hotkey_toggle_visibility, &d.hotkey_pause_audio] {
+        for hk in [
+            &d.hotkey_ask,
+            &d.hotkey_screenshot,
+            &d.hotkey_toggle_visibility,
+            &d.hotkey_pause_audio,
+        ] {
             assert!(!hk.is_empty(), "hotkey must not be empty");
             // Either a function key or a modifier+key combo
             assert!(
@@ -1657,7 +1699,10 @@ mod tests {
     fn malformed_json_parse_errors_caught_gracefully() {
         let bad = b"{not valid json";
         let res: Result<Config, _> = serde_json::from_slice(bad);
-        assert!(res.is_err(), "must error on bad JSON (load() recovers via defaults)");
+        assert!(
+            res.is_err(),
+            "must error on bad JSON (load() recovers via defaults)"
+        );
     }
 
     /// Wrong field type (string instead of bool) must error — caller falls
@@ -1686,10 +1731,24 @@ mod tests {
         // accidentally deleted.
         let keys: Vec<&str> = d.snippets.iter().map(|s| s.key.as_str()).collect();
         for domain in [
-            "k8s", "pg", "incident", "sli",       // originals
-            "linux-oom", "linux-net", "tcp", "dns", "tls",
-            "redis", "kafka", "oauth2", "docker", "aws-vpc",
-            "prom", "trace", "saga", "mesh",
+            "k8s",
+            "pg",
+            "incident",
+            "sli", // originals
+            "linux-oom",
+            "linux-net",
+            "tcp",
+            "dns",
+            "tls",
+            "redis",
+            "kafka",
+            "oauth2",
+            "docker",
+            "aws-vpc",
+            "prom",
+            "trace",
+            "saga",
+            "mesh",
         ] {
             assert!(
                 keys.contains(&domain),
@@ -1721,7 +1780,10 @@ mod tests {
         assert!(!keys.is_empty(), "must ship default snippets");
         assert!(keys.contains(&"k8s".to_string()), "missing k8s snippet");
         assert!(keys.contains(&"pg".to_string()), "missing pg snippet");
-        assert!(keys.contains(&"incident".to_string()), "missing incident snippet");
+        assert!(
+            keys.contains(&"incident".to_string()),
+            "missing incident snippet"
+        );
         assert!(keys.contains(&"sli".to_string()), "missing sli snippet");
         let mut sorted = keys.clone();
         sorted.sort();
@@ -1734,8 +1796,17 @@ mod tests {
     #[test]
     fn default_snippets_have_content() {
         for s in Config::defaults().snippets {
-            assert!(!s.title.trim().is_empty(), "snippet {} missing title", s.key);
-            assert!(s.body.trim().len() >= 50, "snippet {} body too short ({} chars)", s.key, s.body.len());
+            assert!(
+                !s.title.trim().is_empty(),
+                "snippet {} missing title",
+                s.key
+            );
+            assert!(
+                s.body.trim().len() >= 50,
+                "snippet {} body too short ({} chars)",
+                s.key,
+                s.body.len()
+            );
         }
     }
 
@@ -1758,8 +1829,14 @@ mod tests {
     #[test]
     fn context_profile_serialisation_roundtrip() {
         let profiles = vec![
-            ContextProfile { name: "".into(), context: "".into() },
-            ContextProfile { name: "interview".into(), context: "long\nmulti-line\ncontext".into() },
+            ContextProfile {
+                name: "".into(),
+                context: "".into(),
+            },
+            ContextProfile {
+                name: "interview".into(),
+                context: "long\nmulti-line\ncontext".into(),
+            },
         ];
         let json = serde_json::to_string(&profiles).unwrap();
         let back: Vec<ContextProfile> = serde_json::from_str(&json).unwrap();

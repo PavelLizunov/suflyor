@@ -23,48 +23,60 @@ pub fn register_all(app: &AppHandle, _cfg: SharedConfig) -> Vec<String> {
 
     // F10 — screenshot
     let app_h = app.clone();
-    try_register(app, "F10 (screenshot)", Code::F10, &mut warnings, move || {
-        let _ = app_h.emit_to("overlay", "hotkey:screenshot", ());
-    });
+    try_register(
+        app,
+        "F10 (screenshot)",
+        Code::F10,
+        &mut warnings,
+        move || {
+            let _ = app_h.emit_to("overlay", "hotkey:screenshot", ());
+        },
+    );
 
     // F11 — PANIC HIDE: toggle visibility of overlay AND every active tile.
     // #1 adoption blocker per brainstorm — instant "hide everything" if a
     // screenshare starts unexpectedly. Single tap = invisible to viewer.
     // Second tap = restore exactly what was visible before.
     let app_h = app.clone();
-    try_register(app, "F11 (panic-hide)", Code::F11, &mut warnings, move || {
-        let app = app_h.clone();
-        let overlay = app.get_webview_window("overlay");
-        let overlay_visible = overlay
-            .as_ref()
-            .map(|w| w.is_visible().unwrap_or(true))
-            .unwrap_or(true);
+    try_register(
+        app,
+        "F11 (panic-hide)",
+        Code::F11,
+        &mut warnings,
+        move || {
+            let app = app_h.clone();
+            let overlay = app.get_webview_window("overlay");
+            let overlay_visible = overlay
+                .as_ref()
+                .map(|w| w.is_visible().unwrap_or(true))
+                .unwrap_or(true);
 
-        // Determine target state: hide everything if overlay is currently visible,
-        // otherwise show everything.
-        if overlay_visible {
-            // HIDE PASS
-            if let Some(w) = overlay {
-                let _ = w.hide();
-            }
-            // Iterate all webview windows; tile windows have label prefix "tile-".
-            for (label, w) in app.webview_windows() {
-                if label.starts_with("tile-") {
+            // Determine target state: hide everything if overlay is currently visible,
+            // otherwise show everything.
+            if overlay_visible {
+                // HIDE PASS
+                if let Some(w) = overlay {
                     let _ = w.hide();
                 }
-            }
-        } else {
-            // SHOW PASS
-            if let Some(w) = overlay {
-                let _ = w.show();
-            }
-            for (label, w) in app.webview_windows() {
-                if label.starts_with("tile-") {
+                // Iterate all webview windows; tile windows have label prefix "tile-".
+                for (label, w) in app.webview_windows() {
+                    if label.starts_with("tile-") {
+                        let _ = w.hide();
+                    }
+                }
+            } else {
+                // SHOW PASS
+                if let Some(w) = overlay {
                     let _ = w.show();
                 }
+                for (label, w) in app.webview_windows() {
+                    if label.starts_with("tile-") {
+                        let _ = w.show();
+                    }
+                }
             }
-        }
-    });
+        },
+    );
 
     // F8 — pause audio (F12 collides with Windows-wide handlers — DON'T use F12)
     let app_h = app.clone();
@@ -74,21 +86,27 @@ pub fn register_all(app: &AppHandle, _cfg: SharedConfig) -> Vec<String> {
 
     // F6 — manual spawn tile from last transcript line (bypass detector).
     let app_h = app.clone();
-    try_register(app, "F6 (manual tile)", Code::F6, &mut warnings, move || {
-        let app = app_h.clone();
-        tauri::async_runtime::spawn(async move {
-            let cfg = app.state::<crate::config::SharedConfig>();
-            let rt = app.state::<crate::runtime::SharedRuntime>();
-            let tiles = app.state::<crate::tile::SharedTiles>();
-            crate::runtime::manual_spawn_tile(
-                app.clone(),
-                cfg.inner().clone(),
-                rt.inner().clone(),
-                tiles.inner().clone(),
-            )
-            .await;
-        });
-    });
+    try_register(
+        app,
+        "F6 (manual tile)",
+        Code::F6,
+        &mut warnings,
+        move || {
+            let app = app_h.clone();
+            tauri::async_runtime::spawn(async move {
+                let cfg = app.state::<crate::config::SharedConfig>();
+                let rt = app.state::<crate::runtime::SharedRuntime>();
+                let tiles = app.state::<crate::tile::SharedTiles>();
+                crate::runtime::manual_spawn_tile(
+                    app.clone(),
+                    cfg.inner().clone(),
+                    rt.inner().clone(),
+                    tiles.inner().clone(),
+                )
+                .await;
+            });
+        },
+    );
 
     // F4 — KB palette: opens an inline search overlay over the bar.
     // Just emits the event — UI handles modal lifecycle.
@@ -103,51 +121,64 @@ pub fn register_all(app: &AppHandle, _cfg: SharedConfig) -> Vec<String> {
     // profiles are configured, the event payload is null and the
     // frontend shows a hint toast.
     let app_h = app.clone();
-    try_register(app, "F2 (profile cycle)", Code::F2, &mut warnings, move || {
-        let app = app_h.clone();
-        if let Some(cfg) = app.try_state::<crate::config::SharedConfig>() {
-            let (next_name, next_context): (Option<String>, Option<String>) = {
-                let c = cfg.read();
-                if c.context_profiles.is_empty() {
-                    (None, None)
-                } else {
-                    // Cycle: current → next (wrap). If active is None,
-                    // pick the first profile.
-                    let idx = c.active_profile.as_deref()
-                        .and_then(|name| c.context_profiles.iter().position(|p| p.name == name));
-                    let next_idx = idx.map(|i| (i + 1) % c.context_profiles.len()).unwrap_or(0);
-                    let p = &c.context_profiles[next_idx];
-                    (Some(p.name.clone()), Some(p.context.clone()))
+    try_register(
+        app,
+        "F2 (profile cycle)",
+        Code::F2,
+        &mut warnings,
+        move || {
+            let app = app_h.clone();
+            if let Some(cfg) = app.try_state::<crate::config::SharedConfig>() {
+                let (next_name, next_context): (Option<String>, Option<String>) = {
+                    let c = cfg.read();
+                    if c.context_profiles.is_empty() {
+                        (None, None)
+                    } else {
+                        // Cycle: current → next (wrap). If active is None,
+                        // pick the first profile.
+                        let idx = c.active_profile.as_deref().and_then(|name| {
+                            c.context_profiles.iter().position(|p| p.name == name)
+                        });
+                        let next_idx = idx.map(|i| (i + 1) % c.context_profiles.len()).unwrap_or(0);
+                        let p = &c.context_profiles[next_idx];
+                        (Some(p.name.clone()), Some(p.context.clone()))
+                    }
+                };
+                if let (Some(name), Some(context)) = (next_name.as_ref(), next_context.as_ref()) {
+                    // Persist the switch — same as Settings profile picker would do.
+                    {
+                        let mut c = cfg.write();
+                        c.active_profile = Some(name.clone());
+                        c.meeting_context = context.clone();
+                    }
+                    let snap = cfg.read().clone();
+                    if let Err(e) = crate::config::save(&snap) {
+                        log::warn!("F2 profile cycle save failed: {e:#}");
+                    }
                 }
-            };
-            if let (Some(name), Some(context)) = (next_name.as_ref(), next_context.as_ref()) {
-                // Persist the switch — same as Settings profile picker would do.
-                {
-                    let mut c = cfg.write();
-                    c.active_profile = Some(name.clone());
-                    c.meeting_context = context.clone();
-                }
-                let snap = cfg.read().clone();
-                if let Err(e) = crate::config::save(&snap) {
-                    log::warn!("F2 profile cycle save failed: {e:#}");
-                }
+                let _ = app.emit_to(
+                    "overlay",
+                    "hotkey:profile-cycled",
+                    serde_json::json!({ "name": next_name }),
+                );
             }
-            let _ = app.emit_to(
-                "overlay",
-                "hotkey:profile-cycled",
-                serde_json::json!({ "name": next_name }),
-            );
-        }
-    });
+        },
+    );
 
     // v0.0.83: F7 — emit a toggle event for bulk-collapse tiles. The
     // overlay frontend mirrors the 📦 chip click handler, flipping
     // `allCollapsed` and emitting `tile:collapse-all` or
     // `tile:expand-all` to all windows.
     let app_h = app.clone();
-    try_register(app, "F7 (collapse all tiles)", Code::F7, &mut warnings, move || {
-        let _ = app_h.emit_to("overlay", "hotkey:collapse-all", ());
-    });
+    try_register(
+        app,
+        "F7 (collapse all tiles)",
+        Code::F7,
+        &mut warnings,
+        move || {
+            let _ = app_h.emit_to("overlay", "hotkey:collapse-all", ());
+        },
+    );
 
     // v0.0.77: F1 — toggle the hotkey-help popover. Same UX as clicking
     // the ℹ button in the overlay bar. Useful when the user forgets
@@ -186,21 +217,19 @@ pub fn register_all(app: &AppHandle, _cfg: SharedConfig) -> Vec<String> {
     // F-key collisions: F1-F11 are already taken; F12 is reserved by
     // Windows. Chord modifier avoids both. W = "close all Windows".
     let app_h = app.clone();
-    let result = app
-        .global_shortcut()
-        .on_shortcut(
-            Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyW),
-            move |_a, _s, event| {
-                if event.state == ShortcutState::Pressed {
-                    let app = app_h.clone();
-                    tauri::async_runtime::spawn(async move {
-                        let tiles = app.state::<crate::tile::SharedTiles>();
-                        let n = crate::tile::close_all_unpinned(&app, tiles.inner());
-                        log::info!("Ctrl+Alt+W: closed {n} tile(s)");
-                    });
-                }
-            },
-        );
+    let result = app.global_shortcut().on_shortcut(
+        Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyW),
+        move |_a, _s, event| {
+            if event.state == ShortcutState::Pressed {
+                let app = app_h.clone();
+                tauri::async_runtime::spawn(async move {
+                    let tiles = app.state::<crate::tile::SharedTiles>();
+                    let n = crate::tile::close_all_unpinned(&app, tiles.inner());
+                    log::info!("Ctrl+Alt+W: closed {n} tile(s)");
+                });
+            }
+        },
+    );
     if let Err(e) = result {
         let msg = format!("Ctrl+Alt+W (close all tiles): {e}");
         log::warn!("hotkey skipped — {msg}");
@@ -224,22 +253,18 @@ pub fn register_all(app: &AppHandle, _cfg: SharedConfig) -> Vec<String> {
 }
 
 /// Helper: register one shortcut, push a warning instead of bailing on conflict.
-fn try_register<F>(
-    app: &AppHandle,
-    label: &str,
-    code: Code,
-    warnings: &mut Vec<String>,
-    handler: F,
-) where
+fn try_register<F>(app: &AppHandle, label: &str, code: Code, warnings: &mut Vec<String>, handler: F)
+where
     F: Fn() + Send + Sync + 'static,
 {
-    let result = app
-        .global_shortcut()
-        .on_shortcut(Shortcut::new(None, code), move |_app, _shortcut, event| {
+    let result = app.global_shortcut().on_shortcut(
+        Shortcut::new(None, code),
+        move |_app, _shortcut, event| {
             if event.state == ShortcutState::Pressed {
                 handler();
             }
-        });
+        },
+    );
     if let Err(e) = result {
         let msg = format!("{label}: {e}");
         log::warn!("hotkey skipped — {msg}");

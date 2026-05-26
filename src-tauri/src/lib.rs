@@ -28,8 +28,7 @@ static PRE_SETTINGS_POS: Mutex<Option<(f64, f64)>> = Mutex::new(None);
 /// to write the same `%TEMP%/suflyor-update-<ver>.exe`. Two writers →
 /// the second hits a Windows sharing-violation on the file once the
 /// first spawned process opens it. Better to refuse re-entry cleanly.
-static UPDATE_IN_FLIGHT: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+static UPDATE_IN_FLIGHT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 // ── Caller-window guard ──────────────────────────────────────────────────
 //
@@ -56,9 +55,7 @@ fn assert_overlay(window: &tauri::WebviewWindow) -> Result<(), String> {
     if label == "overlay" {
         Ok(())
     } else {
-        log::warn!(
-            "blocked sensitive command from non-overlay window: label={label}"
-        );
+        log::warn!("blocked sensitive command from non-overlay window: label={label}");
         Err(format!(
             "permission denied: this command is restricted to the overlay window (caller={label})"
         ))
@@ -198,20 +195,25 @@ async fn prep_record(
 
     // Record off the async runtime so the WASAPI blocking loop doesn't
     // stall other tokio tasks.
-    let pcm = tokio::task::spawn_blocking(move || {
-        audio::record_mic_blocking(duration_ms, mic_device)
-    })
-    .await
-    .map_err(|e| format!("join error: {e}"))?
-    .map_err(|e| format!("record error: {e:#}"))?;
+    let pcm =
+        tokio::task::spawn_blocking(move || audio::record_mic_blocking(duration_ms, mic_device))
+            .await
+            .map_err(|e| format!("join error: {e}"))?
+            .map_err(|e| format!("record error: {e:#}"))?;
 
     if pcm.is_empty() {
         return Err("recording produced no audio (mic silent?)".into());
     }
 
-    let text = stt::transcribe_once(&pcm, &groq_key, language.as_deref(), whisper_prompt.as_deref(), &stt_model)
-        .await
-        .map_err(|e| format!("stt error: {e:#}"))?;
+    let text = stt::transcribe_once(
+        &pcm,
+        &groq_key,
+        language.as_deref(),
+        whisper_prompt.as_deref(),
+        &stt_model,
+    )
+    .await
+    .map_err(|e| format!("stt error: {e:#}"))?;
     Ok(text)
 }
 
@@ -286,8 +288,16 @@ fn spawn_tile(
         let c = cfg.read();
         (c.tile_monitor_name.clone(), c.stealth_enabled)
     };
-    tile::spawn_tile_with_stealth(&app, tiles.inner(), question, answer, preferred_monitor, stealth, tile::TileKind::Auto)
-        .map_err(|e| e.to_string())
+    tile::spawn_tile_with_stealth(
+        &app,
+        tiles.inner(),
+        question,
+        answer,
+        preferred_monitor,
+        stealth,
+        tile::TileKind::Auto,
+    )
+    .map_err(|e| e.to_string())
 }
 
 // ── Knowledge Base (embedded glossary + commands + patterns) ────────
@@ -324,7 +334,9 @@ fn kb_spawn(
     tiles: tauri::State<'_, SharedTiles>,
 ) -> Result<String, String> {
     assert_overlay(&window)?;
-    let entry = kb::get(&key).ok_or_else(|| format!("kb entry '{key}' not found"))?.clone();
+    let entry = kb::get(&key)
+        .ok_or_else(|| format!("kb entry '{key}' not found"))?
+        .clone();
     let (preferred_monitor, stealth) = {
         let c = cfg.read();
         (c.tile_monitor_name.clone(), c.stealth_enabled)
@@ -400,7 +412,10 @@ async fn ask_from_mic(
 ) -> Result<(), String> {
     assert_overlay(&window)?;
     runtime::manual_ask_source(
-        app, cfg.inner().clone(), rt.inner().clone(), tiles.inner().clone(),
+        app,
+        cfg.inner().clone(),
+        rt.inner().clone(),
+        tiles.inner().clone(),
         audio::AudioSource::Mic,
     )
     .await;
@@ -417,7 +432,10 @@ async fn ask_from_system(
 ) -> Result<(), String> {
     assert_overlay(&window)?;
     runtime::manual_ask_source(
-        app, cfg.inner().clone(), rt.inner().clone(), tiles.inner().clone(),
+        app,
+        cfg.inner().clone(),
+        rt.inner().clone(),
+        tiles.inner().clone(),
         audio::AudioSource::System,
     )
     .await;
@@ -459,7 +477,11 @@ async fn manual_ask_hold_end(
     assert_overlay(&window)?;
     let src = parse_source(&source)?;
     runtime::manual_ask_window_end(
-        app, cfg.inner().clone(), rt.inner().clone(), tiles.inner().clone(), src,
+        app,
+        cfg.inner().clone(),
+        rt.inner().clone(),
+        tiles.inner().clone(),
+        src,
     )
     .await;
     Ok(())
@@ -474,11 +496,7 @@ fn parse_source(s: &str) -> Result<audio::AudioSource, String> {
 }
 
 #[tauri::command]
-fn close_tile(
-    app: tauri::AppHandle,
-    tiles: tauri::State<'_, SharedTiles>,
-    label: String,
-) {
+fn close_tile(app: tauri::AppHandle, tiles: tauri::State<'_, SharedTiles>, label: String) {
     tile::close_tile_by_label(&app, tiles.inner(), &label);
 }
 
@@ -505,11 +523,7 @@ fn close_all_tiles(
 }
 
 #[tauri::command]
-fn pin_tile(
-    tiles: tauri::State<'_, SharedTiles>,
-    label: String,
-    pinned: bool,
-) -> bool {
+fn pin_tile(tiles: tauri::State<'_, SharedTiles>, label: String, pinned: bool) -> bool {
     tile::set_tile_pinned(tiles.inner(), &label, pinned)
 }
 
@@ -530,9 +544,7 @@ fn list_monitors(app: tauri::AppHandle) -> Result<Vec<String>, String> {
 /// meeting_context that was active at SessionStart. Useful after a crash —
 /// the user sees their pre-meeting notes still in place.
 #[tauri::command]
-fn last_session_summary(
-    window: tauri::WebviewWindow,
-) -> Result<Option<serde_json::Value>, String> {
+fn last_session_summary(window: tauri::WebviewWindow) -> Result<Option<serde_json::Value>, String> {
     assert_overlay(&window)?;
     let dir = journal::sessions_dir().map_err(|e| e.to_string())?;
     let Ok(read) = std::fs::read_dir(&dir) else {
@@ -555,15 +567,21 @@ fn last_session_summary(
         let tb = std::fs::metadata(b).and_then(|m| m.modified()).ok();
         ta.cmp(&tb).then(a.cmp(b))
     });
-    let Some(last) = files.last() else { return Ok(None) };
+    let Some(last) = files.last() else {
+        return Ok(None);
+    };
 
     // Read first ~3 lines for SessionStart event.
-    let Ok(content) = std::fs::read_to_string(last) else { return Ok(None) };
+    let Ok(content) = std::fs::read_to_string(last) else {
+        return Ok(None);
+    };
     let mut start: Option<serde_json::Value> = None;
     let mut transcript_count: usize = 0;
     let mut tile_count: usize = 0;
     for line in content.lines() {
-        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else { continue };
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
         let kind = v.get("kind").and_then(|k| k.as_str()).unwrap_or("");
         match kind {
             "session_start" if start.is_none() => start = Some(v),
@@ -606,7 +624,11 @@ fn set_stealth(
         let _ = w.set_content_protected(enabled);
     }
     // Apply to all existing tile windows.
-    for label in app.webview_windows().keys().filter(|l| l.starts_with("tile-")) {
+    for label in app
+        .webview_windows()
+        .keys()
+        .filter(|l| l.starts_with("tile-"))
+    {
         if let Some(w) = app.get_webview_window(label) {
             let _ = w.set_content_protected(enabled);
         }
@@ -629,7 +651,9 @@ fn export_config(
     let cfg = state.read().clone();
     let bytes = serde_json::to_vec_pretty(&cfg).map_err(|e| e.to_string())?;
     let stamp = journal::now_unix_ms() / 1000;
-    let desktop = dirs::desktop_dir().or_else(dirs::home_dir).ok_or("no desktop dir")?;
+    let desktop = dirs::desktop_dir()
+        .or_else(dirs::home_dir)
+        .ok_or("no desktop dir")?;
     let path = desktop.join(format!("suflyor-backup-{stamp}.json"));
     std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().to_string())
@@ -717,29 +741,34 @@ pub(crate) fn sanitize_diagnostic_text(s: &str) -> String {
 #[cfg(test)]
 mod sanitize_tests {
     use super::sanitize_diagnostic_text;
-    #[test] fn redacts_groq_key() {
+    #[test]
+    fn redacts_groq_key() {
         assert_eq!(
             sanitize_diagnostic_text("error: gsk_abc123def456 invalid"),
             "error: <REDACTED_GROQ_KEY> invalid"
         );
     }
-    #[test] fn redacts_bearer_header() {
+    #[test]
+    fn redacts_bearer_header() {
         assert_eq!(
             sanitize_diagnostic_text("Authorization: Bearer xyz789 sent"),
             "Authorization: Bearer <REDACTED> sent"
         );
     }
-    #[test] fn redacts_sk_key() {
+    #[test]
+    fn redacts_sk_key() {
         assert_eq!(
             sanitize_diagnostic_text("token=sk-abcdef nope"),
             "token=<REDACTED_API_KEY> nope"
         );
     }
-    #[test] fn leaves_other_text_unchanged() {
+    #[test]
+    fn leaves_other_text_unchanged() {
         let s = "plain message with no secrets here";
         assert_eq!(sanitize_diagnostic_text(s), s);
     }
-    #[test] fn stops_at_quotes() {
+    #[test]
+    fn stops_at_quotes() {
         // JSON-quoted secret should leave the closing quote alone.
         assert_eq!(
             sanitize_diagnostic_text("\"key\":\"gsk_x123\""),
@@ -767,7 +796,9 @@ fn export_config_safe(
     let cfg = blank_share_secrets(state.read().clone());
     let bytes = serde_json::to_vec_pretty(&cfg).map_err(|e| e.to_string())?;
     let stamp = journal::now_unix_ms() / 1000;
-    let desktop = dirs::desktop_dir().or_else(dirs::home_dir).ok_or("no desktop dir")?;
+    let desktop = dirs::desktop_dir()
+        .or_else(dirs::home_dir)
+        .ok_or("no desktop dir")?;
     let path = desktop.join(format!("suflyor-share-{stamp}.json"));
     std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
     log::info!(
@@ -877,7 +908,9 @@ fn dump_diagnostics(
     );
 
     let stamp = journal::now_unix_ms() / 1000;
-    let desktop = dirs::desktop_dir().or_else(dirs::home_dir).ok_or("no desktop dir")?;
+    let desktop = dirs::desktop_dir()
+        .or_else(dirs::home_dir)
+        .ok_or("no desktop dir")?;
     let path = desktop.join(format!("suflyor-diagnostic-{stamp}.md"));
     std::fs::write(&path, report).map_err(|e| e.to_string())?;
     log::info!("diagnostic dump written to {}", path.display());
@@ -895,9 +928,10 @@ mod export_safe_tests {
         c.ai_bearer = "Bearer_REAL".into();
         c.ai_base_url = "http://192.168.0.142:18902/v1".into();
         c.meeting_context = "Senior SRE @ MyCorp, salary $200k, target $250k".into();
-        c.context_profiles = vec![
-            ContextProfile { name: "K8s interview".into(), context: "kubernetes stuff".into() },
-        ];
+        c.context_profiles = vec![ContextProfile {
+            name: "K8s interview".into(),
+            context: "kubernetes stuff".into(),
+        }];
         c.active_profile = Some("K8s interview".into());
         c
     }
@@ -946,7 +980,10 @@ mod export_safe_tests {
     fn keeps_trigger_keywords() {
         // Generic DevOps vocab — safe to share.
         let c = blank_share_secrets(loaded_cfg());
-        assert!(!c.trigger_keywords.is_empty(), "trigger_keywords should be retained");
+        assert!(
+            !c.trigger_keywords.is_empty(),
+            "trigger_keywords should be retained"
+        );
     }
 
     #[test]
@@ -1059,9 +1096,7 @@ fn open_sessions_folder(window: tauri::WebviewWindow) -> Result<String, String> 
     let path = dir.to_string_lossy().to_string();
     #[cfg(target_os = "windows")]
     {
-        let _ = std::process::Command::new("explorer")
-            .arg(&path)
-            .spawn();
+        let _ = std::process::Command::new("explorer").arg(&path).spawn();
     }
     Ok(path)
 }
@@ -1132,7 +1167,8 @@ fn open_settings(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<
         // (laptops with 1366×768 or scaled 1080p), the bottom of the
         // Settings window with the footer (Save / Back buttons) was
         // off-screen. Now: shrink to fit.
-        let monitor_h = w.current_monitor()
+        let monitor_h = w
+            .current_monitor()
             .ok()
             .flatten()
             .map(|m| {
@@ -1240,10 +1276,19 @@ async fn check_bridge(
                 "stream": false,
             });
             let t = std::time::Instant::now();
-            let r = client.post(&url).bearer_auth(&bearer).json(&body).send().await?;
+            let r = client
+                .post(&url)
+                .bearer_auth(&bearer)
+                .json(&body)
+                .send()
+                .await?;
             let status = r.status().as_u16();
             let body_text = r.text().await.unwrap_or_default();
-            Ok::<(u16, String, u64), reqwest::Error>((status, body_text, t.elapsed().as_millis() as u64))
+            Ok::<(u16, String, u64), reqwest::Error>((
+                status,
+                body_text,
+                t.elapsed().as_millis() as u64,
+            ))
         }
     };
 
@@ -1283,13 +1328,21 @@ async fn check_bridge(
             } else if status == 404 {
                 format!("404 — endpoint /chat/completions not found on {base_url} (typo in URL?)")
             } else if status == 400 {
-                format!("HTTP 400 — bridge rejected payload (body: {})", body_text.chars().take(120).collect::<String>())
+                format!(
+                    "HTTP 400 — bridge rejected payload (body: {})",
+                    body_text.chars().take(120).collect::<String>()
+                )
             } else if status >= 500 {
                 format!("HTTP {status} — bridge is reachable but failing")
             } else {
                 String::new()
             };
-            Ok(BridgeStatus { reachable, status, latency_ms, hint })
+            Ok(BridgeStatus {
+                reachable,
+                status,
+                latency_ms,
+                hint,
+            })
         }
         Err(e) => {
             let msg = format!("{e}");
@@ -1303,7 +1356,12 @@ async fn check_bridge(
             } else {
                 msg
             };
-            Ok(BridgeStatus { reachable: false, status: 0, latency_ms, hint })
+            Ok(BridgeStatus {
+                reachable: false,
+                status: 0,
+                latency_ms,
+                hint,
+            })
         }
     }
 }
@@ -1375,8 +1433,14 @@ mod bridge_probe_tests {
     #[test]
     fn case_insensitive_match() {
         // Some bridges uppercase "Model" or "MODEL"
-        assert!(is_model_not_found_response(400, r#"{"error":"MODEL NOT FOUND"}"#));
-        assert!(is_model_not_found_response(400, r#"{"error":"Model Unknown"}"#));
+        assert!(is_model_not_found_response(
+            400,
+            r#"{"error":"MODEL NOT FOUND"}"#
+        ));
+        assert!(is_model_not_found_response(
+            400,
+            r#"{"error":"Model Unknown"}"#
+        ));
     }
 
     #[test]
@@ -1390,8 +1454,10 @@ mod bridge_probe_tests {
         // Per fn docstring: legitimate non-model-related errors that happen
         // to mention "model" in their text will trigger fallback. Accepted.
         let body = r#"{"error":"Request invalid: please contact the model team"}"#;
-        assert!(is_model_not_found_response(400, body),
-            "documented false-positive: matcher is loose by design");
+        assert!(
+            is_model_not_found_response(400, body),
+            "documented false-positive: matcher is loose by design"
+        );
     }
 }
 
@@ -1431,11 +1497,13 @@ async fn check_update(window: tauri::WebviewWindow) -> Result<UpdateInfo, String
     let current = env!("CARGO_PKG_VERSION").to_string();
     let download_default = format!(
         "https://github.com/{owner}/{name}/releases/latest",
-        owner = REPO_OWNER, name = REPO_NAME
+        owner = REPO_OWNER,
+        name = REPO_NAME
     );
     let url = format!(
         "https://api.github.com/repos/{owner}/{name}/releases/latest",
-        owner = REPO_OWNER, name = REPO_NAME
+        owner = REPO_OWNER,
+        name = REPO_NAME
     );
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
@@ -1443,25 +1511,35 @@ async fn check_update(window: tauri::WebviewWindow) -> Result<UpdateInfo, String
         .build()
     {
         Ok(c) => c,
-        Err(e) => return Ok(UpdateInfo {
-            current, latest: None, update_available: false,
-            download_url: download_default,
-            notes: String::new(),
-            error: format!("HTTP client init failed: {e}"),
-        }),
+        Err(e) => {
+            return Ok(UpdateInfo {
+                current,
+                latest: None,
+                update_available: false,
+                download_url: download_default,
+                notes: String::new(),
+                error: format!("HTTP client init failed: {e}"),
+            })
+        }
     };
     let resp = match client.get(&url).send().await {
         Ok(r) => r,
-        Err(e) => return Ok(UpdateInfo {
-            current, latest: None, update_available: false,
-            download_url: download_default,
-            notes: String::new(),
-            error: format!("GitHub unreachable: {e}"),
-        }),
+        Err(e) => {
+            return Ok(UpdateInfo {
+                current,
+                latest: None,
+                update_available: false,
+                download_url: download_default,
+                notes: String::new(),
+                error: format!("GitHub unreachable: {e}"),
+            })
+        }
     };
     if !resp.status().is_success() {
         return Ok(UpdateInfo {
-            current, latest: None, update_available: false,
+            current,
+            latest: None,
+            update_available: false,
             download_url: download_default,
             notes: String::new(),
             error: format!("GitHub returned HTTP {}", resp.status()),
@@ -1469,17 +1547,29 @@ async fn check_update(window: tauri::WebviewWindow) -> Result<UpdateInfo, String
     }
     let v: serde_json::Value = match resp.json().await {
         Ok(v) => v,
-        Err(e) => return Ok(UpdateInfo {
-            current, latest: None, update_available: false,
-            download_url: download_default,
-            notes: String::new(),
-            error: format!("malformed JSON from GitHub: {e}"),
-        }),
+        Err(e) => {
+            return Ok(UpdateInfo {
+                current,
+                latest: None,
+                update_available: false,
+                download_url: download_default,
+                notes: String::new(),
+                error: format!("malformed JSON from GitHub: {e}"),
+            })
+        }
     };
     let tag = v.get("tag_name").and_then(|t| t.as_str()).unwrap_or("");
     let latest_str = tag.trim_start_matches('v').to_string();
-    let notes = v.get("body").and_then(|b| b.as_str()).unwrap_or("").to_string();
-    let release_url = v.get("html_url").and_then(|u| u.as_str()).unwrap_or(&download_default).to_string();
+    let notes = v
+        .get("body")
+        .and_then(|b| b.as_str())
+        .unwrap_or("")
+        .to_string();
+    let release_url = v
+        .get("html_url")
+        .and_then(|u| u.as_str())
+        .unwrap_or(&download_default)
+        .to_string();
     // Edge case: GitHub returned HTTP 200 but body is missing `tag_name` or
     // it's an empty string. Don't pretend everything is fine — tell the
     // user the API responded weirdly so they don't get a false "up to date"
@@ -1491,7 +1581,9 @@ async fn check_update(window: tauri::WebviewWindow) -> Result<UpdateInfo, String
             update_available: false,
             download_url: release_url,
             notes,
-            error: "GitHub API returned no tag_name — releases page may be empty or response malformed".into(),
+            error:
+                "GitHub API returned no tag_name — releases page may be empty or response malformed"
+                    .into(),
         });
     }
     let update_available = is_strictly_newer(&latest_str, &current);
@@ -1556,7 +1648,8 @@ async fn download_and_install_update(window: tauri::WebviewWindow) -> Result<Str
     let current = env!("CARGO_PKG_VERSION");
     let api_url = format!(
         "https://api.github.com/repos/{owner}/{name}/releases/latest",
-        owner = REPO_OWNER, name = REPO_NAME
+        owner = REPO_OWNER,
+        name = REPO_NAME
     );
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(60))
@@ -1582,14 +1675,19 @@ async fn download_and_install_update(window: tauri::WebviewWindow) -> Result<Str
     }
 
     // Find the NSIS asset: name pattern `suflyor_<ver>_x64-setup.exe`.
-    let assets = v.get("assets").and_then(|a| a.as_array())
+    let assets = v
+        .get("assets")
+        .and_then(|a| a.as_array())
         .ok_or("GitHub release has no assets")?;
-    let nsis_asset = assets.iter().find(|a| {
-        a.get("name")
-            .and_then(|n| n.as_str())
-            .map(|n| n.ends_with("_x64-setup.exe"))
-            .unwrap_or(false)
-    }).ok_or("no NSIS installer (*_x64-setup.exe) in latest release")?;
+    let nsis_asset = assets
+        .iter()
+        .find(|a| {
+            a.get("name")
+                .and_then(|n| n.as_str())
+                .map(|n| n.ends_with("_x64-setup.exe"))
+                .unwrap_or(false)
+        })
+        .ok_or("no NSIS installer (*_x64-setup.exe) in latest release")?;
     let download_url = nsis_asset
         .get("browser_download_url")
         .and_then(|u| u.as_str())
@@ -1622,8 +1720,7 @@ async fn download_and_install_update(window: tauri::WebviewWindow) -> Result<Str
     // Write to %TEMP%/suflyor-update-<ver>.exe. Overwrite if exists.
     let temp_dir = std::env::temp_dir();
     let installer_path = temp_dir.join(format!("suflyor-update-{latest}.exe"));
-    std::fs::write(&installer_path, &bytes)
-        .map_err(|e| format!("temp write failed: {e}"))?;
+    std::fs::write(&installer_path, &bytes).map_err(|e| format!("temp write failed: {e}"))?;
     log::info!("update installer written to {}", installer_path.display());
 
     // Spawn the installer detached. The installer will:
@@ -1680,15 +1777,21 @@ fn is_strictly_newer(candidate: &str, current: &str) -> bool {
         return false;
     }
     let parse = |s: &str| -> Vec<u64> {
-        s.split('.').map(|p| p.parse::<u64>().unwrap_or(0)).collect()
+        s.split('.')
+            .map(|p| p.parse::<u64>().unwrap_or(0))
+            .collect()
     };
     let av = parse(&a);
     let bv = parse(&b);
     for i in 0..av.len().max(bv.len()) {
         let ai = av.get(i).copied().unwrap_or(0);
         let bi = bv.get(i).copied().unwrap_or(0);
-        if ai > bi { return true; }
-        if ai < bi { return false; }
+        if ai > bi {
+            return true;
+        }
+        if ai < bi {
+            return false;
+        }
     }
     false // equal
 }
@@ -1696,33 +1799,40 @@ fn is_strictly_newer(candidate: &str, current: &str) -> bool {
 #[cfg(test)]
 mod update_tests {
     use super::is_strictly_newer;
-    #[test] fn equal_is_not_newer() {
+    #[test]
+    fn equal_is_not_newer() {
         assert!(!is_strictly_newer("0.0.1", "0.0.1"));
         assert!(!is_strictly_newer("1.2.3", "1.2.3"));
     }
-    #[test] fn lower_is_not_newer() {
+    #[test]
+    fn lower_is_not_newer() {
         assert!(!is_strictly_newer("0.0.0", "0.0.1"));
         assert!(!is_strictly_newer("1.0.0", "2.0.0"));
     }
-    #[test] fn higher_is_newer() {
+    #[test]
+    fn higher_is_newer() {
         assert!(is_strictly_newer("0.0.2", "0.0.1"));
         assert!(is_strictly_newer("0.1.0", "0.0.1"));
         assert!(is_strictly_newer("1.0.0", "0.99.99"));
     }
-    #[test] fn v_prefix_ignored() {
+    #[test]
+    fn v_prefix_ignored() {
         assert!(is_strictly_newer("v0.0.2", "0.0.1"));
         assert!(is_strictly_newer("v0.0.2", "v0.0.1"));
     }
-    #[test] fn prerelease_suffix_ignored() {
+    #[test]
+    fn prerelease_suffix_ignored() {
         // 0.0.2-rc1 treated as 0.0.2 — still newer than 0.0.1.
         assert!(is_strictly_newer("0.0.2-rc1", "0.0.1"));
         // 0.0.1+build5 same as 0.0.1.
         assert!(!is_strictly_newer("0.0.1+build5", "0.0.1"));
     }
-    #[test] fn empty_candidate_is_not_newer() {
+    #[test]
+    fn empty_candidate_is_not_newer() {
         assert!(!is_strictly_newer("", "0.0.1"));
     }
-    #[test] fn unequal_segment_counts() {
+    #[test]
+    fn unequal_segment_counts() {
         // "1" is treated as "1.0.0" via unwrap_or(0) padding.
         assert!(!is_strictly_newer("1", "1.0.0"));
         assert!(!is_strictly_newer("1.0", "1.0.0"));
@@ -1731,7 +1841,8 @@ mod update_tests {
         // behavior even if 4-segment versions are unusual.
         assert!(is_strictly_newer("1.0.0.5", "1.0.0"));
     }
-    #[test] fn non_numeric_segments_treated_as_zero() {
+    #[test]
+    fn non_numeric_segments_treated_as_zero() {
         // Each segment parse-or-zero. "abc" → [0] vs "0.0.0" → [0,0,0]
         // → padded loop is all zeros. Returns false (equal).
         assert!(!is_strictly_newer("abc", "0.0.0"));
@@ -1834,7 +1945,10 @@ mod panic_log_rotation_tests {
         // find "\n\n" in s[8..] returns position of next pair.
         // The exact tail depends on which separator is found first — what matters
         // is the result is valid UTF-8 and starts cleanly.
-        assert!(!t.contains("\n\n\n"), "tail should not have triple newlines");
+        assert!(
+            !t.contains("\n\n\n"),
+            "tail should not have triple newlines"
+        );
     }
 }
 
@@ -1991,7 +2105,8 @@ fn read_all_session_stats(window: tauri::WebviewWindow) -> Result<SessionStats, 
     let mut tiles_spawned_total: u64 = 0;
     let mut total_cost_microcents: u128 = 0;
     let mut daily_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
-    let mut question_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    let mut question_counts: std::collections::HashMap<String, u32> =
+        std::collections::HashMap::new();
 
     let entries = std::fs::read_dir(&dir).map_err(|e| e.to_string())?;
     for entry in entries.flatten() {
@@ -1999,11 +2114,19 @@ fn read_all_session_stats(window: tauri::WebviewWindow) -> Result<SessionStats, 
         if path.extension().and_then(|s| s.to_str()) != Some("jsonl") {
             continue;
         }
-        let Ok(meta) = entry.metadata() else { continue; };
-        if !meta.is_file() { continue; }
+        let Ok(meta) = entry.metadata() else {
+            continue;
+        };
+        if !meta.is_file() {
+            continue;
+        }
         // Skip absurdly large files to keep this fast.
-        if meta.len() > 50 * 1024 * 1024 { continue; }
-        let Ok(content) = std::fs::read_to_string(&path) else { continue; };
+        if meta.len() > 50 * 1024 * 1024 {
+            continue;
+        }
+        let Ok(content) = std::fs::read_to_string(&path) else {
+            continue;
+        };
 
         sessions_total += 1;
         let mut has_summary = false;
@@ -2014,8 +2137,12 @@ fn read_all_session_stats(window: tauri::WebviewWindow) -> Result<SessionStats, 
 
         for line in content.lines() {
             let line = line.trim();
-            if line.is_empty() { continue; }
-            let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else { continue; };
+            if line.is_empty() {
+                continue;
+            }
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+                continue;
+            };
             let kind = v["kind"].as_str().unwrap_or("");
             match kind {
                 "session_start" => {
@@ -2027,9 +2154,15 @@ fn read_all_session_stats(window: tauri::WebviewWindow) -> Result<SessionStats, 
                 }
                 "session_summary" => {
                     has_summary = true;
-                    if let Some(d) = v["duration_ms"].as_u64() { duration_total_ms += d; }
-                    if let Some(n) = v["ai_requests_total"].as_u64() { ai_requests_total += n; }
-                    if let Some(n) = v["tiles_spawned"].as_u64() { tiles_spawned_total += n; }
+                    if let Some(d) = v["duration_ms"].as_u64() {
+                        duration_total_ms += d;
+                    }
+                    if let Some(n) = v["ai_requests_total"].as_u64() {
+                        ai_requests_total += n;
+                    }
+                    if let Some(n) = v["tiles_spawned"].as_u64() {
+                        tiles_spawned_total += n;
+                    }
                     if let Some(c) = v["total_cost_microcents"].as_u64() {
                         total_cost_microcents += c as u128;
                     }
@@ -2132,11 +2265,17 @@ fn set_stt_language(
     assert_overlay(&window)?;
     let normalized = lang.trim().to_lowercase();
     if !normalized.is_empty() && normalized != "ru" && normalized != "en" {
-        return Err(format!("invalid stt language '{normalized}' — must be ru, en, or empty (auto)"));
+        return Err(format!(
+            "invalid stt language '{normalized}' — must be ru, en, or empty (auto)"
+        ));
     }
     let next_cfg = {
         let mut c = state.write();
-        c.stt_language = if normalized.is_empty() { None } else { Some(normalized) };
+        c.stt_language = if normalized.is_empty() {
+            None
+        } else {
+            Some(normalized)
+        };
         c.clone()
     };
     config::save(&next_cfg).map_err(|e| e.to_string())?;
@@ -2229,16 +2368,21 @@ async fn tile_translate(
         },
     ];
 
-    let (answer, _usage) = crate::ai::complete_with_usage(&base_url, &bearer, &model, messages, 512)
-        .await
-        .map_err(|e| format!("AI error: {e:#}"))?;
+    let (answer, _usage) =
+        crate::ai::complete_with_usage(&base_url, &bearer, &model, messages, 512)
+            .await
+            .map_err(|e| format!("AI error: {e:#}"))?;
 
     // Close the old tile (frees its slot).
     tile::close_tile_by_label(&app, tiles.inner(), &label);
 
     // Spawn fresh tile labeled with flag emoji so user can see which
     // language was used. Manual kind = orange chrome.
-    let flag = if other_language == "ru" { "🇷🇺" } else { "🇬🇧" };
+    let flag = if other_language == "ru" {
+        "🇷🇺"
+    } else {
+        "🇬🇧"
+    };
     let new_label = tile::spawn_tile_with_stealth(
         &app,
         tiles.inner(),
@@ -2357,9 +2501,10 @@ async fn tile_reload(
         },
     ];
 
-    let (answer, _usage) = crate::ai::complete_with_usage(&base_url, &bearer, &model, messages, 512)
-        .await
-        .map_err(|e| format!("AI error: {e:#}"))?;
+    let (answer, _usage) =
+        crate::ai::complete_with_usage(&base_url, &bearer, &model, messages, 512)
+            .await
+            .map_err(|e| format!("AI error: {e:#}"))?;
 
     // Close the old tile (frees its slot for the respawn).
     tile::close_tile_by_label(&app, tiles.inner(), &label);
@@ -2491,12 +2636,10 @@ async fn test_microphone(
     // Record 3 seconds — long enough to compute meaningful peak even
     // for someone who just says one word, short enough not to feel
     // like a chore.
-    let pcm = tokio::task::spawn_blocking(move || {
-        audio::record_mic_blocking(3000, mic_device)
-    })
-    .await
-    .map_err(|e| format!("join error: {e}"))?
-    .map_err(|e| format!("record error: {e:#}"))?;
+    let pcm = tokio::task::spawn_blocking(move || audio::record_mic_blocking(3000, mic_device))
+        .await
+        .map_err(|e| format!("join error: {e}"))?
+        .map_err(|e| format!("record error: {e:#}"))?;
 
     if pcm.is_empty() {
         return Ok(MicTestResult {
@@ -2510,7 +2653,8 @@ async fn test_microphone(
     // v0.0.92 P2 fix: i16::MIN.abs() = 32768 overflows the 0 dBFS reference
     // → would give tiny positive dBFS for a max-negative sample. Clamp to
     // 32767 so dBFS is strictly ≤ 0.
-    let peak: i32 = pcm.iter()
+    let peak: i32 = pcm
+        .iter()
         .map(|s| (*s as i32).abs().min(32767))
         .max()
         .unwrap_or(0);
@@ -2519,9 +2663,13 @@ async fn test_microphone(
     } else {
         Some(20.0_f32 * (peak as f32 / 32767.0_f32).log10())
     };
-    let verdict = if peak < 100 { "silent" }
-        else if peak_dbfs.map(|d| d < -30.0).unwrap_or(false) { "quiet" }
-        else { "ok" };
+    let verdict = if peak < 100 {
+        "silent"
+    } else if peak_dbfs.map(|d| d < -30.0).unwrap_or(false) {
+        "quiet"
+    } else {
+        "ok"
+    };
 
     // Transcribe only if signal is at least quiet — silent recordings
     // would just give Whisper noise to hallucinate on.
@@ -2534,13 +2682,19 @@ async fn test_microphone(
     } else {
         // whisper_prompt is Option<String>; transcribe_once wants Option<&str>.
         let prompt_opt = whisper_prompt.as_deref();
-        match stt::transcribe_once(&pcm, &groq_key, language.as_deref(), prompt_opt, &stt_model).await {
+        match stt::transcribe_once(&pcm, &groq_key, language.as_deref(), prompt_opt, &stt_model)
+            .await
+        {
             Ok(t) => t.trim().to_string(),
             Err(e) => format!("[transcribe error: {e:#}]"),
         }
     };
 
-    Ok(MicTestResult { peak_dbfs, transcript, verdict })
+    Ok(MicTestResult {
+        peak_dbfs,
+        transcript,
+        verdict,
+    })
 }
 
 /// v0.0.95: Add a new snippet on-the-fly from the F4 palette
@@ -2565,8 +2719,13 @@ fn add_snippet(
     if k.len() < 2 || k.len() > 32 {
         return Err(format!("snippet key '{k}' must be 2-32 chars"));
     }
-    if !k.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
-        return Err(format!("snippet key '{k}' must be alphanumeric + '-' / '_'"));
+    if !k
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(format!(
+            "snippet key '{k}' must be alphanumeric + '-' / '_'"
+        ));
     }
     let b = body.trim().to_string();
     if b.is_empty() {
@@ -2574,7 +2733,10 @@ fn add_snippet(
     }
     const MAX_BODY: usize = 4096;
     if b.len() > MAX_BODY {
-        return Err(format!("snippet body too long ({} bytes, max {MAX_BODY})", b.len()));
+        return Err(format!(
+            "snippet body too long ({} bytes, max {MAX_BODY})",
+            b.len()
+        ));
     }
     // v0.0.96 P1 fix: hold the write lock across config::save so two
     // concurrent add_snippet calls can't both clone-then-write-to-disk
@@ -2583,7 +2745,9 @@ fn add_snippet(
     // dedup check + push + serialize + disk-write as one atomic op.
     let mut c = state.write();
     if c.snippets.iter().any(|s| s.key.to_lowercase() == k) {
-        return Err(format!("snippet '{k}' already exists — delete it first via Settings → Snippets"));
+        return Err(format!(
+            "snippet '{k}' already exists — delete it first via Settings → Snippets"
+        ));
     }
     c.snippets.push(config::Snippet {
         key: k.clone(),
@@ -2632,7 +2796,8 @@ fn test_detector(
         },
         None => DetectorTestResult {
             triggered: false,
-            reason: "no trigger (no '?', no interrogative, no keyword match, or too short / noise)".into(),
+            reason: "no trigger (no '?', no interrogative, no keyword match, or too short / noise)"
+                .into(),
             matched_keyword: None,
         },
     })
@@ -2666,7 +2831,10 @@ async fn generate_cheatsheet(
         return Err("AI bridge not configured".into());
     }
     if ctx.trim().is_empty() {
-        return Err("meeting_context is empty — fill it in first via Settings → Profile → Meeting context".into());
+        return Err(
+            "meeting_context is empty — fill it in first via Settings → Profile → Meeting context"
+                .into(),
+        );
     }
     let lang_directive = if lang == "ru" {
         "Пиши на русском языке."
@@ -2679,7 +2847,8 @@ async fn generate_cheatsheet(
          Output as markdown with H2 headings per question. Be concrete and pragmatic — no fluff. \
          Cover both behavioural questions and the most likely technical deep-dives based on the role. {lang_directive}"
     );
-    let user = format!("Meeting/interview context:\n\n{ctx}\n\nGenerate the 8-question cheatsheet now:");
+    let user =
+        format!("Meeting/interview context:\n\n{ctx}\n\nGenerate the 8-question cheatsheet now:");
     let messages = vec![
         ai::ChatMessage {
             role: "system".into(),
@@ -2743,7 +2912,8 @@ fn bookmark_last_answer(
         .append(true)
         .open(&path)
         .map_err(|e| e.to_string())?;
-    file.write_all(entry.as_bytes()).map_err(|e| e.to_string())?;
+    file.write_all(entry.as_bytes())
+        .map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().into_owned())
 }
 
@@ -2815,7 +2985,11 @@ async fn tile_followups(
     assert_overlay(&window)?;
     let (base_url, bearer, model) = {
         let cfg = state.read();
-        (cfg.ai_base_url.clone(), cfg.ai_bearer.clone(), cfg.ai_model.clone())
+        (
+            cfg.ai_base_url.clone(),
+            cfg.ai_bearer.clone(),
+            cfg.ai_model.clone(),
+        )
     };
     if base_url.trim().is_empty() || bearer.trim().is_empty() {
         return Err("AI bridge not configured (set base_url + bearer in Settings)".into());
@@ -2851,7 +3025,13 @@ async fn tile_followups(
     // Split by newlines, trim, drop empties, take 3.
     let questions: Vec<String> = text
         .lines()
-        .map(|s| s.trim().trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ')' || c.is_whitespace()).to_string())
+        .map(|s| {
+            s.trim()
+                .trim_start_matches(|c: char| {
+                    c.is_ascii_digit() || c == '.' || c == ')' || c.is_whitespace()
+                })
+                .to_string()
+        })
         .filter(|s| !s.is_empty() && s.len() > 4)
         .take(3)
         .collect();
@@ -2868,7 +3048,9 @@ fn render_session_md(content: &str, filename: &str) -> String {
     let mut events: Vec<serde_json::Value> = Vec::new();
     for line in content.lines() {
         let line = line.trim();
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(line) {
             events.push(v);
         }
@@ -2891,7 +3073,9 @@ fn render_session_md(content: &str, filename: &str) -> String {
         let prep = start["prep_model"].as_str().unwrap_or("");
         let lang = start["response_language"].as_str().unwrap_or("?");
         md.push_str(&format!("- model: `{model}`"));
-        if !prep.is_empty() { md.push_str(&format!(" · prep: `{prep}`")); }
+        if !prep.is_empty() {
+            md.push_str(&format!(" · prep: `{prep}`"));
+        }
         md.push_str(&format!(" · lang: `{lang}`\n"));
         if let Some(ts) = start["unix_ms"].as_i64() {
             md.push_str(&format!("- started: {}\n", fmt_clock(ts)));
@@ -2910,13 +3094,17 @@ fn render_session_md(content: &str, filename: &str) -> String {
             "ai_response" => {
                 req_count += 1;
                 let purpose = ev["purpose"].as_str().unwrap_or("ask");
-                let ts_str = ev["unix_ms"].as_i64().map(fmt_clock).unwrap_or_else(|| "?".into());
+                let ts_str = ev["unix_ms"]
+                    .as_i64()
+                    .map(fmt_clock)
+                    .unwrap_or_else(|| "?".into());
                 let latency = ev["latency_ms"].as_i64().unwrap_or(0);
                 let cost_micro = ev["cost_microcents"].as_i64().unwrap_or(0);
                 let cost_usd = cost_micro as f64 / 100_000_000.0;
                 md.push_str(&format!("## #{req_count} · {purpose} · {ts_str}\n\n"));
                 if let Some(req) = pending_req {
-                    let prompt = req["user_prompt"].as_str()
+                    let prompt = req["user_prompt"]
+                        .as_str()
                         .or_else(|| req["user_prompt_preview"].as_str())
                         .unwrap_or("");
                     if !prompt.is_empty() {
@@ -2941,13 +3129,17 @@ fn render_session_md(content: &str, filename: &str) -> String {
         md.push_str("## Summary\n\n");
         let dur_min = sum["duration_ms"].as_i64().unwrap_or(0) as f64 / 60_000.0;
         md.push_str(&format!("- duration: {dur_min:.1} min\n"));
-        md.push_str(&format!("- transcript lines: {} (mic {} · system {})\n",
+        md.push_str(&format!(
+            "- transcript lines: {} (mic {} · system {})\n",
             sum["transcript_lines"].as_i64().unwrap_or(0),
             sum["transcript_mic"].as_i64().unwrap_or(0),
-            sum["transcript_system"].as_i64().unwrap_or(0)));
-        md.push_str(&format!("- AI requests: {} · tiles spawned: {}\n",
+            sum["transcript_system"].as_i64().unwrap_or(0)
+        ));
+        md.push_str(&format!(
+            "- AI requests: {} · tiles spawned: {}\n",
             sum["ai_requests_total"].as_i64().unwrap_or(0),
-            sum["tiles_spawned"].as_i64().unwrap_or(0)));
+            sum["tiles_spawned"].as_i64().unwrap_or(0)
+        ));
         let total_cost = sum["total_cost_microcents"].as_i64().unwrap_or(0) as f64 / 100_000_000.0;
         md.push_str(&format!("- total cost: ${total_cost:.4}\n"));
     }
@@ -2975,16 +3167,24 @@ fn try_auto_export_latest_to_desktop() -> Result<std::path::PathBuf, String> {
         let tb = std::fs::metadata(b).and_then(|m| m.modified()).ok();
         ta.cmp(&tb).then(a.cmp(b))
     });
-    let latest = files.last().ok_or_else(|| "no session journals found".to_string())?;
+    let latest = files
+        .last()
+        .ok_or_else(|| "no session journals found".to_string())?;
     let meta = std::fs::metadata(latest).map_err(|e| e.to_string())?;
     if meta.len() == 0 {
         return Err("latest session journal is empty".into());
     }
     let content = std::fs::read_to_string(latest).map_err(|e| e.to_string())?;
-    let filename = latest.file_name().and_then(|s| s.to_str()).unwrap_or("session");
+    let filename = latest
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("session");
     let md = render_session_md(&content, filename);
     let desktop = dirs::desktop_dir().ok_or_else(|| "no desktop dir".to_string())?;
-    let stem = latest.file_stem().and_then(|s| s.to_str()).unwrap_or("session");
+    let stem = latest
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("session");
     let out_path = desktop.join(format!("{stem}.md"));
     std::fs::write(&out_path, md).map_err(|e| e.to_string())?;
     Ok(out_path)
@@ -3006,10 +3206,7 @@ fn try_auto_export_latest_to_desktop() -> Result<std::path::PathBuf, String> {
 /// they're noise for a human reading a post-meeting recap. (The
 /// Replay viewer is the right tool when you want the raw timeline.)
 #[tauri::command]
-fn export_session_markdown(
-    window: tauri::WebviewWindow,
-    path: String,
-) -> Result<String, String> {
+fn export_session_markdown(window: tauri::WebviewWindow, path: String) -> Result<String, String> {
     assert_overlay(&window)?;
     const MAX_BYTES: u64 = 10 * 1024 * 1024;
     let p = std::path::PathBuf::from(&path);
@@ -3021,7 +3218,11 @@ fn export_session_markdown(
     }
     let meta = std::fs::metadata(&canonical_path).map_err(|e| e.to_string())?;
     if meta.len() > MAX_BYTES {
-        return Err(format!("session file too large ({} bytes, max {})", meta.len(), MAX_BYTES));
+        return Err(format!(
+            "session file too large ({} bytes, max {})",
+            meta.len(),
+            MAX_BYTES
+        ));
     }
 
     let content = std::fs::read_to_string(&canonical_path).map_err(|e| e.to_string())?;
@@ -3046,8 +3247,7 @@ fn export_session_markdown(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
-        .init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     // v0.0.21: runtime panic hook. The existing P0-3 crash-report.txt
     // catches STARTUP panics only (via .run().unwrap_or_else at the
@@ -3078,9 +3278,7 @@ pub fn run() {
         } else {
             "<non-string panic payload>".to_string()
         };
-        let entry = format!(
-            "[unix={timestamp}] panic at {location}\n  {msg}\n\n"
-        );
+        let entry = format!("[unix={timestamp}] panic at {location}\n  {msg}\n\n");
         eprintln!("PANIC: {entry}");
         // v0.0.28: fall back to %TEMP% if config_dir() returns None
         // (extremely rare on Windows but undocumented previously — the

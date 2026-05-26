@@ -19,7 +19,11 @@ pub fn setup(app: &AppHandle) -> Result<()> {
     let hide = MenuItem::with_id(app, "hide", "Hide overlay", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
     let close_tiles = MenuItem::with_id(
-        app, "close_all_tiles", "Close all tiles (Ctrl+Alt+W)", true, None::<&str>,
+        app,
+        "close_all_tiles",
+        "Close all tiles (Ctrl+Alt+W)",
+        true,
+        None::<&str>,
     )?;
     let sep = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
