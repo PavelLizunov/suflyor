@@ -240,6 +240,24 @@ export default function TileWindow() {
     }
   };
 
+  // v0.0.89: 🌐 translate — re-ask in opposite language. Same bridge
+  // pattern as reload (emit event → overlay invokes assert_overlay-
+  // gated cmd). Reuses `reloading` spinner state since both actions
+  // close + respawn this tile.
+  const translate = async () => {
+    if (reloading) return;
+    setReloading(true);
+    try {
+      await emit("tile:translate-request", {
+        label: `tile-${id}`,
+        question,
+      });
+    } catch (e) {
+      console.warn("tile translate emit:", e);
+      setReloading(false);
+    }
+  };
+
   // v0.0.20: build a single regex out of the highlight list once per
   // render — used to split text nodes and wrap matches in <mark>.
   // Escape regex special chars per keyword. Case-insensitive. \b only
@@ -458,6 +476,28 @@ export default function TileWindow() {
           }}
         >
           {reloading ? "⏳" : "🔄"}
+        </button>
+        {/* v0.0.89: 🌐 translate — re-ask in opposite language. Same
+            bridge pattern as 🔄 reload (event → overlay → backend cmd).
+            Disabled together with reload via shared `reloading` state. */}
+        <button
+          className="tile-translate"
+          onClick={translate}
+          disabled={reloading}
+          title={lang === "en"
+            ? "Translate: re-ask in the opposite language"
+            : "Перевести: переспросить на противоположном языке"}
+          aria-label={lang === "en" ? "Translate tile" : "Перевести тайл"}
+          style={{
+            background: "transparent",
+            border: "none",
+            cursor: reloading ? "wait" : "pointer",
+            opacity: reloading ? 0.5 : 0.85,
+            padding: "0 6px",
+            fontSize: 13,
+          }}
+        >
+          🌐
         </button>
         <button
           className="tile-close"

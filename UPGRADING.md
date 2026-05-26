@@ -26,6 +26,30 @@ for download. No auto-install (no code signing — by design).
 
 Two code-review agent passes ran on the diff. First found 3 P0/P1 (shipped .85, .86, .87). Second pass running at time of v0.0.88 ship.
 
+### → v0.0.89 (2026-05-26) — 🌐 Translate tile button
+
+New 🌐 button in tile chrome between 🔄 reload and × close. Click →
+backend re-asks the same question with `response_language` flipped
+(ru ↔ en) → closes the old tile → spawns a fresh tile in the OTHER
+language. New tile's question is prefixed with 🇷🇺 or 🇬🇧 flag for
+quick visual recognition.
+
+Architecture mirrors v0.0.68 reload bridge:
+- Tile emits `tile:translate-request { label, question }` event
+- Overlay listens, validates `event.windowLabel` matches claimed
+  label (v0.0.85 security fix applied here too), invokes
+  `tile_translate` Tauri command (assert_overlay)
+- Backend builds simplified prompt (no transcript context, just
+  meeting_context + question) with `lang_block` from the opposite
+  language, calls AI, close-then-spawn
+
+Use case: interviewer asks for English answer mid-call but your
+default is Russian — click 🌐 on the existing Russian tile → 🇬🇧
+English version appears in 1-2 sec.
+
+If `cfg.response_language` is "auto" (neither ru nor en), defaults
+to English as the "other" language.
+
 ### → v0.0.88 (2026-05-26) — 🧪 Mic test card in Settings → Audio
 
 New "🧪 Mic test (3 s)" card at the top of Settings → 🔉 Audio.

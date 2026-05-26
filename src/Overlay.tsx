@@ -934,6 +934,42 @@ export default function Overlay() {
       })
     );
 
+    // v0.0.89: 🌐 Tile translate bridge. Same pattern as v0.0.68 reload
+    // — tile emits, overlay validates source + invokes backend.
+    unlistens.push(
+      listen<{ label: string; question: string }>(
+        "tile:translate-request",
+        async (e) => {
+          const { label, question } = e.payload;
+          if (!label || !question) {
+            console.warn("tile:translate-request missing fields", e.payload);
+            return;
+          }
+          const source = (e as { windowLabel?: string }).windowLabel;
+          if (typeof source !== "string" || !source.startsWith("tile-") || source !== label) {
+            console.warn(
+              "tile:translate-request rejected — source/label mismatch (source=%s, claimed=%s)",
+              source ?? "?",
+              label,
+            );
+            return;
+          }
+          try {
+            await invoke<string>("tile_translate", { label, question });
+          } catch (err) {
+            const msg = String(err);
+            console.warn("tile_translate failed:", msg);
+            setErrorText(msg.length > 200 ? msg.slice(0, 200) + "…" : msg);
+            if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+            errorTimerRef.current = setTimeout(() => {
+              if (mountedRef.current) setErrorText("");
+              errorTimerRef.current = null;
+            }, 6000);
+          }
+        }
+      )
+    );
+
     // v0.0.68: 🔄 Tile reload bridge. Tile windows can't call tile_reload
     // directly (assert_overlay), so they emit `tile:reload-request` to all
     // windows; this overlay window invokes the actual command. On AI

@@ -2137,6 +2137,110 @@ fn set_stt_language(
     Ok(())
 }
 
+/// v0.0.89: like tile_reload but forces response_language to be the
+/// opposite of the current cfg.response_language ("ru" ↔ "en"). All
+/// other settings (ai_model, meeting_context, etc.) preserved. Spawned
+/// tile uses Manual kind so the chrome reads "MANUAL" (explicit user
+/// action). Useful when interviewer suddenly asks for English answer
+/// and your default is Russian (or vice versa).
+#[tauri::command]
+async fn tile_translate(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, SharedConfig>,
+    tiles: tauri::State<'_, SharedTiles>,
+    label: String,
+    question: String,
+) -> Result<String, String> {
+    assert_overlay(&window)?;
+    let q_trim = question.trim();
+    if q_trim.is_empty() {
+        return Err("empty question — cannot translate".into());
+    }
+    let (base_url, bearer, model, current_language, meeting_context, preferred_monitor, stealth) = {
+        let c = state.read();
+        (
+            c.ai_base_url.clone(),
+            c.ai_bearer.clone(),
+            c.ai_model.clone(),
+            c.response_language.clone(),
+            c.meeting_context.clone(),
+            c.tile_monitor_name.clone(),
+            c.stealth_enabled,
+        )
+    };
+    if base_url.trim().is_empty() || bearer.trim().is_empty() {
+        return Err("AI bridge not configured (set base_url + bearer in Settings)".into());
+    }
+    // Flip ru ↔ en. Anything else (e.g. "auto") → "en" as a sensible
+    // default opposite (most non-ru users want English).
+    let other_language = match current_language.as_str() {
+        "ru" => "en",
+        "en" => "ru",
+        _ => "en",
+    };
+
+    let lang_block = match other_language {
+        "ru" => "Отвечай на русском языке. Английский только для названий технологий.",
+        "en" => "Respond in English.",
+        _ => "Respond in the same language as the question.",
+    };
+    let ctx_block = if meeting_context.trim().is_empty() {
+        "Контекст встречи не задан.".to_string()
+    } else {
+        format!(
+            "Бэкграунд пользователя (для понимания уровня — не привязывай ответ к этим темам \
+             если вопрос про другое):\n{}",
+            meeting_context.trim()
+        )
+    };
+    let system_prompt = format!(
+        "Ты — техничный AI-ассистент. Пользователь видит твой ответ в окошке. \
+         Нужен максимально полезный краткий ответ.\n\n\
+         {ctx_block}\n\n\
+         === Правила ===\n\
+         - НИКАКОЙ преамбулы. Первое слово — суть.\n\
+         - Максимум 120 слов, цель 60-80.\n\
+         - Маркдаун: **жирный**, `code`, маркированные списки.\n\
+         - {lang_block}"
+    );
+    let user_prompt = format!("Вопрос:\n{q_trim}");
+
+    let messages = vec![
+        crate::ai::ChatMessage {
+            role: "system".into(),
+            content: crate::ai::MessageContent::Text(system_prompt),
+        },
+        crate::ai::ChatMessage {
+            role: "user".into(),
+            content: crate::ai::MessageContent::Text(user_prompt),
+        },
+    ];
+
+    let (answer, _usage) = crate::ai::complete_with_usage(&base_url, &bearer, &model, messages, 512)
+        .await
+        .map_err(|e| format!("AI error: {e:#}"))?;
+
+    // Close the old tile (frees its slot).
+    tile::close_tile_by_label(&app, tiles.inner(), &label);
+
+    // Spawn fresh tile labeled with flag emoji so user can see which
+    // language was used. Manual kind = orange chrome.
+    let flag = if other_language == "ru" { "🇷🇺" } else { "🇬🇧" };
+    let new_label = tile::spawn_tile_with_stealth(
+        &app,
+        tiles.inner(),
+        format!("{flag} {q_trim}"),
+        answer.trim().to_string(),
+        preferred_monitor,
+        stealth,
+        tile::TileKind::Manual,
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(new_label)
+}
+
 /// v0.0.68: Re-ask the question that spawned a tile and replace its
 /// content with a fresh AI answer. Triggered by the 🔄 button on tile
 /// chrome (tile emits `tile:reload-request` event → Overlay listens →
@@ -3048,6 +3152,7 @@ pub fn run() {
             get_mic_muted,
             test_microphone,
             tile_reload,
+            tile_translate,
             set_stealth,
             list_snippets,
             expand_snippet,
