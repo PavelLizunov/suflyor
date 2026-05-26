@@ -1013,24 +1013,21 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* v0.0.38 polish — same template as Stealth/Coaching panels. */}
+        {/* v0.0.38 polish — same template as Stealth/Coaching panels.
+            v0.0.43 i18n: all strings via t(). */}
         <div className="card">
-          <div className="card-title">🎨 Внешний вид overlay</div>
+          <div className="card-title">{t("interface.cost.title", lang)}</div>
           <div className="switch-row">
             <div className="switch-meta">
-              <div className="switch-title">Показывать индикатор стоимости 💰</div>
-              <div className="switch-desc">
-                Шильдик «💰 $X.XXX» в overlay-баре. Скрытие НЕ отключает учёт
-                — деньги всё равно пишутся в журнал и cost:update event летает.
-                Только убирает шильдик из бара.
-              </div>
+              <div className="switch-title">{t("interface.cost.switch.title", lang)}</div>
+              <div className="switch-desc">{t("interface.cost.switch.desc", lang)}</div>
             </div>
             <button
               type="button"
               className="switch"
               role="switch"
               aria-checked={showCost}
-              aria-label="Toggle cost indicator"
+              aria-label={t("interface.cost.switch.aria", lang)}
               onClick={() => {
                 const v = !showCost;
                 setShowCost(v);
@@ -1049,22 +1046,18 @@ export default function Settings() {
             Behavior unchanged: same `cfg.stealth_enabled` + `set_stealth`
             backend invoke; just visual conversion. */}
         <div className="card">
-          <div className="card-title">🎯 Screen-share поведение</div>
+          <div className="card-title">{t("stealth.card.title", lang)}</div>
           <div className="switch-row">
             <div className="switch-meta">
-              <div className="switch-title">Скрыть overlay + tiles от screen share</div>
-              <div className="switch-desc">
-                Windows 10 2004+: SetWindowDisplayAffinity (WDA_EXCLUDEFROMCAPTURE).
-                Применяется сразу — restart не нужен. Не работает в OBS с режимом
-                «window capture»; работает в Zoom/Teams/Meet.
-              </div>
+              <div className="switch-title">{t("stealth.switch.title", lang)}</div>
+              <div className="switch-desc">{t("stealth.switch.desc", lang)}</div>
             </div>
             <button
               type="button"
               className="switch"
               role="switch"
               aria-checked={cfg.stealth_enabled}
-              aria-label="Toggle stealth mode"
+              aria-label={t("stealth.switch.aria", lang)}
               onClick={async () => {
                 const v = !cfg.stealth_enabled;
                 update({ stealth_enabled: v });
@@ -1076,11 +1069,7 @@ export default function Settings() {
               }}
             />
           </div>
-          <div className="banner info">
-            Тест: пошарь экран в Teams/Meet, спроси коллегу видит ли он overlay.
-            Если да — graphics driver не поддерживает WDA_EXCLUDEFROMCAPTURE;
-            используй overlay на втором мониторе.
-          </div>
+          <div className="banner info">{t("stealth.banner", lang)}</div>
         </div>
       </div>)}
 
@@ -1088,23 +1077,18 @@ export default function Settings() {
         {/* v0.0.38 polish — same template as Stealth panel (v0.0.37):
             .card + .card-title + .switch-row. Behavior unchanged. */}
         <div className="card">
-          <div className="card-title">🎓 Post-meeting debrief</div>
+          <div className="card-title">{t("coaching.card.title", lang)}</div>
           <div className="switch-row">
             <div className="switch-meta">
-              <div className="switch-title">Coaching tile после Stop (opt-in)</div>
-              <div className="switch-desc">
-                После Stop session AI шлёт mic-транскрипт в Sonnet и возвращает
-                3 коротких замечания о вашей речи (темп, паразиты, структура).
-                Срабатывает только если сессия ≥30 сек и было ≥5 mic-реплик.
-                Стоит ~1 Sonnet вызов (≈$0.005). Не забудь Save.
-              </div>
+              <div className="switch-title">{t("coaching.switch.title", lang)}</div>
+              <div className="switch-desc">{t("coaching.switch.desc", lang)}</div>
             </div>
             <button
               type="button"
               className="switch"
               role="switch"
               aria-checked={cfg.post_meeting_debrief_enabled ?? false}
-              aria-label="Toggle post-meeting debrief"
+              aria-label={t("coaching.switch.aria", lang)}
               onClick={() => update({ post_meeting_debrief_enabled: !(cfg.post_meeting_debrief_enabled ?? false) })}
             />
           </div>
@@ -1464,16 +1448,14 @@ export default function Settings() {
             same text-input UX, just inside the new card frame.
             Behavior unchanged. */}
         <div className="card">
-          <div className="card-title">⌨ Глобальные хоткеи</div>
+          <div className="card-title">{t("hotkeys.card.title", lang)}</div>
           <div className="hint" style={{ fontSize: 11, color: "var(--c-text-dim)" }}>
-            Регистрируются как global hotkeys Windows — работают когда
-            overlay не в фокусе. Формат: «F9» / «Ctrl+Shift+A» (Tauri syntax).
-            После Save потребуется restart сессии чтобы перерегистрировать.
+            {t("hotkeys.hint", lang)}
           </div>
           <div className="card-row">
             <div className="row-label">
-              Ask AI
-              <span className="row-hint">Спросить AI сейчас (со screenshot если есть)</span>
+              {t("hotkeys.ask.label", lang)}
+              <span className="row-hint">{t("hotkeys.ask.hint", lang)}</span>
             </div>
             <div className="row-control">
               <input value={cfg.hotkey_ask} onChange={(e) => update({ hotkey_ask: e.target.value })} />
@@ -1481,8 +1463,8 @@ export default function Settings() {
           </div>
           <div className="card-row">
             <div className="row-label">
-              Take screenshot
-              <span className="row-hint">Захват экрана для следующего F9</span>
+              {t("hotkeys.screenshot.label", lang)}
+              <span className="row-hint">{t("hotkeys.screenshot.hint", lang)}</span>
             </div>
             <div className="row-control">
               <input value={cfg.hotkey_screenshot} onChange={(e) => update({ hotkey_screenshot: e.target.value })} />
@@ -1490,8 +1472,8 @@ export default function Settings() {
           </div>
           <div className="card-row">
             <div className="row-label">
-              Toggle visibility
-              <span className="row-hint">PANIC HIDE — скрыть overlay + все тайлы</span>
+              {t("hotkeys.toggle.label", lang)}
+              <span className="row-hint">{t("hotkeys.toggle.hint", lang)}</span>
             </div>
             <div className="row-control">
               <input value={cfg.hotkey_toggle_visibility} onChange={(e) => update({ hotkey_toggle_visibility: e.target.value })} />
@@ -1499,8 +1481,8 @@ export default function Settings() {
           </div>
           <div className="card-row">
             <div className="row-label">
-              Pause audio
-              <span className="row-hint">Пауза/возобновить сессию (F8)</span>
+              {t("hotkeys.pause.label", lang)}
+              <span className="row-hint">{t("hotkeys.pause.hint", lang)}</span>
             </div>
             <div className="row-control">
               <input value={cfg.hotkey_pause_audio} onChange={(e) => update({ hotkey_pause_audio: e.target.value })} />

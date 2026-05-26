@@ -2,7 +2,7 @@
 
 Личный AI-overlay для технических собесов под Windows. Слушает звук, транскрибирует через Whisper, спрашивает Claude, показывает ответ во второстепенном окошке.
 
-Pet project, **v0.0.42**. Под одного пользователя. Без code signing, без telemetry.
+Pet project, **v0.0.43**. Под одного пользователя. Без code signing, без telemetry.
 
 ![overlay bar](docs/screenshots/overlay-bar.png)
 

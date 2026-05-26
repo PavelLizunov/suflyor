@@ -11,6 +11,35 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.43 (2026-05-26)
+
+Second i18n release. Translates the **simple panels** — those with
+single boolean toggles + minimal hierarchical content — using the
+infrastructure from v0.0.42.
+
+Panels covered:
+- **Stealth** (🎯 Screen-share behaviour): card title, switch
+  title/desc/aria, info banner
+- **Coaching** (🎓 Post-meeting debrief): card title, switch
+  title/desc/aria
+- **Interface** (🎨 Overlay appearance): card title for cost-indicator
+  toggle + switch title/desc/aria (the language switcher card was
+  already translated in v0.0.42)
+- **Hotkeys** (⌨ Global hotkeys): card title, instructional hint, all
+  4 row labels (Ask AI · Take screenshot · Toggle visibility · Pause
+  audio) + their hints
+
+Still NOT translated (deferred to v0.0.44 → v0.0.45):
+- AI panel (~30 strings — Bridge, Models, Budget, Detector cards)
+- Profile + Meeting context panel (~25 strings)
+- Audio + STT panel (~10 strings)
+- Auto-tiles + Snippets panel (~40 strings + dynamic snippet entries)
+- Knowledge base panel (~15 strings + search results)
+- Advanced (Updates · Diagnostics) panel (~25 strings)
+- Overlay bar + tile chrome + Replay viewer
+
+No backend changes — same `ui_language` field from v0.0.42.
+
 ### → v0.0.42 (2026-05-26)
 
 User: «Также сделай полные переводы как на русский так и на английский».
