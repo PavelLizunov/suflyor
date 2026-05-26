@@ -11,6 +11,21 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.82 (2026-05-26) — QOL block 5, #30
+
+**📦 Bulk collapse/expand all tiles from overlay bar.**
+
+New 📦 chip after the 🎯 stealth chip. Click → emits Tauri event
+`tile:collapse-all` → every tile window flips its v0.0.71 collapsed
+state to true (chrome-only). Click again → emits `tile:expand-all` →
+all expand back.
+
+Frontend-only — backend doesn't know about this UX construct.
+
+Use case: spawned 5 tiles during a long interview, want to clear
+visual space fast but keep the tiles as a reference strip. One click,
+all collapse simultaneously instead of clicking ▾ on each.
+
 ### → v0.0.81 (2026-05-26) — QOL block 5, #29
 
 **🎯 Stealth quick-toggle chip in overlay bar.**

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow, currentMonitor, LogicalSize } from "@tauri-apps/api/window";
 import { t, resolveLang, type Lang } from "./i18n";
 
@@ -107,6 +107,11 @@ export default function Overlay() {
   // cfg.stealth_enabled on mount + focus. Writes via set_stealth.
   // Toggling applies to overlay + all tile windows immediately.
   const [stealth, setStealthState] = useState<boolean>(false);
+  // v0.0.82: bulk tile collapse state. Toggling emits a Tauri event
+  // that all tile windows listen for. Frontend-side only — backend
+  // doesn't need to know about this UX construct. Starts false on
+  // every overlay mount; not persisted.
+  const [allCollapsed, setAllCollapsed] = useState<boolean>(false);
   // Failure HUD — 3 dots (audio/stt/ai). null = no signal received yet.
   const [health, setHealth] = useState<HealthPayload | null>(null);
   // Voice coach — live mic WPM / filler density. null = backend hasn't
@@ -1211,6 +1216,39 @@ export default function Overlay() {
           }}
         >
           🎯 {stealth ? "ON" : "off"}
+        </button>
+        {/* v0.0.82: bulk collapse / expand all tiles. Emits a Tauri
+            event that all tile windows listen for. Useful to clean up
+            screen real estate fast when you've spawned a lot of tiles
+            but want to keep them around as a reference strip. Stays
+            in sync via the local allCollapsed state — clicking again
+            expands everything back. */}
+        <button
+          type="button"
+          className="hint"
+          style={{
+            fontFamily: "monospace",
+            fontSize: 11,
+            padding: "0 6px",
+            borderRadius: 4,
+            border: "1px solid var(--c-border-soft)",
+            background: "transparent",
+            cursor: "pointer",
+            color: "var(--c-text-mute)",
+          }}
+          title={lang === "en"
+            ? `${allCollapsed ? "Expand" : "Collapse"} all tiles (bulk ▾/▴)`
+            : `${allCollapsed ? "Развернуть" : "Свернуть"} все тайлы (массово ▾/▴)`}
+          aria-label={lang === "en" ? "Toggle all tiles" : "Переключить все тайлы"}
+          aria-pressed={allCollapsed}
+          onClick={() => {
+            const next = !allCollapsed;
+            emit(next ? "tile:collapse-all" : "tile:expand-all")
+              .catch((e) => console.warn("collapse-all emit:", e));
+            setAllCollapsed(next);
+          }}
+        >
+          📦
         </button>
         {/* v0.0.62: session elapsed timer chip. Shown while session
             running (sessionStartMs set). Yellow at 45 min, red at 60. */}

@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
-import { emit } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -105,6 +105,22 @@ export default function TileWindow() {
   useEffect(() => {
     document.body.classList.add("tile");
     return () => document.body.classList.remove("tile");
+  }, []);
+
+  // v0.0.82: listen for bulk collapse/expand events from the overlay
+  // bar's 📦 chip. emit() broadcasts to all windows; each tile flips
+  // its own collapsed state. Tiles that don't exist when the event
+  // fires don't matter — new tiles spawn with collapsed=false (the
+  // chip toggle re-emits when toggled again).
+  useEffect(() => {
+    const unlistens: Array<() => void> = [];
+    listen<void>("tile:collapse-all", () => setCollapsed(true))
+      .then((u) => unlistens.push(u))
+      .catch(() => {});
+    listen<void>("tile:expand-all", () => setCollapsed(false))
+      .then((u) => unlistens.push(u))
+      .catch(() => {});
+    return () => { unlistens.forEach((u) => u()); };
   }, []);
 
   // v0.0.69: tick tile age every 5s. Formats: <60s as "Ns", <60m as
