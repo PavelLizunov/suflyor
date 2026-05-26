@@ -24,6 +24,13 @@ slint-build = "1.16"
 # need no system deps (no GTK/X11). Suitable for the pilot.
 slint = "1.16"
 
+# Journal data layer (Day 2). serde_json parses the per-line JSONL
+# events; dirs resolves %APPDATA%; anyhow gives Context-friendly errors.
+# These three are already deps of src-tauri so no new third-party risk.
+serde_json = "1"
+dirs = "5"
+anyhow = "1"
+
 [dev-dependencies]
 # i-slint-backend-testing is the OFFICIAL test framework (not "slint-testing").
 # `mcp` feature enables the embedded MCP server; with SLINT_EMIT_DEBUG_INFO=1

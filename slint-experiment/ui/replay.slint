@@ -93,7 +93,9 @@ export component MainWindow inherits Window {
         }
 
         // ---------- Filter chips ----------
-        if root.filter-chips.length > 0 : HorizontalLayout {
+        // Hide when only one distinct kind — filtering is meaningless with
+        // a single bucket. Mirrors React's `kindCounts.length > 1` gate.
+        if root.filter-chips.length > 1 : HorizontalLayout {
             spacing: 6px;
             alignment: start;
             Text {
