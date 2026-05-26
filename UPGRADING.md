@@ -11,6 +11,19 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.14 (2026-05-26)
+
+- **No config schema change.**
+- Fix: closing Settings now restores the overlay to its pre-Settings
+  position (was snapping back to the default 200,40). If you dragged
+  overlay to second monitor and opened Settings, closing Settings
+  used to throw the overlay back to primary monitor.
+- A11y sweep: tile windows, Replay viewer, and KB palette got proper
+  ARIA roles + aria-label/aria-pressed/aria-selected. Replay filter
+  chips are now color-coded by event kind (matches timeline borders).
+- 2 new edge-case tests for is_strictly_newer (semver compare): test
+  count 237 → 239.
+
 ### → v0.0.13 (2026-05-26)
 
 - **No config schema change.**
