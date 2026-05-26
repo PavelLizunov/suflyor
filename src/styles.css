@@ -553,6 +553,307 @@ kbd {
   gap: var(--s-4);
 }
 
+/* =====================================================================
+   v0.0.30 — Settings sidebar redesign (Claude Design handoff).
+   Two-pane layout: 200px nav on left, content on right. Cards inside.
+   Switch atom + row, banner, chip-cloud, hotkey-row.
+   The legacy `.settings-root .body` block above still works for any
+   panel that opts out of the new shell.
+   ===================================================================== */
+
+.settings-shell {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-nav {
+  background: var(--c-bg-0);
+  border-right: 1px solid var(--c-border);
+  padding: var(--s-3) var(--s-2);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-nav .nav-search {
+  margin: 0 var(--s-2) var(--s-2);
+  position: relative;
+}
+.settings-nav .nav-search input {
+  height: 26px;
+  padding-left: 26px;
+  font-size: var(--fs-12);
+  background: var(--c-bg-2);
+  width: 100%;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-2);
+  color: var(--c-text);
+}
+.settings-nav .nav-search::before {
+  content: "⌕";
+  position: absolute;
+  left: 8px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--c-text-dim);
+  font-size: var(--fs-13);
+  pointer-events: none;
+}
+.settings-nav .nav-group {
+  font: 600 var(--fs-10)/1 var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--c-text-dim);
+  padding: var(--s-3) var(--s-3) var(--s-2);
+}
+.settings-nav button.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  text-align: left;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-2);
+  color: var(--c-text-mute);
+  font-size: var(--fs-13);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background var(--dur-base) var(--ease),
+              color var(--dur-base) var(--ease);
+}
+.settings-nav button.nav-item:hover {
+  background: var(--c-bg-2);
+  color: var(--c-text);
+}
+.settings-nav button.nav-item.active {
+  background: color-mix(in srgb, var(--c-auto) 14%, var(--c-bg-2));
+  color: var(--c-text);
+  border-color: color-mix(in srgb, var(--c-auto) 40%, transparent);
+}
+.settings-nav .nav-item .nav-icon {
+  width: 18px;
+  display: inline-grid;
+  place-items: center;
+  font-size: var(--fs-13);
+  flex: 0 0 auto;
+}
+.settings-nav .nav-item .nav-badge {
+  margin-left: auto;
+  font: 500 var(--fs-10)/1 var(--font-mono);
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: var(--c-bg-3);
+  color: var(--c-text-mute);
+}
+.settings-nav .nav-item.has-warn .nav-badge {
+  background: color-mix(in srgb, var(--c-warn) 25%, transparent);
+  color: var(--c-warn);
+}
+
+.settings-pane {
+  overflow-y: auto;
+  padding: var(--s-5) var(--s-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+.settings-pane .pane-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  padding-bottom: var(--s-3);
+  border-bottom: 1px solid var(--c-border-soft);
+}
+.settings-pane .pane-head h2 {
+  margin: 0;
+  font: 600 var(--fs-16)/1.2 var(--font-ui);
+  letter-spacing: -0.005em;
+  color: var(--c-text);
+}
+.settings-pane .pane-head .pane-sub {
+  font: 400 var(--fs-12)/1.4 var(--font-ui);
+  color: var(--c-text-mute);
+}
+
+/* Sub-section card inside a pane */
+.settings-pane .card {
+  background: var(--c-bg-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-3);
+  padding: var(--s-4) var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+.settings-pane .card-title {
+  font: 600 var(--fs-12)/1 var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--c-text-mute);
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.settings-pane .card-row {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: var(--s-4);
+  align-items: start;
+}
+.settings-pane .card-row .row-label {
+  padding-top: 7px;
+  font-size: var(--fs-13);
+  color: var(--c-text);
+}
+.settings-pane .card-row .row-label .row-hint {
+  display: block;
+  font-size: var(--fs-11);
+  color: var(--c-text-dim);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+.settings-pane .card-row .row-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+.settings-pane .card-row .row-control .hint {
+  font-size: var(--fs-11);
+  color: var(--c-text-dim);
+  line-height: 1.45;
+}
+
+/* Inline switch row (no label column) */
+.switch-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  padding: var(--s-2) 0;
+}
+.switch-row .switch-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.switch-row .switch-meta .switch-title {
+  font-size: var(--fs-13);
+  color: var(--c-text);
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.switch-row .switch-meta .switch-desc {
+  font-size: var(--fs-11);
+  color: var(--c-text-dim);
+  line-height: 1.45;
+  margin-top: 2px;
+}
+.switch {
+  flex: 0 0 auto;
+  position: relative;
+  display: inline-block;
+  width: 32px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--c-bg-4);
+  border: 1px solid var(--c-border);
+  cursor: pointer;
+  transition: background var(--dur-base) var(--ease),
+              border-color var(--dur-base) var(--ease);
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 1px; left: 1px;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--c-text-mute);
+  transition: transform var(--dur-base) var(--ease),
+              background var(--dur-base) var(--ease);
+}
+.switch[aria-checked="true"] {
+  background: color-mix(in srgb, var(--c-auto) 65%, var(--c-bg-2));
+  border-color: color-mix(in srgb, var(--c-auto) 60%, transparent);
+}
+.switch[aria-checked="true"]::after {
+  transform: translateX(14px);
+  background: #fff;
+}
+
+/* Warning / banner inside pane */
+.banner {
+  border-radius: var(--r-2);
+  padding: var(--s-3) var(--s-4);
+  font-size: var(--fs-12);
+  line-height: 1.45;
+  border: 1px solid;
+}
+.banner.warn {
+  background: color-mix(in srgb, var(--c-warn) 8%, transparent);
+  border-color: color-mix(in srgb, var(--c-warn) 35%, transparent);
+  color: color-mix(in srgb, var(--c-warn) 70%, white);
+}
+.banner.info {
+  background: color-mix(in srgb, var(--c-auto) 8%, transparent);
+  border-color: color-mix(in srgb, var(--c-auto) 35%, transparent);
+  color: color-mix(in srgb, var(--c-auto) 65%, white);
+}
+
+/* Trigger-keywords chip cloud */
+.chip-cloud {
+  display: flex; flex-wrap: wrap;
+  gap: 4px;
+  padding: var(--s-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-2);
+  background: var(--c-bg-3);
+  max-height: 132px;
+  overflow-y: auto;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 8px;
+  border-radius: 3px;
+  background: var(--c-bg-1);
+  border: 1px solid var(--c-border);
+  color: var(--c-text);
+  font: 500 var(--fs-11)/1 var(--font-mono);
+}
+.chip button {
+  color: var(--c-text-dim);
+  font-size: var(--fs-12);
+  line-height: 1;
+  padding: 0 1px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.chip button:hover { color: var(--c-error); }
+
+/* Hotkey row */
+.hotkey-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--c-border-soft);
+}
+.hotkey-row:last-child { border-bottom: 0; }
+.hotkey-row .hk-name { font-size: var(--fs-13); color: var(--c-text); }
+.hotkey-row .hk-name small {
+  display: block;
+  font-size: var(--fs-11);
+  color: var(--c-text-dim);
+  margin-top: 2px;
+}
+.hotkey-row .hk-keys { display: flex; gap: 4px; }
+
 .settings-root .footer {
   padding: var(--s-3) var(--s-5);
   border-top: 1px solid var(--c-border);

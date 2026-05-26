@@ -11,6 +11,56 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.30 (2026-05-26) ✨ Settings sidebar redesign
+
+**Settings UI reorganized from one long scroll into a sidebar + content
+pane** per Claude Design handoff (`api.anthropic.com/v1/design/h/...`).
+
+User asked: «можем как-то организовать [Settings]» — the original was
+13 stacked `<h3>` sections with ~2000 px total height. Now: 200-px
+sidebar nav on the left with 4 groups + 11 sections, content pane on
+the right showing only the active section.
+
+- **Sidebar groups + sections** (4 / 11):
+  - **Сессия**: 👤 Профиль и контекст · 🎚 Аудио и STT
+  - **AI**: 🛰 AI мост · модели · бюджет (⚠ HTTP badge when bridge is
+    plain http to non-localhost)
+  - **Логика**: 🪟 Авто-тайлы и сниппеты (badge: snippet count) ·
+    📚 База знаний (badge: KB entry count, e.g. `1.6k`) · 🎓 Коучинг
+  - **Приложение**: 🎨 Интерфейс · 🫥 Скрытность · ⌨ Хоткеи ·
+    🔧 Обновления · диагностика
+- **Search filter** in sidebar (`фильтр…`) — narrows the nav list
+  client-side by label substring.
+- **No content moved** — each existing settings-section was wrapped in
+  a `{activeSection === "X" && (<div...>...</div>)}` conditional, so
+  every field binding, save handler, modal trigger, and event listener
+  keeps working unchanged.
+- **All design CSS appended to `src/styles.css`** — new selectors:
+  `.settings-shell`, `.settings-nav`, `.settings-pane`, `.card`,
+  `.card-title`, `.card-row`, `.row-label`, `.row-hint`, `.row-control`,
+  `.switch`, `.switch-row`, `.switch-meta`, `.switch-title`,
+  `.switch-desc`, `.banner.warn|info`, `.chip-cloud`, `.chip`,
+  `.hotkey-row`, `.hk-name`, `.hk-keys`, `.nav-search`, `.nav-group`,
+  `.nav-item.active|has-warn`, `.nav-icon`, `.nav-badge`. Tokens
+  (`--c-*`, `--fs-*`, `--s-*`, `--r-*`) already existed from prior
+  design round — re-used as-is.
+- **Audio panel** is the only one that shows two existing sections
+  (Audio devices at top + STT below) since both belong logically
+  together — both render when `activeSection === "audio"`.
+- **Profile panel** similarly combines Профили + Meeting context.
+- **Tiles panel** combines Auto-tiles + Snippets.
+- **AI panel** is a single large card (the existing AI proxy block
+  includes bridge URL, bearer, models, language, cost cap, bridge
+  check). Future versions may split into 3 separate panels per the
+  original design (bridge / models / budget).
+
+No config schema change. JSX class names preserved — `.settings-root`
+still wraps everything; `.settings-section`, `.field`, `.btn`,
+`.btn.secondary`, `.btn-row` are still used inside the conditionally-
+rendered sections.
+
+255/255 lib tests still pass · vite build clean · tsc clean.
+
 ### → v0.0.29 (2026-05-26)
 
 **Tile size is now percentage of monitor with absolute floor.** User

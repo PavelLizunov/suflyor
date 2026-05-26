@@ -148,6 +148,12 @@ export default function Settings() {
   // Crash report — if %APPDATA%\overlay-mvp\crash-report.txt exists, show
   // a button to open it. Probed on mount + on window focus.
   const [crashReport, setCrashReport] = useState<string | null>(null);
+  // v0.0.30: sidebar redesign — active panel + search query for filter.
+  // Implementation per Claude Design handoff (rust-overlay/project/Settings.html).
+  // Wraps the existing 13 settings-section blocks in conditional render
+  // instead of moving them — preserves all save/load field bindings.
+  const [activeSection, setActiveSection] = useState<string>("profile");
+  const [navFilter, setNavFilter] = useState("");
   const toastTimerRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
   // Pending modal resolver — captured so unmount can reject open prompts
@@ -482,7 +488,90 @@ export default function Settings() {
         </button>
       </div>
 
-      <div className="settings-section">
+      {/* v0.0.30 sidebar layout per Claude Design handoff.
+       * The 13 existing settings-section blocks are wrapped in conditionals
+       * driven by `activeSection`. Sidebar nav lives on the left. The old
+       * btn-row footer (Save/Back/Replay/etc) stays below the shell. */}
+      <div className="settings-shell">
+        <nav className="settings-nav" aria-label="Settings sections">
+          <div className="nav-search">
+            <input
+              type="search"
+              placeholder="фильтр…"
+              value={navFilter}
+              onChange={(e) => setNavFilter(e.target.value)}
+              aria-label="Filter settings sections"
+            />
+          </div>
+          {(() => {
+            const items: Array<
+              | { group: string }
+              | { id: string; icon: string; label: string; badge?: string; warn?: boolean }
+            > = [
+              { group: "Сессия" },
+              { id: "profile", icon: "👤", label: "Профиль и контекст" },
+              { id: "audio", icon: "🎚", label: "Аудио и STT" },
+              { group: "AI" },
+              {
+                id: "ai",
+                icon: "🛰",
+                label: "AI мост · модели · бюджет",
+                ...(cfg && cfg.ai_base_url && cfg.ai_base_url.startsWith("http://") &&
+                  !cfg.ai_base_url.includes("localhost") &&
+                  !cfg.ai_base_url.includes("127.0.0.1") &&
+                  !cfg.ai_base_url.includes("[::1]")
+                  ? { warn: true, badge: "HTTP" }
+                  : {}),
+              },
+              { group: "Логика" },
+              { id: "tiles", icon: "🪟", label: "Авто-тайлы и сниппеты",
+                ...(cfg?.snippets?.length ? { badge: String(cfg.snippets.length) } : {}) },
+              { id: "knowledge", icon: "📚", label: "База знаний",
+                ...(kbStats?.total ? { badge: kbStats.total >= 1000
+                  ? `${(kbStats.total / 1000).toFixed(1)}k`
+                  : String(kbStats.total) } : {}) },
+              { id: "coaching", icon: "🎓", label: "Коучинг" },
+              { group: "Приложение" },
+              { id: "interface", icon: "🎨", label: "Интерфейс" },
+              { id: "stealth", icon: "🫥", label: "Скрытность" },
+              { id: "hotkeys", icon: "⌨", label: "Хоткеи" },
+              { id: "advanced", icon: "🔧", label: "Обновления · диагностика" },
+            ];
+            const q = navFilter.trim().toLowerCase();
+            const filtered = q
+              ? items.filter((it) =>
+                  "group" in it ? false : it.label.toLowerCase().includes(q) || it.id.includes(q),
+                )
+              : items;
+            return filtered.map((it, i) =>
+              "group" in it ? (
+                <div key={`g${i}`} className="nav-group">
+                  {it.group}
+                </div>
+              ) : (
+                <button
+                  key={it.id}
+                  type="button"
+                  className={
+                    "nav-item" +
+                    (activeSection === it.id ? " active" : "") +
+                    (it.warn ? " has-warn" : "")
+                  }
+                  onClick={() => setActiveSection(it.id)}
+                  aria-current={activeSection === it.id ? "page" : undefined}
+                >
+                  <span className="nav-icon">{it.icon}</span>
+                  <span>{it.label}</span>
+                  {it.badge && <span className="nav-badge">{it.badge}</span>}
+                </button>
+              ),
+            );
+          })()}
+        </nav>
+
+        <section className="settings-pane" aria-label="Active settings panel">
+
+      {activeSection === "profile" && (<div className="settings-section">
         <h3>👥 Профили контекста</h3>
         <div className="field">
           <label>Активный профиль</label>
@@ -536,9 +625,9 @@ export default function Settings() {
             >× Удалить активный</button>
           )}
         </div>
-      </div>
+      </div>)}
 
-      <div className="settings-section">
+      {activeSection === "profile" && (<div className="settings-section">
         <h3>📝 Meeting context</h3>
         <div className="field">
           <label>
@@ -577,9 +666,9 @@ export default function Settings() {
             {recError}
           </div>
         )}
-      </div>
+      </div>)}
 
-      <div className="settings-section">
+      {activeSection === "audio" && (<div className="settings-section">
         <h3>🎤 Audio devices</h3>
         <div className="field">
           <label>Microphone (your voice)</label>
@@ -608,9 +697,9 @@ export default function Settings() {
             ))}
           </select>
         </div>
-      </div>
+      </div>)}
 
-      <div className="settings-section">
+      {activeSection === "ai" && (<div className="settings-section">
         <h3>🤖 AI proxy (your Claude bridge)</h3>
         <div className="field">
           <label>Base URL</label>
@@ -786,9 +875,9 @@ export default function Settings() {
             <option value="en">English (en)</option>
           </select>
         </div>
-      </div>
+      </div>)}
 
-      <div className="settings-section">
+      {activeSection === "interface" && (<div className="settings-section">
         <h3>🎨 Интерфейс</h3>
         <div className="field">
           <label>
@@ -809,9 +898,9 @@ export default function Settings() {
             Скрытие не отключает учёт — деньги всё равно пишутся в журнал и cost:update event летает. Только убирает шильдик из бара.
           </div>
         </div>
-      </div>
+      </div>)}
 
-      <div className="settings-section">
+      {activeSection === "stealth" && (<div className="settings-section">
         <h3>🎯 Stealth</h3>
         <div className="field">
           <label title="WDA_EXCLUDEFROMCAPTURE — overlay+tiles не появятся в Zoom/Meet/OBS screen share">
@@ -832,9 +921,9 @@ export default function Settings() {
             Скрыть overlay+tiles от screen share (нужен restart? нет — применяется сразу)
           </label>
         </div>
-      </div>
+      </div>)}
 
-      <div className="settings-section">
+      {activeSection === "coaching" && (<div className="settings-section">
         <h3>🎯 Coaching</h3>
         <div className="field">
           <label title="После Stop session AI шлёт mic-транскрипт в Sonnet и возвращает 3 коротких замечания о вашей речи (темп, паразиты, структура). +1 Sonnet-вызов на сессию.">
@@ -850,9 +939,9 @@ export default function Settings() {
             Срабатывает только если сессия ≥30 сек и было ≥5 mic-реплик. Стоит ~1 Sonnet вызов (≈$0.005). Не забудьте Save.
           </div>
         </div>
-      </div>
+      </div>)}
 
-      <div className="settings-section">
+      {activeSection === "tiles" && (<div className="settings-section">
         <h3>🪟 Auto-tiles</h3>
         <div className="field">
           <label>
@@ -888,9 +977,9 @@ export default function Settings() {
             placeholder="kubernetes etcd istio terraform prometheus"
           />
         </div>
-      </div>
+      </div>)}
 
-      <div className="settings-section">
+      {activeSection === "knowledge" && (<div className="settings-section">
         <h3>
           📚 Knowledge Base
           {kbStats && (
@@ -970,9 +1059,9 @@ export default function Settings() {
         <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 6 }}>
           KB файлы embedded в бинарник (read-only). Источники: <code>src-tauri/knowledge/{"{glossary,commands,patterns}"}.md</code>.
         </div>
-      </div>
+      </div>)}
 
-      <div className="settings-section">
+      {activeSection === "tiles" && (<div className="settings-section">
         <h3>
           📋 Snippets ({(cfg.snippets || []).length}) — pre-written answers (zero cost){" "}
           <button
@@ -1140,9 +1229,9 @@ export default function Settings() {
           Редактирование снипетов через JSON: <code>%APPDATA%\overlay-mvp\config.json</code> → массив <code>snippets</code>.
           В будущей версии — palette через F4 и UI редактор прямо здесь.
         </div>
-      </div>
+      </div>)}
 
-      <div className="settings-section">
+      {activeSection === "audio" && (<div className="settings-section">
         <h3>🎙 STT (Groq Whisper)</h3>
         <div className="field">
           <label>Groq API key (gsk_…)</label>
@@ -1174,9 +1263,9 @@ export default function Settings() {
             Turbo сокращает latency Whisper-вызова с ~500ms до ~150-200ms на 2-5s клипе. Качество падает на редких технических терминах (kubectl-debug, consistent hashing). Для типовых SRE/DevOps вопросов разница незаметна. Меняй при необходимости low-latency feedback.
           </div>
         </div>
-      </div>
+      </div>)}
 
-      <div className="settings-section">
+      {activeSection === "hotkeys" && (<div className="settings-section">
         <h3>⌨ Hotkeys</h3>
         <div className="field">
           <label>Ask AI</label>
@@ -1194,9 +1283,9 @@ export default function Settings() {
           <label>Pause audio</label>
           <input value={cfg.hotkey_pause_audio} onChange={(e) => update({ hotkey_pause_audio: e.target.value })} />
         </div>
-      </div>
+      </div>)}
 
-      <div className="settings-section">
+      {activeSection === "advanced" && (<div className="settings-section">
         <h3>🆙 Обновления</h3>
         <div className="field">
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -1396,7 +1485,11 @@ export default function Settings() {
             </div>
           </div>
         </div>
+      </div>)}
+
+        </section>
       </div>
+      {/* end v0.0.30 settings-shell (sidebar + pane) */}
 
       <div className="btn-row">
         {savedFlash && <span style={{ color: "#4ade80", alignSelf: "center" }}>✓ Saved</span>}
