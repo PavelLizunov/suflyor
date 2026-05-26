@@ -43,34 +43,149 @@ starting any autonomous session.
   doesn't always pick it up — prepend
   `export PATH="/c/Users/x3d_mutant/.cargo/bin:$PATH"`.
 
-## Release verification — MANDATORY (after v0.0.34 P0 incident)
+## Methodology — six-layer testing (adopted from vpnctl, 2026-05-26)
 
-See `RELEASE_CHECKLIST.md` for the canonical 6-gate methodology.
-Established 2026-05-26 after v0.0.34 shipped an infinite-overlay-grow
-bug that all static checks passed but no one launched the binary.
+**Why this exists:** v0.0.67 → v0.1.2 attempt was a 33-release marathon
+where layers 1-2 (clippy + cargo test) passed every release but the user
+caught regressions live in WebView2 layout, focus races, multi-monitor
+geometry, and i18n drift. User cut 64 of 68 GitHub releases by hand
+(`«удалить большую часть релизов, зачем они там?»`) and asked for the
+methodology from their `vpnctl` Rust project where there were no large
+bugs. This section is that methodology, adapted to Tauri/WebView2.
 
-**Every release MUST pass all 6 gates before `git push`:**
+### The six layers (UI), three (logic-only)
 
-1. **Static checks** (`cargo test --lib`, `cargo clippy --all-targets
-   -- -D warnings`, `npx tsc --noEmit`)
-2. **Build** (`npm run tauri build -- --bundles nsis`)
-3. **Install** via the NSIS installer with `/S` silent flag and verify
-   `LastWriteTime` of `%LOCALAPPDATA%\suflyor\overlay-mvp.exe` updated
-4. **Smoke test via computer-use** — `mcp__computer-use__screenshot` after
-   `open_application "suflyor"`. Bar must:
-   - render at sane size (520-1000 px wide), correct position (top)
-   - NOT extend past screen edges
-   - have stable dimensions over a 5-second wait (catches feedback loops
-     like v0.0.34's infinite-grow)
-5. **Feature verification** of the changed surface — for layout changes,
-   drag-resize the bar; for Settings changes, navigate panels + click
-   save; for hotkey changes, trigger the hotkey
-6. **Quit cleanly** — `⚙ → ✕ Выйти → «Выйти» confirm` then check
-   `(Get-Process overlay-mvp -ErrorAction SilentlyContinue).Count == 0`
+Each layer catches a strict subset the others miss. **Do not skip.**
+Every skip in the past produced a user-facing regression.
 
-Static checks are necessary but NOT sufficient. They don't see runtime
-layout feedback loops. See `POST_MORTEM_v0034.md` for the full incident
-analysis.
+| # | Layer | Tool | Catches | Misses |
+|---|---|---|---|---|
+| 1 | clippy | `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings` | API misuse, dead code, `unwrap`/`expect`/`panic` outside `#[cfg(test)]` | CSS, HTML, runtime behaviour |
+| 2 | cargo test | `cargo test --manifest-path src-tauri/Cargo.toml --lib` | Rust unit + integration (260+ tests) | TS code, WebView paint, layout |
+| 3 | Copy-contract | `cargo test --test copy_contract` (and `npx tsc --noEmit` for TS) | Drift in canonical i18n strings, error message formats | Style of NEW text — additive: pin it the same commit it lands |
+| 4 | review-agent | `Agent(subagent_type:general-purpose, prompt=docs/REVIEW_AGENT_PROMPT.md)` BEFORE commit | Logic bugs, security, library misuse, codebase duplicates | Whether the WebView paints correctly |
+| 5 | Live install + smoke | `scripts/ci.ps1 && scripts/visual_check.ps1` | Runtime crashes, infinite-grow loops, missing assets in bundle | Cross-display-config edge cases (need user's monitor) |
+| 6 | Visual check | `scripts/visual_check.ps1` saves PNG → Claude reads it | Floating panels covering chrome, tile chrome overflow, font fallback, transparency paint glitches | Quirks specific to user's display setup |
+
+Logic-only changes (e.g. detector regex, kb parser) need 1, 2, 4, 5.
+Anything that touches Tauri windows, React, or CSS needs all six.
+
+### Blocking workflow before every commit
+
+```
+1. review-agent      (independent — paste full diff + invariants, do NOT
+                      reference "the discussion above")
+2. npm run ci        = scripts/ci.ps1 (fmt-check + clippy + tests + tsc)
+3. scripts/visual_check.ps1 → Read the PNG it saves
+4. git commit / push (auto-gated by .claude/hooks/git-gate.ps1 — BLOCKS
+                      if fmt/clippy/test/tsc fail; --no-verify bypasses)
+```
+
+The git-gate.ps1 PreToolUse hook is the ONLY piece that genuinely
+BLOCKS bad commits — without it, the methodology relies on discipline
+(remembering to run `npm run ci`). Setup:
+- `.claude/settings.json` registers the hook against `Bash` matcher
+- `.claude/hooks/git-gate.ps1` runs `cargo fmt --check + clippy` on
+  every `git commit`, plus `cargo test --lib + --test copy_contract +
+  npx tsc --noEmit` on every `git push`
+- `--no-verify` in the git command bypasses with a WARN line (rare;
+  hotfix only per the short-circuit below)
+- Required toolchain component: `rustup component add rustfmt`
+- After editing the hook script OR settings.json: RESTART Claude Code
+  (settings watcher does not pick up changes mid-session)
+- Pipe-test before trusting:
+  ```pwsh
+  '{"tool_input":{"command":"git commit -m x"}}' | powershell -NoProfile -ExecutionPolicy Bypass -File .claude\hooks\git-gate.ps1
+  ```
+
+**Hotfix-only short-circuit** (review-agent skippable ONLY if ALL THREE):
+- impl ≤ 5 lines
+- touches exactly ONE surface (e.g. only a CSS rule, or only a single
+  Tauri command body)
+- changes no string pinned by `tests/copy_contract.rs`
+
+### Concrete test patterns
+
+- **`src-tauri/tests/copy_contract.rs`** — pins canonical Russian + English
+  UI strings (`settings.save`, error format `tile spawn failed: {reason}`,
+  the F4 palette placeholder, etc.). Any drift fails the test in the same
+  commit. Adding a new visible string = add it to the contract test in
+  the same commit that adds the string. See [Copy contract](#copy-contract)
+  below for full coverage list.
+- **`src-tauri/tests/spec_*.rs`** — independent contract tests for new
+  public Rust functions. Written by `test-writer-agent` (Agent tool)
+  BEFORE the agent sees impl. Per-file feature scope. `#![allow(clippy::unwrap_used)]`
+  on module level. Each test = own tempdir / fresh state. Tests that
+  fail = either impl wrong or spec ambiguous — DO NOT weaken the test.
+- **Existing 260 `cargo test --lib` suite** — keep green at all times.
+  WAV roundtrip, decimator signal, detector regex, tile slot math,
+  config schema migration. Many of these are the most valuable bug-catchers
+  the project has.
+- **"Inverted impl" smell** — if `fn foo() -> Vec<T>` returned `Vec::new()`
+  and a test still passed, that test is useless. Every test must check
+  observable behaviour against the spec, not "didn't panic".
+
+### Operational rules
+
+- **`cargo fmt --all`** (NOT `--check`) BEFORE running tests. If it
+  changes anything, include in the same commit. fmt drift is the most
+  common CI killer.
+- **Build = `npm run tauri build`** (NOT `cargo build`). `cargo build`
+  bypasses the vite frontend bundle and ships a dev URL in release.
+  See the v0.0.95 P0 ROOT CAUSE incident.
+- **After Rust backend change** → mandatory NSIS install + visual check.
+  Don't trust "cargo test green = production sees new code". Verify
+  the installed binary timestamp updated and the new code path runs.
+- **Sub-agent isolation** — review-agent and test-writer-agent see only
+  what's in the prompt. Brief like a new colleague. Paste the full diff
+  and the architectural invariants. Don't reference earlier conversation.
+
+### Visual check (layer 6) for overlay-mvp
+
+`scripts/visual_check.ps1 [-Open]`:
+1. Kill any running overlay-mvp.
+2. (`-Open` only) Run the NSIS installer silently and confirm timestamp.
+3. Launch overlay via `Start-Process "$env:LOCALAPPDATA\suflyor\overlay-mvp.exe"`.
+4. Wait 2 s for WebView2 paint.
+5. Use `Add-Type` + System.Windows.Forms to grab a screenshot of the
+   primary display and save to `target/visual/overlay-{ts}.png`.
+6. (in future Claude session) `Read` that PNG to verify bar geometry,
+   chip overflow, content rendering.
+
+The script does the boring infra — the actual eyeball gate is Claude
+reading the PNG via the `Read` tool. Without that final read, layer 6
+is just bookkeeping. See `scripts/visual_check.ps1`.
+
+### Lessons learned (the "we got burned" list)
+
+1. **Don't skip a layer.** Every time I did during the marathon,
+   regressions reached the user. v0.0.85 reload+translate dead for 7
+   releases because layer 4 was skipped. v0.1.2 palette restore race
+   because layer 6 was skipped.
+2. **Don't run "fix waves"** when something's broken. Roll back to the
+   last known-good state FIRST, then fix with the full layer cake. The
+   marathon-block-5 hotfix waves compounded regressions because every
+   "fix" landed against an already-broken base.
+3. **Static checks are necessary, not sufficient.** clippy + cargo test +
+   tsc can all pass while the WebView shows a blank window. Treat them
+   as a sanity gate, not a release gate.
+4. **The user has 1 portrait secondary** (1200×1920 at x=-1200) + 1
+   landscape primary (1920×1080). Any default that depends on monitor
+   orientation needs both orientations live-tested. See
+   `tile.rs::pick_monitor` history.
+5. **WebView2 transparency + `always_on_top` is paint-flaky** on Windows
+   DWM. Always opaque-ish backgrounds (`rgba(20, 22, 30, 0.92)` not
+   fully transparent) to avoid "tile created but invisible" bugs.
+6. **No marathons.** User explicitly asked never to run another 29-release
+   sprint. Fewer, better-verified releases. See memory
+   `[[no-marathon-releases]]`.
+
+### Reference
+
+- **Methodology source:** memory `[[vpnctl-methodology]]` (full vpnctl
+  6-layer doc with example agent prompts).
+- **Project state:** memory `[[project-overlay-mvp-history]]`.
+- **User setup:** memory `[[user-setup-monitors]]`.
 
 ## i18n (RU + EN, since v0.0.42)
 

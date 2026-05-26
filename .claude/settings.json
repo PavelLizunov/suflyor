@@ -30,6 +30,15 @@
             "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:/Users/x3d_mutant/Natively/overlay-mvp/.claude/hooks/block-asks.ps1\""
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:/Users/x3d_mutant/Natively/overlay-mvp/.claude/hooks/git-gate.ps1\""
+          }
+        ]
       }
     ],
     "PostToolUse": [
