@@ -11,6 +11,30 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.22 (2026-05-26)
+
+- **REAL F8 crash fix.** v0.0.21 added a JS-side re-entry guard which
+  prevented one class of race, but the actual panic was in Rust — the
+  v0.0.21 runtime-panics.log finally surfaced it:
+  ```
+  src/runtime.rs:1437 — "there is no reactor running, must be called
+                         from the context of a Tokio 1.x runtime"
+  ```
+  Root cause: `stop_session` is a **sync** Tauri command. Tauri 2 runs
+  sync commands on a thread that has NO tokio reactor in TLS. Inside
+  `stop_session`, the post-meeting debrief was fired via raw
+  `tokio::spawn(...)` which panics in that thread. Same root cause as
+  task #93 in 2026-05-25 (also fixed by switching to
+  `tauri::async_runtime::spawn`).
+  
+  Fixed both sites:
+  - `runtime.rs:1437` (debrief fire-and-forget)
+  - `tile.rs:365` (TTL task — also called from sync kb_spawn /
+    expand_snippet commands)
+
+  `tauri::async_runtime::spawn` is a drop-in for `tokio::spawn` but uses
+  Tauri's own tokio runtime which is always available.
+
 ### → v0.0.21 (2026-05-26)
 
 - **F8 crash fix.** Rapid F8 double-press during an active session

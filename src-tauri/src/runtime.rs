@@ -1434,7 +1434,14 @@ pub fn stop_session(
     let has_bearer = !cfg.read().ai_bearer.trim().is_empty();
     match should_run_debrief(enabled, duration_ms, mic_lines, mic_text_chars, has_bearer) {
         Ok(()) => {
-            tokio::spawn(async move {
+            // CRITICAL: must be tauri::async_runtime::spawn, NOT tokio::spawn.
+            // stop_session is a sync Tauri command — Tauri 2 runs sync
+            // commands on a thread WITHOUT a tokio reactor in TLS, so
+            // tokio::spawn here panics with "there is no reactor running".
+            // Live crash 2026-05-26 (v0.0.21 panic log src/runtime.rs:1437).
+            // tauri::async_runtime::spawn always works — it uses Tauri's
+            // own runtime that's installed before commands fire. Same task #93.
+            tauri::async_runtime::spawn(async move {
                 run_post_meeting_debrief(app, cfg, tiles, transcript_snapshot).await;
             });
         }

@@ -362,7 +362,12 @@ pub fn spawn_tile_with_highlight(
     let app_clone = app.clone();
     let label_for_ttl = label.clone();
     let tiles_for_ttl = tiles.clone();
-    tokio::spawn(async move {
+    // CRITICAL: tauri::async_runtime::spawn, NOT tokio::spawn. This fn
+    // is called from sync Tauri commands (kb_spawn, expand_snippet, etc.)
+    // where the calling thread has no tokio reactor in TLS — tokio::spawn
+    // would panic with "no reactor running". Live crash 2026-05-26 in
+    // sibling runtime::stop_session (same root cause). Same task #93.
+    tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_secs(TTL_SECS)).await;
         // Atomic check+remove: prevents a race where the user pins the tile
         // *between* a non-atomic pin check and the close call. With the
