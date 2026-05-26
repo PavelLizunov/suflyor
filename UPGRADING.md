@@ -11,6 +11,25 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.23 (2026-05-26)
+
+- **🚀 One-click update.** Settings → 🆙 Обновления → новая кнопка
+  «🚀 Скачать и установить (one-click)» рядом со старой
+  «⬇ Открыть в браузере». Качает NSIS-installer с GitHub Releases в
+  `%TEMP%`, спавнит его, программа закрывается через 2 секунды,
+  установщик заменяет файлы (с UAC prompt) и поднимает новую версию.
+  Без хождения в браузер.
+- Старая кнопка «Открыть в браузере» оставлена как fallback на случай
+  если one-click не сработает (network issue, GitHub Releases отдал
+  пустой asset, и т.п.).
+- Защита: проверка размера скачанного файла — если меньше 100 KB
+  (значит redirect HTML / corrupted asset / GitHub mid-publish),
+  отказывается запускать чтобы пользователь не получил мутную ошибку
+  от Windows.
+- Backend cmd: `download_and_install_update`. Не использует
+  `tauri-plugin-updater` потому что у нас нет signed артефактов;
+  свой минимальный flow проще и не требует генерации key pair.
+
 ### → v0.0.22 (2026-05-26)
 
 - **REAL F8 crash fix.** v0.0.21 added a JS-side re-entry guard which

@@ -1435,6 +1435,111 @@ async fn check_update(window: tauri::WebviewWindow) -> Result<UpdateInfo, String
     })
 }
 
+/// v0.0.23: one-click update flow. Downloads the latest NSIS installer
+/// to %TEMP%, spawns it, and returns. The frontend then calls quit_app
+/// so the installer can replace overlay-mvp.exe without "file in use"
+/// errors. NSIS handles UAC prompt + relaunch on success.
+///
+/// We use NSIS (`*_x64-setup.exe`) over MSI because:
+///   - NSIS installer can replace a running binary on Windows more
+///     reliably (defers via reboot-once-required marker, or uses
+///     msiexec /qb that the user cannot abort mid-replace)
+///   - NSIS is a single .exe — `Command::new(path).spawn()` works directly
+///   - MSI needs `msiexec.exe /i path.msi` which sometimes doesn't trigger
+///     the UAC flow correctly when spawned from a user-context Tauri app
+///
+/// Returns the path of the launched installer so the UI can show it.
+#[tauri::command]
+async fn download_and_install_update(window: tauri::WebviewWindow) -> Result<String, String> {
+    assert_overlay(&window)?;
+    let current = env!("CARGO_PKG_VERSION");
+    let api_url = format!(
+        "https://api.github.com/repos/{owner}/{name}/releases/latest",
+        owner = REPO_OWNER, name = REPO_NAME
+    );
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .user_agent(format!("suflyor/{current} update-download"))
+        .build()
+        .map_err(|e| format!("HTTP client init failed: {e}"))?;
+
+    let v: serde_json::Value = client
+        .get(&api_url)
+        .send()
+        .await
+        .map_err(|e| format!("GitHub API unreachable: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("GitHub API error: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("malformed GitHub JSON: {e}"))?;
+
+    let tag = v.get("tag_name").and_then(|t| t.as_str()).unwrap_or("");
+    let latest = tag.trim_start_matches('v');
+    if latest.is_empty() {
+        return Err("GitHub release has no tag_name".into());
+    }
+
+    // Find the NSIS asset: name pattern `suflyor_<ver>_x64-setup.exe`.
+    let assets = v.get("assets").and_then(|a| a.as_array())
+        .ok_or("GitHub release has no assets")?;
+    let nsis_asset = assets.iter().find(|a| {
+        a.get("name")
+            .and_then(|n| n.as_str())
+            .map(|n| n.ends_with("_x64-setup.exe"))
+            .unwrap_or(false)
+    }).ok_or("no NSIS installer (*_x64-setup.exe) in latest release")?;
+    let download_url = nsis_asset
+        .get("browser_download_url")
+        .and_then(|u| u.as_str())
+        .ok_or("asset missing browser_download_url")?;
+
+    log::info!("downloading update v{latest} from {download_url}");
+    let bytes = client
+        .get(download_url)
+        .send()
+        .await
+        .map_err(|e| format!("download failed: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("download HTTP error: {e}"))?
+        .bytes()
+        .await
+        .map_err(|e| format!("read body failed: {e}"))?;
+    log::info!("downloaded {} bytes", bytes.len());
+
+    // Sanity check: NSIS setup.exe should be at least a few hundred KB.
+    // If GitHub Releases is mid-publish or asset is corrupt, we get a
+    // tiny redirect HTML — refuse to spawn it to avoid the user seeing
+    // a weird error from Windows.
+    if bytes.len() < 100_000 {
+        return Err(format!(
+            "downloaded file is suspiciously small ({} bytes) — refusing to launch",
+            bytes.len()
+        ));
+    }
+
+    // Write to %TEMP%/suflyor-update-<ver>.exe. Overwrite if exists.
+    let temp_dir = std::env::temp_dir();
+    let installer_path = temp_dir.join(format!("suflyor-update-{latest}.exe"));
+    std::fs::write(&installer_path, &bytes)
+        .map_err(|e| format!("temp write failed: {e}"))?;
+    log::info!("update installer written to {}", installer_path.display());
+
+    // Spawn the installer detached. The installer will:
+    //   1. Prompt UAC for elevation
+    //   2. Wait for overlay-mvp.exe to exit (or kill it)
+    //   3. Replace files
+    //   4. Optionally relaunch (NSIS default)
+    //
+    // We use `spawn()` (NOT `output()`) so we don't wait for it to exit.
+    // The frontend will call quit_app right after this returns.
+    std::process::Command::new(&installer_path)
+        .spawn()
+        .map_err(|e| format!("spawn installer failed: {e}"))?;
+
+    Ok(installer_path.to_string_lossy().to_string())
+}
+
 /// Tiny semver-ish compare: split by '.' and compare numeric components
 /// left-to-right. Non-numeric components compared as strings. Returns true
 /// iff `candidate` is strictly newer than `current`. Pre-release suffixes
@@ -1785,6 +1890,7 @@ pub fn run() {
             kb_spawn,
             check_bridge,
             check_update,
+            download_and_install_update,
             crash_report_path,
             dump_diagnostics,
         ])

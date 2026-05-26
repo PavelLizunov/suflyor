@@ -141,6 +141,10 @@ export default function Settings() {
   // Update check — GH releases API for "is there a new version".
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateBusy, setUpdateBusy] = useState(false);
+  // v0.0.23: one-click update download + install (the second button).
+  // Separate flag so the user can still hit "Проверить" while a
+  // download is in flight (though that's unusual).
+  const [oneClickBusy, setOneClickBusy] = useState(false);
   // Crash report — if %APPDATA%\overlay-mvp\crash-report.txt exists, show
   // a button to open it. Probed on mount + on window focus.
   const [crashReport, setCrashReport] = useState<string | null>(null);
@@ -1259,23 +1263,57 @@ export default function Settings() {
                   }}>{updateInfo.notes}</pre>
                 </details>
               )}
-              <button
-                className="btn"
-                onClick={async () => {
-                  try {
-                    // tauri-plugin-opener: open URL in default browser.
-                    const { openUrl } = await import("@tauri-apps/plugin-opener");
-                    await openUrl(updateInfo.download_url);
-                  } catch (e) {
-                    showToast("err", `Не удалось открыть браузер: ${e}`);
-                  }
-                }}
-                title="Откроет страницу релиза в браузере — скачай MSI и запусти"
-              >
-                ⬇ Открыть страницу скачивания
-              </button>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  className="btn"
+                  onClick={async () => {
+                    // v0.0.23: one-click download + install. Backend
+                    // fetches NSIS setup.exe, spawns it; we then quit so
+                    // the installer can replace overlay-mvp.exe cleanly.
+                    if (oneClickBusy) return;
+                    setOneClickBusy(true);
+                    try {
+                      showToast("ok", "⬇ Скачиваю установщик…");
+                      const path = await invoke<string>("download_and_install_update");
+                      showToast("ok", `✓ Установщик запущен (${path.split(/[\\/]/).pop()}). Программа закроется через 2 сек, дальше следуй за UAC + NSIS подсказками.`);
+                      // Give the OS a moment to bring up the UAC prompt
+                      // before we kill ourselves; otherwise the user can
+                      // miss the prompt and think nothing happened.
+                      setTimeout(() => {
+                        invoke("quit_app").catch(() => {
+                          // Fallback if quit_app refuses: hard exit by
+                          // closing the overlay window which is the only
+                          // main window — Tauri will tear the app down.
+                          getCurrentWindow().close().catch(() => {});
+                        });
+                      }, 2000);
+                    } catch (e) {
+                      setOneClickBusy(false);
+                      showToast("err", `Ошибка обновления: ${e}`);
+                    }
+                  }}
+                  disabled={oneClickBusy}
+                  title="Скачивает NSIS установщик и запускает его. Программа закроется, инсталлер заменит файлы и поднимет новую версию. UAC prompt будет."
+                >
+                  {oneClickBusy ? "⏳ Скачиваю…" : "🚀 Скачать и установить (one-click)"}
+                </button>
+                <button
+                  className="btn secondary"
+                  onClick={async () => {
+                    try {
+                      const { openUrl } = await import("@tauri-apps/plugin-opener");
+                      await openUrl(updateInfo.download_url);
+                    } catch (e) {
+                      showToast("err", `Не удалось открыть браузер: ${e}`);
+                    }
+                  }}
+                  title="Альтернативно: откроет страницу релиза в браузере — скачай MSI/EXE и запусти руками"
+                >
+                  ⬇ Открыть в браузере
+                </button>
+              </div>
               <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 6 }}>
-                Без code signing — SmartScreen предупредит «Unknown publisher». Жми More info → Run anyway. Установщик заменит старую версию (config сохранится).
+                Без code signing — SmartScreen может предупредить «Unknown publisher». Жми More info → Run anyway. Установщик заменит старую версию, config сохранится.
               </div>
             </div>
           )}
