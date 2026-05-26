@@ -821,6 +821,34 @@ export default function Overlay() {
       })
     );
 
+    // v0.0.68: 🔄 Tile reload bridge. Tile windows can't call tile_reload
+    // directly (assert_overlay), so they emit `tile:reload-request` to all
+    // windows; this overlay window invokes the actual command. On AI
+    // failure we surface via tile:error → existing toast UI.
+    unlistens.push(
+      listen<{ label: string; question: string }>("tile:reload-request", async (e) => {
+        const { label, question } = e.payload;
+        if (!label || !question) {
+          console.warn("tile:reload-request missing fields", e.payload);
+          return;
+        }
+        try {
+          await invoke<string>("tile_reload", { label, question });
+          // Success — backend closed old tile + spawned new. Nothing more
+          // to do here; user sees the new tile appear.
+        } catch (err) {
+          const msg = String(err);
+          console.warn("tile_reload failed:", msg);
+          setErrorText(msg.length > 200 ? msg.slice(0, 200) + "…" : msg);
+          if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+          errorTimerRef.current = setTimeout(() => {
+            if (mountedRef.current) setErrorText("");
+            errorTimerRef.current = null;
+          }, 6000);
+        }
+      })
+    );
+
     unlistens.push(
       listen<void>("hotkey:pause_audio", async () => {
         // v0.0.21: re-entry guard. User reported F8-during-call crashes

@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
+import { emit } from "@tauri-apps/api/event";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -51,6 +52,12 @@ export default function TileWindow() {
 
   const [answer] = useState(answerInitial);
   const [pinned, setPinned] = useState(false);
+  // v0.0.68: visual spinner state for the 🔄 reload button. Click sets it
+  // true, backend closes this tile on success so unmount handles cleanup.
+  // On AI error the backend keeps this tile alive but the spinner sticks
+  // until the user clicks again or closes — acceptable since errors are
+  // rare and the new tile that didn't spawn is obvious feedback.
+  const [reloading, setReloading] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   // v0.0.48: language for tile chrome. tile-* windows have a narrow
   // capability set but get_config is allowed via assert_overlay's caller
@@ -146,6 +153,24 @@ export default function TileWindow() {
       setPinned(next);
     } catch (e) {
       console.warn("pin_tile:", e);
+    }
+  };
+
+  // v0.0.68: 🔄 reload — re-ask the same question, get fresh answer.
+  // Tile windows can't call tile_reload directly (assert_overlay), so we
+  // emit a Tauri event to ALL windows; Overlay listens + invokes the
+  // backend command. On success the backend closes THIS tile (and spawns
+  // a new one), so React unmount handles cleanup. On AI failure the tile
+  // stays alive with the spinner — user can click × to close or try
+  // again.
+  const reload = async () => {
+    if (reloading) return;
+    setReloading(true);
+    try {
+      await emit("tile:reload-request", { label: `tile-${id}`, question });
+    } catch (e) {
+      console.warn("tile reload emit:", e);
+      setReloading(false);
     }
   };
 
@@ -278,6 +303,29 @@ export default function TileWindow() {
           aria-pressed={pinned}
         >
           📌
+        </button>
+        {/* v0.0.68: 🔄 reload — re-ask same question. Backend closes
+            this tile + spawns new one with fresh answer. Spinner during
+            in-flight; click guarded by `reloading` state to prevent
+            double-spawn. */}
+        <button
+          className="tile-reload"
+          onClick={reload}
+          disabled={reloading}
+          title={reloading
+            ? (lang === "en" ? "Reloading…" : "Перезапрос…")
+            : (lang === "en" ? "Re-ask this question (fresh AI answer)" : "Переспросить (новый ответ AI)")}
+          aria-label={lang === "en" ? "Reload tile" : "Перезапросить тайл"}
+          style={{
+            background: "transparent",
+            border: "none",
+            cursor: reloading ? "wait" : "pointer",
+            opacity: reloading ? 0.5 : 0.85,
+            padding: "0 6px",
+            fontSize: 13,
+          }}
+        >
+          {reloading ? "⏳" : "🔄"}
         </button>
         <button
           className="tile-close"

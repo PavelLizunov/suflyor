@@ -11,6 +11,29 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.68 (2026-05-26) — QOL block 5, #16
+
+**🔄 Reload button on tile chrome — re-ask the same question.**
+
+New 🔄 button between 📌 pin and ✕ close on every tile. Click → backend
+re-asks the same question via Haiku → closes the old tile → spawns a
+fresh tile with the new answer.
+
+Use case: AI's first answer was off-target or you want a second take
+without typing the question again. One click = new attempt. Pin status
+is intentionally NOT preserved — re-asking implies you want to consider
+the new answer fresh.
+
+Architecture:
+- Tile windows can't call `tile_reload` directly (assert_overlay guard)
+- Tile emits `tile:reload-request` event with `{ label, question }`
+- Overlay window listens → invokes `tile_reload` → backend does the work
+- On AI error: tile stays alive, overlay surfaces error toast
+
+Cost: ~$0.001 per click on Haiku. Spinner shows ⏳ during in-flight to
+prevent double-spawn from rapid clicks. New tile uses `Manual` kind
+(orange chrome) since the action was explicitly user-initiated.
+
 ### → v0.0.67 (2026-05-26) — QOL block 5, #15
 
 **STT language quick-switch chip in overlay bar (🎙 ru/en/auto).**

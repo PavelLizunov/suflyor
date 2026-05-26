@@ -2121,6 +2121,122 @@ fn set_stt_language(
     Ok(())
 }
 
+/// v0.0.68: Re-ask the question that spawned a tile and replace its
+/// content with a fresh AI answer. Triggered by the 🔄 button on tile
+/// chrome (tile emits `tile:reload-request` event → Overlay listens →
+/// invokes this command).
+///
+/// Flow: close the old tile (frees its slot), call AI with a minimal
+/// reload prompt (meeting_context as background + the question), spawn
+/// a new tile carrying the fresh answer. New tile gets a fresh label
+/// and probably reuses the freed slot (slot-allocator picks the first
+/// FREE one).
+///
+/// Why not in-place: keeping the same window would require sending the
+/// new markdown via Tauri event to a specific window. Close+respawn is
+/// simpler, reuses everything that already works, and the user sees a
+/// brief 200ms blank-then-fresh which makes "I just got a new answer"
+/// obvious. Pin status is intentionally NOT preserved — if the user
+/// re-asks, they want to consider the new answer fresh.
+///
+/// Cost: ~$0.001 per click on Haiku. No cap, user-initiated.
+#[tauri::command]
+async fn tile_reload(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, SharedConfig>,
+    tiles: tauri::State<'_, SharedTiles>,
+    label: String,
+    question: String,
+) -> Result<String, String> {
+    assert_overlay(&window)?;
+    let q_trim = question.trim();
+    if q_trim.is_empty() {
+        return Err("empty question — cannot reload".into());
+    }
+    let (base_url, bearer, model, response_language, meeting_context, preferred_monitor, stealth) = {
+        let c = state.read();
+        (
+            c.ai_base_url.clone(),
+            c.ai_bearer.clone(),
+            c.ai_model.clone(),
+            c.response_language.clone(),
+            c.meeting_context.clone(),
+            c.tile_monitor_name.clone(),
+            c.stealth_enabled,
+        )
+    };
+    if base_url.trim().is_empty() || bearer.trim().is_empty() {
+        return Err("AI bridge not configured (set base_url + bearer in Settings)".into());
+    }
+
+    // Minimal "answer the question fresh" prompt. Doesn't reuse the
+    // transcript-aware build_auto_tile_prompts because reload is a
+    // standalone re-ask, not a transcript-driven one. meeting_context
+    // is still attached as background so user-specific stack info
+    // informs the answer.
+    let lang_block = match response_language.as_str() {
+        "ru" => "Отвечай на русском языке. Английский только для названий технологий.",
+        "en" => "Respond in English.",
+        _ => "Respond in the same language as the question.",
+    };
+    let ctx_block = if meeting_context.trim().is_empty() {
+        "Контекст встречи не задан.".to_string()
+    } else {
+        format!(
+            "Бэкграунд пользователя (для понимания уровня — не привязывай ответ к этим темам \
+             если вопрос про другое):\n{}",
+            meeting_context.trim()
+        )
+    };
+    let system_prompt = format!(
+        "Ты — техничный AI-ассистент. Пользователь видит твой ответ в окошке поверх экрана. \
+         Нужен максимально полезный краткий ответ.\n\n\
+         {ctx_block}\n\n\
+         === Правила ===\n\
+         - НИКАКОЙ преамбулы (\"Хороший вопрос\", \"Конечно\"). Первое слово — суть.\n\
+         - Максимум 120 слов, цель 60-80. Краткость > полнота.\n\
+         - Маркдаун: **жирный** для ключевого, `code` для команд/имён, маркированные списки.\n\
+         - Конкретные команды/числа/имена, не общие фразы.\n\
+         - {lang_block}"
+    );
+    let user_prompt = format!("Вопрос:\n{q_trim}");
+
+    let messages = vec![
+        crate::ai::ChatMessage {
+            role: "system".into(),
+            content: crate::ai::MessageContent::Text(system_prompt),
+        },
+        crate::ai::ChatMessage {
+            role: "user".into(),
+            content: crate::ai::MessageContent::Text(user_prompt),
+        },
+    ];
+
+    let (answer, _usage) = crate::ai::complete_with_usage(&base_url, &bearer, &model, messages, 512)
+        .await
+        .map_err(|e| format!("AI error: {e:#}"))?;
+
+    // Close the old tile (frees its slot for the respawn).
+    tile::close_tile_by_label(&app, tiles.inner(), &label);
+
+    // Spawn fresh tile with the new answer. Kind=Manual so the
+    // color-code header reads "MANUAL" (this was an explicit user
+    // action, not auto-detection).
+    let new_label = tile::spawn_tile_with_stealth(
+        &app,
+        tiles.inner(),
+        q_trim.to_string(),
+        answer.trim().to_string(),
+        preferred_monitor,
+        stealth,
+        tile::TileKind::Manual,
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(new_label)
+}
+
 /// v0.0.66: detector trigger tester. Runs the real detect_trigger
 /// function on sample text using the current cfg.trigger_keywords.
 /// Returns a human-readable verdict so user can tune trigger_keywords
@@ -2719,6 +2835,7 @@ pub fn run() {
             generate_cheatsheet,
             test_detector,
             set_stt_language,
+            tile_reload,
             set_stealth,
             list_snippets,
             expand_snippet,
