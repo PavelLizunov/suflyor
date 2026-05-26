@@ -48,6 +48,10 @@ export default function Overlay() {
   const [hasScreenshot, setHasScreenshot] = useState(false);
   const [hotkeyWarnings, setHotkeyWarnings] = useState<string[]>([]);
   const [rateLimited, setRateLimited] = useState(false);
+  // v0.0.12: separate "over budget" chip (was conflated with rate-limit).
+  // Soft warning per v0.0.5 cost cap pivot — AI keeps working, user just
+  // sees they've crossed their configured budget.
+  const [overBudget, setOverBudget] = useState(false);
   const [sessionCost, setSessionCost] = useState(0);
   // Push-to-talk mode + live recording indicator state.
   const [askMode, setAskMode] = useState<"click" | "hold">("hold");
@@ -406,22 +410,32 @@ export default function Overlay() {
       })
     );
 
-    // Cost cap hit (P1-1) — show a persistent yellow chip in the overlay
-    // so the user notices the cap kicked in even if they're looking at the
-    // tile area. Cleared by next start_session reset.
+    // Cost budget warning (v0.0.5 soft warn semantics — AI continues, this
+    // is a passive notice). Persists for 60s so the user notices it but
+    // doesn't stay forever. Distinct chip from rate-limited — they mean
+    // different things (rate-limit = AI WAS dropped this call; over budget
+    // = AI succeeded but you crossed your configured budget).
     unlistens.push(
-      listen<{ reason: string; source: string }>("cost:cap-hit", (e) => {
+      listen<{ reason: string; source: string; blocking?: boolean }>("cost:cap-hit", (e) => {
         if (!mountedRef.current) return;
-        // Reuse the rate-limited chip — same UX semantics ("AI was throttled,
-        // here's why"). A future iteration could split them visually but for
-        // now one chip beats two for screen real estate.
-        setRateLimited(true);
-        // Auto-clear after a longer window (10s vs 3s for rate-limit) since
-        // the user often needs to read the message + change Settings.
+        setOverBudget(true);
+        // Auto-clear after 60s. Counter resets on next start_session anyway,
+        // but user might keep this session running for a while past the cap.
         setTimeout(() => {
-          if (mountedRef.current) setRateLimited(false);
-        }, 10_000);
-        console.warn(`cost cap hit (source=${e.payload.source}): ${e.payload.reason}`);
+          if (mountedRef.current) setOverBudget(false);
+        }, 60_000);
+        console.warn(`over budget (source=${e.payload.source}): ${e.payload.reason}`);
+      })
+    );
+
+    // Session restart clears the over-budget chip.
+    unlistens.push(
+      listen<{ session_usd: number }>("cost:update", (e) => {
+        // Already handled below for sessionCost — this duplicate listener
+        // exists to reset overBudget when the session resets (cost goes to 0).
+        if (e.payload.session_usd === 0 && mountedRef.current) {
+          setOverBudget(false);
+        }
       })
     );
 
@@ -623,6 +637,16 @@ export default function Overlay() {
         {rateLimited && (
           <span className="hint" style={{ color: "#facc15" }} aria-label="Rate limited">
             ⏱ rate-limited
+          </span>
+        )}
+        {overBudget && (
+          <span
+            className="hint"
+            style={{ color: "#facc15" }}
+            aria-label="Session cost over configured budget"
+            title="Сессия превысила Soft budget warning (Settings → AI proxy). AI продолжает работать — это passive notice."
+          >
+            💰 over budget
           </span>
         )}
         {showCost && sessionCost > 0 && (
