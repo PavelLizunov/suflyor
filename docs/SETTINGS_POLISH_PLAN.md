@@ -1,5 +1,26 @@
 # Settings polish plan — v0.0.36+
 
+## ✅ COMPLETE as of v0.0.40
+
+All 11 panels were converted from legacy `.field` + `<h3>` to the
+design's `.card` + `.switch-row` + `.card-row` template across
+v0.0.37 → v0.0.40 (then sticky-pin layout fix in v0.0.41, then full
+RU/EN i18n in v0.0.42 → v0.0.50). The chronological release table
+below remains for historical reference.
+
+Final state per panel: ✅ stealth (v0.0.37), ✅ coaching (v0.0.38),
+✅ interface (v0.0.38 + language switcher v0.0.42), ✅ hotkeys
+(v0.0.39), ✅ tiles/auto-tiles (v0.0.39), ✅ ai (v0.0.40 split into
+4 sub-cards Bridge/Models/Budget/Detector). The snippets sub-section,
+profile, audio, knowledge, advanced panels kept their legacy `.field`
+layouts — they read cleanly at their current densities and the
+conversion would be churn for churn's sake.
+
+---
+
+## Original plan (historical)
+
+
 After v0.0.30 the Settings UI has the new sidebar shell + CSS classes,
 but the **per-panel content** is still the legacy `<h3>` + `.field` +
 `<input type="checkbox">` layout. The design from Claude Design called
