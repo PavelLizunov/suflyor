@@ -41,18 +41,63 @@ if ($now -ge $deadline) {
     exit 0
 }
 
-# Anti-loop: if hook fired in response to our own previous block,
-# don't keep blocking forever.
+# Anti-loop SAFETY RAIL (not bypass).
+#
+# Old version returned exit 0 the moment stop_hook_active became true,
+# which meant the harness was allowed to stop after just ONE block. Live
+# regression 2026-05-26 04:41: user reported "автоматический режим снова
+# завершился слишком рано" — marathon ran 45 min then silently died. Root
+# cause was this bypass.
+#
+# New version uses a STOP COUNTER:
+#   - Each Stop-block increments the counter
+#   - If counter exceeds MAX_BLOCKS_PER_HOUR (default 240 = 1 every 15s),
+#     we let the next Stop through — interpret as "model is genuinely
+#     stuck in a loop, end this poorly". A counter file with a timestamp
+#     for rate windowing.
+#   - Plan edits reset the counter (productive work continues).
+#
+# This way one careless "end of turn" message can't disarm the marathon,
+# but a runaway loop where Claude immediately re-stops every cycle is
+# still bounded.
+$stopCountFile = Join-Path $projectRoot ".claude/_stop_count"
+$now = Get-Date
+$nowUnix = [int]([DateTimeOffset]::Now.ToUnixTimeSeconds())
+$windowSecs = 3600
+$maxBlocks = 240
+
+$blocksInWindow = 0
+$earliestUnix = $nowUnix
+if (Test-Path $stopCountFile) {
+    # File format: one unix timestamp per line, one per past Stop event.
+    $lines = Get-Content $stopCountFile -ErrorAction SilentlyContinue
+    if ($lines) {
+        $kept = @()
+        foreach ($t in $lines) {
+            $u = 0
+            try { $u = [int]$t } catch { continue }
+            if ($u -ge ($nowUnix - $windowSecs)) {
+                $kept += $u
+            }
+        }
+        $blocksInWindow = $kept.Count
+        if ($kept.Count -gt 0) { $earliestUnix = $kept[0] }
+        # Rewrite file with only in-window entries to bound size.
+        Set-Content $stopCountFile -Value ($kept -join "`n") -Force
+    }
+}
+
+# Add this block to the counter file.
+Add-Content $stopCountFile -Value "$nowUnix"
+
+if ($blocksInWindow -ge $maxBlocks) {
+    Write-Host "Stop guard rate-limit hit: $blocksInWindow blocks in last hour. Letting stop proceed (model likely stuck)."
+    exit 0
+}
+
+# Read stdin for diagnostics but DO NOT use stop_hook_active as a bypass.
 $stdin = ""
 try { $stdin = [Console]::In.ReadToEnd() } catch {}
-if ($stdin) {
-    try {
-        $hookInput = $stdin | ConvertFrom-Json
-        if ($hookInput.stop_hook_active -eq $true) {
-            exit 0
-        }
-    } catch {}
-}
 
 $remaining = $deadline - $now
 $hours = [math]::Floor($remaining.TotalHours)

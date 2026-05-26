@@ -102,8 +102,24 @@ Hooks in `.claude/settings.json` enforce R1-R10 (see `.claude/AUTONOMOUS_RULES.m
 14. **Snippets section search ranking** — currently filter is substring, no rank. Score by key prefix > title prefix > body match.
 15. **Final mega-review of v0.0.6 candidate** before releasing.
 
-## In progress
-**Cleanup phase — pacing down output for remaining marathon time. No new feature releases planned. Focus: read-and-verify, docs, very low-velocity test additions.**
+## In progress (re-armed 2026-05-26T04:52, new deadline 10:52)
+
+**HOOK BUG FIXED:** stop-guard.ps1 had an anti-loop bypass that exited 0 the
+moment `stop_hook_active=true`. Meant marathon could only block ONE stop attempt
+then silently terminate. Live regression — user reported "автоматический режим
+снова завершился слишком рано" at 04:41 after only 45 min productive work.
+
+Fix: replaced bypass with sliding-window rate limit. Counter at
+`.claude/_stop_count` tracks Stop events in the last 1h. Hook returns exit 2
+indefinitely UNLESS rate exceeds 240 blocks/hour (= 1 every 15s = model
+genuinely stuck in degenerate loop). Tested both branches: normal exit 2 with
+stop_hook_active=true now blocks correctly; planted 241 entries → next block
+let through. Both verified.
+
+Marathon retry mandate (from user 2026-05-26T04:41): "пофвторить" — continue
+productive work for fresh 6h window.
+
+Pulling next backlog item to start.
 
 ## Marathon summary (for user wake-up, refreshed 2026-05-26T00:55)
 
