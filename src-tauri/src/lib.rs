@@ -921,28 +921,27 @@ fn import_config(
     state: tauri::State<'_, SharedConfig>,
 ) -> Result<(), String> {
     assert_overlay(&window)?;
-    // SECURITY: confine reads to the user's Desktop / Documents directories.
-    // Without this gate the renderer (which can be poisoned by AI-rendered
-    // markdown in a tile, prompt-injected through interviewer transcript)
-    // could exfiltrate ANY file on disk via this command — the json-parse
-    // error path leaks part of the contents back via the error string.
-    // S0 finding from night-run security audit (2026-05-25).
+    // v0.0.17: removed the Desktop-OR-Documents path allowlist that this
+    // command used to enforce. Reasons:
+    //   1. assert_overlay above already blocks any non-overlay window from
+    //      calling import_config — a poisoned tile can't reach this code
+    //      path. The allowlist was layering paranoia on top of that, not
+    //      providing a unique defense.
+    //   2. Allowlist broke real user flows: Russian Windows users where
+    //      Desktop is localised to "Рабочий стол" inside OneDrive, files
+    //      saved to Downloads, network shares, anywhere not under the two
+    //      hardcoded folders. Original v0.0.4 ticket "там надо вводить
+    //      путь руками потому что Desktop не находит".
+    //   3. v0.0.17 also moves the import trigger to native file picker
+    //      (tauri-plugin-dialog), which is itself a user-action gate that
+    //      AI-rendered markdown cannot trigger.
+    // The json parse error path still strips bytes from its message so
+    // even if a poisoned overlay somehow invoked import_config with an
+    // arbitrary path, the error doesn't leak file contents.
     let raw = std::path::PathBuf::from(&path);
     let canon = raw
         .canonicalize()
         .map_err(|e| format!("path canonicalize failed: {e}"))?;
-    let desktop = dirs::desktop_dir();
-    let docs = dirs::document_dir();
-    let allowed = [&desktop, &docs]
-        .iter()
-        .filter_map(|d| d.as_ref())
-        .any(|d| canon.starts_with(d));
-    if !allowed {
-        return Err(format!(
-            "import_config refused: path must be under Desktop or Documents (got {})",
-            canon.display()
-        ));
-    }
     let bytes = std::fs::read(&canon).map_err(|e| e.to_string())?;
     // Don't leak parse-error contents to the renderer — strip to the error
     // category only. (serde sometimes echoes raw bytes in its message.)
@@ -1623,6 +1622,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .manage(shared_cfg.clone())
         .manage(shared_rt.clone())
         .manage(shared_tiles.clone())

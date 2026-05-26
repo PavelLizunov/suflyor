@@ -179,6 +179,50 @@ export default function Settings() {
       }
     };
   }, []);
+
+  // v0.0.17: drag-and-drop a .json file onto Settings to import it.
+  // Tauri's onDragDropEvent fires at the window level with the file paths.
+  // Same backend path as the explicit import button — invoke("import_config").
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const u = await getCurrentWindow().onDragDropEvent(({ payload }) => {
+          if (!mountedRef.current) return;
+          if (payload.type !== "drop") return;
+          const paths = (payload as { type: "drop"; paths: string[] }).paths || [];
+          const json = paths.find((p) => p.toLowerCase().endsWith(".json"));
+          if (!json) {
+            if (paths.length > 0) {
+              showToast("err", `Перетащи именно .json (получено: ${paths[0].split(/[\\/]/).pop()})`);
+            }
+            return;
+          }
+          (async () => {
+            try {
+              await invoke("import_config", { path: json });
+              const fresh = await invoke<Config>("get_config");
+              if (mountedRef.current) {
+                setCfg(fresh);
+                showToast("ok", "Конфиг загружен через drag-and-drop.");
+              }
+            } catch (e) {
+              if (mountedRef.current) showToast("err", `Ошибка импорта: ${e}`);
+            }
+          })();
+        });
+        if (cancelled) u();
+        else unlisten = u;
+      } catch (e) {
+        console.warn("onDragDropEvent register failed:", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+    };
+  }, []);
   const showPrompt = useCallback((title: string, placeholder?: string, initial = "") =>
     new Promise<string | null>((resolve) => {
       if (!mountedRef.current) { resolve(null); return; }
@@ -1332,13 +1376,24 @@ export default function Settings() {
         <button
           className="btn secondary"
           onClick={async () => {
-            const path = await showPrompt(
-              "Импорт конфига",
-              "C:\\Users\\you\\Desktop\\overlay-config.json",
-            );
-            if (!path) return;
+            // v0.0.17: native file picker (was: text prompt → user typed
+            // full path → Russian Windows / OneDrive / Downloads paths
+            // tripped the Desktop-only allowlist). Now anyone can pick a
+            // JSON file from anywhere via Windows Explorer dialog.
             try {
-              await invoke("import_config", { path });
+              const { open } = await import("@tauri-apps/plugin-dialog");
+              const path = await open({
+                multiple: false,
+                directory: false,
+                title: "Выбери config.json для импорта",
+                filters: [
+                  { name: "JSON config", extensions: ["json"] },
+                  { name: "Все файлы", extensions: ["*"] },
+                ],
+              });
+              if (!path) return;
+              const picked = typeof path === "string" ? path : path[0];
+              await invoke("import_config", { path: picked });
               const fresh = await invoke<Config>("get_config");
               setCfg(fresh);
               showToast("ok", "Конфиг загружен. Перезапустите session чтобы применить.");
@@ -1346,7 +1401,7 @@ export default function Settings() {
               showToast("err", `Ошибка импорта: ${e}`);
             }
           }}
-          title="Загрузить config из json файла"
+          title="Открыть Windows Explorer и выбрать .json файл — или перетащи файл прямо в окно Settings"
         >
           📥 Import
         </button>

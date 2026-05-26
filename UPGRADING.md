@@ -11,6 +11,22 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.17 (2026-05-26)
+
+- **No config schema change.**
+- **Bug fix:** import config flow no longer asks you to type the full
+  path manually. Settings → 🔽 Import → native Windows Explorer file
+  picker. Also accepts **drag-and-drop** — drop a `.json` file onto the
+  Settings window and it imports.
+- **Bug fix:** path-allowlist that refused any path not under Desktop
+  or Documents removed. Was breaking imports from OneDrive (Russian
+  Windows uses localised "Рабочий стол" folder name), Downloads, network
+  shares, anywhere else. The `assert_overlay` guard already prevents
+  poisoned tile windows from reaching `import_config`, so the allowlist
+  was paranoid layering with no unique defense — at the cost of breaking
+  real flows.
+- New dep: `tauri-plugin-dialog` (Rust + JS) for the native file picker.
+
 ### → v0.0.16 (2026-05-26)
 
 - **No config schema change.**

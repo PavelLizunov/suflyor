@@ -1,6 +1,6 @@
 [package]
 name = "overlay-mvp"
-version = "0.0.16"
+version = "0.0.17"
 description = "Minimal AI meeting overlay"
 authors = ["x3d_mutant"]
 edition = "2021"
@@ -24,6 +24,10 @@ tauri-plugin-global-shortcut = "2"
 # hold global hotkeys and the new instance would silently fail to register
 # F3/F4/F8/F9 etc. (regression caught live 2026-05-25).
 tauri-plugin-single-instance = "2"
+# Native file picker dialog. Replaces "type the path manually" prompt in
+# Settings → Import config flow (which broke on Russian Windows where the
+# user's Desktop is localised, and was generally awful UX). v0.0.17.
+tauri-plugin-dialog = "2"
 
 # --- Serialization & config ---
 serde = { version = "1", features = ["derive"] }
