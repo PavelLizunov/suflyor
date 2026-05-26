@@ -101,7 +101,7 @@ Unprotected commands (read-only or low-blast-radius): `list_audio_devices`, `kb_
 
 | File | Lines | Role |
 |---|---|---|
-| `src-tauri/src/lib.rs` | ~1500 | Tauri Builder, all Tauri commands, bridge/update probes |
+| `src-tauri/src/lib.rs` | ~1700 | Tauri Builder, all Tauri commands, bridge/update probes, export_safe |
 | `src-tauri/src/runtime.rs` | ~3100 | Session lifecycle, transcript forwarder, AI ask flows, voice coach, debrief |
 | `src-tauri/src/config.rs` | ~1700 | Config struct + serde defaults + default snippets |
 | `src-tauri/src/stt.rs` | ~965 | Whisper VAD pipeline, prompt budgeting, retry classifier |
@@ -117,7 +117,7 @@ Unprotected commands (read-only or low-blast-radius): `list_audio_devices`, `kb_
 | `src/TileWindow.tsx` | ~114 | Q/A tile card with markdown |
 | `src/Replay.tsx` | ~350 | JSONL journal timeline viewer |
 
-## Test coverage (227 tests as of marathon end 2026-05-26)
+## Test coverage (237 tests as of marathon retry 2026-05-26 ~05:00)
 
 Strong coverage:
 - Config save/load + serde defaults + pricing-table sync (15 tests)
@@ -135,6 +135,12 @@ Strong coverage:
 - Update semver compare (5 tests)
 - Journal — JSONL serialize, counters, prune count-based + size-cap (12 tests)
 - Audio — WAV roundtrip, resample, decimator (~10 tests)
+- **blank_share_secrets** (10 tests) — security-critical: each share-export
+  field gets blanked / each kept field survives / idempotent
+- **is_permanent_ai_error** (8 tests) — retry classifier gate (400/401/403/
+  404/413 permanent; 5xx/429/network transient; empty defensive)
+- **Tile slot picker** (4 tests) — gap-reuse after middle close, oldest
+  eviction with slot reuse, empty initial, unordered occupied
 
 Honest gaps:
 - No integration test that runs spawn_tile against a real Tauri AppHandle (mocking AppHandle is hard; pure-fn extracts cover most logic)
