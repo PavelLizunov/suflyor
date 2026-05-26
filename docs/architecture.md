@@ -101,21 +101,21 @@ Unprotected commands (read-only or low-blast-radius): `list_audio_devices`, `kb_
 
 | File | Lines | Role |
 |---|---|---|
-| `src-tauri/src/lib.rs` | ~1530 | Tauri Builder, all Tauri commands, bridge/update probes, export_safe |
-| `src-tauri/src/runtime.rs` | ~3100 | Session lifecycle, transcript forwarder, AI ask flows, voice coach, debrief |
-| `src-tauri/src/config.rs` | ~1700 | Config struct + serde defaults + default snippets |
-| `src-tauri/src/stt.rs` | ~965 | Whisper VAD pipeline, prompt budgeting, retry classifier |
-| `src-tauri/src/tile.rs` | ~770 | Tile manager, grid_position layout math, TTL reaper |
-| `src-tauri/src/journal.rs` | ~720 | JSONL writer, prune (count + size cap), session summary |
-| `src-tauri/src/ai.rs` | ~640 | Claude OpenAI-compat client (stream + non-stream + retry) |
-| `src-tauri/src/kb.rs` | ~319 | Embedded KB search (1643 entries, pre-lowercased) |
-| `src-tauri/src/audio.rs` | ~580 | WASAPI loopback + mic, resampling, push-to-talk |
-| `src-tauri/src/hotkeys.rs` | ~180 | Global hotkey registration |
-| `src-tauri/src/tray.rs` | ~91 | Tray icon + menu (Show/Hide/Settings/Quit) |
-| `src/Overlay.tsx` | ~730 | Main overlay bar (36px) |
-| `src/Settings.tsx` | ~1265 | 13-section config panel |
-| `src/TileWindow.tsx` | ~114 | Q/A tile card with markdown |
-| `src/Replay.tsx` | ~350 | JSONL journal timeline viewer |
+| `src-tauri/src/lib.rs` | 1530 | Tauri Builder, all Tauri commands, bridge/update probes, export_safe |
+| `src-tauri/src/runtime.rs` | 3259 | Session lifecycle, transcript forwarder, AI ask flows, voice coach, debrief |
+| `src-tauri/src/config.rs` | 1665 | Config struct + serde defaults + default snippets |
+| `src-tauri/src/stt.rs` | 965 | Whisper VAD pipeline, prompt budgeting, retry classifier |
+| `src-tauri/src/tile.rs` | 758 | Tile manager, grid_position layout math, TTL reaper |
+| `src-tauri/src/journal.rs` | 765 | JSONL writer, prune (count + size cap), session summary |
+| `src-tauri/src/ai.rs` | 674 | Claude OpenAI-compat client (stream + non-stream + retry) |
+| `src-tauri/src/kb.rs` | 319 | Embedded KB search (1643 entries, pre-lowercased) |
+| `src-tauri/src/audio.rs` | 580 | WASAPI loopback + mic, resampling, push-to-talk |
+| `src-tauri/src/hotkeys.rs` | 180 | Global hotkey registration |
+| `src-tauri/src/tray.rs` | 106 | Tray icon + menu (Show/Hide/Settings/Quit) |
+| `src/Overlay.tsx` | 763 | Main overlay bar (36px) |
+| `src/Settings.tsx` | 1483 | 13-section config panel |
+| `src/TileWindow.tsx` | 133 | Q/A tile card with markdown |
+| `src/Replay.tsx` | 439 | JSONL journal timeline viewer |
 
 ## Test coverage (237 tests as of marathon retry 2026-05-26 ~05:00)
 
