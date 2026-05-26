@@ -864,6 +864,28 @@ export default function Overlay() {
       })
     );
 
+    // v0.0.80: F2 cycles through saved context profiles. Backend has
+    // already applied the switch (cfg + save). Frontend just shows a
+    // toast so the user knows what profile is now active.
+    unlistens.push(
+      listen<{ name: string | null }>("hotkey:profile-cycled", (e) => {
+        const name = e.payload?.name;
+        const msg = name
+          ? (lang === "en"
+              ? `📋 Profile: ${name}`
+              : `📋 Профиль: ${name}`)
+          : (lang === "en"
+              ? "No profiles configured — add some in Settings → Profile"
+              : "Нет профилей — создай в Настройках → Профиль");
+        setErrorText(msg);
+        if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+        errorTimerRef.current = setTimeout(() => {
+          if (mountedRef.current) setErrorText("");
+          errorTimerRef.current = null;
+        }, 3500);
+      })
+    );
+
     unlistens.push(
       listen<{ text: string }>("tile:rate-limited", () => {
         flashFlag(rateTimerRef, setRateLimited, true, 3000);

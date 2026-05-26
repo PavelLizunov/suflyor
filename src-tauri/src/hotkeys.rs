@@ -97,6 +97,49 @@ pub fn register_all(app: &AppHandle, _cfg: SharedConfig) -> Vec<String> {
         let _ = app_h.emit_to("overlay", "hotkey:kb-palette", ());
     });
 
+    // v0.0.80: F2 — cycle through saved context profiles. Emits an
+    // event with the next profile's name; frontend handles applying it
+    // (so the toast / Settings update / etc. stay in JS-land). If no
+    // profiles are configured, the event payload is null and the
+    // frontend shows a hint toast.
+    let app_h = app.clone();
+    try_register(app, "F2 (profile cycle)", Code::F2, &mut warnings, move || {
+        let app = app_h.clone();
+        if let Some(cfg) = app.try_state::<crate::config::SharedConfig>() {
+            let (next_name, next_context): (Option<String>, Option<String>) = {
+                let c = cfg.read();
+                if c.context_profiles.is_empty() {
+                    (None, None)
+                } else {
+                    // Cycle: current → next (wrap). If active is None,
+                    // pick the first profile.
+                    let idx = c.active_profile.as_deref()
+                        .and_then(|name| c.context_profiles.iter().position(|p| p.name == name));
+                    let next_idx = idx.map(|i| (i + 1) % c.context_profiles.len()).unwrap_or(0);
+                    let p = &c.context_profiles[next_idx];
+                    (Some(p.name.clone()), Some(p.context.clone()))
+                }
+            };
+            if let (Some(name), Some(context)) = (next_name.as_ref(), next_context.as_ref()) {
+                // Persist the switch — same as Settings profile picker would do.
+                {
+                    let mut c = cfg.write();
+                    c.active_profile = Some(name.clone());
+                    c.meeting_context = context.clone();
+                }
+                let snap = cfg.read().clone();
+                if let Err(e) = crate::config::save(&snap) {
+                    log::warn!("F2 profile cycle save failed: {e:#}");
+                }
+            }
+            let _ = app.emit_to(
+                "overlay",
+                "hotkey:profile-cycled",
+                serde_json::json!({ "name": next_name }),
+            );
+        }
+    });
+
     // v0.0.77: F1 — toggle the hotkey-help popover. Same UX as clicking
     // the ℹ button in the overlay bar. Useful when the user forgets
     // which keys are bound and wants the cheatsheet on top of their

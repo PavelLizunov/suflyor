@@ -11,6 +11,25 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.80 (2026-05-26) — QOL block 5, #28
+
+**F2 — cycle through saved context profiles.**
+
+New F2 global hotkey advances `cfg.active_profile` to the next entry in
+`cfg.context_profiles` (wraps around). Picks the first profile when
+active is `None`. Persists via `config::save` so the change survives a
+restart.
+
+Emits `hotkey:profile-cycled { name }` event; frontend shows a 3.5-sec
+toast with the new profile name (or "no profiles configured" hint if
+the list is empty).
+
+Use case: you have profiles for "SRE interview" / "PM call" / "Code
+review" — F2 between meetings instantly swaps `meeting_context`
+without opening Settings → Profile → dropdown → save.
+
+If no profiles exist, F2 is harmless (toast hints to add some).
+
 ### → v0.0.79 (2026-05-26) — QOL block 5, #27
 
 **AI response cache — auto-tile path skips identical re-asks (10 min TTL).**
