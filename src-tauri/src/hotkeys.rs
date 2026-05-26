@@ -207,35 +207,13 @@ pub fn register_all(app: &AppHandle, _cfg: SharedConfig) -> Vec<String> {
         warnings.push(msg);
     }
 
-    // F7 — DEBUG: spawn a hardcoded test tile
-    let app_h = app.clone();
-    try_register(app, "F7 (test tile)", Code::F7, &mut warnings, move || {
-        let app = app_h.clone();
-        tauri::async_runtime::spawn(async move {
-            let tiles = app.state::<crate::tile::SharedTiles>();
-            let cfg = app.state::<crate::config::SharedConfig>();
-            let preferred = cfg.read().tile_monitor_name.clone();
-            match crate::tile::spawn_tile(
-                &app,
-                tiles.inner(),
-                "DEBUG: Что такое etcd?".into(),
-                "etcd — distributed key-value store на основе Raft. Используется Kubernetes \
-                 как source of truth для cluster state. Strongly consistent, durable, watch-based."
-                    .into(),
-                preferred,
-            ) {
-                Ok(label) => log::info!("F7 test tile spawned: {label}"),
-                Err(e) => {
-                    log::warn!("F7 test tile failed: {e:#}");
-                    let _ = app.emit_to(
-                        "overlay",
-                        "hotkey:error",
-                        serde_json::json!({ "hotkey": "F7", "error": format!("{e:#}") }),
-                    );
-                }
-            }
-        });
-    });
+    // v0.0.85 P0 fix: removed legacy debug F7 (spawned a hardcoded
+    // "Что такое etcd?" tile). It collided with the v0.0.83 F7
+    // collapse-all registration — the second try_register call for
+    // the same Code returns an error that gets surfaced as a warning
+    // toast, AND on some tauri-plugin-global-shortcut versions OVERRIDES
+    // the first registration, so F7 spawned a debug tile instead of
+    // toggling collapse. Caught by code-review agent on v0.0.84.
 
     if !warnings.is_empty() {
         log::warn!("hotkey registration warnings: {warnings:?}");

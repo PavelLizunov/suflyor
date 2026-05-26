@@ -903,14 +903,29 @@ async fn maybe_spawn_tile(
     // wider matching surface). TTL 10 min — long enough to catch the
     // pattern "interviewer asked X at 5:00 and again at 25:00" but
     // short enough that stale context doesn't ruin freshness.
-    let cache_key: String = text
-        .to_lowercase()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(200)
-        .collect();
+    // v0.0.85 P0 fix: bake ai_model + response_language + meeting_context
+    // length into the key. Without these, an F2 profile cycle (changes
+    // meeting_context) or 🧠 model chip click (changes ai_model) would
+    // return a stale cached answer that was generated under the OLD
+    // context. Length is a cheap proxy for "context changed"; a full
+    // hash would be safer but length-collision-across-edits is unlikely
+    // for free-form prose. Inputs whose effective AI prompt would differ
+    // now produce different cache keys.
+    let cache_seed: String = format!(
+        "m={};l={};c={};q={}",
+        model,
+        response_language,
+        meeting_context.len(),
+        text
+            .to_lowercase()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .chars()
+            .take(200)
+            .collect::<String>(),
+    );
+    let cache_key = cache_seed;
     let cache_hit: Option<String> = {
         let mut s = rt.lock();
         let now = std::time::Instant::now();

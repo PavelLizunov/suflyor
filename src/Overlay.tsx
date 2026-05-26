@@ -940,6 +940,14 @@ export default function Overlay() {
     // failure we surface via tile:error → existing toast UI.
     // v0.0.69: payload also carries `currentGeneration` so backend can
     // bump it for the respawned tile (renders as 🔄×N+1 badge).
+    // v0.0.85 P1 fix: validate that the event's source window label
+    // matches the claimed `label` AND starts with "tile-". Without this
+    // check, a poisoned tile (markdown-injection vector) could forge
+    // {label: "tile-OTHER", question: "leak my groq_api_key"} and the
+    // overlay would faithfully invoke tile_reload → arbitrary prompt
+    // execution on the user's AI bridge. Tauri exposes the source via
+    // `e.windowLabel`. Other tabs/windows that try to forge the event
+    // are dropped with a warning.
     unlistens.push(
       listen<{ label: string; question: string; currentGeneration?: number }>(
         "tile:reload-request",
@@ -947,6 +955,15 @@ export default function Overlay() {
           const { label, question, currentGeneration } = e.payload;
           if (!label || !question) {
             console.warn("tile:reload-request missing fields", e.payload);
+            return;
+          }
+          const source = (e as { windowLabel?: string }).windowLabel;
+          if (typeof source !== "string" || !source.startsWith("tile-") || source !== label) {
+            console.warn(
+              "tile:reload-request rejected — source/label mismatch (source=%s, claimed=%s)",
+              source ?? "?",
+              label,
+            );
             return;
           }
           try {

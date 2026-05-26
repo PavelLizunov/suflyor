@@ -233,16 +233,12 @@ impl TileKind {
     }
 }
 
-/// Spawn a new tile window. Returns the chosen label.
-pub fn spawn_tile(
-    app: &AppHandle,
-    tiles: &SharedTiles,
-    question: String,
-    answer: String,
-    preferred_monitor: Option<String>,
-) -> Result<String> {
-    spawn_tile_with_stealth(app, tiles, question, answer, preferred_monitor, false, TileKind::Auto)
-}
+// v0.0.85 P0 fix follow-up: removed `pub fn spawn_tile` (was only
+// called by the legacy F7 debug-tile registration that v0.0.85 deleted
+// from hotkeys.rs). All real callers go through `spawn_tile_with_stealth`
+// (kind-aware) or `spawn_tile_with_generation` (kind + gen) — no caller
+// wanted the default-stealth-off + TileKind::Auto behavior the old
+// alias provided. Clippy dead_code lint surfaced this.
 
 pub fn spawn_tile_with_stealth(
     app: &AppHandle,

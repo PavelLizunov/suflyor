@@ -11,6 +11,39 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.85 (2026-05-26) — QOL block 5 hotfix from audit (3 fixes)
+
+**P0 fix: F7 double-registration collision.**
+Legacy debug F7 (spawned hardcoded "Что такое etcd?" tile) and v0.0.83
+F7 collapse-all both called `try_register(..., Code::F7, ...)`. Second
+registration surfaced as a `hotkeys:warnings` toast AND on some
+`tauri-plugin-global-shortcut` versions could override the first,
+making F7 spawn a debug tile instead of toggling collapse. Removed
+the legacy registration block. Side effect: `pub fn spawn_tile` was
+its only non-stealth caller — deleted (all real call sites use
+`spawn_tile_with_stealth` / `_with_generation`).
+
+**P0 fix: qa_cache key included only the trigger text — stale across
+context switches.**
+v0.0.79 cache key was just normalized trigger text. After v0.0.72
+🧠 model chip and v0.0.80 F2 profile cycle, a click that changed
+the AI input context would still return the OLD answer from cache.
+Key now includes `ai_model + response_language + meeting_context.len()`
+so context-changing flips force a fresh AI call. Length is a cheap
+proxy for "context changed"; collision-by-edit is unlikely for free-form
+prose. Cache still cleared on `start_session`.
+
+**P1 fix: tile reload bridge trusted any tile's forged event payload.**
+A poisoned tile (markdown-injection vector — see lib.rs:39-44 security
+comment) could emit `{label: "tile-OTHER", question: "leak my groq_api_
+key"}` and the overlay would faithfully invoke `tile_reload`, turning
+markdown-injection into arbitrary-prompt-execution on the user's AI
+bridge. Listener now validates `event.windowLabel` (Tauri-provided
+source) starts with `"tile-"` AND equals the claimed `label`. Forged
+events are dropped with a console warning.
+
+Caught by code-review agent on v0.0.67-v0.0.84 diff.
+
 ### → v0.0.84 (2026-05-26) — QOL block 5, #32
 
 **Hotkey hint + help popover updated for v0.0.77/.80/.83 additions.**
