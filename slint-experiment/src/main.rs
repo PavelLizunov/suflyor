@@ -35,7 +35,7 @@ use std::rc::Rc;
 use ui::{FilterChip, MainWindow, ReplayEvent};
 
 use crate::replay_backend::{
-    SessionInfo, fmt_clock, list_sessions, load_session, render_event, total_cost_usd,
+    fmt_clock, list_sessions, load_session, render_event, total_cost_usd, SessionInfo,
 };
 
 /// Mutable state shared between callbacks.
@@ -185,6 +185,7 @@ fn sync_window(window: &MainWindow, state: &mut PilotState) {
     window.set_total_events(events_i32);
     window.set_ai_response_count(count_i32);
     window.set_total_cost_display(format!("{cost:.4}").into());
+    window.set_any_hidden(!state.hidden_kinds.is_empty());
 }
 
 /// Load a session from disk into state. Resets filter chips. Errors
@@ -249,7 +250,9 @@ fn main() -> Result<(), slint::PlatformError> {
         let Some(w) = w.upgrade() else { return };
         let mut st = s.borrow_mut();
         let i = idx as usize;
-        let Some(kind) = st.chip_kinds.get(i).cloned() else { return };
+        let Some(kind) = st.chip_kinds.get(i).cloned() else {
+            return;
+        };
         if st.hidden_kinds.contains(&kind) {
             st.hidden_kinds.remove(&kind);
         } else {
@@ -350,7 +353,7 @@ mod tests {
             // chip_kinds order is by count desc, then kind asc as tie-breaker.
             assert_eq!(state.chip_kinds.len(), 2);
             assert_eq!(state.chip_kinds[0], "transcript_line"); // count=2
-            assert_eq!(state.chip_kinds[1], "ai_response");     // count=1
+            assert_eq!(state.chip_kinds[1], "ai_response"); // count=1
         }
 
         // ===================================================================
@@ -380,14 +383,21 @@ mod tests {
 
             assert_eq!(window.get_events().row_count(), 2, "scenario 2: 2 visible");
             assert_eq!(window.get_total_events(), 3, "scenario 2: total unchanged");
-            assert_eq!(window.get_ai_response_count(), 1, "scenario 2: ai unchanged");
+            assert_eq!(
+                window.get_ai_response_count(),
+                1,
+                "scenario 2: ai unchanged"
+            );
 
             let chips = window.get_filter_chips();
             let ai_chip = chips
                 .iter()
                 .find(|c| c.kind.as_str() == "ai_response")
                 .expect("ai_response chip");
-            assert!(ai_chip.hidden, "scenario 2: ai_response chip flagged hidden");
+            assert!(
+                ai_chip.hidden,
+                "scenario 2: ai_response chip flagged hidden"
+            );
 
             // Toggle back on — all 3 visible.
             state.hidden_kinds.remove(&kind);
@@ -406,10 +416,7 @@ mod tests {
         // ===================================================================
         {
             let mut state = PilotState::new();
-            state.events = vec![
-                ev("transcript_line", 1000),
-                ev("transcript_line", 2000),
-            ];
+            state.events = vec![ev("transcript_line", 1000), ev("transcript_line", 2000)];
             state.hidden_kinds.insert("transcript_line".to_string());
             sync_window(&window, &mut state);
             // Pre-condition: 2 total, 0 visible.
@@ -429,13 +436,34 @@ mod tests {
             sync_window(&window, &mut state);
 
             assert!(state.hidden_kinds.is_empty(), "scenario 3: filter reset");
-            assert_eq!(window.get_total_events(), 3, "scenario 3: new session total");
+            assert_eq!(
+                window.get_total_events(),
+                3,
+                "scenario 3: new session total"
+            );
             assert_eq!(
                 window.get_events().row_count(),
                 3,
                 "scenario 3: all events of new session visible"
             );
             assert_eq!(window.get_ai_response_count(), 3, "scenario 3: ai count");
+
+            // Scenario 3b — call the REAL load_session_into_state to
+            // exercise the disk path and confirm hidden_kinds is cleared
+            // even when the load itself errors out. Catches the regression
+            // class "load_session_into_state forgot to clear hidden_kinds
+            // in the Err branch" — the inlined mutation above would NOT.
+            state.hidden_kinds.insert("ai_response".to_string());
+            assert!(!state.hidden_kinds.is_empty(), "pre: hidden seeded");
+            load_session_into_state(&mut state, "C:/nonexistent/slint-pilot-test.jsonl");
+            assert!(
+                state.hidden_kinds.is_empty(),
+                "scenario 3b: load_session_into_state must clear hidden_kinds even on error"
+            );
+            assert!(
+                state.events.is_empty(),
+                "scenario 3b: events cleared on error path"
+            );
         }
     }
 }

@@ -106,6 +106,16 @@ function Invoke-Gate($name, $exe, $argsList) {
 Invoke-Gate "cargo fmt --check" $cargoExe @("fmt", "--manifest-path", $manifest, "--all", "--", "--check")
 Invoke-Gate "cargo clippy -D warnings" $cargoExe @("clippy", "--manifest-path", $manifest, "--all-targets", "--", "-D", "warnings")
 
+# --- Slint pilot crate (Phase 0+) — added 2026-05-27 ---------------
+# Gate the slint-experiment/ sibling crate if it exists. Wrapping in
+# Test-Path so a future cleanup/removal of the pilot doesn't brick
+# the gate. Same fmt+clippy on commit, plus test on push.
+$slintManifest = "slint-experiment/Cargo.toml"
+if (Test-Path (Join-Path $projectRoot $slintManifest)) {
+    Invoke-Gate "slint fmt --check"        $cargoExe @("fmt", "--manifest-path", $slintManifest, "--all", "--", "--check")
+    Invoke-Gate "slint clippy -D warnings" $cargoExe @("clippy", "--manifest-path", $slintManifest, "--all-targets", "--", "-D", "warnings")
+}
+
 # --- Push-only: full test suite (commits skip these for speed) -------
 if ($isPush) {
     Invoke-Gate "cargo test --lib"                $cargoExe @("test", "--manifest-path", $manifest, "--lib", "--quiet")
@@ -113,6 +123,11 @@ if ($isPush) {
 
     # npx is a .cmd shim — Start-Process handles it the same way.
     Invoke-Gate "npx tsc --noEmit" "npx.cmd" @("tsc", "--noEmit")
+
+    # Slint pilot crate tests — same Test-Path guard.
+    if (Test-Path (Join-Path $projectRoot $slintManifest)) {
+        Invoke-Gate "slint cargo test" $cargoExe @("test", "--manifest-path", $slintManifest, "--quiet")
+    }
 }
 
 [Console]::Error.WriteLine("[git-gate] All gating layers green. Proceeding with: $cmd")

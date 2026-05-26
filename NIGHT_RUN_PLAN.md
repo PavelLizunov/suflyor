@@ -891,3 +891,76 @@ If you want any of those three follow-ups, point — I'll do one per session.
 - **Files touched this session:** `kb.rs` (new), 3 markdown files (new), `lib.rs` (+4 commands), `Settings.tsx` (+1 section). 5 files net.
 
 — end of encyclopedia push, ~3.5h work.
+
+
+## 2026-05-27 01:00-02:00 — Slint migration Phase 0 pilot (autonomous)
+
+User kickoff: paste of `docs/KICKOFF-SLINT-MIGRATION.md` content asking
+for Phase 0 → Phase 7 Slint migration. Pilot scope only this entry.
+
+### Done log
+
+- 01:09  Created branch `experiment/slint-replay` off master `1f86553`.
+- 01:09  Wrote `docs/ADR-002-license.md` (royalty-free Slint tier).
+- 01:11  Scaffolded `slint-experiment/` standalone sibling crate
+         (slint 1.16 + slint-build + i-slint-backend-testing[mcp]).
+         Deviation from plan ("workspace member under src-tauri") —
+         rationale: src-tauri is standalone, not workspace; sibling
+         avoids master-build risk. Logged in pilot report.
+- 01:13  Day 1 build: clean (5.78 s); window paints (BitBlt screenshot
+         at `slint-experiment/target/visual/slint-replay-day1-…png`).
+- 01:14  Day 1 commit: `6fb0e16` (7052 insertions; mostly Cargo.lock).
+- 01:18  Day 2: wrote `slint-experiment/src/replay_backend.rs` (pure
+         Rust port of journal::sessions_dir + list_sessions + load_session +
+         render_event per-kind formatter). Rewrote `main.rs` to
+         Rc<RefCell<PilotState>> + 4 callbacks. Real journals load (auto-
+         loaded newest of 112 on-disk sessions).
+- 01:23  Day 2 review-agent (general-purpose) found 5 important + 2
+         minor parity drifts vs Replay.tsx. 5 important + 1 minor fixed
+         pre-commit; 1 minor (cost f64 precision) deferred to Phase 1
+         shared-crate work.
+- 01:26  Day 2 commit: `49ffd4c` (660 insertions, 101 deletions).
+- 01:28  Day 3: wrote 3 i-slint-backend-testing scenarios. First layout
+         (3 separate #[test] fns) failed on test 3 with "Slint platform
+         initialized in another thread" — libtest spawns fresh threads
+         even with --test-threads=1. Consolidated to 1 #[test] fn with
+         3 scenarios; all green.
+- 01:33  Wrote `docs/PILOT-REPORT-SLINT.md` (full pilot report with
+         GO recommendation + LOC compare + DSL impressions + gotchas +
+         Phase 1 prerequisites).
+- 01:35  Day 3 commit: `425b2fd` (389 insertions).
+
+### In progress
+
+- User go/no-go gate decision required before any Phase 1 work.
+  Recommendation in pilot report: **GO**. Holding here until user
+  responds. Filling autonomous time with low-risk maintenance.
+
+### Decisions log
+
+| Time | Decision | Rationale |
+|---|---|---|
+| 01:09 | Royalty-free Slint license tier | Pet-project scope; attribution panel lands in Phase 6. |
+| 01:11 | Sibling crate at repo root, not workspace member under src-tauri | src-tauri/Cargo.toml is standalone; converting mid-pilot risks master build. |
+| 01:18 | Duplicate journal logic in slint-experiment instead of pulling overlay_mvp_lib | Lib would drag in tauri/wry/WebView2. Duplication is ~80 lines; Phase 1 extracts to shared crate. |
+| 01:18 | UTC fmt_clock instead of local-tz | Avoid chrono/time dep in pilot; Phase 1 swaps to `time` crate. |
+| 01:23 | Fix 5 important review-agent findings, defer 1 minor (cost precision) | Important findings are user-visible parity drifts; minor is internal arithmetic that Phase 1 shared-crate cleanup will address consistently. |
+| 01:28 | Skip review-agent for Day 1 scaffold | No logic, no security surface, no architectural invariants apply yet. Run for Day 2 + Day 3. |
+| 01:28 | Consolidate 3 #[test] fns into 1 with 3 scenarios | Slint testing backend has per-thread platform-install affinity; libtest spawns fresh threads. |
+| 01:33 | Recommendation: GO to Phase 1 (user gate pending) | Pilot proves toolchain + window paint + backend integration + tests work. Markdown + multi-monitor unexercised — recommend Phase 0.5 markdown spike before Phase 4. |
+
+### Findings (Slint-testing gotchas + Phase 1 implications)
+
+1. **Per-thread platform install** — i-slint-backend-testing init is
+   per-thread; libtest spawns fresh threads even with `--test-threads=1`.
+   Workaround: consolidate or invest in custom harness.
+2. **`unsafe_code = "forbid"` incompatible** with generated Slint VTable
+   code. Use `deny` or omit.
+3. **Strict clippy lints** (unwrap_used, expect_used, panic) require an
+   `#[allow]` wrapper around `slint::include_modules!()`. Document in
+   any new-Slint-project CLAUDE.md.
+4. **Filter strip visibility gate** — `if list.length > 1 :` matches
+   React's "hide single-kind chip strip" behavior.
+5. **ComboBox `selected(int)` callback** — reads `self.current-index`
+   correctly in 1.16.1 but worth a regression test on upgrade.
+

@@ -48,6 +48,10 @@ export component MainWindow inherits Window {
     // Distinct event kinds with their counts. Click toggles `hidden`.
     in-out property <[FilterChip]> filter-chips: [];
 
+    // True when at least one chip is hidden — controls visibility of the
+    // "reset" chip. Mirrors React's `hiddenKinds.size > 0` gate.
+    in-out property <bool> any-hidden: false;
+
     // Pre-filtered list of events from the selected session.
     in-out property <[ReplayEvent]> events: [];
 
@@ -125,10 +129,10 @@ export component MainWindow inherits Window {
                 TouchArea { clicked => { root.chip-clicked(i); } }
             }
             // "Reset filter" button only when at least one chip is hidden.
-            // Computing "any hidden" inline is awkward in Slint; Rust side
-            // exposes total-events vs. visible events count, but for the
-            // pilot we always show reset and let it no-op if nothing hidden.
-            Rectangle {
+            // Reset chip only visible when ≥1 kind is hidden. Mirrors React
+            // (`hiddenKinds.size > 0`). Driven by the `any-hidden` property
+            // which Rust sync_window sets to `!state.hidden_kinds.is_empty()`.
+            if root.any-hidden : Rectangle {
                 background: transparent;
                 border-color: #6366f1;
                 border-width: 1px;

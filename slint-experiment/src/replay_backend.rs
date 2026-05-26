@@ -84,9 +84,7 @@ pub fn load_session(path: &Path) -> Result<Vec<serde_json::Value>> {
     let sessions = sessions_dir()?
         .canonicalize()
         .context("canonicalize sessions dir")?;
-    let canonical = path
-        .canonicalize()
-        .context("canonicalize session path")?;
+    let canonical = path.canonicalize().context("canonicalize session path")?;
     if !canonical.starts_with(&sessions) {
         anyhow::bail!("path is outside sessions dir");
     }
@@ -214,6 +212,13 @@ pub fn render_event(ev: &serde_json::Value) -> (String, String) {
             let tiles = ev_u64(ev, "tiles_spawned").unwrap_or(0);
             let errs = ev_u64(ev, "ai_errors").unwrap_or(0);
             let rl = ev_u64(ev, "rate_limited").unwrap_or(0);
+            // Parity with React: session_summary cost reads ONLY
+            // total_cost_microcents (no cost_usd fallback). Per-event
+            // ai_response cost in total_cost_usd() DOES fall back to
+            // cost_usd, so legacy sessions show $0 in this SUMMARY row
+            // but the correct $X.XXXX in the footer. Match the React
+            // behavior to avoid surprising users who've seen the
+            // existing app.
             let cost = ev_u64(ev, "total_cost_microcents").unwrap_or(0) as f64 / 100_000_000.0;
             let mut tail = format!("{reqs} AI · {tiles} tiles");
             if rl > 0 {
@@ -245,11 +250,26 @@ pub fn render_event(ev: &serde_json::Value) -> (String, String) {
             let trig_kind = ev_str(ev, "trigger_kind");
             let label = if triggered { "DETECT ✓" } else { "detect" };
             let reason = if triggered {
-                format!("→ {}", if trig_kind.is_empty() { "trigger" } else { &trig_kind })
+                format!(
+                    "→ {}",
+                    if trig_kind.is_empty() {
+                        "trigger"
+                    } else {
+                        &trig_kind
+                    }
+                )
             } else {
                 "no trigger".to_string()
             };
-            (label.to_string(), format!("{} {}", preview(&text, 200), reason))
+            // Empty-text edge case: avoid a leading space before `reason`.
+            // React renders text + reason as two spans so empty text is an
+            // empty span; the pilot concatenates, so we elide manually.
+            let body = if text.is_empty() {
+                reason
+            } else {
+                format!("{} {}", preview(&text, 200), reason)
+            };
+            (label.to_string(), body)
         }
         "ai_request" => {
             let purpose = ev_str(ev, "purpose");
@@ -306,7 +326,11 @@ pub fn render_event(ev: &serde_json::Value) -> (String, String) {
             let q = ev_str(ev, "question");
             let a = ev_str(ev, "answer");
             let is_translated = q.starts_with("🇷🇺") || q.starts_with("🇬🇧");
-            let label = if is_translated { "TILE · 🌐" } else { "TILE" };
+            let label = if is_translated {
+                "TILE · 🌐"
+            } else {
+                "TILE"
+            };
             (
                 label.to_string(),
                 format!("{} · {}", preview(&q, 80), preview(&a, 100)),
@@ -315,10 +339,7 @@ pub fn render_event(ev: &serde_json::Value) -> (String, String) {
         "rate_limited" => {
             let what = ev_str(ev, "what");
             let text = ev_str(ev, "text");
-            (
-                format!("RATE LIMITED · {what}"),
-                preview(&text, 240),
-            )
+            (format!("RATE LIMITED · {what}"), preview(&text, 240))
         }
         "error" => {
             // React renders error.message in FULL (no preview) so stack
@@ -330,7 +351,11 @@ pub fn render_event(ev: &serde_json::Value) -> (String, String) {
         other => {
             let body = serde_json::to_string(ev).unwrap_or_else(|_| "{}".to_string());
             (
-                if other.is_empty() { "unknown".to_string() } else { other.to_string() },
+                if other.is_empty() {
+                    "unknown".to_string()
+                } else {
+                    other.to_string()
+                },
                 preview(&body, 200),
             )
         }

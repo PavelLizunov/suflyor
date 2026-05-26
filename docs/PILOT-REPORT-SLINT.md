@@ -5,7 +5,19 @@
 **Pilot scope:** rebuild the React `Replay.tsx` viewer in Slint to test
 the migration plan's assumptions before committing to Phases 1-7.
 
-## TL;DR — Recommendation: **GO** (proceed to Phase 1)
+## TL;DR — Recommendation: **GO with Phase 0.5 prerequisites**
+
+> **Update post-R9 re-review:** The original recommendation was an
+> unqualified GO. An independent re-review (full-Phase-0 audit by a
+> general-purpose subagent that hadn't seen the earlier Day-2 review)
+> flagged that this report had been overselling — it omitted that
+> three plan-listed validations were NOT exercised: Slint MCP server
+> wiring (the migration plan's "killer integration"), HWND-poking
+> for transparent overlay flags (the migration's raison d'être), and
+> the markdown adapter spike (the plan's #1 risk). All three are
+> deferred to a recommended **Phase 0.5** before Phase 1's foundation
+> work begins. Original passing checks below remain valid; just don't
+> mistake them for proof of full migration viability.
 
 Slint passed every check the pilot was designed to stress:
 
@@ -33,9 +45,22 @@ in Phase 0 — they remain on the Phase 1-4 risk register. Phase 0 only
 proves Slint is viable for the *simple* end of the UI surface, which
 was the pilot's explicit purpose.
 
+### What Phase 0 explicitly did NOT validate (R9 re-review honesty pass)
+
+| Unvalidated capability | Why it matters | Where the gap should close |
+|---|---|---|
+| **Slint MCP server wiring** | The migration plan lists `SLINT_MCP_PORT=8080` + the `mcp` feature as **"the killer integration"** — replaces `scripts/visual_check.ps1` + computer-use with agent-driven UI testing. The pilot enabled the dev-dep feature but never spun up the server, never connected Claude Code to it, never proved it works. | **Phase 0.5 wire-up + smoke test** (≤ ½ day). If MCP doesn't actually work in our setup, the testing story changes materially. |
+| **HWND-poking for overlay flags** | The migration's reason-for-being is fixing WebView2 transparency / always-on-top / paint-flakiness. The pilot used a normal opaque window — zero evidence Slint+winit can hit the same overlay invariants the existing Tauri build does. | **Phase 0.5 spike** (½-1 day) — grab `slint::Window::window_handle()` raw HWND and call `SetWindowLongPtrW(GWL_EXSTYLE, WS_EX_LAYERED \| WS_EX_TRANSPARENT \| WS_EX_TOOLWINDOW)` + `WDA_EXCLUDEFROMCAPTURE`. If these flags don't survive Slint's compositor, the migration loses its main benefit. |
+| **Markdown adapter (pulldown-cmark + syntect → StyledText)** | The plan's risk register flags this as the **single largest unknown**, budgeted at 2 weeks of Phase 4. No Slint reference impl exists in the wild. If the adapter takes 4+ weeks, Phase 4 blows the plan. | **Phase 0.5 spike** (1-2 days) — minimal pulldown-cmark walker that emits `Text` / `StyledText` for a small set of features (headings, paragraphs, code blocks with syntect colors, bullet lists). Render `src-tauri/knowledge/glossary.md` in a Slint window. If the spike feels grim, re-evaluate hybrid (React-only for tile content) per the plan's risk register. |
+| **Export-to-markdown button** | `src/Replay.tsx:207-232` has a 📥 .md button calling `export_session_markdown` Tauri command. Pilot didn't port it. Not Phase-0-critical but a parity gap Phase 1+ inherits. | Phase 1 tile-window work, when invoking backend commands from Slint windows gets first-class treatment. |
+| **Local timezone in fmt_clock / fmt_modified** | Pilot stays UTC + `epoch+Nd HH:MM` because adding `time` or `chrono` mid-pilot felt out-of-scope. Combobox labels are practically useless to a human as a result. | Phase 1 Day 1 (~30 min): pull `time = { version = "0.3", features = ["macros", "local-offset", "formatting"] }`. |
+| **Hot-reload via `slint-lsp`** | Plan's Pre-Phase-0 prerequisite #1; pilot skipped to save time. Installed post-hoc this session (`cargo install slint-lsp` succeeded). | Phase 1 Day 1: open `slint-experiment/ui/replay.slint` in an editor with LSP wired and confirm live-preview UX is acceptable. Fallback: `cargo run` cycle is ~2-3 s incremental, workable. |
+
 **User decision required at the go/no-go gate**: this report is the
 recommendation; the user may override to no-go (in which case roll
-back to React via `git checkout master` + update ADR-001).
+back to React via `git checkout master` + update ADR-001). If GO,
+the recommended next move is **Phase 0.5** (the three spikes above)
+before committing to Phase 1's foundation work.
 
 ## Day-by-day execution
 
@@ -197,9 +222,23 @@ React-Vitest section with Slint testing):
 | 12 weeks solo work starves user of features | Mitigated by keeping `master` (React/Tauri) shippable; Slint work isolated on branches | **MITIGATED for now.** Re-evaluate if Phase 2 settings-panel cost runs over budget. |
 | License: royalty-free attribution feels bad | Decided in [ADR-002](ADR-002-license.md): royalty-free for pet-project scope | **CLOSED.** Re-open if scope changes. |
 
-## Recommendation for Phase 1+
+## Recommendation for Phase 0.5 + Phase 1+
 
-**Proceed to Phase 1 (Foundation, 1 week).** Before starting:
+**Recommended order:**
+
+1. **Phase 0.5 spikes** (2-3 days, before Phase 1):
+   - HWND-poking spike — confirm transparent always-on-top overlay
+     flags survive Slint+winit on Windows 11. **Hard blocker if it
+     fails** (the migration loses its main benefit).
+   - Markdown adapter spike — minimal pulldown-cmark + syntect →
+     Text/StyledText walker. **Soft blocker** — if it's ≥ 4 weeks,
+     re-open ADR-001 with hybrid React-for-tiles option.
+   - Slint MCP server wire-up — start the server with
+     `SLINT_MCP_PORT=8080` + `SLINT_EMIT_DEBUG_INFO=1`, connect
+     Claude Code via MCP config, run one inspect+click cycle against
+     the pilot binary. **Validates the testing story.**
+
+**Then Phase 1 (Foundation, 1 week)**, before starting:
 
 1. Install `slint-lsp` (`cargo install slint-lsp`) and test live
    preview on `slint-experiment/ui/replay.slint`. Confirm hot-reload
