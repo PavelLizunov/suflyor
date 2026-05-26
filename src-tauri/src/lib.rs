@@ -619,6 +619,93 @@ fn export_config(
 ///
 /// All other fields (snippets, trigger_keywords, ai_model, hotkeys, etc.)
 /// are KEPT so the recipient gets a useful starting point.
+/// Redact known secret patterns from arbitrary diagnostic text (crash
+/// reports, log excerpts, etc.) before including in a dump. Defensive
+/// belt-and-suspenders: most crash text won't contain secrets in the
+/// first place, but a future panic message that captures the full Debug
+/// repr of an HTTP request COULD include the bridge bearer. Better to
+/// always run text through this than rely on hoping panics stay clean.
+///
+/// Patterns covered:
+///   - `gsk_...` (Groq API key prefix)
+///   - `Bearer ...` (HTTP Authorization header value)
+///   - `sk-...` (defensive — OpenAI-style key prefix, not actually used
+///     by this app but cheap insurance if user ever sets one)
+pub(crate) fn sanitize_diagnostic_text(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    let bytes = s.as_bytes();
+    while i < bytes.len() {
+        // Match "gsk_" / "sk-" / "Bearer " — consume the secret token after
+        // the prefix and emit a placeholder. Token defined as non-whitespace
+        // and non-quote chars.
+        let rest = &s[i..];
+        let prefix_match: Option<(&str, &str)> = if rest.starts_with("gsk_") {
+            Some(("gsk_", "<REDACTED_GROQ_KEY>"))
+        } else if rest.starts_with("sk-") {
+            Some(("sk-", "<REDACTED_API_KEY>"))
+        } else if rest.starts_with("Bearer ") {
+            Some(("Bearer ", "Bearer <REDACTED>"))
+        } else {
+            None
+        };
+        if let Some((prefix, replacement)) = prefix_match {
+            out.push_str(replacement);
+            // Skip past prefix + secret token (until whitespace/quote/end).
+            let mut j = i + prefix.len();
+            while j < bytes.len() {
+                let b = bytes[j];
+                if b == b' ' || b == b'\t' || b == b'\n' || b == b'\r' || b == b'"' || b == b'\'' {
+                    break;
+                }
+                j += 1;
+            }
+            i = j;
+        } else {
+            // Copy one char (handling multi-byte UTF-8 properly via char_indices).
+            // Simpler: just copy this byte and advance. The redaction patterns
+            // are all ASCII, so we won't split a multibyte char.
+            out.push(bytes[i] as char);
+            i += 1;
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod sanitize_tests {
+    use super::sanitize_diagnostic_text;
+    #[test] fn redacts_groq_key() {
+        assert_eq!(
+            sanitize_diagnostic_text("error: gsk_abc123def456 invalid"),
+            "error: <REDACTED_GROQ_KEY> invalid"
+        );
+    }
+    #[test] fn redacts_bearer_header() {
+        assert_eq!(
+            sanitize_diagnostic_text("Authorization: Bearer xyz789 sent"),
+            "Authorization: Bearer <REDACTED> sent"
+        );
+    }
+    #[test] fn redacts_sk_key() {
+        assert_eq!(
+            sanitize_diagnostic_text("token=sk-abcdef nope"),
+            "token=<REDACTED_API_KEY> nope"
+        );
+    }
+    #[test] fn leaves_other_text_unchanged() {
+        let s = "plain message with no secrets here";
+        assert_eq!(sanitize_diagnostic_text(s), s);
+    }
+    #[test] fn stops_at_quotes() {
+        // JSON-quoted secret should leave the closing quote alone.
+        assert_eq!(
+            sanitize_diagnostic_text("\"key\":\"gsk_x123\""),
+            "\"key\":\"<REDACTED_GROQ_KEY>\""
+        );
+    }
+}
+
 pub(crate) fn blank_share_secrets(mut cfg: Config) -> Config {
     cfg.groq_api_key = String::new();
     cfg.ai_bearer = String::new();
@@ -666,7 +753,12 @@ fn dump_diagnostics(
     let arch = std::env::consts::ARCH;
 
     // Latest session journal tail (last 50 lines so the report stays under
-    // ~50 KB even for chatty sessions).
+    // ~50 KB even for chatty sessions). Runs through sanitize_diagnostic_text
+    // so any gsk_/Bearer/sk- patterns are redacted. NOTE: ai_request events
+    // include system_prompt + user_prompt which contain the user's
+    // meeting_context. That's not a "secret pattern" so the sanitizer leaves
+    // it intact — the dump output flags this so the user can review before
+    // sharing.
     let journal_tail = journal::sessions_dir()
         .ok()
         .and_then(|dir| {
@@ -687,17 +779,20 @@ fn dump_diagnostics(
         .map(|(path, content)| {
             let lines: Vec<&str> = content.lines().collect();
             let tail_start = lines.len().saturating_sub(50);
-            let tail = lines[tail_start..].join("\n");
-            format!("**File:** `{}`\n**Tail (last {} lines):**\n```jsonl\n{}\n```", path.display(), lines.len() - tail_start, tail)
+            let tail = sanitize_diagnostic_text(&lines[tail_start..].join("\n"));
+            format!("**File:** `{}`\n**Tail (last {} lines, sanitized):**\n```jsonl\n{}\n```\n\n_NOTE: `ai_request` events in this tail include `system_prompt` + `user_prompt` which contain your meeting_context (e.g. company name, role). Review before sharing if that's sensitive._", path.display(), lines.len() - tail_start, tail)
         })
         .unwrap_or_else(|| "_no session journal found_".to_string());
 
     // Optional crash report (inline the same path-resolution as
     // crash_report_path so we don't need to fake a WebviewWindow).
+    // Sanitize content defensively in case a future panic ever includes
+    // the user's Groq key or bridge bearer in its Debug output.
     let crash = dirs::config_dir()
         .map(|d| d.join("overlay-mvp").join("crash-report.txt"))
         .filter(|p| p.exists())
         .and_then(|p| std::fs::read_to_string(&p).ok())
+        .map(|s| sanitize_diagnostic_text(&s))
         .map(|s| format!("```\n{s}\n```"))
         .unwrap_or_else(|| "_no crash report on disk_".to_string());
 
