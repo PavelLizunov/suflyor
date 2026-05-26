@@ -2,7 +2,7 @@
 
 ## ☀️ Wake-up summary — marathon retry 2026-05-26 04:52 → ~07:52 (~3h)
 
-**TL;DR:** 6 releases shipped (v0.0.10 → v0.0.15) closing every priority backlog item + one fresh-backlog item (#13 diagnostic dump). 239 cargo tests pass · clippy `-D warnings` clean · vite build clean. README has 4 fresh screenshots from running release. v0.0.5 slot-collision fix LIVE-VERIFIED on real hardware (6 tiles in 6 unique slots, gap reuse confirmed). A11y sweep across all 3 React surfaces.
+**TL;DR:** 7 releases shipped (v0.0.10 → v0.0.16) closing every priority backlog item + 2 fresh-backlog items (#12 chip colors, #13 diagnostic dump). 244 cargo tests pass · clippy `-D warnings` clean · vite build clean. README has 4 fresh screenshots from running release. v0.0.5 slot-collision fix LIVE-VERIFIED on real hardware (6 tiles in 6 unique slots, gap reuse confirmed). A11y sweep across all 3 React surfaces. Diagnostic dump button with defensive secret-pattern redaction.
 
 **Releases this marathon block:**
 - **v0.0.10** — overlay bar drag fix + snippet CRUD modal
@@ -11,6 +11,7 @@
 - **v0.0.13** — over-budget chip lifecycle: emits cost:update {usd:0} on session restart; flashFlag pattern + tracked timer ref (no stacked timers); listener consolidation. UPGRADING.md chip-emoji history fixed.
 - **v0.0.14** — fix: closing Settings restores overlay to pre-Settings position (was snapping to default 200,40 losing 2nd-monitor drag). A11y sweep: ARIA on Tile/Replay/KB-palette. Replay chips color-coded by kind. +2 semver edge case tests.
 - **v0.0.15** — feat: 📊 Диагностический дамп button in Settings (one-click sanitized config + last 50 journal events + crash report as a single .md to Desktop, for bug reports). Fix: plaintext HTTP warning now suppressed for loopback URLs. Docs: test count + CLAUDE.md test-invocation corrected.
+- **v0.0.16** — security: dump_diagnostics crash report + journal tail now sanitized through new sanitize_diagnostic_text (redacts gsk_/Bearer/sk- patterns). Journal tail flagged for meeting_context review-before-share (not a "secret pattern" so left intact). +5 unit tests (239 → 244). Docs: architecture.md assert_overlay count refreshed 25 → 31, security audit doc updated for v0.0.15+ changes.
 
 **Verified live (not just unit tests):**
 - v0.0.10 overlay drag worked end-to-end (Win32 GetWindowRect: 200,40 → 661,246)
