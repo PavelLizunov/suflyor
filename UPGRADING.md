@@ -26,6 +26,21 @@ for download. No auto-install (no code signing — by design).
 
 Two code-review agent passes ran on the diff. First found 3 P0/P1 (shipped .85, .86, .87). Second pass running at time of v0.0.88 ship.
 
+### → v0.0.93 (2026-05-26) — 📋 Copy-question-to-clipboard button on tiles
+
+New 📋 button in tile chrome between 🔄 reload and 🌐 translate.
+Click → copies the tile's question text to clipboard via
+`navigator.clipboard.writeText`. Briefly shows ✓ for 1.2 sec.
+
+Use case: AI answered a question well — you want to paste the
+question into Slack/email/notes for follow-up. One click vs
+select-and-copy from a tile whose body is markdown-rendered (the
+question is in `.tile-q` div but mouse-selecting around tile chrome
+is fiddly).
+
+Pure frontend — new `CopyQuestionButton` component defined outside
+the main TileWindow render to keep that loop lean.
+
 ### → v0.0.92 (2026-05-26) — Audit P1+P2 cleanup batch
 
 Three findings from code-review agent #2 that didn't make v0.0.91:

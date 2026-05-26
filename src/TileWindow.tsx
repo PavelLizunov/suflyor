@@ -495,6 +495,10 @@ export default function TileWindow() {
         >
           {reloading ? "⏳" : "🔄"}
         </button>
+        {/* v0.0.93: 📋 copy question to clipboard. Useful for pasting
+            into Slack/email/notes. Confirmation: button briefly shows
+            "✓" for 1.2s. Pure frontend, no backend. */}
+        <CopyQuestionButton question={question} lang={lang} />
         {/* v0.0.89: 🌐 translate — re-ask in opposite language. Same
             bridge pattern as 🔄 reload (event → overlay → backend cmd).
             Disabled together with reload via shared `reloading` state. */}
@@ -552,5 +556,43 @@ export default function TileWindow() {
         </ReactMarkdown>
       </div>
     </div>
+  );
+}
+
+// v0.0.93: small button — copies tile question text to clipboard via
+// navigator.clipboard.writeText. Brief ✓ feedback for 1.2s. Defined
+// outside the main TileWindow to keep its render loop lean (it owns
+// its own copied state). Compact styling matches reload/translate
+// buttons.
+function CopyQuestionButton({ question, lang }: { question: string; lang: Lang }) {
+  const [copied, setCopied] = useState(false);
+  const onClick = async () => {
+    try {
+      await navigator.clipboard.writeText(question);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch (e) {
+      console.warn("clipboard write:", e);
+    }
+  };
+  return (
+    <button
+      className="tile-copy-q"
+      onClick={onClick}
+      title={copied
+        ? (lang === "en" ? "✓ Copied" : "✓ Скопировано")
+        : (lang === "en" ? "Copy question to clipboard" : "Скопировать вопрос в буфер")}
+      aria-label={lang === "en" ? "Copy question" : "Скопировать вопрос"}
+      style={{
+        background: "transparent",
+        border: "none",
+        cursor: "pointer",
+        opacity: 0.85,
+        padding: "0 6px",
+        fontSize: 13,
+      }}
+    >
+      {copied ? "✓" : "📋"}
+    </button>
   );
 }
