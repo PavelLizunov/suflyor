@@ -921,24 +921,31 @@ export default function Settings() {
       </div>)}
 
       {activeSection === "interface" && (<div className="settings-section">
-        <h3>🎨 Интерфейс</h3>
-        <div className="field">
-          <label>
-            <input
-              type="checkbox"
-              checked={showCost}
-              onChange={(e) => {
-                const v = e.target.checked;
+        {/* v0.0.38 polish — same template as Stealth/Coaching panels. */}
+        <div className="card">
+          <div className="card-title">🎨 Внешний вид overlay</div>
+          <div className="switch-row">
+            <div className="switch-meta">
+              <div className="switch-title">Показывать индикатор стоимости 💰</div>
+              <div className="switch-desc">
+                Шильдик «💰 $X.XXX» в overlay-баре. Скрытие НЕ отключает учёт
+                — деньги всё равно пишутся в журнал и cost:update event летает.
+                Только убирает шильдик из бара.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="switch"
+              role="switch"
+              aria-checked={showCost}
+              aria-label="Toggle cost indicator"
+              onClick={() => {
+                const v = !showCost;
                 setShowCost(v);
                 try { localStorage.setItem("overlay.showCost", String(v)); }
                 catch (err) { console.warn("localStorage write failed:", err); }
               }}
-              style={{ marginRight: 6 }}
             />
-            Показывать индикатор стоимости 💰 в overlay-баре
-          </label>
-          <div style={{ fontSize: 11, color: "var(--c-text-mute)", marginLeft: 22 }}>
-            Скрытие не отключает учёт — деньги всё равно пишутся в журнал и cost:update event летает. Только убирает шильдик из бара.
           </div>
         </div>
       </div>)}
@@ -986,19 +993,28 @@ export default function Settings() {
       </div>)}
 
       {activeSection === "coaching" && (<div className="settings-section">
-        <h3>🎯 Coaching</h3>
-        <div className="field">
-          <label title="После Stop session AI шлёт mic-транскрипт в Sonnet и возвращает 3 коротких замечания о вашей речи (темп, паразиты, структура). +1 Sonnet-вызов на сессию.">
-            <input
-              type="checkbox"
-              checked={cfg.post_meeting_debrief_enabled ?? false}
-              onChange={(e) => update({ post_meeting_debrief_enabled: e.target.checked })}
-              style={{ marginRight: 6 }}
+        {/* v0.0.38 polish — same template as Stealth panel (v0.0.37):
+            .card + .card-title + .switch-row. Behavior unchanged. */}
+        <div className="card">
+          <div className="card-title">🎓 Post-meeting debrief</div>
+          <div className="switch-row">
+            <div className="switch-meta">
+              <div className="switch-title">Coaching tile после Stop (opt-in)</div>
+              <div className="switch-desc">
+                После Stop session AI шлёт mic-транскрипт в Sonnet и возвращает
+                3 коротких замечания о вашей речи (темп, паразиты, структура).
+                Срабатывает только если сессия ≥30 сек и было ≥5 mic-реплик.
+                Стоит ~1 Sonnet вызов (≈$0.005). Не забудь Save.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="switch"
+              role="switch"
+              aria-checked={cfg.post_meeting_debrief_enabled ?? false}
+              aria-label="Toggle post-meeting debrief"
+              onClick={() => update({ post_meeting_debrief_enabled: !(cfg.post_meeting_debrief_enabled ?? false) })}
             />
-            Post-meeting auto-debrief — coaching tile после Stop (opt-in)
-          </label>
-          <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
-            Срабатывает только если сессия ≥30 сек и было ≥5 mic-реплик. Стоит ~1 Sonnet вызов (≈$0.005). Не забудьте Save.
           </div>
         </div>
       </div>)}

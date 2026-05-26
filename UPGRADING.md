@@ -11,6 +11,23 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.38 (2026-05-26)
+
+Second Settings polish micro-release. Converts **Coaching** + **Interface**
+panels (both have single boolean toggles — same template as Stealth in
+v0.0.37). Two panels folded together because they're trivial conversions
+with identical risk profile.
+
+- **Coaching**: `.card` with title «🎓 Post-meeting debrief», `.switch-row`
+  with title + desc (session ≥30s + ≥5 mic-lines + ~$0.005 Sonnet vote),
+  pill toggle on `post_meeting_debrief_enabled`.
+- **Interface**: `.card` with title «🎨 Внешний вид overlay», `.switch-row`
+  with title + desc (cost hide doesn't disable accounting, just hides chip),
+  pill toggle on the localStorage-backed `showCost`.
+
+Behavior unchanged on both — same state writes, same effects. Pure visual
+conversion.
+
 ### → v0.0.37 (2026-05-26)
 
 First of the planned Settings polish micro-releases (see
