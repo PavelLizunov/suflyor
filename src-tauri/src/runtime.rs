@@ -904,18 +904,28 @@ async fn maybe_spawn_tile(
     // pattern "interviewer asked X at 5:00 and again at 25:00" but
     // short enough that stale context doesn't ruin freshness.
     // v0.0.85 P0 fix: bake ai_model + response_language + meeting_context
-    // length into the key. Without these, an F2 profile cycle (changes
-    // meeting_context) or 🧠 model chip click (changes ai_model) would
-    // return a stale cached answer that was generated under the OLD
-    // context. Length is a cheap proxy for "context changed"; a full
-    // hash would be safer but length-collision-across-edits is unlikely
-    // for free-form prose. Inputs whose effective AI prompt would differ
-    // now produce different cache keys.
+    // length into the key. Without these, F2 profile cycle or 🧠 model
+    // chip click would return stale cached answers from before the
+    // switch.
+    // v0.0.92 P1 follow-up: meeting_context.len() was a cheap proxy for
+    // "context changed", but two same-length edits (a typo fix, equal-
+    // length paste swap) would silently return stale answers. Now hash
+    // the full meeting_context via DefaultHasher (one-shot, no extra
+    // crate). Also include trigger_keywords hash since v0.0.66 detector
+    // tweaks change which triggers fire.
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    meeting_context.hash(&mut h);
+    let ctx_hash = h.finish();
+    let mut h2 = std::collections::hash_map::DefaultHasher::new();
+    trigger_keywords.hash(&mut h2);
+    let kw_hash = h2.finish();
     let cache_seed: String = format!(
-        "m={};l={};c={};q={}",
+        "m={};l={};c={:x};k={:x};q={}",
         model,
         response_language,
-        meeting_context.len(),
+        ctx_hash,
+        kw_hash,
         text
             .to_lowercase()
             .split_whitespace()

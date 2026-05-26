@@ -548,7 +548,13 @@ fn last_session_summary(
     // manual rename / copy / future scheme change would break "latest"
     // detection. Mtime is the authoritative answer to "which is newest".
     // Pattern matches dump_diagnostics (lib.rs:1881).
-    files.sort_by_key(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok());
+    // v0.0.92 P2 fix: secondary lex sort breaks mtime ties (two journals
+    // landing in the same second → deterministic "latest").
+    files.sort_by(|a, b| {
+        let ta = std::fs::metadata(a).and_then(|m| m.modified()).ok();
+        let tb = std::fs::metadata(b).and_then(|m| m.modified()).ok();
+        ta.cmp(&tb).then(a.cmp(b))
+    });
     let Some(last) = files.last() else { return Ok(None) };
 
     // Read first ~3 lines for SessionStart event.
@@ -2456,7 +2462,12 @@ fn set_ai_model(
 /// signal strength (which the prep_record flow swallows).
 #[derive(Debug, serde::Serialize)]
 struct MicTestResult {
-    peak_dbfs: f32,
+    // v0.0.92 P2 fix: was `f32` with NEG_INFINITY sentinel on silent
+    // path → serde_json silently serializes non-finite floats as null,
+    // making the JS-side TS `number` type a lie. Now Option<f32> +
+    // skip_serializing_if so silent → field absent, finite → number.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    peak_dbfs: Option<f32>,
     transcript: String,
     verdict: &'static str, // "ok" | "quiet" | "silent"
 }
@@ -2489,21 +2500,27 @@ async fn test_microphone(
 
     if pcm.is_empty() {
         return Ok(MicTestResult {
-            peak_dbfs: f32::NEG_INFINITY,
+            peak_dbfs: None,
             transcript: String::new(),
             verdict: "silent",
         });
     }
     // Compute peak amplitude (max |sample|) → convert to dBFS.
     // i16::MAX = 32767 = 0 dBFS reference. dBFS = 20 * log10(peak / 32767).
-    let peak: i32 = pcm.iter().map(|s| (*s as i32).abs()).max().unwrap_or(0);
-    let peak_dbfs = if peak == 0 {
-        f32::NEG_INFINITY
+    // v0.0.92 P2 fix: i16::MIN.abs() = 32768 overflows the 0 dBFS reference
+    // → would give tiny positive dBFS for a max-negative sample. Clamp to
+    // 32767 so dBFS is strictly ≤ 0.
+    let peak: i32 = pcm.iter()
+        .map(|s| (*s as i32).abs().min(32767))
+        .max()
+        .unwrap_or(0);
+    let peak_dbfs: Option<f32> = if peak == 0 {
+        None
     } else {
-        20.0_f32 * (peak as f32 / 32767.0_f32).log10()
+        Some(20.0_f32 * (peak as f32 / 32767.0_f32).log10())
     };
     let verdict = if peak < 100 { "silent" }
-        else if peak_dbfs < -30.0 { "quiet" }
+        else if peak_dbfs.map(|d| d < -30.0).unwrap_or(false) { "quiet" }
         else { "ok" };
 
     // Transcribe only if signal is at least quiet — silent recordings
@@ -2896,7 +2913,12 @@ fn try_auto_export_latest_to_desktop() -> Result<std::path::PathBuf, String> {
     // v0.0.87 P1 fix: mtime sort, not lex. See last_session_summary
     // for rationale. Auto-export running quit-time should grab the
     // most recently *modified* journal regardless of name.
-    files.sort_by_key(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok());
+    // v0.0.92 P2 fix: secondary lex sort breaks mtime ties.
+    files.sort_by(|a, b| {
+        let ta = std::fs::metadata(a).and_then(|m| m.modified()).ok();
+        let tb = std::fs::metadata(b).and_then(|m| m.modified()).ok();
+        ta.cmp(&tb).then(a.cmp(b))
+    });
     let latest = files.last().ok_or_else(|| "no session journals found".to_string())?;
     let meta = std::fs::metadata(latest).map_err(|e| e.to_string())?;
     if meta.len() == 0 {

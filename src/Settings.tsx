@@ -2457,7 +2457,9 @@ export default function Settings() {
 // (ok/quiet/silent). Lives at the top of the Audio panel so it's the
 // first thing users see when troubleshooting "AI never spawns tiles".
 function MicTestCard({ lang }: { lang: Lang }) {
-  type Result = { peak_dbfs: number; transcript: string; verdict: "ok" | "quiet" | "silent" };
+  // v0.0.92: peak_dbfs is Option<f32> on backend now — skip_serializing
+  // means the field is absent on silent path. TS type matches reality.
+  type Result = { peak_dbfs?: number | null; transcript: string; verdict: "ok" | "quiet" | "silent" };
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [err, setErr] = useState("");
@@ -2502,7 +2504,7 @@ function MicTestCard({ lang }: { lang: Lang }) {
               {result.verdict === "silent" && (lang === "en" ? "✗ Mic silent" : "✗ Микрофон молчит")}
             </span>
           )}
-          {result && Number.isFinite(result.peak_dbfs) && (
+          {result && typeof result.peak_dbfs === "number" && Number.isFinite(result.peak_dbfs) && (
             <span style={{ fontFamily: "monospace", fontSize: 12, color: "var(--c-text-mute)" }}>
               peak {result.peak_dbfs.toFixed(1)} dBFS
             </span>

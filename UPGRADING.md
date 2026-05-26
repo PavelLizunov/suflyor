@@ -26,6 +26,35 @@ for download. No auto-install (no code signing — by design).
 
 Two code-review agent passes ran on the diff. First found 3 P0/P1 (shipped .85, .86, .87). Second pass running at time of v0.0.88 ship.
 
+### → v0.0.92 (2026-05-26) — Audit P1+P2 cleanup batch
+
+Three findings from code-review agent #2 that didn't make v0.0.91:
+
+**P1: qa_cache key used `meeting_context.len()` as context-change proxy.**
+Two same-length edits (typo fix, equal-length paste) would silently
+return stale answers. Now hashes the full `meeting_context` +
+`trigger_keywords` via `DefaultHasher` (one-shot, no extra crate
+dep). Key format: `m=<model>;l=<lang>;c=<ctxhash>;k=<kwhash>;q=<normalized>`.
+
+**P2: `MicTestResult.peak_dbfs` TS type lied.**
+Backend was `f32` with `f32::NEG_INFINITY` sentinel on silent path →
+`serde_json` silently serializes non-finite floats as `null`, so JS
+saw `null` not a number. Now `Option<f32>` + `skip_serializing_if`
+→ silent path omits the field entirely. TS type updated to
+`number | null | undefined`.
+
+**P2: `i16::MIN.abs()` overflowed the dBFS reference.**
+A max-negative PCM sample (-32768) made `(i32).abs() = 32768`, one
+above the 32767 = 0 dBFS reference → produced tiny positive dBFS
+(+0.00026 dB). Now clamped via `.min(32767)`.
+
+**P2: mtime sort ties were non-deterministic.**
+Two journals landing in the same second could resolve "latest" in
+filesystem-dependent order. Added secondary lex sort (filename
+ASCII order) for deterministic tie-break across runs.
+
+All fixes from same code-review agent that found v0.0.91's P0.
+
 ### → v0.0.91 (2026-05-26) — P0 fix: reload + translate dead since v0.0.85
 
 **🚨 v0.0.85's reload-security check rejected ALL legitimate requests.**
