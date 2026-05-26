@@ -176,14 +176,15 @@ export default function Replay() {
   };
 
   return (
-    <div className="replay-root">
-      <div className="replay-header">
+    <main className="replay-root" aria-label="Session journal replay viewer">
+      <div className="replay-header" role="banner">
         <h2 style={{ margin: 0 }}>📊 Session Replay</h2>
         <div className="replay-controls">
           <select
             value={selected}
             onChange={(e) => setSelected(e.target.value)}
             className="replay-select"
+            aria-label="Choose a session to replay"
           >
             <option value="">— pick a session —</option>
             {sessions.map((s) => (
@@ -192,7 +193,7 @@ export default function Replay() {
               </option>
             ))}
           </select>
-          <button className="btn secondary" onClick={back}>
+          <button className="btn secondary" onClick={back} aria-label="Return to overlay">
             ← Back to overlay
           </button>
         </div>
@@ -296,7 +297,7 @@ export default function Replay() {
           </span>
         </div>
       )}
-    </div>
+    </main>
   );
 }
 
