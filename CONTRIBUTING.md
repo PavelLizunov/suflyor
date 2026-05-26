@@ -35,7 +35,8 @@ npm run tauri build        # → src-tauri/target/release/bundle/msi/suflyor_X.Y
 ## Tests
 
 ```bash
-cargo test --lib                                    # ~230 tests, <1 sec
+cargo test --lib                                    # 239 tests, <1 sec
+cargo test --bin journal-eval                       # 25 CLI tests, <1 sec
 cargo clippy --bin overlay-mvp -- -D warnings       # strict lint
 npm run build                                       # TS + vite build (tsc --noEmit then vite build)
 ```
