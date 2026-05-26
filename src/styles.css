@@ -124,7 +124,7 @@ button { cursor: pointer; }
 }
 
 /* Buttons get tactile feedback */
-:where(button, .btn, .icon-btn, .tile-close):active {
+:where(button, .btn, .icon-btn, .tile-close, .tile-pin):active {
   transform: scale(0.97);
   transition: transform var(--dur-fast) var(--ease);
 }
@@ -379,7 +379,8 @@ kbd {
 
 /* v0.0.24: bumped 18×18 → 24×24 with visible default background.
  * Was barely findable on a glass tile. Now hover gives clear feedback. */
-.tile-close {
+.tile-close,
+.tile-pin {
   -webkit-app-region: no-drag;
   width: 24px;
   height: 24px;
@@ -398,11 +399,18 @@ kbd {
   background: rgba(255, 0, 0, 0.4);  /* close = clear destructive cue */
   color: white;
 }
-.tile-close[data-pinned="true"] {
+/* v0.0.28: pin button uses its OWN hover (yellow tint, non-destructive).
+   Previously shared .tile-close so pin-hover went RED — user could
+   mistake "pin" for "this will delete". Split caught by review agent. */
+.tile-pin:hover {
+  background: rgba(250, 204, 21, 0.30);
+  color: #facc15;
+}
+.tile-pin[data-pinned="true"] {
   background: rgba(250, 204, 21, 0.35);  /* pinned tiles glow yellow */
   color: #facc15;
 }
-.tile-close[data-pinned="true"]:hover {
+.tile-pin[data-pinned="true"]:hover {
   background: rgba(250, 204, 21, 0.55);
 }
 
@@ -768,7 +776,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   .pulse {
     animation: none;
   }
-  :where(button, .btn, .icon-btn, .tile-close):active {
+  :where(button, .btn, .icon-btn, .tile-close, .tile-pin):active {
     transform: none;
   }
 }
@@ -921,7 +929,10 @@ body.settings {
 }
 
 /* --- Tile pin state (📌 button shows yellow when pinned) -------- */
-.tile-close[data-pinned="true"] {
+/* v0.0.28: was `.tile-close[data-pinned="true"]` — but the pin button
+   moved to its own `.tile-pin` class so the destructive red hover
+   doesn't fire on pin. Selector updated to match new class. */
+.tile-pin[data-pinned="true"] {
   color: var(--c-warn);
 }
 

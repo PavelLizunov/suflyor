@@ -147,6 +147,14 @@ impl From<&Monitor> for MonitorRect {
 /// Row pitch uses TILE_H_MAX (not TILE_H) so a row-0 tile that grows after
 /// markdown render can't overlap the row-1 tile below it. Cost: small visual
 /// gap under short tiles. Worth it — overlap was reported in live test.
+///
+/// v0.0.28: clamp horizontal placement to monitor bounds. Previously on
+/// short monitors (1280×720, 1366×768) where `max_rows=1`, the third
+/// column-pair could land at negative x — tiles rendered fully off-screen
+/// left. Now: cap `pair` to the maximum that still fits within the
+/// monitor's left edge, AND clamp `start_x` so even an edge tile stays
+/// at least `PAD` inside `monitor.x`. Worst case (truly impossible to
+/// fit any pair): all tiles stack on the leftmost in-bounds column.
 fn grid_position(monitor: &MonitorRect, index: usize) -> LogicalPosition<f64> {
     let total_w = (TILE_W * COLS as f64) + (PAD * (COLS - 1) as f64);
     let row_h = TILE_H_MAX + PAD;
@@ -158,7 +166,26 @@ fn grid_position(monitor: &MonitorRect, index: usize) -> LogicalPosition<f64> {
     let local = index % per_pair;
     let col = local % COLS;
     let row = local / COLS;
-    let start_x = monitor.x + monitor.w - total_w - PAD - pair as f64 * (total_w + PAD);
+    // Pair pitch = how far each pair-shift moves left.
+    let pair_pitch = total_w + PAD;
+    // The leftmost in-bounds pair anchor. start_x for pair=0 sits at the
+    // top-right anchor; subsequent pairs move LEFT by pair_pitch each.
+    // Cap `pair` so we don't pass the monitor's left edge.
+    let max_pairs = if pair_pitch > 0.0 {
+        // (right_anchor - leftmost_allowed) / pair_pitch
+        // = ((monitor.w - total_w - PAD) - PAD) / pair_pitch
+        // → max pair index that still has start_x ≥ monitor.x + PAD.
+        let usable = (monitor.w - total_w - 2.0 * PAD).max(0.0);
+        (usable / pair_pitch).floor() as usize
+    } else {
+        0
+    };
+    let pair = pair.min(max_pairs);
+    let unclamped_start_x =
+        monitor.x + monitor.w - total_w - PAD - pair as f64 * pair_pitch;
+    // Final safety: clamp to monitor left edge (handles the impossible-
+    // to-fit-even-one-pair case on absurdly narrow displays).
+    let start_x = unclamped_start_x.max(monitor.x + PAD);
     let start_y = monitor.y + PAD;
     LogicalPosition::new(
         start_x + col as f64 * (TILE_W + PAD),
@@ -591,6 +618,50 @@ mod tests {
             assert!(
                 p.y + TILE_H_MAX <= m.y + m.h,
                 "tile {i} off-screen vertically on short monitor"
+            );
+        }
+    }
+
+    /// v0.0.28 REGRESSION: on a 1280×720 monitor (cheap laptop), the
+    /// pre-fix grid math gave start_x = -1564 for tile slot 4 — tiles 4-5
+    /// rendered fully off-screen LEFT. The clamp must keep every slot
+    /// at least PAD inside the monitor's left edge. Caught by review agent
+    /// on v0.0.20→v0.0.27 diff.
+    #[test]
+    fn grid_positions_stay_horizontal_on_720p_laptop() {
+        let m = MonitorRect { x: 0.0, y: 0.0, w: 1280.0, h: 720.0 };
+        for i in 0..MAX_TILES {
+            let p = grid_position(&m, i);
+            assert!(
+                p.x >= m.x,
+                "tile {i} x={} fell off monitor LEFT (m.x={}) on 720p laptop",
+                p.x, m.x
+            );
+            assert!(
+                p.x + TILE_W <= m.x + m.w + 1.0,
+                "tile {i} right edge {} past monitor right {} on 720p laptop",
+                p.x + TILE_W, m.x + m.w
+            );
+        }
+    }
+
+    /// Multi-monitor sanity: if the user's secondary monitor is at a
+    /// non-zero x origin (e.g. ARZOPA at x=1920), tile positions still
+    /// land inside its bounds — not on the primary monitor at x=0..1920.
+    #[test]
+    fn grid_positions_respect_non_zero_monitor_origin() {
+        // 1280-wide secondary monitor anchored at x=1920 (right of primary).
+        let m = MonitorRect { x: 1920.0, y: 0.0, w: 1280.0, h: 720.0 };
+        for i in 0..MAX_TILES {
+            let p = grid_position(&m, i);
+            assert!(
+                p.x >= m.x,
+                "tile {i} x={} fell off secondary monitor LEFT (m.x={})",
+                p.x, m.x
+            );
+            assert!(
+                p.x + TILE_W <= m.x + m.w + 1.0,
+                "tile {i} extends past secondary monitor right edge",
             );
         }
     }

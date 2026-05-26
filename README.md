@@ -2,7 +2,7 @@
 
 Личный AI-overlay для технических собесов под Windows. Слушает звук, транскрибирует через Whisper, спрашивает Claude, показывает ответ во второстепенном окошке.
 
-Pet project, **v0.0.27**. Под одного пользователя. Без code signing, без telemetry.
+Pet project, **v0.0.28**. Под одного пользователя. Без code signing, без telemetry.
 
 ![overlay bar](docs/screenshots/overlay-bar.png)
 
@@ -92,7 +92,7 @@ Tauri 2 + React 19 + Rust. Groq Whisper Large v3 для STT. Claude через O
 
 ## Defaults
 
-- `max_session_cost_usd` = 1.00 USD — **soft warning** (жёлтый чип в overlay), НЕ блокирует AI. Раньше был hard block (v0.0.2-0.0.4) — оказался плохой UX (блок ровно когда нужна помощь). 0 = отключить чип.
+- `max_session_cost_usd` = **0 (выкл) с v0.0.28** — раньше дефолт был 1.00 USD soft-warn, но pet-project юзер сказал «по костам не важно». Любое положительное число включит жёлтый 💰 чип в overlay когда сессия превысит сумму. AI всё равно НЕ блокируется (soft warning since v0.0.5).
 - `detector_skip_mic` = true — auto-tile не спавнится на твоём голосе (только на репликах собеседника). Отключи если хочешь подсказки по обеим сторонам.
 - `post_meeting_debrief_enabled` = false — opt-in. Один Sonnet вызов в конце сессии для 3-point speech coaching.
 - `stealth_enabled` = false — overlay виден в screen-share. Включи в Settings → 🎯 Stealth если параноишь.

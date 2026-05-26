@@ -299,8 +299,8 @@ export default function Overlay() {
 
   // v0.0.26: also pull auto_tile_every_line so we can show a 🔥 chip
   // in the bar when aggressive mode is on. User easily forgets this is
-  // enabled between sessions; without a visible reminder cost can creep
-  // up unexpectedly.
+  // enabled between sessions — chip is a status indicator (not a cost
+  // warning per v0.0.28; user said unlimited budget).
   const [aggressive, setAggressive] = useState(false);
 
   // Load ask-mode + aggressive flag from config once on mount.
@@ -759,7 +759,7 @@ export default function Overlay() {
               border: "1px solid rgba(251, 146, 60, 0.4)",
             }}
             aria-label="Aggressive mode is enabled — tile spawns on every transcript line"
-            title="🔥 AGGRESSIVE MODE ON — тайл на КАЖДУЮ строку транскрипта. AI cost растёт быстро (~$4-5/час непрерывной речи). Отключить: Settings → 🪟 Auto-tiles → снять галку «спавнить тайл на каждую строку»"
+            title="🔥 AGGRESSIVE MODE ON — тайл на КАЖДУЮ строку транскрипта (bypass детектора, до 60 тайлов/мин). Отключить: Settings → 🪟 Auto-tiles → снять галку «спавнить тайл на каждую строку»"
           >
             🔥 aggressive
           </span>

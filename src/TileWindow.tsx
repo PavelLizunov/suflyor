@@ -201,7 +201,7 @@ export default function TileWindow() {
         )}
         <span className="tile-source" title={sourceLabel}>{sourceLabel}</span>
         <button
-          className="tile-close"
+          className="tile-pin"
           data-pinned={pinned ? "true" : undefined}
           onClick={togglePin}
           title={pinned ? "Pinned — no auto-close" : "Pin (cancel auto-close)"}

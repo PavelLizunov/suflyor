@@ -195,7 +195,17 @@ fn default_post_meeting_debrief_enabled() -> bool {
 }
 
 fn default_max_session_cost_usd() -> f64 {
-    1.00 // ≈ 200 Haiku tiles. Detector-runaway guard.
+    // v0.0.28: flipped 1.00 → 0.0 (chip disabled by default). Pet-project
+    // user explicitly opted out of cost guard rails — said «по костам не
+    // важно, у меня безлимитные деньги». Old installs keep their existing
+    // value (serde reads from file); the chip only stops appearing for
+    // fresh installs OR users who explicitly set 0. The cost-cap field
+    // remains in Settings for users who DO want it.
+    //
+    // The hard-block path was already removed in v0.0.5 (soft warning
+    // only), so this is purely a UX guilt-trip removal, not a behaviour
+    // change for live AI calls.
+    0.0
 }
 
 fn default_detector_skip_mic() -> bool {
@@ -1463,9 +1473,11 @@ mod tests {
     #[test]
     fn new_v002_field_defaults() {
         let d = Config::defaults();
-        // Cost cap default — $1.00 = soft warn (not block in v0.0.5+).
-        assert!((d.max_session_cost_usd - 1.00).abs() < 0.001,
-            "max_session_cost_usd default should be $1.00, got {}", d.max_session_cost_usd);
+        // Cost cap default — 0.0 since v0.0.28 means chip is OFF.
+        // Old installs (with explicit value in their config.json) keep
+        // their value via the per-field serde(default=...) loader.
+        assert!(d.max_session_cost_usd.abs() < 0.001,
+            "max_session_cost_usd default should be 0.0 (chip off), got {}", d.max_session_cost_usd);
         // detector_skip_mic ON by default — fix for live regression #96
         // (candidate's own voice shouldn't trigger explanation tiles).
         assert!(d.detector_skip_mic,
@@ -1476,9 +1488,12 @@ mod tests {
     }
 
     /// Old config files (pre-v0.0.2) lack the new fields. Serde must
-    /// fill them with proper defaults — NOT struct defaults (zero for
-    /// f64 means "no cap"; false for bool means "include mic in detector").
-    /// Per-field #[serde(default = "...")] attributes must be intact.
+    /// fill them with proper defaults via per-field #[serde(default="...")]
+    /// attributes — these are the source of forward compat. Struct
+    /// Default would also work but the per-field form is what gets used
+    /// during deserialization, so we assert THAT path specifically.
+    ///
+    /// v0.0.28: max_session_cost_usd default flipped 1.00 → 0.0 (chip off).
     #[test]
     fn pre_v002_config_gets_correct_field_defaults_via_serde() {
         // Simulate a v0.0.1 config — has all fields up to v0.0.1 but no
@@ -1489,23 +1504,33 @@ mod tests {
         }"#;
         let cfg: Config = serde_json::from_str(pre_v002).expect("must parse old config");
         // Field defaults MUST be applied via serde(default=...) on the
-        // field itself (not struct's Default), otherwise upgrades would
-        // silently change behaviour:
-        assert!((cfg.max_session_cost_usd - 1.00).abs() < 0.001,
-            "missing field should fall to 1.00 (cap on), not 0.0 (cap off)");
+        // field itself:
+        assert!(cfg.max_session_cost_usd.abs() < 0.001,
+            "missing field should fall to 0.0 (cap off) — v0.0.28 default");
         assert!(cfg.detector_skip_mic,
             "missing field should fall to true (mic skipped), not false");
         assert!(!cfg.post_meeting_debrief_enabled,
             "missing field should fall to false (opt-in)");
     }
 
-    /// Config with an EXPLICIT 0 for cost cap should NOT be overridden
-    /// to the default 1.00 — user intent to disable the warning is preserved.
+    /// Config with EXPLICIT positive cost cap should NOT be overridden
+    /// to the 0.0 default — user intent to enable the warning is preserved.
+    #[test]
+    fn explicit_positive_cost_cap_preserved() {
+        let with_cap = r#"{ "max_session_cost_usd": 2.50 }"#;
+        let cfg: Config = serde_json::from_str(with_cap).expect("must parse");
+        assert!((cfg.max_session_cost_usd - 2.50).abs() < 0.001,
+            "explicit positive cap must NOT be replaced with 0.0 default");
+    }
+
+    /// Config with EXPLICIT 0 for cost cap stays at 0 (was a meaningful
+    /// "I disabled the chip" signal before v0.0.28 — still works the same).
+    /// v0.0.28: now matches the default. Test kept to lock in the contract.
     #[test]
     fn explicit_zero_cost_cap_preserved() {
         let with_zero = r#"{ "max_session_cost_usd": 0.0 }"#;
         let cfg: Config = serde_json::from_str(with_zero).expect("must parse");
-        assert_eq!(cfg.max_session_cost_usd, 0.0, "explicit 0 must NOT be replaced with default");
+        assert_eq!(cfg.max_session_cost_usd, 0.0, "explicit 0 stays 0");
     }
 
     /// REGRESSION: the default models MUST be in the pricing table.

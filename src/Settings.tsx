@@ -705,17 +705,15 @@ export default function Settings() {
           )}
         </div>
         <div className="field">
-          <label>Soft budget warning (USD) — жёлтый чип "over budget" когда сессия превысит сумму, AI продолжает работать. 0 = выключить.</label>
+          <label>Лимит затрат на сессию (USD) — <strong>0 = выкл (default с v0.0.28)</strong>. Любое положительное число включит жёлтый 💰 чип когда сессия превысит сумму. AI всё равно продолжит работать.</label>
           <input
             type="number"
             min={0}
             step={0.10}
-            value={cfg.max_session_cost_usd ?? 1.0}
+            value={cfg.max_session_cost_usd ?? 0.0}
             onChange={(e) => {
               // Guard NaN — empty input or garbage paste shouldn't
-              // silently disable the cap (which is what `|| 0` would
-              // do because cap_usd <= 0.0 means "no limit" in Rust).
-              // Keep the current value if user types something invalid.
+              // silently flip the cap. Keep current value if invalid.
               const v = parseFloat(e.target.value);
               if (Number.isFinite(v) && v >= 0) {
                 update({ max_session_cost_usd: v });
@@ -724,7 +722,7 @@ export default function Settings() {
             style={{ width: 120 }}
           />
           <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
-            $1.00 ≈ 200 Haiku тайлов. SOFT warning (не hard block) — мост остаётся доступен, юзер сам решит остановить сессию. Счётчик сбрасывается при start_session. v0.0.5 убрал hard-block: блокировать AI в середине собеса оказался плохой идеей.
+            Для справки: $1 ≈ 200 Haiku тайлов · $5 ≈ час непрерывной речи в aggressive mode. Это SOFT warning — AI продолжает отвечать после превышения, чип просто загорается. Счётчик сбрасывается при start_session.
           </div>
         </div>
         <div className="field">
@@ -752,7 +750,7 @@ export default function Settings() {
             <strong>🔥 AGGRESSIVE MODE — спавнить тайл на каждую строку транскрипта (v0.0.18+)</strong>
           </label>
           <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
-            <strong>OFF по умолчанию.</strong> Включи если детектор молчит а ты хочешь чтобы AI отвечал на ВСЁ что слышно. Bypass'ит «вопрос/не вопрос» проверку — каждая строка от Whisper (длиннее 5 символов) → тайл. Rate-limit бампается с 15 до 60 тайлов/мин. <strong>Стоит ≈$5/час непрерывной речи</strong> на Haiku 4.5 (60 тайлов × ~700 токенов × Haiku price). Soft cost warning остаётся включён, но не блокирует. v0.0.26+: overlay-бар покажет 🔥 чип когда включён — не забудешь.
+            <strong>OFF по умолчанию.</strong> Включи если детектор молчит а ты хочешь чтобы AI отвечал на ВСЁ что слышно. Bypass'ит «вопрос/не вопрос» проверку — каждая строка от Whisper (длиннее 5 символов) → тайл. Rate-limit бампается с 15 до 60 тайлов/мин. Overlay-бар покажет 🔥 чип когда включён — будешь видеть статус.
           </div>
         </div>
         <div className="field">
@@ -1290,8 +1288,18 @@ export default function Settings() {
                             // totally broken), unstick the button so user
                             // isn't trapped at "⏳ Скачиваю…" forever and
                             // can at least retry / report it.
+                            // v0.0.28: also tell the backend to release
+                            // its UPDATE_IN_FLIGHT lock — otherwise a
+                            // retry click would get rejected with
+                            // «Update already in progress» until the
+                            // user manually restarts the app.
                             if (mountedRef.current) {
                               setOneClickBusy(false);
+                              invoke("clear_update_in_flight").catch(() => {
+                                // best-effort — if even this fails the
+                                // user really has no choice but to kill
+                                // the process from Task Manager.
+                              });
                               showToast("err", "Не удалось выйти — закрой программу вручную, установщик в %TEMP%");
                             }
                           });

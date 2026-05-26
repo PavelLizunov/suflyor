@@ -11,6 +11,58 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.28 (2026-05-26) ⚠️ default change
+
+**Cost-cap default flipped 1.00 → 0 (chip OFF) per user request.**
+
+User has unlimited AI budget («по костам не важно, безлимитные деньги»),
+so the 💰 «over budget» chip + scary copy in Settings has been replaced
+with neutral status indicators. AI behavior unchanged — was always
+SOFT-warning since v0.0.5, never blocked.
+
+- **(Default change)** `max_session_cost_usd` default 1.00 → **0** (chip
+  disabled). Old installs keep their existing config value (per-field
+  serde default applies only when the key is missing). To re-enable: set
+  any positive value in Settings → AI proxy section.
+- **(UI)** Settings copy for max_session_cost_usd reworded — no more
+  «$1.00 ≈ 200 Haiku тайлов» guilt; just a factual «0 = выкл (default)».
+- **(UI)** 🔥 aggressive chip tooltip no longer mentions «~$4-5/час».
+  Chip stays as state indicator only.
+- **(UI)** Settings copy for aggressive mode no longer says
+  «<strong>Стоит ≈$5/час непрерывной речи</strong>». Removed.
+
+**4 review-agent findings from v0.0.20→v0.0.27 wider-scope pass:**
+
+- **(P1) `close_all_tiles` Tauri command now `assert_overlay`-guarded.**
+  The Ctrl+Alt+W hotkey and tray menu path call the underlying
+  `tile::close_all_unpinned` directly, but the registered Tauri command
+  itself was unguarded — a compromised tile-* window or DevTools could
+  invoke it to nuke pinned tiles. Added `assert_overlay(&window)?` +
+  changed return type to `Result<usize, String>`. No JS callers existed,
+  so no frontend changes.
+- **(P1) Pin button no longer shares destructive-red hover with close.**
+  Both `📌` and `×` buttons used `className="tile-close"` → hovering
+  the pin button gave the red destructive cue. New `.tile-pin` class
+  with neutral-yellow hover; close keeps the red. New v0.0.28 CSS rule
+  also updates the `data-pinned` glow selector to the new class.
+- **(P1) Grid layout no longer renders tiles off-screen on small
+  monitors.** On 1280×720 (and below), the math for `pair >= 2` could
+  return `start_x ≈ −1564 px` → tiles 4-5 fully invisible. Added
+  `max_pairs` clamp + final `start_x.max(monitor.x + PAD)` safety. +2
+  regression tests (1280×720 single-monitor + secondary monitor at
+  non-zero x origin).
+- **(P2) `runtime-panics.log` falls back to `%TEMP%` if `config_dir()`
+  returns None.** Previously dropped silently — now lands at
+  `%TEMP%\overlay-mvp-panic-fallback\runtime-panics.log`.
+- **(P2) `clear_update_in_flight` Tauri command unstucks the backend
+  lock if BOTH `quit_app` AND `window.close()` fail.** v0.0.27's
+  `mem::forget` design leaks the lock by design (expecting the process
+  to die seconds later); if both shutdown paths fail, the toast-fallback
+  path now also calls this command to clear the lock so a retry isn't
+  rejected with «Update already in progress».
+
+253 lib tests pass (251 baseline + 2 new grid tests). Clippy clean.
+
 ### → v0.0.27 (2026-05-26)
 
 3 review-agent findings from the v0.0.25→v0.0.26 diff pass:

@@ -486,12 +486,22 @@ fn close_tile(
 /// and tray menu item. Helpful when aggressive mode floods the screen
 /// or the user wants a clean slate without quitting the whole app.
 /// Respects pin: pinned tiles stay (consistent with TTL reaper behavior).
+///
+/// v0.0.28: added `assert_overlay` guard. The tray + hotkey path call
+/// `tile::close_all_unpinned` directly without going through this Tauri
+/// command, so the only callers of THIS command would be from frontend
+/// JS — and only the overlay window should be able to nuke all tiles.
+/// Without this, a compromised tile-* window could DoS the user's
+/// pinned context by spawning + nuking in a loop. Caught by review-pass
+/// agent on v0.0.20→v0.0.27 diff.
 #[tauri::command]
 fn close_all_tiles(
+    window: tauri::WebviewWindow,
     app: tauri::AppHandle,
     tiles: tauri::State<'_, SharedTiles>,
-) -> usize {
-    tile::close_all_unpinned(&app, tiles.inner())
+) -> Result<usize, String> {
+    assert_overlay(&window)?;
+    Ok(tile::close_all_unpinned(&app, tiles.inner()))
 }
 
 #[tauri::command]
@@ -1593,8 +1603,26 @@ async fn download_and_install_update(window: tauri::WebviewWindow) -> Result<Str
     // and UPDATE_IN_FLIGHT stays SET. A second invoke can't race against
     // the running installer for the same file. The flag naturally clears
     // when the app quits 2s later.
+    //
+    // v0.0.28: edge case — if BOTH quit_app and window.close() fail
+    // frontend-side (extremely rare; would mean Tauri shutdown is
+    // totally broken), the process stays alive and the lock stays
+    // SET forever in this session. The Settings toast-fallback path
+    // now calls `clear_update_in_flight` to unstick it.
     std::mem::forget(guard);
     Ok(installer_path.to_string_lossy().to_string())
+}
+
+/// Manually clear the UPDATE_IN_FLIGHT lock. Called by the Settings
+/// toast-fallback when both quit_app AND window.close() failed — the
+/// process is still alive but the lock would otherwise stay SET until
+/// the user manually restarts the app. v0.0.28.
+#[tauri::command]
+fn clear_update_in_flight(window: tauri::WebviewWindow) -> Result<(), String> {
+    assert_overlay(&window)?;
+    UPDATE_IN_FLIGHT.store(false, std::sync::atomic::Ordering::SeqCst);
+    log::info!("clear_update_in_flight: lock manually released by frontend");
+    Ok(())
 }
 
 /// Tiny semver-ish compare: split by '.' and compare numeric components
@@ -1910,8 +1938,14 @@ pub fn run() {
             "[unix={timestamp}] panic at {location}\n  {msg}\n\n"
         );
         eprintln!("PANIC: {entry}");
-        if let Some(dir) = dirs::config_dir() {
-            let path = dir.join("overlay-mvp").join("runtime-panics.log");
+        // v0.0.28: fall back to %TEMP% if config_dir() returns None
+        // (extremely rare on Windows but undocumented previously — the
+        // panic record would silently vanish). Caught by review agent.
+        let dir = dirs::config_dir()
+            .map(|d| d.join("overlay-mvp"))
+            .unwrap_or_else(|| std::env::temp_dir().join("overlay-mvp-panic-fallback"));
+        {
+            let path = dir.join("runtime-panics.log");
             if let Some(parent) = path.parent() {
                 let _ = std::fs::create_dir_all(parent);
             }
@@ -2060,6 +2094,7 @@ pub fn run() {
             check_bridge,
             check_update,
             download_and_install_update,
+            clear_update_in_flight,
             crash_report_path,
             dump_diagnostics,
         ])
