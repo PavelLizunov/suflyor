@@ -156,6 +156,29 @@ The script does the boring infra — the actual eyeball gate is Claude
 reading the PNG via the `Read` tool. Without that final read, layer 6
 is just bookkeeping. See `scripts/visual_check.ps1`.
 
+### Tier 4 status — Vitest + Docker scaffolds adopted 2026-05-27
+
+- **Vitest** (TS unit + component) installed; `vitest.config.ts`
+  configured with jsdom env + `src/__tests__/setup.ts` wiring
+  jest-dom matchers + clock reset between tests.
+- Baseline tests: `src/clock.test.ts` (6 tests, proves mock-clock
+  injection), `src/i18n.test.ts` (14 tests, TS-side copy contract).
+  Total **20 TS tests** passing.
+- Coverage thresholds set very low (10 % lines/branches) — aspirational
+  per spec § 7 is 90 %/85 %. Backlog: bring coverage up as more
+  components get spec tests.
+- **Docker scaffolds** in `docker/`: `static.Dockerfile` (layers 1+3)
+  and `unit.Dockerfile` (layer 2). Visual/e2e NOT scaffolded — Tauri
+  on Linux uses WebKit2GTK which would diverge from Windows WebView2;
+  see `docker/README.md` for the full deferral rationale.
+- New npm scripts: `npm test`, `npm run test:watch`, `npm run test:ui`.
+
+### Tier 5 status — stack decision
+
+**Variant D (keep React/Tauri + tighten via Tiers 1-4) — confirmed.**
+See `docs/ADR-001-stack.md` for the trade-off analysis and the trigger
+conditions that would re-open the question.
+
 ### Tier 3 status — Rust selective deny baseline adopted 2026-05-27
 
 `src-tauri/src/lib.rs` denies (non-test compilation only):
