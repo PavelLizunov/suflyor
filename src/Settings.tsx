@@ -571,22 +571,32 @@ export default function Settings() {
             onChange={(e) => update({ ai_base_url: e.target.value })}
             placeholder="http://192.168.0.142:18902/v1"
           />
-          {cfg.ai_base_url.trim().toLowerCase().startsWith("http://") && (
-            <div
-              style={{
-                fontSize: 11,
-                color: "var(--c-warn)",
-                marginTop: 4,
-                padding: "4px 8px",
-                background: "color-mix(in srgb, var(--c-warn) 12%, transparent)",
-                border: "1px solid color-mix(in srgb, var(--c-warn) 35%, transparent)",
-                borderLeft: "3px solid var(--c-warn)",
-                borderRadius: "var(--r-1)",
-              }}
-            >
-              ⚠ Plaintext HTTP — bearer token + prompts travel in clear. Use https:// (Caddy/Nginx in front) for any non-localhost deployment.
-            </div>
-          )}
+          {(() => {
+            // Suppress the HTTP warning when the URL is loopback (127.0.0.1,
+            // localhost, [::1]) — traffic never leaves the machine, so it's
+            // not actually exposed. Anything else over http:// is risky.
+            const url = cfg.ai_base_url.trim().toLowerCase();
+            if (!url.startsWith("http://")) return null;
+            const host = url.slice("http://".length).split("/")[0].split(":")[0];
+            const isLoopback = host === "127.0.0.1" || host === "localhost" || host === "[::1]" || host === "::1";
+            if (isLoopback) return null;
+            return (
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "var(--c-warn)",
+                  marginTop: 4,
+                  padding: "4px 8px",
+                  background: "color-mix(in srgb, var(--c-warn) 12%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--c-warn) 35%, transparent)",
+                  borderLeft: "3px solid var(--c-warn)",
+                  borderRadius: "var(--r-1)",
+                }}
+              >
+                ⚠ Plaintext HTTP to non-localhost ({host}) — bearer token + prompts travel in clear. Use https:// (Caddy/Nginx in front) for any non-localhost deployment.
+              </div>
+            );
+          })()}
         </div>
         <div className="field">
           <label>Bearer secret (BRIDGE_SECRET)</label>
