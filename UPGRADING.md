@@ -26,6 +26,24 @@ for download. No auto-install (no code signing — by design).
 
 Two code-review agent passes ran on the diff. First found 3 P0/P1 (shipped .85, .86, .87). Second pass running at time of v0.0.88 ship.
 
+### → v0.0.98 (2026-05-26) — 🎨 Custom CSS theme injection
+
+New `cfg.custom_css: String` (default empty, capped at 8 KB) and
+"🎨 Custom CSS" card in Settings → 🎨 Interface. Textarea content is
+read on overlay mount and injected as a `<style id="suflyor-custom-
+css">` element in document.head. Applied on next Settings save.
+
+Use case: power user wants `.overlay-bar { background: rgba(20,30,50,
+0.9); }` or `.tile-root { font-family: 'JetBrains Mono', monospace; }`
+without recompiling. Theming + minor restyling without source edits.
+
+Char counter shows N / 8192 below the textarea so users see when
+they're nearing the cap. Both backend (`#[serde(default)]`) and
+frontend (`.slice(0, 8192)`) enforce the cap defensively.
+
+Pure additive: existing configs (no `custom_css` field) load fine
+since serde defaults to empty string.
+
 ### → v0.0.97 (2026-05-26) — ✏️ Edit question + re-ask tile button
 
 New ✏️ button in tile chrome (between collapse-all chip 📋 and 🔄

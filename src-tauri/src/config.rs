@@ -68,6 +68,14 @@ pub struct Config {
     #[serde(default = "default_post_meeting_debrief_enabled")]
     pub post_meeting_debrief_enabled: bool,
 
+    /// v0.0.98: arbitrary CSS injected into the overlay window at
+    /// mount time. Lets power users theme the overlay (color
+    /// overrides, font tweaks, chip styling) without recompiling.
+    /// Capped at 8 KB on the frontend so a typo doesn't blow up
+    /// localStorage / IPC. Default empty.
+    #[serde(default)]
+    pub custom_css: String,
+
     /// v0.0.73: when true, `quit_app` exports the most recent session's
     /// JSONL journal to a Markdown file on the user's Desktop right
     /// before exiting. Filename: `suflyor-session-YYYY-MM-DD-HHmm.md`.
@@ -216,6 +224,7 @@ impl Config {
             tile_font_size: default_tile_font_size(),
             snippets: default_snippets(),
             post_meeting_debrief_enabled: default_post_meeting_debrief_enabled(),
+            custom_css: String::new(),
             auto_export_on_quit: false,
             max_session_cost_usd: default_max_session_cost_usd(),
             detector_skip_mic: default_detector_skip_mic(),

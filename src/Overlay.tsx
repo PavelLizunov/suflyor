@@ -611,7 +611,7 @@ export default function Overlay() {
 
   // Load ask-mode + aggressive flag + ui_language from config once on mount.
   useEffect(() => {
-    invoke<{ manual_ask_mode?: string; auto_tile_every_line?: boolean; ui_language?: string; stt_language?: string | null; ai_model?: string; stealth_enabled?: boolean }>("get_config")
+    invoke<{ manual_ask_mode?: string; auto_tile_every_line?: boolean; ui_language?: string; stt_language?: string | null; ai_model?: string; stealth_enabled?: boolean; custom_css?: string }>("get_config")
       .then((c) => {
         if (!mountedRef.current) return;
         const mode = c.manual_ask_mode === "click" ? "click" : "hold";
@@ -621,6 +621,18 @@ export default function Overlay() {
         setSttLang(c.stt_language ?? null);
         if (c.ai_model) setAiModel(c.ai_model);
         setStealthState(Boolean(c.stealth_enabled));
+        // v0.0.98: inject custom CSS theme. Replace existing
+        // <style id="suflyor-custom-css"> or create one. Cap at 8 KB
+        // defensively (the Settings UI also caps); anything more is
+        // almost certainly a mis-paste or runaway template.
+        const css = (c.custom_css ?? "").slice(0, 8192);
+        let el = document.getElementById("suflyor-custom-css") as HTMLStyleElement | null;
+        if (!el) {
+          el = document.createElement("style");
+          el.id = "suflyor-custom-css";
+          document.head.appendChild(el);
+        }
+        el.textContent = css;
       })
       .catch((e) => console.warn("get_config:", e));
     // v0.0.75: load mic mute state from RuntimeState.

@@ -88,6 +88,9 @@ type Config = {
   // v0.0.73: opt-in — auto-export latest session JSONL to a Markdown
   // file on Desktop when the user quits via Settings → ✕ Выйти.
   auto_export_on_quit?: boolean;
+  // v0.0.98: arbitrary CSS injected into the overlay window. Power-user
+  // theming knob — color overrides, font tweaks, chip restyling.
+  custom_css?: string;
   max_session_cost_usd?: number;
   detector_skip_mic?: boolean;
   auto_tile_every_line?: boolean;
@@ -1241,6 +1244,47 @@ export default function Settings() {
                 catch (err) { console.warn("localStorage write failed:", err); }
               }}
             />
+          </div>
+        </div>
+
+        {/* v0.0.98: custom CSS injection — power-user theming. Textarea
+            shows current cfg.custom_css; on Save the new value is
+            persisted + the overlay (same window) re-injects via the
+            mount-time read. Cap at 8192 chars matches backend. */}
+        <div className="card">
+          <div className="card-title">
+            {lang === "en" ? "🎨 Custom CSS" : "🎨 Своё CSS"}
+          </div>
+          <div className="card-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+            <div className="row-hint">
+              {lang === "en"
+                ? "Inject arbitrary CSS into the overlay window. Useful for color overrides, font tweaks, chip restyling. Applied on next Settings save. Max 8 KB."
+                : "Своё CSS для overlay. Цвета, шрифты, переделка чипов. Применяется после Save. Макс 8 КБ."}
+            </div>
+            <textarea
+              value={cfg.custom_css ?? ""}
+              onChange={(e) => {
+                const v = e.target.value.slice(0, 8192);
+                update({ custom_css: v });
+              }}
+              placeholder={lang === "en"
+                ? ".overlay-bar { background: rgba(20, 30, 50, 0.9); }\n.tile-root { font-family: 'JetBrains Mono', monospace; }"
+                : ".overlay-bar { background: rgba(20, 30, 50, 0.9); }\n.tile-root { font-family: 'JetBrains Mono', monospace; }"}
+              spellCheck={false}
+              style={{
+                width: "100%",
+                minHeight: 100,
+                fontFamily: "monospace",
+                fontSize: 12,
+                padding: 8,
+              }}
+            />
+            <div
+              style={{ fontSize: 11, color: "var(--c-text-dim)", fontFamily: "monospace", textAlign: "right" }}
+              aria-live="polite"
+            >
+              {(cfg.custom_css ?? "").length.toLocaleString()} / 8,192 {lang === "en" ? "chars" : "симв."}
+            </div>
           </div>
         </div>
 
