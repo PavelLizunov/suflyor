@@ -232,6 +232,79 @@ const strings = {
     en: "Spawn a tile on EVERY transcript line (v0.0.18+). OFF by default. Bypasses the question/non-question check — every Whisper line (longer than 5 chars) → tile. Rate limit bumps from 15 to 60 tiles/min. The overlay bar shows a 🔥 chip when enabled — you'll see the status.",
   },
   "ai.det.agg.aria":          { ru: "Переключить aggressive mode", en: "Toggle aggressive mode" },
+
+  // ── Profile panel (v0.0.45) ────────────────────────────────────────
+  "profile.profiles.title":   { ru: "👥 Профили контекста",   en: "👥 Context profiles" },
+  "profile.active.label":     { ru: "Активный профиль",       en: "Active profile" },
+  "profile.none":             { ru: "— нет —",                en: "— none —" },
+  "profile.save.button":      { ru: "+ Сохранить текущий как профиль", en: "+ Save current as profile" },
+  "profile.delete.button":    { ru: "× Удалить активный",     en: "× Delete active" },
+  "profile.prompt.name":      { ru: "Имя нового профиля",     en: "Name of new profile" },
+  "profile.prompt.placeholder": { ru: "K8s interview, Backend SRE, …", en: "K8s interview, Backend SRE, …" },
+  "profile.saved.toast":      { ru: "Профиль «{name}» сохранён", en: "Profile «{name}» saved" },
+  "profile.deleted.toast":    { ru: "Профиль «{name}» удалён", en: "Profile «{name}» deleted" },
+  "profile.delete.confirm":   { ru: "Удалить профиль «{name}»?", en: "Delete profile «{name}»?" },
+  "common.delete":            { ru: "Удалить",                en: "Delete" },
+
+  // ── Meeting context (v0.0.45) ──────────────────────────────────────
+  "meeting.title":            { ru: "📝 Meeting context",     en: "📝 Meeting context" },
+  "meeting.label":            {
+    ru: "Контекст которой AI видит при каждом запросе (резюме, описание проекта, термины…)",
+    en: "Context the AI sees on every request (resume, project description, terms…)",
+  },
+  "meeting.placeholder":      {
+    ru: "Например: Это собеседование на Senior SRE в Acme. Мой опыт: 7 лет K8s, etcd, networking…",
+    en: "Example: Senior SRE interview at Acme. My experience: 7 years K8s, etcd, networking…",
+  },
+  "meeting.record.button":    { ru: "🎤 Записать голосом ({sec}с)", en: "🎤 Record voice ({sec}s)" },
+  "meeting.record.busy":      { ru: "🔴 Идёт запись… {sec}с",  en: "🔴 Recording… {sec}s" },
+  "meeting.record.tip":       {
+    ru: "Запишет с микрофона 30 секунд и добавит транскрипт в поле выше",
+    en: "Records 30 seconds from the microphone and appends transcript to the field above",
+  },
+  "meeting.structure.button": { ru: "✨ Структурировать ({model})", en: "✨ Structure ({model})" },
+  "meeting.structure.busy":   { ru: "✨ Структурирую через Sonnet…", en: "✨ Structuring via Sonnet…" },
+  "meeting.structure.tip":    {
+    ru: "Отправит текст в {model} с промтом структурирования и заменит на чистый контекст",
+    en: "Sends text to {model} with a structuring prompt and replaces with cleaned context",
+  },
+
+  // ── Audio panel (v0.0.45) ──────────────────────────────────────────
+  "audio.devices.title":      { ru: "🎤 Audio devices",       en: "🎤 Audio devices" },
+  "audio.mic.label":          { ru: "Microphone (your voice)", en: "Microphone (your voice)" },
+  "audio.mic.default":        { ru: "— default —",            en: "— default —" },
+  "audio.sys.label":          {
+    ru: "System audio (what they say) — выбери loopback устройство (для Astro A50: \"Line (A50 Stream Out)\")",
+    en: "System audio (what they say) — pick a loopback device (for Astro A50: \"Line (A50 Stream Out)\")",
+  },
+  "audio.sys.default":        {
+    ru: "— default render endpoint loopback —",
+    en: "— default render endpoint loopback —",
+  },
+  "audio.loopback.suffix":    { ru: "(loopback)", en: "(loopback)" },
+  "audio.stt.title":          { ru: "🎙 STT (Groq Whisper)",  en: "🎙 STT (Groq Whisper)" },
+  "audio.stt.key.label":      { ru: "Groq API key (gsk_…)",   en: "Groq API key (gsk_…)" },
+  "audio.stt.lang.label":     {
+    ru: "Язык (пусто = auto-detect)",
+    en: "Language (empty = auto-detect)",
+  },
+  "audio.stt.lang.placeholder": { ru: "ru, en, …",            en: "ru, en, …" },
+  "audio.stt.model.label":    {
+    ru: "Whisper model — точность ↔ скорость tradeoff",
+    en: "Whisper model — accuracy ↔ speed tradeoff",
+  },
+  "audio.stt.model.large":    {
+    ru: "whisper-large-v3 (default — лучшая точность на терминах)",
+    en: "whisper-large-v3 (default — best accuracy on terms)",
+  },
+  "audio.stt.model.turbo":    {
+    ru: "whisper-large-v3-turbo (≈3× быстрее, слегка хуже на редких словах)",
+    en: "whisper-large-v3-turbo (≈3× faster, slightly worse on rare words)",
+  },
+  "audio.stt.note":           {
+    ru: "Turbo сокращает latency Whisper-вызова с ~500ms до ~150-200ms на 2-5s клипе. Качество падает на редких технических терминах (kubectl-debug, consistent hashing). Для типовых SRE/DevOps вопросов разница незаметна. Меняй при необходимости low-latency feedback.",
+    en: "Turbo cuts Whisper-call latency from ~500ms to ~150-200ms on a 2-5s clip. Quality drops on rare technical terms (kubectl-debug, consistent hashing). For typical SRE/DevOps questions the difference is unnoticeable. Switch when you need low-latency feedback.",
+  },
 } as const;
 
 export type StringKey = keyof typeof strings;

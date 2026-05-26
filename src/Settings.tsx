@@ -622,9 +622,9 @@ export default function Settings() {
         <section className="settings-pane" aria-label={t("nav.aria.pane", lang)}>
 
       {activeSection === "profile" && (<div className="settings-section">
-        <h3>👥 Профили контекста</h3>
+        <h3>{t("profile.profiles.title", lang)}</h3>
         <div className="field">
-          <label>Активный профиль</label>
+          <label>{t("profile.active.label", lang)}</label>
           <select
             value={cfg.active_profile ?? ""}
             onChange={(e) => {
@@ -637,7 +637,7 @@ export default function Settings() {
               }
             }}
           >
-            <option value="">— нет —</option>
+            <option value="">{t("profile.none", lang)}</option>
             {cfg.context_profiles.map((p) => (
               <option key={p.name} value={p.name}>{p.name}</option>
             ))}
@@ -648,8 +648,8 @@ export default function Settings() {
             className="btn secondary"
             onClick={async () => {
               const raw = await showPrompt(
-                "Имя нового профиля",
-                "K8s interview, Backend SRE, …",
+                t("profile.prompt.name", lang),
+                t("profile.prompt.placeholder", lang),
               );
               const name = raw?.trim();
               if (!name) return;
@@ -658,38 +658,36 @@ export default function Settings() {
                 { name, context: cfg.meeting_context },
               ];
               update({ context_profiles: profiles, active_profile: name });
-              showToast("ok", `Профиль «${name}» сохранён`);
+              showToast("ok", t("profile.saved.toast", lang).replace("{name}", name));
             }}
-          >+ Сохранить текущий как профиль</button>
+          >{t("profile.save.button", lang)}</button>
           {cfg.active_profile && (
             <button
               className="btn secondary"
               onClick={async () => {
                 const ok = await showConfirm(
-                  `Удалить профиль «${cfg.active_profile}»?`,
-                  { confirmLabel: "Удалить", danger: true },
+                  t("profile.delete.confirm", lang).replace("{name}", cfg.active_profile ?? ""),
+                  { confirmLabel: t("common.delete", lang), danger: true },
                 );
                 if (!ok) return;
                 const removed = cfg.active_profile;
                 const profiles = cfg.context_profiles.filter((p) => p.name !== cfg.active_profile);
                 update({ context_profiles: profiles, active_profile: null });
-                showToast("ok", `Профиль «${removed}» удалён`);
+                showToast("ok", t("profile.deleted.toast", lang).replace("{name}", removed ?? ""));
               }}
-            >× Удалить активный</button>
+            >{t("profile.delete.button", lang)}</button>
           )}
         </div>
       </div>)}
 
       {activeSection === "profile" && (<div className="settings-section">
-        <h3>📝 Meeting context</h3>
+        <h3>{t("meeting.title", lang)}</h3>
         <div className="field">
-          <label>
-            Контекст которой AI видит при каждом запросе (резюме, описание проекта, термины…)
-          </label>
+          <label>{t("meeting.label", lang)}</label>
           <textarea
             value={cfg.meeting_context}
             onChange={(e) => update({ meeting_context: e.target.value })}
-            placeholder="Например: Это собеседование на Senior SRE в Acme. Мой опыт: 7 лет K8s, etcd, networking…"
+            placeholder={t("meeting.placeholder", lang)}
           />
         </div>
         <div className="btn-row" style={{ justifyContent: "flex-start", gap: 8 }}>
@@ -697,21 +695,21 @@ export default function Settings() {
             className="btn secondary"
             onClick={recordPrep}
             disabled={recState !== "idle"}
-            title="Запишет с микрофона 30 секунд и добавит транскрипт в поле выше"
+            title={t("meeting.record.tip", lang)}
           >
             {recState === "recording"
-              ? `🔴 Идёт запись… ${recCountdown}с`
-              : `🎤 Записать голосом (${RECORD_SECONDS}с)`}
+              ? t("meeting.record.busy", lang).replace("{sec}", String(recCountdown))
+              : t("meeting.record.button", lang).replace("{sec}", String(RECORD_SECONDS))}
           </button>
           <button
             className="btn secondary"
             onClick={structurePrep}
             disabled={recState !== "idle"}
-            title={`Отправит текст в ${cfg.prep_model} с промтом структурирования и заменит на чистый контекст`}
+            title={t("meeting.structure.tip", lang).replace("{model}", cfg.prep_model)}
           >
             {recState === "structuring"
-              ? "✨ Структурирую через Sonnet…"
-              : `✨ Структурировать (${cfg.prep_model})`}
+              ? t("meeting.structure.busy", lang)
+              : t("meeting.structure.button", lang).replace("{model}", cfg.prep_model)}
           </button>
         </div>
         {recError && (
@@ -722,31 +720,31 @@ export default function Settings() {
       </div>)}
 
       {activeSection === "audio" && (<div className="settings-section">
-        <h3>🎤 Audio devices</h3>
+        <h3>{t("audio.devices.title", lang)}</h3>
         <div className="field">
-          <label>Microphone (your voice)</label>
+          <label>{t("audio.mic.label", lang)}</label>
           <select
             value={cfg.mic_device ?? ""}
             onChange={(e) => update({ mic_device: e.target.value || null })}
           >
-            <option value="">— default —</option>
+            <option value="">{t("audio.mic.default", lang)}</option>
             {devices.inputs.map((d) => (
               <option key={d} value={d}>{d}</option>
             ))}
           </select>
         </div>
         <div className="field">
-          <label>System audio (what they say) — выбери loopback устройство (для Astro A50: "Line (A50 Stream Out)")</label>
+          <label>{t("audio.sys.label", lang)}</label>
           <select
             value={cfg.system_audio_device ?? ""}
             onChange={(e) => update({ system_audio_device: e.target.value || null })}
           >
-            <option value="">— default render endpoint loopback —</option>
+            <option value="">{t("audio.sys.default", lang)}</option>
             {devices.inputs.map((d) => (
               <option key={"in:" + d} value={d}>{d}</option>
             ))}
             {devices.outputs.map((d) => (
-              <option key={"out:" + d} value={d}>{d} (loopback)</option>
+              <option key={"out:" + d} value={d}>{d} {t("audio.loopback.suffix", lang)}</option>
             ))}
           </select>
         </div>
@@ -1390,9 +1388,9 @@ export default function Settings() {
       </div>)}
 
       {activeSection === "audio" && (<div className="settings-section">
-        <h3>🎙 STT (Groq Whisper)</h3>
+        <h3>{t("audio.stt.title", lang)}</h3>
         <div className="field">
-          <label>Groq API key (gsk_…)</label>
+          <label>{t("audio.stt.key.label", lang)}</label>
           <input
             type="password"
             value={cfg.groq_api_key}
@@ -1400,25 +1398,25 @@ export default function Settings() {
           />
         </div>
         <div className="field">
-          <label>Language (empty = auto-detect)</label>
+          <label>{t("audio.stt.lang.label", lang)}</label>
           <input
             type="text"
             value={cfg.stt_language ?? ""}
             onChange={(e) => update({ stt_language: e.target.value || null })}
-            placeholder="ru, en, …"
+            placeholder={t("audio.stt.lang.placeholder", lang)}
           />
         </div>
         <div className="field">
-          <label>Whisper model — accuracy ↔ speed tradeoff</label>
+          <label>{t("audio.stt.model.label", lang)}</label>
           <select
             value={cfg.stt_model ?? "whisper-large-v3"}
             onChange={(e) => update({ stt_model: e.target.value })}
           >
-            <option value="whisper-large-v3">whisper-large-v3 (default — лучшая точность на терминах)</option>
-            <option value="whisper-large-v3-turbo">whisper-large-v3-turbo (≈3× быстрее, слегка хуже на редких словах)</option>
+            <option value="whisper-large-v3">{t("audio.stt.model.large", lang)}</option>
+            <option value="whisper-large-v3-turbo">{t("audio.stt.model.turbo", lang)}</option>
           </select>
           <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
-            Turbo сокращает latency Whisper-вызова с ~500ms до ~150-200ms на 2-5s клипе. Качество падает на редких технических терминах (kubectl-debug, consistent hashing). Для типовых SRE/DevOps вопросов разница незаметна. Меняй при необходимости low-latency feedback.
+            {t("audio.stt.note", lang)}
           </div>
         </div>
       </div>)}

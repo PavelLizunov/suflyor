@@ -11,6 +11,36 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.45 (2026-05-26)
+
+Fourth i18n release. Translates the **Profile + Meeting + Audio** panels.
+
+Strings covered:
+- **👥 Context profiles**: dropdown label, "— none —" empty option,
+  Save / Delete buttons, the showPrompt "Name of new profile" + its
+  placeholder, the save+delete toast messages, the delete-confirm
+  body with the {name} placeholder
+- **📝 Meeting context**: section title, textarea label + placeholder,
+  Record voice button (with {sec} countdown), Structure button (with
+  {model} from cfg.prep_model), both tooltips
+- **🎤 Audio devices**: Mic + System audio labels with the
+  Astro-A50-specific tip, default-option text, (loopback) suffix
+- **🎙 STT (Groq Whisper)**: API key + Language + Whisper model
+  labels, both model option descriptions (large vs turbo), the
+  turbo-vs-large-v3 latency explanation note
+
+First use of `{placeholder}` interpolation pattern — just `.replace()`
+on the returned string, no helper. Good enough for v0.0.42's design
+goal of "small typed map, no runtime dependencies."
+
+Still NOT translated (v0.0.46+):
+- Auto-tiles + Snippets (~40 strings + dynamic snippet entries)
+- Knowledge base (~15 strings + search results)
+- Advanced (Updates · Diagnostics) (~25 strings)
+- Overlay bar + tile chrome + Replay viewer
+
+No backend changes.
+
 ### → v0.0.44 (2026-05-26)
 
 Third i18n release. Translates the **AI panel** — all 4 sub-cards.
