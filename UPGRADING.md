@@ -11,6 +11,25 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.25 (2026-05-26)
+
+Three more UX bugs from live session (continuation of v0.0.24 sweep):
+
+- **Tile double-click no longer maximizes.** Was Tauri 2's default
+  behaviour on `data-tauri-drag-region` — double-click toggled
+  maximize. User reported double-click «выделяет окно и блокирует
+  остальные» — because maximize covered everything else AND grabbed
+  focus. Now: `onDoubleClick={e.preventDefault + e.stopPropagation}`
+  on both tile-bar AND overlay-bar.
+- **Overlay always-on-top is re-asserted every 3s.** Was set at
+  creation only; some windows (Zoom call, screen-share toolbars)
+  push us behind. Periodic `setAlwaysOnTop(true)` keeps us TOPMOST.
+- **Overlay bar auto-resizes width based on content.** Was fixed 520px;
+  with «🟢 Listening 🟡 ⏱ rate-limited 💰 over budget» chips + HUD +
+  buttons, the ⚙ gear at the right edge got clipped. ResizeObserver
+  on bar → calls `setSize` to fit content (cap 1200px to avoid runaway
+  growth). Skipped when Settings is open (Settings has its own size).
+
 ### → v0.0.24 (2026-05-26)
 
 Bug-report sweep — user reported 6 UX issues during live session.

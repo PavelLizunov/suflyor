@@ -164,7 +164,20 @@ export default function TileWindow() {
       role="dialog"
       aria-label={`AI answer tile from ${sourceLabel}`}
     >
-      <div className="tile-bar" data-tauri-drag-region>
+      <div
+        className="tile-bar"
+        data-tauri-drag-region
+        onDoubleClick={(e) => {
+          // v0.0.25: SUPPRESS Tauri's default double-click → maximize
+          // behaviour on drag regions. User reported: double-clicking a
+          // tile «выделяет его, остальные блокируются». Root cause:
+          // double-click maximizes the tile to full-screen, covering all
+          // other tiles AND making them unreachable until you click off.
+          // Stop the event before Tauri's drag-region handler sees it.
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      >
         {seq !== null && (
           <span
             className="tile-seq"

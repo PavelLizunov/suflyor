@@ -190,6 +190,57 @@ export default function Overlay() {
   // Hold latest answer for streaming concatenation without React batching loss.
   const answerRef = useRef("");
 
+  // v0.0.25: auto-resize overlay bar width based on actual content.
+  // User complaint: «Settings ⚙ уходит за пределы окна когда статус
+  // расширяется». Default 520px width was tight; with chips like
+  // «🟢 Listening 🟡 ⏱ rate-limited 💰 over budget» + HUD + buttons,
+  // the gear got clipped. ResizeObserver on overlay-bar → call
+  // window.setSize() to ≥ measured width + margin (cap 1200 so it
+  // doesn't grow ridiculous).
+  const overlayBarRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!overlayBarRef.current) return;
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const measured = entry.contentRect.width;
+      // +30px margin for padding + scrollbar/safety
+      const desiredW = Math.min(Math.max(measured + 30, 520), 1200);
+      // Don't resize if we're inside Settings (palette open also grows window).
+      if (window.location.search.includes("settings=1")) return;
+      getCurrentWindow().outerSize().then((sz) => {
+        getCurrentWindow().scaleFactor().then((scale) => {
+          const currentW = Math.round(sz.width / scale);
+          // Only resize on > 4px delta to dampen flicker.
+          if (Math.abs(currentW - desiredW) > 4) {
+            getCurrentWindow().setSize(new LogicalSize(desiredW, 96))
+              .catch((err) => console.warn("overlay autoresize:", err));
+          }
+        }).catch(() => {});
+      }).catch(() => {});
+    });
+    ro.observe(overlayBarRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  // v0.0.25: re-assert always-on-top every 3s. User complaint: overlay
+  // bar sometimes goes BEHIND other always-on-top windows (Zoom call
+  // window, screen-share toolbars). Tauri's always_on_top=true is set
+  // at creation but Windows reorders TOPMOST windows on focus changes;
+  // SetWindowPos(HWND_TOPMOST) each tick keeps us on top of the
+  // always-on-top stack.
+  useEffect(() => {
+    const tick = async () => {
+      if (!mountedRef.current) return;
+      try {
+        await getCurrentWindow().setAlwaysOnTop(true);
+      } catch { /* ok — sometimes fails transiently during window state changes */ }
+    };
+    tick();
+    const id = window.setInterval(tick, 3000);
+    return () => window.clearInterval(id);
+  }, []);
+
   // Cleanup all timers + flag on unmount, in ONE place.
   useEffect(() => {
     mountedRef.current = true;
@@ -584,8 +635,15 @@ export default function Overlay() {
   return (
     <div className="overlay-root">
       <div
+        ref={overlayBarRef}
         className="overlay-bar"
         data-tauri-drag-region
+        onDoubleClick={(e) => {
+          // v0.0.25: same fix as TileWindow — suppress default
+          // double-click → maximize. Overlay must never go fullscreen.
+          e.preventDefault();
+          e.stopPropagation();
+        }}
         onMouseDown={(e) => {
           // v0.0.10: explicit drag fix — same pattern as Settings header
           // (v0.0.1). CSS -webkit-app-region: drag doesn't work on Windows
