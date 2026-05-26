@@ -1276,6 +1276,23 @@ mod update_tests {
     #[test] fn empty_candidate_is_not_newer() {
         assert!(!is_strictly_newer("", "0.0.1"));
     }
+    #[test] fn unequal_segment_counts() {
+        // "1" is treated as "1.0.0" via unwrap_or(0) padding.
+        assert!(!is_strictly_newer("1", "1.0.0"));
+        assert!(!is_strictly_newer("1.0", "1.0.0"));
+        // "1.0.0.5" — the 4th segment is ignored only via comparison
+        // (av[3]=5, bv[3]=0 → av>bv, return true). Documents the actual
+        // behavior even if 4-segment versions are unusual.
+        assert!(is_strictly_newer("1.0.0.5", "1.0.0"));
+    }
+    #[test] fn non_numeric_segments_treated_as_zero() {
+        // Each segment parse-or-zero. "abc" → [0] vs "0.0.0" → [0,0,0]
+        // → padded loop is all zeros. Returns false (equal).
+        assert!(!is_strictly_newer("abc", "0.0.0"));
+        // "0.x.1" → [0, 0, 1] vs "0.0.0" → [0, 0, 0] → 0=0, 0=0, 1>0 → true.
+        // Garbage middle segment doesn't trip the loop.
+        assert!(is_strictly_newer("0.x.1", "0.0.0"));
+    }
 }
 
 // ── Replay viewer (read session journals) ────────────────────────────────

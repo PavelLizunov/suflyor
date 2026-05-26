@@ -117,7 +117,7 @@ Unprotected commands (read-only or low-blast-radius): `list_audio_devices`, `kb_
 | `src/TileWindow.tsx` | 133 | Q/A tile card with markdown |
 | `src/Replay.tsx` | 439 | JSONL journal timeline viewer |
 
-## Test coverage (237 tests as of marathon retry 2026-05-26 ~05:00)
+## Test coverage (239 tests as of marathon retry 2026-05-26 ~06:30)
 
 Strong coverage:
 - Config save/load + serde defaults + pricing-table sync (15 tests)
@@ -132,7 +132,7 @@ Strong coverage:
 - Debrief gate — duration/mic-lines/text-length thresholds (7 tests)
 - Cost budget — disabled/under/at/over boundary (4 tests)
 - Bridge probe model-not-found matcher (9 tests)
-- Update semver compare (5 tests)
+- Update semver compare (8 tests — equal/lower/higher, v-prefix, prerelease, empty, unequal segments, non-numeric)
 - Journal — JSONL serialize, counters, prune count-based + size-cap (12 tests)
 - Audio — WAV roundtrip, resample, decimator (~10 tests)
 - **blank_share_secrets** (10 tests) — security-critical: each share-export
