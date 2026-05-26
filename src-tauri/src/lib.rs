@@ -2329,6 +2329,87 @@ fn set_ai_model(
     Ok(())
 }
 
+/// v0.0.88: test microphone — record 3 seconds, compute peak dBFS
+/// from the raw PCM, transcribe via Whisper. Returns a struct the
+/// Settings panel renders as a quick "mic works ✓ / silent ✗ /
+/// quiet ⚠" verdict. Helps the user verify their mic + selected
+/// device before joining a real meeting.
+///
+/// Reuses the existing audio::record_mic_blocking + stt::transcribe
+/// pipeline — no new infra, just a thin wrapper that also reports
+/// signal strength (which the prep_record flow swallows).
+#[derive(Debug, serde::Serialize)]
+struct MicTestResult {
+    peak_dbfs: f32,
+    transcript: String,
+    verdict: &'static str, // "ok" | "quiet" | "silent"
+}
+
+#[tauri::command]
+async fn test_microphone(
+    window: tauri::WebviewWindow,
+    cfg: tauri::State<'_, SharedConfig>,
+) -> Result<MicTestResult, String> {
+    assert_overlay(&window)?;
+    let (mic_device, groq_key, language, whisper_prompt, stt_model) = {
+        let c = cfg.read();
+        (
+            c.mic_device.clone(),
+            c.groq_api_key.clone(),
+            c.stt_language.clone(),
+            stt::build_whisper_prompt(&c.trigger_keywords, &c.meeting_context),
+            c.stt_model.clone(),
+        )
+    };
+    // Record 3 seconds — long enough to compute meaningful peak even
+    // for someone who just says one word, short enough not to feel
+    // like a chore.
+    let pcm = tokio::task::spawn_blocking(move || {
+        audio::record_mic_blocking(3000, mic_device)
+    })
+    .await
+    .map_err(|e| format!("join error: {e}"))?
+    .map_err(|e| format!("record error: {e:#}"))?;
+
+    if pcm.is_empty() {
+        return Ok(MicTestResult {
+            peak_dbfs: f32::NEG_INFINITY,
+            transcript: String::new(),
+            verdict: "silent",
+        });
+    }
+    // Compute peak amplitude (max |sample|) → convert to dBFS.
+    // i16::MAX = 32767 = 0 dBFS reference. dBFS = 20 * log10(peak / 32767).
+    let peak: i32 = pcm.iter().map(|s| (*s as i32).abs()).max().unwrap_or(0);
+    let peak_dbfs = if peak == 0 {
+        f32::NEG_INFINITY
+    } else {
+        20.0_f32 * (peak as f32 / 32767.0_f32).log10()
+    };
+    let verdict = if peak < 100 { "silent" }
+        else if peak_dbfs < -30.0 { "quiet" }
+        else { "ok" };
+
+    // Transcribe only if signal is at least quiet — silent recordings
+    // would just give Whisper noise to hallucinate on.
+    let transcript = if verdict == "silent" {
+        String::new()
+    } else if groq_key.trim().is_empty() {
+        // Without a Groq key we still report peak dBFS so the user
+        // knows mic works; just skip transcription.
+        "[Groq API key not set — peak only]".into()
+    } else {
+        // whisper_prompt is Option<String>; transcribe_once wants Option<&str>.
+        let prompt_opt = whisper_prompt.as_deref();
+        match stt::transcribe_once(&pcm, &groq_key, language.as_deref(), prompt_opt, &stt_model).await {
+            Ok(t) => t.trim().to_string(),
+            Err(e) => format!("[transcribe error: {e:#}]"),
+        }
+    };
+
+    Ok(MicTestResult { peak_dbfs, transcript, verdict })
+}
+
 /// v0.0.66: detector trigger tester. Runs the real detect_trigger
 /// function on sample text using the current cfg.trigger_keywords.
 /// Returns a human-readable verdict so user can tune trigger_keywords
@@ -2965,6 +3046,7 @@ pub fn run() {
             set_ai_model,
             set_mic_muted,
             get_mic_muted,
+            test_microphone,
             tile_reload,
             set_stealth,
             list_snippets,

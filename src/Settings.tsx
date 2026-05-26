@@ -890,6 +890,10 @@ export default function Settings() {
       </div>)}
 
       {activeSection === "audio" && (<div className="settings-section">
+        {/* v0.0.88: mic test card. Top of panel so it's the first
+            thing the user sees in Audio. Records 3s + computes peak
+            dBFS + transcribes. Three verdicts: ok / quiet / silent. */}
+        <MicTestCard lang={lang} />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <h3 style={{ margin: 0 }}>{t("audio.devices.title", lang)}</h3>
           {/* v0.0.76: refresh devices button. Mount-time enumeration
@@ -2444,6 +2448,81 @@ export default function Settings() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// v0.0.88: Mic test card. Self-contained — records 3s via test_microphone
+// backend cmd, displays peak dBFS + transcript + colored verdict
+// (ok/quiet/silent). Lives at the top of the Audio panel so it's the
+// first thing users see when troubleshooting "AI never spawns tiles".
+function MicTestCard({ lang }: { lang: Lang }) {
+  type Result = { peak_dbfs: number; transcript: string; verdict: "ok" | "quiet" | "silent" };
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<Result | null>(null);
+  const [err, setErr] = useState("");
+  const run = async () => {
+    if (busy) return;
+    setBusy(true);
+    setErr("");
+    setResult(null);
+    try {
+      const r = await invoke<Result>("test_microphone");
+      setResult(r);
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const verdictColor = result?.verdict === "ok" ? "#3a8c3a"
+    : result?.verdict === "quiet" ? "#c89000"
+    : "#c83a3a";
+  return (
+    <div className="card">
+      <div className="card-title">
+        {lang === "en" ? "🧪 Mic test (3 s)" : "🧪 Тест микрофона (3 с)"}
+      </div>
+      <div className="card-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+        <div className="row-hint">
+          {lang === "en"
+            ? "Records 3 seconds, computes peak signal level (dBFS), and transcribes via Whisper. Use to verify mic + selected device before joining a real meeting."
+            : "Записывает 3 секунды, считает пиковый уровень сигнала (dBFS), и транскрибирует через Whisper. Проверь микрофон + выбранное устройство перед реальной встречей."}
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <button className="btn secondary" onClick={run} disabled={busy}>
+            {busy
+              ? (lang === "en" ? "Recording 3s…" : "Запись 3с…")
+              : (lang === "en" ? "🎤 Test mic" : "🎤 Проверить")}
+          </button>
+          {result && (
+            <span style={{ color: verdictColor, fontWeight: 600, fontSize: 13 }}>
+              {result.verdict === "ok" && (lang === "en" ? "✓ Mic working" : "✓ Микрофон работает")}
+              {result.verdict === "quiet" && (lang === "en" ? "⚠ Mic quiet" : "⚠ Микрофон тихий")}
+              {result.verdict === "silent" && (lang === "en" ? "✗ Mic silent" : "✗ Микрофон молчит")}
+            </span>
+          )}
+          {result && Number.isFinite(result.peak_dbfs) && (
+            <span style={{ fontFamily: "monospace", fontSize: 12, color: "var(--c-text-mute)" }}>
+              peak {result.peak_dbfs.toFixed(1)} dBFS
+            </span>
+          )}
+        </div>
+        {result?.transcript && (
+          <div style={{
+            padding: "8px 10px",
+            background: "var(--c-bg-2, rgba(0,0,0,0.2))",
+            borderRadius: 4,
+            fontSize: 12,
+            fontStyle: "italic",
+          }}>
+            «{result.transcript}»
+          </div>
+        )}
+        {err && (
+          <div style={{ color: "#c83a3a", fontSize: 12 }}>{err}</div>
+        )}
+      </div>
     </div>
   );
 }

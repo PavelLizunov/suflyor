@@ -11,6 +11,28 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.88 (2026-05-26) — 🧪 Mic test card in Settings → Audio
+
+New "🧪 Mic test (3 s)" card at the top of Settings → 🔉 Audio.
+Click → records 3 seconds → computes peak signal level in dBFS →
+transcribes via Whisper → shows colored verdict:
+
+- **✓ ok** (green): peak > -30 dBFS, normal speech
+- **⚠ quiet** (amber): peak between silent and -30 dBFS
+- **✗ silent** (red): no signal (mic muted / wrong device / not
+  plugged in / driver dead)
+
+The transcript is displayed as a quoted italic block — even at low
+levels Whisper often picks up a word, confirming end-to-end pipeline
+health. If Groq API key isn't set, transcript shows "[Groq API key
+not set — peak only]" so the user still sees signal-level feedback.
+
+Backend `test_microphone` reuses `audio::record_mic_blocking` +
+`stt::transcribe_once` — no new infra, just a thin wrapper that also
+reports peak amplitude.
+
+Was the v0.0.57 stub from the QOL brainstorm; finally implemented.
+
 ### → v0.0.87 (2026-05-26) — QOL block 5 audit hotfix (P1 #4)
 
 **Session journal "latest" detection now uses mtime, not lex sort.**
