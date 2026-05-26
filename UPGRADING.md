@@ -11,6 +11,41 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.31 (2026-05-26)
+
+Three follow-ups from v0.0.30 live screenshot review:
+
+- **Confirm-modal button label is now contextual.** User reported the
+  «Выйти из приложения?» modal had a red «Удалить» button — confusing,
+  since the action is «Выйти» (exit), not delete. Root cause: the confirm
+  modal hardcoded the OK label + danger class for the original delete-
+  snippet use case, and the new exit-app call reused it unchanged.
+  Fix: `showConfirm(title, { confirmLabel?, danger? })` — default label
+  is «Подтвердить», default style is neutral. Quit-app passes
+  `{ confirmLabel: "Выйти", danger: true }`. Profile/snippet delete
+  pass `{ confirmLabel: "Удалить", danger: true }`. Future callers get
+  a safe default if they forget.
+- **Sidebar pins «Приложение» group (Интерфейс/Скрытность/Хоткеи/Обновления)
+  to the bottom.** v0.0.30 had all 4 nav groups stacked from the top with
+  empty space below — system-level panels read better at the bottom
+  (Slack/Discord/Linear pattern). CSS-only fix:
+  `.settings-nav .nav-group:nth-last-of-type(1) { margin-top: auto; }`.
+  In a flex column, `margin-top: auto` pushes the targeted element + its
+  following siblings to the end. Added a soft top border + extra padding
+  so it reads as a separator, not a glitch.
+- **Overlay bar max width = 50 % of screen** (with abs floor 520, abs
+  ceiling 1200). v0.0.30 had a hardcoded 1200-px ceiling that on a
+  1920+ monitor let the bar grow past half the screen — too dominant
+  for a peripheral HUD. Now:
+  - 1280×720  → max 640 px (50 % of screen)
+  - 1920×1080 → max 960 px
+  - 2560×1440 → max 1200 px (hits absolute ceiling)
+  Implementation: `Math.min(Math.floor(window.screen.availWidth * 0.5),
+  1200)` computed inside the ResizeObserver callback.
+
+No config schema change. CSS-only + 1 JS line — no rebuild needed for
+existing users beyond the standard one-click update.
+
 ### → v0.0.30 (2026-05-26) ✨ Settings sidebar redesign
 
 **Settings UI reorganized from one long scroll into a sidebar + content

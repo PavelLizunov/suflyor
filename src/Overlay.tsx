@@ -215,7 +215,17 @@ export default function Overlay() {
       if (paletteOpenRef.current) return; // palette has its own size logic
       // contentRect doesn't include border. We add a small margin for
       // padding + safety. Clamp to sane bounds.
-      const desiredW = Math.min(Math.max(Math.ceil(entry.contentRect.width) + 30, 520), 1200);
+      //
+      // v0.0.31: max width is now 50% of screen (with abs floor 520, ceil
+      // 1200). User reported v0.0.30 overlay growing past half the screen
+      // on a 1920+ monitor — too dominant for a peripheral HUD. On
+      // 1280×720 → max 640px · 1920×1080 → max 960px · 2560×1440 → max
+      // 1200px (hits the absolute ceiling). screen.availWidth is the
+      // logical screen width (excludes taskbar); for multi-monitor it's
+      // the PRIMARY monitor, which is close enough for a soft cap.
+      const screenW = (typeof window !== "undefined" && window.screen?.availWidth) || 1920;
+      const maxBarW = Math.min(Math.max(Math.floor(screenW * 0.5), 520), 1200);
+      const desiredW = Math.min(Math.max(Math.ceil(entry.contentRect.width) + 30, 520), maxBarW);
       const desiredH = Math.min(Math.max(Math.ceil(entry.contentRect.height) + 4, 96), 900);
       getCurrentWindow().outerSize().then((sz) => {
         getCurrentWindow().scaleFactor().then((scale) => {

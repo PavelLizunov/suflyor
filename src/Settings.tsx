@@ -18,6 +18,12 @@ type ModalState =
   | {
       kind: "confirm";
       title: string;
+      // v0.0.31: contextual confirm button label + danger styling. User
+      // reported the quit-app confirm said «Удалить» (hardcoded for the
+      // delete-snippet flow) — confusing because the action was «Выйти».
+      // Default label: «Подтвердить». Default danger: false (neutral primary).
+      confirmLabel?: string;
+      danger?: boolean;
       onYes: () => void;
       onNo: () => void;
     }
@@ -256,13 +262,18 @@ export default function Settings() {
         },
       });
     }), []);
-  const showConfirm = useCallback((title: string) =>
+  const showConfirm = useCallback((
+    title: string,
+    opts?: { confirmLabel?: string; danger?: boolean },
+  ) =>
     new Promise<boolean>((resolve) => {
       if (!mountedRef.current) { resolve(false); return; }
       pendingModalRejectRef.current = () => resolve(false);
       setModal({
         kind: "confirm",
         title,
+        confirmLabel: opts?.confirmLabel,
+        danger: opts?.danger,
         onYes: () => {
           pendingModalRejectRef.current = null;
           setModal(null);
@@ -476,6 +487,7 @@ export default function Settings() {
           onClick={async () => {
             const ok = await showConfirm(
               "Выйти из приложения? Текущая сессия захвата завершится, journal сохранится.",
+              { confirmLabel: "Выйти", danger: true },
             );
             if (ok) {
               try { await invoke("quit_app"); }
@@ -615,7 +627,10 @@ export default function Settings() {
             <button
               className="btn secondary"
               onClick={async () => {
-                const ok = await showConfirm(`Удалить профиль «${cfg.active_profile}»?`);
+                const ok = await showConfirm(
+                  `Удалить профиль «${cfg.active_profile}»?`,
+                  { confirmLabel: "Удалить", danger: true },
+                );
                 if (!ok) return;
                 const removed = cfg.active_profile;
                 const profiles = cfg.context_profiles.filter((p) => p.name !== cfg.active_profile);
@@ -1204,6 +1219,7 @@ export default function Settings() {
                     // create new snippets via config.json directly.
                     const ok = await showConfirm(
                       `Удалить snippet /${s.key}?\n\nТекст: «${s.title}»\n\nВосстановить можно только через Import конфига или дефолты (пустой массив snippets в config.json → авто-заполнится из defaults).`,
+                      { confirmLabel: "Удалить", danger: true },
                     );
                     if (!ok) return;
                     const next = { ...cfg, snippets: cfg.snippets.filter(x => x.key !== s.key) };
@@ -1642,7 +1658,15 @@ export default function Settings() {
             {modal.kind === "confirm" && (
               <div className="settings-modal-actions">
                 <button className="btn secondary" autoFocus onClick={modal.onNo}>Отмена</button>
-                <button className="btn settings-modal-danger" onClick={modal.onYes}>Удалить</button>
+                {/* v0.0.31: use the caller-supplied label + danger flag.
+                   Default «Подтвердить» (neutral). Danger callers (delete
+                   profile / snippet) pass `danger:true` for red styling. */}
+                <button
+                  className={modal.danger ? "btn settings-modal-danger" : "btn"}
+                  onClick={modal.onYes}
+                >
+                  {modal.confirmLabel ?? "Подтвердить"}
+                </button>
               </div>
             )}
             {modal.kind === "snippet" && (

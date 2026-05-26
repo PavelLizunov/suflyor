@@ -608,6 +608,17 @@ kbd {
   color: var(--c-text-dim);
   padding: var(--s-3) var(--s-3) var(--s-2);
 }
+/* v0.0.31: pin the LAST nav-group (and its sibling buttons that follow
+   it in DOM order) to the bottom of the sidebar. The «Приложение» group
+   contains Интерфейс / Скрытность / Хоткеи / Обновления — system-level
+   panels that read better at the bottom (Slack/Discord/Linear pattern).
+   `margin-top:auto` in a flex column pushes this group down; everything
+   that comes after it in DOM order follows it to the bottom. */
+.settings-nav .nav-group:nth-last-of-type(1) {
+  margin-top: auto;
+  padding-top: var(--s-5);
+  border-top: 1px solid var(--c-border-soft);
+}
 .settings-nav button.nav-item {
   display: flex;
   align-items: center;
