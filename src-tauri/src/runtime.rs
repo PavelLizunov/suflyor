@@ -89,6 +89,11 @@ pub struct RuntimeState {
     /// times in 30 sec → 3 identical tiles" spam pattern.
     /// Pruned to last 60s on every check.
     pub recent_question_prefixes: Vec<(String, std::time::Instant)>,
+    /// v0.0.75: when true, mic transcripts are dropped before the
+    /// detector + AI flow. System audio is unaffected. Useful for
+    /// coughing/sneezing without polluting the transcript. Toggle
+    /// via 🔇 chip in overlay bar. Not persisted (runtime-only).
+    pub mic_muted: bool,
 }
 
 /// Three atomic timestamps (unix ms) bumped by their respective subsystems.
@@ -491,6 +496,13 @@ pub async fn start_session(
     let journal_for_task = journal.clone();
     let task = tokio::spawn(async move {
         while let Some(ev) = stt_rx.recv().await {
+            // v0.0.75: mic mute — drop mic chunks before they hit the
+            // buffer/journal/frontend/detector. System audio is
+            // unaffected. Cheap check via short lock — toggle is rare
+            // (chip click) so contention is non-existent.
+            if matches!(ev.source, AudioSource::Mic) && rt_for_task.lock().mic_muted {
+                continue;
+            }
             let line = TranscriptLine {
                 source: ev.source,
                 text: ev.text.clone(),

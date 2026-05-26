@@ -11,6 +11,28 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.75 (2026-05-26) — QOL block 5, #23
+
+**🔇 Mic-only mute chip in overlay bar (cough/sneeze without polluting transcript).**
+
+New 🎤/🔇 chip after the 🧠 AI model chip. Click toggles
+`RuntimeState.mic_muted`. While muted, mic transcripts are dropped at
+the STT-stream consumer level — no buffer push, no journal write, no
+frontend emit, no detector. System audio is unaffected so you keep
+hearing/transcribing the interviewer.
+
+Backend: `set_mic_muted(bool)` + `get_mic_muted()` commands (both
+assert_overlay-guarded). Gate added in `start_session`'s transcript
+forwarder task — single fast lock per mic chunk, negligible overhead.
+
+Runtime-only (NOT persisted). Resets to `false` on every
+`start_session` so a forgotten mute doesn't carry across meetings —
+common UX expectation for mute toggles.
+
+Use case: cough/sneeze, side conversation with someone in the room,
+or just take a sip of water without Whisper hearing it. One click =
+mic dropped. Click again = back live.
+
 ### → v0.0.74 (2026-05-26) — QOL block 5, #22
 
 **Settings UI toggle for v0.0.73 auto-export.**

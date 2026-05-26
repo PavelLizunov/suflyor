@@ -98,6 +98,11 @@ export default function Overlay() {
   // so the user can flip to a deeper model mid-meeting without opening
   // Settings → AI → Models → save (5 clicks).
   const [aiModel, setAiModel] = useState<string>("claude-haiku-4-5");
+  // v0.0.75: mic-only mute state. Reads via get_mic_muted on mount, writes
+  // via set_mic_muted. Runtime-only (RuntimeState.mic_muted), so resets
+  // to false on every start_session — chip flips back without us needing
+  // to listen for session events.
+  const [micMuted, setMicMuted] = useState<boolean>(false);
   // Failure HUD — 3 dots (audio/stt/ai). null = no signal received yet.
   const [health, setHealth] = useState<HealthPayload | null>(null);
   // Voice coach — live mic WPM / filler density. null = backend hasn't
@@ -564,6 +569,10 @@ export default function Overlay() {
         if (c.ai_model) setAiModel(c.ai_model);
       })
       .catch((e) => console.warn("get_config:", e));
+    // v0.0.75: load mic mute state from RuntimeState.
+    invoke<boolean>("get_mic_muted")
+      .then((b) => { if (mountedRef.current) setMicMuted(b); })
+      .catch(() => {});
   }, []);
 
   // Re-read aggressive flag + ui_language on window-focus as a safety net.
@@ -1097,6 +1106,41 @@ export default function Overlay() {
             </button>
           );
         })()}
+        {/* v0.0.75: mic-only mute chip. Toggles RuntimeState.mic_muted
+            via set_mic_muted backend command. Muted state tinted red so
+            it's instantly visible "your mic is dropped right now".
+            Doesn't pause the session — system audio + manual asks still
+            work, just the always-on mic VAD pipeline drops chunks. */}
+        <button
+          type="button"
+          className="hint"
+          style={{
+            fontFamily: "monospace",
+            fontSize: 11,
+            padding: "0 6px",
+            borderRadius: 4,
+            border: "1px solid var(--c-border-soft)",
+            background: micMuted ? "rgba(220, 80, 80, 0.22)" : "transparent",
+            cursor: "pointer",
+            color: micMuted ? "rgba(255, 180, 180, 0.95)" : "var(--c-text-mute)",
+          }}
+          title={lang === "en"
+            ? `Mic capture: ${micMuted ? "MUTED — transcript dropped" : "live"}. Click to toggle. System audio is unaffected.`
+            : `Микрофон: ${micMuted ? "ЗАГЛУШЕН — транскрипт игнорируется" : "записывается"}. Клик переключает. System audio не затронут.`}
+          aria-label={lang === "en" ? "Mic mute toggle" : "Переключатель микрофона"}
+          aria-pressed={micMuted}
+          onClick={async () => {
+            const next = !micMuted;
+            try {
+              const got = await invoke<boolean>("set_mic_muted", { muted: next });
+              setMicMuted(got);
+            } catch (err) {
+              console.warn("set_mic_muted:", err);
+            }
+          }}
+        >
+          {micMuted ? "🔇" : "🎤"}
+        </button>
         {/* v0.0.62: session elapsed timer chip. Shown while session
             running (sessionStartMs set). Yellow at 45 min, red at 60. */}
         {sessionStartMs !== null && (

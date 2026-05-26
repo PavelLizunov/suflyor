@@ -2257,6 +2257,35 @@ async fn tile_reload(
     Ok(new_label)
 }
 
+/// v0.0.75: Toggle the mic-only mute flag. While true, mic transcript
+/// lines are dropped before the detector + AI flow (system audio is
+/// unaffected). Useful for coughing/sneezing without polluting the
+/// transcript. Lives in RuntimeState (per-session, not persisted) so
+/// it resets to false on every start_session.
+#[tauri::command]
+fn set_mic_muted(
+    window: tauri::WebviewWindow,
+    rt: tauri::State<'_, SharedRuntime>,
+    muted: bool,
+) -> Result<bool, String> {
+    assert_overlay(&window)?;
+    let mut s = rt.lock();
+    s.mic_muted = muted;
+    Ok(s.mic_muted)
+}
+
+/// v0.0.75: read current mic mute state. Used by overlay on mount/focus
+/// to sync the 🔇 chip after a window unmount/remount (Settings round-
+/// trip). Returns the bool directly — small enough to skip a struct.
+#[tauri::command]
+fn get_mic_muted(
+    window: tauri::WebviewWindow,
+    rt: tauri::State<'_, SharedRuntime>,
+) -> Result<bool, String> {
+    assert_overlay(&window)?;
+    Ok(rt.lock().mic_muted)
+}
+
 /// v0.0.72: Quick-switch the live AI model without opening Settings.
 /// Useful when mid-meeting you want Sonnet's deeper reasoning instead
 /// of Haiku's speed. Updates cfg.ai_model + persists to disk; STT and
@@ -2926,6 +2955,8 @@ pub fn run() {
             test_detector,
             set_stt_language,
             set_ai_model,
+            set_mic_muted,
+            get_mic_muted,
             tile_reload,
             set_stealth,
             list_snippets,
