@@ -11,6 +11,42 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.35 (2026-05-26) 🚨 P0 hotfix for v0.0.34
+
+**v0.0.34 shipped a P0 infinite-grow bug.** User reported: «в 0.34 при
+запуске окно уехало в бесконечность». Caught immediately on the first
+launch. Caused by:
+
+```js
+// v0.0.34 buggy logic:
+const intrinsic = bar.scrollWidth;  // == offsetWidth when content fits
+const needed = intrinsic + 50;
+if (needed > current + 4) setSize(needed, ...);
+// After grow: scrollWidth = newWidth, needed = newWidth + 50,
+// still > current + 4 → setSize again → ∞
+```
+
+v0.0.35 fixes this with:
+
+- **Real intrinsic measurement:** sum of children `offsetWidth` + gaps
+  + bar's horizontal padding. With `.overlay-bar > * { flex-shrink: 0 }`,
+  each child's `offsetWidth` IS its natural width regardless of the
+  parent's actual size. Sum is stable across window resizes.
+- **Hard screen-width safety cap:** `Math.min(needed, screen.availWidth - 20)`.
+  Even if a future bug recreates an infinite-grow, the window can never
+  escape the visible monitor.
+- **One-shot initial fit:** the FIRST ResizeObserver fire of a session
+  is allowed to SHRINK too. Subsequent fires are grow-only. This auto-
+  corrects users who upgraded from v0.0.34 with a persisted oversized
+  window state (no manual reset needed).
+
+Also: established a **strict release-verification methodology** in
+`RELEASE_CHECKLIST.md`. v0.0.34 passed every static check (255 tests,
+clippy clean, tsc clean, build clean) — but no one actually launched
+the binary. Going forward, every release must pass 6 gates including
+"smoke test via computer-use screenshot, verify the window dimensions
+stay stable over 5 seconds" BEFORE git push + GitHub release.
+
 ### → v0.0.34 (2026-05-26)
 
 Three live-feedback fixes:

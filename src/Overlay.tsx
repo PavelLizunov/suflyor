@@ -213,42 +213,71 @@ export default function Overlay() {
   // calls → potential hang on rapid F4-keystroke-Esc cycles. The fix
   // moves the guard into the `useEffect` deps array — RO is now literally
   // not attached while palette is open. Zero race possible.
+  // v0.0.35: track whether we've done the initial size-fit. v0.0.34's
+  // infinite-grow bug left some users with a persisted 1000+ px window
+  // state — on next launch that gets restored, and a pure grow-only
+  // policy would never shrink it back. We do ONE shrink-allowed fit on
+  // the first RO fire of each session; after that, grow-only.
+  const initialFitDoneRef = useRef(false);
   useEffect(() => {
     if (!overlayRootRef.current) return;
     if (paletteOpen) return; // RO disabled while palette is open
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
-      // v0.0.34: GROW-ONLY width policy + removed 50%-of-screen cap.
-      // User reported being unable to manually resize the bar — the prev
-      // logic recomputed desiredW from contentRect every fire, which
-      // EQUALS the current window width (the root stretches to fill
-      // the window) → setSize echoed the current width + 50 → user's
-      // drag was undone on the next RO fire. Plus the 50% cap meant
-      // chips overflowed on 1280-width screens when many were active.
+      // v0.0.35: FIX infinite-grow bug in v0.0.34.
+      // v0.0.34 used `bar.scrollWidth` to estimate intrinsic width — but
+      // when children fit, scrollWidth == offsetWidth == current window
+      // width. So scrollWidth+50 > currentW+4 was always true → setSize
+      // grew the window → next RO fire scrollWidth == new larger width →
+      // grew again → infinite loop. User reported overlay «уехало в
+      // бесконечность» on startup.
       //
-      // New policy:
-      //   - Width: only GROW when intrinsic bar content overflows the
-      //     current window (`bar.scrollWidth > currentW`). Never shrink.
-      //     User can drag the window wider freely. They can't drag
-      //     NARROWER than the intrinsic content (chips would overflow,
-      //     bad UX), but that's an acceptable lower bound.
-      //   - Height: same as before — auto-grow to fit transcript-tail +
-      //     answer-bubble. The .overlay-root contentRect is correct here
-      //     because those children genuinely stack below the bar.
-      //   - No screen-relative cap — bar is as wide as it needs.
+      // Real intrinsic measurement: SUM children offsetWidths + gaps +
+      // bar's horizontal padding. With `.overlay-bar > * { flex-shrink:
+      // 0 }`, each child's offsetWidth IS its natural width regardless
+      // of bar/window size. Sum = true intrinsic content extent, stable
+      // across window resizes.
+      //
+      // Policy unchanged from v0.0.34:
+      //   - GROW only when intrinsic + 50 > current width
+      //   - Never shrink — user can drag wider freely
+      //   - Height auto-grows for transcript-tail / answer-bubble
+      //   - Hard safety: never exceed screen.availWidth - 20
       const bar = overlayBarRef.current;
-      const intrinsicBarW = bar ? bar.scrollWidth : 0;
+      let intrinsicBarW = 0;
+      if (bar) {
+        const children = Array.from(bar.children) as HTMLElement[];
+        const cs = window.getComputedStyle(bar);
+        const gap = parseFloat(cs.gap) || 0;
+        const padL = parseFloat(cs.paddingLeft) || 0;
+        const padR = parseFloat(cs.paddingRight) || 0;
+        intrinsicBarW = children.reduce((sum, c) => sum + c.offsetWidth, 0)
+          + gap * Math.max(0, children.length - 1)
+          + padL + padR;
+      }
       const measuredH = Math.ceil(entry.contentRect.height);
       const desiredH = Math.min(Math.max(measuredH + 4, 96), 900);
       getCurrentWindow().outerSize().then((sz) => {
         getCurrentWindow().scaleFactor().then((scale) => {
           const currentW = Math.round(sz.width / scale);
           const currentH = Math.round(sz.height / scale);
-          // Grow width only when intrinsic content would overflow.
-          // floor 520 keeps a usable minimum for the initial mount.
-          const neededW = Math.max(intrinsicBarW + 50, 520);
-          const targetW = neededW > currentW + 4 ? neededW : currentW;
+          // Hard ceiling: screen width - 20 px so even with a bug the
+          // window can never escape the visible monitor. Floor 520
+          // keeps a usable minimum on first paint.
+          const screenW = (typeof window !== "undefined" && window.screen?.availWidth) || 1920;
+          const maxAllowedW = Math.max(520, screenW - 20);
+          const neededW = Math.min(Math.max(intrinsicBarW + 50, 520), maxAllowedW);
+          // GROW-ONLY after the initial fit. On the FIRST RO fire of
+          // this session we allow SHRINK too — this corrects a persisted
+          // oversized window state (e.g. user upgraded from v0.0.34
+          // which had an infinite-grow bug). Subsequent fires are
+          // grow-only so user manual-drag stays respected.
+          const isFirstFit = !initialFitDoneRef.current;
+          const targetW = isFirstFit
+            ? neededW
+            : (neededW > currentW + 4 ? neededW : currentW);
+          if (isFirstFit) initialFitDoneRef.current = true;
           if (Math.abs(currentW - targetW) > 4 || Math.abs(currentH - desiredH) > 4) {
             getCurrentWindow().setSize(new LogicalSize(targetW, desiredH))
               .catch((err) => console.warn("overlay autoresize:", err));

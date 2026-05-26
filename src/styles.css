@@ -1168,18 +1168,21 @@ body.settings {
 
 /* --- Overlay bar: status text label + hint chips ----------------- */
 
-/* Current JSX renders <div class="dot"/> + <div class="status-text">…</div>
-   instead of the design's <span class="status"><span class="dot"/><span/></span>.
-   Treat the bare .status-text as a flex spacer that pushes the rest right. */
+/* v0.0.35: removed the flex:1 spacer behaviour. The spacer caused
+   .status-text.offsetWidth to equal whatever space was available in
+   the bar (window width minus other children), defeating the
+   children-sum intrinsic measurement that drives auto-resize: with a
+   stretched spacer, "intrinsic" sum equaled current window width
+   always → no shrink possible → window stayed huge after upgrade
+   from v0.0.34 (persisted oversized state).
+   Bar now packs all children at the LEFT naturally. Empty space goes
+   to the right side of the bar — fine for a draggable HUD. */
 .status-text {
-  flex: 1 1 0;
-  min-width: 0;
+  flex: 0 0 auto;
   font-size: var(--fs-12);
   color: var(--c-text-mute);
   letter-spacing: 0.02em;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .status-text.status-error {
   flex: 0 1 auto;
