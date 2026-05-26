@@ -11,6 +11,21 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### QOL block 5 (v0.0.67 → v0.0.88) — at-a-glance summary
+
+22 releases in ~2.5h. Categories:
+
+| Category | Releases |
+|---|---|
+| **New chips in overlay bar** | 🎙 STT lang (.67) · 🧠 AI model (.72) · 🎤/🔇 mic mute (.75) · 🎯 stealth (.81) · 📦 collapse-all (.82) |
+| **New hotkeys** | F1 help (.77) · F2 profile cycle (.80) · F7 collapse-all (.83) |
+| **New tile chrome** | 🔄 reload (.68) · ⏱ age + 🔄×N gen (.69) · ▾/▴ collapse (.71) |
+| **Backend features** | F4 `/key` snippet search (.70) · auto-export on quit (.73 + .74 UI) · qa_cache (.79) · 🧪 mic test (.88) |
+| **Settings polish** | tile font size (.55) · audio refresh + char counter (.76) · clipboard append (.78) |
+| **Audit hotfixes** | F7 collision + cache key + reload security (.85) · chip race + opus lock (.86) · mtime sort (.87) |
+
+Two code-review agent passes ran on the diff. First found 3 P0/P1 (shipped .85, .86, .87). Second pass running at time of v0.0.88 ship.
+
 ### → v0.0.88 (2026-05-26) — 🧪 Mic test card in Settings → Audio
 
 New "🧪 Mic test (3 s)" card at the top of Settings → 🔉 Audio.
