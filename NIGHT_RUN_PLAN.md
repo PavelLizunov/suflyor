@@ -1,14 +1,27 @@
 # Autonomous work plan
 
-## 🚀 Marathon block 5 — QOL chip + hotkey sprint (~20:00-22:15 MSK, **22 releases in ~3h, +4 audit hotfix releases**)
+## 🚀 Marathon block 5 — QOL chip + hotkey sprint (started ~17:13Z, 6h to 23:13Z, **29 releases shipped**)
 
 **Audit hotfix wave (v0.0.85-v0.0.88):**
-- v0.0.85: P0 F7 dup + P0 qa_cache key + P1 reload-bridge security (3 fixes from code-review agent #1)
-- v0.0.86: P1 collapse chip race + P1 opus-preservation (2 more from same agent)
+- v0.0.85: P0 F7 dup + P0 qa_cache key + P1 reload-bridge security (3 fixes from agent #1)
+- v0.0.86: P1 collapse chip race + P1 opus-preservation (2 more, agent #1)
 - v0.0.87: P1 mtime sort for journal "latest" detection (last from agent #1)
-- v0.0.88: 🧪 Mic test card in Settings → Audio (completed pending #143/v0.0.57)
+- v0.0.88: 🧪 Mic test card in Settings → Audio (closed pending #143)
 
-Code-review agent #2 launched at v0.0.88 ship to audit v0.0.85-v0.0.88 diff. Running in background.
+**Audit-fix wave #2 (v0.0.91-v0.0.92):**
+- v0.0.91: 🚨 P0 — v0.0.85's e.windowLabel check was DEAD (Tauri v2.11 removed the field). 🔄 reload + 🌐 translate broken in v0.0.85→v0.0.90. Fix: drop check, validate label via SharedTiles backend instead.
+- v0.0.92: P1 qa_cache key hashes meeting_context properly. P2 peak_dbfs Option<f32>, i16::MIN clamp, mtime ties.
+
+**Net new features (v0.0.89-v0.0.95):**
+- v0.0.89: 🌐 translate tile button
+- v0.0.90: 🔒 bulk pin-all chip
+- v0.0.93: 📋 copy question to clipboard
+- v0.0.94: Nw word count badge
+- v0.0.95: F4 palette `+key body` snippet add
+
+Code-review agent #3 launched at v0.0.95 ship to audit v0.0.89-v0.0.95 diff. Running in background.
+
+
 
 
 
