@@ -35,7 +35,7 @@ starting any autonomous session.
 - Backend: Rust + Tauri 2 in `src-tauri/`. Two binaries — `default-run`
   in `Cargo.toml` is `overlay-mvp`. Build via `npm run tauri build` (NOT
   `cargo build` — that bypasses the vite frontend bundle).
-- Tests: `cargo test --lib` (239 tests, <1s) — the `--bin overlay-mvp`
+- Tests: `cargo test --lib` (244 tests, <1s) — the `--bin overlay-mvp`
   variant in older docs runs zero tests (the binary itself has none —
   all unit tests live in the library target). `cargo clippy --all-targets
   -- -D warnings` for strict lint covers lib + journal-eval CLI.
