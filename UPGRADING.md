@@ -11,6 +11,23 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.21 (2026-05-26)
+
+- **F8 crash fix.** Rapid F8 double-press during an active session
+  could panic on WASAPI device race (second start_session firing while
+  first stop_session was still awaiting). Now serialised via a
+  `pauseInFlightRef` — subsequent F8 presses ignored until the previous
+  pause/resume cycle completes.
+- **Visible hotkey legend.** Hotkey strip in overlay (`F3·F4·F6·...·ℹ`)
+  is now clickable. Opens a popover with full descriptions: F3 reask,
+  F4 KB palette, F6 manual tile, F8 pause/resume, F9 ask AI, F10 screenshot,
+  F11 PANIC HIDE. Click anywhere to close.
+- **Runtime panic log.** New `%APPDATA%\overlay-mvp\runtime-panics.log`
+  captures worker-thread panics (separate from startup crash-report.txt).
+  Auto-included in diagnostic dump (tail 100 lines, sanitized for
+  secret patterns). Каждый panic = timestamp + location + payload,
+  append-only, rotates after 1MB.
+
 ### → v0.0.20 (2026-05-26)
 
 - **No config schema change.**

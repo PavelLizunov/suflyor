@@ -803,6 +803,22 @@ fn dump_diagnostics(
         .map(|s| format!("```\n{s}\n```"))
         .unwrap_or_else(|| "_no crash report on disk_".to_string());
 
+    // v0.0.21: runtime panic log (separate from startup crash-report.txt).
+    // Captures worker-thread panics that don't kill the process but still
+    // indicate a bug (e.g. WASAPI device race on F8 rapid double-press).
+    let runtime_panics = dirs::config_dir()
+        .map(|d| d.join("overlay-mvp").join("runtime-panics.log"))
+        .filter(|p| p.exists())
+        .and_then(|p| std::fs::read_to_string(&p).ok())
+        .map(|s| {
+            // Tail last 100 lines so even a multi-MB log doesn't blow the dump.
+            let lines: Vec<&str> = s.lines().collect();
+            let start = lines.len().saturating_sub(100);
+            sanitize_diagnostic_text(&lines[start..].join("\n"))
+        })
+        .map(|s| format!("```\n{s}\n```"))
+        .unwrap_or_else(|| "_no runtime panics on disk_".to_string());
+
     let report = format!(
         "# Suflyor diagnostic dump\n\n\
          **App version:** v{app_version}\n\
@@ -812,8 +828,10 @@ fn dump_diagnostics(
          ```json\n{cfg_json}\n```\n\n\
          ## Latest session journal (tail)\n\n\
          {journal_tail}\n\n\
-         ## Crash report\n\n\
-         {crash}\n"
+         ## Startup crash report\n\n\
+         {crash}\n\n\
+         ## Runtime panics (last 100 lines)\n\n\
+         {runtime_panics}\n"
     );
 
     let stamp = journal::now_unix_ms() / 1000;
@@ -1599,6 +1617,60 @@ fn load_session(
 pub fn run() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
         .init();
+
+    // v0.0.21: runtime panic hook. The existing P0-3 crash-report.txt
+    // catches STARTUP panics only (via .run().unwrap_or_else at the
+    // bottom). Worker-thread panics during a session (e.g. WASAPI
+    // device race when F8 is double-pressed) were silently dropped to
+    // stderr which release builds don't surface. Now appends each
+    // panic with full payload + location + timestamp to
+    // `%APPDATA%/overlay-mvp/runtime-panics.log` so the user can show
+    // it. Combines with sanitize_diagnostic_text — when included in
+    // dump_diagnostics, gsk_/Bearer/sk- patterns get redacted.
+    std::panic::set_hook(Box::new(|info| {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "<unknown location>".to_string());
+        let payload = info.payload();
+        let msg = if let Some(s) = payload.downcast_ref::<&str>() {
+            (*s).to_string()
+        } else if let Some(s) = payload.downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "<non-string panic payload>".to_string()
+        };
+        let entry = format!(
+            "[unix={timestamp}] panic at {location}\n  {msg}\n\n"
+        );
+        eprintln!("PANIC: {entry}");
+        if let Some(dir) = dirs::config_dir() {
+            let path = dir.join("overlay-mvp").join("runtime-panics.log");
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            // Append, never truncate — we want history across sessions.
+            // Cap file at 1MB; truncate from the front if it grows past
+            // (rare in practice; one panic = ~200 bytes).
+            if let Ok(meta) = std::fs::metadata(&path) {
+                if meta.len() > 1_000_000 {
+                    let _ = std::fs::remove_file(&path);
+                }
+            }
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+            {
+                use std::io::Write;
+                let _ = f.write_all(entry.as_bytes());
+            }
+        }
+    }));
 
     let shared_cfg = config::shared();
     let shared_rt = runtime::shared();

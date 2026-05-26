@@ -177,6 +177,12 @@ export default function Overlay() {
   const errorTimerRef = useRef<TimerHandle | null>(null);
   const startSessionTimerRef = useRef<TimerHandle | null>(null);
   const overBudgetTimerRef = useRef<TimerHandle | null>(null);
+  // v0.0.21: serialises pause/resume (F8) so rapid double-press doesn't
+  // start a new session while the previous stop is still tearing down
+  // WASAPI. Audio device race was crashing the app mid-call.
+  const pauseInFlightRef = useRef(false);
+  // v0.0.21: visible hotkey legend popover open/closed state.
+  const [hotkeyHelpOpen, setHotkeyHelpOpen] = useState(false);
   // Mounted-flag for promise resolutions that may land after unmount
   // (StrictMode double-mount, settings round-trip).
   const mountedRef = useRef(true);
@@ -500,30 +506,45 @@ export default function Overlay() {
 
     unlistens.push(
       listen<void>("hotkey:pause_audio", async () => {
-        // Read CURRENT status via ref to avoid the stale-closure trap that
-        // used to plague this listener (registered once with [] deps).
-        if (statusRef.current === "listening") {
-          // Pause via F8 → status "paused" (distinct from "stopped" which
-          // means tray-Quit or initial state). Lets UI show "⏸ Paused
-          // (F8 to resume)" instead of generic "Stopped" — clearer user
-          // mental model that the session is just suspended, not over.
-          try {
-            await invoke("stop_session");
-            if (mountedRef.current) setStatus("paused");
-          } catch (err) {
-            if (!mountedRef.current) return;
-            setStatus("error");
-            setErrorText(String(err));
+        // v0.0.21: re-entry guard. User reported F8-during-call crashes
+        // periodically — root cause was rapid double-press firing a second
+        // start_session while the first stop_session was still awaiting
+        // its WASAPI shutdown. Audio device race → panic in worker thread.
+        // Now a ref flag drops the second press silently. flashFlag-style
+        // pattern but for a simple in-flight bool, not a timer.
+        if (pauseInFlightRef.current) {
+          console.warn("F8 ignored — previous pause/resume still in flight");
+          return;
+        }
+        pauseInFlightRef.current = true;
+        try {
+          // Read CURRENT status via ref to avoid the stale-closure trap that
+          // used to plague this listener (registered once with [] deps).
+          if (statusRef.current === "listening") {
+            // Pause via F8 → status "paused" (distinct from "stopped" which
+            // means tray-Quit or initial state). Lets UI show "⏸ Paused
+            // (F8 to resume)" instead of generic "Stopped" — clearer user
+            // mental model that the session is just suspended, not over.
+            try {
+              await invoke("stop_session");
+              if (mountedRef.current) setStatus("paused");
+            } catch (err) {
+              if (!mountedRef.current) return;
+              setStatus("error");
+              setErrorText(String(err));
+            }
+          } else {
+            try {
+              await invoke("start_session");
+              if (mountedRef.current) setStatus("listening");
+            } catch (err) {
+              if (!mountedRef.current) return;
+              setStatus("error");
+              setErrorText(String(err));
+            }
           }
-        } else {
-          try {
-            await invoke("start_session");
-            if (mountedRef.current) setStatus("listening");
-          } catch (err) {
-            if (!mountedRef.current) return;
-            setStatus("error");
-            setErrorText(String(err));
-          }
+        } finally {
+          pauseInFlightRef.current = false;
         }
       })
     );
@@ -700,11 +721,22 @@ export default function Overlay() {
             </button>
           );
         })}
-        <span
+        <button
           className="hint"
-          aria-label="Hotkeys: F3 reask · F4 KB palette · F6 manual tile · F8 pause · F9 ask · F10 screenshot · F11 panic hide"
-          title="F3 reask · F4 KB palette · F6 manual tile · F8 pause · F9 ask · F10 screenshot · F11 panic hide"
-        >F3·F4·F6·F8·F9·F10·F11</span>
+          type="button"
+          onClick={() => setHotkeyHelpOpen((v) => !v)}
+          aria-expanded={hotkeyHelpOpen}
+          aria-label="Hotkey legend — click to expand"
+          title="Click для расшифровки всех hotkey'ев"
+          style={{
+            border: "none",
+            background: "transparent",
+            font: "inherit",
+            color: "inherit",
+            cursor: "pointer",
+            padding: 0,
+          }}
+        >F3·F4·F6·F8·F9·F10·F11&nbsp;ℹ</button>
         <button
           className="icon-btn icon-only"
           onClick={openSettings}
@@ -717,6 +749,64 @@ export default function Overlay() {
 
       {transcriptTail && <div className="transcript-tail">{transcriptTail}</div>}
       {answer && <div className="answer-bubble">{answer}</div>}
+
+      {hotkeyHelpOpen && (
+        <div
+          role="dialog"
+          aria-label="Hotkey reference"
+          onClick={() => setHotkeyHelpOpen(false)}
+          style={{
+            position: "absolute",
+            top: 38,
+            right: 8,
+            minWidth: 320,
+            padding: "10px 14px",
+            background: "rgba(20, 22, 30, 0.95)",
+            backdropFilter: "blur(10px)",
+            border: "1px solid var(--c-border-soft)",
+            borderRadius: 8,
+            boxShadow: "0 8px 32px -8px rgba(0,0,0,0.6)",
+            color: "var(--c-text)",
+            fontSize: 12,
+            lineHeight: 1.6,
+            zIndex: 100,
+            cursor: "default",
+          }}
+        >
+          <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--c-text-mute)" }}>
+            Hotkeys (global) — click anywhere to close
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <tbody>
+              {[
+                ["F3", "Reask — повторить последний вопрос со свежим контекстом"],
+                ["F4", "KB palette — поиск в knowledge base (1643 entries)"],
+                ["F6", "Manual tile — спавнить тайл из последней реплики"],
+                ["F8", "Pause / Resume — пауза/возобновить сессию"],
+                ["F9", "Ask AI — спросить AI сейчас (со screenshot если есть)"],
+                ["F10", "Screenshot — захват для следующего F9"],
+                ["F11", "PANIC HIDE — скрыть overlay + все тайлы"],
+              ].map(([key, desc]) => (
+                <tr key={key}>
+                  <td style={{ padding: "2px 8px 2px 0", verticalAlign: "top", width: 40 }}>
+                    <kbd style={{
+                      display: "inline-block",
+                      padding: "1px 6px",
+                      fontFamily: "monospace",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      background: "rgba(255,255,255,0.1)",
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      borderRadius: 4,
+                    }}>{key}</kbd>
+                  </td>
+                  <td style={{ padding: "2px 0", color: "var(--c-text)" }}>{desc}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {paletteOpen && (
         <div className="kb-palette" role="dialog" aria-label="Knowledge base search">
