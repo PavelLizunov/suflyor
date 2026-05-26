@@ -180,5 +180,8 @@ Version is tracked in 3 places (must be kept in sync):
 - **Local Whisper** (CUDA/whisper-rs): research-only in `docs/local-whisper-options.md`. Defer until offline operation requested by a real user. Current Groq pipeline meets latency + quality needs.
 - **Code signing** (Authenticode for MSI): personal tool, single user, would cost $300+/yr cert. SmartScreen "Unknown publisher" warning acceptable.
 - **Auto-update download manager**: Settings → 🆙 Обновления currently opens the GitHub release page in browser. Auto-installing without signing is risky and would need elevation prompts.
-- **Snippet edit/add modal** (full 3-field editor): deferred to v0.1.0. Current state: delete works (v0.0.9); add/edit via JSON in `%APPDATA%\overlay-mvp\config.json`.
 - **Telemetry**: explicit non-goal. Tool is personal-use, no analytics.
+- **Tauri MockRuntime integration tests**: would let us test commands like `start_session`'s emit + `dump_diagnostics`'s file write without a real WebviewWindow. Multi-hour setup; pure-fn extracts cover most logic for now.
+- **Ghost-tile cleanup at startup**: if `overlay-mvp.exe` is force-killed, WebView2 child windows can persist as orphans. Subsequent fresh launch sees an empty active list and a new spawn at slot 0 will overlap with the orphan window's position. Fix would need Win32 enumeration. Not a normal-flow bug — graceful shutdown cleans children. Documented; deferred.
+
+Note: snippet add/edit/delete modal (item from prior doc revision) shipped in v0.0.10 — `Settings → 📋 Snippets → + New / ✎`.
