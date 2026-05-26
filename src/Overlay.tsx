@@ -550,7 +550,25 @@ export default function Overlay() {
 
   return (
     <div className="overlay-root">
-      <div className="overlay-bar">
+      <div
+        className="overlay-bar"
+        data-tauri-drag-region
+        onMouseDown={(e) => {
+          // v0.0.10: explicit drag fix — same pattern as Settings header
+          // (v0.0.1). CSS -webkit-app-region: drag doesn't work on Windows
+          // WebView2; the attribute alone is unreliable. Explicit
+          // startDragging() works because capability has allow-start-dragging.
+          // Skip interactive children (buttons, inputs) so clicks aren't
+          // hijacked into drags.
+          if (e.button !== 0) return;
+          const target = e.target as HTMLElement;
+          if (target.closest("button, input, select, .no-drag, kbd")) return;
+          getCurrentWindow().startDragging().catch((err) => {
+            console.warn("overlay startDragging failed:", err);
+          });
+        }}
+        title="Перетащи за пустую область бара, чтобы подвинуть overlay"
+      >
         <div className={dotClass} aria-hidden="true" />
         <div
           className={status === "error" ? "status-text status-error" : "status-text"}

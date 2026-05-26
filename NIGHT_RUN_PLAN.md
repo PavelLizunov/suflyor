@@ -84,23 +84,21 @@
 `.claude/autonomous_active` should contain a future ISO deadline while a run is in progress.
 Hooks in `.claude/settings.json` enforce R1-R10 (see `.claude/AUTONOMOUS_RULES.md`).
 
-## Backlog (priority-ordered, top = next) — refreshed 2026-05-26T00:13 for /auto 6h
+## Backlog (priority-ordered, top = next) — refreshed 2026-05-26T04:52 for retry marathon
 
-1. **LIVE verify tile slot-collision fix from v0.0.5** — force-spawn 3 tiles via debug F7 / manual, × close middle one, spawn 4th, screenshot — assert no overlap. Bug was the user's own complaint, code+unit-test landed but no integration test.
-2. **Whisper turbo toggle in Settings** — config.stt_model already supports `whisper-large-v3-turbo`. Add dropdown to Settings UI (3× faster, slightly less accurate). ~30 min easy win promised earlier.
-3. **Replay viewer: render `cost:cap-hit` events** — currently falls to "unknown" kind because Replay.tsx didn't know about the new event type. Add label + body formatter.
-4. **Health HUD `idle` after stop_session** — currently dots stay green forever after Stop (last_*_ok_ms frozen). Should transition to "idle" color when no session is active. UX bug found during testing.
-5. **Detector skip-mic LIVE verify** — write a synthetic test: emit fake TranscriptEvent{source:Mic, text:"мы используем kubernetes"} when detector_skip_mic=true → assert NO maybe_spawn_tile call. Pure unit test, no audio needed.
-6. **README + CLAUDE.md refresh for v0.0.5** — soft-warning cost cap semantics, slot collision fix, 13 sections in Settings (was 12, then add updates section). Honest defaults table.
-7. **Local Whisper feasibility study** — read whisper-rs Cargo docs, estimate bundle size impact + build time + CUDA dep complications. Write `docs/local-whisper-options.md` with decision matrix. NO IMPLEMENTATION — research only, ~45 min.
-8. **Bridge probe model fallback** — current `check_bridge` uses `cfg.ai_model`. If that returns 400 "unknown model", retry with a fallback like `claude-3-5-sonnet-latest` (most universal). Hint message says "model `X` not found on bridge, but bridge IS alive".
-9. **Sentry-lite crash report button** — crash-report.txt exists from v0.0.2 P0-3 fix, but no UI surfaces it. Add button in Settings if file exists: "📨 Show crash report" → opens it in Notepad.
-10. **6-agent re-review of v0.0.2-v0.0.5 deltas** — slot fix, cost cap pivot, soft warn, share export, update button, bridge check. Catch any S0/S1 missed.
-11. **Triage and fix S0/S1 from #10**.
-12. **Quick win: F8 Pause/Resume should show clearer state** — currently overlay just turns gray "Stopped". Add explicit "⏸ Paused" badge.
-13. **STT prompt budget audit** — recent changes to trigger_keywords (501 chars in share-export test) might push prompt over 700-char soft cap. Add a logging assertion + test.
-14. **Snippets section search ranking** — currently filter is substring, no rank. Score by key prefix > title prefix > body match.
-15. **Final mega-review of v0.0.6 candidate** before releasing.
+All items 1-15 from prior marathon (00:13-00:55) are CLOSED (see Done log).
+Fresh priorities below.
+
+1. **Overlay bar drag fix** — explicitly deferred since v0.0.2 release notes ("Overlay bar drag через `-webkit-app-region` не работает на Windows WebView2 — фикс будет когда-нибудь"). Same pattern as v0.0.1 Settings drag fix: explicit onMouseDown → getCurrentWindow().startDragging() + capability already present. ~30 min.
+2. **Snippet add + edit modal** — 3-field (key, title, body) modal. Triggered from "+ New" button in snippet header + "✎" button per row. Delete already shipped in v0.0.9. ~2h work for proper modal. Big UX win.
+3. **Replay viewer: filter by event kind** — checkbox row at top (transcript/ai/tile/error/detector). Currently shows all 100+ events per session, hard to grep visually.
+4. **Tile Esc-to-close** — currently × button only. Pressing Esc when tile is focused should close it (or unfocus + close on next click). ~15 min.
+5. **Manual spawn from F4 KB palette confirmation** — test with proper coords on secondary display, confirm 5-tile chain has no overlap regression.
+6. **Fresh 6-agent re-review of v0.0.6/0.0.7/0.0.8/0.0.9** — separate from prior single-agent review. Different angles: security, correctness, perf, UX, tests, docs.
+7. **CONTRIBUTING.md** — short doc for forkers: hooks setup, autonomous mode caveat, test command, version-bump checklist.
+8. **README screenshot refresh** — capture v0.0.9 overlay/settings/kb-palette/tile with current UI (post all changes). Current screenshots from v0.0.1.
+9. **`cargo audit` security audit** — check Cargo.lock for known vulns in deps.
+10. **`npm audit` for frontend** — same check on node_modules.
 
 ## In progress (re-armed 2026-05-26T04:52, new deadline 10:52)
 

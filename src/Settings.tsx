@@ -20,6 +20,18 @@ type ModalState =
       title: string;
       onYes: () => void;
       onNo: () => void;
+    }
+  | {
+      // v0.0.10: 3-field snippet add/edit modal. `isNew=true` allows key
+      // entry; for edit, key is locked (snippets keyed by it). `existingKeys`
+      // is used for uniqueness validation on add.
+      kind: "snippet";
+      title: string;
+      initial: { key: string; title: string; body: string };
+      isNew: boolean;
+      existingKeys: string[];
+      onSubmit: (s: { key: string; title: string; body: string }) => void;
+      onCancel: () => void;
     };
 
 type Snippet = {
@@ -112,6 +124,11 @@ export default function Settings() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [promptValue, setPromptValue] = useState("");
+  // v0.0.10 snippet edit modal — 3 separate fields, reset when opened.
+  const [snipKey, setSnipKey] = useState("");
+  const [snipTitle, setSnipTitle] = useState("");
+  const [snipBody, setSnipBody] = useState("");
+  const [snipError, setSnipError] = useState("");
   // Snippets section state: collapsed by default + filter, otherwise 57
   // entries make the Settings page scroll forever (live regression
   // 2026-05-25: "snippet бесконечно длинный список").
@@ -203,11 +220,48 @@ export default function Settings() {
         },
       });
     }), []);
-  // Esc-anywhere-to-cancel for confirm modals (prompt input already handles it).
+  // v0.0.10: open the 3-field snippet add/edit modal. For "+ New" pass
+  // empty initial + isNew=true; for "✎ Edit" pass existing snippet + false.
+  const showSnippetEdit = useCallback((
+    title: string,
+    initial: { key: string; title: string; body: string },
+    isNew: boolean,
+    existingKeys: string[],
+  ) =>
+    new Promise<{ key: string; title: string; body: string } | null>((resolve) => {
+      if (!mountedRef.current) { resolve(null); return; }
+      pendingModalRejectRef.current = () => resolve(null);
+      setSnipKey(initial.key);
+      setSnipTitle(initial.title);
+      setSnipBody(initial.body);
+      setSnipError("");
+      setModal({
+        kind: "snippet",
+        title,
+        initial,
+        isNew,
+        existingKeys,
+        onSubmit: (v) => {
+          pendingModalRejectRef.current = null;
+          setModal(null);
+          resolve(v);
+        },
+        onCancel: () => {
+          pendingModalRejectRef.current = null;
+          setModal(null);
+          resolve(null);
+        },
+      });
+    }), []);
+
+  // Esc-anywhere-to-cancel for confirm + snippet modals (prompt input already handles it).
   useEffect(() => {
-    if (!modal || modal.kind !== "confirm") return;
+    if (!modal || modal.kind === "prompt") return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") modal.onNo();
+      if (e.key === "Escape") {
+        if (modal.kind === "confirm") modal.onNo();
+        else if (modal.kind === "snippet") modal.onCancel();
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -856,6 +910,30 @@ export default function Settings() {
             onClick={() => setSnippetsExpanded(v => !v)}
             title={snippetsExpanded ? "Свернуть" : "Развернуть все снипеты"}
           >{snippetsExpanded ? "▲ свернуть" : "▼ показать"}</button>
+          <button
+            className="btn"
+            style={{ height: 22, padding: "0 10px", fontSize: 11, marginLeft: 8 }}
+            onClick={async () => {
+              const newSnip = await showSnippetEdit(
+                "+ Новый snippet",
+                { key: "", title: "", body: "" },
+                true,
+                (cfg.snippets || []).map(s => s.key),
+              );
+              if (!newSnip) return;
+              const next = { ...cfg, snippets: [...(cfg.snippets || []), newSnip] };
+              setCfg(next);
+              try {
+                await invoke("save_config", { newCfg: next });
+                showToast("ok", `/${newSnip.key} создан · ${next.snippets.length} snippets`);
+                if (!snippetsExpanded) setSnippetsExpanded(true);
+              } catch (e) {
+                showToast("err", `Не сохранилось: ${e}`);
+                setCfg(cfg);
+              }
+            }}
+            title="Создать новый snippet (откроется 3-field форма)"
+          >+ Новый</button>
         </h3>
         {snippetsExpanded && (
           <div className="field">
@@ -920,6 +998,37 @@ export default function Settings() {
                   title={`Открыть тайл со снипетом /${s.key}`}
                 >
                   Expand →
+                </button>
+                <button
+                  className="btn secondary"
+                  style={{ height: 24, padding: "0 8px", fontSize: 12 }}
+                  onClick={async () => {
+                    const edited = await showSnippetEdit(
+                      `✎ Edit /${s.key}`,
+                      { key: s.key, title: s.title, body: s.body },
+                      false,
+                      [],
+                    );
+                    if (!edited) return;
+                    // Key is locked when editing, so just replace by key.
+                    const next = {
+                      ...cfg,
+                      snippets: cfg.snippets.map(x =>
+                        x.key === s.key ? edited : x
+                      ),
+                    };
+                    setCfg(next);
+                    try {
+                      await invoke("save_config", { newCfg: next });
+                      showToast("ok", `/${s.key} обновлён`);
+                    } catch (e) {
+                      showToast("err", `Не сохранилось: ${e}`);
+                      setCfg(cfg);
+                    }
+                  }}
+                  title={`Редактировать /${s.key} (title + body)`}
+                >
+                  ✎
                 </button>
                 <button
                   className="btn secondary"
@@ -1242,7 +1351,8 @@ export default function Settings() {
             // and triggers an unintended cancel near the modal edge.
             if (e.target !== e.currentTarget) return;
             if (modal.kind === "prompt") modal.onCancel();
-            else modal.onNo();
+            else if (modal.kind === "confirm") modal.onNo();
+            else if (modal.kind === "snippet") modal.onCancel();
           }}
         >
           <div
@@ -1252,7 +1362,7 @@ export default function Settings() {
             aria-modal="true"
           >
             <div className="settings-modal-title">{modal.title}</div>
-            {modal.kind === "prompt" ? (
+            {modal.kind === "prompt" && (
               <>
                 <input
                   className="settings-modal-input"
@@ -1280,11 +1390,89 @@ export default function Settings() {
                   >OK</button>
                 </div>
               </>
-            ) : (
+            )}
+            {modal.kind === "confirm" && (
               <div className="settings-modal-actions">
                 <button className="btn secondary" autoFocus onClick={modal.onNo}>Отмена</button>
                 <button className="btn settings-modal-danger" onClick={modal.onYes}>Удалить</button>
               </div>
+            )}
+            {modal.kind === "snippet" && (
+              <>
+                <div className="field">
+                  <label>Key (короткий идентификатор, используется как `/{snipKey || "key"}`)</label>
+                  <input
+                    type="text"
+                    autoFocus={modal.isNew}
+                    value={snipKey}
+                    disabled={!modal.isNew}
+                    onChange={(e) => {
+                      setSnipKey(e.target.value.trim().toLowerCase());
+                      setSnipError("");
+                    }}
+                    placeholder="k8s-ops"
+                  />
+                  {!modal.isNew && (
+                    <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
+                      Key неизменяем при редактировании (snippet идентифицируется по key). Чтобы переименовать — удали и создай новый.
+                    </div>
+                  )}
+                </div>
+                <div className="field">
+                  <label>Title (отображается в Snippets списке + в заголовке тайла)</label>
+                  <input
+                    type="text"
+                    autoFocus={!modal.isNew}
+                    value={snipTitle}
+                    onChange={(e) => { setSnipTitle(e.target.value); setSnipError(""); }}
+                    placeholder="Kubernetes troubleshoot — 5-step framework"
+                  />
+                </div>
+                <div className="field">
+                  <label>Body (markdown, рендерится в тайле — поддерживает заголовки, списки, code blocks)</label>
+                  <textarea
+                    rows={8}
+                    style={{ width: "100%", fontFamily: "var(--font-mono, monospace)", fontSize: 12 }}
+                    value={snipBody}
+                    onChange={(e) => { setSnipBody(e.target.value); setSnipError(""); }}
+                    placeholder={"1. Check pod status: `kubectl get pods`\n2. Logs: `kubectl logs <pod>`\n3. ..."}
+                  />
+                </div>
+                {snipError && (
+                  <div style={{
+                    fontSize: 12,
+                    color: "var(--c-err, #f87171)",
+                    padding: "6px 8px",
+                    background: "color-mix(in srgb, var(--c-err, #f87171) 10%, transparent)",
+                    borderLeft: "3px solid var(--c-err, #f87171)",
+                    borderRadius: 4,
+                    marginBottom: 8,
+                  }}>{snipError}</div>
+                )}
+                <div className="settings-modal-actions">
+                  <button className="btn secondary" onClick={modal.onCancel}>Отмена</button>
+                  <button
+                    className="btn"
+                    onClick={() => {
+                      const k = snipKey.trim().toLowerCase();
+                      const t = snipTitle.trim();
+                      const b = snipBody.trim();
+                      if (!k) { setSnipError("Key обязателен"); return; }
+                      if (!/^[a-z0-9][a-z0-9-_]*$/i.test(k)) {
+                        setSnipError("Key: только латиница, цифры, '-', '_'. Первый символ — буква/цифра.");
+                        return;
+                      }
+                      if (!t) { setSnipError("Title обязателен"); return; }
+                      if (!b) { setSnipError("Body не может быть пустым"); return; }
+                      if (modal.isNew && modal.existingKeys.includes(k)) {
+                        setSnipError(`Snippet с key /${k} уже существует. Выбери другой key.`);
+                        return;
+                      }
+                      modal.onSubmit({ key: k, title: t, body: b });
+                    }}
+                  >Сохранить</button>
+                </div>
+              </>
             )}
           </div>
         </div>
