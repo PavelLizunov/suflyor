@@ -435,6 +435,37 @@ export default function TileWindow() {
             🔄×{generation}
           </span>
         )}
+        {/* v0.0.94: answer word count. Helps you tell at a glance
+            whether AI gave a one-liner or a deep dive without expanding
+            the tile body. Computed once from `answer` prop (won't
+            change since markdown re-renders don't alter the source).
+            Strip markdown code fences + bullets so the count reflects
+            actual prose. */}
+        {(() => {
+          const stripped = answer
+            .replace(/```[\s\S]*?```/g, "")     // drop code blocks
+            .replace(/`[^`]*`/g, "")            // drop inline code
+            .replace(/[*_#>\-]/g, " ");         // drop markdown punctuation
+          const words = stripped.split(/\s+/).filter(Boolean).length;
+          if (words === 0) return null;
+          return (
+            <span
+              className="tile-words"
+              title={lang === "en"
+                ? `Answer length: ${words} words (excluding code)`
+                : `Длина ответа: ${words} слов (без кода)`}
+              style={{
+                marginLeft: 4,
+                fontSize: 10,
+                fontFamily: "monospace",
+                opacity: 0.5,
+                userSelect: "none",
+              }}
+            >
+              {words}w
+            </span>
+          );
+        })()}
         <button
           className="tile-pin"
           data-pinned={pinned ? "true" : undefined}

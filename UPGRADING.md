@@ -26,6 +26,19 @@ for download. No auto-install (no code signing — by design).
 
 Two code-review agent passes ran on the diff. First found 3 P0/P1 (shipped .85, .86, .87). Second pass running at time of v0.0.88 ship.
 
+### → v0.0.94 (2026-05-26) — Answer word count badge in tile chrome
+
+New `Nw` badge next to ⏱ age + 🔄×N generation chips. Shows answer
+word count excluding code blocks + markdown punctuation (so the
+number reflects actual prose). Hover tooltip explains the exclusion.
+
+Use case: tell at a glance whether AI gave a one-liner ("12w") or a
+deep dive ("180w") without expanding the tile body. Particularly
+useful when the tile is collapsed (▾) — you still see the badge in
+the chrome strip.
+
+Pure frontend, computed once from `answer` prop (no re-render churn).
+
 ### → v0.0.93 (2026-05-26) — 📋 Copy-question-to-clipboard button on tiles
 
 New 📋 button in tile chrome between 🔄 reload and 🌐 translate.
