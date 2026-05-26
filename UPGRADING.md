@@ -11,6 +11,18 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.74 (2026-05-26) — QOL block 5, #22
+
+**Settings UI toggle for v0.0.73 auto-export.**
+
+New 📥 "Auto-export session" switch card in Settings → 🎨 Interface
+panel (right under the language picker). Same backend as v0.0.73 —
+just the UI to flip `auto_export_on_quit` without editing
+`config.json` by hand.
+
+No backend changes, just `Settings.tsx` + a typed `auto_export_on_quit`
+field on the cfg type.
+
 ### → v0.0.73 (2026-05-26) — QOL block 5, #21
 
 **Auto-export session to .md on quit (opt-in).**

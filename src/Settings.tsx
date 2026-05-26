@@ -85,6 +85,9 @@ type Config = {
   stealth_enabled: boolean;
   snippets: Snippet[];
   post_meeting_debrief_enabled?: boolean;
+  // v0.0.73: opt-in — auto-export latest session JSONL to a Markdown
+  // file on Desktop when the user quits via Settings → ✕ Выйти.
+  auto_export_on_quit?: boolean;
   max_session_cost_usd?: number;
   detector_skip_mic?: boolean;
   auto_tile_every_line?: boolean;
@@ -1081,6 +1084,37 @@ export default function Settings() {
                 🇬🇧 {t("interface.language.en", lang)}
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* v0.0.74: Settings UI for the v0.0.73 auto-export toggle.
+            Was config.json-only at ship time. Switch row matches the
+            existing Stealth/Coaching switch template. */}
+        <div className="card">
+          <div className="card-title">
+            {lang === "en" ? "📥 Auto-export session" : "📥 Авто-экспорт сессии"}
+          </div>
+          <div className="switch-row">
+            <div className="switch-meta">
+              <div className="switch-title">
+                {lang === "en"
+                  ? "Save session to Desktop as .md on quit"
+                  : "Сохранять сессию на Рабочий стол при выходе"}
+              </div>
+              <div className="switch-desc">
+                {lang === "en"
+                  ? "Best-effort. Failure (no journals, missing Desktop, IO error) never blocks quit. Same rendering as Replay viewer's 📥 Export button (Q+A pairs + summary, no transcript noise)."
+                  : "Best-effort. Любая ошибка (нет журналов, нет Рабочего стола, IO) НЕ блокирует выход. Тот же рендер что и кнопка 📥 в Replay (пары Q+A + сводка, без шума транскрипта)."}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="switch"
+              role="switch"
+              aria-checked={cfg.auto_export_on_quit ?? false}
+              aria-label={lang === "en" ? "Auto-export on quit" : "Авто-экспорт при выходе"}
+              onClick={() => update({ auto_export_on_quit: !(cfg.auto_export_on_quit ?? false) })}
+            />
           </div>
         </div>
 
