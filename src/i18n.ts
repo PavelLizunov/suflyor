@@ -664,6 +664,43 @@ const strings = {
   "replay.row.errors":        { ru: " · {n} ошибок",          en: " · {n} errors" },
   "replay.row.screenshot":    { ru: "📎 screenshot",          en: "📎 screenshot" },
   "replay.row.in_tok":        { ru: "~{n} in-tok",            en: "~{n} in-tok" },
+
+  // ── Polish: drag/import/snippet header (v0.0.50) ───────────────────
+  "settings.drag.tip":        {
+    ru: "Перетащи за этот заголовок чтобы подвинуть окно",
+    en: "Drag this header to move the window",
+  },
+  "settings.dnd.import.bad":  { ru: "Перетащи именно .json (получено: {ext})", en: "Drop a .json file (got: {ext})" },
+  "settings.dnd.import.ok":   { ru: "Конфиг загружен через drag-and-drop.", en: "Config loaded via drag-and-drop." },
+  "settings.import.error":    { ru: "Ошибка импорта: {err}",  en: "Import error: {err}" },
+  "meeting.error.empty":      {
+    ru: "Сначала запишите или впишите текст",
+    en: "Record voice or type text first",
+  },
+
+  // Snippets section header (CRUD modal still deferred)
+  "snippets.title":           { ru: "📋 Снипеты ({n}) — готовые ответы (zero cost)", en: "📋 Snippets ({n}) — pre-written answers (zero cost)" },
+  "snippets.expand.tip":      { ru: "Развернуть все снипеты", en: "Expand all snippets" },
+  "snippets.collapse.tip":    { ru: "Свернуть",               en: "Collapse" },
+  "snippets.expand.button":   { ru: "▼ показать",             en: "▼ show" },
+  "snippets.collapse.button": { ru: "▲ свернуть",             en: "▲ hide" },
+  "snippets.new.button":      { ru: "+ Новый",                en: "+ New" },
+  "snippets.new.tip":         {
+    ru: "Создать новый snippet (откроется 3-field форма)",
+    en: "Create a new snippet (opens a 3-field form)",
+  },
+  "snippets.new.title":       { ru: "+ Новый snippet",         en: "+ New snippet" },
+  "snippets.create.toast.ok": { ru: "/{key} создан · {n} snippets", en: "/{key} created · {n} snippets" },
+  "snippets.create.toast.fail": { ru: "Не сохранилось: {err}", en: "Failed to save: {err}" },
+  "snippets.desc":            {
+    ru: "Шаблонные ответы, разворачиваются мгновенно (без AI-вызова, $0). Нажми «Expand →» — карточка появится на tile-мониторе (см. секцию Auto-tiles).",
+    en: "Template answers, expand instantly (no AI call, $0). Click «Expand →» — the card appears on the tile monitor (see Auto-tiles section).",
+  },
+  "snippets.filter.placeholder": { ru: "Фильтр ({n} всего)…", en: "Filter ({n} total)…" },
+  "snippets.collapsed.hint":  {
+    ru: "Свёрнуто чтобы Settings не превращался в портянку. Жми «показать» сверху · или используй F4 (KB palette) во время сессии — там же доступны.",
+    en: "Collapsed so Settings doesn't become a long scroll. Click «show» at the top · or use F4 (KB palette) during a session — they're available there too.",
+  },
 } as const;
 
 export type StringKey = keyof typeof strings;

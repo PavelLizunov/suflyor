@@ -11,6 +11,40 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.50 (2026-05-26)
+
+Ninth and (likely) final i18n release. Mops up the remaining
+user-visible strings I deferred in earlier releases.
+
+Strings covered:
+- **Settings header drag tooltip**: «Перетащи за этот заголовок чтобы
+  подвинуть окно» / «Drag this header to move the window»
+- **Drag-and-drop import** of config.json: bad-extension toast,
+  success toast, error toast — all with {ext}/{err} interpolation
+- **Meeting context "record empty" error**: shown when user clicks
+  Structure without recording or typing anything first
+- **Snippets section header** (the parts visible without expanding):
+  section title with {n} count interpolation, expand/collapse
+  toggle button + tip, + New button + tip, create-success +
+  create-fail toast templates with {key}/{n}/{err} interp,
+  description label, filter input placeholder with {n} interp,
+  collapsed-hint footer, empty-state message
+
+NOT translated (deferred indefinitely — extreme edge):
+- showSnippetEdit modal internals (3-field form labels, validation
+  messages) — only seen when adding/editing a snippet, user rarely
+  does this once the defaults are configured
+- Per-snippet expand/delete row buttons inside the list — these only
+  appear when the user explicitly expands the snippet list, and the
+  labels are mostly icons + the snippet's own user-data text
+
+After this release, EVERY visible UI string the typical interview-day
+user encounters is fully translated to RU + EN. Switching via Settings
+→ 🎨 Interface → 🇷🇺/🇬🇧 takes effect immediately on the overlay
+(via window-focus re-read) and on next Settings mount.
+
+No backend changes.
+
 ### → v0.0.49 (2026-05-26)
 
 Eighth i18n release. Translates the **Replay viewer** (Settings → 📊

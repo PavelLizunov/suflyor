@@ -236,7 +236,7 @@ export default function Settings() {
           const json = paths.find((p) => p.toLowerCase().endsWith(".json"));
           if (!json) {
             if (paths.length > 0) {
-              showToast("err", `Перетащи именно .json (получено: ${paths[0].split(/[\\/]/).pop()})`);
+              showToast("err", t("settings.dnd.import.bad", lang).replace("{ext}", paths[0].split(/[\\/]/).pop() ?? ""));
             }
             return;
           }
@@ -246,10 +246,10 @@ export default function Settings() {
               const fresh = await invoke<Config>("get_config");
               if (mountedRef.current) {
                 setCfg(fresh);
-                showToast("ok", "Конфиг загружен через drag-and-drop.");
+                showToast("ok", t("settings.dnd.import.ok", lang));
               }
             } catch (e) {
-              if (mountedRef.current) showToast("err", `Ошибка импорта: ${e}`);
+              if (mountedRef.current) showToast("err", t("settings.import.error", lang).replace("{err}", String(e)));
             }
           })();
         });
@@ -448,7 +448,7 @@ export default function Settings() {
   const structurePrep = async () => {
     if (!cfg || recState !== "idle") return;
     if (!cfg.meeting_context.trim()) {
-      setRecError("Сначала запишите или впишите текст");
+      setRecError(t("meeting.error.empty", lang));
       return;
     }
     setRecError("");
@@ -488,7 +488,7 @@ export default function Settings() {
       <div
         className="settings-header"
         data-tauri-drag-region
-        title="Перетащи за этот заголовок чтобы подвинуть окно"
+        title={t("settings.drag.tip", lang)}
         onMouseDown={(e) => {
           // Only initiate drag on primary (left) button + when the target
           // is the header itself (not a child button). The button check
@@ -1219,19 +1219,19 @@ export default function Settings() {
 
       {activeSection === "tiles" && (<div className="settings-section">
         <h3>
-          📋 Snippets ({(cfg.snippets || []).length}) — pre-written answers (zero cost){" "}
+          {t("snippets.title", lang).replace("{n}", String((cfg.snippets || []).length))}{" "}
           <button
             className="btn secondary"
             style={{ height: 22, padding: "0 8px", fontSize: 11, marginLeft: 8 }}
             onClick={() => setSnippetsExpanded(v => !v)}
-            title={snippetsExpanded ? "Свернуть" : "Развернуть все снипеты"}
-          >{snippetsExpanded ? "▲ свернуть" : "▼ показать"}</button>
+            title={snippetsExpanded ? t("snippets.collapse.tip", lang) : t("snippets.expand.tip", lang)}
+          >{snippetsExpanded ? t("snippets.collapse.button", lang) : t("snippets.expand.button", lang)}</button>
           <button
             className="btn"
             style={{ height: 22, padding: "0 10px", fontSize: 11, marginLeft: 8 }}
             onClick={async () => {
               const newSnip = await showSnippetEdit(
-                "+ Новый snippet",
+                t("snippets.new.title", lang),
                 { key: "", title: "", body: "" },
                 true,
                 (cfg.snippets || []).map(s => s.key),
@@ -1241,37 +1241,35 @@ export default function Settings() {
               setCfg(next);
               try {
                 await invoke("save_config", { newCfg: next });
-                showToast("ok", `/${newSnip.key} создан · ${next.snippets.length} snippets`);
+                showToast("ok", t("snippets.create.toast.ok", lang).replace("{key}", newSnip.key).replace("{n}", String(next.snippets.length)));
                 if (!snippetsExpanded) setSnippetsExpanded(true);
               } catch (e) {
-                showToast("err", `Не сохранилось: ${e}`);
+                showToast("err", t("snippets.create.toast.fail", lang).replace("{err}", String(e)));
                 setCfg(cfg);
               }
             }}
-            title="Создать новый snippet (откроется 3-field форма)"
-          >+ Новый</button>
+            title={t("snippets.new.tip", lang)}
+          >{t("snippets.new.button", lang)}</button>
         </h3>
         {snippetsExpanded && (
           <div className="field">
-            <label>
-              Шаблонные ответы, разворачиваются мгновенно (без AI-вызова, $0). Нажми «Expand →» — карточка появится на tile-мониторе (см. секцию Auto-tiles).
-            </label>
+            <label>{t("snippets.desc", lang)}</label>
             <input
               type="text"
               value={snippetFilter}
               onChange={(e) => setSnippetFilter(e.target.value)}
-              placeholder={`Фильтр (${(cfg.snippets || []).length} всего)…`}
+              placeholder={t("snippets.filter.placeholder", lang).replace("{n}", String((cfg.snippets || []).length))}
               style={{ marginTop: 4 }}
             />
           </div>
         )}
         {!snippetsExpanded ? (
           <div style={{ fontSize: 11, color: "var(--c-text-dim)" }}>
-            Свёрнуто чтобы Settings не превращался в портянку. Жми «показать» сверху · или используй F4 (KB palette) во время сессии — там же доступны.
+            {t("snippets.collapsed.hint", lang)}
           </div>
         ) : (cfg.snippets || []).length === 0 ? (
           <div style={{ fontSize: 12, color: "var(--c-text-mute)" }}>
-            Нет снипетов. Конфиг сбросит дефолтные при следующем перезапуске.
+            {lang === "en" ? "No snippets. Config will reset to defaults on next restart." : "Нет снипетов. Конфиг сбросит дефолтные при следующем перезапуске."}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 320, overflowY: "auto" }}>
