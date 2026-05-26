@@ -1,5 +1,45 @@
 # Autonomous work plan
 
+## ☀️ Wake-up summary — marathon retry 2026-05-26 04:52 → ~07:52 (~3h)
+
+**TL;DR:** 4 releases shipped (v0.0.10 → v0.0.13) closing every backlog item except deferred-with-reason. 239 cargo tests pass · clippy `-D warnings` clean · vite build clean. README has 4 fresh screenshots from running v0.0.13. v0.0.5 slot-collision fix LIVE-VERIFIED on real hardware (6 tiles in 6 unique slots, gap reuse confirmed).
+
+**Releases this marathon block:**
+- **v0.0.10** — overlay bar drag fix + snippet CRUD modal
+- **v0.0.11** — Replay viewer per-kind filter chips + Tile Esc-to-close
+- **v0.0.12** — separate "💰 over budget" chip (was conflated with rate-limit)
+- **v0.0.13** — over-budget chip lifecycle: emits cost:update {usd:0} on session restart; flashFlag pattern + tracked timer ref (no stacked timers); listener consolidation. UPGRADING.md chip-emoji history fixed.
+
+**Verified live (not just unit tests):**
+- v0.0.10 overlay drag worked end-to-end (Win32 GetWindowRect: 200,40 → 661,246)
+- v0.0.13 6× F7 spawn → perfect 2×3 grid placement (no overlap)
+- Gap reuse after middle-tile close → new spawn fills the gap
+
+**Docs shipped:**
+- README screenshots all 4 refreshed (overlay-bar, kb-palette, tile, settings)
+- UPGRADING.md per-version migration notes v0.0.1 → v0.0.13
+- CONTRIBUTING.md for forkers + version-bump checklist
+- docs/architecture.md line counts and test count current (239)
+- docs/security-audit-2026-05-26.md cargo + npm audit clean
+
+**Honest gaps + edge cases caught but not fixed:**
+- **Ghost-tile bug** (developer-only): if overlay-mvp.exe is force-killed mid-flight, WebView2 child tiles persist as orphans; subsequent fresh launch sees empty active list and a new spawn at slot 0 will overlap with the orphan. Not a normal-flow bug — graceful shutdown cleans children. Fix would need Win32 enumeration at startup (non-trivial). Documented, deferred.
+- **Integration tests for chip emit** — adding tests for `start_session` emitting cost:update would need Tauri's MockRuntime; existing tests cover only pure-fn portions. Same gap as docs/architecture.md "honest gaps" already lists.
+
+**Backlog state (refreshed 2026-05-26T04:52):**
+- #1 overlay drag → DONE (v0.0.10, live-verified)
+- #2 snippet modal → DONE (v0.0.10)
+- #3 Replay filter → DONE (v0.0.11)
+- #4 Tile Esc → DONE (v0.0.11)
+- #5 manual spawn KB → DONE (live-verified via F7)
+- #6 fresh agent re-review → DONE (3 findings, all fixed in v0.0.13)
+- #7 CONTRIBUTING.md → DONE
+- #8 README screenshots → DONE
+- #9 cargo audit → DONE (security-audit doc)
+- #10 npm audit → DONE (security-audit doc)
+
+---
+
 ## Marathon snapshot — Day 2 (verification + Settings walkthrough + live interview test)
 
 **This session's mandate:** "Проверяй что отработало а что нет" → systematic verification of all marathon claims · "Делай" → fix 3 bugs + run full interview test · "/auto 3h" → autonomous +3h with new Groq key · "Также проверь что в настройках прям потыкай, поскрить, посмотри баги" → systematic Settings walkthrough.
