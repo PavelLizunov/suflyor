@@ -11,6 +11,29 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.63 (2026-05-26) — QOL block 5, #11
+
+**Bookmark last AI answer — ⭐ button + `bookmarks.md` file.**
+
+Two new Tauri commands:
+- `bookmark_last_answer` — reads `last_question` + `last_answer` from
+  RuntimeState, appends to `%APPDATA%\overlay-mvp\bookmarks.md` with
+  H2 question, body markdown, and `YYYY-MM-DD` timestamp footer.
+  Each entry separated by `---`.
+- `open_bookmarks` — opens the file in the default markdown app
+  (Windows: ShellExecute via `cmd /C start`). Creates the file with a
+  friendly placeholder if missing so Notepad shows something useful.
+
+UI:
+- **Overlay**: ⭐ button between PTT and 💡, click → bookmark current
+  Q+A
+- **Settings → 🔧 Advanced**: 📚 Bookmarks button under Diagnostic
+  dump, opens the file
+
+Use case: AI nails a great explanation of consistent hashing → click
+⭐ → it's now in your personal study file. Open after the interview to
+review what worked.
+
 ### → v0.0.62 (2026-05-26) — QOL block 5, #10
 
 **Session elapsed-time chip in overlay (⏱ mm:ss).**

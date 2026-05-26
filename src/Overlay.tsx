@@ -1128,6 +1128,24 @@ export default function Overlay() {
             padding: 0,
           }}
         >F3·F4·F6·F8·F9·F10·F11&nbsp;ℹ</button>
+        {/* v0.0.63: bookmark last answer to %APPDATA%/bookmarks.md. */}
+        <button
+          className="icon-btn icon-only"
+          type="button"
+          title={lang === "en"
+            ? "Save last Q+A to bookmarks.md (open via Settings → Advanced)"
+            : "Сохранить последний Q+A в bookmarks.md (открыть через Settings → Обновления)"}
+          aria-label={lang === "en" ? "Bookmark last answer" : "Сохранить последний ответ"}
+          onClick={async () => {
+            try {
+              await invoke<string>("bookmark_last_answer");
+            } catch (err) {
+              console.warn("bookmark_last_answer:", err);
+            }
+          }}
+        >
+          ⭐
+        </button>
         {/* v0.0.61: AI follow-up suggestions button. Click → fetch
             last Q+A from backend → call tile_followups → spawn new tile
             with 3 follow-up questions as bullet markdown. */}

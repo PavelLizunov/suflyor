@@ -2094,6 +2094,80 @@ fn ymd_from_unix_ms(ms: i64) -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
+/// v0.0.63: append the most recent Q+A to a persistent bookmarks.md
+/// in the app data dir. Lets the user save particularly good AI
+/// answers for later review.
+///
+/// File location: `%APPDATA%\overlay-mvp\bookmarks.md`.
+/// Format: each entry separated by `---`, with H2 question + body
+/// markdown + ISO 8601 timestamp footer.
+#[tauri::command]
+fn bookmark_last_answer(
+    window: tauri::WebviewWindow,
+    rt: tauri::State<'_, SharedRuntime>,
+) -> Result<String, String> {
+    assert_overlay(&window)?;
+    let (q, a) = {
+        let s = rt.lock();
+        match (s.last_question.clone(), s.last_answer.clone()) {
+            (Some(q), Some(a)) if !q.is_empty() && !a.is_empty() => (q, a),
+            _ => return Err("no AI Q+A this session yet".into()),
+        }
+    };
+    let data_dir = dirs::data_dir()
+        .ok_or_else(|| "no app data dir".to_string())?
+        .join("overlay-mvp");
+    std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+    let path = data_dir.join("bookmarks.md");
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    let ymd = ymd_from_unix_ms(ts);
+    let entry = format!("\n## {q}\n\n{a}\n\n_{ymd}_\n\n---\n");
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|e| e.to_string())?;
+    file.write_all(entry.as_bytes()).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// v0.0.63: open bookmarks.md in the default app (Notepad on Windows).
+/// Returns the path so Settings can show "Saved: ..." toast.
+#[tauri::command]
+async fn open_bookmarks(window: tauri::WebviewWindow) -> Result<String, String> {
+    assert_overlay(&window)?;
+    let data_dir = dirs::data_dir()
+        .ok_or_else(|| "no app data dir".to_string())?
+        .join("overlay-mvp");
+    let path = data_dir.join("bookmarks.md");
+    if !path.exists() {
+        // Create an empty file with a friendly header so Notepad opens
+        // something meaningful instead of erroring.
+        std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+        std::fs::write(&path, "# suflyor bookmarks\n\n(no bookmarks yet — click ⭐ in the overlay after an AI answer)\n").map_err(|e| e.to_string())?;
+    }
+    // Use Tauri's opener plugin via raw command — same pattern as
+    // open_sessions_folder elsewhere.
+    let path_str = path.to_string_lossy().to_string();
+    // Spawn detached; on Windows uses ShellExecuteW to open with the
+    // default associated app for .md (usually Notepad or the user's
+    // chosen editor).
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", "", &path_str])
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn();
+    }
+    Ok(path_str)
+}
+
 /// v0.0.61: snapshot of the last Q+A pair (used by the overlay's
 /// 💡 button to seed `tile_followups`). Reads `last_question` +
 /// `last_answer` from RuntimeState — populated by every AI flow
@@ -2506,6 +2580,8 @@ pub fn run() {
             read_all_session_stats,
             tile_followups,
             get_last_qa,
+            bookmark_last_answer,
+            open_bookmarks,
             set_stealth,
             list_snippets,
             expand_snippet,

@@ -1829,6 +1829,30 @@ export default function Settings() {
               {t("adv.dump.note", lang)}
             </div>
           </div>
+          {/* v0.0.63: open bookmarks.md (created by ⭐ button in overlay). */}
+          <div style={{ marginTop: 8 }}>
+            <button
+              className="btn secondary"
+              onClick={async () => {
+                try {
+                  const path = await invoke<string>("open_bookmarks");
+                  showToast("ok", (lang === "en" ? "Opened: " : "Открыто: ") + path);
+                } catch (e) {
+                  showToast("err", (lang === "en" ? "Open failed: " : "Не открылось: ") + String(e));
+                }
+              }}
+              title={lang === "en"
+                ? "Open %APPDATA%/overlay-mvp/bookmarks.md in your default markdown app (created by ⭐ button in overlay)"
+                : "Открыть %APPDATA%/overlay-mvp/bookmarks.md (создаётся через ⭐ в overlay)"}
+            >
+              📚 {lang === "en" ? "Bookmarks" : "Закладки"}
+            </button>
+            <div style={{ fontSize: 11, color: "var(--c-text-dim)", marginTop: 4 }}>
+              {lang === "en"
+                ? "Click ⭐ in the overlay after an AI answer to append to this file."
+                : "Жми ⭐ в overlay после AI ответа чтобы добавить в этот файл."}
+            </div>
+          </div>
         </div>
 
         {/* v0.0.32: moved Replay/Logs/Export×2/Import here from the footer.
