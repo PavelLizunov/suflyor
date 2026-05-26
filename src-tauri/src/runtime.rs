@@ -94,6 +94,16 @@ pub struct RuntimeState {
     /// coughing/sneezing without polluting the transcript. Toggle
     /// via 🔇 chip in overlay bar. Not persisted (runtime-only).
     pub mic_muted: bool,
+    /// v0.0.79: simple per-session Q→A cache for the auto-tile path.
+    /// Key is normalized question (lowercase, whitespace-collapsed,
+    /// first 200 chars). Value is (full_answer, insertion_instant).
+    /// On detector hit, we look up the normalized key; if found and
+    /// age < 10 min, reuse the cached answer + skip the AI call.
+    /// Doesn't interact with v0.0.64 dedup (which has 60s window):
+    /// dedup short-circuits earlier and prevents the second spawn
+    /// entirely. Cache covers the window where dedup expired but the
+    /// answer is still likely valid. Cleared on start_session.
+    pub qa_cache: HashMap<String, (String, std::time::Instant)>,
 }
 
 /// Three atomic timestamps (unix ms) bumped by their respective subsystems.
@@ -397,6 +407,10 @@ pub async fn start_session(
         guard.meeting_ending_emitted = false;
         // v0.0.64: drop recent-question dedup cache for fresh session.
         guard.recent_question_prefixes.clear();
+        // v0.0.79: drop AI response cache so a new meeting doesn't
+        // inherit stale answers from the previous one (different
+        // context entirely).
+        guard.qa_cache.clear();
         if let Some(j) = guard.journal.take() {
             close_journal_with_summary(j);
         }
@@ -883,6 +897,66 @@ async fn maybe_spawn_tile(
         s.recent_question_prefixes.push((normalized, now));
     }
 
+    // v0.0.79: AI response cache — check before paying for an AI call.
+    // Key normalization: lowercase + collapse whitespace + first 200
+    // chars (more characters than dedup uses since cache covers a much
+    // wider matching surface). TTL 10 min — long enough to catch the
+    // pattern "interviewer asked X at 5:00 and again at 25:00" but
+    // short enough that stale context doesn't ruin freshness.
+    let cache_key: String = text
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(200)
+        .collect();
+    let cache_hit: Option<String> = {
+        let mut s = rt.lock();
+        let now = std::time::Instant::now();
+        let ttl = std::time::Duration::from_secs(600);
+        // Prune stale entries opportunistically — cheap O(n) walk
+        // since cache stays tiny (<100 entries even in long sessions).
+        s.qa_cache.retain(|_, (_, ts)| now.duration_since(*ts) < ttl);
+        s.qa_cache.get(&cache_key).map(|(a, _)| a.clone())
+    };
+    if let Some(cached_answer) = cache_hit {
+        log::info!(
+            "qa_cache HIT (avoided AI call): {}",
+            text.chars().take(60).collect::<String>()
+        );
+        // Spawn the tile with cached answer + journal the reuse so it
+        // shows in Replay. Skip AI request/response events — those are
+        // for actual model calls.
+        let (preferred_monitor, stealth) = {
+            let c = cfg.read();
+            (c.tile_monitor_name.clone(), c.stealth_enabled)
+        };
+        let trigger_text_for_q = match &trigger {
+            Trigger::Question(q) => q.clone(),
+            Trigger::Keyword(kw, _) => kw.clone(),
+        };
+        store_last_qa(&rt, &trigger_text_for_q, &cached_answer);
+        match crate::tile::spawn_tile_with_stealth(
+            &app,
+            &tiles,
+            trigger_text_for_q.clone(),
+            cached_answer.clone(),
+            preferred_monitor,
+            stealth,
+            crate::tile::TileKind::Auto,
+        ) {
+            Ok(label) => journal.write(&JournalEvent::TileSpawn {
+                unix_ms: now_unix_ms(),
+                label: &label,
+                question: &trigger_text_for_q,
+                answer: &cached_answer,
+            }),
+            Err(e) => log::warn!("cached-tile spawn failed: {e:#}"),
+        }
+        return;
+    }
+
     log::info!("auto-tile triggered: {:?}", trigger);
 
     // Cost budget WARN (not block) — see over_cost_budget docstring for
@@ -1009,6 +1083,30 @@ async fn maybe_spawn_tile(
         }
     };
     let latency_ms = t0.elapsed().as_millis() as u64;
+
+    // v0.0.79: cache the answer so future identical questions in this
+    // session skip the AI call. cache_key was computed before the AI
+    // request (same normalization as the cache_hit check above).
+    // Bounded growth: if we ever hit 256 entries (unrealistic for a
+    // single session but defense in depth), drop the oldest half.
+    {
+        let mut s = rt.lock();
+        if s.qa_cache.len() >= 256 {
+            // Sort entries by ts and drop the older half. Done in-place
+            // by collecting expired keys — O(n log n) but only fires
+            // once per session if at all.
+            let now = std::time::Instant::now();
+            let mut by_age: Vec<(String, std::time::Duration)> = s.qa_cache
+                .iter()
+                .map(|(k, (_, ts))| (k.clone(), now.duration_since(*ts)))
+                .collect();
+            by_age.sort_by_key(|(_, age)| std::cmp::Reverse(*age));
+            for (k, _) in by_age.into_iter().take(128) {
+                s.qa_cache.remove(&k);
+            }
+        }
+        s.qa_cache.insert(cache_key, (answer.clone(), std::time::Instant::now()));
+    }
 
     // Accumulate cost + notify UI.
     let micro = ai::cost_microcents(&model, usage.input, usage.output);

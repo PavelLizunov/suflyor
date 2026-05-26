@@ -11,6 +11,31 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.79 (2026-05-26) — QOL block 5, #27
+
+**AI response cache — auto-tile path skips identical re-asks (10 min TTL).**
+
+New `RuntimeState.qa_cache: HashMap<String, (String, Instant)>`. On
+detector hit, the trigger text is normalized (lowercase, whitespace-
+collapsed, first 200 chars) and used as a cache key. If the same
+question was asked + answered within the last 10 minutes, the cached
+answer is reused — tile spawns instantly, no AI call, $0.
+
+Complements v0.0.64 dedup (60s window — short-circuits earlier and
+prevents the second spawn entirely). Cache covers the window where
+dedup expired but the answer is still likely valid.
+
+Bounded growth: if cache hits 256 entries (unrealistic in normal use),
+oldest 128 get pruned. Cleared on every `start_session` so a new
+meeting doesn't inherit stale answers.
+
+Journal: cache hits write a `tile_spawn` event (so Replay shows the
+tile) but skip `ai_request`/`ai_response` — those are reserved for
+actual model calls so cost stats stay accurate.
+
+Use case: interviewer asks "what about kubernetes" at 0:05 and again
+at 0:25 → second time = instant tile, no second AI call.
+
 ### → v0.0.78 (2026-05-26) — QOL block 5, #26
 
 **Quick clipboard → meeting_context button.**
