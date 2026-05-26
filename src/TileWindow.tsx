@@ -120,8 +120,26 @@ export default function TileWindow() {
     listen<void>("tile:expand-all", () => setCollapsed(false))
       .then((u) => unlistens.push(u))
       .catch(() => {});
+    // v0.0.90: bulk pin / unpin via overlay 🔒 chip. Each tile flips
+    // its pin state via the existing pin_tile Tauri command (which has
+    // no assert_overlay since pin is tile-state). State follows; UI
+    // updates from setPinned.
+    const applyPin = async (next: boolean) => {
+      try {
+        await invoke("pin_tile", { label: `tile-${id}`, pinned: next });
+        setPinned(next);
+      } catch (err) {
+        console.warn("bulk pin invoke:", err);
+      }
+    };
+    listen<void>("tile:pin-all", () => { void applyPin(true); })
+      .then((u) => unlistens.push(u))
+      .catch(() => {});
+    listen<void>("tile:unpin-all", () => { void applyPin(false); })
+      .then((u) => unlistens.push(u))
+      .catch(() => {});
     return () => { unlistens.forEach((u) => u()); };
-  }, []);
+  }, [id]);
 
   // v0.0.69: tick tile age every 5s. Formats: <60s as "Ns", <60m as
   // "Nm", ≥60m as "1h+". Cheap interval (one setInterval per tile

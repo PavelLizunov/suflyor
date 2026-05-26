@@ -112,6 +112,9 @@ export default function Overlay() {
   // doesn't need to know about this UX construct. Starts false on
   // every overlay mount; not persisted.
   const [allCollapsed, setAllCollapsed] = useState<boolean>(false);
+  // v0.0.90: bulk pin state. Same broadcast pattern as collapse-all.
+  // Tiles invoke pin_tile(true/false) on the event. Frontend-only.
+  const [allPinned, setAllPinned] = useState<boolean>(false);
   // Failure HUD — 3 dots (audio/stt/ai). null = no signal received yet.
   const [health, setHealth] = useState<HealthPayload | null>(null);
   // Voice coach — live mic WPM / filler density. null = backend hasn't
@@ -1338,6 +1341,41 @@ export default function Overlay() {
           }}
         >
           📦
+        </button>
+        {/* v0.0.90: 🔒 bulk pin / unpin all tiles. Emits Tauri event
+            that tile windows listen for; each invokes pin_tile on its
+            own label. Visible "this whole grid is locked" feedback
+            (golden tint when ON). Useful when you've curated a set of
+            tiles for an interview and want to make sure the TTL
+            reaper doesn't claim them. */}
+        <button
+          type="button"
+          className="hint"
+          style={{
+            fontFamily: "monospace",
+            fontSize: 11,
+            padding: "0 6px",
+            borderRadius: 4,
+            border: "1px solid var(--c-border-soft)",
+            background: allPinned ? "rgba(220, 180, 50, 0.22)" : "transparent",
+            cursor: "pointer",
+            color: allPinned ? "rgba(255, 220, 120, 0.95)" : "var(--c-text-mute)",
+          }}
+          title={lang === "en"
+            ? `${allPinned ? "Unpin" : "Pin"} all visible tiles (bulk 📌)`
+            : `${allPinned ? "Открепить" : "Закрепить"} все видимые тайлы (массово 📌)`}
+          aria-label={lang === "en" ? "Pin all tiles" : "Закрепить все тайлы"}
+          aria-pressed={allPinned}
+          onClick={() => {
+            setAllPinned((v) => {
+              const next = !v;
+              emit(next ? "tile:pin-all" : "tile:unpin-all")
+                .catch((e) => console.warn("pin-all emit:", e));
+              return next;
+            });
+          }}
+        >
+          🔒
         </button>
         {/* v0.0.62: session elapsed timer chip. Shown while session
             running (sessionStartMs set). Yellow at 45 min, red at 60. */}

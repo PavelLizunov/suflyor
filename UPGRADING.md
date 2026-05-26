@@ -26,6 +26,25 @@ for download. No auto-install (no code signing — by design).
 
 Two code-review agent passes ran on the diff. First found 3 P0/P1 (shipped .85, .86, .87). Second pass running at time of v0.0.88 ship.
 
+### → v0.0.90 (2026-05-26) — 🔒 Bulk pin/unpin chip in overlay
+
+New 🔒 chip after the 📦 collapse-all chip. Click → emits Tauri
+event `tile:pin-all` → each tile invokes `pin_tile(label, true)`
+on itself. Click again → emits `tile:unpin-all` → all unpin.
+
+ON state tinted gold so it's visible "this grid is locked, TTL
+reaper won't claim anything". Frontend-only — backend's pin_tile
+command (no assert_overlay since pin is tile-state) does the
+actual work per-tile.
+
+Use case: you've curated 3 tiles you want to reference throughout
+a 60-min interview — without bulk pin, you'd need to click 📌 on
+each. One click locks them all; the TTL reaper respects pin per
+v0.0.5 design.
+
+Pin status survives 📦 collapse — collapse + pin are independent
+states.
+
 ### → v0.0.89 (2026-05-26) — 🌐 Translate tile button
 
 New 🌐 button in tile chrome between 🔄 reload and × close. Click →
