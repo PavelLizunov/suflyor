@@ -97,6 +97,17 @@ pub fn register_all(app: &AppHandle, _cfg: SharedConfig) -> Vec<String> {
         let _ = app_h.emit_to("overlay", "hotkey:kb-palette", ());
     });
 
+    // v0.0.77: F1 — toggle the hotkey-help popover. Same UX as clicking
+    // the ℹ button in the overlay bar. Useful when the user forgets
+    // which keys are bound and wants the cheatsheet on top of their
+    // current view. Emits an event so the frontend can toggle its
+    // existing hotkeyHelpOpen state (which already handles window
+    // resize + outside-click dismiss).
+    let app_h = app.clone();
+    try_register(app, "F1 (help)", Code::F1, &mut warnings, move || {
+        let _ = app_h.emit_to("overlay", "hotkey:help", ());
+    });
+
     // F3 — Reask: re-ask the last question with LATEST transcript +
     // previous answer as context. Useful when conversation moved on
     // and the AI's first take is stale.

@@ -855,6 +855,15 @@ export default function Overlay() {
       })
     );
 
+    // v0.0.77: F1 toggles the same hotkey-help popover as clicking ℹ.
+    // Just flips state — the existing useEffect handles window resize
+    // + outside-click dismiss for both entry paths.
+    unlistens.push(
+      listen<void>("hotkey:help", () => {
+        setHotkeyHelpOpen((v) => !v);
+      })
+    );
+
     unlistens.push(
       listen<{ text: string }>("tile:rate-limited", () => {
         flashFlag(rateTimerRef, setRateLimited, true, 3000);

@@ -11,6 +11,22 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.77 (2026-05-26) — QOL block 5, #25
+
+**F1 — toggle hotkey-help popover (global hotkey).**
+
+New F1 global hotkey toggles the same hotkey/indicator cheatsheet
+popover that the ℹ button in the overlay bar opens. Same auto-resize
+and outside-click dismiss behavior — F1 is just a second entry point.
+
+Useful when you forget which keys are bound mid-meeting and don't
+want to drag the mouse to the tiny ℹ. F1 anywhere → cheatsheet up.
+
+`hotkeys.rs` now registers F1 alongside F3/F4/F6/F8/F9/F10/F11.
+Frontend listens for `hotkey:help` and flips `hotkeyHelpOpen`.
+
+README hotkey table updated.
+
 ### → v0.0.76 (2026-05-26) — QOL block 5, #24
 
 **Polish: audio refresh button + meeting_context char counter.**
