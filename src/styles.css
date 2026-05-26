@@ -388,23 +388,52 @@ kbd {
   color: var(--c-text);
 }
 
-/* Question (interviewer line) — neutral so kind only shows on chrome */
+/* Question (interviewer line) — neutral so kind only shows on chrome.
+ * v0.0.20: max 4 lines (~78px) tall + own scroll so a long question
+ * doesn't squeeze the answer area. Hover-to-expand grows it up to
+ * 50% of the tile via the :hover rule below — release mouse to collapse.
+ */
 .tile-q {
   padding: var(--s-3) var(--s-4) var(--s-2);
   font: 500 var(--fs-13)/1.4 var(--font-ui);
   color: var(--c-text);                /* explicitly neutral          */
   border-bottom: 1px solid var(--c-border-soft);
+  max-height: 78px;                    /* ~4 lines @ 1.4 line-height  */
+  overflow-y: auto;
+  flex: 0 0 auto;
+  transition: max-height var(--dur-base) var(--ease);
 }
+.tile-q:hover { max-height: 200px; }
 
 /* Body (Claude's streamed answer) */
 .tile-body {
-  padding: var(--s-3) var(--s-4) var(--s-4);
+  /* v0.0.20: bumped bottom padding so the very last line of an answer
+   * isn't cut off at the scroll edge. With overflow:auto, padding-bottom
+   * is part of the scrollable extent — used to be s-4 (~12px) which
+   * felt clipped on long answers. */
+  padding: var(--s-3) var(--s-4) var(--s-5);
   font-size: var(--fs-13);
   line-height: 1.55;
   color: var(--c-text);
   overflow-y: auto;
+  /* CRITICAL: overscroll-behavior contain — without it wheel events at
+   * the body edge bubble to the WebView2 host window, which on small
+   * tiles makes "scroll to bottom" feel like it stops short. */
+  overscroll-behavior: contain;
   flex: 1 1 auto;
   min-height: 0;
+}
+
+/* v0.0.20: keyword highlighting. Server passes ?hl=k1,k2,k3 — TileWindow
+ * wraps matches in <mark className="tile-hl">. Soft yellow that reads
+ * on the glass background without screaming. */
+.tile-hl {
+  background: color-mix(in srgb, #facc15 35%, transparent);
+  color: var(--c-text);
+  padding: 0 2px;
+  margin: 0 -1px;
+  border-radius: 3px;
+  font-weight: 600;
 }
 
 /* Markdown content — hierarchy intentionally flat (h1/h2/h3 same size) */

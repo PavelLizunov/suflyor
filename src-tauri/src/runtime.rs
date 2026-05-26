@@ -884,8 +884,46 @@ async fn maybe_spawn_tile(
         (c.tile_monitor_name.clone(), c.stealth_enabled)
     };
 
+    // v0.0.20: collect keywords to highlight inside the tile content.
+    // For Keyword triggers, the matched keyword is obvious. For Question
+    // triggers, scan the trigger_keywords config + question tokens
+    // intersection — usually 0-3 matches per question.
+    let highlights: Vec<String> = match &trigger {
+        Trigger::Keyword(kw, _) => vec![kw.clone()],
+        Trigger::Question(q) => {
+            let q_lower = q.to_lowercase();
+            let q_tokens: std::collections::HashSet<&str> = q_lower
+                .split(|c: char| !c.is_alphanumeric())
+                .filter(|s| s.len() >= 3)
+                .collect();
+            let mut hits: Vec<String> = trigger_keywords
+                .split_whitespace()
+                .filter(|kw| {
+                    let lower = kw.to_lowercase();
+                    q_tokens.contains(lower.as_str())
+                })
+                .take(8)
+                .map(|s| s.to_string())
+                .collect();
+            // Also include longer keywords (>=4 chars) that appear as
+            // substring in the question — catches multi-word entries like
+            // "kubernetes operator" that don't tokenise the same way.
+            if hits.len() < 8 {
+                for kw in trigger_keywords.split_whitespace() {
+                    if kw.len() >= 4 && q_lower.contains(&kw.to_lowercase())
+                        && !hits.iter().any(|h| h.eq_ignore_ascii_case(kw))
+                    {
+                        hits.push(kw.to_string());
+                        if hits.len() >= 8 { break; }
+                    }
+                }
+            }
+            hits
+        }
+    };
+
     store_last_qa(&rt, &question_label, &answer);
-    match crate::tile::spawn_tile_with_stealth(&app, &tiles, question_label.clone(), answer.clone(), preferred_monitor, stealth, crate::tile::TileKind::Auto) {
+    match crate::tile::spawn_tile_with_highlight(&app, &tiles, question_label.clone(), answer.clone(), preferred_monitor, stealth, crate::tile::TileKind::Auto, highlights) {
         Ok(label) => {
             journal.write(&JournalEvent::TileSpawn {
                 unix_ms: now_unix_ms(),

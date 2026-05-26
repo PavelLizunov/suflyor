@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import ReactMarkdown from "react-markdown";
@@ -30,6 +30,18 @@ export default function TileWindow() {
   // Old backend without seq param → undefined → don't render the badge.
   const seqRaw = params.get("seq");
   const seq = seqRaw && /^\d+$/.test(seqRaw) ? parseInt(seqRaw, 10) : null;
+  // v0.0.20: comma-separated keywords to highlight (in question + answer).
+  // Backend caps at 8 keywords / 150 chars; we defensively cap again
+  // client-side at 12 in case URL was hand-crafted.
+  const hlList: string[] = (() => {
+    const raw = params.get("hl");
+    if (!raw) return [];
+    return safeDecode(raw)
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length >= 2)
+      .slice(0, 12);
+  })();
 
   const [answer] = useState(answerInitial);
   const [pinned, setPinned] = useState(false);
@@ -110,6 +122,41 @@ export default function TileWindow() {
     }
   };
 
+  // v0.0.20: build a single regex out of the highlight list once per
+  // render — used to split text nodes and wrap matches in <mark>.
+  // Escape regex special chars per keyword. Case-insensitive. \b only
+  // works on ASCII so for Cyrillic/mixed words we use lookaround on
+  // \w (which JS treats as [A-Za-z0-9_] — still imperfect for Cyrillic
+  // but better than substring-only matches). Plain string match anywhere
+  // is fine for short keywords like "k8s".
+  const hlRegex = (() => {
+    if (hlList.length === 0) return null;
+    const escaped = hlList.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    try {
+      return new RegExp(`(${escaped.join("|")})`, "gi");
+    } catch { return null; }
+  })();
+
+  const renderWithHighlights = (text: string): React.ReactNode => {
+    if (!hlRegex) return text;
+    const parts = text.split(hlRegex);
+    if (parts.length === 1) return text;
+    return parts.map((p, i) =>
+      i % 2 === 1
+        ? <mark key={i} className="tile-hl">{p}</mark>
+        : <React.Fragment key={i}>{p}</React.Fragment>
+    );
+  };
+
+  // Markdown component override: walk text nodes and highlight.
+  // Only override what we need (p, li, h*, em, strong, code stay markdown).
+  const markdownComponents = hlRegex ? {
+    text: ({ children }: { children?: React.ReactNode }) => {
+      if (typeof children === "string") return <>{renderWithHighlights(children)}</>;
+      return <>{children}</>;
+    },
+  } : undefined;
+
   return (
     <div
       ref={rootRef}
@@ -159,9 +206,11 @@ export default function TileWindow() {
           ×
         </button>
       </div>
-      <div className="tile-q" title={question}>{question}</div>
+      <div className="tile-q" title={question}>{renderWithHighlights(question)}</div>
       <div className="tile-body markdown" role="region" aria-label="AI answer body">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+          {answer}
+        </ReactMarkdown>
       </div>
     </div>
   );

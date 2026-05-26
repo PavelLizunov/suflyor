@@ -11,6 +11,21 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.20 (2026-05-26)
+
+- **No config schema change.**
+- **Keyword highlighting** в тайлах: ключевые слова из `trigger_keywords`
+  config'а подсвечиваются жёлтым в question + answer body.
+  Сервер передаёт через `?hl=k1,k2,...` (cap 8 keywords / 150 chars URL).
+- **Question max-height 78px** (~4 строки) + scroll. Долгий вопрос больше
+  не давит ответ — hover на вопрос разворачивает до 200px. Ответу всегда
+  гарантировано большую часть высоты тайла.
+- **Bottom-scroll fix**: tile-body bumped padding-bottom + added
+  `overscroll-behavior: contain` так что wheel-events не уезжают в host
+  window. Раньше последние строки длинного ответа не доскролливались.
+- Backend: new helper `spawn_tile_with_highlight(...)` параллельно с
+  existing `spawn_tile_with_stealth(...)` — старые call sites не меняются.
+
 ### → v0.0.19 (2026-05-26)
 
 - **No config schema change.**

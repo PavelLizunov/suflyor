@@ -206,6 +206,23 @@ pub fn spawn_tile_with_stealth(
     stealth: bool,
     kind: TileKind,
 ) -> Result<String> {
+    spawn_tile_with_highlight(app, tiles, question, answer, preferred_monitor, stealth, kind, Vec::new())
+}
+
+/// v0.0.20: like `spawn_tile_with_stealth` but accepts a list of keywords
+/// to highlight in the tile's question + answer (renders as `<mark>` in
+/// the WebView). Callers who don't have a specific keyword pass empty.
+#[allow(clippy::too_many_arguments)]
+pub fn spawn_tile_with_highlight(
+    app: &AppHandle,
+    tiles: &SharedTiles,
+    question: String,
+    answer: String,
+    preferred_monitor: Option<String>,
+    stealth: bool,
+    kind: TileKind,
+    highlights: Vec<String>,
+) -> Result<String> {
     let id = format!(
         "{:x}",
         std::time::SystemTime::now()
@@ -270,9 +287,26 @@ pub fn spawn_tile_with_stealth(
     // v0.0.19: per-tile sequence number for chronological reading order.
     // Fetch-add — atomic so concurrent spawns get unique numbers.
     let seq = TILE_SEQ_COUNTER.fetch_add(1, Ordering::SeqCst) + 1;
+    // v0.0.20: pass highlight keywords via &hl= comma-separated.
+    // Cap to 8 keywords, total 150 chars — URL has practical limits and
+    // more wouldn't fit on a 380px tile anyway.
+    let hl_param = if highlights.is_empty() {
+        String::new()
+    } else {
+        let mut joined: Vec<String> = Vec::new();
+        let mut total = 0usize;
+        for kw in highlights.iter().take(8) {
+            if kw.is_empty() { continue; }
+            let enc = urlencoding_min(kw);
+            if total + enc.len() + 1 > 150 { break; }
+            total += enc.len() + 1;
+            joined.push(enc);
+        }
+        if joined.is_empty() { String::new() } else { format!("&hl={}", joined.join(",")) }
+    };
     let route = format!(
-        "index.html?tile=1&id={}&kind={}&seq={}&q={}&a={}",
-        id, kind.as_str(), seq, q_enc, a_enc
+        "index.html?tile=1&id={}&kind={}&seq={}{}&q={}&a={}",
+        id, kind.as_str(), seq, hl_param, q_enc, a_enc
     );
 
     let window = match WebviewWindowBuilder::new(app, &label, WebviewUrl::App(route.into()))
