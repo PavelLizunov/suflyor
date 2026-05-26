@@ -11,6 +11,23 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.64 (2026-05-26) — QOL block 5, #12
+
+**Auto-tile dedup — skip duplicate spawns within 60 sec.**
+
+Stops the "interviewer says 'what about kubernetes' 3 times in 30 sec
+→ 3 identical tiles" spam pattern. Now: each maybe_spawn_tile
+normalizes the trigger text (lowercase, whitespace-collapsed, first
+60 chars), checks if same prefix has been used to spawn a tile in
+last 60 sec. If yes, skips silently.
+
+New `RuntimeState.recent_question_prefixes: Vec<(String, Instant)>`.
+Cleared on session_start (per-session dedup window).
+
+Saves: AI call cost + tile grid clutter. Doesn't reduce accuracy —
+the user's first tile for that topic is already on screen, second/
+third would just be the same answer.
+
 ### → v0.0.63 (2026-05-26) — QOL block 5, #11
 
 **Bookmark last AI answer — ⭐ button + `bookmarks.md` file.**

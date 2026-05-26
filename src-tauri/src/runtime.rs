@@ -83,6 +83,12 @@ pub struct RuntimeState {
     /// match. Prevents repeated 🏁 chip emit if the phrase is uttered
     /// multiple times. Reset to false on session_start.
     pub meeting_ending_emitted: bool,
+    /// v0.0.64: recent question prefixes (normalized to lowercase + first
+    /// 60 chars + whitespace-collapsed) with their spawn timestamps.
+    /// Used to dedup the "interviewer says 'what about kubernetes' 3
+    /// times in 30 sec → 3 identical tiles" spam pattern.
+    /// Pruned to last 60s on every check.
+    pub recent_question_prefixes: Vec<(String, std::time::Instant)>,
 }
 
 /// Three atomic timestamps (unix ms) bumped by their respective subsystems.
@@ -384,6 +390,8 @@ pub async fn start_session(
         // v0.0.59: reset meeting-ending flag so a fresh session can
         // re-detect goodbye phrases.
         guard.meeting_ending_emitted = false;
+        // v0.0.64: drop recent-question dedup cache for fresh session.
+        guard.recent_question_prefixes.clear();
         if let Some(j) = guard.journal.take() {
             close_journal_with_summary(j);
         }
@@ -838,6 +846,29 @@ async fn maybe_spawn_tile(
             return;
         }
         s.recent_tile_triggers.push_back(now);
+    }
+
+    // v0.0.64: dedup recently-spawned questions. Normalize text to
+    // lowercase + first 60 chars + whitespace-collapsed. If the same
+    // normalized prefix was used to spawn a tile in last 60s, skip.
+    // Stops the "same keyword 3× in 30s" spam pattern.
+    {
+        let normalized: String = text.to_lowercase()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .chars()
+            .take(60)
+            .collect();
+        let mut s = rt.lock();
+        let now = std::time::Instant::now();
+        let cutoff = now - std::time::Duration::from_secs(60);
+        s.recent_question_prefixes.retain(|(_, ts)| *ts > cutoff);
+        if s.recent_question_prefixes.iter().any(|(prefix, _)| prefix == &normalized) {
+            log::info!("tile dedup: skipping recently-spawned question prefix: {normalized}");
+            return;
+        }
+        s.recent_question_prefixes.push((normalized, now));
     }
 
     log::info!("auto-tile triggered: {:?}", trigger);
