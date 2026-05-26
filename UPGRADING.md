@@ -11,6 +11,20 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.15 (2026-05-26)
+
+- **No config schema change.**
+- **New: Settings → Обновления → 📊 Диагностический дамп.** One click
+  writes a sanitized markdown report to Desktop (config without secrets,
+  last 50 journal events, crash report if present). Attach to a bug
+  report instead of fishing through AppData manually.
+- HTTP plaintext warning in Settings now suppressed for loopback URLs
+  (127.0.0.1 / localhost / [::1]) — the warning was firing on perfectly
+  safe local-host bridge setups.
+- CLAUDE.md test invocation corrected (was `cargo test --lib --bin
+  overlay-mvp` which runs 0 tests because the binary has none — should
+  be `cargo test --lib`).
+
 ### → v0.0.14 (2026-05-26)
 
 - **No config schema change.**
