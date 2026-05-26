@@ -2246,6 +2246,44 @@ async fn tile_reload(
     Ok(new_label)
 }
 
+/// v0.0.72: Quick-switch the live AI model without opening Settings.
+/// Useful when mid-meeting you want Sonnet's deeper reasoning instead
+/// of Haiku's speed. Updates cfg.ai_model + persists to disk; STT and
+/// all other AI paths read from cfg on each call so the switch applies
+/// to the very next request.
+///
+/// Whitelist enforced: only known Claude model IDs are accepted so a
+/// typo in the chip handler doesn't poison cfg with a junk string that
+/// blows up the next AI call. Extend the list when new models ship.
+#[tauri::command]
+fn set_ai_model(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, SharedConfig>,
+    model: String,
+) -> Result<(), String> {
+    assert_overlay(&window)?;
+    let normalized = model.trim().to_string();
+    const KNOWN: &[&str] = &[
+        "claude-haiku-4-5",
+        "claude-sonnet-4-6",
+        "claude-sonnet-4-5",
+        "claude-opus-4-7",
+        "claude-opus-4-6",
+    ];
+    if !KNOWN.contains(&normalized.as_str()) {
+        return Err(format!(
+            "model '{normalized}' not in allow-list (haiku-4-5 / sonnet-4-6 / sonnet-4-5 / opus-4-7 / opus-4-6)"
+        ));
+    }
+    let next_cfg = {
+        let mut c = state.write();
+        c.ai_model = normalized;
+        c.clone()
+    };
+    config::save(&next_cfg).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// v0.0.66: detector trigger tester. Runs the real detect_trigger
 /// function on sample text using the current cfg.trigger_keywords.
 /// Returns a human-readable verdict so user can tune trigger_keywords
@@ -2844,6 +2882,7 @@ pub fn run() {
             generate_cheatsheet,
             test_detector,
             set_stt_language,
+            set_ai_model,
             tile_reload,
             set_stealth,
             list_snippets,

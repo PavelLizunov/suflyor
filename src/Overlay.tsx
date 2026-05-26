@@ -93,6 +93,11 @@ export default function Overlay() {
   // v0.0.67: STT language chip. Reads cfg on mount/focus + writes via
   // set_stt_language Tauri command. Cycles ru → en → auto.
   const [sttLang, setSttLang] = useState<string | null>(null);
+  // v0.0.72: AI model chip. Reads cfg.ai_model on mount/focus + writes
+  // via set_ai_model Tauri command. Click cycles haiku-4-5 ↔ sonnet-4-6
+  // so the user can flip to a deeper model mid-meeting without opening
+  // Settings → AI → Models → save (5 clicks).
+  const [aiModel, setAiModel] = useState<string>("claude-haiku-4-5");
   // Failure HUD — 3 dots (audio/stt/ai). null = no signal received yet.
   const [health, setHealth] = useState<HealthPayload | null>(null);
   // Voice coach — live mic WPM / filler density. null = backend hasn't
@@ -548,7 +553,7 @@ export default function Overlay() {
 
   // Load ask-mode + aggressive flag + ui_language from config once on mount.
   useEffect(() => {
-    invoke<{ manual_ask_mode?: string; auto_tile_every_line?: boolean; ui_language?: string; stt_language?: string | null }>("get_config")
+    invoke<{ manual_ask_mode?: string; auto_tile_every_line?: boolean; ui_language?: string; stt_language?: string | null; ai_model?: string }>("get_config")
       .then((c) => {
         if (!mountedRef.current) return;
         const mode = c.manual_ask_mode === "click" ? "click" : "hold";
@@ -556,6 +561,7 @@ export default function Overlay() {
         setAggressive(Boolean(c.auto_tile_every_line));
         setLang(resolveLang(c.ui_language));
         setSttLang(c.stt_language ?? null);
+        if (c.ai_model) setAiModel(c.ai_model);
       })
       .catch((e) => console.warn("get_config:", e));
   }, []);
@@ -572,12 +578,13 @@ export default function Overlay() {
   useEffect(() => {
     const onFocus = () => {
       if (!mountedRef.current) return;
-      invoke<{ auto_tile_every_line?: boolean; ui_language?: string; stt_language?: string | null }>("get_config")
+      invoke<{ auto_tile_every_line?: boolean; ui_language?: string; stt_language?: string | null; ai_model?: string }>("get_config")
         .then((c) => {
           if (!mountedRef.current) return;
           setAggressive(Boolean(c.auto_tile_every_line));
           setLang(resolveLang(c.ui_language));
           setSttLang(c.stt_language ?? null);
+          if (c.ai_model) setAiModel(c.ai_model);
         })
         .catch(() => {});
     };
@@ -1048,6 +1055,48 @@ export default function Overlay() {
         >
           🎙 {sttLang ?? (lang === "en" ? "auto" : "авто")}
         </button>
+        {/* v0.0.72: AI model quick-switch chip. Cycles haiku ↔ sonnet
+            (currently the two interesting choices — opus is reserved
+            for cfg-only deep-research path). Persisted via set_ai_model
+            backend command (assert_overlay + whitelist). The chip
+            displays the short model family ("hk" / "sn") to stay tiny
+            in the bar; tooltip shows the full ID. Tinted slightly so
+            it's distinguishable from STT chip at a glance. */}
+        {(() => {
+          const isHaiku = aiModel.includes("haiku");
+          const short = isHaiku ? "hk" : aiModel.includes("sonnet") ? "sn" : aiModel.includes("opus") ? "op" : "?";
+          const next = isHaiku ? "claude-sonnet-4-6" : "claude-haiku-4-5";
+          return (
+            <button
+              type="button"
+              className="hint"
+              style={{
+                fontFamily: "monospace",
+                fontSize: 11,
+                padding: "0 6px",
+                borderRadius: 4,
+                border: "1px solid var(--c-border-soft)",
+                background: isHaiku ? "transparent" : "rgba(140, 100, 220, 0.16)",
+                cursor: "pointer",
+                color: "var(--c-text-mute)",
+              }}
+              title={lang === "en"
+                ? `AI model: ${aiModel}. Click to switch to ${next}.`
+                : `AI модель: ${aiModel}. Клик чтобы переключить на ${next}.`}
+              aria-label={lang === "en" ? "AI model" : "AI модель"}
+              onClick={async () => {
+                try {
+                  await invoke("set_ai_model", { model: next });
+                  setAiModel(next);
+                } catch (err) {
+                  console.warn("set_ai_model:", err);
+                }
+              }}
+            >
+              🧠 {short}
+            </button>
+          );
+        })()}
         {/* v0.0.62: session elapsed timer chip. Shown while session
             running (sessionStartMs set). Yellow at 45 min, red at 60. */}
         {sessionStartMs !== null && (

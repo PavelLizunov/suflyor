@@ -11,6 +11,26 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.72 (2026-05-26) — QOL block 5, #20
+
+**🧠 AI model quick-switch chip in overlay bar (haiku ↔ sonnet).**
+
+New 🧠 chip next to the 🎙 STT chip. Shows current `cfg.ai_model` as
+"hk" / "sn" / "op" (short family). Click flips haiku ↔ sonnet via
+new `set_ai_model` backend command. Sonnet variant gets a subtle
+purple tint so it's visible at a glance.
+
+Backend `set_ai_model` validates against an allow-list (haiku-4-5,
+sonnet-4-6, sonnet-4-5, opus-4-7, opus-4-6) so a typo in the chip
+handler can't poison cfg with a junk string. Updates persist via
+`config::save`. STT / detector / manual-ask all read `cfg.ai_model`
+on each call so the switch applies immediately.
+
+Use case: a difficult system-design question lands — flip to Sonnet
+in <100 ms for one tile, then back to Haiku for fast follow-ups.
+Avoids 5-click Settings dive (AI panel → Models card → input → save
+→ back).
+
 ### → v0.0.71 (2026-05-26) — QOL block 5, #19
 
 **Tile collapse button (▾/▴) — minimize to chrome only.**

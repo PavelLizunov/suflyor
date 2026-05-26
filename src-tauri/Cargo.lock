@@ -3047,7 +3047,7 @@ dependencies = [
 
 [[package]]
 name = "overlay-mvp"
-version = "0.0.71"
+version = "0.0.72"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
