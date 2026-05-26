@@ -35,13 +35,42 @@ starting any autonomous session.
 - Backend: Rust + Tauri 2 in `src-tauri/`. Two binaries — `default-run`
   in `Cargo.toml` is `overlay-mvp`. Build via `npm run tauri build` (NOT
   `cargo build` — that bypasses the vite frontend bundle).
-- Tests: `cargo test --lib` (244 tests, <1s) — the `--bin overlay-mvp`
+- Tests: `cargo test --lib` (255 tests, <1s) — the `--bin overlay-mvp`
   variant in older docs runs zero tests (the binary itself has none —
   all unit tests live in the library target). `cargo clippy --all-targets
   -- -D warnings` for strict lint covers lib + journal-eval CLI.
 - Cargo path issue: `cargo` is at `~/.cargo/bin/cargo.exe`. Git Bash
   doesn't always pick it up — prepend
   `export PATH="/c/Users/x3d_mutant/.cargo/bin:$PATH"`.
+
+## Release verification — MANDATORY (after v0.0.34 P0 incident)
+
+See `RELEASE_CHECKLIST.md` for the canonical 6-gate methodology.
+Established 2026-05-26 after v0.0.34 shipped an infinite-overlay-grow
+bug that all static checks passed but no one launched the binary.
+
+**Every release MUST pass all 6 gates before `git push`:**
+
+1. **Static checks** (`cargo test --lib`, `cargo clippy --all-targets
+   -- -D warnings`, `npx tsc --noEmit`)
+2. **Build** (`npm run tauri build -- --bundles nsis`)
+3. **Install** via the NSIS installer with `/S` silent flag and verify
+   `LastWriteTime` of `%LOCALAPPDATA%\suflyor\overlay-mvp.exe` updated
+4. **Smoke test via computer-use** — `mcp__computer-use__screenshot` after
+   `open_application "suflyor"`. Bar must:
+   - render at sane size (520-1000 px wide), correct position (top)
+   - NOT extend past screen edges
+   - have stable dimensions over a 5-second wait (catches feedback loops
+     like v0.0.34's infinite-grow)
+5. **Feature verification** of the changed surface — for layout changes,
+   drag-resize the bar; for Settings changes, navigate panels + click
+   save; for hotkey changes, trigger the hotkey
+6. **Quit cleanly** — `⚙ → ✕ Выйти → «Выйти» confirm` then check
+   `(Get-Process overlay-mvp -ErrorAction SilentlyContinue).Count == 0`
+
+Static checks are necessary but NOT sufficient. They don't see runtime
+layout feedback loops. See `POST_MORTEM_v0034.md` for the full incident
+analysis.
 
 ## Knowledge base
 
