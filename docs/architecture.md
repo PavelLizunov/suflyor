@@ -101,7 +101,7 @@ Unprotected commands (read-only or low-blast-radius): `list_audio_devices`, `kb_
 
 | File | Lines | Role |
 |---|---|---|
-| `src-tauri/src/lib.rs` | ~1700 | Tauri Builder, all Tauri commands, bridge/update probes, export_safe |
+| `src-tauri/src/lib.rs` | ~1530 | Tauri Builder, all Tauri commands, bridge/update probes, export_safe |
 | `src-tauri/src/runtime.rs` | ~3100 | Session lifecycle, transcript forwarder, AI ask flows, voice coach, debrief |
 | `src-tauri/src/config.rs` | ~1700 | Config struct + serde defaults + default snippets |
 | `src-tauri/src/stt.rs` | ~965 | Whisper VAD pipeline, prompt budgeting, retry classifier |
