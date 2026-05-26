@@ -944,14 +944,30 @@ export default function Settings() {
       </div>)}
 
       {activeSection === "stealth" && (<div className="settings-section">
-        <h3>🎯 Stealth</h3>
-        <div className="field">
-          <label title="WDA_EXCLUDEFROMCAPTURE — overlay+tiles не появятся в Zoom/Meet/OBS screen share">
-            <input
-              type="checkbox"
-              checked={cfg.stealth_enabled}
-              onChange={async (e) => {
-                const v = e.target.checked;
+        {/* v0.0.37 polish: converted from legacy .field+checkbox to the
+            design's .card + .switch-row + .switch + .banner.info. Template
+            for the per-panel rollout — see docs/SETTINGS_POLISH_PLAN.md.
+            Behavior unchanged: same `cfg.stealth_enabled` + `set_stealth`
+            backend invoke; just visual conversion. */}
+        <div className="card">
+          <div className="card-title">🎯 Screen-share поведение</div>
+          <div className="switch-row">
+            <div className="switch-meta">
+              <div className="switch-title">Скрыть overlay + tiles от screen share</div>
+              <div className="switch-desc">
+                Windows 10 2004+: SetWindowDisplayAffinity (WDA_EXCLUDEFROMCAPTURE).
+                Применяется сразу — restart не нужен. Не работает в OBS с режимом
+                «window capture»; работает в Zoom/Teams/Meet.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="switch"
+              role="switch"
+              aria-checked={cfg.stealth_enabled}
+              aria-label="Toggle stealth mode"
+              onClick={async () => {
+                const v = !cfg.stealth_enabled;
                 update({ stealth_enabled: v });
                 try {
                   await invoke("set_stealth", { enabled: v });
@@ -959,10 +975,13 @@ export default function Settings() {
                   console.warn("set_stealth:", err);
                 }
               }}
-              style={{ marginRight: 6 }}
             />
-            Скрыть overlay+tiles от screen share (нужен restart? нет — применяется сразу)
-          </label>
+          </div>
+          <div className="banner info">
+            Тест: пошарь экран в Teams/Meet, спроси коллегу видит ли он overlay.
+            Если да — graphics driver не поддерживает WDA_EXCLUDEFROMCAPTURE;
+            используй overlay на втором мониторе.
+          </div>
         </div>
       </div>)}
 

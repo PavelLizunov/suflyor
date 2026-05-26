@@ -11,6 +11,26 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.37 (2026-05-26)
+
+First of the planned Settings polish micro-releases (see
+`docs/SETTINGS_POLISH_PLAN.md`). Converts the **Stealth** panel from
+the legacy `.field + <input type="checkbox">` to the design's
+`.card + .switch-row + .switch + .banner.info`.
+
+- Same backend behavior — `cfg.stealth_enabled` toggle + `set_stealth`
+  invoke unchanged
+- Visual: pill-shaped toggle (yellow-on when active) replaces the
+  bare checkbox; `.card-title` "🎯 Screen-share поведение"; an
+  info banner with the OBS / Teams test instruction
+- Click on the toggle (or the surrounding row in future panels) flips
+  the value via `onClick` instead of `onChange`
+
+Template for the rest of the panels (coaching → interface → hotkeys
+→ detector → budget → audio → tiles → knowledge → ai → profile),
+ordered by risk. Each future panel = one micro-release through the
+full 6-gate RELEASE_CHECKLIST.md cycle.
+
 ### → v0.0.36 (2026-05-26)
 
 Agent-review findings on the v0.0.30→v0.0.35 block. **P0 hotfix**
