@@ -26,6 +26,23 @@ for download. No auto-install (no code signing — by design).
 
 Two code-review agent passes ran on the diff. First found 3 P0/P1 (shipped .85, .86, .87). Second pass running at time of v0.0.88 ship.
 
+### → v0.1.0 (2026-05-26) — 🎉 Milestone: marathon block 5 complete
+
+Version bump from 0.0.x to 0.1.x to mark feature-complete state
+after the 6-hour QOL marathon (17:13Z → 23:13Z May 26).
+
+**Marathon scoreboard:**
+- **33 releases** (v0.0.67 → v0.0.99)
+- **5 new overlay bar chips:** 🎙 STT lang, 🧠 AI model, 🎤/🔇 mic mute, 🎯 stealth, 📦 collapse-all, 🔒 pin-all
+- **3 new hotkeys:** F1 help, F2 profile cycle, F7 collapse-all
+- **8 new tile chrome buttons:** ⏱ age, 🔄×N gen, Nw word count, 📌 pin (existing), 💾 save snippet, 📋 copy q, ✏️ edit q, 🔄 reload, 🌐 translate, ▾/▴ collapse, × close
+- **Backend features:** qa_cache (10 min TTL), auto-export on quit, mic test card, F4 palette extensions (/snippet + +key body), 🎨 custom CSS injection, set_ai_model + set_mic_muted + set_stt_language commands
+- **3 code-review agent passes** caught + fixed: F7 dup, qa_cache stale key, reload-bridge dead since v0.0.85 (the most critical P0), peak_dbfs serialization, add_snippet write race
+
+Quality gates: every release through 6-gate verification (clippy `-D
+warnings`, 260 unit tests, tsc, NSIS build, install timestamp,
+smoke test). No P0 left unresolved.
+
 ### → v0.0.99 (2026-05-26) — 💾 Save tile as snippet
 
 New 💾 button in tile chrome. Click → inline input opens above the
