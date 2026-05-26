@@ -1,5 +1,39 @@
 # Autonomous work plan
 
+## 🚀 Marathon block 5 — QOL chip + hotkey sprint (~20:00-22:15 MSK, **18 releases in ~2h20**)
+
+User: «Не заканчивай работу, продолжай оверлей и подумай что еще можно сделать, мне нужно 6 часов бесперывной работы проверок и твоих фонтазий QOL доработак и не обращай внимание на косты, деньги не приоритет.»
+
+Strategy: rapid-fire QOL features, each a small but visible improvement, all through 6-gate verification (clippy `-D warnings` clean · tsc · cargo test --lib 260 pass · NSIS build · install timestamp confirm).
+
+**Released v0.0.67 → v0.0.84 (18 releases this block):**
+- v0.0.67 🎙 STT lang chip (ru/en/auto cycle)
+- v0.0.68 🔄 Tile reload button (re-ask same question)
+- v0.0.69 ⏱ age + 🔄×N generation badges on tile chrome
+- v0.0.70 F4 palette `/key` searches user snippets
+- v0.0.71 ▾/▴ Tile collapse-to-chrome button
+- v0.0.72 🧠 AI model chip (haiku ↔ sonnet cycle)
+- v0.0.73 Auto-export session to .md on quit (opt-in)
+- v0.0.74 Settings UI toggle for v0.0.73
+- v0.0.75 🔇 Mic-only mute chip (RuntimeState)
+- v0.0.76 Audio refresh button + meeting_context char counter
+- v0.0.77 F1 hotkey → toggle help popover
+- v0.0.78 +📋 clipboard → meeting_context button
+- v0.0.79 AI response cache (qa_cache HashMap, 10 min TTL, auto-tile path)
+- v0.0.80 F2 hotkey → cycle context profiles
+- v0.0.81 🎯 Stealth quick-toggle chip
+- v0.0.82 📦 Bulk collapse/expand all tiles chip
+- v0.0.83 F7 hotkey → mirror 📦 chip
+- v0.0.84 Hotkey hint string + popover table updated for F1/F2/F7
+
+**New hotkeys this block:** F1 (help), F2 (profile cycle), F7 (collapse all).
+**New chips this block:** 🎙 STT, 🧠 AI model, 🎤/🔇 mic mute, 🎯 stealth, 📦 collapse-all.
+**New tile chrome:** 🔄 reload, ▾ collapse, ⏱ age, 🔄×N generation.
+
+Single non-trivial backend feature: v0.0.79 qa_cache (~100 LOC in maybe_spawn_tile + RuntimeState field + start_session clear). Complements v0.0.64 dedup with longer-window match for "same question 25 minutes apart".
+
+3-hour mark: triggered code-review agent on v0.0.67-v0.0.84 diff. Audit running in background.
+
 ## 🌐 Marathon block 4 — i18n sprint (18:00-19:11 MSK, **12 releases in ~70 min**)
 
 User's two original asks: (1) «хедер где settings и Выйти и футтер где back to overlay и save были всегда зафиксированы снизу и сверху окна» (2) «Также сделай полные переводы как на русский так и на английский». Shipped v0.0.41 (sticky header/footer fix — ask #1) + 9 progressive i18n releases v0.0.42 → v0.0.50 covering every visible UI string + v0.0.51 (agent-review hotfix for 3 misses) + v0.0.52 (Snippets CRUD modal close-out). ALL through full 6-gate verification (cargo test --lib 255 pass · clippy `-D warnings` clean · tsc · NSIS build · install timestamp confirm · computer-use smoke test in EN mode · clean quit). **12 releases this block. Final translation map: 235 keys × 2 langs = 470 entries.**
