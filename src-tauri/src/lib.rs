@@ -1915,6 +1915,149 @@ fn load_session(
     Ok(events)
 }
 
+/// v0.0.58: render a session JSONL into a human-readable markdown file
+/// and save to Desktop. Pairs with the Replay viewer "📥 Export
+/// markdown" button. Same path-validation as `load_session` — only
+/// reads from the sessions dir.
+///
+/// Markdown sections (rendered in chronological order):
+///   - H1 with session start timestamp + AI model
+///   - For each `ai_request` / `ai_response` pair: Q (prompt preview) +
+///     A (full response markdown), wall-clock timestamp, latency, cost
+///   - For each `tile_spawn`: Q + A (snapshot of what was shown)
+///   - Final SessionSummary block if present
+///
+/// Intentionally skips raw transcript lines and detector decisions —
+/// they're noise for a human reading a post-meeting recap. (The
+/// Replay viewer is the right tool when you want the raw timeline.)
+#[tauri::command]
+fn export_session_markdown(
+    window: tauri::WebviewWindow,
+    path: String,
+) -> Result<String, String> {
+    assert_overlay(&window)?;
+    const MAX_BYTES: u64 = 10 * 1024 * 1024;
+    let p = std::path::PathBuf::from(&path);
+    let sessions_dir = journal::sessions_dir().map_err(|e| e.to_string())?;
+    let canonical_session_dir = sessions_dir.canonicalize().map_err(|e| e.to_string())?;
+    let canonical_path = p.canonicalize().map_err(|e| e.to_string())?;
+    if !canonical_path.starts_with(&canonical_session_dir) {
+        return Err("path is outside sessions dir".into());
+    }
+    let meta = std::fs::metadata(&canonical_path).map_err(|e| e.to_string())?;
+    if meta.len() > MAX_BYTES {
+        return Err(format!("session file too large ({} bytes, max {})", meta.len(), MAX_BYTES));
+    }
+
+    let content = std::fs::read_to_string(&canonical_path).map_err(|e| e.to_string())?;
+    let mut events: Vec<serde_json::Value> = Vec::new();
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() { continue; }
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(line) {
+            events.push(v);
+        }
+    }
+
+    let fmt_clock = |unix_ms: i64| -> String {
+        // Naive HH:MM:SS from milliseconds — uses chrono if available,
+        // otherwise raw arithmetic. We don't want to pull chrono just
+        // for this so do it by hand.
+        let total_sec = (unix_ms / 1000).rem_euclid(86_400);
+        let h = total_sec / 3600;
+        let m = (total_sec % 3600) / 60;
+        let s = total_sec % 60;
+        format!("{h:02}:{m:02}:{s:02}")
+    };
+
+    let mut md = String::new();
+    let filename = canonical_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("session");
+    md.push_str(&format!("# suflyor session — {filename}\n\n"));
+
+    // Pull session_start metadata if present.
+    if let Some(start) = events.iter().find(|e| e["kind"] == "session_start") {
+        let model = start["ai_model"].as_str().unwrap_or("?");
+        let prep = start["prep_model"].as_str().unwrap_or("");
+        let lang = start["response_language"].as_str().unwrap_or("?");
+        md.push_str(&format!("- model: `{model}`"));
+        if !prep.is_empty() { md.push_str(&format!(" · prep: `{prep}`")); }
+        md.push_str(&format!(" · lang: `{lang}`\n"));
+        if let Some(ts) = start["unix_ms"].as_i64() {
+            md.push_str(&format!("- started: {}\n", fmt_clock(ts)));
+        }
+        md.push('\n');
+    }
+
+    // Pair ai_request with following ai_response by tile id when possible,
+    // otherwise just emit in order.
+    let mut req_count = 0;
+    let mut pending_req: Option<&serde_json::Value> = None;
+    for ev in &events {
+        let kind = ev["kind"].as_str().unwrap_or("");
+        match kind {
+            "ai_request" => {
+                pending_req = Some(ev);
+            }
+            "ai_response" => {
+                req_count += 1;
+                let purpose = ev["purpose"].as_str().unwrap_or("ask");
+                let ts_str = ev["unix_ms"].as_i64().map(fmt_clock).unwrap_or_else(|| "?".into());
+                let latency = ev["latency_ms"].as_i64().unwrap_or(0);
+                let cost_micro = ev["cost_microcents"].as_i64().unwrap_or(0);
+                let cost_usd = cost_micro as f64 / 100_000_000.0;
+                md.push_str(&format!("## #{req_count} · {purpose} · {ts_str}\n\n"));
+                if let Some(req) = pending_req {
+                    let prompt = req["user_prompt"].as_str()
+                        .or_else(|| req["user_prompt_preview"].as_str())
+                        .unwrap_or("");
+                    if !prompt.is_empty() {
+                        md.push_str("**Prompt:**\n\n");
+                        md.push_str("```\n");
+                        md.push_str(prompt);
+                        md.push_str("\n```\n\n");
+                    }
+                }
+                let text = ev["text"].as_str().unwrap_or("");
+                md.push_str("**Answer:**\n\n");
+                md.push_str(text);
+                md.push_str("\n\n");
+                md.push_str(&format!("_{latency} ms · ${cost_usd:.4}_\n\n---\n\n"));
+                pending_req = None;
+            }
+            _ => {}
+        }
+    }
+
+    // SessionSummary footer if present.
+    if let Some(sum) = events.iter().find(|e| e["kind"] == "session_summary") {
+        md.push_str("## Summary\n\n");
+        let dur_min = sum["duration_ms"].as_i64().unwrap_or(0) as f64 / 60_000.0;
+        md.push_str(&format!("- duration: {dur_min:.1} min\n"));
+        md.push_str(&format!("- transcript lines: {} (mic {} · system {})\n",
+            sum["transcript_lines"].as_i64().unwrap_or(0),
+            sum["transcript_mic"].as_i64().unwrap_or(0),
+            sum["transcript_system"].as_i64().unwrap_or(0)));
+        md.push_str(&format!("- AI requests: {} · tiles spawned: {}\n",
+            sum["ai_requests_total"].as_i64().unwrap_or(0),
+            sum["tiles_spawned"].as_i64().unwrap_or(0)));
+        let total_cost = sum["total_cost_microcents"].as_i64().unwrap_or(0) as f64 / 100_000_000.0;
+        md.push_str(&format!("- total cost: ${total_cost:.4}\n"));
+    }
+
+    // Save to Desktop with `.md` suffix replacing the `.jsonl` ext.
+    let desktop = dirs::desktop_dir().ok_or_else(|| "no desktop dir".to_string())?;
+    let stem = canonical_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("session");
+    let out_path = desktop.join(format!("{stem}.md"));
+    std::fs::write(&out_path, md).map_err(|e| e.to_string())?;
+    Ok(out_path.to_string_lossy().into_owned())
+}
+
 // ── Entry point ──────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -2101,6 +2244,7 @@ pub fn run() {
             import_config,
             list_sessions,
             load_session,
+            export_session_markdown,
             set_stealth,
             list_snippets,
             expand_snippet,

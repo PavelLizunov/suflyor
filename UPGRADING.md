@@ -11,6 +11,33 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.58 (2026-05-26) — QOL block 5, #6
+
+**Markdown export of session from Replay viewer.**
+
+Replay viewer header gets a new `📥 .md` button next to Back. Click →
+backend `export_session_markdown` command reads the selected JSONL,
+walks events, generates a human-readable .md and saves to Desktop with
+the session's stem name + `.md` ext.
+
+Rendered sections (chronological):
+- H1 with session filename
+- Header line: model / prep model / response_language + start time
+- For each ai_request/ai_response pair: H2 with "#N · purpose · time",
+  Prompt code-block, Answer markdown, latency + cost footer
+- Summary block at the end: duration, transcript counts, AI request +
+  tile counts, total cost
+
+Intentionally skips: raw transcript lines, detector decisions, rate-
+limit events. They're noise for a human reading a recap. The Replay
+viewer is the right tool when you want the raw timeline.
+
+Path validation: same as `load_session` — only reads from the sessions
+dir (canonicalize + starts_with check), 10 MB max file size.
+
+Use case: post-meeting, you want to send your interview partner the
+key answers you gave. Click 📥 .md → share the file.
+
 ### → v0.0.57 (2026-05-26) — QOL block 5, #5
 
 **Snippet usage frecency sort + count badge.**

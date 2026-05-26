@@ -203,6 +203,32 @@ export default function Replay() {
               </option>
             ))}
           </select>
+          <button
+            className="btn secondary"
+            onClick={async () => {
+              // v0.0.58: export-to-markdown button — calls backend
+              // export_session_markdown which writes a human-readable
+              // .md to Desktop. Backend skips raw transcript/detector
+              // noise — only Q/A pairs + summary.
+              if (!selected) return;
+              try {
+                const path = await invoke<string>("export_session_markdown", { path: selected });
+                alert(
+                  (lang === "en" ? "Markdown saved to: " : "Markdown сохранён: ") + path
+                );
+              } catch (e) {
+                alert(
+                  (lang === "en" ? "Export failed: " : "Ошибка экспорта: ") + String(e)
+                );
+              }
+            }}
+            disabled={!selected}
+            title={lang === "en"
+              ? "Save selected session as human-readable .md to Desktop (Q/A pairs only, skips raw transcript)"
+              : "Сохранить выбранную сессию как читаемый .md на Desktop (только Q/A пары, без сырого транскрипта)"}
+          >
+            📥 .md
+          </button>
           <button className="btn secondary" onClick={back} aria-label={t("replay.back.aria", lang)}>
             {t("replay.back.button", lang)}
           </button>
