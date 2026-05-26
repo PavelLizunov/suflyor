@@ -404,9 +404,17 @@ export default function Overlay() {
       })
     );
 
+    // Single cost:update handler — keeps the running session_usd display
+    // up to date AND resets the soft-budget chip when a new session starts
+    // (cost goes back to 0). Previously two separate listeners did this;
+    // collapsed in v0.0.13 to reduce event-bus chatter and avoid the future
+    // "which listener wins on cleanup" trap.
     unlistens.push(
       listen<{ session_usd: number }>("cost:update", (e) => {
         setSessionCost(e.payload.session_usd);
+        if (e.payload.session_usd === 0 && mountedRef.current) {
+          setOverBudget(false);
+        }
       })
     );
 
@@ -425,17 +433,6 @@ export default function Overlay() {
           if (mountedRef.current) setOverBudget(false);
         }, 60_000);
         console.warn(`over budget (source=${e.payload.source}): ${e.payload.reason}`);
-      })
-    );
-
-    // Session restart clears the over-budget chip.
-    unlistens.push(
-      listen<{ session_usd: number }>("cost:update", (e) => {
-        // Already handled below for sessionCost — this duplicate listener
-        // exists to reset overBudget when the session resets (cost goes to 0).
-        if (e.payload.session_usd === 0 && mountedRef.current) {
-          setOverBudget(false);
-        }
       })
     );
 

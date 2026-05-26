@@ -101,9 +101,10 @@ Fresh priorities below.
 10. **`npm audit` for frontend** — same check on node_modules.
 
 ## In progress (re-armed 2026-05-26T04:52, deadline 10:52)
-**#3 Replay viewer filter by event kind** (started 2026-05-26T05:08)
+**#6 Fresh agent re-review of v0.0.10-v0.0.12 diff** (launched 2026-05-26T05:40 in background — focused on 50-line Overlay.tsx chip-state delta)
 
 ## Done log (newest at top)
+- **2026-05-26T05:40** — **Backlog #8 closed**: README screenshots refreshed for v0.0.12. Captured via Win32 BitBlt from running release: overlay-bar (4.9 KB, gear + F3-F11 hotkey strip), kb-palette (10.4 KB, F4 KB search hint), settings (55 KB, all 13 sections incl. soft budget warning, bridge check, detector skip-mic toggle, HTTP plaintext warning chip). Previous shots were pre-v0.0.2.
 - **2026-05-26T05:55** — **LIVE VERIFY overlay drag**: launched v0.0.12, dragged overlay from (200,40) to (661,246) via left_click_drag at (250,44). Win32 GetWindowRect confirmed window moved. v0.0.10 fix works in release. Backlog #1 fully verified end-to-end.
 - **2026-05-26T05:50** — docs(architecture): test count 237 + new test entries documented (blank_share_secrets/is_permanent/slot picker).
 - **2026-05-26T05:30** — **v0.0.12 released**: separate "💰 over budget" chip (was conflated with "⏱ rate-limited" — different semantics). 60s auto-clear. Resets on cost:update with session_usd=0.
