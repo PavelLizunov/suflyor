@@ -1890,6 +1890,7 @@ checksum = "f93c9c4203e0a2c5c396b8f1686160816f73e9b9cadaf3915aa3b888a83448aa"
 dependencies = [
  "cfg-if",
  "i-slint-backend-linuxkms",
+ "i-slint-backend-testing",
  "i-slint-backend-winit",
  "i-slint-common",
  "i-slint-core",
@@ -4536,6 +4537,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "dirs",
+ "i-slint-backend-selector",
  "i-slint-backend-testing",
  "raw-window-handle",
  "serde_json",

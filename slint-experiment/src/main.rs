@@ -319,6 +319,27 @@ mod tests {
         json!({"kind": kind, "unix_ms": unix_ms})
     }
 
+    /// Phase 0.5 spike 2 — Slint MCP server smoke. Holds the test
+    /// process alive for 12 s so a sibling probe can check whether
+    /// `SLINT_MCP_PORT=8080` actually opens a TCP listener. Marked
+    /// `#[ignore]` so normal `cargo test` doesn't sit waiting.
+    ///
+    /// Run: SLINT_EMIT_DEBUG_INFO=1 SLINT_MCP_PORT=8080 \
+    ///      cargo test --bin slint-replay -- --ignored --nocapture mcp_smoke
+    /// Then in another shell: Test-NetConnection localhost 8080
+    #[test]
+    #[ignore = "interactive MCP smoke — run with --ignored only"]
+    fn mcp_smoke() {
+        i_slint_backend_testing::init_no_event_loop();
+        let _window = MainWindow::new().expect("create window");
+        let port = std::env::var("SLINT_MCP_PORT").unwrap_or_else(|_| "(unset)".into());
+        let debug = std::env::var("SLINT_EMIT_DEBUG_INFO").unwrap_or_else(|_| "(unset)".into());
+        eprintln!("[mcp-smoke] SLINT_MCP_PORT={port} SLINT_EMIT_DEBUG_INFO={debug}");
+        eprintln!("[mcp-smoke] sleeping 12 s — probe with `Test-NetConnection localhost {port}`");
+        std::thread::sleep(std::time::Duration::from_secs(12));
+        eprintln!("[mcp-smoke] exiting cleanly");
+    }
+
     /// Combined Phase 0 test — three scenarios, single thread.
     #[test]
     fn slint_pilot_scenarios() {
