@@ -11,6 +11,35 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.27 (2026-05-26)
+
+3 review-agent findings from the v0.0.25→v0.0.26 diff pass:
+
+- **(P1) `runtime-panics.log` rotation now UTF-8 safe.** v0.0.26's
+  keep-last-500KB rotation byte-sliced a `String` at offset 500_000
+  without checking for a char boundary. This app's own panic messages
+  are routinely Cyrillic (Russian comments + user-content embedded in
+  anyhow! macros = 2 bytes per char), so the slice had ~50% odds of
+  landing mid-char and panicking inside the panic handler. The double
+  panic would have aborted startup the next time the log was rotated.
+  Now: walk forward from `start` to the next valid `char_boundary`
+  before slicing, then snap to the entry separator.
+- **(P2) `download_and_install_update` guard uses `std::mem::forget`.**
+  v0.0.26 used a `guard.reset = false` flag-mutation trick to skip the
+  lock-release Drop on the success path. Functionally correct but the
+  intent was fragile — a future edit slipping any fallible call between
+  `spawn()` and the flag flip would silently leak the lock. Now: the
+  guard is a unit struct whose Drop unconditionally clears the flag,
+  and the success path explicitly `std::mem::forget`s it. Reads as
+  "deliberately do NOT run the destructor" instead of mutating state.
+- **(Polish) Aggressive-chip focus-listener comment clarified.** The
+  v0.0.26 commit message implied the chip syncs on Settings→overlay
+  return via `focus`, but Settings is inline (same window under
+  `?settings=1`) so the overlay actually unmounts/remounts and the
+  mount-time effect handles that path. The focus listener is a safety
+  net for the alt-tab-away-and-back case (e.g. user hand-edited
+  config.json in Notepad). Comment now states the real mechanism.
+
 ### → v0.0.26 (2026-05-26)
 
 5 fixes from a code-review agent pass on v0.0.20-v0.0.25 diff:

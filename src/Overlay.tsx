@@ -315,9 +315,13 @@ export default function Overlay() {
       .catch((e) => console.warn("get_config:", e));
   }, []);
 
-  // Re-read aggressive flag when Settings window closes (user may have
-  // toggled it). Use the same window-focus event we already listen to
-  // for the Settings stale-state heal pattern.
+  // Re-read aggressive flag on window-focus as a safety net. NOTE: in the
+  // common Settings → overlay path the overlay actually unmounts (Settings
+  // lives in the same window under `?settings=1`), so the mount-time
+  // useEffect above is what restores the chip then. This focus listener
+  // covers the secondary case where the user alt-tabs away from the entire
+  // suflyor window and back after editing config via some other route
+  // (e.g. hand-editing %APPDATA%\overlay-mvp\config.json in Notepad).
   useEffect(() => {
     const onFocus = () => {
       if (!mountedRef.current) return;

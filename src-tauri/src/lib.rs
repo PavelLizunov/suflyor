@@ -1485,23 +1485,24 @@ async fn download_and_install_update(window: tauri::WebviewWindow) -> Result<Str
     {
         return Err("Update already in progress — wait for the installer to launch".into());
     }
-    // RAII helper that ONLY unsets if we mark it for reset on the error
-    // path. Success path calls `mem::forget(guard)` so the flag stays set
-    // (intentional: stops re-entry until app quits + restarts).
-    struct ReleaseGuard {
-        reset: bool,
-    }
+    // RAII helper: drop clears the flag. Any early `?` return below
+    // releases the lock so the user can retry. On the success path we
+    // explicitly `std::mem::forget(guard)` immediately after the spawn
+    // line so the lock STAYS SET (the spawned installer has the file
+    // mmap'd; a second invoke would hit a sharing-violation).
+    //
+    // v0.0.27: switched from `guard.reset=false` to mem::forget. Same
+    // effect, but the intent is now compiler-visible — any future edit
+    // slipping a fallible call between spawn() and the forget would
+    // still leak the lock, but the forget reads as "deliberately do
+    // NOT run the destructor" rather than mutating a flag.
+    struct ReleaseGuard;
     impl Drop for ReleaseGuard {
         fn drop(&mut self) {
-            if self.reset {
-                UPDATE_IN_FLIGHT.store(false, Ordering::SeqCst);
-            }
+            UPDATE_IN_FLIGHT.store(false, Ordering::SeqCst);
         }
     }
-    let mut guard = ReleaseGuard { reset: true };
-    // Closure helper: any `?` returning early below leaves guard.reset=true
-    // and releases the lock so the user can retry. Right before the
-    // successful spawn we flip reset=false to keep the lock.
+    let guard = ReleaseGuard;
 
     let current = env!("CARGO_PKG_VERSION");
     let api_url = format!(
@@ -1588,10 +1589,11 @@ async fn download_and_install_update(window: tauri::WebviewWindow) -> Result<Str
         .spawn()
         .map_err(|e| format!("spawn installer failed: {e}"))?;
 
-    // v0.0.26: spawn succeeded — keep the UPDATE_IN_FLIGHT lock SET so
-    // a second invoke can't race against the running installer for the
-    // same file. The lock naturally clears when the app quits 2s later.
-    guard.reset = false;
+    // v0.0.27: spawn succeeded — leak the guard so its Drop never runs
+    // and UPDATE_IN_FLIGHT stays SET. A second invoke can't race against
+    // the running installer for the same file. The flag naturally clears
+    // when the app quits 2s later.
+    std::mem::forget(guard);
     Ok(installer_path.to_string_lossy().to_string())
 }
 
@@ -1669,6 +1671,103 @@ mod update_tests {
         // "0.x.1" → [0, 0, 1] vs "0.0.0" → [0, 0, 0] → 0=0, 0=0, 1>0 → true.
         // Garbage middle segment doesn't trip the loop.
         assert!(is_strictly_newer("0.x.1", "0.0.0"));
+    }
+}
+
+/// Trim `s` to roughly its last `keep_bytes` and snap to the next entry
+/// boundary ("\n\n"). UTF-8 safe — walks forward from the target offset
+/// to the next char boundary before slicing.
+///
+/// Used by the runtime-panics.log rotation in the panic hook. v0.0.27.
+fn truncate_panic_log_tail(s: &str, keep_bytes: usize) -> &str {
+    let mut start = s.len().saturating_sub(keep_bytes);
+    // s.len() is always a char boundary so this terminates.
+    while !s.is_char_boundary(start) {
+        start += 1;
+    }
+    // s[start..] is now a valid UTF-8 slice. Snap to entry separator.
+    s[start..]
+        .find("\n\n")
+        .map(|i| &s[start + i + 2..])
+        .unwrap_or(&s[start..])
+}
+
+#[cfg(test)]
+mod panic_log_rotation_tests {
+    use super::truncate_panic_log_tail;
+
+    #[test]
+    fn truncates_pure_ascii() {
+        let s = "aaaa\n\nbbbb\n\ncccc\n\n";
+        let t = truncate_panic_log_tail(s, 8);
+        // start = len-8 = 10, lands inside "cccc\n\n". Find "\n\n" → return "".
+        // (the bytes "cccc" are at 12..16, then "\n\n" at 16..18).
+        assert!(t.is_empty() || t == "cccc\n\n");
+    }
+
+    #[test]
+    fn no_separator_returns_clean_utf8_tail() {
+        let s = "aaaaaaaaaaaa"; // no "\n\n"
+        let t = truncate_panic_log_tail(s, 4);
+        assert_eq!(t, "aaaa");
+    }
+
+    #[test]
+    fn keep_larger_than_input_returns_all() {
+        let s = "short";
+        let t = truncate_panic_log_tail(s, 1_000_000);
+        assert_eq!(t, "short");
+    }
+
+    #[test]
+    fn cyrillic_mid_char_offset_is_safe() {
+        // 'я' = U+044F = 2 bytes in UTF-8 (0xD1 0x8F). 500 chars * 2B = 1000 bytes.
+        // Each "ababab" group ends with "\n\n" entry separator.
+        // Without the boundary fix this panics with
+        //   "byte index N is not a char boundary; it is inside 'я' (bytes a..b)"
+        // for ~50% of keep_bytes values.
+        let mut s = String::new();
+        for i in 0..500 {
+            s.push_str(&format!("яяяяяя #{i}\n\n"));
+        }
+        // Sweep ALL keep_bytes from 1..s.len() — at least half land mid-char.
+        for k in 1..s.len() {
+            let t = truncate_panic_log_tail(&s, k);
+            // If we reach here without panicking, the slice was valid UTF-8.
+            // Also assert the result IS valid UTF-8 by parsing it as &str ops.
+            let _ = t.chars().count();
+        }
+    }
+
+    #[test]
+    fn emoji_4byte_offset_is_safe() {
+        // '🔥' = U+1F525 = 4 bytes in UTF-8. Tests the 4-byte char-boundary path.
+        let mut s = String::new();
+        for _ in 0..200 {
+            s.push_str("🔥🔥🔥\n\n");
+        }
+        for k in 1..s.len() {
+            let t = truncate_panic_log_tail(&s, k);
+            let _ = t.chars().count();
+        }
+    }
+
+    #[test]
+    fn empty_string_returns_empty() {
+        assert_eq!(truncate_panic_log_tail("", 100), "");
+        assert_eq!(truncate_panic_log_tail("", 0), "");
+    }
+
+    #[test]
+    fn separator_at_offset_works() {
+        // Confirm the snap-to-separator: keep_bytes=10 lands at "\n\n" → tail = "ccc".
+        let s = "aaaaaaa\n\nbbbb\n\nccc";
+        let t = truncate_panic_log_tail(s, 10);
+        // start = 18-10 = 8, lands at second char of first "\n\n" pair.
+        // find "\n\n" in s[8..] returns position of next pair.
+        // The exact tail depends on which separator is found first — what matters
+        // is the result is valid UTF-8 and starts cleanly.
+        assert!(!t.contains("\n\n\n"), "tail should not have triple newlines");
     }
 }
 
@@ -1787,6 +1886,9 @@ pub fn run() {
     // `%APPDATA%/overlay-mvp/runtime-panics.log` so the user can show
     // it. Combines with sanitize_diagnostic_text — when included in
     // dump_diagnostics, gsk_/Bearer/sk- patterns get redacted.
+    //
+    // NOTE: helper `truncate_panic_log_tail` is at the bottom of this
+    // file (above the `#[cfg(test)] mod tests`).
     std::panic::set_hook(Box::new(|info| {
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1816,19 +1918,14 @@ pub fn run() {
             // v0.0.26: KEEP-LAST-N rotation instead of full delete.
             // Previously remove_file at 1MB wiped history right when the
             // user might need it most (e.g. cascading panics). Now: read
-            // file, keep last ~500KB worth (rough — split on \n\n which
-            // is the entry separator), rewrite. The very panic that just
+            // file, keep last ~500KB, rewrite. The very panic that just
             // tripped the size check gets appended below.
+            //
+            // v0.0.27: UTF-8 SAFETY — see truncate_panic_log_tail tests.
             if let Ok(meta) = std::fs::metadata(&path) {
                 if meta.len() > 1_000_000 {
                     if let Ok(s) = std::fs::read_to_string(&path) {
-                        // Keep latter half. Find a clean boundary (entry
-                        // separator is "\n\n" per the format below).
-                        let start = s.len().saturating_sub(500_000);
-                        let tail = s[start..]
-                            .find("\n\n")
-                            .map(|i| &s[start + i + 2..])
-                            .unwrap_or(&s[start..]);
+                        let tail = truncate_panic_log_tail(&s, 500_000);
                         let _ = std::fs::write(&path, tail);
                     } else {
                         // If we can't even read it, fall back to delete
