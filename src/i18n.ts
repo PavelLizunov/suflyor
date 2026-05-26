@@ -128,6 +128,21 @@ const strings = {
   },
   "interface.cost.switch.aria":  { ru: "Переключить индикатор стоимости", en: "Toggle cost indicator" },
 
+  // v0.0.55: compact overlay + tile font size
+  "interface.compact.title":     { ru: "🤏 Компактный режим overlay", en: "🤏 Compact overlay mode" },
+  "interface.compact.switch.title": { ru: "Сжать overlay-бар", en: "Compact overlay bar" },
+  "interface.compact.switch.desc":  {
+    ru: "Прячет чипы 💰 / 🎙 wpm / 📸 ready / ⏱ / 🔥 — оставляет статус + dot + push-to-talk + шестерёнку. Бар становится узким, занимает меньше места над окном собеседования.",
+    en: "Hides 💰 / 🎙 wpm / 📸 ready / ⏱ / 🔥 chips — leaves status + dot + push-to-talk + gear. Bar becomes narrow, takes less space above the meeting window.",
+  },
+  "interface.compact.switch.aria":  { ru: "Переключить компактный режим", en: "Toggle compact mode" },
+  "interface.tilefs.title":      { ru: "📐 Шрифт в тайлах", en: "📐 Tile font size" },
+  "interface.tilefs.label":      { ru: "Размер шрифта", en: "Font size" },
+  "interface.tilefs.hint":       {
+    ru: "Размер тела markdown в каждом тайле (px). Применяется к новым тайлам.",
+    en: "Tile body markdown font size (px). Applies to newly spawned tiles.",
+  },
+
   // ── Hotkeys panel (v0.0.43) ────────────────────────────────────────
   "hotkeys.card.title":       { ru: "⌨ Глобальные хоткеи", en: "⌨ Global hotkeys" },
   "hotkeys.hint":             {

@@ -142,6 +142,13 @@ pub struct Config {
     #[serde(default = "default_ui_language")]
     pub ui_language: String,
 
+    /// Tile body font size in px. Default 12. Reasonable range 11-18.
+    /// Stored here (not localStorage) because tile windows can't read
+    /// localStorage from the overlay window — has to be passed via
+    /// URL param (`&fs=14`) at spawn time. v0.0.55.
+    #[serde(default = "default_tile_font_size")]
+    pub tile_font_size: u32,
+
     /// Pre-written answer snippets. Each snippet has a short trigger key
     /// (e.g. "k8s", "pg") that the user can invoke via the palette to
     /// instantly spawn a tile with the body text — zero AI latency,
@@ -193,6 +200,7 @@ impl Config {
             hotkey_pause_audio: "F12".into(),
             manual_ask_mode: "hold".into(), // push-to-talk by default
             ui_language: default_ui_language(),
+            tile_font_size: default_tile_font_size(),
             snippets: default_snippets(),
             post_meeting_debrief_enabled: default_post_meeting_debrief_enabled(),
             max_session_cost_usd: default_max_session_cost_usd(),
@@ -229,6 +237,13 @@ fn default_ui_language() -> String {
     // (user is Russian-speaking; original Settings copy is Russian).
     // EN is opt-in via Settings → Interface → Язык интерфейса.
     "ru".into()
+}
+
+fn default_tile_font_size() -> u32 {
+    // v0.0.55: default 12 matches the historic `--fs-12` CSS var that
+    // .tile-body.markdown had previously hardcoded. Range 11-18 keeps
+    // tiles readable without breaking grid math.
+    12
 }
 
 /// Massive default trigger-keyword pool — 250+ DevOps/SRE/Cloud/Linux

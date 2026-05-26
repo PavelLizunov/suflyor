@@ -58,6 +58,15 @@ export default function TileWindow() {
   // So we load from URL param ?lang= which the spawn_tile backend will
   // pass through starting v0.0.48. Falls back to "ru" if missing.
   const lang: Lang = resolveLang(params.get("lang"));
+  // v0.0.55: tile body font size baked into URL via &fs=. Backend
+  // already clamps to [11, 18] so we just parse + apply. Falls back to
+  // 12 for older tiles or malformed values.
+  const tileFs: number = (() => {
+    const raw = params.get("fs");
+    if (!raw) return 12;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n >= 11 && n <= 18 ? n : 12;
+  })();
 
   // Bar label by trigger source — shown uppercase via CSS text-transform.
   // Don't repeat 📌 here (the pin button is right next to it).
@@ -222,6 +231,7 @@ export default function TileWindow() {
       className={`tile-root tile-kind-${kind}`}
       role="dialog"
       aria-label={`AI answer tile from ${sourceLabel}`}
+      style={{ "--tile-font-size": `${tileFs}px` } as React.CSSProperties}
     >
       <div
         className="tile-bar"

@@ -11,6 +11,29 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.55 (2026-05-26) — QOL block 5, #3
+
+**Tile font size + compact overlay mode.**
+
+Two unrelated Settings → 🎨 Interface additions:
+
+1. **`📐 Tile font size`** — slider 11-18 px, default 12. Backed by new
+   `cfg.tile_font_size: u32` (forward-compat via `#[serde(default)]`).
+   `spawn_tile_with_highlight` reads value from `SharedConfig`, clamps
+   to [11, 18], and bakes `&fs=14` into the tile URL. TileWindow.tsx
+   parses the param + sets `--tile-font-size` CSS var on `.tile-root`.
+   `.tile-body { font-size: var(--tile-font-size, var(--fs-13)) }`.
+   Applies to **newly spawned tiles** — existing tiles keep their
+   size until next session.
+
+2. **`🤏 Compact overlay mode`** — toggle. Stored in
+   `localStorage["overlay.compact"]`. Overlay reads on mount + on
+   `storage` event (same pattern as `overlay.showCost` from v0.0.13).
+   Adds `.overlay-root.compact` class. CSS hides via aria-label
+   attribute selectors: 📸 ready · 🔥 aggressive · ⏱ rate-limited ·
+   💰 over budget · 💰 $cost · ⚠ hotkey-warnings · 🎙 voice-coach pill.
+   Keeps: status text + dot · health HUD · PTT buttons · ℹ legend · ⚙.
+
 ### → v0.0.54 (2026-05-26) — QOL block 5, #2
 
 **Copy code block button on tile pre blocks.**

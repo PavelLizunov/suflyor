@@ -69,6 +69,15 @@ export default function Overlay() {
     try { return localStorage.getItem("overlay.showCost") !== "false"; }
     catch { return true; }
   });
+  // v0.0.55: compact mode flag. When true, the bar hides the optional
+  // chips (cost, wpm, screenshot, aggressive, rate-limited, over-budget,
+  // hotkey-warnings) — leaves only status text + dot + HUD dots + PTT
+  // buttons + gear. Same localStorage pattern as showCost; flipped from
+  // Settings → 🎨 Interface → Compact mode.
+  const [compact, setCompact] = useState<boolean>(() => {
+    try { return localStorage.getItem("overlay.compact") === "true"; }
+    catch { return false; }
+  });
   // Failure HUD — 3 dots (audio/stt/ai). null = no signal received yet.
   const [health, setHealth] = useState<HealthPayload | null>(null);
   // Voice coach — live mic WPM / filler density. null = backend hasn't
@@ -416,6 +425,10 @@ export default function Overlay() {
     const onStorage = (e: StorageEvent) => {
       if (e.key === "overlay.showCost") {
         setShowCost(e.newValue !== "false");
+      } else if (e.key === "overlay.compact") {
+        // v0.0.55: same pattern as showCost — Settings writes flips
+        // compact mode without reload.
+        setCompact(e.newValue === "true");
       }
     };
     window.addEventListener("storage", onStorage);
@@ -806,7 +819,7 @@ export default function Overlay() {
     .join("  ");
 
   return (
-    <div className="overlay-root" ref={overlayRootRef}>
+    <div className={"overlay-root" + (compact ? " compact" : "")} ref={overlayRootRef}>
       <div
         ref={overlayBarRef}
         className="overlay-bar"

@@ -91,6 +91,9 @@ type Config = {
   // v0.0.42: UI language for Settings/overlay chrome. Defaults to "ru" on
   // backend. Optional in TS because old configs from <v0.0.42 lack it.
   ui_language?: string;
+  // v0.0.55: tile body font size in px (range 11-18, default 12).
+  // Optional for backward compat with <v0.0.55 configs.
+  tile_font_size?: number;
 };
 
 type BridgeStatus = {
@@ -125,6 +128,14 @@ export default function Settings() {
   const [showCost, setShowCost] = useState<boolean>(() => {
     try { return localStorage.getItem("overlay.showCost") !== "false"; }
     catch { return true; }
+  });
+  // v0.0.55: overlay compact mode — hides cost/wpm/screenshot chips in
+  // overlay bar, leaving only status + dot + HUD + gear. Stored in
+  // localStorage like showCost so it can be flipped without backend
+  // round-trip. Same storage-event pattern; Overlay.tsx listens.
+  const [overlayCompact, setOverlayCompact] = useState<boolean>(() => {
+    try { return localStorage.getItem("overlay.compact") === "true"; }
+    catch { return false; }
   });
   // KB search state (embedded glossary + commands + patterns).
   const [kbStats, setKbStats] = useState<KBStats | null>(null);
@@ -1016,6 +1027,54 @@ export default function Settings() {
                 catch (err) { console.warn("localStorage write failed:", err); }
               }}
             />
+          </div>
+        </div>
+
+        {/* v0.0.55: compact overlay mode + tile font size. */}
+        <div className="card">
+          <div className="card-title">{t("interface.compact.title", lang)}</div>
+          <div className="switch-row">
+            <div className="switch-meta">
+              <div className="switch-title">{t("interface.compact.switch.title", lang)}</div>
+              <div className="switch-desc">{t("interface.compact.switch.desc", lang)}</div>
+            </div>
+            <button
+              type="button"
+              className="switch"
+              role="switch"
+              aria-checked={overlayCompact}
+              aria-label={t("interface.compact.switch.aria", lang)}
+              onClick={() => {
+                const v = !overlayCompact;
+                setOverlayCompact(v);
+                try { localStorage.setItem("overlay.compact", String(v)); }
+                catch (err) { console.warn("localStorage write failed:", err); }
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-title">{t("interface.tilefs.title", lang)}</div>
+          <div className="card-row">
+            <div className="row-label">
+              {t("interface.tilefs.label", lang)}
+              <span className="row-hint">{t("interface.tilefs.hint", lang)}</span>
+            </div>
+            <div className="row-control" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <input
+                type="range"
+                min={11}
+                max={18}
+                step={1}
+                value={cfg.tile_font_size ?? 12}
+                onChange={(e) => update({ tile_font_size: parseInt(e.target.value, 10) || 12 })}
+                style={{ flex: 1 }}
+              />
+              <span style={{ minWidth: 36, fontFamily: "monospace", fontSize: 12 }}>
+                {cfg.tile_font_size ?? 12} px
+              </span>
+            </div>
           </div>
         </div>
       </div>)}

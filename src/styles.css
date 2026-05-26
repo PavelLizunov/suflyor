@@ -199,6 +199,34 @@ kbd {
   flex-shrink: 0;
 }
 
+/* v0.0.55: compact mode — hides optional chips that aren't critical
+   during a busy session. The `.overlay-root.compact` class is set
+   from Settings → 🎨 Interface → Compact mode. We hide via attribute
+   selectors on aria-label so we don't have to add a class to every
+   chip's JSX. Keeps:
+   - status text + dot
+   - health HUD dots
+   - PTT buttons (hold/ask)
+   - Hotkey legend ℹ
+   - Gear ⚙
+   Hides: 📸 ready · 🔥 aggressive · ⏱ rate-limited · 💰 over budget ·
+   💰 $ cost · ⚠ hotkey-warnings · 🎙 wpm coach pill. */
+.overlay-root.compact .overlay-bar [aria-label="Screenshot ready"],
+.overlay-root.compact .overlay-bar [aria-label="Скриншот готов"],
+.overlay-root.compact .overlay-bar [aria-label*="Aggressive mode"],
+.overlay-root.compact .overlay-bar [aria-label*="Aggressive режим"],
+.overlay-root.compact .overlay-bar [aria-label="Rate limited"],
+.overlay-root.compact .overlay-bar [aria-label="Rate-limited"],
+.overlay-root.compact .overlay-bar [aria-label*="over configured budget"],
+.overlay-root.compact .overlay-bar [aria-label*="превысила настроенный бюджет"],
+.overlay-root.compact .overlay-bar [aria-label^="Session cost"],
+.overlay-root.compact .overlay-bar [aria-label^="Стоимость сессии"],
+.overlay-root.compact .overlay-bar [aria-label*="hotkey warning"],
+.overlay-root.compact .overlay-bar [aria-label*="проблем"],
+.overlay-root.compact .overlay-bar .coach-pill {
+  display: none !important;
+}
+
 /* Status pill on the bar (label + dot) */
 .overlay-bar .status {
   display: inline-flex;
@@ -447,9 +475,12 @@ kbd {
   /* v0.0.20: bumped bottom padding so the very last line of an answer
    * isn't cut off at the scroll edge. With overflow:auto, padding-bottom
    * is part of the scrollable extent — used to be s-4 (~12px) which
-   * felt clipped on long answers. */
+   * felt clipped on long answers.
+   * v0.0.55: font-size now driven by --tile-font-size CSS var set on
+   * .tile-root (TileWindow.tsx reads &fs= URL param baked by spawn_tile
+   * from cfg.tile_font_size). Falls back to 13 for backwards-compat. */
   padding: var(--s-3) var(--s-4) var(--s-5);
-  font-size: var(--fs-13);
+  font-size: var(--tile-font-size, var(--fs-13));
   line-height: 1.55;
   color: var(--c-text);
   overflow-y: auto;

@@ -362,16 +362,23 @@ pub fn spawn_tile_with_highlight(
     // tooltips + source label. Tile windows can't call get_config
     // (assert_overlay gates it), so we pull ui_language from shared
     // state right here at spawn time.
-    let ui_lang: String = app
+    let (ui_lang, tile_fs) = app
         .try_state::<crate::config::SharedConfig>()
-        .map(|s| s.read().ui_language.clone())
-        .unwrap_or_else(|| "ru".to_string());
+        .map(|s| {
+            let c = s.read();
+            (c.ui_language.clone(), c.tile_font_size)
+        })
+        .unwrap_or_else(|| ("ru".to_string(), 12));
     let lang_param = if ui_lang == "en" { "&lang=en" } else { "&lang=ru" };
+    // v0.0.55: tile font size baked into URL so the tile can apply it
+    // at mount without an IPC call. Clamp to [11, 18] defensively —
+    // an out-of-range config file shouldn't crash the tile renderer.
+    let fs_clamped = tile_fs.clamp(11, 18);
     let route = format!(
-        "index.html?tile=1&id={}&kind={}&seq={}{}&q={}&a={}&mh={}&mw={}{}",
+        "index.html?tile=1&id={}&kind={}&seq={}{}&q={}&a={}&mh={}&mw={}{}&fs={}",
         id, kind.as_str(), seq, hl_param, q_enc, a_enc,
         dims.h_max.round() as i64, dims.w.round() as i64,
-        lang_param
+        lang_param, fs_clamped
     );
 
     let window = match WebviewWindowBuilder::new(app, &label, WebviewUrl::App(route.into()))
