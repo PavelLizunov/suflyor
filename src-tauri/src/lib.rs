@@ -2094,6 +2094,45 @@ fn ymd_from_unix_ms(ms: i64) -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
+/// v0.0.66: detector trigger tester. Runs the real detect_trigger
+/// function on sample text using the current cfg.trigger_keywords.
+/// Returns a human-readable verdict so user can tune trigger_keywords
+/// without spinning up a live session.
+#[derive(Debug, Serialize)]
+struct DetectorTestResult {
+    triggered: bool,
+    reason: String,
+    matched_keyword: Option<String>,
+}
+
+#[tauri::command]
+fn test_detector(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, SharedConfig>,
+    text: String,
+) -> Result<DetectorTestResult, String> {
+    assert_overlay(&window)?;
+    let keywords = state.read().trigger_keywords.clone();
+    let result = runtime::detect_trigger(&text, &keywords);
+    Ok(match result {
+        Some(runtime::Trigger::Question(_)) => DetectorTestResult {
+            triggered: true,
+            reason: "matched as question (contains ? or interrogative pattern)".into(),
+            matched_keyword: None,
+        },
+        Some(runtime::Trigger::Keyword(kw, _)) => DetectorTestResult {
+            triggered: true,
+            reason: format!("matched keyword: «{kw}»"),
+            matched_keyword: Some(kw),
+        },
+        None => DetectorTestResult {
+            triggered: false,
+            reason: "no trigger (no '?', no interrogative, no keyword match, or too short / noise)".into(),
+            matched_keyword: None,
+        },
+    })
+}
+
 /// v0.0.65: Pre-meeting cheatsheet generator. Reads cfg.meeting_context,
 /// asks Sonnet (prep_model) to produce 8 likely interview questions
 /// with brief answer outlines. Saves the markdown to Desktop with a
@@ -2651,6 +2690,7 @@ pub fn run() {
             bookmark_last_answer,
             open_bookmarks,
             generate_cheatsheet,
+            test_detector,
             set_stealth,
             list_snippets,
             expand_snippet,

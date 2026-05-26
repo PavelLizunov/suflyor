@@ -11,6 +11,25 @@ for download. No auto-install (no code signing — by design).
 
 ## Per-version migration notes
 
+### → v0.0.66 (2026-05-26) — QOL block 5, #14
+
+**Detector trigger tester in Settings → 🪟 Auto-tiles.**
+
+New `🧪 Detector tester` row in the Auto-tiles card. Type sample text
++ click "Test" → backend runs real `detect_trigger` with current
+`cfg.trigger_keywords` + returns:
+- ✓ "Would trigger: matched as question" — for question-pattern hits
+- ✓ "Would trigger: matched keyword «kubernetes»" — for keyword hits
+- ✗ "Would skip: no '?', no interrogative, no keyword match" — for
+  no-trigger cases
+
+`detect_trigger` + `Trigger` enum made `pub` (was crate-private).
+New `test_detector` Tauri command + `DetectorTestResult` struct.
+
+Use case: tune trigger_keywords without spinning up a live session.
+Type "What about etcd?" → see if it would fire. Add a new keyword,
+re-test, iterate.
+
 ### → v0.0.65 (2026-05-26) — QOL block 5, #13
 
 **Pre-meeting cheatsheet generator (💎 button).**

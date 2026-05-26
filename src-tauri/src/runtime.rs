@@ -1096,7 +1096,7 @@ async fn maybe_spawn_tile(
 }
 
 #[derive(Debug)]
-enum Trigger {
+pub enum Trigger {
     Question(String),
     Keyword(String, String), // (keyword, full line)
 }
@@ -1262,7 +1262,7 @@ fn strip_filler_prefix(lower: &str) -> String {
     s
 }
 
-fn detect_trigger(text: &str, keyword_list: &str) -> Option<Trigger> {
+pub fn detect_trigger(text: &str, keyword_list: &str) -> Option<Trigger> {
     let trimmed = text.trim();
     if trimmed.len() < 5 {
         return None;

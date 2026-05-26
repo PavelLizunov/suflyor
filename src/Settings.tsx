@@ -162,6 +162,12 @@ export default function Settings() {
   // { [key]: count }. Settings reads on mount; snippet-row Expand
   // handler increments. Cap at 999 per key (cosmetic, prevents overflow
   // in the badge UI).
+  // v0.0.66: detector tester state. Sticky across re-renders so user
+  // can tweak trigger_keywords + re-test without retyping.
+  const [detectorTestText, setDetectorTestText] = useState("");
+  const [detectorTestResult, setDetectorTestResult] = useState<
+    { triggered: boolean; reason: string; matched_keyword: string | null } | null
+  >(null);
   const [snipUses, setSnipUses] = useState<Record<string, number>>(() => {
     try {
       const raw = localStorage.getItem("snippet.uses");
@@ -1259,6 +1265,67 @@ export default function Settings() {
                 placeholder="kubernetes etcd istio terraform prometheus"
               />
             </div>
+          </div>
+          {/* v0.0.66: detector trigger tester. Type sample text, see if
+              it would trigger an auto-tile + why. */}
+          <div className="card-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+            <div className="row-label" style={{ flex: "none" }}>
+              {lang === "en" ? "🧪 Detector tester" : "🧪 Тестер детектора"}
+              <span className="row-hint">
+                {lang === "en"
+                  ? "Type sample text → see if detector would spawn a tile + why."
+                  : "Введи текст → посмотри сработает ли детектор + почему."}
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <input
+                type="text"
+                value={detectorTestText}
+                onChange={(e) => setDetectorTestText(e.target.value)}
+                placeholder={lang === "en"
+                  ? "What about Kubernetes networking?"
+                  : "Расскажи как настраивал etcd кластер"}
+                style={{ flex: 1 }}
+              />
+              <button
+                className="btn secondary"
+                disabled={!detectorTestText.trim()}
+                onClick={async () => {
+                  try {
+                    type Result = { triggered: boolean; reason: string; matched_keyword: string | null };
+                    const r = await invoke<Result>("test_detector", { text: detectorTestText });
+                    setDetectorTestResult(r);
+                  } catch (e) {
+                    setDetectorTestResult({ triggered: false, reason: String(e), matched_keyword: null });
+                  }
+                }}
+              >
+                {lang === "en" ? "Test" : "Тест"}
+              </button>
+            </div>
+            {detectorTestResult && (
+              <div
+                style={{
+                  fontSize: 11,
+                  padding: "6px 8px",
+                  borderRadius: 4,
+                  background: detectorTestResult.triggered
+                    ? "rgba(74, 222, 128, 0.12)"
+                    : "rgba(148, 163, 184, 0.12)",
+                  borderLeft: detectorTestResult.triggered
+                    ? "3px solid var(--c-mic, #4ade80)"
+                    : "3px solid var(--c-border)",
+                  color: "var(--c-text)",
+                }}
+              >
+                <strong>
+                  {detectorTestResult.triggered
+                    ? (lang === "en" ? "✓ Would trigger:" : "✓ Сработал бы:")
+                    : (lang === "en" ? "✗ Would skip:" : "✗ Пропустил бы:")}
+                </strong>{" "}
+                {detectorTestResult.reason}
+              </div>
+            )}
           </div>
         </div>
       </div>)}
