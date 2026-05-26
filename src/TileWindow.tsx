@@ -548,10 +548,12 @@ export default function TileWindow() {
         <button
           className="tile-edit-q"
           onClick={() => {
-            if (reloading) return;
+            if (reloading || savingKey !== null) return;
             setEditingQuestion(question);
           }}
-          disabled={reloading}
+          // v0.1.1 P2 fix: also disable while save-snippet input is open
+          // so both autoFocus inputs don't fight for focus.
+          disabled={reloading || savingKey !== null}
           title={lang === "en"
             ? "Edit question and re-ask (Enter to submit, Esc to cancel)"
             : "Изменить вопрос и переспросить (Enter — отправить, Esc — отменить)"}
@@ -559,8 +561,8 @@ export default function TileWindow() {
           style={{
             background: "transparent",
             border: "none",
-            cursor: reloading ? "wait" : "pointer",
-            opacity: reloading ? 0.5 : 0.85,
+            cursor: reloading || savingKey !== null ? "wait" : "pointer",
+            opacity: reloading || savingKey !== null ? 0.5 : 0.85,
             padding: "0 6px",
             fontSize: 13,
           }}
@@ -663,6 +665,10 @@ export default function TileWindow() {
             autoFocus
             type="text"
             value={savingKey}
+            // v0.1.1 P2 fix: disable input during the 1.5s success
+            // toast window so a stray Enter can't re-submit (which
+            // would trigger backend dedup error + flip ✓ to ✗).
+            disabled={saveStatus === "ok"}
             onChange={(e) => setSavingKey(e.target.value.slice(0, 32))}
             onKeyDown={async (e) => {
               if (e.key === "Escape") {
@@ -671,11 +677,15 @@ export default function TileWindow() {
                 return;
               }
               if (e.key === "Enter") {
+                if (saveStatus === "ok") return; // already saved; ignore until close
                 const key = (savingKey ?? "").trim();
                 if (!key) return;
-                // Build the snippet body — combine question and answer
-                // with a header so the recalled tile reads clearly.
-                const body = `**${question}**\n\n${answer}`;
+                // v0.1.1 P3 fix: escape literal asterisks in question
+                // so a Whisper output like "what is **idempotency**?"
+                // doesn't produce nested-emphasis garbage when the
+                // snippet is recalled and rendered as markdown.
+                const safeQ = question.replace(/\*/g, "\\*");
+                const body = `**${safeQ}**\n\n${answer}`;
                 try {
                   await invoke<string>("add_snippet", { key, body });
                   setSaveStatus("ok");

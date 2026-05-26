@@ -485,6 +485,26 @@ kbd {
   background: rgba(250, 204, 21, 0.55);
 }
 
+/* v0.1.1: hover polish for the new tile chrome buttons added in
+   the v0.0.67-v0.0.99 marathon. Inline-styled by default; this just
+   adds a consistent hover background so they don't feel "dead". */
+.tile-reload:hover,
+.tile-translate:hover,
+.tile-collapse:hover,
+.tile-edit-q:hover,
+.tile-save-snip:hover,
+.tile-copy-q:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+.tile-reload:active,
+.tile-translate:active,
+.tile-collapse:active,
+.tile-edit-q:active,
+.tile-save-snip:active,
+.tile-copy-q:active {
+  background: rgba(255, 255, 255, 0.16) !important;
+}
+
 /* Question (interviewer line) — neutral so kind only shows on chrome.
  * v0.0.20: max 4 lines (~78px) tall + own scroll so a long question
  * doesn't squeeze the answer area. Hover-to-expand grows it up to

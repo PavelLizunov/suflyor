@@ -26,6 +26,36 @@ for download. No auto-install (no code signing — by design).
 
 Two code-review agent passes ran on the diff. First found 3 P0/P1 (shipped .85, .86, .87). Second pass running at time of v0.0.88 ship.
 
+### → v0.1.1 (2026-05-26) — CSS polish + audit #4 P2/P3 fixes
+
+**CSS polish — tile chrome button hover/active states.**
+Added subtle hover backgrounds for the 6 new tile chrome buttons
+shipped in the marathon (🔄 reload, 🌐 translate, ▾ collapse,
+✏️ edit, 💾 save snippet, 📋 copy question). Hover =
+`rgba(255,255,255,0.08)`, active = `0.16`. Matches existing tile-pin
+/ tile-close interaction feel.
+
+**P2 — Concurrent ✏️ + 💾 inline inputs both opened with autoFocus.**
+The edit-question button's `disabled` only checked `reloading`, not
+`savingKey !== null`. Two simultaneous autoFocus inputs caused focus
+fight; save flow broke. Edit button now also disables while save is
+open.
+
+**P2 — Save input stayed editable during the 1.5 s success window.**
+After `add_snippet` resolved, the ✓ toast deferred `setSavingKey
+(null)` 1500 ms. The input was still focused + accepting input → a
+stray Enter would re-submit, triggering backend dedup error and
+flipping ✓ to ✗. Input now `disabled={saveStatus === "ok"}` and the
+Enter handler ignores while ok.
+
+**P3 — Literal asterisks in saved snippet body produced markdown
+mush.**
+A question like "what is **idempotency**?" became
+`***what is **idempotency**?***\n\n…` when wrapped. Asterisks now
+escaped via `question.replace(/\*/g, "\\*")` before interpolation.
+
+All from code-review agent #4 on v0.0.96-v0.1.0 diff.
+
 ### → v0.1.0 (2026-05-26) — 🎉 Milestone: marathon block 5 complete
 
 Version bump from 0.0.x to 0.1.x to mark feature-complete state
