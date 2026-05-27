@@ -37,6 +37,12 @@ export component TileWindow inherits Window {
     // toggles on click. Maximize bool: Rust resizes window via Win32.
     in-out property <bool> pinned: false;
     in-out property <bool> maximized: false;
+    // Phase E6 v20 — body opacity (0.5..1.0). Lets the user see
+    // through tiles to the meeting window underneath. Wired to
+    // cfg.tile_body_opacity via Settings → Stealth slider.
+    // Cherry-picked from Anthropic design bundle 2 (only this prop;
+    // no other design changes — see chat thread cycle 26).
+    in-out property <float> body-opacity: 1.0;
 
     callback close-clicked();
     callback pin-clicked();
@@ -48,6 +54,7 @@ export component TileWindow inherits Window {
         border-radius: 10px;
         border-width: 1px;
         border-color: #2a2c3a;
+        opacity: root.body-opacity;
 
         VerticalLayout {
             padding: 10px;

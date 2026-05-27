@@ -177,6 +177,14 @@ pub struct Config {
     /// that come up every interview (incident-response framework, SLI
     /// design, postgres tuning checklist, etc.).
     pub snippets: Vec<Snippet>,
+
+    /// Phase E6 v20 — tile body opacity (0.5..1.0). Lets the user see
+    /// THROUGH tiles to the meeting window underneath. Default 1.0 =
+    /// opaque (current behaviour). Cherry-picked from the design
+    /// bundle 2 `body-opacity` prop; only this one design change was
+    /// adopted — see cycle 26 chat thread for risk-analysis rationale.
+    #[serde(default = "default_tile_body_opacity")]
+    pub tile_body_opacity: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -229,8 +237,13 @@ impl Config {
             max_session_cost_usd: default_max_session_cost_usd(),
             detector_skip_mic: default_detector_skip_mic(),
             auto_tile_every_line: false,
+            tile_body_opacity: default_tile_body_opacity(),
         }
     }
+}
+
+fn default_tile_body_opacity() -> f32 {
+    1.0
 }
 
 fn default_post_meeting_debrief_enabled() -> bool {

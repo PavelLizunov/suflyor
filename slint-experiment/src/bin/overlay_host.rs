@@ -853,6 +853,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // use invoke_from_event_loop directly because TileWindow holds
     // Rc internally and isn't Send.
     let tiles_for_poll = tiles.clone();
+    let cfg_for_poll = cfg.clone();
     let spawn_poll_timer = Timer::default();
     spawn_poll_timer.start(TimerMode::Repeated, Duration::from_millis(50), move || {
         // Phase E6 v19 — process at most 1 spawn request per 50 ms
@@ -931,6 +932,9 @@ fn main() -> Result<(), slint::PlatformError> {
                 })
                 .collect();
             tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
+            // Phase E6 v20 — apply saved tile opacity from config so
+            // new auto-tiles inherit the user's last slider setting.
+            tile.set_body_opacity(cfg_for_poll.read().tile_body_opacity);
             let weak_tile = tile.as_weak();
             // Phase E6 v17 — capture the vec so close-handler can
             // REMOVE the tile (not just hide). Previous version
@@ -2579,6 +2583,29 @@ fn open_settings(
         });
     }
 
+    // Phase E6 v20 — tile opacity slider. Persists to config AND
+    // applies to all currently-visible tiles via tiles_ref.
+    {
+        let cfg_c = cfg.clone();
+        let tiles_c = tiles_ref.clone();
+        win.on_tile_body_opacity_changed(move |new_value| {
+            let clamped = new_value.clamp(0.5, 1.0);
+            {
+                let mut c = cfg_c.write();
+                c.tile_body_opacity = clamped;
+                if let Err(e) = overlay_backend::config::save(&c) {
+                    eprintln!("[overlay-host] tile_body_opacity save failed: {e:#}");
+                    return;
+                }
+            }
+            // Apply live to all currently-visible tiles.
+            for tile in tiles_c.borrow().iter() {
+                tile.set_body_opacity(clamped);
+            }
+            eprintln!("[overlay-host] tile_body_opacity -> {clamped:.2}");
+        });
+    }
+
     let weak_close = win.as_weak();
     let settings_close = settings_ref.clone();
     win.on_close_clicked(move || {
@@ -2618,6 +2645,9 @@ fn populate_token_status(win: &SettingsWindow, cfg: &overlay_backend::config::Sh
     };
     win.set_ai_bearer_status(SharedString::from(ai_status));
     win.set_groq_api_key_status(SharedString::from(groq_status));
+    // Phase E6 v20 — load tile opacity from config so the slider
+    // reflects the saved value on Settings re-open.
+    win.set_tile_body_opacity(c.tile_body_opacity);
     win.set_ai_base_url_input(SharedString::from(c.ai_base_url.clone()));
     win.set_ai_model_input(SharedString::from(c.ai_model.clone()));
 }

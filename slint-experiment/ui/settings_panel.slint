@@ -24,7 +24,7 @@
 // panels. Day 2 stub (the original two cross-window toggles) now
 // lives inside tab 0 (Stealth).
 
-import { Button, CheckBox, LineEdit, ScrollView, SpinBox, ComboBox } from "std-widgets.slint";
+import { Button, CheckBox, LineEdit, ScrollView, SpinBox, ComboBox, Slider } from "std-widgets.slint";
 
 export component SettingsWindow inherits Window {
     title: @tr("overlay-mvp settings (Slint)");
@@ -50,6 +50,12 @@ export component SettingsWindow inherits Window {
     in-out property <string> groq-api-key-input: "";
     in-out property <string> ai-base-url-input: "";
     in-out property <string> ai-model-input: "";
+
+    // Phase E6 v20 — tile body opacity (50..100%). Slider on Stealth
+    // tab; Rust writes to cfg.tile_body_opacity + applies to spawning
+    // tiles. Cherry-picked from design bundle 2 (only this prop).
+    in-out property <float> tile-body-opacity: 1.0;
+    callback tile-body-opacity-changed(float);
 
     callback always-on-top-changed(bool);
     callback stealth-changed(bool);
@@ -168,6 +174,25 @@ export component SettingsWindow inherits Window {
                             text: @tr("Stealth (hide from screen capture)");
                             checked <=> root.stealth-toggle;
                             toggled => { root.stealth-changed(self.checked); }
+                        }
+                        Rectangle { height: 12px; }
+                        // Phase E6 v20 — tile opacity slider.
+                        Text {
+                            text: @tr("Tile opacity ({}%)", Math.round(root.tile-body-opacity * 100));
+                            font-size: 11px;
+                            color: #c8c8cc;
+                        }
+                        Text {
+                            text: @tr("Lower values let you see the meeting through tiles. 100% = opaque, 50% = half-transparent.");
+                            font-size: 10px;
+                            color: #777;
+                            wrap: word-wrap;
+                        }
+                        Slider {
+                            minimum: 0.5;
+                            maximum: 1.0;
+                            value <=> root.tile-body-opacity;
+                            changed(v) => { root.tile-body-opacity-changed(v); }
                         }
                     }
                     if root.active-tab == 1 : VerticalLayout {
