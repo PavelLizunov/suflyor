@@ -23,6 +23,19 @@ pub struct AppState {
     /// True when the overlay should be hidden from screen capture.
     /// Wired to settings stealth toggle (WDA_EXCLUDEFROMCAPTURE).
     pub stealth: bool,
+    /// True when microphone capture is active. Phase 3 stub — Phase 1
+    /// proper integration with audio module pending.
+    pub mic_active: bool,
+    /// True when system audio capture is active.
+    pub sys_active: bool,
+    /// True when the session timer is running.
+    pub timer_active: bool,
+    /// Elapsed session seconds (formatted to MM:SS by overlay bar).
+    pub session_secs: u64,
+    /// Current AI model — cycles through "sonnet" / "haiku" / "opus".
+    pub ai_model: String,
+    /// Cumulative session cost in USD.
+    pub cost_usd: f64,
 }
 
 /// Convenience alias used by all window-spawning callbacks.
@@ -32,6 +45,29 @@ pub type SharedState = Arc<Mutex<AppState>>;
 pub fn new_shared_state() -> SharedState {
     Arc::new(Mutex::new(AppState {
         always_on_top: true, // overlay defaults to topmost
+        ai_model: "sonnet".to_string(),
         ..Default::default()
     }))
+}
+
+/// Cycle AI model: sonnet -> haiku -> opus -> sonnet.
+pub fn next_model(current: &str) -> &'static str {
+    match current {
+        "sonnet" => "haiku",
+        "haiku" => "opus",
+        _ => "sonnet",
+    }
+}
+
+/// Format session seconds as MM:SS (or H:MM:SS for >1 hour).
+#[must_use]
+pub fn format_timer(secs: u64) -> String {
+    let h = secs / 3600;
+    let m = (secs / 60) % 60;
+    let s = secs % 60;
+    if h > 0 {
+        format!("{h}:{m:02}:{s:02}")
+    } else {
+        format!("{m:02}:{s:02}")
+    }
 }

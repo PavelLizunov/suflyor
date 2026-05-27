@@ -1,65 +1,240 @@
-// Phase 1 Day 2 — Overlay bar window stub.
+// Phase 3 — Real overlay bar with full chip set.
 //
-// Final Phase 3 version will rebuild Overlay.tsx (status text, mic
-// chip, push-to-talk hold, F1/F2/F7 chips, ⚙ Settings, etc.). Day 2
-// stub: title + 3 action buttons + counter display.
+// Ports the structural pattern of src/Overlay.tsx: a horizontal strip
+// of small chips on a translucent dark rounded background, drawn always
+// on top + transparent + click-through. Each chip is a reusable
+// Component so Phase 3+ can add new chips without touching the layout.
+//
+// Backend calls are stubs at the .slint level — the Rust side wires
+// real callbacks to audio/stt/ai/journal modules. Day 2 binary just
+// logs button presses; future binaries integrate with the actual
+// overlay-mvp backend.
 
 import { Button } from "std-widgets.slint";
+
+// ===== Reusable chip primitives =====
+
+// Generic chip: rounded background + 1px border + small label, with
+// an optional active state for the colored variant.
+component Chip inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    in property <color> accent: #6cf;
+
+    callback clicked();
+
+    background: active ? accent.with-alpha(0.18) : transparent;
+    border-color: active ? accent : #3a3c44;
+    border-width: 1px;
+    border-radius: 10px;
+    height: 22px;
+    horizontal-stretch: 0;
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        Text {
+            text: label;
+            font-size: 11px;
+            color: active ? accent : #c8c8cc;
+            vertical-alignment: center;
+        }
+    }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+// Active-indicator chip: chip with a small pulsing dot prefix that
+// represents an "active" / "live" capture state. Used for mic + sys.
+component LiveChip inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    in property <color> accent: #34d399;
+
+    callback clicked();
+
+    background: active ? accent.with-alpha(0.18) : transparent;
+    border-color: active ? accent : #3a3c44;
+    border-width: 1px;
+    border-radius: 10px;
+    height: 22px;
+
+    HorizontalLayout {
+        padding-left: 6px;
+        padding-right: 8px;
+        spacing: 4px;
+        // Dot indicator
+        Rectangle {
+            width: 6px;
+            height: 6px;
+            border-radius: 3px;
+            background: active ? accent : #4a4c54;
+            y: (parent.height - self.height) / 2;
+        }
+        Text {
+            text: label;
+            font-size: 11px;
+            color: active ? accent : #c8c8cc;
+            vertical-alignment: center;
+        }
+    }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+// ===== Main overlay bar =====
 
 export component OverlayBarWindow inherits Window {
     title: "overlay-mvp (Slint)";
     background: transparent;
     no-frame: true;
     always-on-top: true;
-    preferred-width: 520px;
-    preferred-height: 64px;
-    min-width: 320px;
+    preferred-width: 720px;
+    preferred-height: 56px;
+    min-width: 520px;
 
+    // Status pill text (idle / recording / etc).
+    in-out property <string> status-text: "idle";
+    in-out property <color> status-color: #999;
+
+    // Live capture flags.
+    in-out property <bool> mic-active: false;
+    in-out property <bool> sys-active: false;
+
+    // Session timer label (formatted by Rust, e.g. "03:42").
+    in-out property <string> timer-label: "00:00";
+    in-out property <bool> timer-active: false;
+
+    // AI model chip cycle: "sonnet" / "haiku" / "opus".
+    in-out property <string> ai-model: "sonnet";
+
+    // Cumulative session cost (formatted by Rust, e.g. "$0.024").
+    in-out property <string> cost-label: "$0.000";
+
+    // Tile counter for the "+ Tile" button.
     in-out property <int> tiles-spawned: 0;
 
+    // ===== Callbacks =====
+    callback mic-toggle-clicked();
+    callback sys-toggle-clicked();
+    callback timer-toggle-clicked();
+    callback ai-model-cycle-clicked();
     callback spawn-tile-clicked();
+    callback bookmark-clicked();
+    callback tips-clicked();
+    callback stealth-toggle-clicked();
     callback open-settings-clicked();
     callback quit-clicked();
 
     Rectangle {
         background: #14161eea;
-        border-radius: 10px;
+        border-radius: 12px;
         border-width: 1px;
         border-color: #2a2c3a;
 
         HorizontalLayout {
             padding: 8px;
-            spacing: 8px;
+            spacing: 6px;
             alignment: start;
 
-            Text {
-                text: "overlay-mvp (Slint Phase 1 Day 2)";
-                font-size: 12px;
-                color: #e8e8ec;
-                vertical-alignment: center;
+            // Status pill (left edge)
+            Rectangle {
+                background: root.status-color.with-alpha(0.18);
+                border-color: root.status-color;
+                border-width: 1px;
+                border-radius: 10px;
+                height: 22px;
+                horizontal-stretch: 0;
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    Text {
+                        text: root.status-text;
+                        font-size: 11px;
+                        font-weight: 600;
+                        color: root.status-color;
+                        vertical-alignment: center;
+                    }
+                }
             }
 
-            Rectangle {  // spacer
-                horizontal-stretch: 1;
+            // Live capture chips
+            LiveChip {
+                label: "🎤 mic";
+                active: root.mic-active;
+                accent: #34d399;
+                clicked => { root.mic-toggle-clicked(); }
             }
 
-            Text {
-                text: "tiles: " + root.tiles-spawned;
-                font-size: 11px;
-                color: #6cf;
-                vertical-alignment: center;
+            LiveChip {
+                label: "🗣 sys";
+                active: root.sys-active;
+                accent: #6cf;
+                clicked => { root.sys-toggle-clicked(); }
             }
 
-            Button {
-                text: "+ Tile";
+            // Session timer
+            Chip {
+                label: "⏱ " + root.timer-label;
+                active: root.timer-active;
+                accent: #fbbf24;
+                clicked => { root.timer-toggle-clicked(); }
+            }
+
+            // AI model selector
+            Chip {
+                label: "🧠 " + root.ai-model;
+                accent: #818cf8;
+                clicked => { root.ai-model-cycle-clicked(); }
+            }
+
+            // Cost display (always shown)
+            Chip {
+                label: root.cost-label;
+                accent: #f59e0b;
+                clicked => { /* no-op for now */ }
+            }
+
+            // AI tips / followups
+            Chip {
+                label: "💡";
+                accent: #fde68a;
+                clicked => { root.tips-clicked(); }
+            }
+
+            // Bookmark
+            Chip {
+                label: "⭐";
+                accent: #fcd34d;
+                clicked => { root.bookmark-clicked(); }
+            }
+
+            // Stealth toggle
+            Chip {
+                label: "🎯";
+                accent: #ec4899;
+                clicked => { root.stealth-toggle-clicked(); }
+            }
+
+            // Spring spacer
+            Rectangle { horizontal-stretch: 1; }
+
+            // Tile counter + spawn
+            Chip {
+                label: "+ tile (" + root.tiles-spawned + ")";
+                accent: #f472b6;
                 clicked => { root.spawn-tile-clicked(); }
             }
-            Button {
-                text: "⚙";
+
+            // Settings
+            Chip {
+                label: "⚙";
+                accent: #94a3b8;
                 clicked => { root.open-settings-clicked(); }
             }
-            Button {
-                text: "✕";
+
+            // Quit
+            Chip {
+                label: "✕";
+                accent: #ef4444;
                 clicked => { root.quit-clicked(); }
             }
         }
