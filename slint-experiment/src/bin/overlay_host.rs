@@ -667,27 +667,9 @@ fn main() -> Result<(), slint::PlatformError> {
     result
 }
 
-/// Map a reqwest/anyhow error string to a privacy-safe category for
-/// display in the tile body. Strips out URLs / IPs / bearer tokens
-/// that would otherwise land in user-shared screenshots.
-fn classify_ai_error(msg: &str) -> &'static str {
-    let lower = msg.to_lowercase();
-    if lower.contains("timed out") || lower.contains("timeout") {
-        "AI bridge timed out"
-    } else if lower.contains("connection refused") || lower.contains("connection error") {
-        "AI bridge unreachable (connection refused)"
-    } else if lower.contains("401") || lower.contains("403") || lower.contains("unauthorized") {
-        "AI bridge rejected request (auth failure)"
-    } else if lower.contains("404") || lower.contains("not found") {
-        "AI bridge endpoint not found (URL or model wrong)"
-    } else if lower.contains("429") || lower.contains("rate") {
-        "AI bridge rate-limited"
-    } else if lower.contains("500") || lower.contains("502") || lower.contains("503") {
-        "AI bridge returned server error"
-    } else {
-        "AI bridge call failed (see overlay-host stderr for diagnostic)"
-    }
-}
+// `classify_ai_error` moved to slint_replay::app_state so the unit
+// tests can pin the categories table without spinning up the UI.
+use slint_replay::app_state::classify_ai_error;
 
 /// Recompute status pill based on capture flags.
 fn refresh_status(overlay: &OverlayBarWindow, mic: bool, sys: bool) {

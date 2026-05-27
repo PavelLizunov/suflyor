@@ -86,6 +86,72 @@ pub fn format_timer(secs: u64) -> String {
     }
 }
 
+/// Plain-Rust shape produced by the palette adapter before wrapping
+/// in the Slint `PaletteResult` struct. Lifted out of `overlay_host`
+/// so the per-row preview/fallback logic gets unit-test coverage
+/// without needing a Slint runtime.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PaletteRow {
+    pub key: String,
+    pub title: String,
+    pub preview: String,
+    pub source: &'static str,
+}
+
+/// Convert a single `overlay_backend::kb::KBEntry` into the row data
+/// the F4 palette renders. Preview is the first sentence (or first
+/// 160 chars, whichever is shorter) of the body, with empty fallback.
+/// Title falls back to the key if the heading is blank.
+#[must_use]
+pub fn palette_row_from(entry: &overlay_backend::kb::KBEntry) -> PaletteRow {
+    let preview = entry
+        .body
+        .split_terminator(['.', '\n'])
+        .next()
+        .unwrap_or("")
+        .chars()
+        .take(160)
+        .collect::<String>();
+    let title = if entry.heading.is_empty() {
+        entry.key.clone()
+    } else {
+        entry.heading.clone()
+    };
+    PaletteRow {
+        key: entry.key.clone(),
+        title,
+        preview,
+        source: entry.source,
+    }
+}
+
+/// Map an AI-error-chain string to a privacy-safe category for tile
+/// display. Pure function — extracted from overlay_host.rs so unit
+/// tests can pin the classifier table without spinning up the UI.
+/// Strips out URLs / IPs / bearer tokens that would otherwise land
+/// in user-shared screenshots. Order of checks matters when keywords
+/// overlap (e.g. "timeout" before "404" since reqwest timeout chain
+/// can contain both).
+#[must_use]
+pub fn classify_ai_error(msg: &str) -> &'static str {
+    let lower = msg.to_lowercase();
+    if lower.contains("timed out") || lower.contains("timeout") {
+        "AI bridge timed out"
+    } else if lower.contains("connection refused") || lower.contains("connection error") {
+        "AI bridge unreachable (connection refused)"
+    } else if lower.contains("401") || lower.contains("403") || lower.contains("unauthorized") {
+        "AI bridge rejected request (auth failure)"
+    } else if lower.contains("404") || lower.contains("not found") {
+        "AI bridge endpoint not found (URL or model wrong)"
+    } else if lower.contains("429") || lower.contains("rate") {
+        "AI bridge rate-limited"
+    } else if lower.contains("500") || lower.contains("502") || lower.contains("503") {
+        "AI bridge returned server error"
+    } else {
+        "AI bridge call failed (see overlay-host stderr for diagnostic)"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -111,5 +177,111 @@ mod tests {
         assert!(canonical.contains(&next_model("sonnet")));
         assert!(canonical.contains(&next_model("opus")));
         assert_eq!(next_model("garbage"), "claude-haiku-4-5");
+    }
+
+    /// Golden test for the palette row preview logic. Pins the
+    /// 160-char cap, first-sentence-only behavior, and empty-heading
+    /// fallback to key — the three regressions most likely to slip
+    /// through future refactors. Review-agent recommended this as
+    /// the highest-value test to add for the current Slint code path
+    /// 2026-05-27.
+    #[test]
+    fn palette_row_preview_slicing() {
+        use overlay_backend::kb::KBEntry;
+        // 1. Body with multiple sentences — keeps only first.
+        let e = KBEntry::new(
+            "k8s".into(),
+            "kubernetes — k8s".into(),
+            "Container orchestration platform. Manages deployment. Heals failures.".into(),
+            "glossary",
+        );
+        let r = palette_row_from(&e);
+        assert_eq!(r.key, "k8s");
+        assert_eq!(r.title, "kubernetes — k8s");
+        assert_eq!(r.preview, "Container orchestration platform");
+        assert_eq!(r.source, "glossary");
+
+        // 2. Body longer than 160 chars in a single sentence → trimmed.
+        let long_body = "a".repeat(300);
+        let e2 = KBEntry::new(
+            "long".into(),
+            "Long entry".into(),
+            long_body.clone(),
+            "glossary",
+        );
+        let r2 = palette_row_from(&e2);
+        assert_eq!(r2.preview.chars().count(), 160);
+        assert!(long_body.starts_with(&r2.preview));
+
+        // 3. Empty heading → falls back to key.
+        let e3 = KBEntry::new(
+            "naked".into(),
+            String::new(),
+            "tiny body".into(),
+            "snippets",
+        );
+        let r3 = palette_row_from(&e3);
+        assert_eq!(r3.title, "naked");
+        assert_eq!(r3.preview, "tiny body");
+
+        // 4. Newline-only body → empty preview.
+        let e4 = KBEntry::new(
+            "nl".into(),
+            "Newline-only".into(),
+            "\n\n\n".into(),
+            "glossary",
+        );
+        let r4 = palette_row_from(&e4);
+        assert_eq!(r4.preview, "");
+    }
+
+    /// Table-driven check that classify_ai_error never leaks the raw
+    /// URL / IP / token from a reqwest error string. Each entry is
+    /// (error-substring, expected-category, must-NOT-appear-in-output).
+    #[test]
+    fn classify_ai_error_table() {
+        let cases: &[(&str, &str)] = &[
+            (
+                "error sending request for url (http://192.168.0.142:18902/v1/chat/completions): operation timed out",
+                "AI bridge timed out",
+            ),
+            (
+                "tcp connect: Connection refused (os error 10061)",
+                "AI bridge unreachable (connection refused)",
+            ),
+            (
+                "HTTP 401 Unauthorized from http://192.168.0.142:18902",
+                "AI bridge rejected request (auth failure)",
+            ),
+            (
+                "HTTP 404 Not Found (POST /v1/chat/completions)",
+                "AI bridge endpoint not found (URL or model wrong)",
+            ),
+            (
+                "HTTP 429 Too Many Requests (rate-limited 30s)",
+                "AI bridge rate-limited",
+            ),
+            (
+                "HTTP 502 Bad Gateway upstream",
+                "AI bridge returned server error",
+            ),
+            (
+                "some weird new failure mode we never heard of",
+                "AI bridge call failed (see overlay-host stderr for diagnostic)",
+            ),
+        ];
+        for (input, expected_category) in cases {
+            let got = classify_ai_error(input);
+            assert_eq!(
+                got, *expected_category,
+                "classify_ai_error({input:?}) returned {got:?}, expected {expected_category:?}"
+            );
+            // Privacy invariant: output must never contain the raw URL,
+            // IP, port, or bearer-token-like substring from the input.
+            assert!(
+                !got.contains("192.168.") && !got.contains("http://") && !got.contains("https://"),
+                "classify output {got:?} leaks URL/IP from input {input:?}"
+            );
+        }
     }
 }

@@ -55,6 +55,10 @@ if ($Installer) {
         Write-Host "  scoop install nsis    OR    winget install NSIS.NSIS" -ForegroundColor Yellow
         exit 12
     }
+    # Pre-create the bundle output dir so makensis doesn't fail with
+    # "opening output file" on first run (review-agent finding 2026-05-27).
+    $bundleDir = Join-Path $crate "target\release\bundle"
+    New-Item -ItemType Directory -Force -Path $bundleDir | Out-Null
     $nsi = Join-Path $PSScriptRoot "slint-installer.nsi"
     & $makensis "/V2" $nsi
     if ($LASTEXITCODE -ne 0) {

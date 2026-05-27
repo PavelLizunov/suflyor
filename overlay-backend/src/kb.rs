@@ -43,6 +43,26 @@ pub struct KBEntry {
     body_lower: String,
 }
 
+impl KBEntry {
+    /// Build a `KBEntry` from raw fields. Computes the lowercase
+    /// caches automatically. Used by both the embedded-doc `parse`
+    /// path and downstream tests / fakes that need to construct
+    /// entries without going through the markdown parser.
+    #[must_use]
+    pub fn new(key: String, heading: String, body: String, source: &'static str) -> Self {
+        let heading_lower = heading.to_lowercase();
+        let body_lower = body.to_lowercase();
+        Self {
+            key,
+            heading,
+            body,
+            source,
+            heading_lower,
+            body_lower,
+        }
+    }
+}
+
 /// Lazy global. First call pays parsing cost (≈30ms for 1600 entries on a
 /// 2024 laptop), subsequent calls return cached slice.
 static CACHE: OnceLock<Vec<KBEntry>> = OnceLock::new();
