@@ -39,10 +39,26 @@ export component SettingsWindow inherits Window {
     in-out property <bool> always-on-top-toggle: true;
     in-out property <bool> stealth-toggle: false;
 
+    // Phase E6 — token status display + edit. Status strings are
+    // populated by overlay-host on open from cfg.read().ai_bearer
+    // and cfg.read().groq_api_key (masked: "✓ set (48 chars)" or
+    // "❌ unset"). The LineEdit accepts a fresh value; Save fires
+    // the corresponding callback which writes to config.json.
+    in-out property <string> ai-bearer-status: "(loading...)";
+    in-out property <string> ai-bearer-input: "";
+    in-out property <string> groq-api-key-status: "(loading...)";
+    in-out property <string> groq-api-key-input: "";
+    in-out property <string> ai-base-url-input: "";
+    in-out property <string> ai-model-input: "";
+
     callback always-on-top-changed(bool);
     callback stealth-changed(bool);
     callback close-clicked();
     callback tab-selected(int);
+    callback ai-bearer-save(string);
+    callback groq-api-key-save(string);
+    callback ai-base-url-save(string);
+    callback ai-model-save(string);
 
     HorizontalLayout {
         padding: 0px;
@@ -369,40 +385,126 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 11 : VerticalLayout {
                         spacing: 8px;
                         Text {
-                            text: @tr("Claude AI bridge — bearer token + cost cap. Probe button validates connectivity.");
+                            text: @tr("Claude AI bridge — bearer token + base URL + model.");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
                         }
-                        LineEdit {
-                            placeholder-text: @tr("AI bearer token (masked when set)");
+
+                        // ----- ai_bearer (Claude token) -----
+                        Text {
+                            text: @tr("Bearer token:") + " " + root.ai-bearer-status;
+                            font-size: 11px;
+                            color: #c8c8cc;
                         }
                         HorizontalLayout {
-                            spacing: 8px;
-                            Text {
-                                text: @tr("Session cost cap ($):");
-                                font-size: 11px;
-                                color: #c8c8cc;
-                                vertical-alignment: center;
+                            spacing: 6px;
+                            LineEdit {
+                                placeholder-text: @tr("paste new bearer token then Save");
+                                text <=> root.ai-bearer-input;
+                                input-type: password;
+                                horizontal-stretch: 1;
                             }
-                            SpinBox { minimum: 0; maximum: 100; value: 5; }
+                            Button {
+                                text: @tr("Save");
+                                clicked => {
+                                    root.ai-bearer-save(root.ai-bearer-input);
+                                    root.ai-bearer-input = "";
+                                }
+                            }
                         }
-                        Button { text: @tr("Probe Claude"); }
+
+                        Rectangle { background: #2a2c3a; height: 1px; }
+
+                        // ----- ai_base_url -----
+                        Text {
+                            text: @tr("Base URL (Claude bridge endpoint):");
+                            font-size: 11px;
+                            color: #c8c8cc;
+                        }
+                        HorizontalLayout {
+                            spacing: 6px;
+                            LineEdit {
+                                placeholder-text: @tr("http://your.bridge.host:PORT/v1");
+                                text <=> root.ai-base-url-input;
+                                horizontal-stretch: 1;
+                            }
+                            Button {
+                                text: @tr("Save");
+                                clicked => {
+                                    root.ai-base-url-save(root.ai-base-url-input);
+                                }
+                            }
+                        }
+
+                        Rectangle { background: #2a2c3a; height: 1px; }
+
+                        // ----- ai_model -----
+                        Text {
+                            text: @tr("AI model (Claude full ID):");
+                            font-size: 11px;
+                            color: #c8c8cc;
+                        }
+                        HorizontalLayout {
+                            spacing: 6px;
+                            LineEdit {
+                                placeholder-text: @tr("claude-haiku-4-5 / claude-sonnet-4-6 / claude-opus-4-7");
+                                text <=> root.ai-model-input;
+                                horizontal-stretch: 1;
+                            }
+                            Button {
+                                text: @tr("Save");
+                                clicked => {
+                                    root.ai-model-save(root.ai-model-input);
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: @tr("Tip: Save writes to %APPDATA%\\overlay-mvp\\config.json. Restart binary to re-load.");
+                            font-size: 10px;
+                            color: #666;
+                            wrap: word-wrap;
+                        }
                     }
                     if root.active-tab == 12 : VerticalLayout {
                         spacing: 8px;
                         Text {
-                            text: @tr("Groq STT (Whisper) settings — model + custom Whisper prompt (improves transcription on domain vocabulary).");
+                            text: @tr("Groq STT (Whisper) — API key + model. Required for speech-to-text on audio capture.");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
                         }
-                        ComboBox {
-                            // Model identifiers — proper nouns, not translated.
-                            model: ["whisper-large-v3", "whisper-large-v3-turbo"];
-                            current-index: 1;
+
+                        // ----- groq_api_key -----
+                        Text {
+                            text: @tr("Groq API key:") + " " + root.groq-api-key-status;
+                            font-size: 11px;
+                            color: #c8c8cc;
                         }
-                        LineEdit { placeholder-text: @tr("Custom Whisper prompt (domain vocab)..."); }
+                        HorizontalLayout {
+                            spacing: 6px;
+                            LineEdit {
+                                placeholder-text: @tr("paste new Groq key then Save");
+                                text <=> root.groq-api-key-input;
+                                input-type: password;
+                                horizontal-stretch: 1;
+                            }
+                            Button {
+                                text: @tr("Save");
+                                clicked => {
+                                    root.groq-api-key-save(root.groq-api-key-input);
+                                    root.groq-api-key-input = "";
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: @tr("Tip: Save writes to %APPDATA%\\overlay-mvp\\config.json. Restart binary to re-load.");
+                            font-size: 10px;
+                            color: #666;
+                            wrap: word-wrap;
+                        }
                     }
                 }
             }

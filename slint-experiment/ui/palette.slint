@@ -20,7 +20,12 @@ export struct PaletteResult {
 
 export component PaletteWindow inherits Window {
     title: "F4 — KB palette";
-    background: transparent;
+    // Phase E6 fix: was `background: transparent` + frameless which
+    // combined with WS_EX_LAYERED via make_transparent_overlay on the
+    // HWND causes text to render invisible (alpha-clamped). Use solid
+    // opaque background so the dark theme actually shows up. Frame
+    // stays off for the floating-palette feel.
+    background: #14161e;
     no-frame: true;
     always-on-top: true;
     preferred-width: 620px;

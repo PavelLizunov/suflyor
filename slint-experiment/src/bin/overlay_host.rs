@@ -1281,8 +1281,9 @@ fn main() -> Result<(), slint::PlatformError> {
         let s = state.clone();
         let settings_ref = settings.clone();
         let tiles_ref = tiles.clone();
+        let cfg_for_settings = cfg.clone();
         overlay.on_open_settings_clicked(move || {
-            open_settings(&s, &settings_ref, &tiles_ref);
+            open_settings(&s, &settings_ref, &tiles_ref, &cfg_for_settings);
         });
     }
 
@@ -1761,9 +1762,24 @@ fn fire_f9_ask(
     slint_replay::runtime_state::lock(slint_rt).ai_task = Some(task);
 }
 
+/// Atomic counter for tile-slot index — increments per spawn so
+/// successive tiles stack down the right edge instead of piling on
+/// top of each other in screen center. Reset only by process restart;
+/// real wrap/overflow logic is Phase E6 follow-up. Phase E6 fix
+/// (2026-05-27): was "Day 2 stub: just center on the primary monitor"
+/// which made all tiles spawn at the same coordinates → user complaint
+/// "тайлы спавняются исключительно в центе экрана, их нельзя двигать".
+static TILE_SLOT_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 /// Apply transparency + position tile on the appropriate monitor.
 /// Uses pick_monitor to respect the user's portrait-secondary setup
 /// (default to primary unless non-primary is landscape + at-least-as-wide).
+///
+/// Layout: stacks tiles down the RIGHT EDGE of the chosen monitor
+/// with `TILE_DEFAULT_H + 12px gap` between each. After ~6 slots wraps
+/// back to top. This is intentionally simple — proper grid logic
+/// (src-tauri `tile.rs::grid_position` does ~80 LOC of math) is
+/// deferred to a future polish phase.
 fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
     let weak = tile.as_weak();
     Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
@@ -1774,15 +1790,15 @@ fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
 
         let _ = make_transparent_overlay(hwnd);
 
-        // Position on the user's chosen monitor. For Day 2 stub: just
-        // center on the primary monitor. Phases 3+ tile grid logic
-        // would compute (x,y) from monitor + grid slot.
         let monitors = enum_monitors();
         if let Some(mon) = pick_monitor(&monitors) {
             let tile_w = TILE_DEFAULT_W;
             let tile_h = TILE_DEFAULT_H;
-            let x = mon.left + (mon.width() - tile_w) / 2;
-            let y = mon.top + (mon.height() - tile_h) / 2;
+            let slot = TILE_SLOT_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % 6; // wrap every 6 slots
+                                                                                                 // Right-edge stack: right margin 20px, top margin 80px
+                                                                                                 // (clear of the overlay bar at the top-left).
+            let x = mon.left + mon.width() - tile_w - 20;
+            let y = mon.top + 80 + (slot as i32) * (tile_h + 12);
             let _ = move_window(hwnd, x, y, tile_w, tile_h);
         }
     });
@@ -1954,9 +1970,12 @@ fn open_settings(
     state: &slint_replay::app_state::SharedState,
     settings_ref: &Rc<RefCell<Option<SettingsWindow>>>,
     tiles_ref: &TileWindows,
+    cfg: &overlay_backend::config::SharedConfig,
 ) {
     let mut settings_slot = settings_ref.borrow_mut();
     if let Some(existing) = settings_slot.as_ref() {
+        // Refresh token status — config might have changed since last open.
+        populate_token_status(existing, cfg);
         let _ = existing.show();
         return;
     }
@@ -1974,6 +1993,7 @@ fn open_settings(
             win.set_stealth_toggle(st.stealth);
         }
     }
+    populate_token_status(&win, cfg);
 
     let s2 = state.clone();
     let tiles_ref2 = tiles_ref.clone();
@@ -2001,6 +2021,88 @@ fn open_settings(
         }
     });
 
+    // Phase E6 — token + AI bridge config save wires.
+    {
+        let cfg_c = cfg.clone();
+        let weak_for_refresh = win.as_weak();
+        win.on_ai_bearer_save(move |new_value| {
+            let trimmed = new_value.trim().to_string();
+            if trimmed.is_empty() {
+                eprintln!("[overlay-host] ai_bearer save skipped: empty input");
+                return;
+            }
+            {
+                let mut c = cfg_c.write();
+                c.ai_bearer = trimmed;
+                if let Err(e) = overlay_backend::config::save(&c) {
+                    eprintln!("[overlay-host] ai_bearer save failed: {e:#}");
+                    return;
+                }
+            }
+            eprintln!("[overlay-host] ai_bearer saved to config.json");
+            if let Some(w) = weak_for_refresh.upgrade() {
+                populate_token_status(&w, &cfg_c);
+            }
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        let weak_for_refresh = win.as_weak();
+        win.on_groq_api_key_save(move |new_value| {
+            let trimmed = new_value.trim().to_string();
+            if trimmed.is_empty() {
+                eprintln!("[overlay-host] groq_api_key save skipped: empty input");
+                return;
+            }
+            {
+                let mut c = cfg_c.write();
+                c.groq_api_key = trimmed;
+                if let Err(e) = overlay_backend::config::save(&c) {
+                    eprintln!("[overlay-host] groq_api_key save failed: {e:#}");
+                    return;
+                }
+            }
+            eprintln!("[overlay-host] groq_api_key saved to config.json");
+            if let Some(w) = weak_for_refresh.upgrade() {
+                populate_token_status(&w, &cfg_c);
+            }
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_ai_base_url_save(move |new_value| {
+            let trimmed = new_value.trim().to_string();
+            {
+                let mut c = cfg_c.write();
+                c.ai_base_url = trimmed.clone();
+                if let Err(e) = overlay_backend::config::save(&c) {
+                    eprintln!("[overlay-host] ai_base_url save failed: {e:#}");
+                    return;
+                }
+            }
+            eprintln!("[overlay-host] ai_base_url saved: {trimmed}");
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_ai_model_save(move |new_value| {
+            let trimmed = new_value.trim().to_string();
+            if trimmed.is_empty() {
+                eprintln!("[overlay-host] ai_model save skipped: empty input");
+                return;
+            }
+            {
+                let mut c = cfg_c.write();
+                c.ai_model = trimmed.clone();
+                if let Err(e) = overlay_backend::config::save(&c) {
+                    eprintln!("[overlay-host] ai_model save failed: {e:#}");
+                    return;
+                }
+            }
+            eprintln!("[overlay-host] ai_model saved: {trimmed}");
+        });
+    }
+
     let weak_close = win.as_weak();
     let settings_close = settings_ref.clone();
     win.on_close_clicked(move || {
@@ -2012,4 +2114,30 @@ fn open_settings(
 
     let _ = win.show();
     *settings_slot = Some(win);
+}
+
+/// Populate the Settings window's token-status display properties
+/// from the current `cfg`. Phase E6 — gives the user a way to SEE
+/// whether ai_bearer / groq_api_key are configured without leaking
+/// the values themselves (shows length + first 3 chars as fingerprint).
+fn populate_token_status(win: &SettingsWindow, cfg: &overlay_backend::config::SharedConfig) {
+    let c = cfg.read();
+    let ai_status = if c.ai_bearer.is_empty() {
+        "❌ not set".to_string()
+    } else {
+        let len = c.ai_bearer.chars().count();
+        let prefix: String = c.ai_bearer.chars().take(3).collect();
+        format!("✓ set ({len} chars, starts: {prefix}***)")
+    };
+    let groq_status = if c.groq_api_key.is_empty() {
+        "❌ not set".to_string()
+    } else {
+        let len = c.groq_api_key.chars().count();
+        let prefix: String = c.groq_api_key.chars().take(3).collect();
+        format!("✓ set ({len} chars, starts: {prefix}***)")
+    };
+    win.set_ai_bearer_status(SharedString::from(ai_status));
+    win.set_groq_api_key_status(SharedString::from(groq_status));
+    win.set_ai_base_url_input(SharedString::from(c.ai_base_url.clone()));
+    win.set_ai_model_input(SharedString::from(c.ai_model.clone()));
 }

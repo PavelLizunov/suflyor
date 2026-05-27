@@ -74,12 +74,15 @@ export component TileWindow inherits Window {
                         }
                     }
                 }
+                // Phase E6 fix: Unicode glyphs 📌/✕ render as missing-
+                // glyph boxes on some Slint+skia font fallbacks. Use
+                // ASCII text labels that any font renders cleanly.
                 Button {
-                    text: "📌";
+                    text: "pin";
                     clicked => { root.pin-clicked(); }
                 }
                 Button {
-                    text: "✕";
+                    text: "X";
                     clicked => { root.close-clicked(); }
                 }
             }
