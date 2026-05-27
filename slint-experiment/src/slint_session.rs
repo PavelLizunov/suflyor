@@ -293,6 +293,21 @@ pub fn detector_allows(source: AudioSource, skip_mic: bool) -> bool {
     }
 }
 
+/// Phase E6 v12 — convert a detector Trigger into TileSpec.highlights.
+/// First slot is a human-readable trigger label rendered as a colored
+/// badge in the tile (e.g. "🔥 docker", "❓ question"). Empty Vec for
+/// no badge (manual F9 / F6 spawns don't go through this helper).
+#[must_use]
+pub fn trigger_highlights(trigger: &backend_runtime::Trigger) -> Vec<String> {
+    match trigger {
+        backend_runtime::Trigger::Keyword(kw, _) => vec![format!("🔥 {kw}")],
+        backend_runtime::Trigger::Question(q) => {
+            let snippet: String = q.trim().chars().take(60).collect();
+            vec![format!("❓ {snippet}")]
+        }
+    }
+}
+
 /// Auto-tile rate limit — drop spawn if more than this many tiles
 /// fired in the rolling 60s window. Matches src-tauri's MAX_TILES_
 /// PER_MIN value to keep cost behavior identical across binaries.
@@ -478,6 +493,11 @@ async fn maybe_spawn_auto_tile(
             backend_runtime::Trigger::Question(q) => q.clone(),
             backend_runtime::Trigger::Keyword(kw, _) => kw.clone(),
         };
+        // Phase E6 v12 — populate highlights with the trigger keyword
+        // (or "❓" + question prefix) so the tile UI can show a badge
+        // explaining why this tile spawned. User: "ключевые слова не
+        // помечены я не понимаю на какое окно смотреть".
+        let highlights_for_spec = trigger_highlights(&trigger);
         {
             let mut s = lock(&rt);
             s.last_question = Some(trigger_text_for_q.clone());
@@ -493,7 +513,7 @@ async fn maybe_spawn_auto_tile(
                 answer: cached_answer,
                 source: "auto_tile_cached".into(),
                 is_translation: false,
-                highlights: vec![],
+                highlights: highlights_for_spec,
             },
             monitor_hint,
             stealth,
@@ -658,13 +678,16 @@ async fn maybe_spawn_auto_tile(
     };
     let label_for_log = question_label.clone();
     let answer_for_journal = answer.clone();
+    // Phase E6 v12 — pass trigger info so the tile shows a badge
+    // explaining which keyword/question spawned it.
+    let highlights_for_spec = trigger_highlights(&trigger);
     match events.spawn_tile_full(
         TileSpec {
             question: question_label.clone(),
             answer,
             source: "auto_tile".into(),
             is_translation: false,
-            highlights: vec![],
+            highlights: highlights_for_spec,
         },
         monitor_hint,
         stealth,

@@ -205,9 +205,15 @@ export component OverlayBarWindow inherits Window {
                 clicked => { root.sys-toggle-clicked(); }
             }
 
-            // Session timer
+            // Session timer — Phase E6 v12: label hints at what the
+            // click does. User feedback: "нажать на часики не очень
+            // очевидно" — the bare "⏱ 00:00" gave no hint that
+            // clicking starts a session. Now shows "▶ start" when
+            // idle, "⏸ MM:SS" when recording.
             Chip {
-                label: @tr("⏱ {}", root.timer-label);
+                label: root.timer-active
+                    ? @tr("⏸ {}", root.timer-label)
+                    : @tr("▶ start");
                 active: root.timer-active;
                 accent: #fbbf24;
                 clicked => { root.timer-toggle-clicked(); }

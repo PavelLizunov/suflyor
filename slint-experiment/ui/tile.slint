@@ -30,6 +30,12 @@ export component TileWindow inherits Window {
     in-out property <[MarkdownBlock]> blocks: [];
     // Source label shown in chrome row (e.g. "ai", "kb", "snippet").
     in-out property <string> source-label: "—";
+    // Phase E6 v12 — trigger badge. Shows WHY this tile spawned:
+    // a Question, Keyword(kw), or every-line. Empty string hides
+    // the badge entirely. User feedback: "ключевые слова не
+    // помечены я не понимаю на какое окно смотреть".
+    in-out property <string> trigger-label: "";
+    in-out property <color> trigger-color: #6cf;
 
     callback close-clicked();
     callback pin-clicked();
@@ -154,6 +160,38 @@ export component TileWindow inherits Window {
             Rectangle {
                 background: #2a2c3a;
                 height: 1px;
+            }
+
+            // ===== Trigger badge =====
+            // Phase E6 v12 — colored pill below chrome row shows what
+            // detector trigger spawned this tile (Keyword "docker",
+            // Question "...", every-line). Hidden when trigger-label
+            // is empty (manual F9 ask or F6 spawn).
+            if root.trigger-label != "" : Rectangle {
+                height: 22px;
+                horizontal-stretch: 1;
+                HorizontalLayout {
+                    alignment: start;
+                    Rectangle {
+                        background: root.trigger-color.with-alpha(0.18);
+                        border-color: root.trigger-color;
+                        border-width: 1px;
+                        border-radius: 9px;
+                        height: 20px;
+                        horizontal-stretch: 0;
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 8px;
+                            Text {
+                                text: root.trigger-label;
+                                font-size: 10px;
+                                font-weight: 700;
+                                color: root.trigger-color;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
             }
 
             // ===== Markdown body (kind-discriminant renderer) =====

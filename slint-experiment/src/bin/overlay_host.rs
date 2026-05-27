@@ -850,6 +850,19 @@ fn main() -> Result<(), slint::PlatformError> {
                 req.kind.as_journal_tag(),
                 if req.stealth { "stealth" } else { "" }
             )));
+            // Phase E6 v12 — first highlight (if any) becomes the
+            // trigger badge. Backend's trigger_highlights() already
+            // formats it as "🔥 keyword" or "❓ question snippet".
+            // Color: orange for keyword/aggressive, blue for question.
+            if let Some(first) = req.spec.highlights.first() {
+                tile.set_trigger_label(SharedString::from(first.clone()));
+                let is_keyword = first.starts_with("🔥");
+                tile.set_trigger_color(if is_keyword {
+                    slint::Color::from_rgb_u8(0xfb, 0x92, 0x3c) // orange
+                } else {
+                    slint::Color::from_rgb_u8(0x6c, 0xcf, 0xff) // cyan
+                });
+            }
             // Render answer markdown via the spike adapter
             // (same pattern as on_spawn_tile_clicked at ~line 996).
             let blocks: Vec<MarkdownBlock> = markdown::parse(&req.spec.answer)
@@ -1725,6 +1738,10 @@ fn fire_f9_ask(
     tile.set_sequence(seq as i32);
     tile.set_tile_title(SharedString::from("F9 ask · live"));
     tile.set_source_label(SharedString::from("ai · asking…"));
+    // Phase E6 v12 — purple trigger badge for manual F9 ask so user
+    // sees which tile came from a hotkey vs auto-detector.
+    tile.set_trigger_label(SharedString::from("✋ F9 manual ask"));
+    tile.set_trigger_color(slint::Color::from_rgb_u8(0xa7, 0x8b, 0xfa));
     wire_tile_drag(&tile);
     let placeholder = vec![MarkdownBlock {
         kind: markdown::kind::PARAGRAPH,
