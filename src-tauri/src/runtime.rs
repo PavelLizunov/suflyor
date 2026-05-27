@@ -4,7 +4,7 @@
 //! Frontend interacts via Tauri commands (start/stop capture, ask).
 //! Events flow back via tauri::Emitter (channel name → see fn names).
 
-use crate::ai::{self, AiEvent};
+use crate::ai;
 use crate::audio::{self, AudioSource, CaptureHandle};
 use crate::config::SharedConfig;
 use crate::journal::{now_unix_ms, Journal, JournalEvent};
@@ -2367,8 +2367,19 @@ pub async fn manual_spawn_tile(
     }
 }
 
-/// Trigger an AI ask using current transcript + context + pending screenshot.
-/// Streams AiEvents back to the overlay window as `"ai:event"`.
+/// F9 Live Ask: thin Tauri shim around
+/// `overlay_backend::runtime::ask_stream_loop`.
+///
+/// Phase B2 port #4: streaming body moved to overlay-backend. This
+/// shim:
+///   1. Snapshots cfg + transcript + screenshot under rt locks.
+///   2. Emits `cost:cap-hit` (non-blocking warn) if over budget.
+///   3. Writes JournalEvent::AiRequest (sync, pre-stream).
+///   4. Starts ai::stream_chat → gets ai_rx Receiver.
+///   5. Cancels any in-flight ai_task (rapid-F9 protection).
+///   6. Builds the cost-mutation closure (captures rt).
+///   7. tokio::spawns `ask_stream_loop` + stores JoinHandle in rt.
+///
 /// MUST be called from a Tokio runtime context.
 pub async fn ask(app: AppHandle, cfg: SharedConfig, rt: SharedRuntime) {
     let (base_url, bearer, model, meeting_context, response_language, cap_usd) = {
@@ -2414,7 +2425,15 @@ pub async fn ask(app: AppHandle, cfg: SharedConfig, rt: SharedRuntime) {
         None,
     );
 
-    let journal = rt.lock().journal.clone().unwrap_or_default();
+    let (journal_for_request, journal_for_loop, health_for_stream) = {
+        let s = rt.lock();
+        // Pre-port code: `rt.lock().journal.clone().unwrap_or_default()`.
+        // We pass the Option through so the port can `if let Some(j)`
+        // (Journal::default() write is a no-op anyway — wire-equivalent
+        // but the explicit Option is cleaner per port #2/#3 pattern).
+        let j = s.journal.clone();
+        (j.clone(), j, s.health.clone())
+    };
     let sys_full = messages
         .first()
         .and_then(|m| match &m.content {
@@ -2434,20 +2453,19 @@ pub async fn ask(app: AppHandle, cfg: SharedConfig, rt: SharedRuntime) {
         None => String::new(),
     };
     let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
-    journal.write(&JournalEvent::AiRequest {
-        unix_ms: now_unix_ms(),
-        purpose: "live_ask",
-        model: &model,
-        system_prompt: &sys_full,
-        user_prompt: &usr_full,
-        attached_screenshot: screenshot.is_some(),
-        input_tokens_est,
-    });
-    // Keep around for response logging closure.
-    let sys_full_clone = sys_full.clone();
-    let usr_full_clone = usr_full.clone();
+    if let Some(j) = journal_for_request.as_ref() {
+        j.write(&JournalEvent::AiRequest {
+            unix_ms: now_unix_ms(),
+            purpose: "live_ask",
+            model: &model,
+            system_prompt: &sys_full,
+            user_prompt: &usr_full,
+            attached_screenshot: screenshot.is_some(),
+            input_tokens_est,
+        });
+    }
 
-    let mut ai_rx = ai::stream_chat(base_url, bearer, model.clone(), messages, 4096);
+    let ai_rx = ai::stream_chat(base_url, bearer, model.clone(), messages, 4096);
 
     // Cancel any in-flight ask before spawning a new one — otherwise rapid
     // F9 presses stack responses on top of each other.
@@ -2459,67 +2477,39 @@ pub async fn ask(app: AppHandle, cfg: SharedConfig, rt: SharedRuntime) {
     }
 
     let t0 = std::time::Instant::now();
-    let rt_clone = rt.clone();
-    // Hoist health Arc OUT of the per-Delta hot loop — otherwise each token
-    // takes a full parking_lot Mutex on RuntimeState (S1 from 2nd-pass).
-    let health_for_stream = rt_clone.lock().health.clone();
-    let task = tokio::spawn(async move {
-        let mut accumulated = String::new();
-        let mut finish = "stop".to_string();
-        while let Some(ev) = ai_rx.recv().await {
-            match &ev {
-                AiEvent::Delta { text } => {
-                    // Lock-free atomic store per token — replaces previous
-                    // `bump_health_ai(&rt_clone)` that took a Mutex per call.
-                    health_for_stream
-                        .last_ai_ok_ms
-                        .store(now_unix_ms() as u64, Ordering::Relaxed);
-                    accumulated.push_str(text);
-                }
-                AiEvent::Done { reason } => finish = reason.clone(),
-                AiEvent::Error { message } => {
-                    journal.write(&JournalEvent::Error {
-                        unix_ms: now_unix_ms(),
-                        module: "live_ask_ai",
-                        message,
-                    });
-                }
-                _ => {}
-            }
-            let done = matches!(ev, AiEvent::Done { .. } | AiEvent::Error { .. });
-            let _ = app.emit_to("overlay", "ai:event", &ev);
-            if done {
-                break;
-            }
-        }
-        // Streaming endpoint does not surface usage cleanly, so estimate
-        // tokens as chars/4 (Claude tokenizer is roughly this on English+
-        // mixed Russian). Cost is approximate — exact tally on non-streaming.
-        let input_tokens =
-            ((sys_full_clone.chars().count() + usr_full_clone.chars().count()) as u64) / 4;
-        let output_tokens = (accumulated.chars().count() as u64) / 4;
-        let micro = ai::cost_microcents(&model, input_tokens, output_tokens);
-        let total_usd = {
-            let mut s = rt_clone.lock();
-            s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
-            (s.session_cost_microcents as f64) / 100_000_000.0
-        };
-        journal.write(&JournalEvent::AiResponse {
-            unix_ms: now_unix_ms(),
-            purpose: "live_ask",
-            model: &model,
-            latency_ms: t0.elapsed().as_millis() as u64,
-            finish_reason: &finish,
-            text: &accumulated,
-            output_tokens_est: output_tokens,
-            cost_microcents: micro,
-        });
-        let _ = app.emit_to(
-            "overlay",
-            "cost:update",
-            serde_json::json!({ "session_usd": total_usd }),
-        );
+    let rt_for_cost = rt.clone();
+    // FnOnce closure: lock rt, accumulate session_cost, return new
+    // total in USD. The port calls this once at end-of-stream then
+    // emits cost:update with the returned value — preserves the
+    // pre-port mutate-then-emit ordering.
+    let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
+        let mut s = rt_for_cost.lock();
+        s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
+        (s.session_cost_microcents as f64) / 100_000_000.0
     });
+
+    // Fetch the real SharedTiles from Tauri state so the adapter's
+    // spawn_tile_full path stays sane if any future port adds a tile
+    // spawn here. ask_stream_loop itself doesn't spawn tiles today,
+    // but using the real registry future-proofs the wiring.
+    use tauri::Manager as _;
+    let tiles = app.state::<SharedTiles>().inner().clone();
+    let events: Arc<dyn overlay_backend::events::RuntimeEvents> = Arc::new(crate::TauriEvents {
+        app: app.clone(),
+        tiles,
+    });
+
+    let task = tokio::spawn(overlay_backend::runtime::ask_stream_loop(
+        events,
+        ai_rx,
+        model,
+        sys_full,
+        usr_full,
+        journal_for_loop,
+        health_for_stream,
+        t0,
+        cost_apply,
+    ));
     rt.lock().ai_task = Some(task);
 }
 

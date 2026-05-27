@@ -9,8 +9,8 @@
 //! Port order per `docs/PHASE-B2-RUNTIME-PORT-PLAN.md`:
 //!   #1 run_post_meeting_debrief   ← landed
 //!   #2 reask_last                 ← landed
-//!   #3 manual_spawn_tile          ← landed (this port)
-//!   #4 ask                        (pending)
+//!   #3 manual_spawn_tile          ← landed
+//!   #4 ask (stream loop)          ← landed (this port)
 //!   #5 manual_ask_source          (pending)
 //!   #6 manual_ask_window_end      (pending)
 //!   #7 maybe_spawn_tile + start_session (together)
@@ -686,6 +686,120 @@ pub async fn manual_spawn_tile(
     })
 }
 
+// ===== F9 Live Ask streaming loop (Phase B2 port #4) =====
+//
+// Different shape from ports #2/#3: takes a stream receiver directly
+// (not a pre-built Inputs struct) since the receiver comes from
+// ai::stream_chat which the SHIM kicks off after building messages.
+// The port is the body of what was previously a `tokio::spawn(async move
+// { ... })` block; the shim still does the spawn (so the Tauri side
+// keeps owning the JoinHandle for rt.ai_task cancellation).
+//
+// The cost-mutation closure is the new pattern: the port can't touch
+// SharedRuntime (which lives in src-tauri) so the shim provides a
+// callback that mutates session_cost + returns the new USD total.
+// The port calls the callback once at end-of-stream, then emits
+// cost:update with the returned total — preserves the original
+// mutate-then-emit ordering exactly.
+
+/// Closure type for "apply cost delta + return new session total in USD".
+/// Provided by the shim; called once by `ask_stream_loop` at end-of-stream.
+/// `Send` bound is required because `ask_stream_loop` runs as a
+/// `tokio::spawn`'d task on potentially a different thread.
+pub type CostApplyFn = Box<dyn FnOnce(u64) -> f64 + Send>;
+
+/// Streaming body of F9 Live Ask. Runs inside the `tokio::spawn` that
+/// the src-tauri shim creates — owns the AiEvent stream receiver,
+/// emits each event verbatim to the React side, accumulates the
+/// answer text, then at end-of-stream estimates token cost,
+/// invokes the shim-provided `cost_apply` callback to mutate
+/// session_cost (under rt lock on the shim side), writes
+/// JournalEvent::AiResponse, and emits `cost:update` with the new
+/// session USD total.
+///
+/// `t0` is the `Instant::now()` captured before `ai::stream_chat`
+/// returned the receiver — used for `AiResponse.latency_ms`.
+///
+/// Wire-parity invariants preserved:
+/// 1. Each `ai:event` emit fires AS the AiEvent arrives (no batching).
+/// 2. `cost:update` fires AFTER the session_cost mutation.
+/// 3. `JournalEvent::AiResponse.text` is the FULL accumulated answer.
+/// 4. Health `last_ai_ok_ms` bumped on each Delta (atomic store, no lock).
+/// 5. AiEvent::Error path writes JournalEvent::Error AND still emits
+///    the `ai:event` payload so the React side sees the error chip.
+#[allow(clippy::too_many_arguments)]
+pub async fn ask_stream_loop(
+    events: Arc<dyn RuntimeEvents>,
+    mut ai_rx: tokio::sync::mpsc::Receiver<ai::AiEvent>,
+    model: String,
+    sys_full: String,
+    usr_full: String,
+    journal: Option<Journal>,
+    health: Arc<HealthSignals>,
+    t0: std::time::Instant,
+    cost_apply: CostApplyFn,
+) {
+    let mut accumulated = String::new();
+    let mut finish = "stop".to_string();
+    while let Some(ev) = ai_rx.recv().await {
+        match &ev {
+            ai::AiEvent::Delta { text } => {
+                // Atomic store per token — lock-free hot path.
+                health
+                    .last_ai_ok_ms
+                    .store(crate::journal::now_unix_ms() as u64, Ordering::Relaxed);
+                accumulated.push_str(text);
+            }
+            ai::AiEvent::Done { reason } => finish = reason.clone(),
+            ai::AiEvent::Error { message } => {
+                if let Some(j) = journal.as_ref() {
+                    j.write(&JournalEvent::Error {
+                        unix_ms: crate::journal::now_unix_ms(),
+                        module: "live_ask_ai",
+                        message,
+                    });
+                }
+            }
+            _ => {}
+        }
+        let done = matches!(ev, ai::AiEvent::Done { .. } | ai::AiEvent::Error { .. });
+        // Serialize AiEvent → Value for the trait. The Tauri adapter
+        // re-encodes to JSON internally; net wire format identical.
+        // unwrap_or(Null) is unreachable in practice (AiEvent variants
+        // are all serde-derive-clean) but keeps the hot loop panic-free.
+        let payload = serde_json::to_value(&ev).unwrap_or(serde_json::Value::Null);
+        events.emit("ai:event", payload);
+        if done {
+            break;
+        }
+    }
+    // Streaming endpoint does not surface usage cleanly, so estimate
+    // tokens as chars/4 (Claude tokenizer is roughly this on EN +
+    // mixed RU). Cost is approximate — exact tally on non-streaming.
+    let input_tokens = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
+    let output_tokens = (accumulated.chars().count() as u64) / 4;
+    let micro = ai::cost_microcents(&model, input_tokens, output_tokens);
+    // Shim-provided closure: lock rt, add micro to session_cost,
+    // return new total in USD. Single call, FnOnce, no re-entry.
+    let total_usd = cost_apply(micro);
+    if let Some(j) = journal.as_ref() {
+        j.write(&JournalEvent::AiResponse {
+            unix_ms: crate::journal::now_unix_ms(),
+            purpose: "live_ask",
+            model: &model,
+            latency_ms: t0.elapsed().as_millis() as u64,
+            finish_reason: &finish,
+            text: &accumulated,
+            output_tokens_est: output_tokens,
+            cost_microcents: micro,
+        });
+    }
+    events.emit(
+        "cost:update",
+        serde_json::json!({ "session_usd": total_usd }),
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -867,6 +981,107 @@ mod tests {
         let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
         let outcome = reask_last(sink, cfg, inputs).await;
         assert!(outcome.is_none(), "no-prior-QA path must return None");
+    }
+
+    /// `ask_stream_loop` end-to-end with a hand-fed receiver:
+    /// 3 Deltas + 1 Done → accumulator hits 3 tokens, cost_apply
+    /// called exactly once with non-zero micro, Done emitted.
+    #[tokio::test]
+    async fn ask_stream_loop_processes_deltas_then_done_and_calls_cost_apply_once() {
+        use std::sync::Mutex as StdMutex;
+        let (tx, rx) = tokio::sync::mpsc::channel::<ai::AiEvent>(8);
+        // Feed events from a separate task so the receiver loop drives.
+        let feeder = tokio::spawn(async move {
+            tx.send(ai::AiEvent::Delta {
+                text: "Hello".into(),
+            })
+            .await
+            .unwrap();
+            tx.send(ai::AiEvent::Delta { text: " ".into() })
+                .await
+                .unwrap();
+            tx.send(ai::AiEvent::Delta {
+                text: "world".into(),
+            })
+            .await
+            .unwrap();
+            tx.send(ai::AiEvent::Done {
+                reason: "stop".into(),
+            })
+            .await
+            .unwrap();
+            // Closing tx after Done is the natural shutdown.
+        });
+
+        let calls = Arc::new(StdMutex::new(Vec::<u64>::new()));
+        let calls_clone = calls.clone();
+        let cost_apply: CostApplyFn = Box::new(move |micro| {
+            calls_clone.lock().unwrap().push(micro);
+            0.0001234 // arbitrary USD total for the cost:update emit
+        });
+
+        let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
+        ask_stream_loop(
+            sink,
+            rx,
+            "claude-haiku-4-5".into(),
+            "sys".into(),
+            "usr".into(),
+            None,
+            Arc::new(HealthSignals::default()),
+            std::time::Instant::now(),
+            cost_apply,
+        )
+        .await;
+        feeder.await.unwrap();
+
+        let calls = calls.lock().unwrap();
+        assert_eq!(
+            calls.len(),
+            1,
+            "cost_apply must be called exactly once at end-of-stream"
+        );
+        assert!(
+            calls[0] > 0,
+            "estimated cost should be non-zero for 11-char accumulated answer"
+        );
+    }
+
+    /// `ask_stream_loop` with immediate Error → cost_apply still
+    /// fires (output_tokens=0 → micro≈0) so the cost:update emit
+    /// remains parity-correct on the error path too.
+    #[tokio::test]
+    async fn ask_stream_loop_error_path_still_calls_cost_apply_once() {
+        use std::sync::Mutex as StdMutex;
+        let (tx, rx) = tokio::sync::mpsc::channel::<ai::AiEvent>(2);
+        let feeder = tokio::spawn(async move {
+            tx.send(ai::AiEvent::Error {
+                message: "stream died: upstream 503".into(),
+            })
+            .await
+            .unwrap();
+        });
+        let calls = Arc::new(StdMutex::new(0u32));
+        let calls_clone = calls.clone();
+        let cost_apply: CostApplyFn = Box::new(move |_micro| {
+            *calls_clone.lock().unwrap() += 1;
+            0.0
+        });
+        let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
+        ask_stream_loop(
+            sink,
+            rx,
+            "claude-haiku-4-5".into(),
+            "sys".into(),
+            "usr".into(),
+            None,
+            Arc::new(HealthSignals::default()),
+            std::time::Instant::now(),
+            cost_apply,
+        )
+        .await;
+        feeder.await.unwrap();
+        assert_eq!(*calls.lock().unwrap(), 1);
     }
 
     /// Manual spawn with empty transcript → emits tile:error +
