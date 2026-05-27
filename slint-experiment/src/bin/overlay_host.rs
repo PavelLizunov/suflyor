@@ -11,17 +11,24 @@
 //!
 //! Run: `cargo run --bin overlay-host` from `slint-experiment/`.
 
+use overlay_backend::events::{MonitorHint, RuntimeEvents, TileKind, TileSpec};
 use overlay_backend::{ai, audio, config, journal, kb};
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
 use slint_replay::app_state::{format_timer, new_shared_state, next_model};
 use slint_replay::markdown;
+use slint_replay::runtime_state::{shared_runtime, SharedSlintRuntime};
+use slint_replay::slint_events::{SlintEvents, SlintUiBridge};
+use slint_replay::slint_session;
 use slint_replay::win32::{
     enum_monitors, grab_hwnd, make_transparent_overlay, move_window, pick_monitor,
     set_always_on_top, set_stealth,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::mpsc as tokio_mpsc;
 
 #[allow(
     clippy::unwrap_used,
@@ -41,6 +48,124 @@ use ui::{
 };
 
 type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
+
+// ===== Phase E3 — OverlayBarBridge =====
+//
+// Implements SlintUiBridge so the ported overlay-backend fns (called
+// via SlintEvents) can update the overlay bar UI + spawn tile windows.
+// Tile spawning routes through an mpsc channel because slint::invoke_
+// from_event_loop requires Send + 'static closures and TileWindow is
+// not Send (Rc inside) — a Timer on the UI thread polls the channel
+// and creates real TileWindows.
+struct OverlayBarBridge {
+    overlay_weak: slint::Weak<OverlayBarWindow>,
+    spawn_tx: tokio_mpsc::UnboundedSender<SpawnTileRequest>,
+    tile_seq: AtomicU64,
+}
+
+/// Tile-spawn request sent from the bridge (any thread) to the UI
+/// poll-Timer running on the Slint main thread. Carries everything
+/// needed to construct a TileWindow + render the markdown body.
+struct SpawnTileRequest {
+    label: String,
+    spec: TileSpec,
+    /// Reserved for Phase E3 follow-up — pass through to a tile-
+    /// placement helper that honors MonitorHint::Named (cfg.tile_
+    /// monitor_name pin). Today apply_tile_hwnd_with_monitor reads
+    /// config directly, so the hint is dropped on this Slint
+    /// trajectory. TauriEvents adapter uses it for the React side.
+    #[allow(dead_code, reason = "reserved for monitor-name routing")]
+    monitor: MonitorHint,
+    stealth: bool,
+    kind: TileKind,
+}
+
+impl SlintUiBridge for OverlayBarBridge {
+    fn forward_event(&self, channel: String, payload: serde_json::Value) {
+        let weak = self.overlay_weak.clone();
+        let _ = slint::invoke_from_event_loop(move || {
+            let Some(o) = weak.upgrade() else {
+                return;
+            };
+            match channel.as_str() {
+                "cost:update" => {
+                    if let Some(usd) = payload.get("session_usd").and_then(|v| v.as_f64()) {
+                        o.set_cost_label(SharedString::from(format!("${usd:.3}")));
+                    }
+                }
+                "session:started" => {
+                    o.set_timer_active(true);
+                    o.set_status_text(SharedString::from("recording"));
+                    o.set_status_color(slint::Color::from_rgb_u8(0x2a, 0xc7, 0x60));
+                }
+                "session:stopped" => {
+                    o.set_timer_active(false);
+                    o.set_status_text(SharedString::from("idle"));
+                    o.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
+                }
+                "health:update" => {
+                    // Crude: collapse 3-subsystem state to single
+                    // status color until the bar gets dedicated dots.
+                    let st = |k: &str| -> Option<&str> {
+                        payload.get(k).and_then(serde_json::Value::as_str)
+                    };
+                    let any_down = matches!(st("audio"), Some("down"))
+                        || matches!(st("stt"), Some("down"))
+                        || matches!(st("ai"), Some("down"));
+                    let any_degraded = matches!(st("audio"), Some("degraded"))
+                        || matches!(st("stt"), Some("degraded"))
+                        || matches!(st("ai"), Some("degraded"));
+                    if any_down {
+                        o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x4b, 0x4b));
+                    } else if any_degraded {
+                        o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0xb4, 0x4b));
+                    }
+                    // ok / idle leaves the prior color alone
+                    // (set by session:started / session:stopped).
+                }
+                "meeting:ending" => {
+                    o.set_status_text(SharedString::from("🏁 wrapping up"));
+                }
+                "transcript:line" | "ai:event" => {
+                    // No overlay-bar UI for these yet — transcript
+                    // belongs to the tile UI (auto-tile) and ai:event
+                    // updates flow per-tile via the streaming closure
+                    // installed at spawn time (Phase E3 follow-up).
+                }
+                "tile:error" | "tile:rate-limited" | "cost:cap-hit" | "speech:coach" => {
+                    // No toast UI yet — log so developer sees these
+                    // during testing without losing them.
+                    eprintln!("[overlay-bridge] {channel}: {payload}");
+                }
+                other => {
+                    eprintln!("[overlay-bridge] unknown channel '{other}'");
+                }
+            }
+        });
+    }
+
+    fn schedule_spawn_tile(
+        &self,
+        spec: TileSpec,
+        monitor: MonitorHint,
+        stealth: bool,
+        kind: TileKind,
+    ) -> Result<String, String> {
+        let n = self.tile_seq.fetch_add(1, Ordering::Relaxed);
+        let label = format!("slint-tile-{n}");
+        let req = SpawnTileRequest {
+            label: label.clone(),
+            spec,
+            monitor,
+            stealth,
+            kind,
+        };
+        self.spawn_tx
+            .send(req)
+            .map_err(|e| format!("tile-spawn channel send failed: {e}"))?;
+        Ok(label)
+    }
+}
 
 // ===== Tuning constants — extracted from inline literals 2026-05-27 =====
 //
@@ -132,6 +257,23 @@ fn main() -> Result<(), slint::PlatformError> {
     let settings: Rc<RefCell<Option<SettingsWindow>>> = Rc::new(RefCell::new(None));
 
     let overlay = OverlayBarWindow::new()?;
+
+    // ===== Phase E3 — SlintRuntime + SlintEvents bridge =====
+    //
+    // SlintRuntime carries session state (transcript, journal, health,
+    // last_qa, session_cost, task handles). SlintEvents wraps the
+    // OverlayBarBridge which routes RuntimeEvents.emit() to UI property
+    // setters via slint::invoke_from_event_loop + schedule_spawn_tile
+    // posts SpawnTileRequest through an mpsc channel that the
+    // spawn_poll_timer below drains on the UI thread.
+    let slint_rt: SharedSlintRuntime = shared_runtime();
+    let (spawn_tx, mut spawn_rx) = tokio_mpsc::unbounded_channel::<SpawnTileRequest>();
+    let bridge = Arc::new(OverlayBarBridge {
+        overlay_weak: overlay.as_weak(),
+        spawn_tx,
+        tile_seq: AtomicU64::new(0),
+    });
+    let events: Arc<dyn RuntimeEvents> = Arc::new(SlintEvents::new(bridge.clone()));
 
     // Phase D1 — select bundled translation per config.ui_language.
     // MUST be called AFTER creating at least one component (Slint
@@ -399,10 +541,25 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== Session timer =====
+    // ===== Session timer (Phase E3: real session start/stop) =====
+    //
+    // Clicking the timer chip now starts or stops the real audio +
+    // STT pipeline via slint_session::start_session/stop_session. On
+    // start failure (e.g. groq_api_key empty), the chip stays off and
+    // the diagnostic appears via the bridge's tile:error path
+    // (currently logged; UI toast comes in a follow-up).
+    //
+    // The chip's local AppState.timer_active flag tracks the user's
+    // INTENT (toggle on / toggle off). The real session lifecycle
+    // (capture handle, tasks) lives in SlintRuntime — they're kept
+    // in sync via this handler.
     {
         let s = state.clone();
         let weak = overlay.as_weak();
+        let events_for_timer = events.clone();
+        let cfg_for_timer = cfg.clone();
+        let rt_for_timer = slint_rt.clone();
+        let rt_handle_for_timer = rt_handle.clone();
         overlay.on_timer_toggle_clicked(move || {
             let new_active = {
                 let mut st = match s.lock() {
@@ -421,8 +578,103 @@ fn main() -> Result<(), slint::PlatformError> {
                     o.set_timer_label(SharedString::from("00:00"));
                 }
             }
+
+            if new_active {
+                // Starting — kick off real capture/STT/forwarder via
+                // the slint_session orchestrator. Must run within the
+                // tokio runtime context (spawn_* calls inside).
+                let events_c = events_for_timer.clone();
+                let cfg_c = cfg_for_timer.clone();
+                let rt_c = rt_for_timer.clone();
+                let s_for_revert = s.clone();
+                let weak_revert = weak.clone();
+                rt_handle_for_timer.spawn(async move {
+                    if let Err(e) = slint_session::start_session(events_c, cfg_c, rt_c) {
+                        eprintln!("[overlay-host] start_session failed: {e:#}");
+                        // Revert UI toggle since the pipeline didn't start.
+                        let _ = slint::invoke_from_event_loop(move || {
+                            let mut st = match s_for_revert.lock() {
+                                Ok(g) => g,
+                                Err(p) => p.into_inner(),
+                            };
+                            st.timer_active = false;
+                            st.session_secs = 0;
+                            drop(st);
+                            if let Some(o) = weak_revert.upgrade() {
+                                o.set_timer_active(false);
+                                o.set_status_text(SharedString::from("start failed"));
+                                o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x4b, 0x4b));
+                            }
+                        });
+                    }
+                });
+            } else {
+                // Stopping — snapshot transcript + abort tasks.
+                // Phase E5 will feed snapshot to run_post_meeting_debrief.
+                let rt_c = rt_for_timer.clone();
+                let events_c = events_for_timer.clone();
+                rt_handle_for_timer.spawn(async move {
+                    let snapshot = slint_session::stop_session(rt_c);
+                    eprintln!(
+                        "[overlay-host] session stopped — {} transcript lines snapshotted",
+                        snapshot.len()
+                    );
+                    events_c.emit("session:stopped", serde_json::Value::Null);
+                });
+            }
         });
     }
+
+    // ===== Spawn-tile poll Timer (Phase E3) =====
+    //
+    // OverlayBarBridge sends SpawnTileRequest into spawn_rx from any
+    // thread. This Timer (running on the Slint main thread) drains
+    // the channel every 50ms and creates real TileWindows. Cannot
+    // use invoke_from_event_loop directly because TileWindow holds
+    // Rc internally and isn't Send.
+    let tiles_for_poll = tiles.clone();
+    let spawn_poll_timer = Timer::default();
+    spawn_poll_timer.start(TimerMode::Repeated, Duration::from_millis(50), move || {
+        while let Ok(req) = spawn_rx.try_recv() {
+            let tile = match TileWindow::new() {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!(
+                        "[overlay-host] spawn poll: TileWindow::new failed for {}: {e}",
+                        req.label
+                    );
+                    continue;
+                }
+            };
+            tile.set_tile_title(SharedString::from(req.spec.question.clone()));
+            tile.set_source_label(SharedString::from(format!(
+                "{} · {}",
+                req.kind.as_journal_tag(),
+                if req.stealth { "🥷" } else { "" }
+            )));
+            // Render answer markdown via the spike adapter
+            // (same pattern as on_spawn_tile_clicked at ~line 996).
+            let blocks: Vec<MarkdownBlock> = markdown::parse(&req.spec.answer)
+                .into_iter()
+                .map(|b| MarkdownBlock {
+                    kind: b.kind,
+                    text: SharedString::from(b.text),
+                    lang: SharedString::from(b.lang),
+                })
+                .collect();
+            tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
+            let weak_tile = tile.as_weak();
+            tile.on_close_clicked(move || {
+                if let Some(t) = weak_tile.upgrade() {
+                    let _ = t.hide();
+                }
+            });
+            // (monitor placement applied via apply_tile_hwnd_with_monitor.)
+            let _ = tile.show();
+            apply_tile_hwnd_with_monitor(&tile);
+            tiles_for_poll.borrow_mut().push(tile);
+        }
+    });
 
     // Periodic timer (every 1 s) — updates the session-timer label
     // when active. Slint Timer::default() with `start(Repeated, ...)`
