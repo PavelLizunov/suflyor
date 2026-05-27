@@ -47,3 +47,5 @@ anyhow = "1"
 [dev-dependencies]
 hound = "3"
 tempfile = "3"
+# Drop-guard for test cleanup (bookmark_tests in journal.rs).
+scopeguard = "1"

@@ -11,7 +11,7 @@
 //!
 //! Run: `cargo run --bin overlay-host` from `slint-experiment/`.
 
-use overlay_backend::{ai, audio, config, kb};
+use overlay_backend::{ai, audio, config, journal, kb};
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
 use slint_replay::app_state::{format_timer, new_shared_state, next_model};
 use slint_replay::markdown;
@@ -445,8 +445,53 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== Bookmark / Tips (stubs) =====
-    overlay.on_bookmark_clicked(|| eprintln!("[overlay-host] bookmark clicked (stub)"));
+    // ===== Bookmark chip (Phase C: real journal::append_bookmark) =====
+    //
+    // Reads AppState.last_tile_qa (populated by spawn_tile on AI
+    // success) and appends the Q+A to %APPDATA%\overlay-mvp\
+    // bookmarks.md. Same on-disk format as the React/Tauri v0.1.1
+    // bookmark_last_answer command — users get unified history.
+    {
+        let s = state.clone();
+        let weak = overlay.as_weak();
+        overlay.on_bookmark_clicked(move || {
+            let qa_opt = {
+                let st = match s.lock() {
+                    Ok(g) => g,
+                    Err(p) => p.into_inner(),
+                };
+                st.last_tile_qa.clone()
+            };
+            let Some(o) = weak.upgrade() else { return };
+            match qa_opt {
+                None => {
+                    o.set_status_text(SharedString::from("bookmark: spawn a tile first"));
+                    o.set_status_color(slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24));
+                    eprintln!("[overlay-host] bookmark: no last_tile_qa yet");
+                }
+                Some((question, answer)) => match journal::append_bookmark(&question, &answer) {
+                    Ok(path) => {
+                        eprintln!("[overlay-host] bookmark appended to {}", path.display());
+                        o.set_status_text(SharedString::from("bookmark saved"));
+                        o.set_status_color(slint::Color::from_rgb_u8(0xfc, 0xd3, 0x4d));
+                    }
+                    Err(e) => {
+                        eprintln!("[overlay-host] bookmark write failed: {e:#}");
+                        o.set_status_text(SharedString::from("bookmark failed"));
+                        o.set_status_color(slint::Color::from_rgb_u8(0xf8, 0x71, 0x71));
+                    }
+                },
+            }
+            // Auto-revert status after 3s.
+            let weak_revert = weak.clone();
+            let s_revert = s.clone();
+            slint::Timer::single_shot(Duration::from_secs(3), move || {
+                if let Some(o) = weak_revert.upgrade() {
+                    refresh_status(&o, get_mic_active(&s_revert), get_sys_active(&s_revert));
+                }
+            });
+        });
+    }
 
     // Tips chip opens the palette manually. The F4 global hotkey
     // (registered below) does the same. Both routes converge on
@@ -619,6 +664,9 @@ fn main() -> Result<(), slint::PlatformError> {
             // Capture a Weak handle the tokio task can post back to
             // the UI thread via slint::invoke_from_event_loop.
             let weak_for_ai = tile.as_weak();
+            // Clone the Arc<Mutex<AppState>> for the AI task to use
+            // when storing last_tile_qa on success. Cheap arc clone.
+            let s_for_bookmark = s.clone();
             t.borrow_mut().push(tile);
 
             // Spawn the AI call on the tokio runtime. Read config under
@@ -694,6 +742,12 @@ fn main() -> Result<(), slint::PlatformError> {
                                 "ai · {} · ${:.4}",
                                 model, cost_usd
                             )));
+                            // Phase C — remember this Q+A so the bookmark
+                            // chip can append it to bookmarks.md.
+                            if let Ok(mut st) = s_for_bookmark.lock() {
+                                st.last_tile_qa =
+                                    Some((question_for_task.clone(), response.clone()));
+                            }
                         }
                         Err(e) => {
                             // Privacy: classify the error rather than dump

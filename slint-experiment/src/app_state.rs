@@ -45,6 +45,11 @@ pub struct AppState {
     /// Same as mic_probe_in_flight but for the sys chip's loopback
     /// probe (record_sys_blocking).
     pub sys_probe_in_flight: bool,
+    /// Last (question, answer) tile spawned with a successful AI
+    /// response. Bookmark chip reads this and appends to
+    /// %APPDATA%\overlay-mvp\bookmarks.md. None if no tile has
+    /// completed an AI call yet this session.
+    pub last_tile_qa: Option<(String, String)>,
 }
 
 /// Convenience alias used by all window-spawning callbacks.
