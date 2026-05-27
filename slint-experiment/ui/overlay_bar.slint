@@ -94,9 +94,12 @@ export component OverlayBarWindow inherits Window {
     background: transparent;
     no-frame: true;
     always-on-top: true;
-    preferred-width: 720px;
+    // Phase E6 v10 — widened from 720 to 980 so new chip labels
+    // (💡 tips, ⭐ bm, 🎯 stealth, 🔥 auto, ⚙ settings, X quit) all
+    // fit without truncating the rightmost (X quit) chip.
+    preferred-width: 980px;
     preferred-height: 56px;
-    min-width: 520px;
+    min-width: 700px;
 
     // Status pill text (idle / recording / etc).
     in-out property <string> status-text: "idle";
@@ -119,6 +122,13 @@ export component OverlayBarWindow inherits Window {
     // Tile counter for the "+ Tile" button.
     in-out property <int> tiles-spawned: 0;
 
+    // Phase E6 v10 — aggressive (every-line) auto-tile mode flag.
+    // When true, the bar shows the "🔥 auto" chip lit; user can
+    // toggle to spawn a tile on every transcript line (vs. only on
+    // Question/Keyword triggers). Backend already supports it via
+    // cfg.auto_tile_every_line; this just surfaces the switch.
+    in-out property <bool> aggressive-active: false;
+
     // ===== Callbacks =====
     callback mic-toggle-clicked();
     callback sys-toggle-clicked();
@@ -128,6 +138,7 @@ export component OverlayBarWindow inherits Window {
     callback bookmark-clicked();
     callback tips-clicked();
     callback stealth-toggle-clicked();
+    callback aggressive-toggle-clicked();
     callback open-settings-clicked();
     callback quit-clicked();
 
@@ -202,29 +213,37 @@ export component OverlayBarWindow inherits Window {
 
             // AI tips / followups
             Chip {
-                label: "💡";
+                label: "💡 tips";
                 accent: #fde68a;
                 clicked => { root.tips-clicked(); }
             }
 
             // Bookmark
             Chip {
-                label: "⭐";
+                label: "⭐ bm";
                 accent: #fcd34d;
                 clicked => { root.bookmark-clicked(); }
             }
 
-            // Stealth toggle
+            // Stealth toggle (hide from screen capture)
             Chip {
-                label: "🎯";
+                label: "🎯 stealth";
                 accent: #ec4899;
                 clicked => { root.stealth-toggle-clicked(); }
+            }
+
+            // Aggressive auto-tile mode (every transcript line spawns)
+            Chip {
+                label: root.aggressive-active ? "🔥 auto-ON" : "🔥 auto";
+                accent: #fb923c;
+                active: root.aggressive-active;
+                clicked => { root.aggressive-toggle-clicked(); }
             }
 
             // Spring spacer
             Rectangle { horizontal-stretch: 1; }
 
-            // Tile counter + spawn
+            // Tile counter + spawn (F6 manual ask)
             Chip {
                 label: @tr("+ tile ({})", root.tiles-spawned);
                 accent: #f472b6;
@@ -233,14 +252,16 @@ export component OverlayBarWindow inherits Window {
 
             // Settings
             Chip {
-                label: "⚙";
+                label: "⚙ settings";
                 accent: #94a3b8;
                 clicked => { root.open-settings-clicked(); }
             }
 
-            // Quit
+            // Quit (ASCII X — Unicode ✕ U+2715 renders as missing glyph
+            // on some Slint+skia font fallbacks; same root cause as
+            // tile close glyph fix in cycle 7)
             Chip {
-                label: "✕";
+                label: "X quit";
                 accent: #ef4444;
                 clicked => { root.quit-clicked(); }
             }

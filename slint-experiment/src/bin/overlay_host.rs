@@ -1307,6 +1307,33 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // ===== Aggressive auto-tile toggle =====
+    // Phase E6 v10 — surface backend's cfg.auto_tile_every_line as a
+    // bar-level switch. Reads current value into chip state at startup,
+    // then toggles on click + persists to config.json. The backend
+    // detector pipeline in slint_session already honours this flag
+    // (every_line=true → MAX_TILES_PER_MIN_AGGRESSIVE=20).
+    {
+        let cfg_for_agg = cfg.clone();
+        let weak_for_agg = overlay.as_weak();
+        // Sync initial state from cfg.
+        if let Some(o) = weak_for_agg.upgrade() {
+            o.set_aggressive_active(cfg_for_agg.read().auto_tile_every_line);
+        }
+        overlay.on_aggressive_toggle_clicked(move || {
+            let new_state = {
+                let mut c = cfg_for_agg.write();
+                c.auto_tile_every_line = !c.auto_tile_every_line;
+                let _ = overlay_backend::config::save(&c);
+                c.auto_tile_every_line
+            };
+            eprintln!("[overlay-host] aggressive auto-tile -> {new_state}");
+            if let Some(o) = weak_for_agg.upgrade() {
+                o.set_aggressive_active(new_state);
+            }
+        });
+    }
+
     // ===== Quit =====
     overlay.on_quit_clicked(|| {
         eprintln!("[overlay-host] quit requested");
