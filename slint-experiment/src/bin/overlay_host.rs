@@ -197,10 +197,11 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     });
 
-    // ===== AI model cycle =====
+    // ===== AI model cycle (Phase C: writes to config) =====
     {
         let s = state.clone();
         let weak = overlay.as_weak();
+        let cfg_cycle = cfg.clone();
         overlay.on_ai_model_cycle_clicked(move || {
             let new_model = {
                 let mut st = match s.lock() {
@@ -210,6 +211,17 @@ fn main() -> Result<(), slint::PlatformError> {
                 st.ai_model = next_model(&st.ai_model).to_string();
                 st.ai_model.clone()
             };
+            // Persist to config.json — next AI call uses the new model.
+            {
+                let mut w = cfg_cycle.write();
+                w.ai_model = new_model.clone();
+            }
+            let snapshot = cfg_cycle.read().clone();
+            if let Err(e) = config::save(&snapshot) {
+                eprintln!("[overlay-host] config save failed: {e}");
+            } else {
+                eprintln!("[overlay-host] ai_model -> {new_model} (saved)");
+            }
             if let Some(o) = weak.upgrade() {
                 o.set_ai_model(SharedString::from(new_model));
             }
