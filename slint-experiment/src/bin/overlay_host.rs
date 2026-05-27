@@ -42,6 +42,27 @@ use ui::{
 type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
 
 fn main() -> Result<(), slint::PlatformError> {
+    // Phase 6 — MCP server enablement hint.
+    //
+    // The mcp feature on i-slint-backend-selector auto-starts an HTTP MCP
+    // server when SLINT_MCP_PORT is set (Phase 0.5 spike 2 result). For
+    // operator visibility, log the value at startup.
+    match std::env::var("SLINT_MCP_PORT") {
+        Ok(p) => {
+            eprintln!(
+                "[overlay-host] MCP server: listening on http://127.0.0.1:{p}/mcp (SLINT_MCP_PORT={p})"
+            );
+            if std::env::var("SLINT_EMIT_DEBUG_INFO").is_err() {
+                eprintln!(
+                    "[overlay-host] MCP HINT: set SLINT_EMIT_DEBUG_INFO=1 for element introspection."
+                );
+            }
+        }
+        Err(_) => eprintln!(
+            "[overlay-host] MCP server disabled. Enable with `SLINT_EMIT_DEBUG_INFO=1 SLINT_MCP_PORT=8080`."
+        ),
+    }
+
     let state = new_shared_state();
     let tiles: TileWindows = Rc::new(RefCell::new(Vec::new()));
     let settings: Rc<RefCell<Option<SettingsWindow>>> = Rc::new(RefCell::new(None));

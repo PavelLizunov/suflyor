@@ -23,6 +23,9 @@ component Chip inherits Rectangle {
 
     callback clicked();
 
+    accessible-role: button;
+    accessible-label: label;
+
     background: active ? accent.with-alpha(0.18) : transparent;
     border-color: active ? accent : #3a3c44;
     border-width: 1px;
@@ -51,6 +54,11 @@ component LiveChip inherits Rectangle {
     in property <color> accent: #34d399;
 
     callback clicked();
+
+    accessible-role: button;
+    accessible-label: label;
+    accessible-checkable: true;
+    accessible-checked: active;
 
     background: active ? accent.with-alpha(0.18) : transparent;
     border-color: active ? accent : #3a3c44;
