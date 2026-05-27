@@ -11,8 +11,8 @@
 //!   #2 reask_last                 ← landed
 //!   #3 manual_spawn_tile          ← landed
 //!   #4 ask (stream loop)          ← landed
-//!   #5 manual_ask_source          ← landed (this port)
-//!   #6 manual_ask_window_end      (pending)
+//!   #5 manual_ask_source          ← landed
+//!   #6 manual_ask_window_end      ← landed (this port)
 //!   #7 maybe_spawn_tile + start_session (together)
 //!   #8 stop_session               (depends on debrief)
 //!
@@ -899,6 +899,389 @@ pub async fn manual_ask_source(
     })
 }
 
+// ===== F7/F8 Push-to-talk release (Phase B2 port #6) =====
+
+/// Just-in-time recent-transcript fetch. The pre-port code reads
+/// `recent_context` AFTER STT completes (so any always-on capture
+/// lines that landed during the PTT hold are included). Snapshotting
+/// in the shim would freeze the context earlier — that's a wire-parity
+/// regression for active calls. Instead, the shim provides this
+/// FnOnce closure (captures rt) and the port invokes it post-STT.
+pub type RecentContextFn = Box<dyn FnOnce() -> Vec<String> + Send>;
+
+/// Snapshot of state the ported `manual_ask_window_end` needs. The
+/// PTT channel + thread are MOVED through (FnOnce-style consumption);
+/// the recent-transcript reader is deferred via closure.
+pub struct PttInputs {
+    /// Atomic flag the capture thread polls every 500ms. Port sets
+    /// it to true to signal stop, then awaits `samples_rx`.
+    pub stop_signal: Arc<std::sync::atomic::AtomicBool>,
+    /// Oneshot the capture thread fills with `Ok(Vec<i16>)` on
+    /// clean exit, or `Err(String)` on WASAPI/COM failure.
+    pub samples_rx: tokio::sync::oneshot::Receiver<Result<Vec<i16>, String>>,
+    /// JoinHandle of the capture thread. Port detaches a cleanup
+    /// thread to await join without blocking the async path.
+    /// `None` only in tests that don't spawn a real thread.
+    pub thread: Option<std::thread::JoinHandle<()>>,
+    /// Unix ms when PTT started — for the "удерживай дольше" + log.
+    pub start_ms: u64,
+    /// What the held PTT struct says it was capturing. Used only
+    /// for the mismatch log line.
+    pub held_source: AudioSource,
+    /// What F-key release triggered this. Drives the tile chrome,
+    /// glyph, and journal `purpose` tag.
+    pub requested_source: AudioSource,
+    /// Cloned Journal handle.
+    pub journal: Option<Journal>,
+    /// Health-signals Arc.
+    pub health: Arc<HealthSignals>,
+    /// Closure that snapshots `recent_context` (last 5 labeled
+    /// transcript lines) from rt. Called by the port AFTER STT
+    /// so context includes any always-on lines that landed
+    /// during the PTT hold.
+    pub recent_context_provider: RecentContextFn,
+}
+
+/// Writeback the shim applies on success.
+#[derive(Debug, Clone)]
+pub struct PttOutcome {
+    /// "🔊⏺ {snippet}" or "🎤⏺ {snippet}" form (snippet capped 80 chars).
+    pub display_question: String,
+    /// Trimmed model answer.
+    pub answer_trimmed: String,
+    /// Microcents to add to session_cost_microcents.
+    pub cost_microcents_delta: u64,
+}
+
+/// F7/F8 Push-to-talk release — signal stop to the dedicated PTT
+/// capture thread, await the PCM blob, send as ONE WAV to Whisper
+/// (no VAD splitting = no chunk-boundary artifacts), filter
+/// hallucinations + emptiness, then ask AI and spawn the tile.
+///
+/// Port #6 of Phase B2 — biggest emit surface in the batch (8 emit
+/// sites: 6 tile:error variants + 1 transcript:line + 1 cost:update
+/// via shim). Pre-port body was ~310 lines; the port reproduces it
+/// faithfully + uses the closure-based recent_context_provider to
+/// preserve the "snapshot just-in-time post-STT" semantics.
+pub async fn manual_ask_window_end(
+    events: Arc<dyn RuntimeEvents>,
+    cfg: SharedConfig,
+    inputs: PttInputs,
+) -> Option<PttOutcome> {
+    if inputs.held_source != inputs.requested_source {
+        log::warn!(
+            "PTT end source mismatch: held={:?}, end={:?}",
+            inputs.held_source,
+            inputs.requested_source,
+        );
+        // Still consume the receiver so the thread doesn't leak.
+    }
+
+    let now = crate::journal::now_unix_ms() as u64;
+    let duration_ms = now.saturating_sub(inputs.start_ms);
+    log::info!(
+        "PTT hold end: {:?} after {}ms — awaiting samples",
+        inputs.requested_source,
+        duration_ms
+    );
+
+    // Signal stop and await samples.
+    inputs.stop_signal.store(true, Ordering::Release);
+    let samples = match inputs.samples_rx.await {
+        Ok(Ok(s)) => s,
+        Ok(Err(capture_err)) => {
+            events.emit(
+                "tile:error",
+                serde_json::json!({
+                    "message": format!("Push-to-talk capture: {capture_err}"),
+                }),
+            );
+            return None;
+        }
+        Err(_) => {
+            log::warn!("PTT samples_rx dropped — capture thread crashed");
+            events.emit(
+                "tile:error",
+                serde_json::json!({
+                    "message": "Push-to-talk: capture thread crashed (см. лог)",
+                }),
+            );
+            return None;
+        }
+    };
+
+    // Best-effort cleanup of the OS thread — detached cleanup thread.
+    if let Some(handle) = inputs.thread {
+        let _ = std::thread::Builder::new()
+            .name("ptt-end-join".into())
+            .spawn(move || {
+                let _ = handle.join();
+            });
+    }
+
+    if samples.len() < (crate::audio::TARGET_SAMPLE_RATE as usize / 4) {
+        // <250ms — too short to be meaningful speech.
+        events.emit(
+            "tile:error",
+            serde_json::json!({
+                "message": format!("Push-to-talk: записано всего {duration_ms}ms — удерживай дольше"),
+            }),
+        );
+        return None;
+    }
+    // Pre-Whisper noise gate — same filter as always-on capture.
+    if !crate::stt::buffer_likely_speech(&samples) {
+        events.emit(
+            "tile:error",
+            serde_json::json!({
+                "message": "Push-to-talk: фон без речи — нечего распознавать",
+            }),
+        );
+        return None;
+    }
+
+    // Transcribe via dedicated Whisper call.
+    let (groq_key, language, whisper_prompt, stt_model) = {
+        let c = cfg.read();
+        (
+            c.groq_api_key.clone(),
+            c.stt_language.clone(),
+            crate::stt::build_whisper_prompt(&c.trigger_keywords, &c.meeting_context),
+            c.stt_model.clone(),
+        )
+    };
+    let purpose = match inputs.requested_source {
+        AudioSource::System => "push_to_talk_system",
+        AudioSource::Mic => "push_to_talk_mic",
+    };
+
+    let t_stt0 = std::time::Instant::now();
+    let transcribed = match crate::stt::transcribe_once(
+        &samples,
+        &groq_key,
+        language.as_deref(),
+        whisper_prompt.as_deref(),
+        &stt_model,
+    )
+    .await
+    {
+        Ok(t) => t.trim().to_string(),
+        Err(e) => {
+            log::warn!("PTT transcription failed: {e:#}");
+            if let Some(j) = inputs.journal.as_ref() {
+                j.write(&JournalEvent::Error {
+                    unix_ms: crate::journal::now_unix_ms(),
+                    module: "ptt_stt",
+                    message: &format!("{e:#}"),
+                });
+            }
+            events.emit(
+                "tile:error",
+                serde_json::json!({ "message": format!("STT error: {e}") }),
+            );
+            return None;
+        }
+    };
+    log::info!(
+        "PTT transcribed in {}ms: '{}'",
+        t_stt0.elapsed().as_millis(),
+        transcribed.chars().take(80).collect::<String>()
+    );
+
+    if transcribed.is_empty() {
+        events.emit(
+            "tile:error",
+            serde_json::json!({
+                "message": "Push-to-talk: Whisper не услышал речи (тишина?)",
+            }),
+        );
+        return None;
+    }
+    // Post-Whisper hallucination filter.
+    if crate::stt::is_likely_hallucination(&transcribed) {
+        log::info!(
+            "PTT dropped hallucination: '{}'",
+            transcribed.chars().take(80).collect::<String>()
+        );
+        let preview: String = transcribed.chars().take(60).collect();
+        events.emit(
+            "tile:error",
+            serde_json::json!({
+                "message": format!("Push-to-talk: распознанное похоже на галлюцинацию Whisper («{preview}»)"),
+            }),
+        );
+        return None;
+    }
+
+    // Synthetic transcript:line — appears in journal AND in the UI tail.
+    if let Some(j) = inputs.journal.as_ref() {
+        j.write(&JournalEvent::TranscriptLine {
+            unix_ms: crate::journal::now_unix_ms(),
+            source: match inputs.requested_source {
+                AudioSource::System => "system",
+                AudioSource::Mic => "mic",
+            },
+            text: &transcribed,
+        });
+    }
+    let transcript_line = TranscriptLine {
+        source: inputs.requested_source,
+        text: transcribed.clone(),
+        timestamp_ms: now,
+    };
+    let transcript_payload =
+        serde_json::to_value(&transcript_line).unwrap_or(serde_json::Value::Null);
+    events.emit("transcript:line", transcript_payload);
+
+    // AI prompt — freshly-transcribed text + short labeled context
+    // from the still-rolling main transcript (snapshot just-in-time
+    // via the shim's closure so any always-on lines that landed
+    // during the PTT hold are included; pre-port wire-parity).
+    let (base_url, bearer, model, response_language, meeting_context, preferred_monitor, stealth) = {
+        let c = cfg.read();
+        (
+            c.ai_base_url.clone(),
+            c.ai_bearer.clone(),
+            c.ai_model.clone(),
+            c.response_language.clone(),
+            c.meeting_context.clone(),
+            c.tile_monitor_name.clone(),
+            c.stealth_enabled,
+        )
+    };
+    let recent_context = (inputs.recent_context_provider)();
+    let mut labeled = recent_context;
+    let ptt_label = match inputs.requested_source {
+        AudioSource::System => format!("[СОБЕСЕДНИК ⏺] {transcribed}"),
+        AudioSource::Mic => format!("[ПОЛЬЗОВАТЕЛЬ ⏺] {transcribed}"),
+    };
+    labeled.push(ptt_label);
+
+    // NOTE: pre-port manual_ask_window_end deliberately does NOT
+    // emit cost:cap-hit (unlike manual_ask_source). PTT release is
+    // considered an in-flight commitment — we don't want to flash
+    // a cap chip after the user already held the key. Preserved
+    // here for wire-parity. If the session is way over budget the
+    // user will see cost:update with the new total post-AI; that's
+    // the canonical "you're spending" feedback for PTT.
+
+    let trigger_for_prompt = Trigger::Question(transcribed.clone());
+    let (system_prompt, user_prompt) = build_auto_tile_prompts(
+        &trigger_for_prompt,
+        &labeled,
+        &meeting_context,
+        &response_language,
+    );
+    let sys_full = system_prompt.clone();
+    let usr_full = user_prompt.clone();
+    let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
+    let messages = vec![
+        ai::ChatMessage {
+            role: "system".into(),
+            content: ai::MessageContent::Text(system_prompt),
+        },
+        ai::ChatMessage {
+            role: "user".into(),
+            content: ai::MessageContent::Text(user_prompt),
+        },
+    ];
+
+    if let Some(j) = inputs.journal.as_ref() {
+        j.write(&JournalEvent::AiRequest {
+            unix_ms: crate::journal::now_unix_ms(),
+            purpose,
+            model: &model,
+            system_prompt: &sys_full,
+            user_prompt: &usr_full,
+            attached_screenshot: false,
+            input_tokens_est,
+        });
+    }
+    let t0 = std::time::Instant::now();
+    let (answer, usage) =
+        match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512).await {
+            Ok(t) => {
+                inputs
+                    .health
+                    .last_ai_ok_ms
+                    .store(crate::journal::now_unix_ms() as u64, Ordering::Relaxed);
+                t
+            }
+            Err(e) => {
+                log::warn!("PTT AI failed: {e:#}");
+                if let Some(j) = inputs.journal.as_ref() {
+                    j.write(&JournalEvent::Error {
+                        unix_ms: crate::journal::now_unix_ms(),
+                        module: purpose,
+                        message: &format!("{e:#}"),
+                    });
+                }
+                // Pre-port did NOT emit tile:error on AI failure — silent.
+                return None;
+            }
+        };
+    let micro = ai::cost_microcents(&model, usage.input, usage.output);
+    let answer_trimmed = answer.trim().to_string();
+
+    if let Some(j) = inputs.journal.as_ref() {
+        j.write(&JournalEvent::AiResponse {
+            unix_ms: crate::journal::now_unix_ms(),
+            purpose,
+            model: &model,
+            latency_ms: t0.elapsed().as_millis() as u64,
+            finish_reason: "stop",
+            text: &answer,
+            output_tokens_est: usage.output,
+            cost_microcents: micro,
+        });
+    }
+
+    let icon = match inputs.requested_source {
+        AudioSource::System => "🔊⏺",
+        AudioSource::Mic => "🎤⏺",
+    };
+    let snippet: String = transcribed.chars().take(80).collect();
+    let question = format!("{icon} {snippet}");
+    let tile_kind = match inputs.requested_source {
+        AudioSource::System => TileKind::System,
+        AudioSource::Mic => TileKind::Mic,
+    };
+    let monitor_hint = match preferred_monitor.as_deref() {
+        Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
+        _ => MonitorHint::Auto,
+    };
+
+    match events.spawn_tile_full(
+        TileSpec {
+            question: question.clone(),
+            answer: answer_trimmed.clone(),
+            source: purpose.into(),
+            is_translation: false,
+        },
+        monitor_hint,
+        stealth,
+        tile_kind,
+    ) {
+        Ok(label) => {
+            if let Some(j) = inputs.journal.as_ref() {
+                j.write(&JournalEvent::TileSpawn {
+                    unix_ms: crate::journal::now_unix_ms(),
+                    label: &label,
+                    question: &question,
+                    answer: &answer,
+                });
+            }
+        }
+        Err(e) => log::warn!("PTT spawn_tile failed: {e:#}"),
+    }
+
+    Some(PttOutcome {
+        display_question: question,
+        answer_trimmed,
+        cost_microcents_delta: micro,
+    })
+}
+
 // ===== F9 Live Ask streaming loop (Phase B2 port #4) =====
 //
 // Different shape from ports #2/#3: takes a stream receiver directly
@@ -1295,6 +1678,59 @@ mod tests {
         .await;
         feeder.await.unwrap();
         assert_eq!(*calls.lock().unwrap(), 1);
+    }
+
+    /// manual_ask_window_end with capture-thread err on samples_rx
+    /// → emits tile:error + returns None. Exercises the
+    /// `Ok(Err(capture_err))` branch.
+    #[tokio::test]
+    async fn manual_ask_window_end_capture_err_returns_none() {
+        use std::sync::atomic::AtomicBool;
+        let (tx, rx) = tokio::sync::oneshot::channel::<Result<Vec<i16>, String>>();
+        // Send Err immediately as if WASAPI failed.
+        tx.send(Err("WASAPI: AUDCLNT_E_DEVICE_INVALIDATED".into()))
+            .unwrap();
+        let inputs = PttInputs {
+            stop_signal: Arc::new(AtomicBool::new(false)),
+            samples_rx: rx,
+            thread: None, // no real thread to join in tests
+            start_ms: 0,
+            held_source: AudioSource::Mic,
+            requested_source: AudioSource::Mic,
+            journal: None,
+            health: Arc::new(HealthSignals::default()),
+            recent_context_provider: Box::new(Vec::new),
+        };
+        let cfg = hermetic_empty_config();
+        let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
+        let outcome = manual_ask_window_end(sink, cfg, inputs).await;
+        assert!(outcome.is_none(), "capture-err path must return None");
+    }
+
+    /// manual_ask_window_end with too-short buffer (<250ms at 16kHz =
+    /// <4000 samples) → emits "удерживай дольше" tile:error +
+    /// returns None.
+    #[tokio::test]
+    async fn manual_ask_window_end_short_buffer_returns_none() {
+        use std::sync::atomic::AtomicBool;
+        let (tx, rx) = tokio::sync::oneshot::channel::<Result<Vec<i16>, String>>();
+        // 100ms at 16kHz = 1600 samples (below 4000 threshold).
+        tx.send(Ok(vec![0; 1600])).unwrap();
+        let inputs = PttInputs {
+            stop_signal: Arc::new(AtomicBool::new(false)),
+            samples_rx: rx,
+            thread: None,
+            start_ms: 0,
+            held_source: AudioSource::System,
+            requested_source: AudioSource::System,
+            journal: None,
+            health: Arc::new(HealthSignals::default()),
+            recent_context_provider: Box::new(Vec::new),
+        };
+        let cfg = hermetic_empty_config();
+        let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
+        let outcome = manual_ask_window_end(sink, cfg, inputs).await;
+        assert!(outcome.is_none(), "too-short buffer must return None");
     }
 
     /// manual_ask_source with empty trigger → emits tile:error +

@@ -1887,9 +1887,20 @@ pub fn manual_ask_window_start(rt: SharedRuntime, cfg: SharedConfig, source: Aud
     now
 }
 
-/// Push-to-talk END: signal stop to the dedicated capture thread, await
-/// the full PCM blob, send as ONE WAV to Whisper (no VAD splitting →
-/// no chunk-boundary artifacts → cleaner text), ask AI, spawn tile.
+/// F7/F8 Push-to-talk release: thin Tauri shim around
+/// `overlay_backend::runtime::manual_ask_window_end`.
+///
+/// Phase B2 port #6: ~310-line body moved to overlay-backend. This
+/// shim:
+///   1. Takes ownership of the PTT capture under rt lock (removes
+///      manual_ask_start_ms[source] + take()s push_to_talk).
+///   2. Early-return on no-matching-start (same as pre-port).
+///   3. Snapshots journal + health.
+///   4. Constructs the recent_context closure capturing rt (port
+///      invokes it post-STT to preserve "snapshot just-in-time"
+///      semantics for wire-parity).
+///   5. Delegates to the port + applies session-cost / last_qa
+///      writeback under rt lock + emits cost:update on success.
 pub async fn manual_ask_window_end(
     app: AppHandle,
     cfg: SharedConfig,
@@ -1897,309 +1908,59 @@ pub async fn manual_ask_window_end(
     tiles: SharedTiles,
     source: AudioSource,
 ) {
-    // Take ownership of the PTT capture struct (releases lock immediately).
     let ptt = {
         let mut s = rt.lock();
         s.manual_ask_start_ms.remove(&source);
         s.push_to_talk.take()
     };
     let Some(ptt) = ptt else {
-        log::warn!("PTT end for {:?} without matching start — ignored", source);
+        log::warn!("PTT end for {source:?} without matching start — ignored");
         return;
     };
-    if ptt.source != source {
-        log::warn!(
-            "PTT end source mismatch: held={:?}, end={:?}",
-            ptt.source,
-            source
-        );
-        // Still consume the receiver so the thread doesn't leak.
-    }
 
-    let now = crate::journal::now_unix_ms() as u64;
-    let duration_ms = now.saturating_sub(ptt.start_ms);
-    log::info!(
-        "PTT hold end: {:?} after {}ms — awaiting samples",
-        ptt.source,
-        duration_ms
-    );
-
-    // Signal stop and await samples. Channel carries Result so we can
-    // surface the real WASAPI/COM failure to the UI instead of the prior
-    // misleading "too short" message.
-    ptt.stop.store(true, Ordering::Release);
-    let samples = match ptt.samples_rx.await {
-        Ok(Ok(s)) => s,
-        Ok(Err(capture_err)) => {
-            let _ = app.emit_to(
-                "overlay",
-                "tile:error",
-                serde_json::json!({
-                    "message": format!("Push-to-talk capture: {}", capture_err)
-                }),
-            );
-            return;
-        }
-        Err(_) => {
-            log::warn!("PTT samples_rx dropped — capture thread crashed");
-            let _ = app.emit_to(
-                "overlay",
-                "tile:error",
-                serde_json::json!({
-                    "message": "Push-to-talk: capture thread crashed (см. лог)"
-                }),
-            );
-            return;
-        }
+    let (journal, health) = {
+        let s = rt.lock();
+        (s.journal.clone(), s.health.clone())
     };
 
-    // Best-effort cleanup of the OS thread — it should already be exiting.
-    if let Some(handle) = ptt.thread {
-        let _ = std::thread::Builder::new()
-            .name("ptt-end-join".into())
-            .spawn(move || {
-                let _ = handle.join();
-            });
-    }
+    let rt_for_context = rt.clone();
+    let recent_context_provider: overlay_backend::runtime::RecentContextFn =
+        Box::new(move || select_recent_lines_labeled(&rt_for_context.lock().transcript, 5));
 
-    if samples.len() < (crate::audio::TARGET_SAMPLE_RATE as usize / 4) {
-        // <250ms — too short to be meaningful speech.
-        let _ = app.emit_to(
-            "overlay",
-            "tile:error",
-            serde_json::json!({
-                "message": format!("Push-to-talk: записано всего {}ms — удерживай дольше", duration_ms)
-            }),
-        );
-        return;
-    }
-    // Pre-Whisper noise gate — same filter as always-on capture.
-    if !crate::stt::buffer_likely_speech(&samples) {
-        let _ = app.emit_to(
-            "overlay",
-            "tile:error",
-            serde_json::json!({
-                "message": "Push-to-talk: фон без речи — нечего распознавать"
-            }),
-        );
-        return;
-    }
-
-    // Transcribe via DEDICATED Whisper call — one WAV, full context, no VAD chunks.
-    let (groq_key, language, whisper_prompt, stt_model) = {
-        let c = cfg.read();
-        (
-            c.groq_api_key.clone(),
-            c.stt_language.clone(),
-            crate::stt::build_whisper_prompt(&c.trigger_keywords, &c.meeting_context),
-            c.stt_model.clone(),
-        )
+    let inputs = overlay_backend::runtime::PttInputs {
+        stop_signal: ptt.stop,
+        samples_rx: ptt.samples_rx,
+        thread: ptt.thread,
+        start_ms: ptt.start_ms,
+        held_source: ptt.source,
+        requested_source: source,
+        journal,
+        health,
+        recent_context_provider,
     };
 
-    let journal = rt.lock().journal.clone().unwrap_or_default();
-    let purpose = match source {
-        AudioSource::System => "push_to_talk_system",
-        AudioSource::Mic => "push_to_talk_mic",
-    };
-
-    let t_stt0 = std::time::Instant::now();
-    let transcribed = match crate::stt::transcribe_once(
-        &samples,
-        &groq_key,
-        language.as_deref(),
-        whisper_prompt.as_deref(),
-        &stt_model,
-    )
-    .await
-    {
-        Ok(t) => t.trim().to_string(),
-        Err(e) => {
-            log::warn!("PTT transcription failed: {e:#}");
-            journal.write(&JournalEvent::Error {
-                unix_ms: now_unix_ms(),
-                module: "ptt_stt",
-                message: &format!("{e:#}"),
-            });
-            let _ = app.emit_to(
-                "overlay",
-                "tile:error",
-                serde_json::json!({ "message": format!("STT error: {}", e) }),
-            );
-            return;
-        }
-    };
-    log::info!(
-        "PTT transcribed in {}ms: '{}'",
-        t_stt0.elapsed().as_millis(),
-        transcribed.chars().take(80).collect::<String>()
-    );
-
-    if transcribed.is_empty() {
-        let _ = app.emit_to(
-            "overlay",
-            "tile:error",
-            serde_json::json!({ "message": "Push-to-talk: Whisper не услышал речи (тишина?)" }),
-        );
-        return;
-    }
-    // Post-Whisper hallucination filter — drop "subscribe to my channel",
-    // repetition loops, punctuation-only output.
-    if crate::stt::is_likely_hallucination(&transcribed) {
-        log::info!(
-            "PTT dropped hallucination: '{}'",
-            transcribed.chars().take(80).collect::<String>()
-        );
-        let _ = app.emit_to(
-            "overlay",
-            "tile:error",
-            serde_json::json!({
-                "message": format!("Push-to-talk: распознанное похоже на галлюцинацию Whisper («{}»)",
-                    transcribed.chars().take(60).collect::<String>())
-            }),
-        );
-        return;
-    }
-
-    // Emit the PTT transcript as a synthetic transcript line so it shows
-    // up in the journal AND in the UI tail.
-    journal.write(&JournalEvent::TranscriptLine {
-        unix_ms: now_unix_ms(),
-        source: match source {
-            AudioSource::System => "system",
-            AudioSource::Mic => "mic",
-        },
-        text: &transcribed,
+    let events: Arc<dyn overlay_backend::events::RuntimeEvents> = Arc::new(crate::TauriEvents {
+        app: app.clone(),
+        tiles: tiles.clone(),
     });
-    let _ = app.emit_to(
-        "overlay",
-        "transcript:line",
-        &TranscriptLine {
-            source,
-            text: transcribed.clone(),
-            timestamp_ms: now,
-        },
-    );
 
-    // Build AI prompt — only the freshly-transcribed text, plus a short
-    // labeled context from the still-rolling main transcript for situational awareness.
-    let (base_url, bearer, model, response_language, meeting_context, preferred_monitor, stealth) = {
-        let c = cfg.read();
-        (
-            c.ai_base_url.clone(),
-            c.ai_bearer.clone(),
-            c.ai_model.clone(),
-            c.response_language.clone(),
-            c.meeting_context.clone(),
-            c.tile_monitor_name.clone(),
-            c.stealth_enabled,
-        )
-    };
-    let recent_context = select_recent_lines_labeled(&rt.lock().transcript, 5);
-    let mut labeled = recent_context.clone();
-    let ptt_label = match source {
-        AudioSource::System => format!("[СОБЕСЕДНИК ⏺] {}", transcribed),
-        AudioSource::Mic => format!("[ПОЛЬЗОВАТЕЛЬ ⏺] {}", transcribed),
-    };
-    labeled.push(ptt_label);
+    let outcome = overlay_backend::runtime::manual_ask_window_end(events, cfg, inputs).await;
 
-    let trigger_for_prompt = Trigger::Question(transcribed.clone());
-    let (system_prompt, user_prompt) = build_auto_tile_prompts(
-        &trigger_for_prompt,
-        &labeled,
-        &meeting_context,
-        &response_language,
-    );
-
-    let sys_full = system_prompt.clone();
-    let usr_full = user_prompt.clone();
-    let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
-    let messages = vec![
-        ai::ChatMessage {
-            role: "system".into(),
-            content: ai::MessageContent::Text(system_prompt),
-        },
-        ai::ChatMessage {
-            role: "user".into(),
-            content: ai::MessageContent::Text(user_prompt),
-        },
-    ];
-
-    journal.write(&JournalEvent::AiRequest {
-        unix_ms: now_unix_ms(),
-        purpose,
-        model: &model,
-        system_prompt: &sys_full,
-        user_prompt: &usr_full,
-        attached_screenshot: false,
-        input_tokens_est,
-    });
-    let t0 = std::time::Instant::now();
-
-    let (answer, usage) =
-        match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512).await {
-            Ok(t) => {
-                bump_health_ai(&rt);
-                t
-            }
-            Err(e) => {
-                log::warn!("PTT AI failed: {e:#}");
-                journal.write(&JournalEvent::Error {
-                    unix_ms: now_unix_ms(),
-                    module: purpose,
-                    message: &format!("{e:#}"),
-                });
-                return;
-            }
+    if let Some(out) = outcome {
+        let total = {
+            let mut s = rt.lock();
+            s.session_cost_microcents = s
+                .session_cost_microcents
+                .saturating_add(out.cost_microcents_delta);
+            s.last_question = Some(out.display_question);
+            s.last_answer = Some(out.answer_trimmed);
+            (s.session_cost_microcents as f64) / 100_000_000.0
         };
-    let micro = ai::cost_microcents(&model, usage.input, usage.output);
-    let total = {
-        let mut s = rt.lock();
-        s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
-        (s.session_cost_microcents as f64) / 100_000_000.0
-    };
-    let _ = app.emit_to(
-        "overlay",
-        "cost:update",
-        serde_json::json!({ "session_usd": total }),
-    );
-    journal.write(&JournalEvent::AiResponse {
-        unix_ms: now_unix_ms(),
-        purpose,
-        model: &model,
-        latency_ms: t0.elapsed().as_millis() as u64,
-        finish_reason: "stop",
-        text: &answer,
-        output_tokens_est: usage.output,
-        cost_microcents: micro,
-    });
-
-    let icon = match source {
-        AudioSource::System => "🔊⏺",
-        AudioSource::Mic => "🎤⏺",
-    };
-    let snippet: String = transcribed.chars().take(80).collect();
-    let question = format!("{icon} {snippet}");
-    let kind = match source {
-        AudioSource::System => crate::tile::TileKind::System,
-        AudioSource::Mic => crate::tile::TileKind::Mic,
-    };
-    store_last_qa(&rt, &question, answer.trim());
-    match crate::tile::spawn_tile_with_stealth(
-        &app,
-        &tiles,
-        question.clone(),
-        answer.trim().to_string(),
-        preferred_monitor,
-        stealth,
-        kind,
-    ) {
-        Ok(label) => journal.write(&JournalEvent::TileSpawn {
-            unix_ms: now_unix_ms(),
-            label: &label,
-            question: &question,
-            answer: &answer,
-        }),
-        Err(e) => log::warn!("PTT spawn_tile failed: {e:#}"),
+        let _ = app.emit_to(
+            "overlay",
+            "cost:update",
+            serde_json::json!({ "session_usd": total }),
+        );
     }
 }
 
