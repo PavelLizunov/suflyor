@@ -875,21 +875,54 @@ fn main() -> Result<(), slint::PlatformError> {
                 .collect();
             tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
             let weak_tile = tile.as_weak();
+            // Phase E6 v17 — capture the vec so close-handler can
+            // REMOVE the tile (not just hide). Previous version
+            // only called tile.hide() — TileWindow Strong stayed
+            // in the Vec → Slint kept dispatching to dead windows
+            // → UI thread saturated after 30+ tiles. User: "у
+            // меня зависла основная панель".
+            let vec_for_close = tiles_for_poll.clone();
             tile.on_close_clicked(move || {
                 eprintln!("[overlay-host] tile (poll/F3) close_clicked fired");
                 if let Some(t) = weak_tile.upgrade() {
+                    let close_hwnd = grab_hwnd(t.window()).ok();
                     let _ = t.hide();
+                    if let Some(target) = close_hwnd {
+                        let before = vec_for_close.borrow().len();
+                        vec_for_close
+                            .borrow_mut()
+                            .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
+                        let after = vec_for_close.borrow().len();
+                        eprintln!(
+                            "[overlay-host]   dropped from vec: before={before} after={after}"
+                        );
+                    }
                 }
             });
-            // Phase E6 v8 — wire pin so the button isn't silently
-            // unresponsive. Stub for now; full pin behaviour ports in
-            // a later phase. Without this the click is a no-op which
-            // looks like the button is broken.
+            // Phase E6 v17 — pin toggles visual state. Pinned tiles
+            // stay around even when session stops (auto-hide skips
+            // them). User: "кнопка pin не работает".
             let weak_pin = tile.as_weak();
             tile.on_pin_clicked(move || {
                 eprintln!("[overlay-host] tile (poll/F3) pin_clicked fired");
-                if weak_pin.upgrade().is_some() {
-                    // Pin behaviour ports later — silent stub for now.
+                if let Some(t) = weak_pin.upgrade() {
+                    let new = !t.get_pinned();
+                    t.set_pinned(new);
+                    eprintln!("[overlay-host]   pinned -> {new}");
+                }
+            });
+            // Phase E6 v17 — maximize toggles tile size. User: "нет
+            // функционала развернуть, нужно отдельной кнопкой или
+            // даб-кликом". Win32 SetWindowPos honours new size; we
+            // store the previous rect in app_state for restore.
+            let weak_max = tile.as_weak();
+            tile.on_maximize_clicked(move || {
+                eprintln!("[overlay-host] tile (poll/F3) maximize_clicked fired");
+                if let Some(t) = weak_max.upgrade() {
+                    let Ok(hwnd) = grab_hwnd(t.window()) else {
+                        return;
+                    };
+                    toggle_tile_maximize(hwnd, &t);
                 }
             });
             // (monitor placement applied via apply_tile_hwnd_with_monitor.)
@@ -1229,16 +1262,32 @@ fn main() -> Result<(), slint::PlatformError> {
             tile.set_blocks(ModelRc::new(VecModel::from(placeholder)));
 
             let weak_tile = tile.as_weak();
+            let vec_for_close = t.clone();
             tile.on_close_clicked(move || {
                 eprintln!("[overlay-host] tile (spawn-poll) close_clicked fired");
-                if let Some(t) = weak_tile.upgrade() {
-                    let _ = t.hide();
+                if let Some(tw) = weak_tile.upgrade() {
+                    let close_hwnd = grab_hwnd(tw.window()).ok();
+                    let _ = tw.hide();
+                    if let Some(target) = close_hwnd {
+                        vec_for_close.borrow_mut().retain(|item| {
+                            grab_hwnd(item.window()).ok() != Some(target)
+                        });
+                    }
                 }
             });
             let weak_pin = tile.as_weak();
             tile.on_pin_clicked(move || {
-                if weak_pin.upgrade().is_some() {
-                    eprintln!("[overlay-host] tile (spawn-poll) pin_clicked fired");
+                if let Some(tw) = weak_pin.upgrade() {
+                    let new = !tw.get_pinned();
+                    tw.set_pinned(new);
+                    eprintln!("[overlay-host] tile (spawn-poll) pin -> {new}");
+                }
+            });
+            let weak_max = tile.as_weak();
+            tile.on_maximize_clicked(move || {
+                if let Some(tw) = weak_max.upgrade() {
+                    let Ok(hwnd) = grab_hwnd(tw.window()) else { return };
+                    toggle_tile_maximize(hwnd, &tw);
                 }
             });
 
@@ -1805,18 +1854,35 @@ fn fire_f9_ask(
     }];
     tile.set_blocks(ModelRc::new(VecModel::from(placeholder)));
     let weak_close = tile.as_weak();
+    let vec_for_close = tiles.clone();
     tile.on_close_clicked(move || {
         eprintln!("[overlay-host] tile (F9) close_clicked fired");
         if let Some(t) = weak_close.upgrade() {
+            let close_hwnd = grab_hwnd(t.window()).ok();
             let _ = t.hide();
+            if let Some(target) = close_hwnd {
+                vec_for_close
+                    .borrow_mut()
+                    .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
+            }
         }
     });
     let weak_pin = tile.as_weak();
     tile.on_pin_clicked(move || {
         eprintln!("[overlay-host] tile (F9) pin_clicked fired");
-        if weak_pin.upgrade().is_some() {
-            // Stub — full pin behaviour (stop session auto-hide) lives
-            // in the React/Tauri version; mirror once Slint state grows.
+        if let Some(t) = weak_pin.upgrade() {
+            let new = !t.get_pinned();
+            t.set_pinned(new);
+        }
+    });
+    let weak_max = tile.as_weak();
+    tile.on_maximize_clicked(move || {
+        eprintln!("[overlay-host] tile (F9) maximize_clicked fired");
+        if let Some(t) = weak_max.upgrade() {
+            let Ok(hwnd) = grab_hwnd(t.window()) else {
+                return;
+            };
+            toggle_tile_maximize(hwnd, &t);
         }
     });
     let _ = tile.show();
@@ -1971,6 +2037,21 @@ static TILE_SLOT_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::At
 /// spawn (never wraps) so the user can tell tiles apart in a busy
 /// session. Reset only at process restart.
 static TILE_DISPLAY_SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Phase E6 v17 — maximize toggle helper. User: "нет функционала
+/// развернуть, нужно отдельной кнопкой или даб-кликом". Maximized
+/// tile is 800×600 (~1.7× default); restored back to 460×360. Uses
+/// Win32 SetWindowPos with current position so the tile expands in
+/// place from its top-left corner. Flips tile.maximized so the
+/// button glyph updates.
+fn toggle_tile_maximize(hwnd: windows::Win32::Foundation::HWND, tile: &TileWindow) {
+    use windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, SWP_NOMOVE, SWP_NOZORDER};
+    let new = !tile.get_maximized();
+    let (w, h): (i32, i32) = if new { (800, 600) } else { (460, 360) };
+    let _ = unsafe { SetWindowPos(hwnd, None, 0, 0, w, h, SWP_NOMOVE | SWP_NOZORDER) };
+    tile.set_maximized(new);
+    eprintln!("[overlay-host]   tile maximized -> {new} (size={w}x{h})");
+}
 
 /// Wire the chrome-row drag callback on a tile so the user can move
 /// it by pressing+dragging the title area. Win32 system-drag handles
@@ -2201,20 +2282,34 @@ fn open_palette(
             tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
 
             let weak_tile = tile.as_weak();
+            let vec_for_close = tiles_ref2.clone();
             tile.on_close_clicked(move || {
                 eprintln!("[overlay-host] tile (KB-palette) close_clicked fired");
                 if let Some(t) = weak_tile.upgrade() {
+                    let close_hwnd = grab_hwnd(t.window()).ok();
                     let _ = t.hide();
+                    if let Some(target) = close_hwnd {
+                        vec_for_close
+                            .borrow_mut()
+                            .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
+                    }
                 }
             });
-            // Phase E6 v8 — wire pin so the button isn't silently
-            // unresponsive. Stub for now; full pin behaviour ports in
-            // a later phase.
+            // Pin toggles visual state (cycle 17 stub upgraded v17).
             let weak_pin = tile.as_weak();
             tile.on_pin_clicked(move || {
-                eprintln!("[overlay-host] tile (KB-palette) pin_clicked fired");
-                if weak_pin.upgrade().is_some() {
-                    // Pin behaviour ports later — silent stub for now.
+                if let Some(t) = weak_pin.upgrade() {
+                    let new = !t.get_pinned();
+                    t.set_pinned(new);
+                }
+            });
+            let weak_max = tile.as_weak();
+            tile.on_maximize_clicked(move || {
+                if let Some(t) = weak_max.upgrade() {
+                    let Ok(hwnd) = grab_hwnd(t.window()) else {
+                        return;
+                    };
+                    toggle_tile_maximize(hwnd, &t);
                 }
             });
 

@@ -30,18 +30,17 @@ export component TileWindow inherits Window {
     in-out property <[MarkdownBlock]> blocks: [];
     // Source label shown in chrome row (e.g. "ai", "kb", "snippet").
     in-out property <string> source-label: "—";
-    // Phase E6 v12 — trigger badge. Shows WHY this tile spawned:
-    // a Question, Keyword(kw), or every-line. Empty string hides
-    // the badge entirely. User feedback: "ключевые слова не
-    // помечены я не понимаю на какое окно смотреть".
+    // Phase E6 v12 — trigger badge.
     in-out property <string> trigger-label: "";
     in-out property <color> trigger-color: #6cf;
+    // Phase E6 v17 — pinned bool: changes pin button visual; Rust
+    // toggles on click. Maximize bool: Rust resizes window via Win32.
+    in-out property <bool> pinned: false;
+    in-out property <bool> maximized: false;
 
     callback close-clicked();
     callback pin-clicked();
-    // Phase E6 — drag-to-move via Win32 system-drag. Rust handler
-    // calls win32::start_window_drag(hwnd) which sends
-    // WM_NCLBUTTONDOWN/HTCAPTION; Windows handles the rest.
+    callback maximize-clicked();
     callback drag-start-requested();
 
     Rectangle {
@@ -121,16 +120,42 @@ export component TileWindow inherits Window {
                 Rectangle {
                     width: 44px;
                     height: 28px;
-                    background: pin-touch.has-hover ? #34354a : #2a2c3a;
+                    // Phase E6 v17 — pinned-state shows yellow tint.
+                    background: root.pinned
+                        ? #5a4a14
+                        : (pin-touch.has-hover ? #34354a : #2a2c3a);
                     border-radius: 4px;
                     border-width: 1px;
-                    border-color: #3a3c44;
+                    border-color: root.pinned ? #facc15 : #3a3c44;
                     pin-touch := TouchArea {
                         clicked => { root.pin-clicked(); }
                     }
                     Text {
-                        text: "pin";
+                        text: root.pinned ? "📌pin" : "pin";
                         font-size: 11px;
+                        color: root.pinned ? #facc15 : #e8e8ec;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                // Phase E6 v17 — Maximize button. User: "нет
+                // функционала развернуть, нужно отдельной кнопкой
+                // или даб-кликом". Win32 SetWindowPos resizes window
+                // 460x360 → 800x600 (toggle).
+                Rectangle {
+                    width: 36px;
+                    height: 28px;
+                    background: max-touch.has-hover ? #34354a : #2a2c3a;
+                    border-radius: 4px;
+                    border-width: 1px;
+                    border-color: #3a3c44;
+                    max-touch := TouchArea {
+                        clicked => { root.maximize-clicked(); }
+                    }
+                    Text {
+                        text: root.maximized ? "▢" : "□";
+                        font-size: 13px;
+                        font-weight: 700;
                         color: #e8e8ec;
                         horizontal-alignment: center;
                         vertical-alignment: center;
