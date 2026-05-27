@@ -1439,12 +1439,27 @@ fn main() -> Result<(), slint::PlatformError> {
     // YouTube prep) ALWAYS wants sys capture on. Opt-out via env
     // var SLINT_OVERLAY_NO_AUTO_SYS=1 if a future caller needs the
     // old behaviour (e.g. CI smoke runs).
+    //
+    // Phase E6 v14 — also auto-start session (timer) ~1.5s after
+    // sys probe completes. User: "то что еще старт нужно прокликивать
+    // это ко?". Sequence: sys-toggle (400 ms delay) → 3 s probe →
+    // settle → timer-toggle (1900 ms total delay so the probe
+    // finishes first). Opt-out: SLINT_OVERLAY_NO_AUTO_START=1.
     if std::env::var("SLINT_OVERLAY_NO_AUTO_SYS").is_err() {
         let weak = overlay.as_weak();
         Timer::single_shot(Duration::from_millis(400), move || {
             if let Some(o) = weak.upgrade() {
                 eprintln!("[overlay-host] auto-enabling sys capture on startup");
                 o.invoke_sys_toggle_clicked();
+            }
+        });
+    }
+    if std::env::var("SLINT_OVERLAY_NO_AUTO_START").is_err() {
+        let weak = overlay.as_weak();
+        Timer::single_shot(Duration::from_millis(1900), move || {
+            if let Some(o) = weak.upgrade() {
+                eprintln!("[overlay-host] auto-starting session on startup");
+                o.invoke_timer_toggle_clicked();
             }
         });
     }
