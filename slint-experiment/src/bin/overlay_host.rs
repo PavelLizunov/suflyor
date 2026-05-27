@@ -2580,20 +2580,24 @@ fn open_settings(
 /// whether ai_bearer / groq_api_key are configured without leaking
 /// the values themselves (shows length + first 3 chars as fingerprint).
 fn populate_token_status(win: &SettingsWindow, cfg: &overlay_backend::config::SharedConfig) {
+    // Phase E6 v18 — ASCII status prefixes ("[ok]" / "[--]") instead of
+    // Unicode ✓ / ❌ which Slint+skia rendered as missing-glyph boxes
+    // on the user's font fallback. Same root cause as the Close button
+    // fix in settings_panel.slint and the quit chip fix in cycle 15.
     let c = cfg.read();
     let ai_status = if c.ai_bearer.is_empty() {
-        "❌ not set".to_string()
+        "[--] not set".to_string()
     } else {
         let len = c.ai_bearer.chars().count();
         let prefix: String = c.ai_bearer.chars().take(3).collect();
-        format!("✓ set ({len} chars, starts: {prefix}***)")
+        format!("[ok] set ({len} chars, starts: {prefix}***)")
     };
     let groq_status = if c.groq_api_key.is_empty() {
-        "❌ not set".to_string()
+        "[--] not set".to_string()
     } else {
         let len = c.groq_api_key.chars().count();
         let prefix: String = c.groq_api_key.chars().take(3).collect();
-        format!("✓ set ({len} chars, starts: {prefix}***)")
+        format!("[ok] set ({len} chars, starts: {prefix}***)")
     };
     win.set_ai_bearer_status(SharedString::from(ai_status));
     win.set_groq_api_key_status(SharedString::from(groq_status));
