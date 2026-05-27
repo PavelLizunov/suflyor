@@ -85,16 +85,36 @@ pub fn make_transparent_tile(hwnd: HWND) -> Result<(), Box<dyn std::error::Error
 
 fn apply_transparency(hwnd: HWND, click_through: bool) -> Result<(), Box<dyn std::error::Error>> {
     let before = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
-    let added = if click_through {
-        WS_EX_TRANSPARENT.0 as isize | WS_EX_TOOLWINDOW.0 as isize
+    let target = if click_through {
+        // Overlay bar — clicks pass through everywhere except
+        // explicit TouchAreas (Slint engine).
+        before | WS_EX_TRANSPARENT.0 as isize | WS_EX_TOOLWINDOW.0 as isize
     } else {
-        // Tiles want WS_EX_TOOLWINDOW (no taskbar entry) but NOT
-        // WS_EX_TRANSPARENT (otherwise clicks pass through).
-        WS_EX_TOOLWINDOW.0 as isize
+        // Tiles — explicitly CLEAR WS_EX_TRANSPARENT (Slint's
+        // frameless+transparent-background setup sets it implicitly
+        // on Windows). Without this AND-NOT, tiles silently swallow
+        // every click → drag/buttons never fire. Phase E6 v6 root
+        // cause of "тайлы нельзя двигать".
+        (before | WS_EX_TOOLWINDOW.0 as isize) & !(WS_EX_TRANSPARENT.0 as isize)
     };
     unsafe {
-        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, before | added);
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, target);
     }
+    // Phase E6 v7 diagnostic — verify the ex_style actually changed.
+    // Logs the before/after bits so we can confirm WS_EX_TRANSPARENT
+    // (0x20) is cleared for tiles and set for overlay. If Slint
+    // re-applies WS_EX_TRANSPARENT later we'll see it diverge.
+    let after = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
+    let transparent_bit = WS_EX_TRANSPARENT.0 as isize;
+    eprintln!(
+        "[overlay-host] apply_transparency: click_through={} before=0x{:x} target=0x{:x} after=0x{:x} \
+         transparent_bit_after={}",
+        click_through,
+        before,
+        target,
+        after,
+        (after & transparent_bit) != 0,
+    );
 
     let margins = MARGINS {
         cxLeftWidth: -1,
@@ -294,6 +314,14 @@ pub fn start_window_drag(hwnd: HWND) -> Result<(), Box<dyn std::error::Error>> {
     use windows::Win32::Foundation::{LPARAM, WPARAM};
     use windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
     use windows::Win32::UI::WindowsAndMessaging::{SendMessageW, HTCAPTION, WM_NCLBUTTONDOWN};
+    // Phase E6 v7 diagnostic — stderr-log every drag invocation so
+    // we can confirm the chrome-row TouchArea is reaching this code.
+    // If we see this log but the window still doesn't drag, the bug
+    // is in WM_NCLBUTTONDOWN handling (maybe Slint intercepts it).
+    eprintln!(
+        "[overlay-host] start_window_drag invoked for hwnd={:?}",
+        hwnd.0
+    );
     unsafe {
         ReleaseCapture()?;
         SendMessageW(

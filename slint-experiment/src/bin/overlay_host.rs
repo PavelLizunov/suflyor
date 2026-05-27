@@ -801,6 +801,16 @@ fn main() -> Result<(), slint::PlatformError> {
                     let _ = t.hide();
                 }
             });
+            // Phase E6 v8 — wire pin so the button isn't silently
+            // unresponsive. Stub for now; full pin behaviour ports in
+            // a later phase. Without this the click is a no-op which
+            // looks like the button is broken.
+            let weak_pin = tile.as_weak();
+            tile.on_pin_clicked(move || {
+                if weak_pin.upgrade().is_some() {
+                    // Pin behaviour ports later — silent stub for now.
+                }
+            });
             // (monitor placement applied via apply_tile_hwnd_with_monitor.)
             let _ = tile.show();
             apply_tile_hwnd_with_monitor(&tile);
@@ -1628,8 +1638,17 @@ fn fire_f9_ask(
     tile.set_blocks(ModelRc::new(VecModel::from(placeholder)));
     let weak_close = tile.as_weak();
     tile.on_close_clicked(move || {
+        eprintln!("[overlay-host] F9 tile close_clicked fired");
         if let Some(t) = weak_close.upgrade() {
             let _ = t.hide();
+        }
+    });
+    let weak_pin = tile.as_weak();
+    tile.on_pin_clicked(move || {
+        eprintln!("[overlay-host] F9 tile pin_clicked fired");
+        if weak_pin.upgrade().is_some() {
+            // Stub — full pin behaviour (stop session auto-hide) lives
+            // in the React/Tauri version; mirror once Slint state grows.
         }
     });
     let _ = tile.show();
@@ -1830,6 +1849,15 @@ fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
         // complaint "тайлы нельзя двигать".
         let _ = make_transparent_tile(hwnd);
 
+        // Phase E6 v5 — Slint's `always-on-top: true` declaration is
+        // applied at window creation but doesn't reliably translate
+        // to HWND_TOPMOST on Windows + winit + skia. Explicitly set
+        // HWND_TOPMOST so tile windows sit above Explorer / desktop
+        // / browser windows and the user can interact with them.
+        // Without this, clicks land on whatever non-topmost window
+        // is at the pixel under the tile.
+        let _ = set_always_on_top(hwnd, true);
+
         // Phase E6 fix v3 — read the ACTUAL physical window size that
         // Slint produced (HiDPI-aware), then place using that real
         // width so the right-edge alignment is accurate. Previous
@@ -1976,6 +2004,15 @@ fn open_palette(
             tile.on_close_clicked(move || {
                 if let Some(t) = weak_tile.upgrade() {
                     let _ = t.hide();
+                }
+            });
+            // Phase E6 v8 — wire pin so the button isn't silently
+            // unresponsive. Stub for now; full pin behaviour ports in
+            // a later phase.
+            let weak_pin = tile.as_weak();
+            tile.on_pin_clicked(move || {
+                if weak_pin.upgrade().is_some() {
+                    // Pin behaviour ports later — silent stub for now.
                 }
             });
 
