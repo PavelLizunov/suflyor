@@ -88,13 +88,19 @@ impl overlay_backend::events::RuntimeEvents for TauriEvents {
         kind: overlay_backend::events::TileKind,
     ) -> Result<String, String> {
         // Translate semantic events::TileKind → React-side tile::TileKind
-        // (CSS color class). All non-Auto semantic kinds map to Manual
-        // today — future polish can extend tile.rs with per-kind
-        // accents (per-kind gradient bars, journal-driven color
-        // mapping, etc.). The new Manual variant from Phase B2 port #3
-        // is explicit so when that polish lands it preserves the
-        // pre-port "F6 / PTT = gray tile" affordance.
+        // (CSS color class). React side has 4 kinds today (Auto/System/
+        // Mic/Manual driving CSS classes). The richer events::TileKind
+        // set encodes intent for the future Slint binary + journal;
+        // here we collapse to the closest React kind:
+        //   System  → System (purple)
+        //   Mic     → Mic    (teal)
+        //   Auto    → Auto   (yellow)
+        //   All else → Manual (gray) — including Ai (no React class
+        //   yet — bookmark/debrief/etc. all look like manual today).
         let tauri_kind = match kind {
+            overlay_backend::events::TileKind::System => tile::TileKind::System,
+            overlay_backend::events::TileKind::Mic => tile::TileKind::Mic,
+            overlay_backend::events::TileKind::Auto => tile::TileKind::Auto,
             overlay_backend::events::TileKind::Ai
             | overlay_backend::events::TileKind::Kb
             | overlay_backend::events::TileKind::Snippet

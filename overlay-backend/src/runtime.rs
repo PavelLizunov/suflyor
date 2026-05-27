@@ -10,8 +10,8 @@
 //!   #1 run_post_meeting_debrief   ← landed
 //!   #2 reask_last                 ← landed
 //!   #3 manual_spawn_tile          ← landed
-//!   #4 ask (stream loop)          ← landed (this port)
-//!   #5 manual_ask_source          (pending)
+//!   #4 ask (stream loop)          ← landed
+//!   #5 manual_ask_source          ← landed (this port)
 //!   #6 manual_ask_window_end      (pending)
 //!   #7 maybe_spawn_tile + start_session (together)
 //!   #8 stop_session               (depends on debrief)
@@ -686,6 +686,219 @@ pub async fn manual_spawn_tile(
     })
 }
 
+// ===== F-key Manual ask from a specific source (Phase B2 port #5) =====
+
+/// Snapshot of `SharedRuntime` state for `manual_ask_source`. Same
+/// shape as `ManualSpawnInputs` plus the `trigger_text` extracted
+/// from the requested source's last transcript line.
+#[derive(Clone)]
+pub struct ManualAskSourceInputs {
+    /// Cross-source: last ≤8 transcript lines labeled with speaker
+    /// tags `[ПОЛЬЗОВАТЕЛЬ]` / `[СОБЕСЕДНИК]`. Provides AI with the
+    /// back-and-forth context regardless of which side the user
+    /// pressed.
+    pub recent_transcript_labeled: Vec<String>,
+    /// Last line from the REQUESTED source — empty string means
+    /// "no lines from that source yet" → port emits tile:error +
+    /// returns None.
+    pub trigger_text: String,
+    /// Pre-computed cost-cap reason (see ManualSpawnInputs).
+    pub cost_cap_reason: Option<String>,
+    /// Which side the user asked about. Drives the tile chrome
+    /// (System=🔊/purple, Mic=🎤/teal) + journal purpose tag.
+    pub source: AudioSource,
+    /// Cloned Journal handle. None skips journal writes.
+    pub journal: Option<Journal>,
+    /// Health-signals Arc; port bumps last_ai_ok_ms on AI success.
+    pub health: Arc<HealthSignals>,
+}
+
+/// Writeback the shim applies on success.
+#[derive(Debug, Clone)]
+pub struct ManualAskSourceOutcome {
+    /// "🔊 {trigger}" or "🎤 {trigger}" form.
+    pub display_question: String,
+    /// Trimmed model answer.
+    pub answer_trimmed: String,
+    /// Microcents to add to session_cost_microcents.
+    pub cost_microcents_delta: u64,
+}
+
+/// Source-specific manual ask (mic chip / sys chip / source-PTT).
+/// Uses the LAST line from the requested side as the trigger but
+/// feeds the AI the last 8 lines from BOTH sides as context (so
+/// the model sees the back-and-forth).
+///
+/// Port #5 of Phase B2 — same snapshot/outcome pattern as #2/#3
+/// but adds an AudioSource discriminant to pick the tile chrome
+/// (TileKind::System vs Mic) + journal purpose tag
+/// (manual_ask_system vs manual_ask_mic).
+pub async fn manual_ask_source(
+    events: Arc<dyn RuntimeEvents>,
+    cfg: SharedConfig,
+    inputs: ManualAskSourceInputs,
+) -> Option<ManualAskSourceOutcome> {
+    if inputs.trigger_text.is_empty() {
+        let what = if matches!(inputs.source, AudioSource::Mic) {
+            "микрофона"
+        } else {
+            "system audio"
+        };
+        events.emit(
+            "tile:error",
+            serde_json::json!({
+                "message": format!("Транскрипт от {what} пустой — нечего спросить"),
+            }),
+        );
+        return None;
+    }
+
+    if let Some(reason) = inputs.cost_cap_reason {
+        events.emit(
+            "cost:cap-hit",
+            serde_json::json!({
+                "reason": reason,
+                "source": "manual_ask",
+                "blocking": false,
+            }),
+        );
+    }
+
+    let (base_url, bearer, model, response_language, meeting_context, preferred_monitor, stealth) = {
+        let c = cfg.read();
+        (
+            c.ai_base_url.clone(),
+            c.ai_bearer.clone(),
+            c.ai_model.clone(),
+            c.response_language.clone(),
+            c.meeting_context.clone(),
+            c.tile_monitor_name.clone(),
+            c.stealth_enabled,
+        )
+    };
+    let trigger_for_prompt = Trigger::Question(inputs.trigger_text.clone());
+    let (system_prompt, user_prompt) = build_auto_tile_prompts(
+        &trigger_for_prompt,
+        &inputs.recent_transcript_labeled,
+        &meeting_context,
+        &response_language,
+    );
+
+    let sys_full = system_prompt.clone();
+    let usr_full = user_prompt.clone();
+    let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
+    let messages = vec![
+        ai::ChatMessage {
+            role: "system".into(),
+            content: ai::MessageContent::Text(system_prompt),
+        },
+        ai::ChatMessage {
+            role: "user".into(),
+            content: ai::MessageContent::Text(user_prompt),
+        },
+    ];
+
+    let purpose = match inputs.source {
+        AudioSource::System => "manual_ask_system",
+        AudioSource::Mic => "manual_ask_mic",
+    };
+    if let Some(j) = inputs.journal.as_ref() {
+        j.write(&JournalEvent::AiRequest {
+            unix_ms: crate::journal::now_unix_ms(),
+            purpose,
+            model: &model,
+            system_prompt: &sys_full,
+            user_prompt: &usr_full,
+            attached_screenshot: false,
+            input_tokens_est,
+        });
+    }
+    let t0 = std::time::Instant::now();
+
+    let (answer, usage) =
+        match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512).await {
+            Ok(t) => {
+                inputs
+                    .health
+                    .last_ai_ok_ms
+                    .store(crate::journal::now_unix_ms() as u64, Ordering::Relaxed);
+                t
+            }
+            Err(e) => {
+                log::warn!("manual_ask_source AI failed: {e:#}");
+                if let Some(j) = inputs.journal.as_ref() {
+                    j.write(&JournalEvent::Error {
+                        unix_ms: crate::journal::now_unix_ms(),
+                        module: purpose,
+                        message: &format!("{e:#}"),
+                    });
+                }
+                // Pre-port did NOT emit tile:error on AI failure (same
+                // asymmetry as manual_spawn_tile). Preserve.
+                return None;
+            }
+        };
+    let micro = ai::cost_microcents(&model, usage.input, usage.output);
+    let answer_trimmed = answer.trim().to_string();
+
+    if let Some(j) = inputs.journal.as_ref() {
+        j.write(&JournalEvent::AiResponse {
+            unix_ms: crate::journal::now_unix_ms(),
+            purpose,
+            model: &model,
+            latency_ms: t0.elapsed().as_millis() as u64,
+            finish_reason: "stop",
+            text: &answer,
+            output_tokens_est: usage.output,
+            cost_microcents: micro,
+        });
+    }
+
+    let icon = match inputs.source {
+        AudioSource::System => "🔊",
+        AudioSource::Mic => "🎤",
+    };
+    let question = format!("{icon} {}", inputs.trigger_text);
+    let tile_kind = match inputs.source {
+        AudioSource::System => TileKind::System,
+        AudioSource::Mic => TileKind::Mic,
+    };
+    let monitor_hint = match preferred_monitor.as_deref() {
+        Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
+        _ => MonitorHint::Auto,
+    };
+
+    match events.spawn_tile_full(
+        TileSpec {
+            question: question.clone(),
+            answer: answer_trimmed.clone(),
+            source: purpose.into(),
+            is_translation: false,
+        },
+        monitor_hint,
+        stealth,
+        tile_kind,
+    ) {
+        Ok(label) => {
+            if let Some(j) = inputs.journal.as_ref() {
+                j.write(&JournalEvent::TileSpawn {
+                    unix_ms: crate::journal::now_unix_ms(),
+                    label: &label,
+                    question: &question,
+                    answer: &answer,
+                });
+            }
+        }
+        Err(e) => log::warn!("manual ask spawn_tile failed: {e:#}"),
+    }
+
+    Some(ManualAskSourceOutcome {
+        display_question: question,
+        answer_trimmed,
+        cost_microcents_delta: micro,
+    })
+}
+
 // ===== F9 Live Ask streaming loop (Phase B2 port #4) =====
 //
 // Different shape from ports #2/#3: takes a stream receiver directly
@@ -1082,6 +1295,42 @@ mod tests {
         .await;
         feeder.await.unwrap();
         assert_eq!(*calls.lock().unwrap(), 1);
+    }
+
+    /// manual_ask_source with empty trigger → emits tile:error +
+    /// returns None. Tests the System branch's RU error string.
+    #[tokio::test]
+    async fn manual_ask_source_empty_trigger_system_returns_none() {
+        let cfg = hermetic_empty_config();
+        let inputs = ManualAskSourceInputs {
+            recent_transcript_labeled: vec![],
+            trigger_text: String::new(),
+            cost_cap_reason: None,
+            source: AudioSource::System,
+            journal: None,
+            health: Arc::new(HealthSignals::default()),
+        };
+        let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
+        let outcome = manual_ask_source(sink, cfg, inputs).await;
+        assert!(outcome.is_none());
+    }
+
+    /// manual_ask_source with empty trigger on Mic branch → same
+    /// behavior, different RU error string.
+    #[tokio::test]
+    async fn manual_ask_source_empty_trigger_mic_returns_none() {
+        let cfg = hermetic_empty_config();
+        let inputs = ManualAskSourceInputs {
+            recent_transcript_labeled: vec![],
+            trigger_text: String::new(),
+            cost_cap_reason: None,
+            source: AudioSource::Mic,
+            journal: None,
+            health: Arc::new(HealthSignals::default()),
+        };
+        let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
+        let outcome = manual_ask_source(sink, cfg, inputs).await;
+        assert!(outcome.is_none());
     }
 
     /// Manual spawn with empty transcript → emits tile:error +

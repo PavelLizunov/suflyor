@@ -125,6 +125,20 @@ pub enum TileKind {
     /// have to use `Ai` and silently become a blue tile when the
     /// adapter gains per-kind branches.
     Manual,
+    /// Auto-detector spawn — question/keyword caught in transcript
+    /// without F6/F9 user action. Maps to `tile::TileKind::Auto`
+    /// on the Tauri side (yellow chrome). Added Phase B2 port #5
+    /// alongside System/Mic so port #7 (maybe_spawn_tile +
+    /// start_session) doesn't have to re-litigate the variant set.
+    Auto,
+    /// System-side ask (🔊 chip / PTT on interviewer audio).
+    /// Maps to `tile::TileKind::System` (purple chrome). Added
+    /// Phase B2 port #5 so source-color affordance survives the
+    /// adapter polish.
+    System,
+    /// Mic-side ask (🎤 chip / PTT on user mic). Maps to
+    /// `tile::TileKind::Mic` (teal chrome). Added Phase B2 port #5.
+    Mic,
 }
 
 impl TileKind {
@@ -141,6 +155,9 @@ impl TileKind {
             Self::Bookmark => "bookmark",
             Self::Debrief => "debrief",
             Self::Manual => "manual",
+            Self::Auto => "auto",
+            Self::System => "system",
+            Self::Mic => "mic",
         }
     }
 
@@ -158,6 +175,9 @@ impl TileKind {
             Self::Bookmark => "⭐",
             Self::Debrief => "🎯",
             Self::Manual => "✋",
+            Self::Auto => "",
+            Self::System => "🔊",
+            Self::Mic => "🎤",
         }
     }
 }
@@ -275,6 +295,9 @@ mod tests {
             TileKind::Bookmark,
             TileKind::Debrief,
             TileKind::Manual,
+            TileKind::Auto,
+            TileKind::System,
+            TileKind::Mic,
         ];
         let tags: HashSet<_> = all.iter().map(|k| k.as_journal_tag()).collect();
         assert_eq!(tags.len(), all.len(), "duplicate journal tag in TileKind");

@@ -1756,8 +1756,13 @@ fn close_journal_with_summary(j: Journal) {
     j.close();
 }
 
-/// Manual ask from a specific source (mic or system) — grabs last 5 lines
-/// from that source's transcript, asks AI, spawns tile. Bypasses detector.
+/// Source-specific manual ask: thin Tauri shim around
+/// `overlay_backend::runtime::manual_ask_source`.
+///
+/// Phase B2 port #5: body moved to overlay-backend. Same shape as
+/// port #3 (manual_spawn_tile) but adds an AudioSource discriminant
+/// that drives the tile chrome (System=🔊 purple, Mic=🎤 teal) +
+/// journal purpose tag.
 pub async fn manual_ask_source(
     app: AppHandle,
     cfg: SharedConfig,
@@ -1765,156 +1770,44 @@ pub async fn manual_ask_source(
     tiles: SharedTiles,
     source: AudioSource,
 ) {
-    // Pull cross-source context: the trigger is the LAST line from the
-    // requested source, but we feed the AI the last 8 lines from BOTH
-    // speakers so it sees the back-and-forth. Without this, asking about
-    // "почему?" from the interviewer loses the topic context entirely.
-    let (recent, trigger_text): (Vec<String>, String) = {
+    let inputs = {
         let s = rt.lock();
-        let lines = select_recent_lines_labeled(&s.transcript, 8);
-        let trigger = find_last_line_from_source(&s.transcript, source).unwrap_or_default();
-        (lines, trigger)
-    };
-    if trigger_text.is_empty() {
-        let _ = app.emit_to(
-            "overlay",
-            "tile:error",
-            serde_json::json!({
-                "message": format!("Транскрипт от {} пустой — нечего спросить",
-                    if matches!(source, AudioSource::Mic) { "микрофона" } else { "system audio" })
-            }),
-        );
-        return;
-    }
-
-    // Cost budget WARN (not block) — manual ask is user-initiated.
-    let (cap_usd, current_micro) = (
-        cfg.read().max_session_cost_usd,
-        rt.lock().session_cost_microcents,
-    );
-    if let Some(reason) = over_cost_budget(cap_usd, current_micro) {
-        let _ = app.emit_to(
-            "overlay",
-            "cost:cap-hit",
-            serde_json::json!({ "reason": reason, "source": "manual_ask", "blocking": false }),
-        );
-    }
-
-    let (base_url, bearer, model, response_language, meeting_context, preferred_monitor, stealth) = {
-        let c = cfg.read();
-        (
-            c.ai_base_url.clone(),
-            c.ai_bearer.clone(),
-            c.ai_model.clone(),
-            c.response_language.clone(),
-            c.meeting_context.clone(),
-            c.tile_monitor_name.clone(),
-            c.stealth_enabled,
-        )
+        let recent = select_recent_lines_labeled(&s.transcript, 8);
+        let trigger_text = find_last_line_from_source(&s.transcript, source).unwrap_or_default();
+        let cap_usd = cfg.read().max_session_cost_usd;
+        let cost_cap_reason = over_cost_budget(cap_usd, s.session_cost_microcents);
+        overlay_backend::runtime::ManualAskSourceInputs {
+            recent_transcript_labeled: recent,
+            trigger_text,
+            cost_cap_reason,
+            source,
+            journal: s.journal.clone(),
+            health: s.health.clone(),
+        }
     };
 
-    let trigger_for_prompt = Trigger::Question(trigger_text.clone());
-    let (system_prompt, user_prompt) = build_auto_tile_prompts(
-        &trigger_for_prompt,
-        &recent,
-        &meeting_context,
-        &response_language,
-    );
-
-    let sys_full = system_prompt.clone();
-    let usr_full = user_prompt.clone();
-    let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
-    let messages = vec![
-        ai::ChatMessage {
-            role: "system".into(),
-            content: ai::MessageContent::Text(system_prompt),
-        },
-        ai::ChatMessage {
-            role: "user".into(),
-            content: ai::MessageContent::Text(user_prompt),
-        },
-    ];
-
-    let journal = rt.lock().journal.clone().unwrap_or_default();
-    let purpose = match source {
-        AudioSource::System => "manual_ask_system",
-        AudioSource::Mic => "manual_ask_mic",
-    };
-    journal.write(&JournalEvent::AiRequest {
-        unix_ms: now_unix_ms(),
-        purpose,
-        model: &model,
-        system_prompt: &sys_full,
-        user_prompt: &usr_full,
-        attached_screenshot: false,
-        input_tokens_est,
+    let events: Arc<dyn overlay_backend::events::RuntimeEvents> = Arc::new(crate::TauriEvents {
+        app: app.clone(),
+        tiles: tiles.clone(),
     });
-    let t0 = std::time::Instant::now();
 
-    let (answer, usage) =
-        match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512).await {
-            Ok(t) => {
-                bump_health_ai(&rt);
-                t
-            }
-            Err(e) => {
-                log::warn!("manual_ask_source AI failed: {e:#}");
-                journal.write(&JournalEvent::Error {
-                    unix_ms: now_unix_ms(),
-                    module: purpose,
-                    message: &format!("{e:#}"),
-                });
-                return;
-            }
+    let outcome = overlay_backend::runtime::manual_ask_source(events, cfg, inputs).await;
+
+    if let Some(out) = outcome {
+        let total = {
+            let mut s = rt.lock();
+            s.session_cost_microcents = s
+                .session_cost_microcents
+                .saturating_add(out.cost_microcents_delta);
+            s.last_question = Some(out.display_question);
+            s.last_answer = Some(out.answer_trimmed);
+            (s.session_cost_microcents as f64) / 100_000_000.0
         };
-    let micro = ai::cost_microcents(&model, usage.input, usage.output);
-    let total = {
-        let mut s = rt.lock();
-        s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
-        (s.session_cost_microcents as f64) / 100_000_000.0
-    };
-    let _ = app.emit_to(
-        "overlay",
-        "cost:update",
-        serde_json::json!({ "session_usd": total }),
-    );
-    journal.write(&JournalEvent::AiResponse {
-        unix_ms: now_unix_ms(),
-        purpose,
-        model: &model,
-        latency_ms: t0.elapsed().as_millis() as u64,
-        finish_reason: "stop",
-        text: &answer,
-        output_tokens_est: usage.output,
-        cost_microcents: micro,
-    });
-
-    let icon = match source {
-        AudioSource::System => "🔊",
-        AudioSource::Mic => "🎤",
-    };
-    let question = format!("{icon} {trigger_text}");
-    let kind = match source {
-        AudioSource::System => crate::tile::TileKind::System,
-        AudioSource::Mic => crate::tile::TileKind::Mic,
-    };
-    store_last_qa(&rt, &question, answer.trim());
-    match crate::tile::spawn_tile_with_stealth(
-        &app,
-        &tiles,
-        question.clone(),
-        answer.trim().to_string(),
-        preferred_monitor,
-        stealth,
-        kind,
-    ) {
-        Ok(label) => journal.write(&JournalEvent::TileSpawn {
-            unix_ms: now_unix_ms(),
-            label: &label,
-            question: &question,
-            answer: &answer,
-        }),
-        Err(e) => log::warn!("manual ask spawn_tile failed: {e:#}"),
+        let _ = app.emit_to(
+            "overlay",
+            "cost:update",
+            serde_json::json!({ "session_usd": total }),
+        );
     }
 }
 
