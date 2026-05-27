@@ -1,0 +1,61 @@
+// Phase 1 Day 2 — Tile window stub.
+//
+// Final Phase 4 version: question header + markdown body (via
+// pulldown-cmark adapter from Phase 0.5 spike 3) + chrome row
+// (source label, age, chrome buttons, close). Day 2: title + body
+// placeholder + close button + sequence number.
+
+import { Button, ScrollView } from "std-widgets.slint";
+
+export component TileWindow inherits Window {
+    title: "tile";
+    background: transparent;
+    no-frame: true;
+    always-on-top: true;
+    preferred-width: 440px;
+    preferred-height: 260px;
+
+    in-out property <string> tile-title: "Untitled tile";
+    in-out property <string> tile-body: "(body will render via pulldown-cmark adapter in Phase 4)";
+    in-out property <int> sequence: 0;
+
+    callback close-clicked();
+
+    Rectangle {
+        background: #14161eea;
+        border-radius: 8px;
+        border-width: 1px;
+        border-color: #2a2c3a;
+
+        VerticalLayout {
+            padding: 12px;
+            spacing: 8px;
+
+            HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    text: "#" + root.sequence + "  " + root.tile-title;
+                    font-size: 13px;
+                    font-weight: 700;
+                    color: #e8e8ec;
+                    vertical-alignment: center;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Button {
+                    text: "✕";
+                    clicked => { root.close-clicked(); }
+                }
+            }
+
+            ScrollView {
+                vertical-stretch: 1;
+                Text {
+                    text: root.tile-body;
+                    font-size: 12px;
+                    color: #c8c8cc;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+}

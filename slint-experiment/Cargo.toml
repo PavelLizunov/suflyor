@@ -10,6 +10,10 @@ edition = "2021"
 description = "Phase 0 Slint pilot — port of the Replay viewer for stack evaluation"
 publish = false
 
+[lib]
+name = "slint_replay"
+path = "src/lib.rs"
+
 [[bin]]
 name = "slint-replay"
 path = "src/main.rs"
@@ -29,6 +33,14 @@ path = "src/bin/overlay_spike.rs"
 [[bin]]
 name = "markdown-spike"
 path = "src/bin/markdown_spike.rs"
+
+# Phase 1 Day 2: multi-window manager. Single Arc<Mutex<AppState>>
+# shared across overlay bar + N tile windows + settings window.
+# Each window applies the win32::make_transparent_overlay /
+# set_always_on_top / set_stealth helpers as appropriate.
+[[bin]]
+name = "overlay-host"
+path = "src/bin/overlay_host.rs"
 
 [build-dependencies]
 # Compiles ui/*.slint into Rust at build time. include_modules!() in

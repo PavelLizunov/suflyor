@@ -1,0 +1,67 @@
+// Phase 1 Day 2 — Overlay bar window stub.
+//
+// Final Phase 3 version will rebuild Overlay.tsx (status text, mic
+// chip, push-to-talk hold, F1/F2/F7 chips, ⚙ Settings, etc.). Day 2
+// stub: title + 3 action buttons + counter display.
+
+import { Button } from "std-widgets.slint";
+
+export component OverlayBarWindow inherits Window {
+    title: "overlay-mvp (Slint)";
+    background: transparent;
+    no-frame: true;
+    always-on-top: true;
+    preferred-width: 520px;
+    preferred-height: 64px;
+    min-width: 320px;
+
+    in-out property <int> tiles-spawned: 0;
+
+    callback spawn-tile-clicked();
+    callback open-settings-clicked();
+    callback quit-clicked();
+
+    Rectangle {
+        background: #14161eea;
+        border-radius: 10px;
+        border-width: 1px;
+        border-color: #2a2c3a;
+
+        HorizontalLayout {
+            padding: 8px;
+            spacing: 8px;
+            alignment: start;
+
+            Text {
+                text: "overlay-mvp (Slint Phase 1 Day 2)";
+                font-size: 12px;
+                color: #e8e8ec;
+                vertical-alignment: center;
+            }
+
+            Rectangle {  // spacer
+                horizontal-stretch: 1;
+            }
+
+            Text {
+                text: "tiles: " + root.tiles-spawned;
+                font-size: 11px;
+                color: #6cf;
+                vertical-alignment: center;
+            }
+
+            Button {
+                text: "+ Tile";
+                clicked => { root.spawn-tile-clicked(); }
+            }
+            Button {
+                text: "⚙";
+                clicked => { root.open-settings-clicked(); }
+            }
+            Button {
+                text: "✕";
+                clicked => { root.quit-clicked(); }
+            }
+        }
+    }
+}

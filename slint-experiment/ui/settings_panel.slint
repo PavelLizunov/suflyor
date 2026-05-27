@@ -1,0 +1,69 @@
+// Phase 1 Day 2 — Settings window stub.
+//
+// Phase 2 will port all 13 Settings panels (Stealth, Coaching,
+// Hotkeys, Interface, Updates, Stats, Audio, Auto-tiles, Snippets,
+// Knowledge base, Profile+context, AI bridge, STT). Day 2 stub:
+// title + 2 toggles + close.
+
+import { Button, CheckBox } from "std-widgets.slint";
+
+export component SettingsWindow inherits Window {
+    title: "overlay-mvp settings (Slint)";
+    preferred-width: 480px;
+    preferred-height: 320px;
+    background: #14161e;
+
+    in-out property <bool> always-on-top-toggle: true;
+    in-out property <bool> stealth-toggle: false;
+
+    callback always-on-top-changed(bool);
+    callback stealth-changed(bool);
+    callback close-clicked();
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: "Settings (Phase 1 Day 2 stub)";
+                font-size: 16px;
+                font-weight: 700;
+                color: #e8e8ec;
+                vertical-alignment: center;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Button {
+                text: "✕";
+                clicked => { root.close-clicked(); }
+            }
+        }
+
+        Rectangle {
+            background: #2a2c3a;
+            height: 1px;
+        }
+
+        Text {
+            text: "Phase 2 will port the 13 React Settings panels here. Day 2 stub shows the two cross-window toggles wired through SharedState + HWND helpers.";
+            font-size: 11px;
+            color: #888;
+            wrap: word-wrap;
+        }
+
+        CheckBox {
+            text: "Always on top (HWND_TOPMOST)";
+            checked <=> root.always-on-top-toggle;
+            toggled => { root.always-on-top-changed(self.checked); }
+        }
+
+        CheckBox {
+            text: "Stealth (WDA_EXCLUDEFROMCAPTURE — hidden from screen capture)";
+            checked <=> root.stealth-toggle;
+            toggled => { root.stealth-changed(self.checked); }
+        }
+
+        Rectangle { vertical-stretch: 1; }
+    }
+}
