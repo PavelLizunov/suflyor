@@ -88,8 +88,12 @@ impl overlay_backend::events::RuntimeEvents for TauriEvents {
         kind: overlay_backend::events::TileKind,
     ) -> Result<String, String> {
         // Translate semantic events::TileKind → React-side tile::TileKind
-        // (CSS color class). All semantic kinds map to Manual today —
-        // future polish can extend tile.rs with per-kind accents.
+        // (CSS color class). All non-Auto semantic kinds map to Manual
+        // today — future polish can extend tile.rs with per-kind
+        // accents (per-kind gradient bars, journal-driven color
+        // mapping, etc.). The new Manual variant from Phase B2 port #3
+        // is explicit so when that polish lands it preserves the
+        // pre-port "F6 / PTT = gray tile" affordance.
         let tauri_kind = match kind {
             overlay_backend::events::TileKind::Ai
             | overlay_backend::events::TileKind::Kb
@@ -98,7 +102,8 @@ impl overlay_backend::events::RuntimeEvents for TauriEvents {
             | overlay_backend::events::TileKind::Reload
             | overlay_backend::events::TileKind::Followup
             | overlay_backend::events::TileKind::Bookmark
-            | overlay_backend::events::TileKind::Debrief => tile::TileKind::Manual,
+            | overlay_backend::events::TileKind::Debrief
+            | overlay_backend::events::TileKind::Manual => tile::TileKind::Manual,
         };
         // Translate MonitorHint → tile::pick_monitor's Option<String>.
         // tile::pick_monitor still only knows name-matching (it pre-dates

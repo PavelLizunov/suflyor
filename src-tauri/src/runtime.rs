@@ -2310,137 +2310,60 @@ pub async fn manual_ask_window_end(
     }
 }
 
-/// Manual tile spawn — uses the LAST transcript line (any source) as the
-/// trigger but passes the last 8 lines of cross-source context to the AI.
-/// Bypasses the detector so the user can force a suggestion when auto-tile
-/// skipped the question.
+/// F6 Manual spawn tile: thin Tauri shim around
+/// `overlay_backend::runtime::manual_spawn_tile`.
+///
+/// Phase B2 port #3: body moved to overlay-backend. This shim follows
+/// the same snapshot-and-writeback pattern established by port #2
+/// (reask_last):
+///   1. Snapshot SharedRuntime + cost-cap check under one rt lock.
+///   2. Drop lock.
+///   3. Construct TauriEvents + call ported async fn.
+///   4. On success-outcome: re-acquire rt lock to apply session-cost
+///      add + store_last_qa, then emit cost:update with new total.
 pub async fn manual_spawn_tile(
     app: AppHandle,
     cfg: SharedConfig,
     rt: SharedRuntime,
     tiles: SharedTiles,
 ) {
-    let (recent, last_line): (Vec<String>, Option<TranscriptLine>) = {
+    let inputs = {
         let s = rt.lock();
-        let lines = select_recent_lines_labeled(&s.transcript, 8);
-        (lines, s.transcript.back().cloned())
-    };
-    let Some(line) = last_line else {
-        log::info!("manual_spawn_tile: no transcript yet");
-        let _ = app.emit_to(
-            "overlay",
-            "tile:error",
-            serde_json::json!({ "message": "Транскрипт пустой — нечего спрашивать" }),
-        );
-        return;
+        let recent = select_recent_lines_labeled(&s.transcript, 8);
+        let last_line = s.transcript.back().cloned();
+        let cap_usd = cfg.read().max_session_cost_usd;
+        let cost_cap_reason = over_cost_budget(cap_usd, s.session_cost_microcents);
+        overlay_backend::runtime::ManualSpawnInputs {
+            recent_transcript_labeled: recent,
+            last_line,
+            cost_cap_reason,
+            journal: s.journal.clone(),
+            health: s.health.clone(),
+        }
     };
 
-    // Cost budget WARN (not block) — F6 is user-initiated.
-    let (cap_usd, current_micro) = (
-        cfg.read().max_session_cost_usd,
-        rt.lock().session_cost_microcents,
-    );
-    if let Some(reason) = over_cost_budget(cap_usd, current_micro) {
-        let _ = app.emit_to(
-            "overlay",
-            "cost:cap-hit",
-            serde_json::json!({ "reason": reason, "source": "manual_spawn", "blocking": false }),
-        );
-    }
-
-    let (base_url, bearer, model, response_language, meeting_context, preferred_monitor, stealth) = {
-        let c = cfg.read();
-        (
-            c.ai_base_url.clone(),
-            c.ai_bearer.clone(),
-            c.ai_model.clone(),
-            c.response_language.clone(),
-            c.meeting_context.clone(),
-            c.tile_monitor_name.clone(),
-            c.stealth_enabled,
-        )
-    };
-    // Use the same structured prompt builder as auto-tile — recent
-    // transcript window + meeting context, treated as a Question.
-    let trigger = Trigger::Question(line.text.clone());
-    let (sys_full, usr_full) =
-        build_auto_tile_prompts(&trigger, &recent, &meeting_context, &response_language);
-    let messages = vec![
-        ai::ChatMessage {
-            role: "system".into(),
-            content: ai::MessageContent::Text(sys_full.clone()),
-        },
-        ai::ChatMessage {
-            role: "user".into(),
-            content: ai::MessageContent::Text(usr_full.clone()),
-        },
-    ];
-    let journal = rt.lock().journal.clone().unwrap_or_default();
-    journal.write(&JournalEvent::AiRequest {
-        unix_ms: now_unix_ms(),
-        purpose: "manual_spawn",
-        model: &model,
-        system_prompt: &sys_full,
-        user_prompt: &usr_full,
-        attached_screenshot: false,
-        input_tokens_est: ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4,
+    let events: Arc<dyn overlay_backend::events::RuntimeEvents> = Arc::new(crate::TauriEvents {
+        app: app.clone(),
+        tiles: tiles.clone(),
     });
-    let t0 = std::time::Instant::now();
-    let (answer, usage) =
-        match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512).await {
-            Ok(t) => {
-                bump_health_ai(&rt);
-                t
-            }
-            Err(e) => {
-                log::warn!("manual_spawn_tile AI failed: {e:#}");
-                journal.write(&JournalEvent::Error {
-                    unix_ms: now_unix_ms(),
-                    module: "manual_spawn",
-                    message: &format!("{e:#}"),
-                });
-                return;
-            }
+
+    let outcome = overlay_backend::runtime::manual_spawn_tile(events, cfg, inputs).await;
+
+    if let Some(out) = outcome {
+        let total = {
+            let mut s = rt.lock();
+            s.session_cost_microcents = s
+                .session_cost_microcents
+                .saturating_add(out.cost_microcents_delta);
+            s.last_question = Some(out.display_question);
+            s.last_answer = Some(out.answer_trimmed);
+            (s.session_cost_microcents as f64) / 100_000_000.0
         };
-    let micro = ai::cost_microcents(&model, usage.input, usage.output);
-    let total = {
-        let mut s = rt.lock();
-        s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
-        (s.session_cost_microcents as f64) / 100_000_000.0
-    };
-    let _ = app.emit_to(
-        "overlay",
-        "cost:update",
-        serde_json::json!({ "session_usd": total }),
-    );
-    journal.write(&JournalEvent::AiResponse {
-        unix_ms: now_unix_ms(),
-        purpose: "manual_spawn",
-        model: &model,
-        latency_ms: t0.elapsed().as_millis() as u64,
-        finish_reason: "stop",
-        text: &answer,
-        output_tokens_est: usage.output,
-        cost_microcents: micro,
-    });
-    let question = format!("✋ {}", line.text);
-    store_last_qa(&rt, &question, answer.trim());
-    match crate::tile::spawn_tile_with_stealth(
-        &app,
-        &tiles,
-        question.clone(),
-        answer.trim().to_string(),
-        preferred_monitor,
-        stealth,
-        crate::tile::TileKind::Manual,
-    ) {
-        Ok(label) => journal.write(&JournalEvent::TileSpawn {
-            unix_ms: now_unix_ms(),
-            label: &label,
-            question: &question,
-            answer: &answer,
-        }),
-        Err(e) => log::warn!("manual spawn_tile failed: {e:#}"),
+        let _ = app.emit_to(
+            "overlay",
+            "cost:update",
+            serde_json::json!({ "session_usd": total }),
+        );
     }
 }
 

@@ -117,6 +117,14 @@ pub enum TileKind {
     Bookmark,
     /// Post-meeting debrief tile (one per stop_session when opt-in).
     Debrief,
+    /// User-forced manual tile (F6 / manual chip / PTT result).
+    /// Visually distinct (gray chrome) from auto-detector Ai tiles
+    /// so the user can tell which suggestions they explicitly
+    /// asked for vs which the detector spawned. Added Phase B2
+    /// port #3 — without this variant, manual_spawn_tile would
+    /// have to use `Ai` and silently become a blue tile when the
+    /// adapter gains per-kind branches.
+    Manual,
 }
 
 impl TileKind {
@@ -132,6 +140,7 @@ impl TileKind {
             Self::Followup => "followup",
             Self::Bookmark => "bookmark",
             Self::Debrief => "debrief",
+            Self::Manual => "manual",
         }
     }
 
@@ -148,6 +157,7 @@ impl TileKind {
             Self::Followup => "💡",
             Self::Bookmark => "⭐",
             Self::Debrief => "🎯",
+            Self::Manual => "✋",
         }
     }
 }
@@ -264,6 +274,7 @@ mod tests {
             TileKind::Followup,
             TileKind::Bookmark,
             TileKind::Debrief,
+            TileKind::Manual,
         ];
         let tags: HashSet<_> = all.iter().map(|k| k.as_journal_tag()).collect();
         assert_eq!(tags.len(), all.len(), "duplicate journal tag in TileKind");

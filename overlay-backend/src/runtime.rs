@@ -8,8 +8,8 @@
 //!
 //! Port order per `docs/PHASE-B2-RUNTIME-PORT-PLAN.md`:
 //!   #1 run_post_meeting_debrief   ← landed
-//!   #2 reask_last                 ← landed (this port)
-//!   #3 manual_spawn_tile          (pending)
+//!   #2 reask_last                 ← landed
+//!   #3 manual_spawn_tile          ← landed (this port)
 //!   #4 ask                        (pending)
 //!   #5 manual_ask_source          (pending)
 //!   #6 manual_ask_window_end      (pending)
@@ -487,6 +487,205 @@ pub async fn reask_last(
     })
 }
 
+// ===== F6 Manual spawn tile (Phase B2 port #3) =====
+
+/// Snapshot of `SharedRuntime` state the ported `manual_spawn_tile`
+/// reads. Built by the src-tauri shim under one rt lock acquisition.
+#[derive(Clone)]
+pub struct ManualSpawnInputs {
+    /// Last ≤8 transcript lines, each pre-formatted with the speaker
+    /// tag `[ПОЛЬЗОВАТЕЛЬ]` (mic) / `[СОБЕСЕДНИК]` (system). Empty
+    /// only when transcript is empty (port short-circuits anyway).
+    pub recent_transcript_labeled: Vec<String>,
+    /// Most recent transcript line (any source) — port uses its
+    /// text as the AI question trigger. `None` means transcript
+    /// is empty → port emits `tile:error` + returns `None`.
+    pub last_line: Option<TranscriptLine>,
+    /// Pre-computed cost-cap reason from `over_cost_budget(cap_usd,
+    /// current_micro)`. `Some(reason)` means we're at/over the
+    /// session cap — port emits `cost:cap-hit` (non-blocking warn)
+    /// then proceeds. `None` means under budget.
+    pub cost_cap_reason: Option<String>,
+    /// Cloned `Journal` handle (Arc-backed inside). Optional —
+    /// `None` skips journal writes (e.g. tests with no journal).
+    pub journal: Option<Journal>,
+    /// Health-signals Arc; port bumps `last_ai_ok_ms` on AI success.
+    pub health: Arc<HealthSignals>,
+}
+
+/// Writeback the shim applies under the rt lock after the port
+/// finishes. Returned only on AI success.
+#[derive(Debug, Clone)]
+pub struct ManualSpawnOutcome {
+    /// "✋ {line.text}" form to store as the new `last_question`.
+    pub display_question: String,
+    /// Trimmed model answer to store as the new `last_answer`.
+    pub answer_trimmed: String,
+    /// Microcents to add to `session_cost_microcents`.
+    pub cost_microcents_delta: u64,
+}
+
+/// F6 Manual spawn tile: bypasses the auto-tile detector — the user
+/// pressed F6 (or the manual chip) to force a suggestion using the
+/// LAST transcript line (any source) as the trigger + last 8 lines
+/// of cross-source context.
+///
+/// Port #3 of Phase B2. Same snapshot-and-writeback pattern as port
+/// #2 (reask_last). Emits `tile:error` on empty transcript and
+/// `cost:cap-hit` (non-blocking) when over the per-session budget.
+/// Does NOT emit `cost:update` — that's the shim's job after
+/// applying the writeback (preserves wire-level ordering).
+pub async fn manual_spawn_tile(
+    events: Arc<dyn RuntimeEvents>,
+    cfg: SharedConfig,
+    inputs: ManualSpawnInputs,
+) -> Option<ManualSpawnOutcome> {
+    let Some(line) = inputs.last_line else {
+        log::info!("manual_spawn_tile: no transcript yet");
+        events.emit(
+            "tile:error",
+            serde_json::json!({ "message": "Транскрипт пустой — нечего спрашивать" }),
+        );
+        return None;
+    };
+
+    if let Some(reason) = inputs.cost_cap_reason {
+        events.emit(
+            "cost:cap-hit",
+            serde_json::json!({
+                "reason": reason,
+                "source": "manual_spawn",
+                "blocking": false,
+            }),
+        );
+    }
+
+    let (base_url, bearer, model, response_language, meeting_context, preferred_monitor, stealth) = {
+        let c = cfg.read();
+        (
+            c.ai_base_url.clone(),
+            c.ai_bearer.clone(),
+            c.ai_model.clone(),
+            c.response_language.clone(),
+            c.meeting_context.clone(),
+            c.tile_monitor_name.clone(),
+            c.stealth_enabled,
+        )
+    };
+    let trigger = Trigger::Question(line.text.clone());
+    let (sys_full, usr_full) = build_auto_tile_prompts(
+        &trigger,
+        &inputs.recent_transcript_labeled,
+        &meeting_context,
+        &response_language,
+    );
+    let messages = vec![
+        ai::ChatMessage {
+            role: "system".into(),
+            content: ai::MessageContent::Text(sys_full.clone()),
+        },
+        ai::ChatMessage {
+            role: "user".into(),
+            content: ai::MessageContent::Text(usr_full.clone()),
+        },
+    ];
+    if let Some(j) = inputs.journal.as_ref() {
+        j.write(&JournalEvent::AiRequest {
+            unix_ms: crate::journal::now_unix_ms(),
+            purpose: "manual_spawn",
+            model: &model,
+            system_prompt: &sys_full,
+            user_prompt: &usr_full,
+            attached_screenshot: false,
+            input_tokens_est: ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4,
+        });
+    }
+    let t0 = std::time::Instant::now();
+    let (answer, usage) =
+        match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512).await {
+            Ok(t) => {
+                inputs
+                    .health
+                    .last_ai_ok_ms
+                    .store(crate::journal::now_unix_ms() as u64, Ordering::Relaxed);
+                t
+            }
+            Err(e) => {
+                log::warn!("manual_spawn_tile AI failed: {e:#}");
+                if let Some(j) = inputs.journal.as_ref() {
+                    j.write(&JournalEvent::Error {
+                        unix_ms: crate::journal::now_unix_ms(),
+                        module: "manual_spawn",
+                        message: &format!("{e:#}"),
+                    });
+                }
+                // Pre-port code did NOT emit tile:error on AI failure
+                // for manual_spawn (only reask_last did) — preserve
+                // that silence. The user sees the failure in journal
+                // + log only.
+                return None;
+            }
+        };
+    let micro = ai::cost_microcents(&model, usage.input, usage.output);
+    let answer_trimmed = answer.trim().to_string();
+
+    if let Some(j) = inputs.journal.as_ref() {
+        j.write(&JournalEvent::AiResponse {
+            unix_ms: crate::journal::now_unix_ms(),
+            purpose: "manual_spawn",
+            model: &model,
+            latency_ms: t0.elapsed().as_millis() as u64,
+            finish_reason: "stop",
+            text: &answer,
+            output_tokens_est: usage.output,
+            cost_microcents: micro,
+        });
+    }
+
+    let question = format!("✋ {}", line.text);
+    let monitor_hint = match preferred_monitor.as_deref() {
+        Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
+        _ => MonitorHint::Auto,
+    };
+    // TileKind::Manual (NOT Ai) — F6 / manual chip / PTT is the
+    // user explicitly asking, so the tile chrome stays gray to
+    // distinguish from auto-detector Ai (blue) spawns. Today the
+    // TauriEvents adapter collapses both to tile::TileKind::Manual
+    // so behavior is identical; the explicit variant locks in
+    // wire-parity once the adapter gets per-kind branches.
+    match events.spawn_tile_full(
+        TileSpec {
+            question: question.clone(),
+            answer: answer_trimmed.clone(),
+            source: "manual_spawn".into(),
+            is_translation: false,
+        },
+        monitor_hint,
+        stealth,
+        TileKind::Manual,
+    ) {
+        Ok(label) => {
+            if let Some(j) = inputs.journal.as_ref() {
+                j.write(&JournalEvent::TileSpawn {
+                    unix_ms: crate::journal::now_unix_ms(),
+                    label: &label,
+                    question: &question,
+                    answer: &answer,
+                });
+            }
+        }
+        // Pre-port used `{e:#}` (anyhow alternate / multiline) — keeps
+        // the full source chain in the log for observability. Match it.
+        Err(e) => log::warn!("manual spawn_tile failed: {e:#}"),
+    }
+
+    Some(ManualSpawnOutcome {
+        display_question: question,
+        answer_trimmed,
+        cost_microcents_delta: micro,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -668,6 +867,50 @@ mod tests {
         let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
         let outcome = reask_last(sink, cfg, inputs).await;
         assert!(outcome.is_none(), "no-prior-QA path must return None");
+    }
+
+    /// Manual spawn with empty transcript → emits tile:error +
+    /// returns None. No AI call attempted.
+    #[tokio::test]
+    async fn manual_spawn_tile_empty_transcript_returns_none() {
+        let cfg = hermetic_empty_config();
+        let inputs = ManualSpawnInputs {
+            recent_transcript_labeled: vec![],
+            last_line: None,
+            cost_cap_reason: None,
+            journal: None,
+            health: Arc::new(HealthSignals::default()),
+        };
+        let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
+        let outcome = manual_spawn_tile(sink, cfg, inputs).await;
+        assert!(
+            outcome.is_none(),
+            "empty-transcript path must return None (got {outcome:?})"
+        );
+    }
+
+    /// Manual spawn with a transcript line + over-budget cap +
+    /// hermetic AI config → cost:cap-hit fires (non-blocking), AI
+    /// call fails (empty bearer), outcome is None, no panic.
+    #[tokio::test]
+    async fn manual_spawn_tile_over_budget_warns_but_proceeds() {
+        let cfg = hermetic_empty_config();
+        let inputs = ManualSpawnInputs {
+            recent_transcript_labeled: vec!["[ПОЛЬЗОВАТЕЛЬ] hello".into()],
+            last_line: Some(TranscriptLine {
+                source: AudioSource::Mic,
+                text: "hello".into(),
+                timestamp_ms: 0,
+            }),
+            cost_cap_reason: Some("over budget: $0.50 spent ≥ $0.10".into()),
+            journal: None,
+            health: Arc::new(HealthSignals::default()),
+        };
+        let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
+        let outcome = manual_spawn_tile(sink, cfg, inputs).await;
+        // Cap-hit is non-blocking: port still attempts the AI call
+        // (fails under hermetic config) → outcome None, no panic.
+        assert!(outcome.is_none());
     }
 
     /// Reask with prior QA but explicitly-empty AI config → AI call
