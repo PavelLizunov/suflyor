@@ -11,6 +11,7 @@
 //!
 //! Run: `cargo run --bin overlay-host` from `slint-experiment/`.
 
+use overlay_backend::kb;
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
 use slint_replay::app_state::{format_timer, new_shared_state, next_model};
 use slint_replay::markdown;
@@ -228,20 +229,14 @@ fn main() -> Result<(), slint::PlatformError> {
     let hp_tiles = tiles.clone();
     let hp_state = state.clone();
     let hp_weak_overlay = overlay.as_weak();
-    hotkey_poll.start(
-        TimerMode::Repeated,
-        Duration::from_millis(50),
-        move || {
-            while let Ok(event) = global_hotkey::GlobalHotKeyEvent::receiver().try_recv() {
-                if event.id == f4_id
-                    && event.state == global_hotkey::HotKeyState::Pressed
-                {
-                    eprintln!("[overlay-host] F4 pressed — opening palette");
-                    open_palette(&hp_palette, &hp_tiles, &hp_state, &hp_weak_overlay);
-                }
+    hotkey_poll.start(TimerMode::Repeated, Duration::from_millis(50), move || {
+        while let Ok(event) = global_hotkey::GlobalHotKeyEvent::receiver().try_recv() {
+            if event.id == f4_id && event.state == global_hotkey::HotKeyState::Pressed {
+                eprintln!("[overlay-host] F4 pressed — opening palette");
+                open_palette(&hp_palette, &hp_tiles, &hp_state, &hp_weak_overlay);
             }
-        },
-    );
+        }
+    });
 
     // ===== Stealth toggle on overlay bar =====
     {
@@ -449,28 +444,20 @@ fn open_palette(
         }
     };
 
-    // Sample static results (Phase 5.x will hit kb_search backend).
-    let sample = vec![
-        PaletteResult {
-            key: "kubernetes".into(),
-            title: "kubernetes — k8s".into(),
-            preview: "Container orchestration platform. Manages deployment, scaling, healing across a cluster of nodes.".into(),
-            source: "kb".into(),
-        },
-        PaletteResult {
-            key: "kubectl".into(),
-            title: "kubectl".into(),
-            preview: "CLI for Kubernetes API. Reads ~/.kube/config. Verbs: get, describe, logs, exec, apply, delete.".into(),
-            source: "kb".into(),
-        },
-        PaletteResult {
-            key: "/k8s".into(),
-            title: "/k8s snippet".into(),
-            preview: "Kubernetes cheatsheet snippet (custom)".into(),
-            source: "snippet".into(),
-        },
-    ];
-    win.set_results(slint::ModelRc::new(slint::VecModel::from(sample)));
+    // Phase C — wire palette to real overlay_backend::kb::search.
+    // Initial load: show top 20 entries (popular/first in cache).
+    let initial = kb_to_palette_results(&kb::search("", 20));
+    win.set_results(slint::ModelRc::new(slint::VecModel::from(initial)));
+
+    let weak_self_q = win.as_weak();
+    win.on_query_changed(move |q| {
+        let Some(p) = weak_self_q.upgrade() else {
+            return;
+        };
+        let hits = kb::search(q.as_str(), 20);
+        let model = kb_to_palette_results(&hits);
+        p.set_results(slint::ModelRc::new(slint::VecModel::from(model)));
+    });
 
     let weak_close = win.as_weak();
     let palette_close = palette_ref.clone();
@@ -508,10 +495,13 @@ fn open_palette(
         if let Ok(tile) = TileWindow::new() {
             tile.set_sequence(seq as i32);
             tile.set_tile_title(SharedString::from(result.title.to_string()));
-            tile.set_source_label(SharedString::from(format!("palette · {}", result.source)));
-            // Render the result preview as a simple paragraph; real Phase 5
-            // would call kb_get(key) to load the full content + parse as markdown.
-            let md = format!("# {}\n\n{}\n", result.key, result.preview);
+            tile.set_source_label(SharedString::from(format!("kb · {}", result.source)));
+            // Phase C — wire to real kb::get for the full body. Falls
+            // back to the preview if the key isn't found (defensive;
+            // shouldn't happen since result came from kb::search).
+            let body = kb::get(result.key.as_str())
+                .map_or_else(|| result.preview.to_string(), |e| e.body.clone());
+            let md = format!("# {}\n\n{body}\n", result.heading_or_key());
             let blocks: Vec<MarkdownBlock> = markdown::parse(&md)
                 .into_iter()
                 .map(|b| MarkdownBlock {
@@ -550,6 +540,48 @@ fn results_index(model: &slint::ModelRc<PaletteResult>, idx: i32) -> Option<Pale
         return None;
     }
     model.row_data(idx as usize)
+}
+
+/// Convert overlay_backend::kb::KBEntry rows into the Slint PaletteResult
+/// struct that the .slint UI consumes.
+fn kb_to_palette_results(entries: &[kb::KBEntry]) -> Vec<PaletteResult> {
+    entries
+        .iter()
+        .map(|e| {
+            // First sentence (or first 160 chars) of body for preview.
+            let preview = e
+                .body
+                .split_terminator(['.', '\n'])
+                .next()
+                .unwrap_or("")
+                .chars()
+                .take(160)
+                .collect::<String>();
+            PaletteResult {
+                key: SharedString::from(e.key.clone()),
+                title: SharedString::from(e.heading.clone()),
+                preview: SharedString::from(preview),
+                source: SharedString::from(e.source),
+            }
+        })
+        .collect()
+}
+
+/// PaletteResult ergonomic extension — `heading_or_key` returns the
+/// .heading if non-empty, else falls back to the .key. Stops the
+/// tile title from being blank when an entry has just a key.
+trait PaletteResultExt {
+    fn heading_or_key(&self) -> String;
+}
+
+impl PaletteResultExt for PaletteResult {
+    fn heading_or_key(&self) -> String {
+        if self.title.is_empty() {
+            self.key.to_string()
+        } else {
+            self.title.to_string()
+        }
+    }
 }
 
 /// Open the settings window. Reuses existing instance if open.
