@@ -93,8 +93,15 @@ export component TileWindow inherits Window {
             }
 
             // ===== Markdown body (kind-discriminant renderer) =====
+            // Phase E6 fix — viewport-width and explicit Text width
+            // force `wrap: word-wrap` to actually engage. Without the
+            // viewport-width hint, ScrollView lets content render
+            // unconstrained → long Russian paragraphs overflowed the
+            // dark fill area (user complaint "текст выходит за края").
             ScrollView {
                 vertical-stretch: 1;
+                horizontal-stretch: 1;
+                viewport-width: self.width;
                 VerticalLayout {
                     spacing: 4px;
                     for block[i] in root.blocks: Rectangle {
@@ -108,6 +115,7 @@ export component TileWindow inherits Window {
                             font-weight: 700;
                             color: #e8e8ec;
                             wrap: word-wrap;
+                            width: parent.width;
                         }
                         // H2
                         if block.kind == 2 : Text {
@@ -116,6 +124,7 @@ export component TileWindow inherits Window {
                             font-weight: 700;
                             color: #c8c8cc;
                             wrap: word-wrap;
+                            width: parent.width;
                         }
                         // H3
                         if block.kind == 3 : Text {
@@ -124,6 +133,7 @@ export component TileWindow inherits Window {
                             font-weight: 700;
                             color: #a8a8ac;
                             wrap: word-wrap;
+                            width: parent.width;
                         }
                         // Paragraph
                         if block.kind == 0 : Text {
@@ -131,6 +141,7 @@ export component TileWindow inherits Window {
                             font-size: 12px;
                             color: #c8c8cc;
                             wrap: word-wrap;
+                            width: parent.width;
                         }
                         // Bullet
                         if block.kind == 4 : HorizontalLayout {
@@ -147,6 +158,7 @@ export component TileWindow inherits Window {
                                 font-size: 12px;
                                 color: #c8c8cc;
                                 wrap: word-wrap;
+                                horizontal-stretch: 1;
                             }
                         }
                         // Code block
@@ -162,12 +174,15 @@ export component TileWindow inherits Window {
                                     font-size: 9px;
                                     color: #666;
                                 }
+                                // Code blocks need horizontal scroll for
+                                // long lines (Consolas) — keep no-wrap.
                                 Text {
                                     text: block.text;
                                     font-size: 11px;
                                     color: #d8e8f8;
                                     font-family: "Consolas";
-                                    wrap: no-wrap;
+                                    wrap: word-wrap;
+                                    width: parent.width;
                                 }
                             }
                         }

@@ -20,8 +20,8 @@ use slint_replay::runtime_state::{shared_runtime, SharedSlintRuntime};
 use slint_replay::slint_events::{SlintEvents, SlintUiBridge};
 use slint_replay::slint_session;
 use slint_replay::win32::{
-    enum_monitors, grab_hwnd, make_transparent_overlay, move_window, pick_monitor,
-    set_always_on_top, set_stealth,
+    enum_monitors, get_window_rect, grab_hwnd, make_transparent_overlay, move_window_pos_only,
+    pick_monitor, set_always_on_top, set_stealth,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -773,10 +773,15 @@ fn main() -> Result<(), slint::PlatformError> {
                 }
             };
             tile.set_tile_title(SharedString::from(req.spec.question.clone()));
+            // Phase E6 fix — auto-increment sequence so tile labels
+            // show #1, #2, #3 instead of all #0. Use Relaxed because
+            // poll-Timer is single-threaded (UI thread).
+            let seq = TILE_DISPLAY_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+            tile.set_sequence(seq as i32);
             tile.set_source_label(SharedString::from(format!(
                 "{} · {}",
                 req.kind.as_journal_tag(),
-                if req.stealth { "🥷" } else { "" }
+                if req.stealth { "stealth" } else { "" }
             )));
             // Render answer markdown via the spike adapter
             // (same pattern as on_spawn_tile_clicked at ~line 996).
@@ -1605,6 +1610,11 @@ fn fire_f9_ask(
             return;
         }
     };
+    // Phase E6 fix — share the same display-sequence counter so F9
+    // tiles get a unique #N label in line with auto-tiles + manual_
+    // spawn tiles (previously stuck at #0).
+    let seq = TILE_DISPLAY_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+    tile.set_sequence(seq as i32);
     tile.set_tile_title(SharedString::from("F9 ask · live"));
     tile.set_source_label(SharedString::from("ai · asking…"));
     let placeholder = vec![MarkdownBlock {
@@ -1763,23 +1773,24 @@ fn fire_f9_ask(
 }
 
 /// Atomic counter for tile-slot index — increments per spawn so
-/// successive tiles stack down the right edge instead of piling on
-/// top of each other in screen center. Reset only by process restart;
-/// real wrap/overflow logic is Phase E6 follow-up. Phase E6 fix
-/// (2026-05-27): was "Day 2 stub: just center on the primary monitor"
-/// which made all tiles spawn at the same coordinates → user complaint
-/// "тайлы спавняются исключительно в центе экрана, их нельзя двигать".
+/// successive tiles distribute across a 2-column grid on the right
+/// half of the chosen monitor.
 static TILE_SLOT_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
+/// Monotonic counter for the tile-title #N badge. Increments per
+/// spawn (never wraps) so the user can tell tiles apart in a busy
+/// session. Reset only at process restart.
+static TILE_DISPLAY_SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 /// Apply transparency + position tile on the appropriate monitor.
-/// Uses pick_monitor to respect the user's portrait-secondary setup
-/// (default to primary unless non-primary is landscape + at-least-as-wide).
 ///
-/// Layout: stacks tiles down the RIGHT EDGE of the chosen monitor
-/// with `TILE_DEFAULT_H + 12px gap` between each. After ~6 slots wraps
-/// back to top. This is intentionally simple — proper grid logic
-/// (src-tauri `tile.rs::grid_position` does ~80 LOC of math) is
-/// deferred to a future polish phase.
+/// Phase E6 fix v2 (2026-05-27): previous "right-edge stack" math
+/// overflowed monitor.bottom after ~slot 2 (tile_h+12 × N > screen
+/// height) → user complaint "тайлы уходят за экран". Now uses a
+/// 2-column × dynamic-rows grid with hard clamps to monitor bounds.
+/// Pre-port React/Tauri used src-tauri's tile.rs::grid_position
+/// (~80 LOC of layered math); this is a simpler 2-col wrap that
+/// fits on any landscape monitor without overflow.
 fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
     let weak = tile.as_weak();
     Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
@@ -1790,16 +1801,54 @@ fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
 
         let _ = make_transparent_overlay(hwnd);
 
+        // Phase E6 fix v3 — read the ACTUAL physical window size that
+        // Slint produced (HiDPI-aware), then place using that real
+        // width so the right-edge alignment is accurate. Previous
+        // version forced TILE_DEFAULT_W (460 raw pixels) which
+        // overrode Slint's logical-to-physical scaling and made
+        // tile content overflow the dark fill area on 125% scaling.
+        let (_cur_x, _cur_y, real_w, real_h) =
+            get_window_rect(hwnd).unwrap_or((0, 0, TILE_DEFAULT_W, TILE_DEFAULT_H));
+
         let monitors = enum_monitors();
         if let Some(mon) = pick_monitor(&monitors) {
-            let tile_w = TILE_DEFAULT_W;
-            let tile_h = TILE_DEFAULT_H;
-            let slot = TILE_SLOT_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % 6; // wrap every 6 slots
-                                                                                                 // Right-edge stack: right margin 20px, top margin 80px
-                                                                                                 // (clear of the overlay bar at the top-left).
-            let x = mon.left + mon.width() - tile_w - 20;
-            let y = mon.top + 80 + (slot as i32) * (tile_h + 12);
-            let _ = move_window(hwnd, x, y, tile_w, tile_h);
+            let gap_x: i32 = 12;
+            let gap_y: i32 = 12;
+            let top_margin: i32 = 80;
+            let right_margin: i32 = 20;
+
+            let usable_h = mon.height().saturating_sub(top_margin + 20);
+            let rows = ((usable_h + gap_y) / (real_h + gap_y)).max(1) as usize;
+            let cols: usize = 2;
+            let total_slots = (rows * cols).max(1);
+
+            let slot =
+                TILE_SLOT_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % total_slots;
+            let row = slot / cols;
+            let col = slot % cols;
+
+            let x_outer = mon.left + mon.width() - real_w - right_margin;
+            let x_inner = x_outer - real_w - gap_x;
+            let x = if col == 0 { x_inner } else { x_outer };
+            let y = mon.top + top_margin + (row as i32) * (real_h + gap_y);
+
+            // Hard clamp so a tile can never land off-screen even if
+            // monitor enum returned weird coordinates (portrait
+            // secondary at negative x).
+            let x_clamped = x.clamp(mon.left + 8, mon.right - real_w - 8);
+            let y_clamped = y.clamp(mon.top + 8, mon.bottom - real_h - 8);
+
+            eprintln!(
+                "[overlay-host] tile placement: monitor=({},{},{},{}) real_size=({},{}) slot={} row={} col={} pos=({},{})",
+                mon.left, mon.top, mon.right, mon.bottom,
+                real_w, real_h, slot, row, col, x_clamped, y_clamped,
+            );
+            // Move-only — preserve Slint's natural size so HiDPI
+            // rendering stays correct (text fills the dark fill area
+            // instead of overflowing).
+            let _ = move_window_pos_only(hwnd, x_clamped, y_clamped);
+        } else {
+            eprintln!("[overlay-host] tile placement: no monitor returned by pick_monitor — tile not moved");
         }
     });
 }

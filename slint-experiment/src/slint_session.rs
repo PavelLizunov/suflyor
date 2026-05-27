@@ -102,6 +102,22 @@ pub fn start_session(
     if groq_key.trim().is_empty() {
         anyhow::bail!("Groq API key not set in settings (cfg.groq_api_key empty)");
     }
+    // Phase E6 diagnostic — surface device names so we can debug
+    // mic-transcript-not-working complaints. Empty = "default device".
+    log_info(&format!(
+        "audio devices — mic={:?} sys={:?}",
+        mic_dev.as_deref().unwrap_or("<default>"),
+        sys_dev.as_deref().unwrap_or("<default>"),
+    ));
+    log_info(&format!(
+        "stt config — model={stt_model} language={:?} whisper_prompt={}",
+        cfg.read().stt_language.as_deref().unwrap_or("<auto>"),
+        if cfg.read().trigger_keywords.is_empty() {
+            "<no kw prompt>"
+        } else {
+            "<from trigger_keywords>"
+        }
+    ));
 
     // ===== 3. Open fresh journal =====
     let journal = match Journal::open_new_session() {
@@ -194,8 +210,17 @@ async fn transcript_forwarder(
     journal: Journal,
 ) {
     while let Some(ev) = stt_rx.recv().await {
+        // Phase E6 diagnostic — log every STT event so we can debug
+        // "mic transcript not working" complaints. Truncate text to
+        // 80 chars to keep stderr readable.
+        log_info(&format!(
+            "transcript event: source={:?} text='{}'",
+            ev.source,
+            ev.text.chars().take(80).collect::<String>(),
+        ));
         // Mic-mute drop — same semantic as src-tauri's check.
         if matches!(ev.source, AudioSource::Mic) && lock(&rt).mic_muted {
+            log_info("  -> dropped (mic muted)");
             continue;
         }
         let line = TranscriptLine {

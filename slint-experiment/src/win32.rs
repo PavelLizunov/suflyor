@@ -235,6 +235,34 @@ pub fn move_window(
     Ok(())
 }
 
+/// Move the window to (x, y) without changing its size. Used by tile
+/// placement so Slint's natural sizing (per-monitor DPI scale aware)
+/// stays intact while we just position the window. Fixes Phase E6
+/// bug: setting `move_window(..., 460, 360)` with raw pixel sizes
+/// forces the window smaller than Slint's logical-size render canvas
+/// on HiDPI monitors → text overflows the dark fill area.
+pub fn move_window_pos_only(hwnd: HWND, x: i32, y: i32) -> Result<(), Box<dyn std::error::Error>> {
+    use windows::Win32::UI::WindowsAndMessaging::{SWP_NOSIZE, SWP_NOZORDER};
+    unsafe {
+        SetWindowPos(hwnd, None, x, y, 0, 0, SWP_NOZORDER | SWP_NOSIZE)?;
+    }
+    Ok(())
+}
+
+/// Read the actual physical window rect (x, y, w, h) for placement
+/// math. Returns dimensions in screen coordinates (raw OS pixels).
+/// Used by the tile-spawn poll Timer to know each tile's real size
+/// after Slint's HiDPI-aware layout settles, so the right-edge
+/// alignment math uses the true width.
+pub fn get_window_rect(hwnd: HWND) -> Result<(i32, i32, i32, i32), Box<dyn std::error::Error>> {
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
+    let mut r = RECT::default();
+    unsafe {
+        GetWindowRect(hwnd, &mut r)?;
+    }
+    Ok((r.left, r.top, r.right - r.left, r.bottom - r.top))
+}
+
 /// Pick a target monitor for a new tile. Mirrors the heuristic in
 /// `src-tauri/src/tile.rs::pick_monitor` — default to primary unless
 /// a non-primary monitor is landscape AND at least as wide as primary.
