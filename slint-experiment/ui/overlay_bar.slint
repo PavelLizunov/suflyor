@@ -1,96 +1,57 @@
-// =====================================================================
-// Overlay bar — always-on-top strip above the meeting window.
+// Real overlay bar with full chip set.
 //
-// Phase E6 v15 — integrated Anthropic-design redesign:
-//   - StatusPill (left): dot + label, halo pulse when "thinking",
-//     red treatment when error-state
-//   - LiveChip for mic/sys: filled when active, semantic colour
-//     (green mic, orange sys)
-//   - Generic Chip: timer, model, cost, aggressive — accent ONLY
-//     on border (calm peripheral aesthetic), filled when emphasised
-//   - IconBtn ghost icons: tips, bm, stealth, settings, quit
-//   - VDivider between groups (instead of just spacing)
-//   - "+ tile (N)" is the only primary chip (filled indigo)
+// Ports the structural pattern of src/Overlay.tsx: a horizontal strip
+// of small chips on a translucent dark rounded background, drawn
+// always on top + transparent + click-through. Each chip is a reusable
+// Component so future chips slot in without touching the layout.
 //
-// Bottom row (Phase E6 v11): live transcript line + AI streaming
-// pill so user sees the pipeline working.
-//
-// Public API (UNCHANGED — overlay_host.rs wires 1:1):
-//   props:     status-text, status-color, mic-active, sys-active,
-//              timer-label, timer-active, ai-model, cost-label,
-//              tiles-spawned, aggressive-active, last-transcript-line,
-//              last-transcript-source, ai-streaming
-//   callbacks: mic-toggle-clicked, sys-toggle-clicked,
-//              timer-toggle-clicked, ai-model-cycle-clicked,
-//              spawn-tile-clicked, bookmark-clicked, tips-clicked,
-//              stealth-toggle-clicked, aggressive-toggle-clicked,
-//              open-settings-clicked, quit-clicked
-//
-// New optional props (default-safe):
-//   error-state  bool — flips StatusPill to red treatment
-//   thinking     bool — halo pulse on the status dot
-//   cost-warn    bool — cost chip fills yellow when cap exceeded
-// =====================================================================
+// Consumed by the `overlay-host` binary (src/bin/overlay_host.rs)
+// which wires every callback to real backend modules: audio probe,
+// AI ask, KB palette, hotkey dispatch, journal bookmark, etc.
 
-import { Theme } from "tokens.slint";
+import { Button } from "std-widgets.slint";
 
-// ----- StatusPill: dot + text. Halo-pulses when thinking. ------------
-component StatusPill inherits Rectangle {
+// ===== Reusable chip primitives =====
+
+// Generic chip: rounded background + 1px border + small label, with
+// an optional active state for the colored variant.
+component Chip inherits Rectangle {
     in property <string> label;
-    in property <color>  accent: Theme.text-mute;
-    in property <bool>   pulse: false;
-    in property <bool>   error-state: false;
+    in property <bool> active: false;
+    in property <color> accent: #6cf;
 
-    height: 24px;
-    border-radius: Theme.r-pill;
+    callback clicked();
+
+    accessible-role: button;
+    accessible-label: label;
+
+    background: active ? accent.with-alpha(0.18) : transparent;
+    border-color: active ? accent : #3a3c44;
     border-width: 1px;
-    background: root.error-state
-        ? Theme.error.with-alpha(0.12)
-        : root.accent.with-alpha(0.10);
-    border-color: root.error-state
-        ? Theme.error.with-alpha(0.55)
-        : root.accent.with-alpha(0.35);
+    border-radius: 10px;
+    height: 22px;
+    horizontal-stretch: 0;
 
     HorizontalLayout {
         padding-left: 8px;
-        padding-right: 10px;
-        spacing: 6px;
-        alignment: start;
-        Rectangle {
-            width: 8px; height: 8px;
-            border-radius: 4px;
-            background: root.error-state ? Theme.error : root.accent;
-            y: (parent.height - self.height) / 2;
-            // Halo
-            Rectangle {
-                x: -4px; y: -4px;
-                width: 16px; height: 16px;
-                border-radius: 8px;
-                background: parent.background.with-alpha(0.35);
-                opacity: root.pulse ? 1.0 : 0;
-                animate opacity {
-                    duration: 1200ms;
-                    iteration-count: -1;
-                    easing: ease-in-out;
-                    direction: alternate;
-                }
-            }
-        }
+        padding-right: 8px;
         Text {
-            text: root.label;
-            font-size: Theme.fs-11;
-            font-weight: 600;
-            color: root.error-state ? Theme.error : root.accent;
+            text: label;
+            font-size: 11px;
+            color: active ? accent : #c8c8cc;
             vertical-alignment: center;
         }
     }
+    TouchArea { clicked => { root.clicked(); } }
 }
 
-// ----- LiveChip: chip with leading dot. Active = filled. -------------
+// Active-indicator chip: chip with a small pulsing dot prefix that
+// represents an "active" / "live" capture state. Used for mic + sys.
 component LiveChip inherits Rectangle {
     in property <string> label;
-    in property <bool>   active: false;
-    in property <color>  accent: Theme.mic;
+    in property <bool> active: false;
+    in property <color> accent: #34d399;
+
     callback clicked();
 
     accessible-role: button;
@@ -98,169 +59,89 @@ component LiveChip inherits Rectangle {
     accessible-checkable: true;
     accessible-checked: active;
 
-    height: 24px;
-    border-radius: Theme.r-pill;
+    background: active ? accent.with-alpha(0.18) : transparent;
+    border-color: active ? accent : #3a3c44;
     border-width: 1px;
-    background: root.active
-        ? root.accent.with-alpha(0.16)
-        : (ta.has-hover ? Theme.bg-3.with-alpha(0.6) : transparent);
-    border-color: root.active
-        ? root.accent.with-alpha(0.55)
-        : Theme.border;
-    animate background, border-color { duration: Theme.dur-base; }
+    border-radius: 10px;
+    height: 22px;
 
     HorizontalLayout {
-        padding-left: 8px;
-        padding-right: 10px;
-        spacing: 6px;
+        padding-left: 6px;
+        padding-right: 8px;
+        spacing: 4px;
+        // Dot indicator
         Rectangle {
-            width: 7px; height: 7px;
-            border-radius: 4px;
-            background: root.active ? root.accent : Theme.border-strong;
+            width: 6px;
+            height: 6px;
+            border-radius: 3px;
+            background: active ? accent : #4a4c54;
             y: (parent.height - self.height) / 2;
-            animate background { duration: Theme.dur-base; }
         }
         Text {
-            text: root.label;
-            font-size: Theme.fs-11;
-            font-weight: 600;
-            color: root.active ? root.accent : Theme.text-mute;
+            text: label;
+            font-size: 11px;
+            color: active ? accent : #c8c8cc;
             vertical-alignment: center;
-            animate color { duration: Theme.dur-base; }
         }
     }
-    ta := TouchArea { clicked => { root.clicked(); } }
-    states [
-        pressed when ta.pressed: { opacity: 0.7; }
-    ]
+    TouchArea { clicked => { root.clicked(); } }
 }
 
-// ----- Generic chip (timer, model, cost, aggressive). Accent on border.
-component Chip inherits Rectangle {
-    in property <string> label;
-    in property <color>  accent: Theme.text-mute;
-    in property <bool>   emphasised: false;
-    callback clicked();
-
-    accessible-role: button;
-    accessible-label: label;
-
-    height: 24px;
-    border-radius: Theme.r-pill;
-    border-width: 1px;
-    background: root.emphasised
-        ? root.accent.with-alpha(0.14)
-        : (ta.has-hover ? Theme.bg-3.with-alpha(0.55) : transparent);
-    border-color: root.emphasised
-        ? root.accent.with-alpha(0.5)
-        : Theme.border;
-    animate background, border-color { duration: Theme.dur-base; }
-    horizontal-stretch: 0;
-
-    HorizontalLayout {
-        padding-left: 9px;
-        padding-right: 10px;
-        alignment: center;
-        Text {
-            text: root.label;
-            font-size: Theme.fs-11;
-            font-weight: root.emphasised ? 600 : 500;
-            color: root.emphasised ? root.accent : Theme.text;
-            vertical-alignment: center;
-            horizontal-alignment: center;
-        }
-    }
-    ta := TouchArea { clicked => { root.clicked(); } }
-    states [
-        pressed when ta.pressed: { opacity: 0.7; }
-    ]
-}
-
-// ----- Icon-only ghost button (tips/bm/stealth/settings/quit) --------
-component IconBtn inherits Rectangle {
-    in property <string> glyph;
-    in property <color>  hover-accent: Theme.text-mute;
-    in property <bool>   destructive: false;
-    callback clicked();
-
-    accessible-role: button;
-    accessible-label: glyph;
-
-    width: 32px;
-    height: 24px;
-    border-radius: Theme.r-pill;
-    border-width: 1px;
-    background: ta.has-hover
-        ? (root.destructive
-            ? Theme.error.with-alpha(0.12)
-            : root.hover-accent.with-alpha(0.10))
-        : transparent;
-    border-color: ta.has-hover
-        ? (root.destructive
-            ? Theme.error.with-alpha(0.5)
-            : root.hover-accent.with-alpha(0.3))
-        : Theme.border-soft;
-    animate background, border-color { duration: Theme.dur-base; }
-
-    Text {
-        text: root.glyph;
-        font-size: Theme.fs-12;
-        color: ta.has-hover
-            ? (root.destructive ? Theme.error : root.hover-accent)
-            : Theme.text-mute;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        animate color { duration: Theme.dur-base; }
-    }
-    ta := TouchArea { clicked => { root.clicked(); } }
-    states [
-        pressed when ta.pressed: { opacity: 0.7; }
-    ]
-}
-
-// ----- Vertical separator between chip groups -------------------------
-component VDivider inherits Rectangle {
-    width: 1px;
-    height: 14px;
-    background: Theme.border-soft;
-}
-
-// =====================================================================
-// OverlayBarWindow
-// =====================================================================
+// ===== Main overlay bar =====
 
 export component OverlayBarWindow inherits Window {
     title: "overlay-mvp (Slint)";
     background: transparent;
     no-frame: true;
     always-on-top: true;
-    // Wider preferred-width so all chips + transcript row fit on
-    // primary 1920px screen. Bumped height to fit transcript row.
+    // Phase E6 v10 — widened from 720 to 980 so new chip labels
+    // (💡 tips, ⭐ bm, 🎯 stealth, 🔥 auto, ⚙ settings, X quit) all
+    // fit without truncating the rightmost (X quit) chip.
+    // Phase E6 v11 — height bumped 56 → 86 to fit live transcript row.
     preferred-width: 980px;
-    preferred-height: 78px;
+    preferred-height: 86px;
     min-width: 700px;
 
-    // ===== Public state ===============================================
+    // Status pill text (idle / recording / etc).
     in-out property <string> status-text: "idle";
-    in-out property <color>  status-color: Theme.text-mute;
-    in-out property <bool>   mic-active: false;
-    in-out property <bool>   sys-active: false;
+    in-out property <color> status-color: #999;
+
+    // Live capture flags.
+    in-out property <bool> mic-active: false;
+    in-out property <bool> sys-active: false;
+
+    // Session timer label (formatted by Rust, e.g. "03:42").
     in-out property <string> timer-label: "00:00";
-    in-out property <bool>   timer-active: false;
+    in-out property <bool> timer-active: false;
+
+    // AI model chip cycle: "sonnet" / "haiku" / "opus".
     in-out property <string> ai-model: "sonnet";
+
+    // Cumulative session cost (formatted by Rust, e.g. "$0.024").
     in-out property <string> cost-label: "$0.000";
-    in-out property <int>    tiles-spawned: 0;
-    in-out property <bool>   aggressive-active: false;
+
+    // Tile counter for the "+ Tile" button.
+    in-out property <int> tiles-spawned: 0;
+
+    // Phase E6 v10 — aggressive (every-line) auto-tile mode flag.
+    // When true, the bar shows the "🔥 auto" chip lit; user can
+    // toggle to spawn a tile on every transcript line (vs. only on
+    // Question/Keyword triggers). Backend already supports it via
+    // cfg.auto_tile_every_line; this just surfaces the switch.
+    in-out property <bool> aggressive-active: false;
+
+    // Phase E6 v11 — live status indicators. `last-transcript-line`
+    // shows the most recent STT output (truncated by Rust to ~120
+    // chars) below the chip row so user sees "транскрипция работает".
+    // `ai-streaming` lights up the AI model chip background pulse so
+    // user sees "AI работает" while a tile is mid-stream.
     in-out property <string> last-transcript-line: "";
+    in-out property <bool> ai-streaming: false;
+    // Source tag for the transcript line — "mic" / "sys" / "" to
+    // colour-code which side of the conversation it came from.
     in-out property <string> last-transcript-source: "";
-    in-out property <bool>   ai-streaming: false;
 
-    // New optional (default-safe):
-    in-out property <bool>   error-state: false;
-    in-out property <bool>   thinking: false;
-    in-out property <bool>   cost-warn: false;
-
-    // ===== Callbacks (unchanged) ======================================
+    // ===== Callbacks =====
     callback mic-toggle-clicked();
     callback sys-toggle-clicked();
     callback timer-toggle-clicked();
@@ -273,166 +154,191 @@ export component OverlayBarWindow inherits Window {
     callback open-settings-clicked();
     callback quit-clicked();
 
-    // ---- Shell ------------------------------------------------------
     Rectangle {
-        background: Theme.glass;
-        border-radius: Theme.r-4;
+        background: #14161eea;
+        border-radius: 12px;
         border-width: 1px;
-        border-color: Theme.glass-border;
-        drop-shadow-blur: 24px;
-        drop-shadow-color: #00000088;
-        drop-shadow-offset-y: 8px;
+        border-color: #2a2c3a;
 
         VerticalLayout {
-            padding-left: 8px;
-            padding-right: 8px;
-            padding-top: 5px;
-            padding-bottom: 5px;
-            spacing: 3px;
+            padding: 6px;
+            spacing: 4px;
 
-            // === Chip row ==========================================
-            HorizontalLayout {
-                spacing: 5px;
-                alignment: start;
+        HorizontalLayout {
+            padding: 2px;
+            spacing: 6px;
+            alignment: start;
 
-                StatusPill {
-                    label: root.status-text;
-                    accent: root.status-color;
-                    pulse: root.thinking;
-                    error-state: root.error-state;
-                }
-
-                LiveChip {
-                    label: "🎤 mic";
-                    active: root.mic-active;
-                    accent: Theme.mic;
-                    clicked => { root.mic-toggle-clicked(); }
-                }
-
-                LiveChip {
-                    label: "🔊 sys";
-                    active: root.sys-active;
-                    accent: Theme.system;
-                    clicked => { root.sys-toggle-clicked(); }
-                }
-
-                VDivider {}
-
-                // Timer with start-hint (cycle 17).
-                Chip {
-                    label: root.timer-active
-                        ? "⏸ " + root.timer-label
-                        : "▶ start";
-                    accent: Theme.warn;
-                    emphasised: root.timer-active;
-                    clicked => { root.timer-toggle-clicked(); }
-                }
-
-                Chip {
-                    label: "🧠 " + root.ai-model;
-                    accent: Theme.info;
-                    clicked => { root.ai-model-cycle-clicked(); }
-                }
-
-                Chip {
-                    label: root.cost-label;
-                    accent: Theme.warn;
-                    emphasised: root.cost-warn;
-                }
-
-                VDivider {}
-
-                // Action glyphs (ghost).
-                IconBtn {
-                    glyph: "💡"; hover-accent: Theme.warn;
-                    clicked => { root.tips-clicked(); }
-                }
-                IconBtn {
-                    glyph: "⭐"; hover-accent: Theme.warn;
-                    clicked => { root.bookmark-clicked(); }
-                }
-                IconBtn {
-                    glyph: "🎯"; hover-accent: Theme.ai;
-                    clicked => { root.stealth-toggle-clicked(); }
-                }
-                // Aggressive auto-tile toggle (cycle 15).
-                Chip {
-                    label: root.aggressive-active ? "🔥 auto-ON" : "🔥 auto";
-                    accent: Theme.system;
-                    emphasised: root.aggressive-active;
-                    clicked => { root.aggressive-toggle-clicked(); }
-                }
-
-                // Spring spacer
-                Rectangle { horizontal-stretch: 1; min-width: 8px; }
-
-                // + tile (primary action).
-                Chip {
-                    label: "+ tile (" + root.tiles-spawned + ")";
-                    accent: Theme.auto;
-                    emphasised: true;
-                    clicked => { root.spawn-tile-clicked(); }
-                }
-                IconBtn {
-                    glyph: "⚙"; hover-accent: Theme.text;
-                    clicked => { root.open-settings-clicked(); }
-                }
-                IconBtn {
-                    glyph: "X"; hover-accent: Theme.error;
-                    destructive: true;
-                    clicked => { root.quit-clicked(); }
-                }
-            }
-
-            // === Live status row (cycle 16) ========================
-            HorizontalLayout {
-                padding-left: 4px;
-                padding-right: 4px;
-                spacing: 6px;
-                Rectangle {
-                    width: 8px;
-                    height: 8px;
-                    y: (parent.height - self.height) / 2;
-                    border-radius: 4px;
-                    background: root.last-transcript-source == "mic"
-                        ? Theme.mic
-                        : (root.last-transcript-source == "sys"
-                            ? Theme.system
-                            : Theme.border-strong);
-                }
-                Text {
-                    text: root.last-transcript-line == ""
-                        ? "🎙 ожидаю транскрипт... (mic/sys → STT)"
-                        : root.last-transcript-line;
-                    font-size: Theme.fs-11;
-                    color: root.last-transcript-line == ""
-                        ? Theme.text-dim
-                        : Theme.text-mute;
-                    overflow: elide;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
-                }
-                Rectangle {
-                    width: root.ai-streaming ? 90px : 0px;
-                    height: 18px;
-                    y: (parent.height - self.height) / 2;
-                    background: root.ai-streaming
-                        ? Theme.ai.with-alpha(0.18)
-                        : transparent;
-                    border-color: Theme.ai;
-                    border-width: root.ai-streaming ? 1px : 0px;
-                    border-radius: 9px;
-                    horizontal-stretch: 0;
+            // Status pill (left edge)
+            Rectangle {
+                background: root.status-color.with-alpha(0.18);
+                border-color: root.status-color;
+                border-width: 1px;
+                border-radius: 10px;
+                height: 22px;
+                horizontal-stretch: 0;
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
                     Text {
-                        visible: root.ai-streaming;
-                        text: "🧠 AI streaming";
-                        font-size: 10px;
-                        color: Theme.ai;
+                        text: root.status-text;
+                        font-size: 11px;
+                        font-weight: 600;
+                        color: root.status-color;
                         vertical-alignment: center;
-                        horizontal-alignment: center;
                     }
                 }
             }
+
+            // Live capture chips
+            LiveChip {
+                label: @tr("🎤 mic");
+                active: root.mic-active;
+                accent: #34d399;
+                clicked => { root.mic-toggle-clicked(); }
+            }
+
+            LiveChip {
+                label: @tr("🗣 sys");
+                active: root.sys-active;
+                accent: #6cf;
+                clicked => { root.sys-toggle-clicked(); }
+            }
+
+            // Session timer — Phase E6 v12: label hints at what the
+            // click does. User feedback: "нажать на часики не очень
+            // очевидно" — the bare "⏱ 00:00" gave no hint that
+            // clicking starts a session. Now shows "▶ start" when
+            // idle, "⏸ MM:SS" when recording.
+            Chip {
+                label: root.timer-active
+                    ? @tr("⏸ {}", root.timer-label)
+                    : @tr("▶ start");
+                active: root.timer-active;
+                accent: #fbbf24;
+                clicked => { root.timer-toggle-clicked(); }
+            }
+
+            // AI model selector
+            Chip {
+                label: @tr("🧠 {}", root.ai-model);
+                accent: #818cf8;
+                clicked => { root.ai-model-cycle-clicked(); }
+            }
+
+            // Cost display (always shown)
+            Chip {
+                label: root.cost-label;
+                accent: #f59e0b;
+                clicked => { /* no-op for now */ }
+            }
+
+            // AI tips / followups
+            Chip {
+                label: "💡 tips";
+                accent: #fde68a;
+                clicked => { root.tips-clicked(); }
+            }
+
+            // Bookmark
+            Chip {
+                label: "⭐ bm";
+                accent: #fcd34d;
+                clicked => { root.bookmark-clicked(); }
+            }
+
+            // Stealth toggle (hide from screen capture)
+            Chip {
+                label: "🎯 stealth";
+                accent: #ec4899;
+                clicked => { root.stealth-toggle-clicked(); }
+            }
+
+            // Aggressive auto-tile mode (every transcript line spawns)
+            Chip {
+                label: root.aggressive-active ? "🔥 auto-ON" : "🔥 auto";
+                accent: #fb923c;
+                active: root.aggressive-active;
+                clicked => { root.aggressive-toggle-clicked(); }
+            }
+
+            // Spring spacer
+            Rectangle { horizontal-stretch: 1; }
+
+            // Tile counter + spawn (F6 manual ask)
+            Chip {
+                label: @tr("+ tile ({})", root.tiles-spawned);
+                accent: #f472b6;
+                clicked => { root.spawn-tile-clicked(); }
+            }
+
+            // Settings
+            Chip {
+                label: "⚙ settings";
+                accent: #94a3b8;
+                clicked => { root.open-settings-clicked(); }
+            }
+
+            // Quit (ASCII X — Unicode ✕ U+2715 renders as missing glyph
+            // on some Slint+skia font fallbacks; same root cause as
+            // tile close glyph fix in cycle 7)
+            Chip {
+                label: "X quit";
+                accent: #ef4444;
+                clicked => { root.quit-clicked(); }
+            }
+        }
+
+        // ===== Live status row =====
+        // Phase E6 v11 — bottom row shows last transcript line + AI
+        // streaming indicator. Gives the user immediate visual proof
+        // that STT and AI are working without opening a separate
+        // window or watching a log file.
+        HorizontalLayout {
+            padding-left: 4px;
+            padding-right: 4px;
+            spacing: 6px;
+            // Source tag — "mic" green dot, "sys" cyan dot, "" gray.
+            Rectangle {
+                width: 8px;
+                height: 8px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 4px;
+                background: root.last-transcript-source == "mic"
+                    ? #34d399
+                    : (root.last-transcript-source == "sys" ? #6cf : #3a3c44);
+            }
+            // The live transcript text — elide when too long.
+            Text {
+                text: root.last-transcript-line == ""
+                    ? "🎙 ожидаю транскрипт... (mic/sys → STT)"
+                    : root.last-transcript-line;
+                font-size: 11px;
+                color: root.last-transcript-line == "" ? #6a6c74 : #c8c8cc;
+                overflow: elide;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            // AI streaming pulse — visible when an ask is in flight.
+            Rectangle {
+                width: root.ai-streaming ? 80px : 0px;
+                height: 18px;
+                y: (parent.height - self.height) / 2;
+                background: root.ai-streaming ? #818cf8.with-alpha(0.22) : transparent;
+                border-color: #818cf8;
+                border-width: root.ai-streaming ? 1px : 0px;
+                border-radius: 9px;
+                horizontal-stretch: 0;
+                Text {
+                    visible: root.ai-streaming;
+                    text: "🧠 AI streaming";
+                    font-size: 10px;
+                    color: #818cf8;
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                }
+            }
+        }
         }
     }
 }

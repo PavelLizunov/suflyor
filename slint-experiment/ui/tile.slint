@@ -1,112 +1,19 @@
-// =====================================================================
-// Tile window — floating card with streamed AI answer.
+// Phase 4 — Tile window with markdown body.
 //
-// Phase E6 v15 — integrated Anthropic-design redesign. Visual rules:
-//   - kind colour shows on border + top accent strip + bullets only
-//     (never on title text or large fills — peripheral-friendly)
-//   - markdown body stays neutral; code blocks neutral charcoal
-//   - trigger badge (Phase E6 v12) preserved below chrome row
-//   - ScrollView (std-widgets) wraps body so scrollbar is visible
-//     when content overflows (user complaint: "нет скролла")
-//
-// Public API (UNCHANGED — overlay_host.rs continues to use):
-//   struct MarkdownBlock { kind: int, text: string, lang: string }
-//   props:     tile-title, sequence, blocks, source-label,
-//              trigger-label, trigger-color
-//   callbacks: close-clicked, pin-clicked, drag-start-requested
-//
-// New optional props (default-safe — won't break existing call sites):
-//   kind         "auto" | "system" | "mic" | "manual" | "ai"
-//   pinned       bool — pin icon flips state when true
-//   live         bool — shows "● live" indicator next to title
-//   ai-status    string — "asking…" / "done (stop)" etc.
-// =====================================================================
+// Uses the same MarkdownBlock struct as markdown_spike.slint (single
+// definition in this file; spike imports from here). Rust side parses
+// CommonMark via slint_replay::markdown::parse() and pushes the
+// resulting Vec<Block> into the `blocks` property.
 
-import { ScrollView } from "std-widgets.slint";
-import { Theme } from "tokens.slint";
+import { Button, ScrollView } from "std-widgets.slint";
 
-// MarkdownBlock — canonical definition, re-exported via index.slint.
+// MarkdownBlock is shared with markdown_spike — defined here in the
+// canonical location and re-exported through index.slint.
 export struct MarkdownBlock {
     kind: int,
     text: string,
     lang: string,
 }
-
-// ----- Small chip used in the chrome row (source label / status) -----
-component MetaChip inherits Rectangle {
-    in property <string> text;
-    in property <color>  accent: Theme.text-mute;
-    in property <bool>   filled: false;
-
-    height: 18px;
-    border-radius: 4px;
-    border-width: 1px;
-    background: root.filled ? root.accent.with-alpha(0.18) : transparent;
-    border-color: root.filled
-        ? root.accent.with-alpha(0.45)
-        : Theme.border;
-    horizontal-stretch: 0;
-
-    HorizontalLayout {
-        padding-left: 6px;
-        padding-right: 6px;
-        alignment: center;
-        Text {
-            text: root.text;
-            font-size: 10px;
-            font-weight: 500;
-            color: root.filled ? root.accent : Theme.text-mute;
-            vertical-alignment: center;
-        }
-    }
-}
-
-// ----- Tiny ghost button used in chrome (pin, close) -----------------
-// Phase E6 v15 — wider hit-box than Slint's std-widgets Button so
-// off-by-a-few-pixel clicks still register. User feedback from cycle
-// 14: "close не сработал не сразу одит где был ответ так и не закрылся".
-component ChromeBtn inherits Rectangle {
-    in property <string> glyph;
-    in property <bool>   destructive: false;
-    in property <bool>   active: false;       // pin = filled when pinned
-    callback clicked();
-
-    width: 28px;
-    height: 22px;
-    border-radius: Theme.r-1;
-    background: root.active
-        ? Theme.warn.with-alpha(0.18)
-        : (ta.has-hover
-            ? (root.destructive
-                ? Theme.error.with-alpha(0.18)
-                : Theme.bg-3.with-alpha(0.7))
-            : transparent);
-    border-width: 1px;
-    border-color: root.active
-        ? Theme.warn.with-alpha(0.5)
-        : (ta.has-hover ? Theme.border-strong : transparent);
-    animate background, border-color { duration: Theme.dur-base; }
-
-    Text {
-        text: root.glyph;
-        font-size: 11px;
-        font-weight: 600;
-        color: root.active
-            ? Theme.warn
-            : (ta.has-hover
-                ? (root.destructive ? Theme.error : Theme.text)
-                : Theme.text-mute);
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        animate color { duration: Theme.dur-base; }
-    }
-
-    ta := TouchArea { clicked => { root.clicked(); } }
-}
-
-// =====================================================================
-// TileWindow
-// =====================================================================
 
 export component TileWindow inherits Window {
     title: "tile";
@@ -118,168 +25,159 @@ export component TileWindow inherits Window {
     min-width: 320px;
     min-height: 200px;
 
-    // ===== Public state (kept compatible) =============================
     in-out property <string> tile-title: "Untitled tile";
-    in-out property <int>    sequence: 0;
+    in-out property <int> sequence: 0;
     in-out property <[MarkdownBlock]> blocks: [];
+    // Source label shown in chrome row (e.g. "ai", "kb", "snippet").
     in-out property <string> source-label: "—";
-    // Phase E6 v12 — trigger badge from auto-detector / F9 hotkey.
+    // Phase E6 v12 — trigger badge. Shows WHY this tile spawned:
+    // a Question, Keyword(kw), or every-line. Empty string hides
+    // the badge entirely. User feedback: "ключевые слова не
+    // помечены я не понимаю на какое окно смотреть".
     in-out property <string> trigger-label: "";
-    in-out property <color>  trigger-color: Theme.auto;
+    in-out property <color> trigger-color: #6cf;
 
-    // ===== New optional state (default-safe) ==========================
-    // "auto" | "system" | "mic" | "manual" | "ai"  → drives kind colour.
-    in-out property <string> kind: "auto";
-    in-out property <bool>   pinned: false;
-    in-out property <bool>   live: false;
-    in-out property <string> ai-status: "";
-
-    // ===== Callbacks (unchanged) ======================================
     callback close-clicked();
     callback pin-clicked();
+    // Phase E6 — drag-to-move via Win32 system-drag. Rust handler
+    // calls win32::start_window_drag(hwnd) which sends
+    // WM_NCLBUTTONDOWN/HTCAPTION; Windows handles the rest.
     callback drag-start-requested();
 
-    // ----- Derived: kind colour --------------------------------------
-    property <color> accent:
-        root.kind == "system" ? Theme.system :
-        root.kind == "mic"    ? Theme.mic    :
-        root.kind == "manual" ? Theme.manual :
-        root.kind == "ai"     ? Theme.ai     :
-        /* default — "auto" */  Theme.auto;
-
-    // ----- Shell -----------------------------------------------------
     Rectangle {
-        background: Theme.glass-strong;
-        border-radius: Theme.r-4;
+        background: #14161eea;
+        border-radius: 10px;
         border-width: 1px;
-        border-color: root.accent.with-alpha(0.55);
-        drop-shadow-blur: 28px;
-        drop-shadow-offset-y: 10px;
-        drop-shadow-color: #00000099;
+        border-color: #2a2c3a;
 
         VerticalLayout {
-            padding: 0px;
-            spacing: 0px;
+            padding: 10px;
+            spacing: 6px;
 
-            // ===== Top accent strip (slim kind-colour bar) ===========
-            Rectangle {
-                height: 3px;
-                background: root.accent;
-            }
-
-            // ===== Chrome row =======================================
-            // Phase E6 v10 — drag-area TouchArea inside title sub-
-            // rectangle (NOT wrapping whole chrome row) so chrome
-            // buttons (pin/X) fire independently.
-            chrome := Rectangle {
-                height: 30px;
-                background: root.accent.with-alpha(0.10);
-
-                HorizontalLayout {
-                    padding-left: 10px;
-                    padding-right: 6px;
-                    spacing: 6px;
-                    alignment: start;
-
-                    // Title + drag handle area
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        drag-area := TouchArea {
-                            pointer-event(ev) => {
-                                if (ev.button == PointerEventButton.left
-                                    && ev.kind == PointerEventKind.down) {
-                                    root.drag-start-requested();
-                                }
-                            }
-                        }
-                        HorizontalLayout {
-                            spacing: 6px;
-                            // Sequence number — monospace, accent-coloured.
-                            Text {
-                                text: "#" + root.sequence;
-                                font-family: "Consolas";
-                                font-size: Theme.fs-11;
-                                font-weight: 600;
-                                color: root.accent;
-                                vertical-alignment: center;
-                            }
-                            // Title — neutral white, elide.
-                            Text {
-                                text: root.tile-title;
-                                font-size: Theme.fs-12;
-                                font-weight: 600;
-                                color: Theme.text;
-                                vertical-alignment: center;
-                                overflow: elide;
-                                horizontal-stretch: 1;
+            // ===== Chrome row =====
+            // Phase E6 v8 — RESTRUCTURED to fix the "pin/X buttons
+            // don't fire" bug. The previous version wrapped a
+            // TouchArea over the WHOLE chrome row, which captured
+            // pointer events even when they overlapped the Button
+            // widgets → Button.clicked never fired (TouchArea
+            // pointer-event swallows). Now the TouchArea is INSIDE
+            // a sub-Rectangle that only covers the title+spacer
+            // region; buttons live OUTSIDE that Rectangle so their
+            // internal TouchArea is the only one in the click path.
+            HorizontalLayout {
+                spacing: 6px;
+                height: 28px;
+                // Title + drag-handle area — stretches to fill
+                // remaining width on the LEFT of the source-label +
+                // buttons cluster. TouchArea covers ONLY this area
+                // so its pointer-event capture doesn't shadow the
+                // sibling Button widgets.
+                Rectangle {
+                    horizontal-stretch: 1;
+                    drag-area := TouchArea {
+                        pointer-event(ev) => {
+                            if (ev.button == PointerEventButton.left
+                                && ev.kind == PointerEventKind.down) {
+                                root.drag-start-requested();
                             }
                         }
                     }
-
-                    // Live dot + "live" label
-                    if root.live: HorizontalLayout {
-                        spacing: 4px;
-                        alignment: center;
-                        Rectangle {
-                            width: 6px; height: 6px;
-                            border-radius: 3px;
-                            background: Theme.mic;
-                            y: (parent.height - self.height) / 2;
-                        }
+                    Text {
+                        x: 0;
+                        text: @tr("#{}  {}", root.sequence, root.tile-title);
+                        font-size: 12px;
+                        font-weight: 700;
+                        color: #e8e8ec;
+                        vertical-alignment: center;
+                        overflow: elide;
+                        width: parent.width;
+                    }
+                }
+                Rectangle {
+                    background: transparent;
+                    border-color: #3a3c44;
+                    border-width: 1px;
+                    border-radius: 8px;
+                    height: 20px;
+                    horizontal-stretch: 0;
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
                         Text {
-                            text: "live";
+                            text: root.source-label;
                             font-size: 10px;
-                            font-weight: 500;
-                            color: Theme.mic;
+                            color: #999;
                             vertical-alignment: center;
                         }
                     }
-
-                    // source-label meta chip (filled — wears kind colour)
-                    MetaChip {
-                        text: root.source-label;
-                        accent: root.accent;
-                        filled: true;
-                    }
-
-                    // Pin
-                    ChromeBtn {
-                        glyph: "pin";
-                        active: root.pinned;
+                }
+                // Phase E6 v9 — wrap buttons in fixed-min-width Rectangles
+                // with explicit TouchArea so the click target is larger
+                // than the default Slint Button intrinsic width. User
+                // reported "X не работает" on dragged tiles — root
+                // cause was pixel-perfect aim required (button ~15 px
+                // wide). Now each button is 44 px wide + 28 px tall so
+                // off-by-a-few-pixels clicks still land on the button.
+                Rectangle {
+                    width: 44px;
+                    height: 28px;
+                    background: pin-touch.has-hover ? #34354a : #2a2c3a;
+                    border-radius: 4px;
+                    border-width: 1px;
+                    border-color: #3a3c44;
+                    pin-touch := TouchArea {
                         clicked => { root.pin-clicked(); }
                     }
-
-                    // Close
-                    ChromeBtn {
-                        glyph: "X";
-                        destructive: true;
+                    Text {
+                        text: "pin";
+                        font-size: 11px;
+                        color: #e8e8ec;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    width: 30px;
+                    height: 28px;
+                    background: close-touch.has-hover ? #5a2a2a : #2a2c3a;
+                    border-radius: 4px;
+                    border-width: 1px;
+                    border-color: #3a3c44;
+                    close-touch := TouchArea {
                         clicked => { root.close-clicked(); }
+                    }
+                    Text {
+                        text: "X";
+                        font-size: 12px;
+                        font-weight: 700;
+                        color: #e8e8ec;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
                     }
                 }
             }
 
-            // ===== Divider ==========================================
             Rectangle {
+                background: #2a2c3a;
                 height: 1px;
-                background: Theme.border-soft;
             }
 
-            // ===== Trigger badge =====================================
-            // Phase E6 v12 — shows what spawned this tile: keyword /
-            // question / manual F9. Hidden when empty (KB-palette).
+            // ===== Trigger badge =====
+            // Phase E6 v12 — colored pill below chrome row shows what
+            // detector trigger spawned this tile (Keyword "docker",
+            // Question "...", every-line). Hidden when trigger-label
+            // is empty (manual F9 ask or F6 spawn).
             if root.trigger-label != "" : Rectangle {
-                height: 24px;
+                height: 22px;
                 horizontal-stretch: 1;
                 HorizontalLayout {
                     alignment: start;
-                    padding-left: 10px;
-                    padding-top: 3px;
                     Rectangle {
                         background: root.trigger-color.with-alpha(0.18);
                         border-color: root.trigger-color;
                         border-width: 1px;
                         border-radius: 9px;
-                        height: 18px;
+                        height: 20px;
                         horizontal-stretch: 0;
                         HorizontalLayout {
                             padding-left: 8px;
@@ -296,37 +194,18 @@ export component TileWindow inherits Window {
                 }
             }
 
-            // ===== Markdown body (kind-discriminant renderer) =======
-            // Phase E6 v15 — std-widgets ScrollView (shows visible
-            // scrollbar on overflow). User complaint: "нет скролла".
+            // ===== Markdown body (kind-discriminant renderer) =====
+            // Phase E6 fix — viewport-width and explicit Text width
+            // force `wrap: word-wrap` to actually engage. Without the
+            // viewport-width hint, ScrollView lets content render
+            // unconstrained → long Russian paragraphs overflowed the
+            // dark fill area (user complaint "текст выходит за края").
             ScrollView {
                 vertical-stretch: 1;
                 horizontal-stretch: 1;
                 viewport-width: self.width;
-
                 VerticalLayout {
-                    padding-left: 14px;
-                    padding-right: 14px;
-                    padding-top: 8px;
-                    padding-bottom: 8px;
-                    spacing: 6px;
-
-                    // Empty-state placeholder
-                    if root.blocks.length == 0: Rectangle {
-                        HorizontalLayout {
-                            alignment: center;
-                            padding: 18px;
-                            Text {
-                                text: root.ai-status != ""
-                                    ? "⏳  " + root.ai-status
-                                    : "(no content yet)";
-                                font-size: Theme.fs-12;
-                                color: Theme.text-mute;
-                                horizontal-alignment: center;
-                            }
-                        }
-                    }
-
+                    spacing: 4px;
                     for block[i] in root.blocks: Rectangle {
                         background: transparent;
                         horizontal-stretch: 1;
@@ -334,75 +213,75 @@ export component TileWindow inherits Window {
                         // H1
                         if block.kind == 1 : Text {
                             text: block.text;
-                            font-size: Theme.fs-14;
+                            font-size: 18px;
                             font-weight: 700;
-                            color: Theme.text;
+                            color: #e8e8ec;
                             wrap: word-wrap;
                             width: parent.width;
                         }
                         // H2
                         if block.kind == 2 : Text {
                             text: block.text;
-                            font-size: Theme.fs-13;
+                            font-size: 15px;
                             font-weight: 700;
-                            color: Theme.text;
+                            color: #c8c8cc;
                             wrap: word-wrap;
                             width: parent.width;
                         }
                         // H3
                         if block.kind == 3 : Text {
                             text: block.text;
-                            font-size: Theme.fs-13;
-                            font-weight: 600;
-                            color: Theme.text-mute;
+                            font-size: 13px;
+                            font-weight: 700;
+                            color: #a8a8ac;
                             wrap: word-wrap;
                             width: parent.width;
                         }
                         // Paragraph
                         if block.kind == 0 : Text {
                             text: block.text;
-                            font-size: Theme.fs-13;
-                            color: Theme.text;
+                            font-size: 12px;
+                            color: #c8c8cc;
                             wrap: word-wrap;
                             width: parent.width;
                         }
                         // Bullet
                         if block.kind == 4 : HorizontalLayout {
-                            padding-left: 4px;
-                            spacing: 8px;
+                            padding-left: 12px;
+                            spacing: 6px;
                             Text {
                                 text: "•";
-                                font-size: Theme.fs-13;
-                                color: root.accent;
+                                font-size: 12px;
+                                color: #6cf;
                                 width: 10px;
                             }
                             Text {
                                 text: block.text;
-                                font-size: Theme.fs-13;
-                                color: Theme.text;
+                                font-size: 12px;
+                                color: #c8c8cc;
                                 wrap: word-wrap;
                                 horizontal-stretch: 1;
                             }
                         }
-                        // Code block — neutral charcoal (not kind-tinted).
+                        // Code block
                         if block.kind == 5 : Rectangle {
-                            background: Theme.bg-0.with-alpha(0.6);
-                            border-radius: Theme.r-2;
+                            background: #0d0f15;
+                            border-radius: 4px;
                             border-width: 1px;
-                            border-color: Theme.border-soft;
+                            border-color: #2a2c3a;
                             VerticalLayout {
                                 padding: 8px;
-                                spacing: 2px;
                                 if block.lang != "" : Text {
                                     text: block.lang;
                                     font-size: 9px;
-                                    font-family: "Consolas";
-                                    color: Theme.text-dim;
+                                    color: #666;
                                 }
+                                // Code blocks need horizontal scroll for
+                                // long lines (Consolas) — keep no-wrap.
                                 Text {
                                     text: block.text;
-                                    font-size: Theme.fs-12;
-                                    color: Theme.text;
+                                    font-size: 11px;
+                                    color: #d8e8f8;
                                     font-family: "Consolas";
                                     wrap: word-wrap;
                                     width: parent.width;
@@ -411,7 +290,7 @@ export component TileWindow inherits Window {
                         }
                         // HR
                         if block.kind == 6 : Rectangle {
-                            background: Theme.border-soft;
+                            background: #2a2c3a;
                             height: 1px;
                         }
                     }
