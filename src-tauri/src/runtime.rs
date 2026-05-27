@@ -1229,243 +1229,25 @@ async fn maybe_spawn_tile(
 // Used by 7 sites here + 2 sites in lib.rs (DetectorTestResult mapping).
 pub use overlay_backend::runtime::Trigger;
 
-/// Cheap noise filter for Whisper artefacts. We accept the line if:
-/// - At least 2 word-like tokens (3+ chars each)
-/// - At least 60% alpha/digit characters (rest = spaces/punct)
-/// - Not a single repeated word ("ага ага ага ага")
-///
-/// Cyrillic counts via char.is_alphanumeric().
-fn looks_like_real_speech(text: &str) -> bool {
-    let total: usize = text.chars().count();
-    if total == 0 {
-        return false;
-    }
-    let alnum: usize = text.chars().filter(|c| c.is_alphanumeric()).count();
-    if (alnum as f32 / total as f32) < 0.60 {
-        return false;
-    }
-    let tokens: Vec<&str> = text
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|s| s.chars().count() >= 3)
-        .collect();
-    if tokens.len() < 2 {
-        return false;
-    }
-    // Single-word echo? ("угу угу угу угу")
-    let first = tokens[0].to_lowercase();
-    if tokens.iter().all(|t| t.to_lowercase() == first) {
-        return false;
-    }
-    true
-}
+// looks_like_real_speech moved to overlay_backend::runtime during
+// Phase E4 (shared with Slint binary auto-detector). Re-export
+// keeps the local `cargo test` calls below compiling unchanged.
+pub use overlay_backend::runtime::looks_like_real_speech;
 
 // build_auto_tile_prompts moved to overlay_backend::runtime during
 // Phase B2 port #2. Used by 7 sites in runtime.rs across the auto-
 // detector + reask + manual-ask paths; reused verbatim post-port.
 pub use overlay_backend::runtime::build_auto_tile_prompts;
 
-/// Drop common conversational filler prefixes ("а ", "ну ", "вот ", "так ", "и ")
-/// from the start of a sentence so the interrogative-test sees the meaningful
-/// first word. "А расскажи как..." → "расскажи как..." (triggers).
-/// Strips up to 3 stacked fillers and any leading punctuation.
-fn strip_filler_prefix(lower: &str) -> String {
-    // Word-only fillers (no trailing space). Boundary is detected by the
-    // next char being non-alnum — handles "вот," / "так." / "ну!" etc.
-    const FILLERS: &[&str] = &[
-        "а",
-        "ну",
-        "вот",
-        "так",
-        "и",
-        "ладно",
-        "хорошо",
-        "слушай",
-        "ой",
-        "эх",
-        "ага",
-        "угу",
-        "да",
-        "ок",
-        "о'кей",
-        "окей",
-    ];
-    let trim_punct = |s: &str| -> String {
-        s.trim_start_matches(|c: char| !c.is_alphanumeric() && c != '?')
-            .to_string()
-    };
-    let mut s = trim_punct(lower);
-    for _ in 0..4 {
-        let mut matched = false;
-        for f in FILLERS {
-            if let Some(rest) = s.strip_prefix(f) {
-                // Word boundary: filler must be followed by non-alnum
-                // (space, comma, punct) or end. Avoids matching "вот"
-                // as prefix of "воткни".
-                let next_is_alnum = rest.chars().next().is_some_and(|c| c.is_alphanumeric());
-                if !next_is_alnum {
-                    s = trim_punct(rest);
-                    matched = true;
-                    break;
-                }
-            }
-        }
-        if !matched {
-            break;
-        }
-    }
-    s
-}
+// strip_filler_prefix moved to overlay_backend::runtime during
+// Phase E4. Re-export keeps any callers compiling.
+pub use overlay_backend::runtime::strip_filler_prefix;
 
-pub fn detect_trigger(text: &str, keyword_list: &str) -> Option<Trigger> {
-    let trimmed = text.trim();
-    if trimmed.len() < 5 {
-        return None;
-    }
-    // Whisper artefact filter — if the transcript is mostly weird characters
-    // or has too few real word-like tokens, skip to avoid spam AI calls.
-    if !looks_like_real_speech(trimmed) {
-        log::debug!(
-            "detector noise-filter: '{}'",
-            trimmed.chars().take(60).collect::<String>()
-        );
-        return None;
-    }
-    let lower = trimmed.to_lowercase();
-
-    // 1. '?' ANYWHERE — Whisper rarely puts it in speech but if it does we
-    // definitely want it. BUT only if utterance has enough content:
-    // single-word + ? ("Kubernetes?") and 2-word fragments are usually
-    // restatements/clarifications, not real questions. Min 4 words skips
-    // those without hurting recall on real interview questions
-    // (typical ≥6 words: "Расскажи как ты настраивал X?").
-    // Live-test 2026-05-25: "Какой-нибудь Kubernetes?" fired tile —
-    // user complained. This guard suppresses without dropping the
-    // long-form "?" questions detector v3 was already catching.
-    if trimmed.contains('?') {
-        let word_count = lower.split_whitespace().count();
-        if word_count >= 4 {
-            return Some(Trigger::Question(trimmed.to_string()));
-        } else {
-            log::debug!(
-                "detector skip short-? utterance ({} words): '{}'",
-                word_count,
-                trimmed.chars().take(80).collect::<String>()
-            );
-        }
-    }
-
-    // 2. Sentence-leading interrogatives + request verbs.
-    //
-    // CRITICAL: live test showed " что " / " когда " / " как " in the MIDDLE
-    // of a sentence are usually conjunctions ("я знаю, ЧТО Y", "когда он
-    // загрузился — отдаёт параметры", "не понятно, КАК это работает") —
-    // not questions. Matching them anywhere caused ~50% false-positive rate.
-    //
-    // New rule: interrogative pronouns must be the FIRST word (with optional
-    // filler prefix like "А "). Request verbs ("расскажи", "опиши") can be
-    // first or follow a short filler ("А расскажи"). Hypothetical scenarios
-    // ("допустим", "представь") same. Question marks anywhere still trigger
-    // (handled above in step 1).
-    const SENTENCE_LEADING: &[&str] = &[
-        // Interrogative pronouns — must be at start (after optional ", А ").
-        // NOTE: "когда" intentionally EXCLUDED — even at sentence start it's
-        // almost always a temporal subordinate conjunction in spoken Russian
-        // ("Когда X, Y" = "When X, Y" — statement). Real "Когда?" questions
-        // almost always end in '?' and are caught by step 1.
-        // "где" / "кто" / "чей" similarly excluded — high FP-to-TP ratio.
-        "что ",
-        "как ",
-        "почему ",
-        "зачем ",
-        "какой ",
-        "какая ",
-        "какое ",
-        "какие ",
-        "сколько ",
-        "чем ",
-        // Request verbs — interview pattern
-        "расскажи",
-        "опиши",
-        "поясни",
-        "объясни",
-        "поделись",
-        "приведи пример",
-        "приведите пример",
-        // Hypothetical scenario openers
-        "допустим",
-        "представь",
-        "представим",
-        "если у тебя",
-        "если у вас",
-        "с чего",
-        "с какого",
-        // Meta-question openers — interviewer signalling a question is coming
-        // ("давай спросим у тебя…", "давай обсудим…", "поговорим про…").
-        // Task #103 followup — these were missed before detector v4.
-        "давай спросим",
-        "давай обсудим",
-        "давай поговорим",
-        "давай разберём",
-        "давай разберем",
-        "поговорим про",
-        "поговорим о",
-        "обсудим",
-        // English-mixed (interviews often switch). Include request verbs
-        // like "tell me" — many interviewers code-switch mid-sentence.
-        "how ",
-        "what ",
-        "why ",
-        "explain ",
-        "describe ",
-        "tell me ",
-    ];
-    // Strip optional filler prefix words ("а", "ну", "вот", "так", "и")
-    // before checking — they're common conversational starters before a
-    // real question.
-    let stripped = strip_filler_prefix(&lower);
-    for trigger in SENTENCE_LEADING {
-        if stripped.starts_with(trigger) {
-            return Some(Trigger::Question(trimmed.to_string()));
-        }
-    }
-
-    // 3. Keyword match (case-insensitive whole-word, alnum boundary).
-    // Optimisation (2nd-pass S2): tokenise `lower` ONCE into a HashSet,
-    // then O(1) lookup per keyword. Previously we re-split `lower` for
-    // every keyword in the user's 250+ token list → O(N·M) per line.
-    // With 250 keywords × 8 transcript lines/sec = 2000 splits/sec on
-    // the audio hot path. New layout: split once, 250 hashset lookups.
-    let tokens: std::collections::HashSet<&str> = lower
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|s| !s.is_empty())
-        .collect();
-    for kw in keyword_list.split_whitespace() {
-        // Cheap path first: if the original keyword (already lowercased
-        // by the caller's source list, but we don't enforce that) is
-        // ASCII-lowercase already, skip the to_lowercase() allocation.
-        let kw_lower_owned;
-        let kw_lookup: &str = if kw.bytes().all(|b| !b.is_ascii_uppercase()) {
-            kw
-        } else {
-            kw_lower_owned = kw.to_lowercase();
-            // Safety: extending the borrow this way requires a leak; instead
-            // do the lookup inside the else branch.
-            if tokens.contains(kw_lower_owned.as_str()) {
-                return Some(Trigger::Keyword(kw.to_string(), trimmed.to_string()));
-            }
-            continue;
-        };
-        if tokens.contains(kw_lookup) {
-            return Some(Trigger::Keyword(kw.to_string(), trimmed.to_string()));
-        }
-    }
-
-    log::debug!(
-        "detector skipped: '{}'",
-        trimmed.chars().take(80).collect::<String>()
-    );
-    None
-}
+// detect_trigger moved to overlay_backend::runtime during Phase E4
+// so both binaries (src-tauri React stack + Slint binary auto-
+// detector inside transcript_forwarder) share the same rules.
+// Re-export keeps existing callers + tests below compiling.
+pub use overlay_backend::runtime::detect_trigger;
 
 /// F3 Reask: thin Tauri shim around `overlay_backend::runtime::reask_last`.
 ///

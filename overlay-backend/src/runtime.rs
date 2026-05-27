@@ -271,6 +271,205 @@ pub fn build_auto_tile_prompts(
     (system_prompt, user_prompt)
 }
 
+// ===== Auto-tile trigger detector (moved Phase E4 — was src-tauri-private) =====
+
+/// Cheap noise filter for Whisper artefacts. Accept the line iff:
+/// - At least 2 word-like tokens (3+ chars each).
+/// - At least 60% alphanumeric characters (rest = spaces/punct).
+/// - Not a single repeated word ("ага ага ага ага").
+///
+/// Cyrillic counts via `char::is_alphanumeric()`.
+#[must_use]
+pub fn looks_like_real_speech(text: &str) -> bool {
+    let total: usize = text.chars().count();
+    if total == 0 {
+        return false;
+    }
+    let alnum: usize = text.chars().filter(|c| c.is_alphanumeric()).count();
+    if (alnum as f32 / total as f32) < 0.60 {
+        return false;
+    }
+    let tokens: Vec<&str> = text
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|s| s.chars().count() >= 3)
+        .collect();
+    if tokens.len() < 2 {
+        return false;
+    }
+    // Single-word echo? ("угу угу угу угу")
+    let first = tokens[0].to_lowercase();
+    if tokens.iter().all(|t| t.to_lowercase() == first) {
+        return false;
+    }
+    true
+}
+
+/// Drop common conversational filler prefixes ("а ", "ну ", "вот ",
+/// "так ", "и ") from the start of a sentence so the interrogative-
+/// test sees the meaningful first word. "А расскажи как..." →
+/// "расскажи как..." (triggers). Strips up to 4 stacked fillers and
+/// any leading punctuation.
+#[must_use]
+pub fn strip_filler_prefix(lower: &str) -> String {
+    const FILLERS: &[&str] = &[
+        "а",
+        "ну",
+        "вот",
+        "так",
+        "и",
+        "ладно",
+        "хорошо",
+        "слушай",
+        "ой",
+        "эх",
+        "ага",
+        "угу",
+        "да",
+        "ок",
+        "о'кей",
+        "окей",
+    ];
+    let trim_punct = |s: &str| -> String {
+        s.trim_start_matches(|c: char| !c.is_alphanumeric() && c != '?')
+            .to_string()
+    };
+    let mut s = trim_punct(lower);
+    for _ in 0..4 {
+        let mut matched = false;
+        for f in FILLERS {
+            if let Some(rest) = s.strip_prefix(f) {
+                // Word boundary: filler must be followed by non-alnum
+                // (space, comma, punct) or end. Avoids matching "вот"
+                // as prefix of "воткни".
+                let next_is_alnum = rest.chars().next().is_some_and(char::is_alphanumeric);
+                if !next_is_alnum {
+                    s = trim_punct(rest);
+                    matched = true;
+                    break;
+                }
+            }
+        }
+        if !matched {
+            break;
+        }
+    }
+    s
+}
+
+/// Auto-tile trigger detector. Returns `Some(Trigger)` if the
+/// transcript line looks like a question OR contains a configured
+/// keyword. Moved from src-tauri Phase E4 so both binaries share
+/// detection rules.
+///
+/// Pattern recognition:
+/// 1. '?' anywhere — must have ≥4 words (short "Kubernetes?" is
+///    a restatement, not a question).
+/// 2. Sentence-leading interrogatives / request verbs (Russian +
+///    English mix; "когда"/"где"/"кто" deliberately excluded due
+///    to high false-positive rate as conjunctions).
+/// 3. Keyword match against `keyword_list` (whitespace-split,
+///    case-insensitive, whole-word via alphanumeric tokenization).
+#[must_use]
+pub fn detect_trigger(text: &str, keyword_list: &str) -> Option<Trigger> {
+    let trimmed = text.trim();
+    if trimmed.len() < 5 {
+        return None;
+    }
+    if !looks_like_real_speech(trimmed) {
+        log::debug!(
+            "detector noise-filter: '{}'",
+            trimmed.chars().take(60).collect::<String>()
+        );
+        return None;
+    }
+    let lower = trimmed.to_lowercase();
+
+    // 1. '?' ANYWHERE — but only if utterance has ≥4 words.
+    if trimmed.contains('?') {
+        let word_count = lower.split_whitespace().count();
+        if word_count >= 4 {
+            return Some(Trigger::Question(trimmed.to_string()));
+        }
+        log::debug!(
+            "detector skip short-? utterance ({} words): '{}'",
+            word_count,
+            trimmed.chars().take(80).collect::<String>()
+        );
+    }
+
+    // 2. Sentence-leading interrogatives + request verbs.
+    const SENTENCE_LEADING: &[&str] = &[
+        "что ",
+        "как ",
+        "почему ",
+        "зачем ",
+        "какой ",
+        "какая ",
+        "какое ",
+        "какие ",
+        "сколько ",
+        "чем ",
+        "расскажи",
+        "опиши",
+        "поясни",
+        "объясни",
+        "поделись",
+        "приведи пример",
+        "приведите пример",
+        "допустим",
+        "представь",
+        "представим",
+        "если у тебя",
+        "если у вас",
+        "с чего",
+        "с какого",
+        "давай спросим",
+        "давай обсудим",
+        "давай поговорим",
+        "давай разберём",
+        "давай разберем",
+        "поговорим про",
+        "поговорим о",
+        "обсудим",
+        "how ",
+        "what ",
+        "why ",
+        "explain ",
+        "describe ",
+        "tell me ",
+    ];
+    let stripped = strip_filler_prefix(&lower);
+    for trigger in SENTENCE_LEADING {
+        if stripped.starts_with(trigger) {
+            return Some(Trigger::Question(trimmed.to_string()));
+        }
+    }
+
+    // 3. Keyword match — tokenize lower once, hashset lookup per kw.
+    let tokens: std::collections::HashSet<&str> = lower
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|s| !s.is_empty())
+        .collect();
+    for kw in keyword_list.split_whitespace() {
+        if kw.bytes().all(|b| !b.is_ascii_uppercase()) {
+            if tokens.contains(kw) {
+                return Some(Trigger::Keyword(kw.to_string(), trimmed.to_string()));
+            }
+        } else {
+            let kw_lower = kw.to_lowercase();
+            if tokens.contains(kw_lower.as_str()) {
+                return Some(Trigger::Keyword(kw.to_string(), trimmed.to_string()));
+            }
+        }
+    }
+
+    log::debug!(
+        "detector skipped: '{}'",
+        trimmed.chars().take(80).collect::<String>()
+    );
+    None
+}
+
 // ===== F3 Reask (Phase B2 port #2) =====
 
 /// Snapshot of `SharedRuntime` state the ported `reask_last` reads.

@@ -717,10 +717,19 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                 });
             } else {
-                // Stopping — snapshot transcript + abort tasks.
-                // Phase E5 will feed snapshot to run_post_meeting_debrief.
+                // Stopping — snapshot transcript + abort tasks + fire
+                // Phase E5 post-meeting debrief if the gate allows.
                 let rt_c = rt_for_timer.clone();
                 let events_c = events_for_timer.clone();
+                let cfg_c = cfg_for_timer.clone();
+                let rt_handle_c = rt_handle_for_timer.clone();
+                let session_secs_snapshot = {
+                    let st = match s.lock() {
+                        Ok(g) => g,
+                        Err(p) => p.into_inner(),
+                    };
+                    st.session_secs
+                };
                 rt_handle_for_timer.spawn(async move {
                     let snapshot = slint_session::stop_session(rt_c);
                     eprintln!(
@@ -728,6 +737,15 @@ fn main() -> Result<(), slint::PlatformError> {
                         snapshot.len()
                     );
                     events_c.emit("session:stopped", serde_json::Value::Null);
+                    // Phase E5 — debrief (gated: opt-in + ≥30s +
+                    // ≥5 mic lines + non-empty AI bearer).
+                    slint_session::maybe_run_debrief(
+                        events_c,
+                        cfg_c,
+                        snapshot,
+                        session_secs_snapshot * 1000,
+                        &rt_handle_c,
+                    );
                 });
             }
         });
