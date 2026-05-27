@@ -11,4 +11,5 @@ pub mod app_state;
 pub mod markdown;
 pub mod runtime_state;
 pub mod slint_events;
+pub mod slint_session;
 pub mod win32;
