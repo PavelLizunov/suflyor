@@ -20,8 +20,8 @@ use slint_replay::runtime_state::{shared_runtime, SharedSlintRuntime};
 use slint_replay::slint_events::{SlintEvents, SlintUiBridge};
 use slint_replay::slint_session;
 use slint_replay::win32::{
-    enum_monitors, get_window_rect, grab_hwnd, make_transparent_overlay, move_window_pos_only,
-    pick_monitor, set_always_on_top, set_stealth,
+    enum_monitors, get_window_rect, grab_hwnd, make_transparent_overlay, make_transparent_tile,
+    move_window_pos_only, pick_monitor, set_always_on_top, set_stealth, start_window_drag,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -778,6 +778,7 @@ fn main() -> Result<(), slint::PlatformError> {
             // poll-Timer is single-threaded (UI thread).
             let seq = TILE_DISPLAY_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
             tile.set_sequence(seq as i32);
+            wire_tile_drag(&tile);
             tile.set_source_label(SharedString::from(format!(
                 "{} · {}",
                 req.kind.as_journal_tag(),
@@ -1126,6 +1127,7 @@ fn main() -> Result<(), slint::PlatformError> {
             tile.set_sequence(seq as i32);
             tile.set_tile_title(SharedString::from(question.clone()));
             tile.set_source_label(SharedString::from("ai · asking…"));
+            wire_tile_drag(&tile);
 
             // Initial placeholder body while the AI call is in flight.
             let placeholder = vec![MarkdownBlock {
@@ -1617,6 +1619,7 @@ fn fire_f9_ask(
     tile.set_sequence(seq as i32);
     tile.set_tile_title(SharedString::from("F9 ask · live"));
     tile.set_source_label(SharedString::from("ai · asking…"));
+    wire_tile_drag(&tile);
     let placeholder = vec![MarkdownBlock {
         kind: markdown::kind::PARAGRAPH,
         text: SharedString::from("⏳ Asking AI…"),
@@ -1782,6 +1785,25 @@ static TILE_SLOT_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::At
 /// session. Reset only at process restart.
 static TILE_DISPLAY_SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
+/// Wire the chrome-row drag callback on a tile so the user can move
+/// it by pressing+dragging the title area. Win32 system-drag handles
+/// the actual cursor tracking + repaint. Phase E6 — fixes user
+/// complaint "тайлы нельзя двигать".
+fn wire_tile_drag(tile: &TileWindow) {
+    let weak = tile.as_weak();
+    tile.on_drag_start_requested(move || {
+        let Some(t) = weak.upgrade() else {
+            return;
+        };
+        let Ok(hwnd) = grab_hwnd(t.window()) else {
+            return;
+        };
+        if let Err(e) = start_window_drag(hwnd) {
+            eprintln!("[overlay-host] start_window_drag failed: {e:#}");
+        }
+    });
+}
+
 /// Apply transparency + position tile on the appropriate monitor.
 ///
 /// Phase E6 fix v2 (2026-05-27): previous "right-edge stack" math
@@ -1799,7 +1821,14 @@ fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
             return;
         };
 
-        let _ = make_transparent_overlay(hwnd);
+        // Phase E6 fix v4 — use make_transparent_tile (no WS_EX_
+        // TRANSPARENT) so tiles accept clicks for buttons + drag.
+        // Previous make_transparent_overlay set WS_EX_TRANSPARENT
+        // which made every click pass through to underlying windows
+        // (Explorer/desktop), silently swallowing every chrome-row
+        // press → drag-to-move never fired. Same root cause as user
+        // complaint "тайлы нельзя двигать".
+        let _ = make_transparent_tile(hwnd);
 
         // Phase E6 fix v3 — read the ACTUAL physical window size that
         // Slint produced (HiDPI-aware), then place using that real
@@ -1926,6 +1955,7 @@ fn open_palette(
             tile.set_sequence(seq as i32);
             tile.set_tile_title(SharedString::from(result.title.to_string()));
             tile.set_source_label(SharedString::from(format!("kb · {}", result.source)));
+            wire_tile_drag(&tile);
             // Phase C — wire to real kb::get for the full body. Falls
             // back to the preview if the key isn't found (defensive;
             // shouldn't happen since result came from kb::search).

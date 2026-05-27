@@ -69,8 +69,29 @@ pub fn grab_hwnd(window: &slint::Window) -> Result<HWND, Box<dyn std::error::Err
 /// this yields a true transparent overlay on Windows 11. Confirmed
 /// visually 2026-05-27.
 pub fn make_transparent_overlay(hwnd: HWND) -> Result<(), Box<dyn std::error::Error>> {
+    apply_transparency(hwnd, /* click_through */ true)
+}
+
+/// Apply the same transparency wiring as `make_transparent_overlay`
+/// but WITHOUT `WS_EX_TRANSPARENT`, so the window accepts clicks +
+/// drag interaction. Use for tile windows where the user needs to
+/// click buttons (pin, close) and drag the chrome row. Phase E6 —
+/// fixes user complaint "тайлы нельзя двигать": tiles inherited
+/// click-through from make_transparent_overlay and silently
+/// swallowed every TouchArea press.
+pub fn make_transparent_tile(hwnd: HWND) -> Result<(), Box<dyn std::error::Error>> {
+    apply_transparency(hwnd, /* click_through */ false)
+}
+
+fn apply_transparency(hwnd: HWND, click_through: bool) -> Result<(), Box<dyn std::error::Error>> {
     let before = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
-    let added = WS_EX_TRANSPARENT.0 as isize | WS_EX_TOOLWINDOW.0 as isize;
+    let added = if click_through {
+        WS_EX_TRANSPARENT.0 as isize | WS_EX_TOOLWINDOW.0 as isize
+    } else {
+        // Tiles want WS_EX_TOOLWINDOW (no taskbar entry) but NOT
+        // WS_EX_TRANSPARENT (otherwise clicks pass through).
+        WS_EX_TOOLWINDOW.0 as isize
+    };
     unsafe {
         SetWindowLongPtrW(hwnd, GWL_EXSTYLE, before | added);
     }
@@ -261,6 +282,28 @@ pub fn get_window_rect(hwnd: HWND) -> Result<(i32, i32, i32, i32), Box<dyn std::
         GetWindowRect(hwnd, &mut r)?;
     }
     Ok((r.left, r.top, r.right - r.left, r.bottom - r.top))
+}
+
+/// Start a Windows system-drag on a frameless window. Releases any
+/// mouse capture then sends WM_NCLBUTTONDOWN with HTCAPTION wParam —
+/// Windows then handles the drag natively (smooth, no JS-side
+/// cursor tracking needed). Called from the tile's title-bar
+/// TouchArea on pointer-down. Phase E6 fix for user complaint
+/// "тайлы нельзя двигать".
+pub fn start_window_drag(hwnd: HWND) -> Result<(), Box<dyn std::error::Error>> {
+    use windows::Win32::Foundation::{LPARAM, WPARAM};
+    use windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
+    use windows::Win32::UI::WindowsAndMessaging::{SendMessageW, HTCAPTION, WM_NCLBUTTONDOWN};
+    unsafe {
+        ReleaseCapture()?;
+        SendMessageW(
+            hwnd,
+            WM_NCLBUTTONDOWN,
+            Some(WPARAM(HTCAPTION as usize)),
+            Some(LPARAM(0)),
+        );
+    }
+    Ok(())
 }
 
 /// Pick a target monitor for a new tile. Mirrors the heuristic in

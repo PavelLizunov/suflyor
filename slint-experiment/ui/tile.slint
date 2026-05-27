@@ -33,6 +33,10 @@ export component TileWindow inherits Window {
 
     callback close-clicked();
     callback pin-clicked();
+    // Phase E6 — drag-to-move via Win32 system-drag. Rust handler
+    // calls win32::start_window_drag(hwnd) which sends
+    // WM_NCLBUTTONDOWN/HTCAPTION; Windows handles the rest.
+    callback drag-start-requested();
 
     Rectangle {
         background: #14161eea;
@@ -45,45 +49,63 @@ export component TileWindow inherits Window {
             spacing: 6px;
 
             // ===== Chrome row =====
-            HorizontalLayout {
-                spacing: 6px;
-                Text {
-                    text: @tr("#{}  {}", root.sequence, root.tile-title);
-                    font-size: 12px;
-                    font-weight: 700;
-                    color: #e8e8ec;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-                Rectangle { horizontal-stretch: 1; }
-                Rectangle {
-                    background: transparent;
-                    border-color: #3a3c44;
-                    border-width: 1px;
-                    border-radius: 8px;
-                    height: 20px;
-                    horizontal-stretch: 0;
-                    HorizontalLayout {
-                        padding-left: 6px;
-                        padding-right: 6px;
-                        Text {
-                            text: root.source-label;
-                            font-size: 10px;
-                            color: #999;
-                            vertical-alignment: center;
+            // Phase E6 — wrap in a Rectangle with TouchArea so the
+            // chrome row acts as a drag handle (Win32 system-drag).
+            // Buttons inside still fire their own clicked callbacks
+            // because TouchArea propagates to children when clicked
+            // is the active intent. Pointer-down on the row itself
+            // fires the drag-start-requested callback which moves
+            // the whole tile window.
+            Rectangle {
+                height: 28px;
+                drag-area := TouchArea {
+                    pointer-event(ev) => {
+                        if (ev.button == PointerEventButton.left
+                            && ev.kind == PointerEventKind.down) {
+                            root.drag-start-requested();
                         }
                     }
                 }
-                // Phase E6 fix: Unicode glyphs 📌/✕ render as missing-
-                // glyph boxes on some Slint+skia font fallbacks. Use
-                // ASCII text labels that any font renders cleanly.
-                Button {
-                    text: "pin";
-                    clicked => { root.pin-clicked(); }
-                }
-                Button {
-                    text: "X";
-                    clicked => { root.close-clicked(); }
+                HorizontalLayout {
+                    spacing: 6px;
+                    Text {
+                        text: @tr("#{}  {}", root.sequence, root.tile-title);
+                        font-size: 12px;
+                        font-weight: 700;
+                        color: #e8e8ec;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    Rectangle {
+                        background: transparent;
+                        border-color: #3a3c44;
+                        border-width: 1px;
+                        border-radius: 8px;
+                        height: 20px;
+                        horizontal-stretch: 0;
+                        HorizontalLayout {
+                            padding-left: 6px;
+                            padding-right: 6px;
+                            Text {
+                                text: root.source-label;
+                                font-size: 10px;
+                                color: #999;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                    // Phase E6 fix: Unicode glyphs 📌/✕ render as missing-
+                    // glyph boxes on some Slint+skia font fallbacks. Use
+                    // ASCII text labels that any font renders cleanly.
+                    Button {
+                        text: "pin";
+                        clicked => { root.pin-clicked(); }
+                    }
+                    Button {
+                        text: "X";
+                        clicked => { root.close-clicked(); }
+                    }
                 }
             }
 
