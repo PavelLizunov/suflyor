@@ -56,6 +56,9 @@ raw-window-handle = "0.6"
 windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Controls",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
 ] }
 
 # Phase 0.5 MCP spike: per docs.rs/i-slint-backend-testing 1.16, the

@@ -21,6 +21,12 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use slint::ComponentHandle;
 use std::time::Duration;
 use windows::Win32::Foundation::HWND;
+use windows::Win32::Graphics::Dwm::{
+    DwmEnableBlurBehindWindow, DwmExtendFrameIntoClientArea, DWM_BB_BLURREGION, DWM_BB_ENABLE,
+    DWM_BLURBEHIND,
+};
+use windows::Win32::Graphics::Gdi::{CreateRectRgn, DeleteObject};
+use windows::Win32::UI::Controls::MARGINS;
 use windows::Win32::UI::WindowsAndMessaging::{
     GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_TOOLWINDOW,
     WS_EX_TRANSPARENT,
@@ -111,13 +117,61 @@ fn apply_and_log(hwnd: HWND) {
     );
 
     if transparent && toolwindow {
-        eprintln!(
-            "[overlay-spike] SUCCESS: TRANSPARENT + TOOLWINDOW flags stuck. \
-             Visible transparency depends on Slint's winit-transparent wiring (see screenshot)."
-        );
+        eprintln!("[overlay-spike] EX flags stuck. Trying DWM transparency wiring...");
     } else {
-        eprintln!("[overlay-spike] FAILURE: required flags did not apply.");
+        eprintln!("[overlay-spike] FAILURE: required EX flags did not apply.");
+        return;
     }
+
+    // Phase 1 Day 1 transparency wiring spike — two attempts:
+    //
+    // (a) DwmExtendFrameIntoClientArea with margins=(-1,-1,-1,-1) — extends
+    //     the DWM-composited frame across the entire client area, which on
+    //     Windows 10+ enables per-pixel alpha for the window IF the window
+    //     content has an alpha channel.
+    // (b) DwmEnableBlurBehindWindow with hRgnBlur = empty region — tells
+    //     DWM to composite the window with per-pixel alpha (instead of the
+    //     default opaque GDI background).
+    //
+    // Neither succeeds if Slint's winit window was created without
+    // `with_transparent(true)`. We try both and report visually.
+
+    let margins = MARGINS {
+        cxLeftWidth: -1,
+        cxRightWidth: -1,
+        cyTopHeight: -1,
+        cyBottomHeight: -1,
+    };
+    unsafe {
+        match DwmExtendFrameIntoClientArea(hwnd, &margins) {
+            Ok(()) => eprintln!("[overlay-spike] DwmExtendFrameIntoClientArea: OK"),
+            Err(e) => eprintln!("[overlay-spike] DwmExtendFrameIntoClientArea failed: {e:?}"),
+        }
+    }
+
+    // Empty region = transparent "blur" zone, which in practice enables
+    // per-pixel alpha without applying actual blur. The trick fails on
+    // Windows 11 with default DWM settings (Acrylic) and you may see a
+    // light tint, but it's worth trying.
+    let h_rgn = unsafe { CreateRectRgn(0, 0, -1, -1) };
+    let bb = DWM_BLURBEHIND {
+        dwFlags: DWM_BB_ENABLE | DWM_BB_BLURREGION,
+        fEnable: true.into(),
+        hRgnBlur: h_rgn,
+        fTransitionOnMaximized: false.into(),
+    };
+    unsafe {
+        match DwmEnableBlurBehindWindow(hwnd, &bb) {
+            Ok(()) => eprintln!("[overlay-spike] DwmEnableBlurBehindWindow: OK"),
+            Err(e) => eprintln!("[overlay-spike] DwmEnableBlurBehindWindow failed: {e:?}"),
+        }
+        let _ = DeleteObject(h_rgn.into());
+    }
+
+    eprintln!(
+        "[overlay-spike] Transparency wiring attempted. Check screenshot — \
+         if window shows desktop through unfilled regions, success."
+    );
 }
 
 /// Extract a raw Win32 HWND from a Slint window. Requires the
