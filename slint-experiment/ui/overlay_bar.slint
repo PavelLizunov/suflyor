@@ -97,8 +97,9 @@ export component OverlayBarWindow inherits Window {
     // Phase E6 v10 — widened from 720 to 980 so new chip labels
     // (💡 tips, ⭐ bm, 🎯 stealth, 🔥 auto, ⚙ settings, X quit) all
     // fit without truncating the rightmost (X quit) chip.
+    // Phase E6 v11 — height bumped 56 → 86 to fit live transcript row.
     preferred-width: 980px;
-    preferred-height: 56px;
+    preferred-height: 86px;
     min-width: 700px;
 
     // Status pill text (idle / recording / etc).
@@ -129,6 +130,17 @@ export component OverlayBarWindow inherits Window {
     // cfg.auto_tile_every_line; this just surfaces the switch.
     in-out property <bool> aggressive-active: false;
 
+    // Phase E6 v11 — live status indicators. `last-transcript-line`
+    // shows the most recent STT output (truncated by Rust to ~120
+    // chars) below the chip row so user sees "транскрипция работает".
+    // `ai-streaming` lights up the AI model chip background pulse so
+    // user sees "AI работает" while a tile is mid-stream.
+    in-out property <string> last-transcript-line: "";
+    in-out property <bool> ai-streaming: false;
+    // Source tag for the transcript line — "mic" / "sys" / "" to
+    // colour-code which side of the conversation it came from.
+    in-out property <string> last-transcript-source: "";
+
     // ===== Callbacks =====
     callback mic-toggle-clicked();
     callback sys-toggle-clicked();
@@ -148,8 +160,12 @@ export component OverlayBarWindow inherits Window {
         border-width: 1px;
         border-color: #2a2c3a;
 
+        VerticalLayout {
+            padding: 6px;
+            spacing: 4px;
+
         HorizontalLayout {
-            padding: 8px;
+            padding: 2px;
             spacing: 6px;
             alignment: start;
 
@@ -265,6 +281,58 @@ export component OverlayBarWindow inherits Window {
                 accent: #ef4444;
                 clicked => { root.quit-clicked(); }
             }
+        }
+
+        // ===== Live status row =====
+        // Phase E6 v11 — bottom row shows last transcript line + AI
+        // streaming indicator. Gives the user immediate visual proof
+        // that STT and AI are working without opening a separate
+        // window or watching a log file.
+        HorizontalLayout {
+            padding-left: 4px;
+            padding-right: 4px;
+            spacing: 6px;
+            // Source tag — "mic" green dot, "sys" cyan dot, "" gray.
+            Rectangle {
+                width: 8px;
+                height: 8px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 4px;
+                background: root.last-transcript-source == "mic"
+                    ? #34d399
+                    : (root.last-transcript-source == "sys" ? #6cf : #3a3c44);
+            }
+            // The live transcript text — elide when too long.
+            Text {
+                text: root.last-transcript-line == ""
+                    ? "🎙 ожидаю транскрипт... (mic/sys → STT)"
+                    : root.last-transcript-line;
+                font-size: 11px;
+                color: root.last-transcript-line == "" ? #6a6c74 : #c8c8cc;
+                overflow: elide;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            // AI streaming pulse — visible when an ask is in flight.
+            Rectangle {
+                width: root.ai-streaming ? 80px : 0px;
+                height: 18px;
+                y: (parent.height - self.height) / 2;
+                background: root.ai-streaming ? #818cf8.with-alpha(0.22) : transparent;
+                border-color: #818cf8;
+                border-width: root.ai-streaming ? 1px : 0px;
+                border-radius: 9px;
+                horizontal-stretch: 0;
+                Text {
+                    visible: root.ai-streaming;
+                    text: "🧠 AI streaming";
+                    font-size: 10px;
+                    color: #818cf8;
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                }
+            }
+        }
         }
     }
 }

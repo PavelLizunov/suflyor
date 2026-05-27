@@ -70,6 +70,11 @@ struct OverlayBarBridge {
     /// Mutex (not RwLock) because only one streaming tile at a time
     /// (rapid-F9 aborts the prior task).
     current_streaming: std::sync::Mutex<Option<StreamingTile>>,
+    /// Phase E6 v11 — count of in-flight AI streams (auto-tiles run
+    /// in parallel even though F9 is exclusive). Bar's ai-streaming
+    /// flag mirrors `counter > 0`. Incremented on AiEvent::Start,
+    /// decremented on AiEvent::Done/Error.
+    ai_in_flight: std::sync::atomic::AtomicI32,
 }
 
 /// Per-streaming-tile state: weak handle + accumulated answer text.
@@ -136,6 +141,7 @@ impl OverlayBarBridge {
                 });
             }
             ai::AiEvent::Done { reason } => {
+                self.dec_ai_in_flight();
                 let weak = {
                     let mut slot = match self.current_streaming.lock() {
                         Ok(g) => g,
@@ -154,6 +160,7 @@ impl OverlayBarBridge {
                 }
             }
             ai::AiEvent::Error { message } => {
+                self.dec_ai_in_flight();
                 let weak = {
                     let mut slot = match self.current_streaming.lock() {
                         Ok(g) => g,
@@ -176,9 +183,47 @@ impl OverlayBarBridge {
                 }
             }
             ai::AiEvent::Start { .. } => {
-                // No-op — we already showed the placeholder body when
-                // the F9 handler synchronously created the tile.
+                // Phase E6 v11 — Start fires once per AI call (F9 +
+                // each auto-tile). Bump the in-flight counter and
+                // light the bar's ai-streaming pulse.
+                self.inc_ai_in_flight();
             }
+        }
+    }
+
+    /// Increment in-flight AI stream count and push the new state to
+    /// the bar's ai-streaming flag (true if > 0).
+    fn inc_ai_in_flight(&self) {
+        let prev = self
+            .ai_in_flight
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if prev == 0 {
+            let weak = self.overlay_weak.clone();
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(o) = weak.upgrade() {
+                    o.set_ai_streaming(true);
+                }
+            });
+        }
+    }
+
+    /// Decrement in-flight AI stream count. Clears the pulse when it
+    /// reaches 0. Saturates at 0 in case Done fires without a paired
+    /// Start (shouldn't happen but defensive).
+    fn dec_ai_in_flight(&self) {
+        let prev = self
+            .ai_in_flight
+            .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        if prev <= 1 {
+            // Clamp to 0 to recover from any unpaired Done/Error.
+            self.ai_in_flight
+                .store(0, std::sync::atomic::Ordering::SeqCst);
+            let weak = self.overlay_weak.clone();
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(o) = weak.upgrade() {
+                    o.set_ai_streaming(false);
+                }
+            });
         }
     }
 }
@@ -236,8 +281,28 @@ impl SlintUiBridge for OverlayBarBridge {
                     o.set_status_text(SharedString::from("🏁 wrapping up"));
                 }
                 "transcript:line" => {
-                    // No overlay-bar UI yet — transcript belongs to
-                    // tile UI (auto-tile in E4).
+                    // Phase E6 v11 — surface the last STT line on the
+                    // bar so user sees "транскрипция работает". User
+                    // complaint: "нет статусов что транскрипция
+                    // работает". Truncate to 120 chars; Slint Text
+                    // elides further at render time.
+                    let text = payload
+                        .get("text")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .trim();
+                    let source = payload
+                        .get("source")
+                        .and_then(|v| v.as_str())
+                        .map(|s| match s {
+                            "Mic" => "mic",
+                            "System" => "sys",
+                            _ => "",
+                        })
+                        .unwrap_or("");
+                    let truncated: String = text.chars().take(120).collect();
+                    o.set_last_transcript_line(SharedString::from(truncated));
+                    o.set_last_transcript_source(SharedString::from(source));
                 }
                 "tile:error" | "tile:rate-limited" | "cost:cap-hit" | "speech:coach" => {
                     // No toast UI yet — log so developer sees these
@@ -380,6 +445,7 @@ fn main() -> Result<(), slint::PlatformError> {
         spawn_tx,
         tile_seq: AtomicU64::new(0),
         current_streaming: std::sync::Mutex::new(None),
+        ai_in_flight: std::sync::atomic::AtomicI32::new(0),
     });
     let events: Arc<dyn RuntimeEvents> = Arc::new(SlintEvents::new(bridge.clone()));
 
