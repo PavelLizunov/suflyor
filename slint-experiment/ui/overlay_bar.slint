@@ -153,12 +153,30 @@ export component OverlayBarWindow inherits Window {
     callback aggressive-toggle-clicked();
     callback open-settings-clicked();
     callback quit-clicked();
+    // Phase E6 v16 — drag the whole bar via system-drag. User: "не
+    // могу нормально передвигать его". Wired to win32::
+    // start_window_drag in Rust, same path as tile drag.
+    callback drag-start-requested();
 
     Rectangle {
         background: #14161eea;
         border-radius: 12px;
         border-width: 1px;
         border-color: #2a2c3a;
+
+        // Phase E6 v16 — background drag handle. Sits behind every
+        // chip's TouchArea so click on chip → chip fires; click on
+        // empty bar background → start system-drag (move window).
+        // Slint TouchArea capture rule: deepest TouchArea with
+        // matching event wins, so child chips always shadow this.
+        bar-drag-area := TouchArea {
+            pointer-event(ev) => {
+                if (ev.button == PointerEventButton.left
+                    && ev.kind == PointerEventKind.down) {
+                    root.drag-start-requested();
+                }
+            }
+        }
 
         VerticalLayout {
             padding: 6px;

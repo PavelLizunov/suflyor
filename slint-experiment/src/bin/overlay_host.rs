@@ -1413,6 +1413,28 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // ===== Bar drag-to-move (Phase E6 v16) =====
+    // Wires the overlay bar's drag-start-requested callback to
+    // win32::start_window_drag, same path used by tiles in
+    // wire_tile_drag. User feedback: "не могу нормально передвигать
+    // его". TouchArea on the bar background fires on empty-space
+    // pointer-down — chip TouchAreas shadow it on their pixels so
+    // chip clicks still work.
+    {
+        let weak_for_drag = overlay.as_weak();
+        overlay.on_drag_start_requested(move || {
+            let Some(o) = weak_for_drag.upgrade() else {
+                return;
+            };
+            let Ok(hwnd) = grab_hwnd(o.window()) else {
+                return;
+            };
+            if let Err(e) = start_window_drag(hwnd) {
+                eprintln!("[overlay-host] bar drag start failed: {e:#}");
+            }
+        });
+    }
+
     // ===== Quit =====
     overlay.on_quit_clicked(|| {
         eprintln!("[overlay-host] quit requested");
