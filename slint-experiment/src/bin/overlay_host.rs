@@ -61,6 +61,23 @@ struct OverlayBarBridge {
     overlay_weak: slint::Weak<OverlayBarWindow>,
     spawn_tx: tokio_mpsc::UnboundedSender<SpawnTileRequest>,
     tile_seq: AtomicU64,
+    /// Phase E3 slice 2 — weak handle to the in-flight streaming
+    /// tile plus per-tile accumulator. F9 ask handler synchronously
+    /// creates a placeholder TileWindow, registers its weak here,
+    /// then spawns `ask_stream_loop` which streams `ai:event`
+    /// payloads back through `forward_event` and these updates land
+    /// in THIS tile. Cleared on `AiEvent::Done` or `AiEvent::Error`.
+    /// Mutex (not RwLock) because only one streaming tile at a time
+    /// (rapid-F9 aborts the prior task).
+    current_streaming: std::sync::Mutex<Option<StreamingTile>>,
+}
+
+/// Per-streaming-tile state: weak handle + accumulated answer text.
+/// Bridge re-renders the full markdown tree on every Delta — cheap
+/// at <500 tokens, can be windowed later if needed.
+struct StreamingTile {
+    weak: slint::Weak<TileWindow>,
+    accumulated: String,
 }
 
 /// Tile-spawn request sent from the bridge (any thread) to the UI
@@ -80,8 +97,100 @@ struct SpawnTileRequest {
     kind: TileKind,
 }
 
+impl OverlayBarBridge {
+    /// Handle `ai:event` separately because it needs to look up the
+    /// `current_streaming` slot (per-call mutable state) before
+    /// scheduling the UI mutation. Mutex is released BEFORE the
+    /// invoke_from_event_loop call so the UI thread isn't blocked
+    /// on the lock if the same code path re-enters.
+    fn handle_ai_event(&self, payload: serde_json::Value) {
+        let Ok(evt) = serde_json::from_value::<ai::AiEvent>(payload) else {
+            return;
+        };
+        match evt {
+            ai::AiEvent::Delta { text } => {
+                let (weak, body) = {
+                    let mut slot = match self.current_streaming.lock() {
+                        Ok(g) => g,
+                        Err(p) => p.into_inner(),
+                    };
+                    let Some(stream) = slot.as_mut() else {
+                        return; // No active stream; drop the delta.
+                    };
+                    stream.accumulated.push_str(&text);
+                    (stream.weak.clone(), stream.accumulated.clone())
+                };
+                let _ = slint::invoke_from_event_loop(move || {
+                    let Some(tile) = weak.upgrade() else {
+                        return;
+                    };
+                    let blocks: Vec<MarkdownBlock> = markdown::parse(&body)
+                        .into_iter()
+                        .map(|b| MarkdownBlock {
+                            kind: b.kind,
+                            text: SharedString::from(b.text),
+                            lang: SharedString::from(b.lang),
+                        })
+                        .collect();
+                    tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
+                });
+            }
+            ai::AiEvent::Done { reason } => {
+                let weak = {
+                    let mut slot = match self.current_streaming.lock() {
+                        Ok(g) => g,
+                        Err(p) => p.into_inner(),
+                    };
+                    slot.take().map(|s| s.weak)
+                };
+                if let Some(weak) = weak {
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(tile) = weak.upgrade() {
+                            tile.set_source_label(SharedString::from(format!(
+                                "ai · done ({reason})"
+                            )));
+                        }
+                    });
+                }
+            }
+            ai::AiEvent::Error { message } => {
+                let weak = {
+                    let mut slot = match self.current_streaming.lock() {
+                        Ok(g) => g,
+                        Err(p) => p.into_inner(),
+                    };
+                    slot.take().map(|s| s.weak)
+                };
+                if let Some(weak) = weak {
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(tile) = weak.upgrade() {
+                            let blocks = vec![MarkdownBlock {
+                                kind: markdown::kind::PARAGRAPH,
+                                text: SharedString::from(format!("⚠ AI error: {message}")),
+                                lang: SharedString::from(""),
+                            }];
+                            tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
+                            tile.set_source_label(SharedString::from("⚠ error"));
+                        }
+                    });
+                }
+            }
+            ai::AiEvent::Start { .. } => {
+                // No-op — we already showed the placeholder body when
+                // the F9 handler synchronously created the tile.
+            }
+        }
+    }
+}
+
 impl SlintUiBridge for OverlayBarBridge {
     fn forward_event(&self, channel: String, payload: serde_json::Value) {
+        // ai:event has its own path because it needs mutable access
+        // to current_streaming before scheduling the UI update.
+        if channel == "ai:event" {
+            self.handle_ai_event(payload);
+            return;
+        }
         let weak = self.overlay_weak.clone();
         let _ = slint::invoke_from_event_loop(move || {
             let Some(o) = weak.upgrade() else {
@@ -126,11 +235,9 @@ impl SlintUiBridge for OverlayBarBridge {
                 "meeting:ending" => {
                     o.set_status_text(SharedString::from("🏁 wrapping up"));
                 }
-                "transcript:line" | "ai:event" => {
-                    // No overlay-bar UI for these yet — transcript
-                    // belongs to the tile UI (auto-tile) and ai:event
-                    // updates flow per-tile via the streaming closure
-                    // installed at spawn time (Phase E3 follow-up).
+                "transcript:line" => {
+                    // No overlay-bar UI yet — transcript belongs to
+                    // tile UI (auto-tile in E4).
                 }
                 "tile:error" | "tile:rate-limited" | "cost:cap-hit" | "speech:coach" => {
                     // No toast UI yet — log so developer sees these
@@ -272,6 +379,7 @@ fn main() -> Result<(), slint::PlatformError> {
         overlay_weak: overlay.as_weak(),
         spawn_tx,
         tile_seq: AtomicU64::new(0),
+        current_streaming: std::sync::Mutex::new(None),
     });
     let events: Arc<dyn RuntimeEvents> = Arc::new(SlintEvents::new(bridge.clone()));
 
@@ -818,11 +926,21 @@ fn main() -> Result<(), slint::PlatformError> {
     let f3_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F3);
     let f4_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F4);
     let f7_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F7);
+    // Phase E3 slice 2 — F9 ask (live AI streaming via overlay-backend's
+    // ask_stream_loop). Matches src-tauri/React-side semantic where F9
+    // is the "ask AI with full transcript context" hotkey.
+    let f9_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F9);
     let f3_id = f3_hotkey.id();
     let f4_id = f4_hotkey.id();
     let f7_id = f7_hotkey.id();
+    let f9_id = f9_hotkey.id();
     if let Some(m) = hotkey_manager.as_ref() {
-        for (label, hk) in [("F3", f3_hotkey), ("F4", f4_hotkey), ("F7", f7_hotkey)] {
+        for (label, hk) in [
+            ("F3", f3_hotkey),
+            ("F4", f4_hotkey),
+            ("F7", f7_hotkey),
+            ("F9", f9_hotkey),
+        ] {
             match m.register(hk) {
                 Ok(()) => eprintln!("[overlay-host] {label} hotkey registered"),
                 Err(e) => eprintln!("[overlay-host] {label} register failed: {e}"),
@@ -835,6 +953,11 @@ fn main() -> Result<(), slint::PlatformError> {
     let hp_tiles = tiles.clone();
     let hp_state = state.clone();
     let hp_weak_overlay = overlay.as_weak();
+    let hp_bridge = bridge.clone();
+    let hp_events = events.clone();
+    let hp_cfg = cfg.clone();
+    let hp_rt = slint_rt.clone();
+    let hp_rt_handle = rt_handle.clone();
     hotkey_poll.start(
         TimerMode::Repeated,
         Duration::from_millis(HOTKEY_POLL_MS),
@@ -860,6 +983,22 @@ fn main() -> Result<(), slint::PlatformError> {
                 eprintln!("[overlay-host] F7 pressed — collapse-all (stub)");
                 // Phase 4+ would call `tile.set_collapsed(true)` on
                 // every open tile via the registry.
+            } else if event.id == f9_id {
+                // Phase E3 slice 2 — F9 live AI ask via overlay-backend's
+                // `ask_stream_loop`. Synchronously creates a placeholder
+                // tile + registers it in the bridge's current_streaming
+                // slot, then spawns the streaming AI task. Deltas land
+                // back through the bridge's ai:event handler and update
+                // the tile body live.
+                eprintln!("[overlay-host] F9 pressed — live ask streaming");
+                fire_f9_ask(
+                    &hp_bridge,
+                    &hp_events,
+                    &hp_cfg,
+                    &hp_rt,
+                    &hp_rt_handle,
+                    &hp_tiles,
+                );
             }
         }
     });
@@ -1170,6 +1309,205 @@ fn apply_overlay_hwnd(overlay: &OverlayBarWindow) {
             Err(e) => eprintln!("[overlay-host] overlay HWND grab failed: {e}"),
         }
     });
+}
+
+/// Phase E3 slice 2 — F9 ask handler.
+///
+/// Runs on the Slint UI thread (called from the hotkey poll Timer
+/// closure). Synchronously creates a placeholder TileWindow, registers
+/// its Weak in the bridge's `current_streaming` slot so subsequent
+/// `ai:event` payloads from `ask_stream_loop` land in this tile, then
+/// spawns a tokio task that:
+///   1. Snapshots cfg + transcript + screenshot under brief rt locks.
+///   2. Builds messages via `ai::build_request` (same prompt builder
+///      the src-tauri ask shim uses).
+///   3. Writes `JournalEvent::AiRequest`.
+///   4. Aborts any in-flight `ai_task` (rapid-F9 protection — matches
+///      src-tauri behavior).
+///   5. Starts `ai::stream_chat` → gets the receiver.
+///   6. Builds the `cost_apply` closure (locks rt, accumulates
+///      session_cost, returns new USD total).
+///   7. Spawns `overlay_backend::runtime::ask_stream_loop` which drives
+///      the stream + emits per-Delta `ai:event` payloads back through
+///      `SlintEvents` → `OverlayBarBridge::handle_ai_event` → tile
+///      body re-renders live.
+///
+/// Wire-parity invariants matched to src-tauri:
+/// - F9 always proceeds even when over budget (cost:cap-hit is a warn
+///   chip, not a gate).
+/// - last_screenshot is CONSUMED (taken) on F9 so it ships once.
+/// - In-flight ai_task aborted BEFORE the new spawn.
+fn fire_f9_ask(
+    bridge: &Arc<OverlayBarBridge>,
+    events: &Arc<dyn RuntimeEvents>,
+    cfg: &overlay_backend::config::SharedConfig,
+    slint_rt: &SharedSlintRuntime,
+    rt_handle: &tokio::runtime::Handle,
+    tiles: &TileWindows,
+) {
+    // ===== 1. Sync placeholder tile creation =====
+    let tile = match TileWindow::new() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("[overlay-host] F9: TileWindow::new failed: {e}");
+            return;
+        }
+    };
+    tile.set_tile_title(SharedString::from("F9 ask · live"));
+    tile.set_source_label(SharedString::from("ai · asking…"));
+    let placeholder = vec![MarkdownBlock {
+        kind: markdown::kind::PARAGRAPH,
+        text: SharedString::from("⏳ Asking AI…"),
+        lang: SharedString::from(""),
+    }];
+    tile.set_blocks(ModelRc::new(VecModel::from(placeholder)));
+    let weak_close = tile.as_weak();
+    tile.on_close_clicked(move || {
+        if let Some(t) = weak_close.upgrade() {
+            let _ = t.hide();
+        }
+    });
+    let _ = tile.show();
+    apply_tile_hwnd_with_monitor(&tile);
+    let weak_for_stream = tile.as_weak();
+    tiles.borrow_mut().push(tile);
+
+    // ===== 2. Register the tile in the bridge's streaming slot =====
+    {
+        let mut slot = match bridge.current_streaming.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        *slot = Some(StreamingTile {
+            weak: weak_for_stream,
+            accumulated: String::new(),
+        });
+    }
+
+    // ===== 3. Snapshot cfg + cost-cap + transcript + screenshot =====
+    let (base_url, bearer, model, meeting_context, response_language, cap_usd) = {
+        let c = cfg.read();
+        (
+            c.ai_base_url.clone(),
+            c.ai_bearer.clone(),
+            c.ai_model.clone(),
+            c.meeting_context.clone(),
+            c.response_language.clone(),
+            c.max_session_cost_usd,
+        )
+    };
+    let current_micro = slint_replay::runtime_state::lock(slint_rt).session_cost_microcents;
+    if current_micro > 0 && cap_usd > 0.0 {
+        let usd = (current_micro as f64) / 100_000_000.0;
+        if usd >= cap_usd {
+            events.emit(
+                "cost:cap-hit",
+                serde_json::json!({
+                    "reason": format!(
+                        "over budget: ${usd:.4} spent ≥ ${cap_usd:.2} (Settings → Max cost per session)"
+                    ),
+                    "source": "live_ask",
+                    "blocking": false,
+                }),
+            );
+        }
+    }
+
+    let (transcript_lines, screenshot) = {
+        let mut s = slint_replay::runtime_state::lock(slint_rt);
+        let lines: Vec<String> = s
+            .transcript
+            .iter()
+            .map(|l| format!("[{:?}] {}", l.source, l.text))
+            .collect();
+        let shot = s.last_screenshot.take();
+        (lines, shot)
+    };
+
+    let messages = ai::build_request(
+        &meeting_context,
+        &response_language,
+        &transcript_lines,
+        screenshot.as_deref(),
+        None,
+    );
+
+    let (journal_for_request, journal_for_loop, health_for_stream) = {
+        let s = slint_replay::runtime_state::lock(slint_rt);
+        let j = s.journal.clone();
+        (j.clone(), j, s.health.clone())
+    };
+    let sys_full = messages
+        .first()
+        .and_then(|m| match &m.content {
+            ai::MessageContent::Text(t) => Some(t.clone()),
+            _ => None,
+        })
+        .unwrap_or_default();
+    let usr_full = match messages.get(1).map(|m| &m.content) {
+        Some(ai::MessageContent::Text(t)) => t.clone(),
+        Some(ai::MessageContent::Parts(parts)) => parts
+            .iter()
+            .find_map(|p| match p {
+                ai::ContentPart::Text { text } => Some(text.clone()),
+                _ => None,
+            })
+            .unwrap_or_default(),
+        None => String::new(),
+    };
+    let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
+    if let Some(j) = journal_for_request.as_ref() {
+        j.write(&journal::JournalEvent::AiRequest {
+            unix_ms: journal::now_unix_ms(),
+            purpose: "live_ask",
+            model: &model,
+            system_prompt: &sys_full,
+            user_prompt: &usr_full,
+            attached_screenshot: screenshot.is_some(),
+            input_tokens_est,
+        });
+    }
+
+    // ===== 4. Cancel in-flight + build cost_apply closure =====
+    {
+        let mut s = slint_replay::runtime_state::lock(slint_rt);
+        if let Some(h) = s.ai_task.take() {
+            h.abort();
+        }
+    }
+
+    let rt_for_cost = slint_rt.clone();
+    let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
+        let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
+        s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
+        (s.session_cost_microcents as f64) / 100_000_000.0
+    });
+
+    let t0 = std::time::Instant::now();
+    let events_for_task = events.clone();
+    // CRITICAL: `ai::stream_chat` internally calls `tokio::spawn`,
+    // which panics with "there is no reactor running" when called
+    // from a non-tokio thread (Slint UI / hotkey poll Timer closure).
+    // The same trap is documented in src-tauri/src/runtime.rs:1804
+    // ("must be tauri::async_runtime::spawn, NOT tokio::spawn").
+    // We move stream_chat INSIDE the rt_handle.spawn future so the
+    // tokio runtime context exists when it runs.
+    let task = rt_handle.spawn(async move {
+        let ai_rx = ai::stream_chat(base_url, bearer, model.clone(), messages, 4096);
+        overlay_backend::runtime::ask_stream_loop(
+            events_for_task,
+            ai_rx,
+            model,
+            sys_full,
+            usr_full,
+            journal_for_loop,
+            health_for_stream,
+            t0,
+            cost_apply,
+        )
+        .await;
+    });
+    slint_replay::runtime_state::lock(slint_rt).ai_task = Some(task);
 }
 
 /// Apply transparency + position tile on the appropriate monitor.

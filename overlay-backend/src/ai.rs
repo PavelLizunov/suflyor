@@ -8,7 +8,13 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
 /// Frontend-visible event stream.
-#[derive(Debug, Clone, Serialize)]
+///
+/// Both `Serialize` AND `Deserialize` — the Slint binary's
+/// `OverlayBarBridge` round-trips through `serde_json::Value` to
+/// extract typed Delta/Done/Error variants from the `ai:event`
+/// channel payload that `ask_stream_loop` emits via the trait
+/// boundary. Added Deserialize Phase E3 slice 2 (2026-05-27).
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AiEvent {
     Start { id: String },
