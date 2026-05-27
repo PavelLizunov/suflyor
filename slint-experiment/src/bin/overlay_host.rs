@@ -843,22 +843,39 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== Bookmark chip (Phase C: real journal::append_bookmark) =====
+    // ===== Bookmark chip (Phase C + E3 slice 4: read from SlintRuntime) =====
     //
-    // Reads AppState.last_tile_qa (populated by spawn_tile on AI
-    // success) and appends the Q+A to %APPDATA%\overlay-mvp\
-    // bookmarks.md. Same on-disk format as the React/Tauri v0.1.1
-    // bookmark_last_answer command — users get unified history.
+    // Reads SlintRuntime.last_question / last_answer (canonical state
+    // post-port — populated by reask_last, manual_spawn_tile,
+    // manual_ask_source via their shim writebacks) and appends to
+    // %APPDATA%\overlay-mvp\bookmarks.md. Falls back to AppState
+    // .last_tile_qa for the legacy +tile chip path which still uses
+    // local AI calls (slated for future commit to route through
+    // events.spawn_tile_full like the other tile producers).
     {
         let s = state.clone();
+        let slint_rt_bookmark = slint_rt.clone();
         let weak = overlay.as_weak();
         overlay.on_bookmark_clicked(move || {
             let qa_opt = {
-                let st = match s.lock() {
-                    Ok(g) => g,
-                    Err(p) => p.into_inner(),
-                };
-                st.last_tile_qa.clone()
+                // Prefer SlintRuntime (post-port canonical) — the ported
+                // F-key handlers write here via shim writeback.
+                let rt_guard = slint_replay::runtime_state::lock(&slint_rt_bookmark);
+                let from_rt = rt_guard
+                    .last_question
+                    .clone()
+                    .and_then(|q| rt_guard.last_answer.clone().map(|a| (q, a)));
+                drop(rt_guard);
+                if from_rt.is_some() {
+                    from_rt
+                } else {
+                    // Legacy +tile chip path — AppState.last_tile_qa.
+                    let st = match s.lock() {
+                        Ok(g) => g,
+                        Err(p) => p.into_inner(),
+                    };
+                    st.last_tile_qa.clone()
+                }
             };
             let Some(o) = weak.upgrade() else { return };
             match qa_opt {
@@ -925,6 +942,9 @@ fn main() -> Result<(), slint::PlatformError> {
     };
     let f3_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F3);
     let f4_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F4);
+    // Phase E3 slice 3 — F6 manual spawn from last transcript line
+    // (bypasses auto-detector). Matches src-tauri hotkey table.
+    let f6_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F6);
     let f7_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F7);
     // Phase E3 slice 2 — F9 ask (live AI streaming via overlay-backend's
     // ask_stream_loop). Matches src-tauri/React-side semantic where F9
@@ -932,12 +952,14 @@ fn main() -> Result<(), slint::PlatformError> {
     let f9_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F9);
     let f3_id = f3_hotkey.id();
     let f4_id = f4_hotkey.id();
+    let f6_id = f6_hotkey.id();
     let f7_id = f7_hotkey.id();
     let f9_id = f9_hotkey.id();
     if let Some(m) = hotkey_manager.as_ref() {
         for (label, hk) in [
             ("F3", f3_hotkey),
             ("F4", f4_hotkey),
+            ("F6", f6_hotkey),
             ("F7", f7_hotkey),
             ("F9", f9_hotkey),
         ] {
@@ -962,46 +984,49 @@ fn main() -> Result<(), slint::PlatformError> {
         TimerMode::Repeated,
         Duration::from_millis(HOTKEY_POLL_MS),
         move || {
-        while let Ok(event) = global_hotkey::GlobalHotKeyEvent::receiver().try_recv() {
-            if event.state != global_hotkey::HotKeyState::Pressed {
-                continue;
-            }
-            if event.id == f4_id {
-                eprintln!("[overlay-host] F4 pressed — opening palette");
-                open_palette(&hp_palette, &hp_tiles, &hp_state, &hp_weak_overlay);
-            } else if event.id == f3_id {
-                // Phase D2 placeholder: F3 currently re-invokes the
-                // spawn_tile callback (same as the "+ tile" chip), which
-                // uses a hardcoded demo prompt. Phase C+ task: read the
-                // last N seconds of mic transcript from overlay_backend
-                // and pass as the real "Ask the AI now" prompt.
-                eprintln!("[overlay-host] F3 pressed — invoking spawn-tile (demo prompt; real transcript wiring pending)");
-                if let Some(o) = hp_weak_overlay.upgrade() {
-                    o.invoke_spawn_tile_clicked();
+            while let Ok(event) = global_hotkey::GlobalHotKeyEvent::receiver().try_recv() {
+                if event.state != global_hotkey::HotKeyState::Pressed {
+                    continue;
                 }
-            } else if event.id == f7_id {
-                eprintln!("[overlay-host] F7 pressed — collapse-all (stub)");
-                // Phase 4+ would call `tile.set_collapsed(true)` on
-                // every open tile via the registry.
-            } else if event.id == f9_id {
-                // Phase E3 slice 2 — F9 live AI ask via overlay-backend's
-                // `ask_stream_loop`. Synchronously creates a placeholder
-                // tile + registers it in the bridge's current_streaming
-                // slot, then spawns the streaming AI task. Deltas land
-                // back through the bridge's ai:event handler and update
-                // the tile body live.
-                eprintln!("[overlay-host] F9 pressed — live ask streaming");
-                fire_f9_ask(
-                    &hp_bridge,
-                    &hp_events,
-                    &hp_cfg,
-                    &hp_rt,
-                    &hp_rt_handle,
-                    &hp_tiles,
-                );
+                if event.id == f4_id {
+                    eprintln!("[overlay-host] F4 pressed — opening palette");
+                    open_palette(&hp_palette, &hp_tiles, &hp_state, &hp_weak_overlay);
+                } else if event.id == f3_id {
+                    // Phase E3 slice 3 — F3 reask via overlay-backend's
+                    // ported reask_last. Refines the last AI answer using
+                    // newest transcript context. Replaces the prior D2
+                    // stub that re-invoked the +tile chip.
+                    eprintln!("[overlay-host] F3 pressed — reask_last");
+                    fire_f3_reask(&hp_events, &hp_cfg, &hp_rt, &hp_rt_handle);
+                } else if event.id == f6_id {
+                    // Phase E3 slice 3 — F6 manual spawn from last
+                    // transcript line (bypasses auto-detector).
+                    eprintln!("[overlay-host] F6 pressed — manual_spawn_tile");
+                    fire_f6_manual_spawn(&hp_events, &hp_cfg, &hp_rt, &hp_rt_handle);
+                } else if event.id == f7_id {
+                    eprintln!("[overlay-host] F7 pressed — collapse-all (stub)");
+                    // Phase 4+ would call `tile.set_collapsed(true)` on
+                    // every open tile via the registry.
+                } else if event.id == f9_id {
+                    // Phase E3 slice 2 — F9 live AI ask via overlay-backend's
+                    // `ask_stream_loop`. Synchronously creates a placeholder
+                    // tile + registers it in the bridge's current_streaming
+                    // slot, then spawns the streaming AI task. Deltas land
+                    // back through the bridge's ai:event handler and update
+                    // the tile body live.
+                    eprintln!("[overlay-host] F9 pressed — live ask streaming");
+                    fire_f9_ask(
+                        &hp_bridge,
+                        &hp_events,
+                        &hp_cfg,
+                        &hp_rt,
+                        &hp_rt_handle,
+                        &hp_tiles,
+                    );
+                }
             }
-        }
-    });
+        },
+    );
 
     // ===== Stealth toggle on overlay bar =====
     {
@@ -1307,6 +1332,214 @@ fn apply_overlay_hwnd(overlay: &OverlayBarWindow) {
                 Err(e) => eprintln!("[overlay-host] overlay transparency failed: {e}"),
             },
             Err(e) => eprintln!("[overlay-host] overlay HWND grab failed: {e}"),
+        }
+    });
+}
+
+/// Local helper: compute `Some(reason)` if session_cost is over the
+/// configured cap, else `None`. Duplicated from src-tauri's
+/// `over_cost_budget` — small enough to inline rather than promote
+/// to overlay-backend.
+fn cost_cap_reason(cap_usd: f64, current_microcents: u64) -> Option<String> {
+    if cap_usd <= 0.0 {
+        return None;
+    }
+    let current_usd = (current_microcents as f64) / 100_000_000.0;
+    if current_usd >= cap_usd {
+        Some(format!(
+            "over budget: ${current_usd:.4} spent ≥ ${cap_usd:.2} (Settings → Max cost per session)"
+        ))
+    } else {
+        None
+    }
+}
+
+/// Local helper: last `max` transcript lines labeled with speaker
+/// tags `[ПОЛЬЗОВАТЕЛЬ]` / `[СОБЕСЕДНИК]`. Mirrors src-tauri's
+/// `select_recent_lines_labeled` — kept local to avoid promoting a
+/// tiny helper to overlay-backend.
+fn select_recent_labeled(
+    transcript: &std::collections::VecDeque<overlay_backend::audio::TranscriptLine>,
+    max: usize,
+) -> Vec<String> {
+    let n = transcript.len();
+    let start = n.saturating_sub(max);
+    transcript
+        .iter()
+        .skip(start)
+        .map(|l| {
+            let src = match l.source {
+                overlay_backend::audio::AudioSource::System => "[СОБЕСЕДНИК]",
+                overlay_backend::audio::AudioSource::Mic => "[ПОЛЬЗОВАТЕЛЬ]",
+            };
+            format!("{src} {}", l.text)
+        })
+        .collect()
+}
+
+/// Phase E3 slice 3 — F3 reask handler.
+///
+/// Snapshots SlintRuntime into ReaskInputs, spawns the ported
+/// `reask_last` async fn, applies the outcome writeback
+/// (session_cost plus last_qa) under the rt lock, then emits
+/// `cost:update` so the bar updates. Wire-for-wire equivalent of
+/// src-tauri's reask_last shim but using SlintEvents and
+/// SharedSlintRuntime instead of TauriEvents and SharedRuntime.
+fn fire_f3_reask(
+    events: &Arc<dyn RuntimeEvents>,
+    cfg: &overlay_backend::config::SharedConfig,
+    slint_rt: &SharedSlintRuntime,
+    rt_handle: &tokio::runtime::Handle,
+) {
+    let inputs = {
+        let s = slint_replay::runtime_state::lock(slint_rt);
+        overlay_backend::runtime::ReaskInputs {
+            last_question: s.last_question.clone(),
+            last_answer: s.last_answer.clone(),
+            recent_transcript_iconized: s
+                .transcript
+                .iter()
+                .rev()
+                .take(10)
+                .rev()
+                .map(|l| {
+                    let icon = match l.source {
+                        overlay_backend::audio::AudioSource::System => "🗣",
+                        overlay_backend::audio::AudioSource::Mic => "🎤",
+                    };
+                    format!("{icon} {}", l.text)
+                })
+                .collect(),
+            journal: s.journal.clone(),
+            health: s.health.clone(),
+        }
+    };
+    let events_c = events.clone();
+    let cfg_c = cfg.clone();
+    let rt_c = slint_rt.clone();
+    rt_handle.spawn(async move {
+        let outcome = overlay_backend::runtime::reask_last(events_c.clone(), cfg_c, inputs).await;
+        if let Some(out) = outcome {
+            let total = {
+                let mut s = slint_replay::runtime_state::lock(&rt_c);
+                s.session_cost_microcents = s
+                    .session_cost_microcents
+                    .saturating_add(out.cost_microcents_delta);
+                s.last_question = Some(out.display_question);
+                s.last_answer = Some(out.answer_trimmed);
+                (s.session_cost_microcents as f64) / 100_000_000.0
+            };
+            events_c.emit("cost:update", serde_json::json!({ "session_usd": total }));
+        }
+    });
+}
+
+/// Phase E3 slice 3 — F6 manual spawn handler.
+///
+/// Snapshots rt into ManualSpawnInputs (recent 8 labeled lines +
+/// last line + cost cap), spawns the ported `manual_spawn_tile`
+/// async fn, applies outcome writeback. Same shape as F3 reask.
+fn fire_f6_manual_spawn(
+    events: &Arc<dyn RuntimeEvents>,
+    cfg: &overlay_backend::config::SharedConfig,
+    slint_rt: &SharedSlintRuntime,
+    rt_handle: &tokio::runtime::Handle,
+) {
+    let inputs = {
+        let s = slint_replay::runtime_state::lock(slint_rt);
+        let recent = select_recent_labeled(&s.transcript, 8);
+        let last_line = s.transcript.back().cloned();
+        let cap_usd = cfg.read().max_session_cost_usd;
+        let cost_cap = cost_cap_reason(cap_usd, s.session_cost_microcents);
+        overlay_backend::runtime::ManualSpawnInputs {
+            recent_transcript_labeled: recent,
+            last_line,
+            cost_cap_reason: cost_cap,
+            journal: s.journal.clone(),
+            health: s.health.clone(),
+        }
+    };
+    let events_c = events.clone();
+    let cfg_c = cfg.clone();
+    let rt_c = slint_rt.clone();
+    rt_handle.spawn(async move {
+        let outcome =
+            overlay_backend::runtime::manual_spawn_tile(events_c.clone(), cfg_c, inputs).await;
+        if let Some(out) = outcome {
+            let total = {
+                let mut s = slint_replay::runtime_state::lock(&rt_c);
+                s.session_cost_microcents = s
+                    .session_cost_microcents
+                    .saturating_add(out.cost_microcents_delta);
+                s.last_question = Some(out.display_question);
+                s.last_answer = Some(out.answer_trimmed);
+                (s.session_cost_microcents as f64) / 100_000_000.0
+            };
+            events_c.emit("cost:update", serde_json::json!({ "session_usd": total }));
+        }
+    });
+}
+
+/// Phase E3 slice 4 — chip-driven manual ask for a specific source
+/// (sys chip → System, future PTT → Mic). Snapshots rt into
+/// ManualAskSourceInputs, spawns the ported `manual_ask_source`,
+/// applies outcome writeback. Shape mirrors fire_f6.
+///
+/// Currently unwired — the existing mic/sys chip handlers are 3-second
+/// audio-device probes (useful diagnostic, kept for now). Proper PTT
+/// (press-and-hold) requires Slint UI changes — adding
+/// `pointer-event` callbacks on the chip TouchAreas — to distinguish
+/// press from release. That's deferred to a Phase E UX commit. When
+/// it lands, the press handler calls
+/// `slint_session::manual_ask_window_start` and the release handler
+/// calls `manual_ask_window_end` (already ported as B2 port #6).
+#[allow(dead_code, reason = "wired in Phase E PTT UX phase")]
+fn fire_manual_ask_source(
+    events: &Arc<dyn RuntimeEvents>,
+    cfg: &overlay_backend::config::SharedConfig,
+    slint_rt: &SharedSlintRuntime,
+    rt_handle: &tokio::runtime::Handle,
+    source: overlay_backend::audio::AudioSource,
+) {
+    let inputs = {
+        let s = slint_replay::runtime_state::lock(slint_rt);
+        let recent = select_recent_labeled(&s.transcript, 8);
+        // Trigger = last line from THIS source.
+        let trigger_text = s
+            .transcript
+            .iter()
+            .rev()
+            .find(|l| l.source == source)
+            .map(|l| l.text.clone())
+            .unwrap_or_default();
+        let cap_usd = cfg.read().max_session_cost_usd;
+        let cost_cap = cost_cap_reason(cap_usd, s.session_cost_microcents);
+        overlay_backend::runtime::ManualAskSourceInputs {
+            recent_transcript_labeled: recent,
+            trigger_text,
+            cost_cap_reason: cost_cap,
+            source,
+            journal: s.journal.clone(),
+            health: s.health.clone(),
+        }
+    };
+    let events_c = events.clone();
+    let cfg_c = cfg.clone();
+    let rt_c = slint_rt.clone();
+    rt_handle.spawn(async move {
+        let outcome =
+            overlay_backend::runtime::manual_ask_source(events_c.clone(), cfg_c, inputs).await;
+        if let Some(out) = outcome {
+            let total = {
+                let mut s = slint_replay::runtime_state::lock(&rt_c);
+                s.session_cost_microcents = s
+                    .session_cost_microcents
+                    .saturating_add(out.cost_microcents_delta);
+                s.last_question = Some(out.display_question);
+                s.last_answer = Some(out.answer_trimmed);
+                (s.session_cost_microcents as f64) / 100_000_000.0
+            };
+            events_c.emit("cost:update", serde_json::json!({ "session_usd": total }));
         }
     });
 }
