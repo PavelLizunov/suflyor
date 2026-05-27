@@ -3046,6 +3046,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "overlay-backend"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "bytes",
+ "dirs 5.0.1",
+ "futures-util",
+ "image",
+ "log",
+ "once_cell",
+ "parking_lot",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "wasapi",
+ "xcap",
+]
+
+[[package]]
 name = "overlay-mvp"
 version = "0.1.1"
 dependencies = [
@@ -3059,6 +3081,7 @@ dependencies = [
  "image",
  "log",
  "once_cell",
+ "overlay-backend",
  "parking_lot",
  "reqwest 0.12.28",
  "serde",

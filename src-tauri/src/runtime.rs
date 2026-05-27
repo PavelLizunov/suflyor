@@ -14,7 +14,7 @@ use crate::tile::SharedTiles;
 use anyhow::Result;
 use parking_lot::Mutex;
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 use tauri::{AppHandle, Emitter};
@@ -106,76 +106,11 @@ pub struct RuntimeState {
     pub qa_cache: HashMap<String, (String, std::time::Instant)>,
 }
 
-/// Three atomic timestamps (unix ms) bumped by their respective subsystems.
-/// Zero = never yet ok in this session.
-#[derive(Debug, Default)]
-pub struct HealthSignals {
-    /// Bumped each time an `AudioChunk` arrives from the WASAPI thread.
-    /// Stale (>15s) → audio device / loopback issue.
-    pub last_audio_frame_ms: AtomicU64,
-    /// Bumped on each successful Groq Whisper transcription.
-    /// Stale (>60s) → Groq rate-limit / network / VPN issue.
-    pub last_stt_ok_ms: AtomicU64,
-    /// Bumped on each successful AI streaming completion OR
-    /// non-streaming response.
-    /// Stale (>180s) → AI proxy / model issue (or simply no recent ask).
-    pub last_ai_ok_ms: AtomicU64,
-}
-
-/// Snapshot emitted on the `health:update` Tauri event every 2s while a
-/// session is active. Frontend converts ages to color states (green/
-/// yellow/red) and renders 3 dots in the overlay bar.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct HealthPayload {
-    /// "ok" | "degraded" | "down" | "idle"
-    pub audio: &'static str,
-    pub stt: &'static str,
-    pub ai: &'static str,
-    /// Milliseconds since each subsystem's last success. None = never yet.
-    pub audio_age_ms: Option<u64>,
-    pub stt_age_ms: Option<u64>,
-    pub ai_age_ms: Option<u64>,
-}
-
-impl HealthSignals {
-    /// Classify a signal's age into a 4-state health label.
-    ///
-    /// Thresholds chosen per-subsystem because their natural cadences
-    /// differ wildly:
-    /// - audio: ~5 chunks/sec, so >15s = definitely broken
-    /// - stt: utterances arrive whenever speech pauses, so >60s ok during silence
-    /// - ai: only fires on user ask, so >180s = idle (not necessarily broken)
-    fn classify(age_ms: Option<u64>, degraded: u64, down: u64) -> &'static str {
-        match age_ms {
-            None => "idle",
-            Some(a) if a < degraded => "ok",
-            Some(a) if a < down => "degraded",
-            Some(_) => "down",
-        }
-    }
-
-    pub fn snapshot(&self, now_ms: u64) -> HealthPayload {
-        let read = |a: &AtomicU64| -> Option<u64> {
-            let v = a.load(Ordering::Relaxed);
-            if v == 0 {
-                None
-            } else {
-                Some(now_ms.saturating_sub(v))
-            }
-        };
-        let audio_age = read(&self.last_audio_frame_ms);
-        let stt_age = read(&self.last_stt_ok_ms);
-        let ai_age = read(&self.last_ai_ok_ms);
-        HealthPayload {
-            audio: Self::classify(audio_age, 15_000, 60_000),
-            stt: Self::classify(stt_age, 60_000, 180_000),
-            ai: Self::classify(ai_age, 180_000, 600_000),
-            audio_age_ms: audio_age,
-            stt_age_ms: stt_age,
-            ai_age_ms: ai_age,
-        }
-    }
-}
+// HealthSignals + HealthPayload were extracted to overlay_backend::health
+// during Phase B1 of the Slint migration. Re-export keeps existing
+// `crate::runtime::HealthSignals` callers compiling without churn.
+#[allow(unused_imports)] // HealthPayload re-exported for downstream callers
+pub use overlay_backend::health::{HealthPayload, HealthSignals};
 
 /// Russian filler words tracked by the live voice coach. Lowercase,
 /// matched as whole words (boundary = non-alphanumeric). Curated from
@@ -2934,23 +2869,11 @@ mod tests {
     use super::*;
 
     // ── HealthSignals tests (2nd-pass review identified gap) ────────
-
-    /// `classify` should map age into the right state for each threshold.
-    /// Table-driven so adding a new bucket later is one line.
-    #[test]
-    fn health_classify_thresholds() {
-        // None → idle (no signal yet this session)
-        assert_eq!(HealthSignals::classify(None, 1000, 5000), "idle");
-        // age < degraded → ok
-        assert_eq!(HealthSignals::classify(Some(0), 1000, 5000), "ok");
-        assert_eq!(HealthSignals::classify(Some(999), 1000, 5000), "ok");
-        // age in [degraded, down) → degraded
-        assert_eq!(HealthSignals::classify(Some(1000), 1000, 5000), "degraded");
-        assert_eq!(HealthSignals::classify(Some(4999), 1000, 5000), "degraded");
-        // age >= down → down
-        assert_eq!(HealthSignals::classify(Some(5000), 1000, 5000), "down");
-        assert_eq!(HealthSignals::classify(Some(999_999), 1000, 5000), "down");
-    }
+    //
+    // Phase B1: classify_thresholds test moved with HealthSignals to
+    // overlay-backend/src/health.rs (the `classify` fn is private to
+    // that module). snapshot tests stay here since they exercise the
+    // public API + integration with crate::journal::now_unix_ms().
 
     /// snapshot() with all atomics zeroed = "idle" for every subsystem.
     /// This is the post-`stop_session` / post-zero state.

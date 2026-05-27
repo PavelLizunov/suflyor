@@ -187,8 +187,9 @@ fn main() -> Result<(), slint::PlatformError> {
     // ===== Bookmark / Tips (stubs) =====
     overlay.on_bookmark_clicked(|| eprintln!("[overlay-host] bookmark clicked (stub)"));
 
-    // Tips chip doubles as palette opener for now (Phase 5 will swap
-    // to a global F4 hotkey via Win32 RegisterHotKey).
+    // Tips chip opens the palette manually. The F4 global hotkey
+    // (registered below) does the same. Both routes converge on
+    // open_palette() for state consistency.
     let palette: Rc<RefCell<Option<PaletteWindow>>> = Rc::new(RefCell::new(None));
     {
         let palette_ref = palette.clone();
@@ -199,6 +200,48 @@ fn main() -> Result<(), slint::PlatformError> {
             open_palette(&palette_ref, &tiles_ref, &s, &weak_overlay);
         });
     }
+
+    // ===== F4 global hotkey (Phase D2) =====
+    //
+    // global-hotkey 0.6 owns a single process-wide event receiver +
+    // platform-specific hotkey manager. We register F4 once, then poll
+    // the receiver every 50 ms from a Slint Timer — fires on UI thread
+    // so we can touch Rc-borrowed state without Send concerns.
+    let hotkey_manager = match global_hotkey::GlobalHotKeyManager::new() {
+        Ok(m) => Some(m),
+        Err(e) => {
+            eprintln!("[overlay-host] GlobalHotKeyManager init failed: {e}. F4 hotkey disabled.");
+            None
+        }
+    };
+    let f4_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F4);
+    let f4_id = f4_hotkey.id();
+    if let Some(m) = hotkey_manager.as_ref() {
+        match m.register(f4_hotkey) {
+            Ok(()) => eprintln!("[overlay-host] F4 hotkey registered (id={f4_id})"),
+            Err(e) => eprintln!("[overlay-host] F4 register failed: {e}"),
+        }
+    }
+
+    let hotkey_poll = Timer::default();
+    let hp_palette = palette.clone();
+    let hp_tiles = tiles.clone();
+    let hp_state = state.clone();
+    let hp_weak_overlay = overlay.as_weak();
+    hotkey_poll.start(
+        TimerMode::Repeated,
+        Duration::from_millis(50),
+        move || {
+            while let Ok(event) = global_hotkey::GlobalHotKeyEvent::receiver().try_recv() {
+                if event.id == f4_id
+                    && event.state == global_hotkey::HotKeyState::Pressed
+                {
+                    eprintln!("[overlay-host] F4 pressed — opening palette");
+                    open_palette(&hp_palette, &hp_tiles, &hp_state, &hp_weak_overlay);
+                }
+            }
+        },
+    );
 
     // ===== Stealth toggle on overlay bar =====
     {

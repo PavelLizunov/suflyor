@@ -32,6 +32,10 @@ src-tauri/gen/
 # Slint pilot crate build artifacts (Phase 0)
 slint-experiment/target/
 
+# Phase B1 — overlay-backend crate build artifacts
+overlay-backend/target/
+overlay-backend/Cargo.lock
+
 # Autonomous mode internal state (hook-managed, machine-local)
 .claude/autonomous_active
 .claude/_progress_counter

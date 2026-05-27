@@ -64,3 +64,10 @@ anyhow = "1"
 # WAV reader for roundtrip integration test
 hound = "3"
 tempfile = "3"
+
+# Phase B1 (Slint migration): backend modules extracted into a
+# Tauri-free crate. src-tauri/src/{audio,stt,ai,journal,kb,screenshot,
+# config}.rs are now 1-line shim re-exports from this crate;
+# slint-experiment depends on the same crate via its own path entry.
+[dependencies.overlay-backend]
+path = "../overlay-backend"

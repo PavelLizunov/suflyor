@@ -86,6 +86,17 @@ i-slint-backend-selector = { version = "=1.16.1", features = ["mcp"] }
 # dep of slint-build, so no new third-party risk.
 pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
 
+# Phase D2 — global F4 hotkey. global-hotkey is maintained by the
+# tauri-apps org (Tauri itself uses it). Provides a thread-safe
+# event channel that UI code can poll from a Slint Timer.
+global-hotkey = "0.6"
+
+# Phase B1 — overlay-backend Tauri-free crate. Holds the 7 modules
+# (audio/stt/ai/journal/kb/screenshot/config) + health.rs. Both
+# src-tauri (legacy) and this crate consume them.
+[dependencies.overlay-backend]
+path = "../overlay-backend"
+
 [dev-dependencies]
 # i-slint-backend-testing is the OFFICIAL test framework (not
 # "slint-testing"). The MCP server does NOT live here — Phase 0.5 spike
