@@ -27,7 +27,7 @@
 import { Button, CheckBox, LineEdit, ScrollView, SpinBox, ComboBox } from "std-widgets.slint";
 
 export component SettingsWindow inherits Window {
-    title: "overlay-mvp settings (Slint)";
+    title: @tr("overlay-mvp settings (Slint)");
     preferred-width: 720px;
     preferred-height: 480px;
     min-width: 480px;
@@ -60,7 +60,7 @@ export component SettingsWindow inherits Window {
                 spacing: 2px;
 
                 Text {
-                    text: "Settings";
+                    text: @tr("Settings");
                     font-size: 14px;
                     font-weight: 700;
                     color: #e8e8ec;
@@ -68,20 +68,22 @@ export component SettingsWindow inherits Window {
                 }
                 Rectangle { background: #2a2c3a; height: 1px; }
 
+                // Tab labels — emoji prefixes preserved as identity (not translated),
+                // text suffix wrapped in @tr() so gettext picks up the translatable part.
                 for entry[i] in [
-                    "🎯 Stealth",
-                    "🎯 Coaching",
-                    "⌨ Hotkeys",
-                    "🌐 Interface",
-                    "⬆ Updates",
-                    "📊 Stats",
-                    "🎤 Audio",
-                    "🪟 Auto-tiles",
-                    "✂ Snippets",
-                    "📚 Knowledge base",
-                    "👤 Profile + context",
-                    "🧠 AI bridge",
-                    "🗣 STT",
+                    @tr("🎯 Stealth"),
+                    @tr("🎯 Coaching"),
+                    @tr("⌨ Hotkeys"),
+                    @tr("🌐 Interface"),
+                    @tr("⬆ Updates"),
+                    @tr("📊 Stats"),
+                    @tr("🎤 Audio"),
+                    @tr("🪟 Auto-tiles"),
+                    @tr("✂ Snippets"),
+                    @tr("📚 Knowledge base"),
+                    @tr("👤 Profile + context"),
+                    @tr("🧠 AI bridge"),
+                    @tr("🗣 STT"),
                 ] : Rectangle {
                     height: 28px;
                     background: i == root.active-tab ? #2a2c3a : transparent;
@@ -105,7 +107,7 @@ export component SettingsWindow inherits Window {
 
                 Rectangle { vertical-stretch: 1; }
                 Button {
-                    text: "✕ Close";
+                    text: @tr("✕ Close");
                     clicked => { root.close-clicked(); }
                 }
             }
@@ -133,18 +135,18 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 0 : VerticalLayout {
                         spacing: 8px;
                         Text {
-                            text: "Stealth mode hides the overlay window from screen capture (Print Screen, Teams/Meet, OBS). Uses WDA_EXCLUDEFROMCAPTURE on Windows 10/11.";
+                            text: @tr("Stealth mode hides the overlay window from screen capture (Print Screen, Teams/Meet, OBS). Uses WDA_EXCLUDEFROMCAPTURE on Windows 10/11.");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
                         }
                         CheckBox {
-                            text: "Always on top (HWND_TOPMOST)";
+                            text: @tr("Always on top (HWND_TOPMOST)");
                             checked <=> root.always-on-top-toggle;
                             toggled => { root.always-on-top-changed(self.checked); }
                         }
                         CheckBox {
-                            text: "Stealth (hide from screen capture)";
+                            text: @tr("Stealth (hide from screen capture)");
                             checked <=> root.stealth-toggle;
                             toggled => { root.stealth-changed(self.checked); }
                         }
@@ -152,16 +154,16 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 1 : VerticalLayout {
                         spacing: 8px;
                         Text {
-                            text: "Post-meeting debrief: AI critique of pacing, filler density, key points. Opt-in.";
+                            text: @tr("Post-meeting debrief: AI critique of pacing, filler density, key points. Opt-in.");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
                         }
-                        CheckBox { text: "Enable post-meeting debrief"; }
+                        CheckBox { text: @tr("Enable post-meeting debrief"); }
                         HorizontalLayout {
                             spacing: 8px;
                             Text {
-                                text: "Min session seconds:";
+                                text: @tr("Min session seconds:");
                                 font-size: 11px;
                                 color: #c8c8cc;
                                 vertical-alignment: center;
@@ -171,21 +173,24 @@ export component SettingsWindow inherits Window {
                     }
                     if root.active-tab == 2 : VerticalLayout {
                         spacing: 4px;
+                        // SCAFFOLDING: "wire to RegisterHotKey in Phase 2.3" — internal
+                        // marker that Phase 2.3 will replace this stub with real config.
+                        // Description still user-facing → wrap.
                         Text {
-                            text: "Global hotkeys (read-only — wire to RegisterHotKey in Phase 2.3):";
+                            text: @tr("Global hotkeys (read-only — wire to RegisterHotKey in Phase 2.3):");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
                         }
                         Rectangle { background: #2a2c3a; height: 1px; }
                         for entry in [
-                            ["F1",  "Toggle hotkey-hint popover"],
-                            ["F2",  "Cycle context profile"],
-                            ["F3",  "Ask the AI now"],
-                            ["F4",  "Open KB palette"],
-                            ["F7",  "Bulk collapse/expand all tiles"],
-                            ["F8",  "Push-to-talk (hold)"],
-                            ["F9",  "Reload last tile"],
+                            ["F1",  @tr("Toggle hotkey-hint popover")],
+                            ["F2",  @tr("Cycle context profile")],
+                            ["F3",  @tr("Ask the AI now")],
+                            ["F4",  @tr("Open KB palette")],
+                            ["F7",  @tr("Bulk collapse/expand all tiles")],
+                            ["F8",  @tr("Push-to-talk (hold)")],
+                            ["F9",  @tr("Reload last tile")],
                         ] : HorizontalLayout {
                             padding: 4px;
                             spacing: 12px;
@@ -206,7 +211,7 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 3 : VerticalLayout {
                         spacing: 8px;
                         Text {
-                            text: "Interface language. Wires gettext for all UI strings (Phase 6).";
+                            text: @tr("Interface language. Wires gettext for all UI strings (Phase 6).");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
@@ -214,12 +219,14 @@ export component SettingsWindow inherits Window {
                         HorizontalLayout {
                             spacing: 8px;
                             Text {
-                                text: "Language:";
+                                text: @tr("Language:");
                                 font-size: 11px;
                                 color: #c8c8cc;
                                 vertical-alignment: center;
                             }
                             ComboBox {
+                                // Language names are themselves untranslated identifiers
+                                // (each appears in its own language as a self-label).
                                 model: ["Русский", "English"];
                                 current-index: 0;
                             }
@@ -228,15 +235,15 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 4 : VerticalLayout {
                         spacing: 8px;
                         Text {
-                            text: "Check for updates and view diagnostic info.";
+                            text: @tr("Check for updates and view diagnostic info.");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
                         }
-                        Button { text: "Check for updates"; }
-                        Button { text: "Save diagnostic dump"; }
+                        Button { text: @tr("Check for updates"); }
+                        Button { text: @tr("Save diagnostic dump"); }
                         Text {
-                            text: "Version: 0.2.0-slint-pre (slint-experiment branch)";
+                            text: @tr("Version: 0.2.0-slint-pre (slint-experiment branch)");
                             font-size: 10px;
                             color: #666;
                         }
@@ -244,11 +251,13 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 5 : VerticalLayout {
                         spacing: 8px;
                         Text {
-                            text: "Session stats aggregated across all journals.";
+                            text: @tr("Session stats aggregated across all journals.");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
                         }
+                        // SCAFFOLDING: mock stats data — Phase 2.6 will wire to real
+                        // journal aggregation (replaces literal numbers).
                         for line in [
                             "Sessions logged:        112",
                             "Total session time:     14h 22m",
@@ -265,37 +274,43 @@ export component SettingsWindow inherits Window {
                     }
                     if root.active-tab == 6 : VerticalLayout {
                         spacing: 8px;
+                        // SCAFFOLDING: "Phase 2.7 ports the WASAPI device enumeration..."
+                        // self-identifies as placeholder content. Tab will be rewritten
+                        // when audio device enumeration lands. Wrap is skipped.
                         Text {
                             text: "Microphone + system audio device selection. Phase 2.7 ports the WASAPI device enumeration + level meter from Audio.tsx.";
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
                         }
+                        // SCAFFOLDING: mock device list
                         ComboBox {
                             model: ["Default microphone", "USB Mic", "Bluetooth headset"];
                             current-index: 0;
                         }
-                        Button { text: "Test microphone (3s record)"; }
+                        Button { text: @tr("Test microphone (3s record)"); }
                     }
                     if root.active-tab == 7 : VerticalLayout {
                         spacing: 8px;
                         Text {
-                            text: "Auto-tile triggers — when transcript contains these keywords, spawn an answer tile automatically.";
+                            text: @tr("Auto-tile triggers — when transcript contains these keywords, spawn an answer tile automatically.");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
                         }
-                        CheckBox { text: "Enable auto-tile detector"; checked: true; }
-                        LineEdit { placeholder-text: "Add keyword..."; }
+                        CheckBox { text: @tr("Enable auto-tile detector"); checked: true; }
+                        LineEdit { placeholder-text: @tr("Add keyword..."); }
                     }
                     if root.active-tab == 8 : VerticalLayout {
                         spacing: 8px;
                         Text {
-                            text: "Custom snippets — invoke via /key in F4 palette to spawn a tile with the snippet body.";
+                            text: @tr("Custom snippets — invoke via /key in F4 palette to spawn a tile with the snippet body.");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
                         }
+                        // SCAFFOLDING: mock snippet rows — Phase 2.9 wires to
+                        // config.json snippets array.
                         for snip in [
                             ["k8s",       "Kubernetes orchestrator notes"],
                             ["postgres",  "PG cheatsheet"],
@@ -316,22 +331,22 @@ export component SettingsWindow inherits Window {
                                 color: #c8c8cc;
                             }
                         }
-                        Button { text: "+ Add snippet"; }
+                        Button { text: @tr("+ Add snippet"); }
                     }
                     if root.active-tab == 9 : VerticalLayout {
                         spacing: 8px;
                         Text {
-                            text: "Embedded knowledge base (1,696 entries: ~53 snippets + 1,643 KB entries across glossary/commands/patterns).";
+                            text: @tr("Embedded knowledge base (1,696 entries: ~53 snippets + 1,643 KB entries across glossary/commands/patterns).");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
                         }
-                        LineEdit { placeholder-text: "Search the KB..."; }
+                        LineEdit { placeholder-text: @tr("Search the KB..."); }
                     }
                     if root.active-tab == 10 : VerticalLayout {
                         spacing: 8px;
                         Text {
-                            text: "Persistent context shared with every AI request — your role, focus areas, vocabulary. Up to 8 KB.";
+                            text: @tr("Persistent context shared with every AI request — your role, focus areas, vocabulary. Up to 8 KB.");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
@@ -343,53 +358,54 @@ export component SettingsWindow inherits Window {
                             border-radius: 4px;
                             height: 120px;
                             Text {
-                                text: "(profile text — multi-line input editor)";
+                                text: @tr("(profile text — multi-line input editor)");
                                 color: #666;
                                 font-size: 11px;
                             }
                         }
                         HorizontalLayout {
                             spacing: 8px;
-                            Button { text: "Import"; }
-                            Button { text: "Export"; }
+                            Button { text: @tr("Import"); }
+                            Button { text: @tr("Export"); }
                         }
                     }
                     if root.active-tab == 11 : VerticalLayout {
                         spacing: 8px;
                         Text {
-                            text: "Claude AI bridge — bearer token + cost cap. Probe button validates connectivity.";
+                            text: @tr("Claude AI bridge — bearer token + cost cap. Probe button validates connectivity.");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
                         }
                         LineEdit {
-                            placeholder-text: "AI bearer token (masked when set)";
+                            placeholder-text: @tr("AI bearer token (masked when set)");
                         }
                         HorizontalLayout {
                             spacing: 8px;
                             Text {
-                                text: "Session cost cap ($):";
+                                text: @tr("Session cost cap ($):");
                                 font-size: 11px;
                                 color: #c8c8cc;
                                 vertical-alignment: center;
                             }
                             SpinBox { minimum: 0; maximum: 100; value: 5; }
                         }
-                        Button { text: "Probe Claude"; }
+                        Button { text: @tr("Probe Claude"); }
                     }
                     if root.active-tab == 12 : VerticalLayout {
                         spacing: 8px;
                         Text {
-                            text: "Groq STT (Whisper) settings — model + custom Whisper prompt (improves transcription on domain vocabulary).";
+                            text: @tr("Groq STT (Whisper) settings — model + custom Whisper prompt (improves transcription on domain vocabulary).");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
                         }
                         ComboBox {
+                            // Model identifiers — proper nouns, not translated.
                             model: ["whisper-large-v3", "whisper-large-v3-turbo"];
                             current-index: 1;
                         }
-                        LineEdit { placeholder-text: "Custom Whisper prompt (domain vocab)..."; }
+                        LineEdit { placeholder-text: @tr("Custom Whisper prompt (domain vocab)..."); }
                     }
                 }
             }
@@ -397,19 +413,19 @@ export component SettingsWindow inherits Window {
     }
 
     pure function tab-name-for(idx: int) -> string {
-        return idx == 0 ? "Stealth" :
-               idx == 1 ? "Coaching" :
-               idx == 2 ? "Hotkeys" :
-               idx == 3 ? "Interface" :
-               idx == 4 ? "Updates" :
-               idx == 5 ? "Stats" :
-               idx == 6 ? "Audio" :
-               idx == 7 ? "Auto-tiles" :
-               idx == 8 ? "Snippets" :
-               idx == 9 ? "Knowledge base" :
-               idx == 10 ? "Profile + context" :
-               idx == 11 ? "AI bridge" :
-               idx == 12 ? "STT" :
+        return idx == 0 ? @tr("Stealth") :
+               idx == 1 ? @tr("Coaching") :
+               idx == 2 ? @tr("Hotkeys") :
+               idx == 3 ? @tr("Interface") :
+               idx == 4 ? @tr("Updates") :
+               idx == 5 ? @tr("Stats") :
+               idx == 6 ? @tr("Audio") :
+               idx == 7 ? @tr("Auto-tiles") :
+               idx == 8 ? @tr("Snippets") :
+               idx == 9 ? @tr("Knowledge base") :
+               idx == 10 ? @tr("Profile + context") :
+               idx == 11 ? @tr("AI bridge") :
+               idx == 12 ? @tr("STT") :
                "—";
     }
 }

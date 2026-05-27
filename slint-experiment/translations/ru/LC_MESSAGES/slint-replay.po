@@ -4,9 +4,10 @@
 # settings_panel.slint + tile body content).
 #
 # Wrapped surfaces:
-# - ui/overlay_bar.slint (5 chip labels)
-# - ui/tile.slint        (1 chrome title with sequence + title)
-# - ui/palette.slint     (3 hint strings)
+# - ui/overlay_bar.slint    (5 chip labels)
+# - ui/tile.slint           (1 chrome title with sequence + title)
+# - ui/palette.slint        (3 hint strings)
+# - ui/settings_panel.slint (Phase D1 full extraction — 13-tab sidebar)
 
 msgid ""
 msgstr ""
@@ -51,3 +52,242 @@ msgstr "Начните печатать для поиска по базе зна
 
 msgid "No results for \"{}\"."
 msgstr "Нет результатов по запросу «{}»."
+
+# === settings_panel.slint ===
+
+# --- Window chrome ---
+
+msgid "overlay-mvp settings (Slint)"
+msgstr "Настройки overlay-mvp (Slint)"
+
+msgid "Settings"
+msgstr "Настройки"
+
+msgid "✕ Close"
+msgstr "✕ Закрыть"
+
+# --- Sidebar tab labels (13 tabs, emoji prefixes preserved as identity) ---
+
+msgid "🎯 Stealth"
+msgstr "🎯 Скрытность"
+
+msgid "🎯 Coaching"
+msgstr "🎯 Коучинг"
+
+msgid "⌨ Hotkeys"
+msgstr "⌨ Хоткеи"
+
+msgid "🌐 Interface"
+msgstr "🌐 Интерфейс"
+
+msgid "⬆ Updates"
+msgstr "⬆ Обновления"
+
+msgid "📊 Stats"
+msgstr "📊 Статистика"
+
+msgid "🎤 Audio"
+msgstr "🎤 Аудио"
+
+msgid "🪟 Auto-tiles"
+msgstr "🪟 Авто-тайлы"
+
+msgid "✂ Snippets"
+msgstr "✂ Сниппеты"
+
+msgid "📚 Knowledge base"
+msgstr "📚 База знаний"
+
+msgid "👤 Profile + context"
+msgstr "👤 Профиль + контекст"
+
+msgid "🧠 AI bridge"
+msgstr "🧠 AI мост"
+
+msgid "🗣 STT"
+msgstr "🗣 STT"
+
+# --- Header tab names (returned by tab-name-for()) ---
+
+msgid "Stealth"
+msgstr "Скрытность"
+
+msgid "Coaching"
+msgstr "Коучинг"
+
+msgid "Hotkeys"
+msgstr "Хоткеи"
+
+msgid "Interface"
+msgstr "Интерфейс"
+
+msgid "Updates"
+msgstr "Обновления"
+
+msgid "Stats"
+msgstr "Статистика"
+
+msgid "Audio"
+msgstr "Аудио"
+
+msgid "Auto-tiles"
+msgstr "Авто-тайлы"
+
+msgid "Snippets"
+msgstr "Сниппеты"
+
+msgid "Knowledge base"
+msgstr "База знаний"
+
+msgid "Profile + context"
+msgstr "Профиль + контекст"
+
+msgid "AI bridge"
+msgstr "AI мост"
+
+msgid "STT"
+msgstr "STT"
+
+# --- Tab 0: Stealth ---
+
+msgid "Stealth mode hides the overlay window from screen capture (Print Screen, Teams/Meet, OBS). Uses WDA_EXCLUDEFROMCAPTURE on Windows 10/11."
+msgstr "Stealth-режим скрывает окно overlay от захвата экрана (Print Screen, Teams/Meet, OBS). Использует WDA_EXCLUDEFROMCAPTURE на Windows 10/11."
+
+msgid "Always on top (HWND_TOPMOST)"
+msgstr "Поверх всех окон (HWND_TOPMOST)"
+
+msgid "Stealth (hide from screen capture)"
+msgstr "Скрытность (прятать от захвата экрана)"
+
+# --- Tab 1: Coaching ---
+
+msgid "Post-meeting debrief: AI critique of pacing, filler density, key points. Opt-in."
+msgstr "Разбор после встречи: AI критикует темп, плотность слов-паразитов, ключевые моменты. По желанию."
+
+msgid "Enable post-meeting debrief"
+msgstr "Включить разбор после встречи"
+
+msgid "Min session seconds:"
+msgstr "Минимум секунд в сессии:"
+
+# --- Tab 2: Hotkeys ---
+
+msgid "Global hotkeys (read-only — wire to RegisterHotKey in Phase 2.3):"
+msgstr "Глобальные хоткеи (только чтение — будут подключены через RegisterHotKey в Phase 2.3):"
+
+msgid "Toggle hotkey-hint popover"
+msgstr "Показать/скрыть подсказку по хоткеям"
+
+msgid "Cycle context profile"
+msgstr "Переключить профиль контекста"
+
+msgid "Ask the AI now"
+msgstr "Спросить AI сейчас"
+
+msgid "Open KB palette"
+msgstr "Открыть палитру базы знаний"
+
+msgid "Bulk collapse/expand all tiles"
+msgstr "Свернуть/развернуть все тайлы"
+
+msgid "Push-to-talk (hold)"
+msgstr "Push-to-talk (удерживать)"
+
+msgid "Reload last tile"
+msgstr "Перезагрузить последний тайл"
+
+# --- Tab 3: Interface ---
+
+msgid "Interface language. Wires gettext for all UI strings (Phase 6)."
+msgstr "Язык интерфейса. Подключает gettext ко всем строкам UI (Phase 6)."
+
+msgid "Language:"
+msgstr "Язык:"
+
+# --- Tab 4: Updates ---
+
+msgid "Check for updates and view diagnostic info."
+msgstr "Проверить обновления и посмотреть диагностику."
+
+msgid "Check for updates"
+msgstr "Проверить обновления"
+
+msgid "Save diagnostic dump"
+msgstr "Сохранить диагностический дамп"
+
+msgid "Version: 0.2.0-slint-pre (slint-experiment branch)"
+msgstr "Версия: 0.2.0-slint-pre (ветка slint-experiment)"
+
+# --- Tab 5: Stats ---
+
+msgid "Session stats aggregated across all journals."
+msgstr "Статистика сессий, агрегированная по всем журналам."
+
+# --- Tab 7: Auto-tiles ---
+
+msgid "Auto-tile triggers — when transcript contains these keywords, spawn an answer tile automatically."
+msgstr "Триггеры авто-тайлов — когда в транскрипте встречаются эти ключевые слова, автоматически открывается тайл с ответом."
+
+msgid "Enable auto-tile detector"
+msgstr "Включить детектор авто-тайлов"
+
+msgid "Add keyword..."
+msgstr "Добавить ключевое слово..."
+
+# --- Tab 8: Snippets ---
+
+msgid "Custom snippets — invoke via /key in F4 palette to spawn a tile with the snippet body."
+msgstr "Свои сниппеты — вызываются через /ключ в палитре F4, открывают тайл с телом сниппета."
+
+msgid "+ Add snippet"
+msgstr "+ Добавить сниппет"
+
+# --- Tab 9: Knowledge base ---
+
+msgid "Embedded knowledge base (1,696 entries: ~53 snippets + 1,643 KB entries across glossary/commands/patterns)."
+msgstr "Встроенная база знаний (1696 записей: ~53 сниппета + 1643 записи KB в глоссарии, командах и паттернах)."
+
+msgid "Search the KB..."
+msgstr "Поиск по базе знаний..."
+
+# --- Tab 10: Profile + context ---
+
+msgid "Persistent context shared with every AI request — your role, focus areas, vocabulary. Up to 8 KB."
+msgstr "Постоянный контекст, который отправляется с каждым запросом к AI — ваша роль, области фокуса, словарь. До 8 КБ."
+
+msgid "(profile text — multi-line input editor)"
+msgstr "(текст профиля — многострочный редактор)"
+
+msgid "Import"
+msgstr "Импорт"
+
+msgid "Export"
+msgstr "Экспорт"
+
+# --- Tab 11: AI bridge ---
+
+msgid "Claude AI bridge — bearer token + cost cap. Probe button validates connectivity."
+msgstr "Мост Claude AI — bearer-токен и лимит затрат. Кнопка проверки тестирует подключение."
+
+msgid "AI bearer token (masked when set)"
+msgstr "Bearer-токен AI (скрывается после ввода)"
+
+msgid "Session cost cap ($):"
+msgstr "Лимит затрат на сессию ($):"
+
+msgid "Probe Claude"
+msgstr "Проверить Claude"
+
+# --- Tab 12: STT ---
+
+msgid "Groq STT (Whisper) settings — model + custom Whisper prompt (improves transcription on domain vocabulary)."
+msgstr "Настройки Groq STT (Whisper) — модель и собственный промпт для Whisper (улучшает транскрипцию доменного словаря)."
+
+msgid "Custom Whisper prompt (domain vocab)..."
+msgstr "Свой промпт для Whisper (доменный словарь)..."
+
+# --- Tab 6: Audio (button only — description and dropdown items are
+#     scaffolding placeholders that Phase 2.7 will replace) ---
+
+msgid "Test microphone (3s record)"
+msgstr "Проверить микрофон (3 сек записи)"

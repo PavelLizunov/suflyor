@@ -250,23 +250,118 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== System chip =====
+    // ===== System (loopback) chip (Phase C: real 3s loopback probe) =====
+    //
+    // Mirror of the mic chip: runs `audio::record_sys_blocking(3000)`
+    // on a tokio blocking task, computes peak dBFS from loopback PCM,
+    // posts result to status pill. Same race-guard + ON-OFF mid-test
+    // handling as the mic chip.
     {
         let s = state.clone();
         let weak = overlay.as_weak();
+        let cfg_sys = cfg.clone();
+        let rt_sys = rt_handle.clone();
         overlay.on_sys_toggle_clicked(move || {
-            let new_active = {
+            let (new_active, may_probe) = {
                 let mut st = match s.lock() {
                     Ok(g) => g,
                     Err(p) => p.into_inner(),
                 };
                 st.sys_active = !st.sys_active;
-                st.sys_active
+                let may = st.sys_active && !st.sys_probe_in_flight;
+                if may {
+                    st.sys_probe_in_flight = true;
+                }
+                (st.sys_active, may)
             };
-            if let Some(o) = weak.upgrade() {
-                o.set_sys_active(new_active);
-                refresh_status(&o, get_mic_active(&s), new_active);
+            let Some(o) = weak.upgrade() else { return };
+            o.set_sys_active(new_active);
+            refresh_status(&o, get_mic_active(&s), new_active);
+
+            if !new_active || !may_probe {
+                return;
             }
+
+            // Phase C symmetry with mic — respect cfg.system_audio_device
+            // when set so users with non-default loopback (e.g. A50
+            // Stream Out) get their chosen device probed. Review-agent
+            // 2026-05-27 (mirror of the mic chip's cfg.mic_device read).
+            let sys_device = cfg_sys.read().system_audio_device.clone();
+            let weak_for_status = weak.clone();
+            let s_for_status = s.clone();
+            rt_sys.spawn_blocking(move || {
+                let device_label = sys_device.clone().unwrap_or_else(|| "default".into());
+                eprintln!("[overlay-host] sys test 3s — device={device_label}");
+                let result = audio::record_sys_blocking(3000, sys_device);
+                let peak_dbfs = match result {
+                    Ok(samples) if samples.is_empty() => None,
+                    Ok(samples) => {
+                        let peak = samples
+                            .iter()
+                            .map(|s| s.unsigned_abs() as u32)
+                            .max()
+                            .unwrap_or(0);
+                        if peak == 0 {
+                            Some(f32::NEG_INFINITY)
+                        } else {
+                            let norm = peak as f32 / 32768.0;
+                            Some(20.0 * norm.log10())
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[overlay-host] sys test failed: {e:#}");
+                        None
+                    }
+                };
+                let _ = slint::invoke_from_event_loop(move || {
+                    {
+                        let mut st = match s_for_status.lock() {
+                            Ok(g) => g,
+                            Err(p) => p.into_inner(),
+                        };
+                        st.sys_probe_in_flight = false;
+                    }
+                    let Some(o) = weak_for_status.upgrade() else {
+                        return;
+                    };
+                    if !get_sys_active(&s_for_status) {
+                        eprintln!(
+                            "[overlay-host] sys test result ignored — user toggled off mid-probe"
+                        );
+                        return;
+                    }
+                    let (label, color) = match peak_dbfs {
+                        Some(db) if db.is_finite() && db >= -40.0 => {
+                            ("sys ok", slint::Color::from_rgb_u8(0x6c, 0xcf, 0xff))
+                        }
+                        Some(db) if db.is_finite() => {
+                            ("sys quiet", slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24))
+                        }
+                        Some(_) => ("sys silent", slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24)),
+                        None => (
+                            "sys test failed",
+                            slint::Color::from_rgb_u8(0xf8, 0x71, 0x71),
+                        ),
+                    };
+                    o.set_status_text(SharedString::from(label));
+                    o.set_status_color(color);
+                    eprintln!(
+                        "[overlay-host] sys test result: {} dBFS ({label})",
+                        peak_dbfs.map_or_else(|| "?".into(), |d| format!("{d:.2}"))
+                    );
+                    let weak_revert = weak_for_status.clone();
+                    let s_revert = s_for_status.clone();
+                    slint::Timer::single_shot(Duration::from_secs(5), move || {
+                        if let Some(o) = weak_revert.upgrade() {
+                            refresh_status(
+                                &o,
+                                get_mic_active(&s_revert),
+                                get_sys_active(&s_revert),
+                            );
+                        }
+                    });
+                });
+            });
         });
     }
 

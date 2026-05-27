@@ -409,6 +409,21 @@ pub fn record_source_until_stop(
 
 /// Record the microphone for a fixed duration, return 16 kHz mono i16 PCM.
 /// Blocking — suitable for spawn_blocking from an async command.
+/// Record the SYSTEM (loopback) audio for a fixed duration, return
+/// 16 kHz mono i16 PCM. Thin wrapper over `record_source_until_stop`:
+/// spawns a sleep+set-flag thread to terminate after `duration_ms`.
+/// Used by the overlay-host's sys chip for a 3s loopback-health probe
+/// (mirrors `record_mic_blocking` for the mic chip).
+pub fn record_sys_blocking(duration_ms: u64, sys_device: Option<String>) -> Result<Vec<i16>> {
+    let stop = Arc::new(AtomicBool::new(false));
+    let stop_setter = stop.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(duration_ms));
+        stop_setter.store(true, Ordering::Release);
+    });
+    record_source_until_stop(AudioSource::System, None, sys_device, stop)
+}
+
 pub fn record_mic_blocking(duration_ms: u64, mic_device: Option<String>) -> Result<Vec<i16>> {
     use std::time::Instant;
 

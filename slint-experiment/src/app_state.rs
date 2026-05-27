@@ -42,6 +42,9 @@ pub struct AppState {
     /// concurrent WASAPI captures fighting for the same device.
     /// Caught by review-agent 2026-05-27.
     pub mic_probe_in_flight: bool,
+    /// Same as mic_probe_in_flight but for the sys chip's loopback
+    /// probe (record_sys_blocking).
+    pub sys_probe_in_flight: bool,
 }
 
 /// Convenience alias used by all window-spawning callbacks.
