@@ -35,7 +35,9 @@ mod ui {
     slint::include_modules!();
 }
 
-use ui::{MarkdownBlock, OverlayBarWindow, SettingsWindow, TileWindow};
+use ui::{
+    MarkdownBlock, OverlayBarWindow, PaletteResult, PaletteWindow, SettingsWindow, TileWindow,
+};
 
 type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
 
@@ -163,7 +165,19 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // ===== Bookmark / Tips (stubs) =====
     overlay.on_bookmark_clicked(|| eprintln!("[overlay-host] bookmark clicked (stub)"));
-    overlay.on_tips_clicked(|| eprintln!("[overlay-host] tips clicked (stub)"));
+
+    // Tips chip doubles as palette opener for now (Phase 5 will swap
+    // to a global F4 hotkey via Win32 RegisterHotKey).
+    let palette: Rc<RefCell<Option<PaletteWindow>>> = Rc::new(RefCell::new(None));
+    {
+        let palette_ref = palette.clone();
+        let tiles_ref = tiles.clone();
+        let s = state.clone();
+        let weak_overlay = overlay.as_weak();
+        overlay.on_tips_clicked(move || {
+            open_palette(&palette_ref, &tiles_ref, &s, &weak_overlay);
+        });
+    }
 
     // ===== Stealth toggle on overlay bar =====
     {
@@ -348,6 +362,130 @@ fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
             let _ = move_window(hwnd, x, y, tile_w, tile_h);
         }
     });
+}
+
+/// Open (or reuse) the KB palette window. Auto-spawn a tile when
+/// the user activates a result, mimicking the React palette flow.
+fn open_palette(
+    palette_ref: &Rc<RefCell<Option<PaletteWindow>>>,
+    tiles_ref: &TileWindows,
+    state: &slint_replay::app_state::SharedState,
+    weak_overlay: &slint::Weak<OverlayBarWindow>,
+) {
+    let mut slot = palette_ref.borrow_mut();
+    if let Some(existing) = slot.as_ref() {
+        let _ = existing.show();
+        return;
+    }
+    let win = match PaletteWindow::new() {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln!("[overlay-host] PaletteWindow::new failed: {e}");
+            return;
+        }
+    };
+
+    // Sample static results (Phase 5.x will hit kb_search backend).
+    let sample = vec![
+        PaletteResult {
+            key: "kubernetes".into(),
+            title: "kubernetes — k8s".into(),
+            preview: "Container orchestration platform. Manages deployment, scaling, healing across a cluster of nodes.".into(),
+            source: "kb".into(),
+        },
+        PaletteResult {
+            key: "kubectl".into(),
+            title: "kubectl".into(),
+            preview: "CLI for Kubernetes API. Reads ~/.kube/config. Verbs: get, describe, logs, exec, apply, delete.".into(),
+            source: "kb".into(),
+        },
+        PaletteResult {
+            key: "/k8s".into(),
+            title: "/k8s snippet".into(),
+            preview: "Kubernetes cheatsheet snippet (custom)".into(),
+            source: "snippet".into(),
+        },
+    ];
+    win.set_results(slint::ModelRc::new(slint::VecModel::from(sample)));
+
+    let weak_close = win.as_weak();
+    let palette_close = palette_ref.clone();
+    win.on_close_requested(move || {
+        if let Some(w) = weak_close.upgrade() {
+            let _ = w.hide();
+        }
+        *palette_close.borrow_mut() = None;
+    });
+
+    let s_ref = state.clone();
+    let tiles_ref2 = tiles_ref.clone();
+    let weak_overlay2 = weak_overlay.clone();
+    let palette_after = palette_ref.clone();
+    let weak_self = win.as_weak();
+    win.on_result_activated(move |idx| {
+        let Some(p) = weak_self.upgrade() else { return };
+        let results = p.get_results();
+        let Some(result) = results_index(&results, idx) else {
+            return;
+        };
+
+        // Spawn a tile with the result content (re-uses Phase 4 plumbing).
+        let seq = {
+            let mut st = match s_ref.lock() {
+                Ok(g) => g,
+                Err(p) => p.into_inner(),
+            };
+            st.tiles_spawned += 1;
+            st.tiles_spawned
+        };
+        if let Some(o) = weak_overlay2.upgrade() {
+            o.set_tiles_spawned(seq as i32);
+        }
+        if let Ok(tile) = TileWindow::new() {
+            tile.set_sequence(seq as i32);
+            tile.set_tile_title(SharedString::from(result.title.to_string()));
+            tile.set_source_label(SharedString::from(format!("palette · {}", result.source)));
+            // Render the result preview as a simple paragraph; real Phase 5
+            // would call kb_get(key) to load the full content + parse as markdown.
+            let md = format!("# {}\n\n{}\n", result.key, result.preview);
+            let blocks: Vec<MarkdownBlock> = markdown::parse(&md)
+                .into_iter()
+                .map(|b| MarkdownBlock {
+                    kind: b.kind,
+                    text: SharedString::from(b.text),
+                    lang: SharedString::from(b.lang),
+                })
+                .collect();
+            tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
+
+            let weak_tile = tile.as_weak();
+            tile.on_close_clicked(move || {
+                if let Some(t) = weak_tile.upgrade() {
+                    let _ = t.hide();
+                }
+            });
+
+            let _ = tile.show();
+            apply_tile_hwnd_with_monitor(&tile);
+            tiles_ref2.borrow_mut().push(tile);
+        }
+        // Close palette after activation.
+        if let Some(p) = weak_self.upgrade() {
+            let _ = p.hide();
+        }
+        *palette_after.borrow_mut() = None;
+    });
+
+    let _ = win.show();
+    *slot = Some(win);
+}
+
+fn results_index(model: &slint::ModelRc<PaletteResult>, idx: i32) -> Option<PaletteResult> {
+    use slint::Model;
+    if idx < 0 {
+        return None;
+    }
+    model.row_data(idx as usize)
 }
 
 /// Open the settings window. Reuses existing instance if open.

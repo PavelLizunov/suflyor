@@ -1,0 +1,159 @@
+// Phase 5 — F4 KB palette stub.
+//
+// Frameless centered window: input field at top, RECENT chips
+// below, results list. F4 (and clicking the overlay's 💡 chip, for
+// now) shows it; Esc / outside-click hides it. Enter on a result
+// spawns a tile via Phase 4 plumbing.
+//
+// Phase 5.x will wire RegisterHotKey for the global F4 + ResizeObserver
+// for outside-click + kb_search backend call. Stub displays sample
+// results loaded from a static list.
+
+import { LineEdit, ScrollView } from "std-widgets.slint";
+
+export struct PaletteResult {
+    key: string,
+    title: string,
+    preview: string,
+    source: string,  // "snippet" | "kb"
+}
+
+export component PaletteWindow inherits Window {
+    title: "F4 — KB palette";
+    background: transparent;
+    no-frame: true;
+    always-on-top: true;
+    preferred-width: 620px;
+    preferred-height: 420px;
+    min-width: 420px;
+
+    in-out property <string> query: "";
+    in-out property <[string]> recent-chips: ["kubernetes", "postgres", "docker"];
+    in-out property <[PaletteResult]> results: [];
+    in-out property <int> selected-index: 0;
+
+    callback query-changed(string);
+    callback chip-clicked(string);
+    callback result-activated(int);
+    callback close-requested();
+
+    Rectangle {
+        background: #14161eee;
+        border-radius: 12px;
+        border-width: 1px;
+        border-color: #2a2c3a;
+
+        VerticalLayout {
+            padding: 12px;
+            spacing: 8px;
+
+            // Input field
+            LineEdit {
+                placeholder-text: "type to search KB / snippets — /snip lists snippets, +key body adds one";
+                text <=> root.query;
+                edited(t) => { root.query-changed(t); }
+            }
+
+            // Recent chips row
+            HorizontalLayout {
+                spacing: 4px;
+                Text {
+                    text: "recent:";
+                    font-size: 10px;
+                    color: #666;
+                    vertical-alignment: center;
+                }
+                for chip in root.recent-chips: Rectangle {
+                    background: transparent;
+                    border-color: #3a3c44;
+                    border-width: 1px;
+                    border-radius: 10px;
+                    height: 20px;
+                    horizontal-stretch: 0;
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
+                        Text {
+                            text: chip;
+                            font-size: 10px;
+                            color: #c8c8cc;
+                            vertical-alignment: center;
+                        }
+                    }
+                    TouchArea { clicked => { root.chip-clicked(chip); } }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Text {
+                    text: "Esc to close · Enter to spawn tile";
+                    font-size: 9px;
+                    color: #555;
+                    vertical-alignment: center;
+                }
+            }
+
+            Rectangle {
+                background: #2a2c3a;
+                height: 1px;
+            }
+
+            // Results list
+            ScrollView {
+                vertical-stretch: 1;
+                VerticalLayout {
+                    spacing: 2px;
+                    if root.results.length == 0 : Text {
+                        text: root.query == ""
+                            ? "Start typing to search the embedded knowledge base (1,696 entries)…"
+                            : "No results for \"" + root.query + "\".";
+                        font-size: 11px;
+                        color: #666;
+                        horizontal-alignment: center;
+                    }
+                    for result[i] in root.results: Rectangle {
+                        background: i == root.selected-index ? #1f2230 : transparent;
+                        border-radius: 4px;
+                        border-color: i == root.selected-index ? #6cf : transparent;
+                        border-width: 1px;
+                        height: 44px;
+
+                        HorizontalLayout {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            spacing: 12px;
+
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                spacing: 0px;
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    Text {
+                                        text: result.key;
+                                        font-size: 12px;
+                                        font-weight: 700;
+                                        color: i == root.selected-index ? #6cf : #c8c8cc;
+                                        vertical-alignment: center;
+                                    }
+                                    Text {
+                                        text: result.source;
+                                        font-size: 9px;
+                                        color: #666;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                                Text {
+                                    text: result.preview;
+                                    font-size: 10px;
+                                    color: #999;
+                                    overflow: elide;
+                                }
+                            }
+                        }
+                        TouchArea {
+                            clicked => { root.result-activated(i); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
