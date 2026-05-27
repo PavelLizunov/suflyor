@@ -12,9 +12,12 @@
 //!   #3 manual_spawn_tile          ← landed
 //!   #4 ask (stream loop)          ← landed
 //!   #5 manual_ask_source          ← landed
-//!   #6 manual_ask_window_end      ← landed (this port)
-//!   #7 maybe_spawn_tile + start_session (together)
-//!   #8 stop_session               (depends on debrief)
+//!   #6 manual_ask_window_end      ← landed
+//!   #7 maybe_spawn_tile + start_session  DEFERRED — entry-point
+//!      orchestrators stay binary-specific. See plan doc § Execution
+//!      status for the architectural rationale + the prescription if
+//!      a future revisit is warranted.
+//!   #8 stop_session               DEFERRED — same reason as #7.
 //!
 //! ## State-flow pattern (introduced in port #2)
 //!
@@ -136,6 +139,7 @@ pub async fn run_post_meeting_debrief(
             answer,
             source: "debrief".into(),
             is_translation: false,
+            highlights: vec![],
         },
         monitor_hint,
         stealth,
@@ -467,6 +471,7 @@ pub async fn reask_last(
             answer: answer_trimmed.clone(),
             source: "reask".into(),
             is_translation: false,
+            highlights: vec![],
         },
         match preferred_monitor.as_deref() {
             Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
@@ -659,6 +664,7 @@ pub async fn manual_spawn_tile(
             answer: answer_trimmed.clone(),
             source: "manual_spawn".into(),
             is_translation: false,
+            highlights: vec![],
         },
         monitor_hint,
         stealth,
@@ -874,6 +880,7 @@ pub async fn manual_ask_source(
             answer: answer_trimmed.clone(),
             source: purpose.into(),
             is_translation: false,
+            highlights: vec![],
         },
         monitor_hint,
         stealth,
@@ -1257,6 +1264,7 @@ pub async fn manual_ask_window_end(
             answer: answer_trimmed.clone(),
             source: purpose.into(),
             is_translation: false,
+            highlights: vec![],
         },
         monitor_hint,
         stealth,

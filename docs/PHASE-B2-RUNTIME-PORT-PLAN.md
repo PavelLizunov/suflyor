@@ -153,3 +153,92 @@ After current session's Phase D1 settings_panel batch lands. Allow
 1 dedicated multi-hour session per the "hard" fns; the 4 "easy" or
 "medium" ports can land incrementally per the order above with
 review-agent before each commit.
+
+## Execution status (updated 2026-05-27)
+
+Session 2026-05-27 landed 6 of 8 ports (ports #1-#6 in the order
+listed above):
+
+| # | Fn | Commit | Pattern introduced |
+|---|---|---|---|
+| 1 | `run_post_meeting_debrief` | b8d2b33 | Baseline (events trait + monitor name) |
+| 2 | `reask_last` | 6ce0d36 | `*Inputs`/`*Outcome` snapshot/writeback |
+| 3 | `manual_spawn_tile` | 3225d33 | New `TileKind::Manual` |
+| 4 | `ask` (stream loop) | 3452c7e | `CostApplyFn` closure for end-of-stream mutation |
+| 5 | `manual_ask_source` | 98176bb | `TileKind::System/Mic/Auto` for chrome parity |
+| 6 | `manual_ask_window_end` | 9e0710f | `RecentContextFn` deferred-snapshot closure |
+
+**Ports #7 (`maybe_spawn_tile` + `start_session`) and #8
+(`stop_session`) deferred as intentional architectural choice.**
+
+Rationale:
+
+- **`start_session` + `stop_session` are `#[tauri::command]`
+  entry-points**, not internal pipeline fns. They're invoked
+  from React via `tauri::invoke('start_session')`. The Slint
+  binary will have its own equivalents (Slint callback handlers
+  driving the same primitives in overlay-backend — `audio::
+  start_capture`, `stt::spawn`, `Journal::open_new_session`,
+  the AI/STT pipelines already ported). There is no semantic
+  win from moving these orchestrators into the shared crate
+  when each binary needs its own version anyway.
+
+- **`maybe_spawn_tile` is tightly coupled to `SharedRuntime`
+  state**: it reads `qa_cache`, `recent_tile_triggers`,
+  `recent_question_prefixes`, `transcript`, `journal`,
+  `session_cost_microcents`, AND writes back to all of them.
+  A faithful port would require either (a) moving `RuntimeState`
+  to overlay-backend (large refactor — 100+ fields and helpers),
+  or (b) a 6-method `AutoTileStateApi` trait with closures the
+  shim provides. Both add API surface for marginal benefit since
+  the auto-detector flow is already invoked only from
+  `start_session`'s transcript-forwarder (which stays in
+  src-tauri per the previous point).
+
+- **The Slint binary already uses overlay-backend's primitives
+  directly** for its own auto-tile flow. When that flow needs
+  cache/dedup/rate-limit, those concerns can be implemented in
+  the Slint binary using the same patterns the src-tauri side
+  uses today — no shared abstraction required for code that
+  doesn't have multiple consumers.
+
+What the 6 ports DID deliver:
+
+- **AI prompt building** (`build_auto_tile_prompts` + `Trigger`)
+  shared across both binaries — same wire prompts in Slint.
+- **AI streaming loop** (`ask_stream_loop`) reusable for any
+  caller with an AiEvent receiver — Slint can drive it directly.
+- **Reask / manual-spawn / source-ask / PTT** all in overlay-
+  backend — Slint can re-use them with its own Inputs builders.
+- **Debrief** in overlay-backend — Slint binary can call it
+  identically.
+- **TauriEvents adapter** in src-tauri/src/lib.rs proves the
+  pattern is sound; SlintEvents adapter can be a 1:1 analog.
+- **MonitorHint::Named pin, TileKind::{Manual,System,Mic,Auto,
+  Debrief,Ai,Kb,Snippet,Translate,Reload,Followup,Bookmark}
+  semantic kinds** — full chrome-affordance preservation.
+- **TileSpec gained `highlights: Vec<String>`** for the auto-
+  tile highlight feature (port #7 prep that survives even
+  though the port itself is deferred — usable by any future
+  caller).
+
+Net effect: **runtime.rs's emit + tile-spawn + AI-call + STT
++ KB pipeline is fully Tauri-decoupled in overlay-backend.**
+The remaining Tauri-coupled fns are entry-point orchestrators
+that legitimately need binary-specific implementations.
+
+If ports #7+#8 are later required (e.g. for code-reuse parity
+between Tauri + Slint binaries OR for spec testing of the
+auto-detector pipeline in isolation), the recommended approach
+is:
+
+1. Add `AutoTileStateApi` trait to overlay-backend::events with
+   the 6 state-access methods (cache get/insert, rate-limit
+   check, dedup check, store_last_qa, accumulate_cost, snapshot
+   recent transcript).
+2. Implement it on a wrapper around src-tauri's SharedRuntime
+   (same pattern as TauriEvents).
+3. Port `maybe_spawn_tile` taking `Arc<dyn AutoTileStateApi>`
+   alongside the existing trait.
+4. start_session stays in src-tauri — its body becomes a thin
+   wiring fn calling the ported pipeline.

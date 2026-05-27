@@ -79,7 +79,7 @@ pub trait RuntimeEvents: Send + Sync {
 
 /// Description of a tile to spawn — replaces the React-side
 /// `tile::spawn_tile_with_stealth(question, answer)` Tauri call.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TileSpec {
     pub question: String,
     pub answer: String,
@@ -89,6 +89,14 @@ pub struct TileSpec {
     /// True when the tile carries a translation rather than an
     /// AI-generated answer (chrome adds the 🌐 glyph).
     pub is_translation: bool,
+    /// Keywords to highlight in the tile's rendered markdown (wraps
+    /// them in `<mark>` on the React side; Slint side ignores until
+    /// the markdown adapter learns to render `<mark>`). Empty Vec
+    /// means "no highlights" — typical for non-auto-tile spawns.
+    /// Added Phase B2 port #7 prep — future-proofing TileSpec for
+    /// auto-tile flow without forcing a separate
+    /// `spawn_tile_with_highlights` trait method.
+    pub highlights: Vec<String>,
 }
 
 /// Tile kind — discriminates the chrome glyph, journal
@@ -269,12 +277,14 @@ mod tests {
             answer: String::new(),
             source: "ai".into(),
             is_translation: false,
+            highlights: vec![],
         });
         let id2 = sink.spawn_tile(TileSpec {
             question: "abc".into(),
             answer: String::new(),
             source: "kb".into(),
             is_translation: false,
+            highlights: vec![],
         });
         // Stable-per-question-len: both have len=3 → same id (noop is
         // deterministic by design; real impls assign unique ids).
@@ -314,6 +324,7 @@ mod tests {
             answer: "world".into(),
             source: "ai".into(),
             is_translation: false,
+            highlights: vec![],
         };
         let id_ai = sink
             .spawn_tile_full(spec.clone(), MonitorHint::Auto, false, TileKind::Ai)
@@ -355,6 +366,7 @@ mod tests {
                     answer: "a".into(),
                     source: "debrief".into(),
                     is_translation: false,
+                    highlights: vec![],
                 },
                 MonitorHint::Named("\\\\.\\DISPLAY2".into()),
                 true,
@@ -383,6 +395,7 @@ mod tests {
                     answer: "a".into(),
                     source: "ai".into(),
                     is_translation: false,
+                    highlights: vec![],
                 },
                 MonitorHint::Auto,
                 false,
