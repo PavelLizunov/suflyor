@@ -1431,6 +1431,24 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // Phase E6 v13 — auto-enable sys (loopback) capture on startup.
+    // User feedback: "почему каждый раз когда ты стартуешь ты не
+    // прокликиваешь sys звук и не включаешь?" — every launch the
+    // user had to click the sys chip manually before audio could
+    // be captured, even though their use-case (interviews, Zoom,
+    // YouTube prep) ALWAYS wants sys capture on. Opt-out via env
+    // var SLINT_OVERLAY_NO_AUTO_SYS=1 if a future caller needs the
+    // old behaviour (e.g. CI smoke runs).
+    if std::env::var("SLINT_OVERLAY_NO_AUTO_SYS").is_err() {
+        let weak = overlay.as_weak();
+        Timer::single_shot(Duration::from_millis(400), move || {
+            if let Some(o) = weak.upgrade() {
+                eprintln!("[overlay-host] auto-enabling sys capture on startup");
+                o.invoke_sys_toggle_clicked();
+            }
+        });
+    }
+
     let result = overlay.run();
     // Tokio MT-runtime drop cancels spawned tasks at their next .await
     // (NOT graceful — they don't get to finish their HTTP response).
