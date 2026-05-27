@@ -48,7 +48,7 @@ export component TileWindow inherits Window {
             HorizontalLayout {
                 spacing: 6px;
                 Text {
-                    text: "#" + root.sequence + "  " + root.tile-title;
+                    text: @tr("#{}  {}", root.sequence, root.tile-title);
                     font-size: 12px;
                     font-weight: 700;
                     color: #e8e8ec;

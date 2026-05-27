@@ -258,25 +258,36 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== F4 global hotkey (Phase D2) =====
+    // ===== Global hotkeys F3 / F4 / F7 (Phase D2 + B3 extra) =====
     //
     // global-hotkey 0.6 owns a single process-wide event receiver +
-    // platform-specific hotkey manager. We register F4 once, then poll
-    // the receiver every 50 ms from a Slint Timer — fires on UI thread
-    // so we can touch Rc-borrowed state without Send concerns.
+    // platform-specific manager. We register one hotkey per F-key,
+    // then poll the receiver every 50 ms from a Slint Timer — fires
+    // on UI thread so we can touch Rc-borrowed state without Send.
+    //
+    // Mirrors the React/Tauri v0.1.1 binding table (Settings ▸ Hotkeys):
+    //   F3 — Ask the AI now (same flow as + tile chip)
+    //   F4 — Open KB palette
+    //   F7 — Bulk collapse/expand all tiles (stub — toggles a flag)
     let hotkey_manager = match global_hotkey::GlobalHotKeyManager::new() {
         Ok(m) => Some(m),
         Err(e) => {
-            eprintln!("[overlay-host] GlobalHotKeyManager init failed: {e}. F4 hotkey disabled.");
+            eprintln!("[overlay-host] GlobalHotKeyManager init failed: {e}. Hotkeys disabled.");
             None
         }
     };
+    let f3_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F3);
     let f4_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F4);
+    let f7_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F7);
+    let f3_id = f3_hotkey.id();
     let f4_id = f4_hotkey.id();
+    let f7_id = f7_hotkey.id();
     if let Some(m) = hotkey_manager.as_ref() {
-        match m.register(f4_hotkey) {
-            Ok(()) => eprintln!("[overlay-host] F4 hotkey registered (id={f4_id})"),
-            Err(e) => eprintln!("[overlay-host] F4 register failed: {e}"),
+        for (label, hk) in [("F3", f3_hotkey), ("F4", f4_hotkey), ("F7", f7_hotkey)] {
+            match m.register(hk) {
+                Ok(()) => eprintln!("[overlay-host] {label} hotkey registered"),
+                Err(e) => eprintln!("[overlay-host] {label} register failed: {e}"),
+            }
         }
     }
 
@@ -287,9 +298,26 @@ fn main() -> Result<(), slint::PlatformError> {
     let hp_weak_overlay = overlay.as_weak();
     hotkey_poll.start(TimerMode::Repeated, Duration::from_millis(50), move || {
         while let Ok(event) = global_hotkey::GlobalHotKeyEvent::receiver().try_recv() {
-            if event.id == f4_id && event.state == global_hotkey::HotKeyState::Pressed {
+            if event.state != global_hotkey::HotKeyState::Pressed {
+                continue;
+            }
+            if event.id == f4_id {
                 eprintln!("[overlay-host] F4 pressed — opening palette");
                 open_palette(&hp_palette, &hp_tiles, &hp_state, &hp_weak_overlay);
+            } else if event.id == f3_id {
+                // Phase D2 placeholder: F3 currently re-invokes the
+                // spawn_tile callback (same as the "+ tile" chip), which
+                // uses a hardcoded demo prompt. Phase C+ task: read the
+                // last N seconds of mic transcript from overlay_backend
+                // and pass as the real "Ask the AI now" prompt.
+                eprintln!("[overlay-host] F3 pressed — invoking spawn-tile (demo prompt; real transcript wiring pending)");
+                if let Some(o) = hp_weak_overlay.upgrade() {
+                    o.invoke_spawn_tile_clicked();
+                }
+            } else if event.id == f7_id {
+                eprintln!("[overlay-host] F7 pressed — collapse-all (stub)");
+                // Phase 4+ would call `tile.set_collapsed(true)` on
+                // every open tile via the registry.
             }
         }
     });

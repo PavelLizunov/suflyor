@@ -49,7 +49,7 @@ export component PaletteWindow inherits Window {
 
             // Input field
             LineEdit {
-                placeholder-text: "type to search KB / snippets — /snip lists snippets, +key body adds one";
+                placeholder-text: @tr("type to search KB / snippets — /snip lists snippets, +key body adds one");
                 text <=> root.query;
                 edited(t) => { root.query-changed(t); }
             }
@@ -58,7 +58,7 @@ export component PaletteWindow inherits Window {
             HorizontalLayout {
                 spacing: 4px;
                 Text {
-                    text: "recent:";
+                    text: @tr("recent:");
                     font-size: 10px;
                     color: #666;
                     vertical-alignment: center;
@@ -84,7 +84,7 @@ export component PaletteWindow inherits Window {
                 }
                 Rectangle { horizontal-stretch: 1; }
                 Text {
-                    text: "Esc to close · Enter to spawn tile";
+                    text: @tr("Esc to close · Enter to spawn tile");
                     font-size: 9px;
                     color: #555;
                     vertical-alignment: center;
@@ -103,8 +103,8 @@ export component PaletteWindow inherits Window {
                     spacing: 2px;
                     if root.results.length == 0 : Text {
                         text: root.query == ""
-                            ? "Start typing to search the embedded knowledge base (1,696 entries)…"
-                            : "No results for \"" + root.query + "\".";
+                            ? @tr("Start typing to search the embedded knowledge base (1,696 entries)…")
+                            : @tr("No results for \"{}\".", root.query);
                         font-size: 11px;
                         color: #666;
                         horizontal-alignment: center;

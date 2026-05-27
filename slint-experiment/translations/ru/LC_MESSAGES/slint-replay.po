@@ -1,12 +1,19 @@
-# Russian translation for the overlay-host binary.
-# Phase D1 partial: 5 user-facing chip labels in overlay_bar.slint.
-# Extend with `slint-tr-extractor` over ui/ once more strings get @tr()
-# wrappers across tile.slint / palette.slint / settings_panel.slint.
+# Russian translations for slint-replay (overlay-host binary).
+# Extracted manually pre-Phase-6 (slint-tr-extractor sweep + msgmerge
+# will replace this once more strings get @tr() wraps in
+# settings_panel.slint + tile body content).
+#
+# Wrapped surfaces:
+# - ui/overlay_bar.slint (5 chip labels)
+# - ui/tile.slint        (1 chrome title with sequence + title)
+# - ui/palette.slint     (3 hint strings)
 
 msgid ""
 msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language: ru\n"
+
+# === overlay_bar.slint ===
 
 msgid "🎤 mic"
 msgstr "🎤 микрофон"
@@ -22,3 +29,25 @@ msgstr "🧠 {}"
 
 msgid "+ tile ({})"
 msgstr "+ тайл ({})"
+
+# === tile.slint ===
+
+msgid "#{}  {}"
+msgstr "№{}  {}"
+
+# === palette.slint ===
+
+msgid "type to search KB / snippets — /snip lists snippets, +key body adds one"
+msgstr "поиск по базе знаний / сниппетам — /snip список сниппетов, +ключ тело добавляет новый"
+
+msgid "recent:"
+msgstr "недавние:"
+
+msgid "Esc to close · Enter to spawn tile"
+msgstr "Esc — закрыть · Enter — открыть тайл"
+
+msgid "Start typing to search the embedded knowledge base (1,696 entries)…"
+msgstr "Начните печатать для поиска по базе знаний (1696 записей)…"
+
+msgid "No results for \"{}\"."
+msgstr "Нет результатов по запросу «{}»."
