@@ -313,7 +313,11 @@ pub fn trigger_highlights(trigger: &backend_runtime::Trigger) -> Vec<String> {
 /// PER_MIN value to keep cost behavior identical across binaries.
 const MAX_TILES_PER_MIN: usize = 6;
 /// Aggressive-mode cap (when `cfg.auto_tile_every_line=true`).
-const MAX_TILES_PER_MIN_AGGRESSIVE: usize = 20;
+/// Phase E6 v19: reduced 20 → 10 after user reported UI freeze even
+/// with cycle 22 spawn rate limit. 20/min still floods the spawn
+/// queue + each tile holds AI streaming state + memory. 10/min ≈ one
+/// tile every 6s which matches realistic interview pacing.
+const MAX_TILES_PER_MIN_AGGRESSIVE: usize = 10;
 /// QA cache TTL — 10 min matches src-tauri's qa_cache TTL so a
 /// long meeting that re-asks the same question gets a cache hit.
 const QA_CACHE_TTL_SECS: u64 = 600;

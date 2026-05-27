@@ -855,19 +855,36 @@ fn main() -> Result<(), slint::PlatformError> {
     let tiles_for_poll = tiles.clone();
     let spawn_poll_timer = Timer::default();
     spawn_poll_timer.start(TimerMode::Repeated, Duration::from_millis(50), move || {
-        // Phase E6 v18 — process at most 2 spawn requests per 50ms
-        // tick. Previously drained the entire queue every tick which
-        // saturated the UI thread when aggressive mode flooded (20
-        // spawns/min × heavy TileWindow::new + apply_transparency +
-        // markdown::parse). User: "снова когда куча окон основное
-        // окно резко стало некликабельным". Backlog still drains
-        // eventually — just spread over multiple ticks so the bar
-        // stays responsive.
-        const MAX_SPAWNS_PER_TICK: usize = 2;
+        // Phase E6 v19 — process at most 1 spawn request per 50 ms
+        // tick (was 2 in v18). TileWindow::new + Slint layout +
+        // apply_transparency + markdown::parse + on_*_clicked
+        // wiring takes 20-50 ms per tile. Two-per-tick burned 40-
+        // 100 ms of UI thread every 50 ms tick → still 80-200%
+        // UI-thread saturation under aggressive flood. One-per-tick
+        // = 20 tiles/sec max throughput which is plenty (aggressive
+        // rate-limit is 10/min, see MAX_TILES_PER_MIN_AGGRESSIVE).
+        // User reported (cycle 24): "баг с зависанием основной
+        // панели не пропал".
+        //
+        // Also: cap the LIVE tiles Vec at MAX_LIVE_TILES — if the
+        // user lets the session run wild, force-close the oldest
+        // tile before spawning a new one. Bounds Slint internal
+        // event dispatch cost (was O(N) per UI event).
+        const MAX_SPAWNS_PER_TICK: usize = 1;
+        const MAX_LIVE_TILES: usize = 16;
         let mut processed = 0;
         while processed < MAX_SPAWNS_PER_TICK {
             let Ok(req) = spawn_rx.try_recv() else { break };
             processed += 1;
+            // Drop oldest tile if we're at the cap. Slint releases
+            // the native window when the Strong refcount hits 0.
+            while tiles_for_poll.borrow().len() >= MAX_LIVE_TILES {
+                let dropped = tiles_for_poll.borrow_mut().remove(0);
+                let _ = dropped.hide();
+                eprintln!(
+                    "[overlay-host] live tile cap hit (>= {MAX_LIVE_TILES}) — dropping oldest"
+                );
+            }
             let tile = match TileWindow::new() {
                 Ok(t) => t,
                 Err(e) => {
