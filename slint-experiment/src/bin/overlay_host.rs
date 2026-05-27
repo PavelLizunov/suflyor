@@ -93,21 +93,23 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     );
 
+    let state = new_shared_state();
+    let tiles: TileWindows = Rc::new(RefCell::new(Vec::new()));
+    let settings: Rc<RefCell<Option<SettingsWindow>>> = Rc::new(RefCell::new(None));
+
+    let overlay = OverlayBarWindow::new()?;
+
     // Phase D1 — select bundled translation per config.ui_language.
-    // Defaults to "ru" per overlay_backend::config::default_ui_language().
-    // Currently only overlay-bar chip labels are wrapped in @tr() —
-    // tile/settings/palette wraps come in D1 expansion.
+    // MUST be called AFTER creating at least one component (Slint
+    // requirement: the platform backend has to be initialized first,
+    // and component creation triggers that). Default "ru" per
+    // overlay_backend::config::default_ui_language().
     let lang = cfg.read().ui_language.clone();
     match slint::select_bundled_translation(&lang) {
         Ok(()) => eprintln!("[overlay-host] translation set to {lang}"),
         Err(e) => eprintln!("[overlay-host] translation {lang} not available: {e}"),
     }
 
-    let state = new_shared_state();
-    let tiles: TileWindows = Rc::new(RefCell::new(Vec::new()));
-    let settings: Rc<RefCell<Option<SettingsWindow>>> = Rc::new(RefCell::new(None));
-
-    let overlay = OverlayBarWindow::new()?;
     overlay.set_status_text(SharedString::from("idle"));
     overlay.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
     // Initialize ai-model chip from loaded config. (Was previously
