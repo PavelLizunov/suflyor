@@ -7,6 +7,7 @@
 pub mod ai;
 pub mod audio;
 pub mod config;
+pub mod events;
 pub mod health;
 pub mod journal;
 pub mod kb;

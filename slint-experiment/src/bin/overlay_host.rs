@@ -11,7 +11,7 @@
 //!
 //! Run: `cargo run --bin overlay-host` from `slint-experiment/`.
 
-use overlay_backend::{ai, config, kb};
+use overlay_backend::{ai, audio, config, kb};
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
 use slint_replay::app_state::{format_timer, new_shared_state, next_model};
 use slint_replay::markdown;
@@ -121,23 +121,132 @@ fn main() -> Result<(), slint::PlatformError> {
 
     apply_overlay_hwnd(&overlay);
 
-    // ===== Mic chip =====
+    // ===== Mic chip (Phase C: real 3s mic level test via audio backend) =====
+    //
+    // Going-active toggle now runs `audio::record_mic_blocking(3000)` on
+    // a tokio blocking task (WASAPI is synchronous), computes peak dBFS
+    // from the i16 samples, and posts the result to the status pill via
+    // slint::invoke_from_event_loop.
+    //
+    // Real continuous capture (start_capture + STT pipeline drain) is
+    // Phase B2 work — needs the runtime::start_session port. For now
+    // the chip click is a 3-second mic-health probe.
     {
         let s = state.clone();
         let weak = overlay.as_weak();
+        let cfg_mic = cfg.clone();
+        let rt_mic = rt_handle.clone();
         overlay.on_mic_toggle_clicked(move || {
-            let new_active = {
+            // Re-entry guard: don't spawn a second probe while the
+            // first is still running. Review-agent finding 2026-05-27.
+            let (new_active, may_probe) = {
                 let mut st = match s.lock() {
                     Ok(g) => g,
                     Err(p) => p.into_inner(),
                 };
                 st.mic_active = !st.mic_active;
-                st.mic_active
+                let may = st.mic_active && !st.mic_probe_in_flight;
+                if may {
+                    st.mic_probe_in_flight = true;
+                }
+                (st.mic_active, may)
             };
-            if let Some(o) = weak.upgrade() {
-                o.set_mic_active(new_active);
-                refresh_status(&o, new_active, get_sys_active(&s));
+            let Some(o) = weak.upgrade() else { return };
+            o.set_mic_active(new_active);
+            refresh_status(&o, new_active, get_sys_active(&s));
+
+            if !new_active || !may_probe {
+                // off-toggle OR a probe is already in flight; let the
+                // current one finish and fire its own status update.
+                return;
             }
+
+            // Capture device name + spawn the blocking probe.
+            let mic_device = cfg_mic.read().mic_device.clone();
+            let weak_for_status = weak.clone();
+            let s_for_status = s.clone();
+            rt_mic.spawn_blocking(move || {
+                let started_label = mic_device.clone().unwrap_or_else(|| "default".into());
+                eprintln!("[overlay-host] mic test 3s — device={started_label}");
+                let result = audio::record_mic_blocking(3000, mic_device);
+                let peak_dbfs = match result {
+                    Ok(samples) if samples.is_empty() => None,
+                    Ok(samples) => {
+                        let peak = samples
+                            .iter()
+                            .map(|s| s.unsigned_abs() as u32)
+                            .max()
+                            .unwrap_or(0);
+                        if peak == 0 {
+                            Some(f32::NEG_INFINITY)
+                        } else {
+                            let norm = peak as f32 / 32768.0;
+                            Some(20.0 * norm.log10())
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[overlay-host] mic test failed: {e:#}");
+                        None
+                    }
+                };
+                let _ = slint::invoke_from_event_loop(move || {
+                    // Clear the in-flight flag whatever happens (success,
+                    // silence, error, or user toggled off mid-test).
+                    {
+                        let mut st = match s_for_status.lock() {
+                            Ok(g) => g,
+                            Err(p) => p.into_inner(),
+                        };
+                        st.mic_probe_in_flight = false;
+                    }
+                    let Some(o) = weak_for_status.upgrade() else {
+                        return;
+                    };
+                    // If user toggled mic OFF while the probe was running,
+                    // don't overwrite the now-idle status with a "mic ok"
+                    // flash. Review-agent finding 2026-05-27.
+                    if !get_mic_active(&s_for_status) {
+                        eprintln!(
+                            "[overlay-host] mic test result ignored — user toggled off mid-probe"
+                        );
+                        return;
+                    }
+                    // 3-bucket label aligned with React's coloured-dot
+                    // convention (silent / quiet / ok). Avoids leaking
+                    // dev jargon ("-42.3 dBFS") to non-technical users.
+                    let (label, color) = match peak_dbfs {
+                        Some(db) if db.is_finite() && db >= -40.0 => {
+                            ("mic ok", slint::Color::from_rgb_u8(0x34, 0xd3, 0x99))
+                        }
+                        Some(db) if db.is_finite() => {
+                            ("mic quiet", slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24))
+                        }
+                        Some(_) => ("mic silent", slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24)),
+                        None => (
+                            "mic test failed",
+                            slint::Color::from_rgb_u8(0xf8, 0x71, 0x71),
+                        ),
+                    };
+                    o.set_status_text(SharedString::from(label));
+                    o.set_status_color(color);
+                    eprintln!(
+                        "[overlay-host] mic test result: {} dBFS ({label})",
+                        peak_dbfs.map_or_else(|| "?".into(), |d| format!("{d:.2}"))
+                    );
+                    // Auto-revert status after 5s.
+                    let weak_revert = weak_for_status.clone();
+                    let s_revert = s_for_status.clone();
+                    slint::Timer::single_shot(Duration::from_secs(5), move || {
+                        if let Some(o) = weak_revert.upgrade() {
+                            refresh_status(
+                                &o,
+                                get_mic_active(&s_revert),
+                                get_sys_active(&s_revert),
+                            );
+                        }
+                    });
+                });
+            });
         });
     }
 

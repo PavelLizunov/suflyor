@@ -36,6 +36,12 @@ pub struct AppState {
     pub ai_model: String,
     /// Cumulative session cost in USD.
     pub cost_usd: f64,
+    /// True while a record_mic_blocking probe is running. Set on
+    /// click-ON, cleared in the post-result invoke_from_event_loop
+    /// closure. Re-entry guard so rapid double-click doesn't spawn
+    /// concurrent WASAPI captures fighting for the same device.
+    /// Caught by review-agent 2026-05-27.
+    pub mic_probe_in_flight: bool,
 }
 
 /// Convenience alias used by all window-spawning callbacks.
