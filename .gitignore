@@ -23,7 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 
-# Rust / Cargo build artifacts (~3 GB)
+# Rust / Cargo build artifacts (~3 GB) + visual-test PNGs
+target/
 src-tauri/target/
 
 # Tauri generated bindings (rebuilt automatically)

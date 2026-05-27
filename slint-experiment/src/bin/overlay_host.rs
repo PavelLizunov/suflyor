@@ -797,6 +797,7 @@ fn main() -> Result<(), slint::PlatformError> {
             tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
             let weak_tile = tile.as_weak();
             tile.on_close_clicked(move || {
+                eprintln!("[overlay-host] tile (poll/F3) close_clicked fired");
                 if let Some(t) = weak_tile.upgrade() {
                     let _ = t.hide();
                 }
@@ -807,6 +808,7 @@ fn main() -> Result<(), slint::PlatformError> {
             // looks like the button is broken.
             let weak_pin = tile.as_weak();
             tile.on_pin_clicked(move || {
+                eprintln!("[overlay-host] tile (poll/F3) pin_clicked fired");
                 if weak_pin.upgrade().is_some() {
                     // Pin behaviour ports later — silent stub for now.
                 }
@@ -1149,6 +1151,7 @@ fn main() -> Result<(), slint::PlatformError> {
 
             let weak_tile = tile.as_weak();
             tile.on_close_clicked(move || {
+                eprintln!("[overlay-host] tile (spawn-poll) close_clicked fired");
                 if let Some(t) = weak_tile.upgrade() {
                     let _ = t.hide();
                 }
@@ -1156,7 +1159,7 @@ fn main() -> Result<(), slint::PlatformError> {
             let weak_pin = tile.as_weak();
             tile.on_pin_clicked(move || {
                 if weak_pin.upgrade().is_some() {
-                    eprintln!("[overlay-host] tile pin clicked (stub)");
+                    eprintln!("[overlay-host] tile (spawn-poll) pin_clicked fired");
                 }
             });
 
@@ -1638,14 +1641,14 @@ fn fire_f9_ask(
     tile.set_blocks(ModelRc::new(VecModel::from(placeholder)));
     let weak_close = tile.as_weak();
     tile.on_close_clicked(move || {
-        eprintln!("[overlay-host] F9 tile close_clicked fired");
+        eprintln!("[overlay-host] tile (F9) close_clicked fired");
         if let Some(t) = weak_close.upgrade() {
             let _ = t.hide();
         }
     });
     let weak_pin = tile.as_weak();
     tile.on_pin_clicked(move || {
-        eprintln!("[overlay-host] F9 tile pin_clicked fired");
+        eprintln!("[overlay-host] tile (F9) pin_clicked fired");
         if weak_pin.upgrade().is_some() {
             // Stub — full pin behaviour (stop session auto-hide) lives
             // in the React/Tauri version; mirror once Slint state grows.
@@ -1808,6 +1811,13 @@ static TILE_DISPLAY_SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::Ato
 /// it by pressing+dragging the title area. Win32 system-drag handles
 /// the actual cursor tracking + repaint. Phase E6 — fixes user
 /// complaint "тайлы нельзя двигать".
+///
+/// Phase E6 v9 — after WM_NCLBUTTONDOWN/HTCAPTION returns (Windows
+/// finished the modal drag loop), re-apply HWND_TOPMOST. Without
+/// this, the dragged tile sometimes loses topmost status (Windows
+/// can decide to demote it during the drag) and another topmost
+/// window comes in front → clicks on the X button miss the tile.
+/// Fixes user complaint "close сработал не сразу".
 fn wire_tile_drag(tile: &TileWindow) {
     let weak = tile.as_weak();
     tile.on_drag_start_requested(move || {
@@ -1819,6 +1829,14 @@ fn wire_tile_drag(tile: &TileWindow) {
         };
         if let Err(e) = start_window_drag(hwnd) {
             eprintln!("[overlay-host] start_window_drag failed: {e:#}");
+            return;
+        }
+        // Re-assert topmost after Windows' modal drag loop ends —
+        // WM_NCLBUTTONDOWN/HTCAPTION is synchronous (SendMessageW
+        // blocks), so by the time start_window_drag returns the user
+        // has released the mouse and the drag is complete.
+        if let Err(e) = set_always_on_top(hwnd, true) {
+            eprintln!("[overlay-host] post-drag set_always_on_top failed: {e:#}");
         }
     });
 }
@@ -1879,15 +1897,32 @@ fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
             let cols: usize = 2;
             let total_slots = (rows * cols).max(1);
 
-            let slot =
-                TILE_SLOT_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % total_slots;
+            // Phase E6 v9 — cascade-offset on wrap. Previously
+            // `slot = COUNTER % total_slots` made the 5th+ tile land
+            // ON TOP of the 1st tile, etc. User complaint: "потом
+            // они начали друг на друга прыгать". Now: track which
+            // cycle (wraparound generation) we're on, and offset
+            // every wrapped tile by (cascade_dx, cascade_dy) per
+            // cycle — visually a stagger like macOS cascade-windows.
+            // Hard clamps still prevent off-screen.
+            let raw_seq = TILE_SLOT_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let slot = raw_seq % total_slots;
+            let cycle = raw_seq / total_slots; // 0 for first batch, 1 for second, etc.
+            let cascade_dx: i32 = 32;
+            let cascade_dy: i32 = 24;
             let row = slot / cols;
             let col = slot % cols;
 
             let x_outer = mon.left + mon.width() - real_w - right_margin;
             let x_inner = x_outer - real_w - gap_x;
-            let x = if col == 0 { x_inner } else { x_outer };
-            let y = mon.top + top_margin + (row as i32) * (real_h + gap_y);
+            let x_base = if col == 0 { x_inner } else { x_outer };
+            let y_base = mon.top + top_margin + (row as i32) * (real_h + gap_y);
+
+            // Cascade offset grows leftward + downward so wrapped tiles
+            // peek out from under their first-cycle siblings. Negative
+            // dx on x because the right-cluster is already at right edge.
+            let x = x_base - (cycle as i32) * cascade_dx;
+            let y = y_base + (cycle as i32) * cascade_dy;
 
             // Hard clamp so a tile can never land off-screen even if
             // monitor enum returned weird coordinates (portrait
@@ -1896,9 +1931,9 @@ fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
             let y_clamped = y.clamp(mon.top + 8, mon.bottom - real_h - 8);
 
             eprintln!(
-                "[overlay-host] tile placement: monitor=({},{},{},{}) real_size=({},{}) slot={} row={} col={} pos=({},{})",
+                "[overlay-host] tile placement: monitor=({},{},{},{}) real_size=({},{}) slot={} cycle={} row={} col={} pos=({},{})",
                 mon.left, mon.top, mon.right, mon.bottom,
-                real_w, real_h, slot, row, col, x_clamped, y_clamped,
+                real_w, real_h, slot, cycle, row, col, x_clamped, y_clamped,
             );
             // Move-only — preserve Slint's natural size so HiDPI
             // rendering stays correct (text fills the dark fill area
@@ -2002,6 +2037,7 @@ fn open_palette(
 
             let weak_tile = tile.as_weak();
             tile.on_close_clicked(move || {
+                eprintln!("[overlay-host] tile (KB-palette) close_clicked fired");
                 if let Some(t) = weak_tile.upgrade() {
                     let _ = t.hide();
                 }
@@ -2011,6 +2047,7 @@ fn open_palette(
             // a later phase.
             let weak_pin = tile.as_weak();
             tile.on_pin_clicked(move || {
+                eprintln!("[overlay-host] tile (KB-palette) pin_clicked fired");
                 if weak_pin.upgrade().is_some() {
                     // Pin behaviour ports later — silent stub for now.
                 }

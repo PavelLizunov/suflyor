@@ -105,19 +105,49 @@ export component TileWindow inherits Window {
                         }
                     }
                 }
-                // Phase E6 fix: Unicode glyphs 📌/✕ render as missing-
-                // glyph boxes on some Slint+skia font fallbacks. Use
-                // ASCII text labels that any font renders cleanly.
-                // These are SIBLINGS of the drag-area Rectangle so
-                // their TouchArea is the topmost click target on
-                // their pixels.
-                Button {
-                    text: "pin";
-                    clicked => { root.pin-clicked(); }
+                // Phase E6 v9 — wrap buttons in fixed-min-width Rectangles
+                // with explicit TouchArea so the click target is larger
+                // than the default Slint Button intrinsic width. User
+                // reported "X не работает" on dragged tiles — root
+                // cause was pixel-perfect aim required (button ~15 px
+                // wide). Now each button is 44 px wide + 28 px tall so
+                // off-by-a-few-pixels clicks still land on the button.
+                Rectangle {
+                    width: 44px;
+                    height: 28px;
+                    background: pin-touch.has-hover ? #34354a : #2a2c3a;
+                    border-radius: 4px;
+                    border-width: 1px;
+                    border-color: #3a3c44;
+                    pin-touch := TouchArea {
+                        clicked => { root.pin-clicked(); }
+                    }
+                    Text {
+                        text: "pin";
+                        font-size: 11px;
+                        color: #e8e8ec;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
                 }
-                Button {
-                    text: "X";
-                    clicked => { root.close-clicked(); }
+                Rectangle {
+                    width: 30px;
+                    height: 28px;
+                    background: close-touch.has-hover ? #5a2a2a : #2a2c3a;
+                    border-radius: 4px;
+                    border-width: 1px;
+                    border-color: #3a3c44;
+                    close-touch := TouchArea {
+                        clicked => { root.close-clicked(); }
+                    }
+                    Text {
+                        text: "X";
+                        font-size: 12px;
+                        font-weight: 700;
+                        color: #e8e8ec;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
                 }
             }
 
