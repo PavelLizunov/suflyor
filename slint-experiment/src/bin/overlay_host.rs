@@ -61,6 +61,13 @@ struct OverlayBarBridge {
     overlay_weak: slint::Weak<OverlayBarWindow>,
     spawn_tx: tokio_mpsc::UnboundedSender<SpawnTileRequest>,
     tile_seq: AtomicU64,
+    /// Phase E6 v18 — last time we pushed a transcript:line update
+    /// to the bar UI. Throttle to MIN_TRANSCRIPT_PUSH_INTERVAL so
+    /// fast STT chunks (one every ~200ms in aggressive Whisper mode)
+    /// don't flood invoke_from_event_loop and saturate the UI
+    /// thread. Drops the IN-BETWEEN updates — user only ever cares
+    /// about the LATEST transcript text anyway.
+    last_transcript_push: std::sync::Mutex<std::time::Instant>,
     /// Phase E3 slice 2 — weak handle to the in-flight streaming
     /// tile plus per-tile accumulator. F9 ask handler synchronously
     /// creates a placeholder TileWindow, registers its weak here,
@@ -236,6 +243,25 @@ impl SlintUiBridge for OverlayBarBridge {
             self.handle_ai_event(payload);
             return;
         }
+        // Phase E6 v18 — transcript:line throttle. STT in aggressive
+        // Whisper mode produces ~5 events/sec; each schedules an
+        // invoke_from_event_loop which the UI thread has to drain.
+        // After 30s of streaming the queue is hundreds deep and the
+        // bar (+ chip click handlers) becomes unresponsive. Drop
+        // events that arrive within 200ms of the previous push —
+        // user only ever sees the LATEST line anyway.
+        if channel == "transcript:line" {
+            const MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(200);
+            let now = std::time::Instant::now();
+            let mut last = match self.last_transcript_push.lock() {
+                Ok(g) => g,
+                Err(p) => p.into_inner(),
+            };
+            if now.duration_since(*last) < MIN_INTERVAL {
+                return;
+            }
+            *last = now;
+        }
         let weak = self.overlay_weak.clone();
         let _ = slint::invoke_from_event_loop(move || {
             let Some(o) = weak.upgrade() else {
@@ -281,11 +307,10 @@ impl SlintUiBridge for OverlayBarBridge {
                     o.set_status_text(SharedString::from("🏁 wrapping up"));
                 }
                 "transcript:line" => {
-                    // Phase E6 v11 — surface the last STT line on the
-                    // bar so user sees "транскрипция работает". User
-                    // complaint: "нет статусов что транскрипция
-                    // работает". Truncate to 120 chars; Slint Text
-                    // elides further at render time.
+                    // Phase E6 v11 — surface latest STT on bar.
+                    // (Throttle handled UPSTREAM in forward_event
+                    // before invoke_from_event_loop is scheduled —
+                    // see the early return in forward_event.)
                     let text = payload
                         .get("text")
                         .and_then(|v| v.as_str())
@@ -446,6 +471,9 @@ fn main() -> Result<(), slint::PlatformError> {
         tile_seq: AtomicU64::new(0),
         current_streaming: std::sync::Mutex::new(None),
         ai_in_flight: std::sync::atomic::AtomicI32::new(0),
+        last_transcript_push: std::sync::Mutex::new(
+            std::time::Instant::now() - std::time::Duration::from_secs(1),
+        ),
     });
     let events: Arc<dyn RuntimeEvents> = Arc::new(SlintEvents::new(bridge.clone()));
 
@@ -827,7 +855,19 @@ fn main() -> Result<(), slint::PlatformError> {
     let tiles_for_poll = tiles.clone();
     let spawn_poll_timer = Timer::default();
     spawn_poll_timer.start(TimerMode::Repeated, Duration::from_millis(50), move || {
-        while let Ok(req) = spawn_rx.try_recv() {
+        // Phase E6 v18 — process at most 2 spawn requests per 50ms
+        // tick. Previously drained the entire queue every tick which
+        // saturated the UI thread when aggressive mode flooded (20
+        // spawns/min × heavy TileWindow::new + apply_transparency +
+        // markdown::parse). User: "снова когда куча окон основное
+        // окно резко стало некликабельным". Backlog still drains
+        // eventually — just spread over multiple ticks so the bar
+        // stays responsive.
+        const MAX_SPAWNS_PER_TICK: usize = 2;
+        let mut processed = 0;
+        while processed < MAX_SPAWNS_PER_TICK {
+            let Ok(req) = spawn_rx.try_recv() else { break };
+            processed += 1;
             let tile = match TileWindow::new() {
                 Ok(t) => t,
                 Err(e) => {
@@ -2044,11 +2084,17 @@ static TILE_DISPLAY_SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::Ato
 /// Win32 SetWindowPos with current position so the tile expands in
 /// place from its top-left corner. Flips tile.maximized so the
 /// button glyph updates.
-fn toggle_tile_maximize(hwnd: windows::Win32::Foundation::HWND, tile: &TileWindow) {
-    use windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, SWP_NOMOVE, SWP_NOZORDER};
+fn toggle_tile_maximize(_hwnd: windows::Win32::Foundation::HWND, tile: &TileWindow) {
+    // Phase E6 v18 fix — use Slint's window().set_size() not raw
+    // Win32 SetWindowPos. SetWindowPos resized the OS window but
+    // left Slint's layout pass thinking the size was still 460×360
+    // → chrome buttons (pin/max/X) stayed at old logical positions
+    // → user clicks hit dead space. set_size goes through the Slint
+    // engine which both updates the OS window AND re-runs layout.
+    // Fixes: "когда я развернул окно, другой его функционал завис".
     let new = !tile.get_maximized();
-    let (w, h): (i32, i32) = if new { (800, 600) } else { (460, 360) };
-    let _ = unsafe { SetWindowPos(hwnd, None, 0, 0, w, h, SWP_NOMOVE | SWP_NOZORDER) };
+    let (w, h): (f32, f32) = if new { (800.0, 600.0) } else { (460.0, 360.0) };
+    tile.window().set_size(slint::LogicalSize::new(w, h));
     tile.set_maximized(new);
     eprintln!("[overlay-host]   tile maximized -> {new} (size={w}x{h})");
 }
