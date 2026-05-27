@@ -5161,6 +5161,7 @@ dependencies = [
  "serde_json",
  "slint",
  "slint-build",
+ "tokio",
  "windows 0.62.2",
 ]
 

@@ -11,7 +11,7 @@
 //!
 //! Run: `cargo run --bin overlay-host` from `slint-experiment/`.
 
-use overlay_backend::kb;
+use overlay_backend::{ai, config, kb};
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
 use slint_replay::app_state::{format_timer, new_shared_state, next_model};
 use slint_replay::markdown;
@@ -64,11 +64,42 @@ fn main() -> Result<(), slint::PlatformError> {
         ),
     }
 
+    // Phase C — tokio runtime for async AI calls. Multi-threaded so
+    // AI HTTP requests don't block the Slint UI event loop. Spawn
+    // background tasks via `rt.handle().spawn(...)` from UI callbacks.
+    let tokio_rt = match tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => {
+            eprintln!("[overlay-host] tokio runtime init failed: {e}. AI calls disabled.");
+            return Err(slint::PlatformError::Other(format!("tokio init: {e}")));
+        }
+    };
+    let rt_handle = tokio_rt.handle().clone();
+
+    // Phase C — load config once at startup. SharedConfig (Arc<RwLock>)
+    // because Settings tab will eventually mutate it.
+    let cfg = config::shared();
+    eprintln!(
+        "[overlay-host] config loaded: ai_model={} ai_base_url={}",
+        cfg.read().ai_model,
+        if cfg.read().ai_base_url.is_empty() {
+            "(unset)"
+        } else {
+            "(set)"
+        }
+    );
+
     let state = new_shared_state();
     let tiles: TileWindows = Rc::new(RefCell::new(Vec::new()));
     let settings: Rc<RefCell<Option<SettingsWindow>>> = Rc::new(RefCell::new(None));
 
     let overlay = OverlayBarWindow::new()?;
+    // Initialize ai-model chip from loaded config.
+    overlay.set_ai_model(SharedString::from(cfg.read().ai_model.clone()));
     overlay.set_status_text(SharedString::from("idle"));
     overlay.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
     overlay.set_ai_model(SharedString::from("sonnet"));
@@ -268,11 +299,13 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== Spawn tile =====
+    // ===== Spawn tile (Phase C: real AI ask via overlay_backend::ai) =====
     {
         let s = state.clone();
         let t = tiles.clone();
         let weak = overlay.as_weak();
+        let cfg_ref = cfg.clone();
+        let rt = rt_handle.clone();
         overlay.on_spawn_tile_clicked(move || {
             let Some(overlay) = weak.upgrade() else {
                 return;
@@ -287,46 +320,142 @@ fn main() -> Result<(), slint::PlatformError> {
             };
             overlay.set_tiles_spawned(seq as i32);
 
-            match TileWindow::new() {
-                Ok(tile) => {
-                    tile.set_sequence(seq as i32);
-                    tile.set_tile_title(SharedString::from(format!("Sample tile #{seq}")));
-                    tile.set_source_label(SharedString::from("phase-4 sample"));
-
-                    // Phase 4 — parse sample markdown and push into the
-                    // tile's blocks model. Real Phase 4 work would source
-                    // this from the AI response stream or KB lookup.
-                    let md_source = markdown::sample_tile_markdown(seq);
-                    let blocks: Vec<MarkdownBlock> = markdown::parse(&md_source)
-                        .into_iter()
-                        .map(|b| MarkdownBlock {
-                            kind: b.kind,
-                            text: SharedString::from(b.text),
-                            lang: SharedString::from(b.lang),
-                        })
-                        .collect();
-                    tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
-
-                    let weak_tile = tile.as_weak();
-                    tile.on_close_clicked(move || {
-                        if let Some(t) = weak_tile.upgrade() {
-                            let _ = t.hide();
-                        }
-                    });
-
-                    let weak_pin = tile.as_weak();
-                    tile.on_pin_clicked(move || {
-                        if let Some(_t) = weak_pin.upgrade() {
-                            eprintln!("[overlay-host] tile pin clicked (stub)");
-                        }
-                    });
-
-                    let _ = tile.show();
-                    apply_tile_hwnd_with_monitor(&tile);
-                    t.borrow_mut().push(tile);
+            let tile = match TileWindow::new() {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!("[overlay-host] TileWindow::new failed: {e}");
+                    return;
                 }
-                Err(e) => eprintln!("[overlay-host] TileWindow::new failed: {e}"),
+            };
+
+            // Hardcoded demo prompt — Phase C extension would source
+            // this from the actual session transcript / detector hit.
+            let question = format!("Explain Kubernetes in 3 sentences. (Tile #{seq})");
+            tile.set_sequence(seq as i32);
+            tile.set_tile_title(SharedString::from(question.clone()));
+            tile.set_source_label(SharedString::from("ai · asking…"));
+
+            // Initial placeholder body while the AI call is in flight.
+            let placeholder = vec![MarkdownBlock {
+                kind: markdown::kind::PARAGRAPH,
+                text: SharedString::from("⏳ Asking AI…"),
+                lang: SharedString::from(""),
+            }];
+            tile.set_blocks(ModelRc::new(VecModel::from(placeholder)));
+
+            let weak_tile = tile.as_weak();
+            tile.on_close_clicked(move || {
+                if let Some(t) = weak_tile.upgrade() {
+                    let _ = t.hide();
+                }
+            });
+            let weak_pin = tile.as_weak();
+            tile.on_pin_clicked(move || {
+                if weak_pin.upgrade().is_some() {
+                    eprintln!("[overlay-host] tile pin clicked (stub)");
+                }
+            });
+
+            let _ = tile.show();
+            apply_tile_hwnd_with_monitor(&tile);
+
+            // Capture a Weak handle the tokio task can post back to
+            // the UI thread via slint::invoke_from_event_loop.
+            let weak_for_ai = tile.as_weak();
+            t.borrow_mut().push(tile);
+
+            // Spawn the AI call on the tokio runtime. Read config under
+            // the lock briefly, drop, then run async.
+            let snapshot = {
+                let cfg_r = cfg_ref.read();
+                (
+                    cfg_r.ai_base_url.clone(),
+                    cfg_r.ai_bearer.clone(),
+                    cfg_r.ai_model.clone(),
+                )
+            };
+            let (base_url, bearer, model) = snapshot;
+
+            if base_url.is_empty() || bearer.is_empty() {
+                // No AI config — render a fallback markdown explaining how
+                // to configure. Stays on UI thread so no invoke needed.
+                let md = format!(
+                    "# {question}\n\n*AI bridge not configured.* Open Settings → AI bridge to set `base_url` + `bearer token`, then re-spawn this tile.\n\n## Sample fallback content\n\n{}",
+                    markdown::sample_tile_markdown(seq)
+                );
+                let blocks: Vec<MarkdownBlock> = markdown::parse(&md)
+                    .into_iter()
+                    .map(|b| MarkdownBlock {
+                        kind: b.kind,
+                        text: SharedString::from(b.text),
+                        lang: SharedString::from(b.lang),
+                    })
+                    .collect();
+                if let Some(t) = weak_for_ai.upgrade() {
+                    t.set_blocks(ModelRc::new(VecModel::from(blocks)));
+                    t.set_source_label(SharedString::from("ai · not configured"));
+                }
+                return;
             }
+
+            let question_for_task = question.clone();
+            rt.spawn(async move {
+                let messages = vec![ai::ChatMessage {
+                    role: "user".to_string(),
+                    content: ai::MessageContent::Text(question_for_task.clone()),
+                }];
+                let result = ai::complete_with_usage(
+                    &base_url,
+                    &bearer,
+                    &model,
+                    messages,
+                    /* max_tokens */ 600,
+                )
+                .await;
+
+                // Post result back to UI thread.
+                let _ = slint::invoke_from_event_loop(move || {
+                    let Some(tile) = weak_for_ai.upgrade() else {
+                        return;
+                    };
+                    match result {
+                        Ok((response, usage)) => {
+                            let cost_micro =
+                                ai::cost_microcents(&model, usage.input, usage.output);
+                            let cost_usd = cost_micro as f64 / 100_000_000.0;
+                            let md = format!("# {question_for_task}\n\n{response}\n");
+                            let blocks: Vec<MarkdownBlock> = markdown::parse(&md)
+                                .into_iter()
+                                .map(|b| MarkdownBlock {
+                                    kind: b.kind,
+                                    text: SharedString::from(b.text),
+                                    lang: SharedString::from(b.lang),
+                                })
+                                .collect();
+                            tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
+                            tile.set_source_label(SharedString::from(format!(
+                                "ai · {} · ${:.4}",
+                                model, cost_usd
+                            )));
+                        }
+                        Err(e) => {
+                            let md = format!(
+                                "# {question_for_task}\n\n**AI call failed:** {e:#}\n\nCheck Settings → AI bridge or check the bridge process / network."
+                            );
+                            let blocks: Vec<MarkdownBlock> = markdown::parse(&md)
+                                .into_iter()
+                                .map(|b| MarkdownBlock {
+                                    kind: b.kind,
+                                    text: SharedString::from(b.text),
+                                    lang: SharedString::from(b.lang),
+                                })
+                                .collect();
+                            tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
+                            tile.set_source_label(SharedString::from("ai · error"));
+                        }
+                    }
+                });
+            });
         });
     }
 
@@ -358,7 +487,11 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    overlay.run()
+    let result = overlay.run();
+    // Keep tokio_rt alive until after run() returns so any in-flight
+    // AI tasks complete cleanly. Drop happens at scope end.
+    drop(tokio_rt);
+    result
 }
 
 /// Recompute status pill based on capture flags.

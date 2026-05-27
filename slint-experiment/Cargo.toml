@@ -61,6 +61,11 @@ serde_json = "1"
 dirs = "5"
 anyhow = "1"
 
+# Phase C — async runtime for AI calls. overlay_backend::ai functions
+# are async and need a tokio runtime. multi-threaded so the AI HTTP
+# call doesn't starve the UI event loop.
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
 # Phase 0.5 overlay-spike: raw HWND + Win32 calls. Same versions
 # src-tauri uses (tauri 2.x ships windows 0.61/0.62 internally), so no
 # new third-party deps in the workspace.
