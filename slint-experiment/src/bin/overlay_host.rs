@@ -93,16 +93,27 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     );
 
+    // Phase D1 — select bundled translation per config.ui_language.
+    // Defaults to "ru" per overlay_backend::config::default_ui_language().
+    // Currently only overlay-bar chip labels are wrapped in @tr() —
+    // tile/settings/palette wraps come in D1 expansion.
+    let lang = cfg.read().ui_language.clone();
+    match slint::select_bundled_translation(&lang) {
+        Ok(()) => eprintln!("[overlay-host] translation set to {lang}"),
+        Err(e) => eprintln!("[overlay-host] translation {lang} not available: {e}"),
+    }
+
     let state = new_shared_state();
     let tiles: TileWindows = Rc::new(RefCell::new(Vec::new()));
     let settings: Rc<RefCell<Option<SettingsWindow>>> = Rc::new(RefCell::new(None));
 
     let overlay = OverlayBarWindow::new()?;
-    // Initialize ai-model chip from loaded config.
-    overlay.set_ai_model(SharedString::from(cfg.read().ai_model.clone()));
     overlay.set_status_text(SharedString::from("idle"));
     overlay.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
-    overlay.set_ai_model(SharedString::from("sonnet"));
+    // Initialize ai-model chip from loaded config. (Was previously
+    // overwritten by a stale `set_ai_model("sonnet")` boilerplate line
+    // — caught by review-agent catch-up audit 2026-05-27.)
+    overlay.set_ai_model(SharedString::from(cfg.read().ai_model.clone()));
     overlay.set_cost_label(SharedString::from("$0.000"));
     overlay.set_timer_label(SharedString::from("00:00"));
 
@@ -451,8 +462,15 @@ fn main() -> Result<(), slint::PlatformError> {
                             )));
                         }
                         Err(e) => {
+                            // Privacy: classify the error rather than dump
+                            // the full chain — reqwest errors typically
+                            // include the full base_url (LAN IP) which
+                            // would leak into screenshots saved under
+                            // target/visual/. Caught by review-agent
+                            // 2026-05-27.
+                            let category = classify_ai_error(&format!("{e:#}"));
                             let md = format!(
-                                "# {question_for_task}\n\n**AI call failed:** {e:#}\n\nCheck Settings → AI bridge or check the bridge process / network."
+                                "# {question_for_task}\n\n**AI call failed:** {category}\n\nCheck Settings → AI bridge or the bridge process / network.",
                             );
                             let blocks: Vec<MarkdownBlock> = markdown::parse(&md)
                                 .into_iter()
@@ -500,10 +518,36 @@ fn main() -> Result<(), slint::PlatformError> {
     }
 
     let result = overlay.run();
-    // Keep tokio_rt alive until after run() returns so any in-flight
-    // AI tasks complete cleanly. Drop happens at scope end.
-    drop(tokio_rt);
+    // Tokio MT-runtime drop cancels spawned tasks at their next .await
+    // (NOT graceful — they don't get to finish their HTTP response).
+    // shutdown_timeout gives in-flight tasks a budgeted window to wrap
+    // up; UI still exits promptly if they take too long. Comment fix
+    // per review-agent finding 2026-05-27 (previous comment claimed
+    // unconditional graceful drop, which is wrong).
+    tokio_rt.shutdown_timeout(Duration::from_secs(2));
     result
+}
+
+/// Map a reqwest/anyhow error string to a privacy-safe category for
+/// display in the tile body. Strips out URLs / IPs / bearer tokens
+/// that would otherwise land in user-shared screenshots.
+fn classify_ai_error(msg: &str) -> &'static str {
+    let lower = msg.to_lowercase();
+    if lower.contains("timed out") || lower.contains("timeout") {
+        "AI bridge timed out"
+    } else if lower.contains("connection refused") || lower.contains("connection error") {
+        "AI bridge unreachable (connection refused)"
+    } else if lower.contains("401") || lower.contains("403") || lower.contains("unauthorized") {
+        "AI bridge rejected request (auth failure)"
+    } else if lower.contains("404") || lower.contains("not found") {
+        "AI bridge endpoint not found (URL or model wrong)"
+    } else if lower.contains("429") || lower.contains("rate") {
+        "AI bridge rate-limited"
+    } else if lower.contains("500") || lower.contains("502") || lower.contains("503") {
+        "AI bridge returned server error"
+    } else {
+        "AI bridge call failed (see overlay-host stderr for diagnostic)"
+    }
 }
 
 /// Recompute status pill based on capture flags.

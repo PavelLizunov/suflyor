@@ -1,0 +1,24 @@
+# Russian translation for the overlay-host binary.
+# Phase D1 partial: 5 user-facing chip labels in overlay_bar.slint.
+# Extend with `slint-tr-extractor` over ui/ once more strings get @tr()
+# wrappers across tile.slint / palette.slint / settings_panel.slint.
+
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: ru\n"
+
+msgid "🎤 mic"
+msgstr "🎤 микрофон"
+
+msgid "🗣 sys"
+msgstr "🗣 система"
+
+msgid "⏱ {}"
+msgstr "⏱ {}"
+
+msgid "🧠 {}"
+msgstr "🧠 {}"
+
+msgid "+ tile ({})"
+msgstr "+ тайл ({})"

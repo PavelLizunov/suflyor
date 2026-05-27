@@ -107,9 +107,10 @@ pub struct RuntimeState {
 }
 
 // HealthSignals + HealthPayload were extracted to overlay_backend::health
-// during Phase B1 of the Slint migration. Re-export keeps existing
-// `crate::runtime::HealthSignals` callers compiling without churn.
-#[allow(unused_imports)] // HealthPayload re-exported for downstream callers
+// during Phase B1 of the Slint migration. Both symbols are actively used
+// elsewhere in src-tauri (HealthSignals → runtime state field; HealthPayload
+// → frontend event payload), so no `#[allow]` is needed. Catch-up review
+// 2026-05-27 flagged the previous overly-broad allow as a real signal.
 pub use overlay_backend::health::{HealthPayload, HealthSignals};
 
 /// Russian filler words tracked by the live voice coach. Lowercase,

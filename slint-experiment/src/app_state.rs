@@ -50,12 +50,20 @@ pub fn new_shared_state() -> SharedState {
     }))
 }
 
-/// Cycle AI model: sonnet -> haiku -> opus -> sonnet.
+/// Cycle AI model among the full IDs accepted by both `overlay_backend::
+/// ai::pricing_per_million` and the user's Claude bridge. IDs match what
+/// the React/Tauri v0.1.1 app writes into `config.json`, so the two stacks
+/// stay in sync.
+///
+/// Short names ("sonnet"/"haiku"/"opus") get mapped to the canonical
+/// current-generation ID before cycling, so legacy configs still work.
+/// Unknown IDs fall back to haiku (cheap default).
 pub fn next_model(current: &str) -> &'static str {
     match current {
-        "sonnet" => "haiku",
-        "haiku" => "opus",
-        _ => "sonnet",
+        "claude-haiku-4-5" | "haiku" => "claude-sonnet-4-6",
+        "claude-sonnet-4-5" | "claude-sonnet-4-6" | "sonnet" => "claude-opus-4-7",
+        "claude-opus-4-7" | "opus" => "claude-haiku-4-5",
+        _ => "claude-haiku-4-5",
     }
 }
 
@@ -69,5 +77,33 @@ pub fn format_timer(secs: u64) -> String {
         format!("{h}:{m:02}:{s:02}")
     } else {
         format!("{m:02}:{s:02}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// All next_model outputs must be valid IDs accepted by
+    /// overlay_backend::ai::pricing_per_million (otherwise we ship
+    /// model strings that the bridge rejects + cost calc falls to the
+    /// safe-upper-bound default). Caught by review-agent 2026-05-27.
+    #[test]
+    fn next_model_outputs_are_canonical_ids() {
+        let canonical = ["claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-7"];
+        for start in canonical {
+            let mut cur = start;
+            for _ in 0..4 {
+                cur = next_model(cur);
+                assert!(
+                    canonical.contains(&cur),
+                    "next_model({start} ...) produced non-canonical {cur:?}"
+                );
+            }
+        }
+        assert!(canonical.contains(&next_model("haiku")));
+        assert!(canonical.contains(&next_model("sonnet")));
+        assert!(canonical.contains(&next_model("opus")));
+        assert_eq!(next_model("garbage"), "claude-haiku-4-5");
     }
 }

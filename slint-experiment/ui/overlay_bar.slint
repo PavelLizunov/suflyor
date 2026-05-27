@@ -166,14 +166,14 @@ export component OverlayBarWindow inherits Window {
 
             // Live capture chips
             LiveChip {
-                label: "🎤 mic";
+                label: @tr("🎤 mic");
                 active: root.mic-active;
                 accent: #34d399;
                 clicked => { root.mic-toggle-clicked(); }
             }
 
             LiveChip {
-                label: "🗣 sys";
+                label: @tr("🗣 sys");
                 active: root.sys-active;
                 accent: #6cf;
                 clicked => { root.sys-toggle-clicked(); }
@@ -181,7 +181,7 @@ export component OverlayBarWindow inherits Window {
 
             // Session timer
             Chip {
-                label: "⏱ " + root.timer-label;
+                label: @tr("⏱ {}", root.timer-label);
                 active: root.timer-active;
                 accent: #fbbf24;
                 clicked => { root.timer-toggle-clicked(); }
@@ -189,7 +189,7 @@ export component OverlayBarWindow inherits Window {
 
             // AI model selector
             Chip {
-                label: "🧠 " + root.ai-model;
+                label: @tr("🧠 {}", root.ai-model);
                 accent: #818cf8;
                 clicked => { root.ai-model-cycle-clicked(); }
             }
@@ -227,7 +227,7 @@ export component OverlayBarWindow inherits Window {
 
             // Tile counter + spawn
             Chip {
-                label: "+ tile (" + root.tiles-spawned + ")";
+                label: @tr("+ tile ({})", root.tiles-spawned);
                 accent: #f472b6;
                 clicked => { root.spawn-tile-clicked(); }
             }
