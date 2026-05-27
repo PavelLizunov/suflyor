@@ -16,12 +16,7 @@
 // upgrade to per-block dedicated components.
 
 import { ScrollView } from "std-widgets.slint";
-
-export struct MarkdownBlock {
-    kind: int,
-    text: string,
-    lang: string,  // for CodeBlock; unused for others
-}
+import { MarkdownBlock } from "tile.slint";
 
 export component MarkdownSpike inherits Window {
     title: "Slint markdown adapter spike";

@@ -6,4 +6,5 @@
 //! `app_state` shared-state module for the multi-window plumbing.
 
 pub mod app_state;
+pub mod markdown;
 pub mod win32;

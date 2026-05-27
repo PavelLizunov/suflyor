@@ -1,59 +1,179 @@
-// Phase 1 Day 2 — Tile window stub.
+// Phase 4 — Tile window with markdown body.
 //
-// Final Phase 4 version: question header + markdown body (via
-// pulldown-cmark adapter from Phase 0.5 spike 3) + chrome row
-// (source label, age, chrome buttons, close). Day 2: title + body
-// placeholder + close button + sequence number.
+// Uses the same MarkdownBlock struct as markdown_spike.slint (single
+// definition in this file; spike imports from here). Rust side parses
+// CommonMark via slint_replay::markdown::parse() and pushes the
+// resulting Vec<Block> into the `blocks` property.
 
 import { Button, ScrollView } from "std-widgets.slint";
+
+// MarkdownBlock is shared with markdown_spike — defined here in the
+// canonical location and re-exported through index.slint.
+export struct MarkdownBlock {
+    kind: int,
+    text: string,
+    lang: string,
+}
 
 export component TileWindow inherits Window {
     title: "tile";
     background: transparent;
     no-frame: true;
     always-on-top: true;
-    preferred-width: 440px;
-    preferred-height: 260px;
+    preferred-width: 460px;
+    preferred-height: 360px;
+    min-width: 320px;
+    min-height: 200px;
 
     in-out property <string> tile-title: "Untitled tile";
-    in-out property <string> tile-body: "(body will render via pulldown-cmark adapter in Phase 4)";
     in-out property <int> sequence: 0;
+    in-out property <[MarkdownBlock]> blocks: [];
+    // Source label shown in chrome row (e.g. "ai", "kb", "snippet").
+    in-out property <string> source-label: "—";
 
     callback close-clicked();
+    callback pin-clicked();
 
     Rectangle {
         background: #14161eea;
-        border-radius: 8px;
+        border-radius: 10px;
         border-width: 1px;
         border-color: #2a2c3a;
 
         VerticalLayout {
-            padding: 12px;
-            spacing: 8px;
+            padding: 10px;
+            spacing: 6px;
 
+            // ===== Chrome row =====
             HorizontalLayout {
-                spacing: 8px;
+                spacing: 6px;
                 Text {
                     text: "#" + root.sequence + "  " + root.tile-title;
-                    font-size: 13px;
+                    font-size: 12px;
                     font-weight: 700;
                     color: #e8e8ec;
                     vertical-alignment: center;
+                    overflow: elide;
                 }
                 Rectangle { horizontal-stretch: 1; }
+                Rectangle {
+                    background: transparent;
+                    border-color: #3a3c44;
+                    border-width: 1px;
+                    border-radius: 8px;
+                    height: 20px;
+                    horizontal-stretch: 0;
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
+                        Text {
+                            text: root.source-label;
+                            font-size: 10px;
+                            color: #999;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+                Button {
+                    text: "📌";
+                    clicked => { root.pin-clicked(); }
+                }
                 Button {
                     text: "✕";
                     clicked => { root.close-clicked(); }
                 }
             }
 
+            Rectangle {
+                background: #2a2c3a;
+                height: 1px;
+            }
+
+            // ===== Markdown body (kind-discriminant renderer) =====
             ScrollView {
                 vertical-stretch: 1;
-                Text {
-                    text: root.tile-body;
-                    font-size: 12px;
-                    color: #c8c8cc;
-                    wrap: word-wrap;
+                VerticalLayout {
+                    spacing: 4px;
+                    for block[i] in root.blocks: Rectangle {
+                        background: transparent;
+                        horizontal-stretch: 1;
+
+                        // H1
+                        if block.kind == 1 : Text {
+                            text: block.text;
+                            font-size: 18px;
+                            font-weight: 700;
+                            color: #e8e8ec;
+                            wrap: word-wrap;
+                        }
+                        // H2
+                        if block.kind == 2 : Text {
+                            text: block.text;
+                            font-size: 15px;
+                            font-weight: 700;
+                            color: #c8c8cc;
+                            wrap: word-wrap;
+                        }
+                        // H3
+                        if block.kind == 3 : Text {
+                            text: block.text;
+                            font-size: 13px;
+                            font-weight: 700;
+                            color: #a8a8ac;
+                            wrap: word-wrap;
+                        }
+                        // Paragraph
+                        if block.kind == 0 : Text {
+                            text: block.text;
+                            font-size: 12px;
+                            color: #c8c8cc;
+                            wrap: word-wrap;
+                        }
+                        // Bullet
+                        if block.kind == 4 : HorizontalLayout {
+                            padding-left: 12px;
+                            spacing: 6px;
+                            Text {
+                                text: "•";
+                                font-size: 12px;
+                                color: #6cf;
+                                width: 10px;
+                            }
+                            Text {
+                                text: block.text;
+                                font-size: 12px;
+                                color: #c8c8cc;
+                                wrap: word-wrap;
+                            }
+                        }
+                        // Code block
+                        if block.kind == 5 : Rectangle {
+                            background: #0d0f15;
+                            border-radius: 4px;
+                            border-width: 1px;
+                            border-color: #2a2c3a;
+                            VerticalLayout {
+                                padding: 8px;
+                                if block.lang != "" : Text {
+                                    text: block.lang;
+                                    font-size: 9px;
+                                    color: #666;
+                                }
+                                Text {
+                                    text: block.text;
+                                    font-size: 11px;
+                                    color: #d8e8f8;
+                                    font-family: "Consolas";
+                                    wrap: no-wrap;
+                                }
+                            }
+                        }
+                        // HR
+                        if block.kind == 6 : Rectangle {
+                            background: #2a2c3a;
+                            height: 1px;
+                        }
+                    }
                 }
             }
         }

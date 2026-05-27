@@ -11,8 +11,9 @@
 //!
 //! Run: `cargo run --bin overlay-host` from `slint-experiment/`.
 
-use slint::{ComponentHandle, SharedString, Timer, TimerMode};
+use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
 use slint_replay::app_state::{format_timer, new_shared_state, next_model};
+use slint_replay::markdown;
 use slint_replay::win32::{
     enum_monitors, grab_hwnd, make_transparent_overlay, move_window, pick_monitor,
     set_always_on_top, set_stealth,
@@ -34,7 +35,7 @@ mod ui {
     slint::include_modules!();
 }
 
-use ui::{OverlayBarWindow, SettingsWindow, TileWindow};
+use ui::{MarkdownBlock, OverlayBarWindow, SettingsWindow, TileWindow};
 
 type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
 
@@ -216,18 +217,34 @@ fn main() -> Result<(), slint::PlatformError> {
             match TileWindow::new() {
                 Ok(tile) => {
                     tile.set_sequence(seq as i32);
-                    tile.set_tile_title(SharedString::from(format!("Tile #{seq}")));
-                    tile.set_tile_body(SharedString::from(
-                        "Phase 4 will render markdown via the pulldown-cmark adapter. \
-                         This tile demonstrates the multi-window plumbing — each new \
-                         tile is its own native window with HWND-managed transparency \
-                         + click-through, sharing AppState via Arc<Mutex<...>>.",
-                    ));
+                    tile.set_tile_title(SharedString::from(format!("Sample tile #{seq}")));
+                    tile.set_source_label(SharedString::from("phase-4 sample"));
+
+                    // Phase 4 — parse sample markdown and push into the
+                    // tile's blocks model. Real Phase 4 work would source
+                    // this from the AI response stream or KB lookup.
+                    let md_source = markdown::sample_tile_markdown(seq);
+                    let blocks: Vec<MarkdownBlock> = markdown::parse(&md_source)
+                        .into_iter()
+                        .map(|b| MarkdownBlock {
+                            kind: b.kind,
+                            text: SharedString::from(b.text),
+                            lang: SharedString::from(b.lang),
+                        })
+                        .collect();
+                    tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
 
                     let weak_tile = tile.as_weak();
                     tile.on_close_clicked(move || {
                         if let Some(t) = weak_tile.upgrade() {
                             let _ = t.hide();
+                        }
+                    });
+
+                    let weak_pin = tile.as_weak();
+                    tile.on_pin_clicked(move || {
+                        if let Some(_t) = weak_pin.upgrade() {
+                            eprintln!("[overlay-host] tile pin clicked (stub)");
                         }
                     });
 
@@ -255,6 +272,18 @@ fn main() -> Result<(), slint::PlatformError> {
         eprintln!("[overlay-host] quit requested");
         let _ = slint::quit_event_loop();
     });
+
+    // Smoke convenience: SLINT_OVERLAY_AUTO_TILE=1 spawns one tile
+    // after 500 ms so screenshot scripts can verify markdown rendering
+    // without driving the UI. Removable Phase 6 cleanup.
+    if std::env::var("SLINT_OVERLAY_AUTO_TILE").is_ok() {
+        let weak = overlay.as_weak();
+        Timer::single_shot(Duration::from_millis(500), move || {
+            if let Some(o) = weak.upgrade() {
+                o.invoke_spawn_tile_clicked();
+            }
+        });
+    }
 
     overlay.run()
 }
