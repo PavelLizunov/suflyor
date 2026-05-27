@@ -102,32 +102,44 @@ function Invoke-Gate($name, $exe, $argsList) {
     }
 }
 
-# --- Always: cargo fmt --check + clippy (both commit and push) -------
-Invoke-Gate "cargo fmt --check" $cargoExe @("fmt", "--manifest-path", $manifest, "--all", "--", "--check")
-Invoke-Gate "cargo clippy -D warnings" $cargoExe @("clippy", "--manifest-path", $manifest, "--all-targets", "--", "-D", "warnings")
+# --- Always (on commit + push): fmt + clippy + fast tests ------------
+# src-tauri (React/Tauri legacy stack).
+Invoke-Gate "src-tauri fmt --check"        $cargoExe @("fmt", "--manifest-path", $manifest, "--all", "--", "--check")
+Invoke-Gate "src-tauri clippy -D warnings" $cargoExe @("clippy", "--manifest-path", $manifest, "--all-targets", "--", "-D", "warnings")
 
-# --- Slint pilot crate (Phase 0+) — added 2026-05-27 ---------------
-# Gate the slint-experiment/ sibling crate if it exists. Wrapping in
-# Test-Path so a future cleanup/removal of the pilot doesn't brick
-# the gate. Same fmt+clippy on commit, plus test on push.
+# Slint pilot crate (Phase 0+) — added 2026-05-27.
+# Phase E6 v18 update (2026-05-27 evening): move tests from push-only
+# to commit too. The 12-test slint-experiment lib suite runs in <1s
+# so the cost of gating every commit is negligible vs catching a
+# Slint regression early. User feedback: "Slint баги проходят без
+# проблем" — that's because the hook only checked fmt+clippy on
+# commit, full suite on push, and many commits never get pushed.
 $slintManifest = "slint-experiment/Cargo.toml"
 if (Test-Path (Join-Path $projectRoot $slintManifest)) {
     Invoke-Gate "slint fmt --check"        $cargoExe @("fmt", "--manifest-path", $slintManifest, "--all", "--", "--check")
     Invoke-Gate "slint clippy -D warnings" $cargoExe @("clippy", "--manifest-path", $slintManifest, "--all-targets", "--", "-D", "warnings")
+    Invoke-Gate "slint cargo test --lib"   $cargoExe @("test", "--manifest-path", $slintManifest, "--workspace", "--lib", "--quiet")
 }
 
-# --- Push-only: full test suite (commits skip these for speed) -------
+# overlay-backend (Phase B1) — extracted shared business logic crate.
+# Was previously NOT gated at all (added 2026-05-27 evening). 136-test
+# lib suite runs in ~3s. Critical because most of the AI / detector /
+# config / runtime logic lives here; both src-tauri and slint-experiment
+# binaries depend on it.
+$backendManifest = "overlay-backend/Cargo.toml"
+if (Test-Path (Join-Path $projectRoot $backendManifest)) {
+    Invoke-Gate "backend fmt --check"        $cargoExe @("fmt", "--manifest-path", $backendManifest, "--all", "--", "--check")
+    Invoke-Gate "backend clippy -D warnings" $cargoExe @("clippy", "--manifest-path", $backendManifest, "--all-targets", "--", "-D", "warnings")
+    Invoke-Gate "backend cargo test --lib"   $cargoExe @("test", "--manifest-path", $backendManifest, "--lib", "--quiet")
+}
+
+# --- Push-only: heavier checks (slow tsc + integration tests) --------
 if ($isPush) {
-    Invoke-Gate "cargo test --lib"                $cargoExe @("test", "--manifest-path", $manifest, "--lib", "--quiet")
-    Invoke-Gate "cargo test --test copy_contract" $cargoExe @("test", "--manifest-path", $manifest, "--test", "copy_contract", "--quiet")
+    Invoke-Gate "src-tauri test --lib"            $cargoExe @("test", "--manifest-path", $manifest, "--lib", "--quiet")
+    Invoke-Gate "src-tauri test copy_contract"    $cargoExe @("test", "--manifest-path", $manifest, "--test", "copy_contract", "--quiet")
 
     # npx is a .cmd shim — Start-Process handles it the same way.
     Invoke-Gate "npx tsc --noEmit" "npx.cmd" @("tsc", "--noEmit")
-
-    # Slint pilot crate tests — same Test-Path guard.
-    if (Test-Path (Join-Path $projectRoot $slintManifest)) {
-        Invoke-Gate "slint cargo test" $cargoExe @("test", "--manifest-path", $slintManifest, "--quiet")
-    }
 }
 
 [Console]::Error.WriteLine("[git-gate] All gating layers green. Proceeding with: $cmd")

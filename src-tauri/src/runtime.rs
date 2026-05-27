@@ -1229,9 +1229,15 @@ async fn maybe_spawn_tile(
 // Used by 7 sites here + 2 sites in lib.rs (DetectorTestResult mapping).
 pub use overlay_backend::runtime::Trigger;
 
-// looks_like_real_speech moved to overlay_backend::runtime during
-// Phase E4 (shared with Slint binary auto-detector). Re-export
-// keeps the local `cargo test` calls below compiling unchanged.
+// Phase E6 v18: re-exports below USED by tests in this file (16 call
+// sites) but clippy flags them as unused because tests compile as a
+// separate target. #[allow(unused_imports)] documents the intent +
+// silences the lint without removing the imports the tests depend on.
+
+#[allow(
+    unused_imports,
+    reason = "consumed by `mod tests` below — clippy sees lib target only"
+)]
 pub use overlay_backend::runtime::looks_like_real_speech;
 
 // build_auto_tile_prompts moved to overlay_backend::runtime during
@@ -1239,8 +1245,10 @@ pub use overlay_backend::runtime::looks_like_real_speech;
 // detector + reask + manual-ask paths; reused verbatim post-port.
 pub use overlay_backend::runtime::build_auto_tile_prompts;
 
-// strip_filler_prefix moved to overlay_backend::runtime during
-// Phase E4. Re-export keeps any callers compiling.
+#[allow(
+    unused_imports,
+    reason = "consumed by `mod tests` below — clippy sees lib target only"
+)]
 pub use overlay_backend::runtime::strip_filler_prefix;
 
 // detect_trigger moved to overlay_backend::runtime during Phase E4
