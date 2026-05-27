@@ -201,11 +201,18 @@ fn tile_root_background_is_opaqueish() {
 }
 
 /// KB query MUST be clamped to 200 chars to prevent DoS via huge paste.
+///
+/// Path moved to overlay-backend during Phase B1 (kb extracted to the
+/// Tauri-free crate); the src-tauri side now re-exports. Catch-up
+/// 2026-05-27 (Phase B2 port #1): re-point the contract at the real
+/// home so this test stops false-greening.
 #[test]
 fn kb_search_clamps_query() {
-    let kb_rs = fs::read_to_string(project_root().join("src-tauri/src/kb.rs")).expect("read kb.rs");
+    let kb_rs = fs::read_to_string(project_root().join("overlay-backend/src/kb.rs"))
+        .expect("read overlay-backend/src/kb.rs");
     assert!(
-        kb_rs.contains("200"),
-        "kb.rs no longer mentions 200 — verify the query-length cap is still in place"
+        kb_rs.contains("MAX_QUERY_CHARS: usize = 200"),
+        "overlay-backend kb.rs no longer pins MAX_QUERY_CHARS=200 — \
+         verify the query-length cap is still in place (DoS protection)"
     );
 }

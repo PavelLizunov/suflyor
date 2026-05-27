@@ -52,6 +52,21 @@ pub enum AudioSource {
     Mic,
 }
 
+/// One line in the rolling session transcript. Each STT-completed
+/// utterance becomes a `TranscriptLine` and joins the runtime
+/// `VecDeque<TranscriptLine>` (max ~5 min of conversation).
+///
+/// Moved from `src-tauri/src/runtime.rs` 2026-05-27 as part of
+/// Phase B2 port #1 (run_post_meeting_debrief) — the ported fn
+/// takes `Vec<TranscriptLine>` and needs the type accessible from
+/// overlay-backend without pulling in Tauri.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct TranscriptLine {
+    pub source: AudioSource,
+    pub text: String,
+    pub timestamp_ms: u64,
+}
+
 #[derive(Debug, Clone)]
 pub struct AudioChunk {
     pub source: AudioSource,

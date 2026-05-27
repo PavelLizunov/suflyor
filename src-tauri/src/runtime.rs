@@ -20,13 +20,12 @@ use std::time::Instant;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::oneshot;
 
-/// One line in the rolling transcript (max ~5 min of conversation).
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct TranscriptLine {
-    pub source: AudioSource,
-    pub text: String,
-    pub timestamp_ms: u64,
-}
+// TranscriptLine moved to overlay_backend::audio during Phase B2
+// port #1 — the ported run_post_meeting_debrief needs the type
+// accessible from overlay-backend without pulling in Tauri.
+// Re-export keeps existing `runtime::TranscriptLine` callers
+// compiling without churn.
+pub use overlay_backend::audio::TranscriptLine;
 
 #[derive(Default)]
 pub struct RuntimeState {
@@ -107,11 +106,12 @@ pub struct RuntimeState {
 }
 
 // HealthSignals + HealthPayload were extracted to overlay_backend::health
-// during Phase B1 of the Slint migration. Both symbols are actively used
-// elsewhere in src-tauri (HealthSignals → runtime state field; HealthPayload
-// → frontend event payload), so no `#[allow]` is needed. Catch-up review
-// 2026-05-27 flagged the previous overly-broad allow as a real signal.
-pub use overlay_backend::health::{HealthPayload, HealthSignals};
+// during Phase B1. HealthSignals has live src-tauri callers (runtime
+// state field). HealthPayload is constructed inside overlay_backend
+// only — the React side reads its serialized form, not the Rust type —
+// so we don't re-export it here. Anyone needing it can `use
+// overlay_backend::health::HealthPayload` directly.
+pub use overlay_backend::health::HealthSignals;
 
 /// Russian filler words tracked by the live voice coach. Lowercase,
 /// matched as whole words (boundary = non-alphanumeric). Curated from
@@ -1808,8 +1808,23 @@ pub fn stop_session(
             // Live crash 2026-05-26 (v0.0.21 panic log src/runtime.rs:1437).
             // tauri::async_runtime::spawn always works — it uses Tauri's
             // own runtime that's installed before commands fire. Same task #93.
+            // Phase B2 port #1 — run_post_meeting_debrief now lives in
+            // overlay_backend::runtime. We construct a TauriEvents adapter
+            // here and delegate. The tauri::async_runtime::spawn wrapping
+            // stays (TLS reactor requirement; see comment above).
+            use std::sync::Arc;
+            let events: Arc<dyn overlay_backend::events::RuntimeEvents> =
+                Arc::new(crate::TauriEvents {
+                    app: app.clone(),
+                    tiles: tiles.clone(),
+                });
             tauri::async_runtime::spawn(async move {
-                run_post_meeting_debrief(app, cfg, tiles, transcript_snapshot).await;
+                overlay_backend::runtime::run_post_meeting_debrief(
+                    events,
+                    cfg,
+                    transcript_snapshot,
+                )
+                .await;
             });
         }
         Err(reason) => {
@@ -1891,97 +1906,10 @@ pub(crate) fn should_run_debrief(
     Ok(())
 }
 
-/// Send the full mic-source transcript to the prep_model (Sonnet) and ask
-/// for 3 concise coaching observations: pace, fillers, dominance, story
-/// structure, vocabulary. Spawn the result as a pinned manual tile so the
-/// user sees it after the meeting ends. Fire-and-forget — if the AI call
-/// fails for any reason, we just log + drop (no UI noise on shutdown).
-async fn run_post_meeting_debrief(
-    app: AppHandle,
-    cfg: SharedConfig,
-    tiles: crate::tile::SharedTiles,
-    transcript: Vec<TranscriptLine>,
-) {
-    let (base_url, bearer, model, response_language, preferred_monitor, stealth) = {
-        let c = cfg.read();
-        (
-            c.ai_base_url.clone(),
-            c.ai_bearer.clone(),
-            c.prep_model.clone(),
-            c.response_language.clone(),
-            c.tile_monitor_name.clone(),
-            c.stealth_enabled,
-        )
-    };
-    // Mic-only transcript for "you" coaching. Snapshot is already capped at
-    // TRANSCRIPT_MAX_LINES (=80) upstream so no second cap needed here.
-    // The 50-char threshold is now gated upstream in should_run_debrief —
-    // by the time we get here the transcript is long enough (P0-2 fix).
-    let mic_text: String = transcript
-        .iter()
-        .filter(|l| matches!(l.source, AudioSource::Mic))
-        .map(|l| l.text.as_str())
-        .collect::<Vec<_>>()
-        .join("\n");
-    // Localise BOTH the prompt body and the tile title — Russian-only
-    // output would be confusing for an English-speaking user even with a
-    // trailing "Respond in English" directive.
-    let is_ru = response_language == "ru";
-    let system_prompt = if is_ru {
-        "Ты — speech coach. На входе — полный mic-транскрипт пользователя за встречу \
-         (только реплики самого пользователя, без собеседника). \
-         Дай РОВНО 3 конкретных наблюдения о его манере речи: \
-         (1) ритм/темп, (2) слова-паразиты, (3) структура высказываний / уверенность. \
-         Каждое наблюдение в формате: одно короткое предложение + 1-2 примера ИЗ ТРАНСКРИПТА в кавычках. \
-         Если транскрипт слишком короткий/пустой для какого-то аспекта — честно скажи 'недостаточно данных'. \
-         Не хвали зря, не пиши воды. Отвечай на русском языке."
-            .to_string()
-    } else {
-        "You are a speech coach. The input is the user's full mic transcript from a meeting \
-         (their own lines only, no interlocutor). \
-         Provide EXACTLY 3 specific observations about their speaking: \
-         (1) pace/rhythm, (2) filler words, (3) structure / confidence. \
-         Each observation: one short sentence + 1-2 verbatim QUOTES FROM THE TRANSCRIPT. \
-         If the transcript is too short/empty for any aspect, say so honestly. \
-         No empty praise, no filler. Respond in English."
-            .to_string()
-    };
-    let messages = vec![
-        ai::ChatMessage {
-            role: "system".into(),
-            content: ai::MessageContent::Text(system_prompt),
-        },
-        ai::ChatMessage {
-            role: "user".into(),
-            content: ai::MessageContent::Text(mic_text),
-        },
-    ];
-    let answer = match ai::complete(&base_url, &bearer, &model, messages, 1024).await {
-        Ok(text) => text,
-        Err(e) => {
-            log::warn!("post-meeting debrief AI call failed: {e:#}");
-            return;
-        }
-    };
-    log::info!("post-meeting debrief landed: {} chars", answer.len());
-    // Spawn as Manual tile so it stays visible until the user dismisses.
-    // No pin API at spawn time — user can hit pin button on the tile if they
-    // want to lock it; otherwise it follows normal TTL (longer for Manual).
-    let tile_title = if is_ru {
-        "🎯 Debrief: что улучшить".to_string()
-    } else {
-        "🎯 Debrief: what to improve".to_string()
-    };
-    let _ = crate::tile::spawn_tile_with_stealth(
-        &app,
-        &tiles,
-        tile_title,
-        answer,
-        preferred_monitor,
-        stealth,
-        crate::tile::TileKind::Manual,
-    );
-}
+// run_post_meeting_debrief MOVED to `overlay_backend::runtime` as part
+// of Phase B2 port #1. The stop_session caller above constructs a
+// `TauriEvents` adapter (defined in src/lib.rs) + delegates. Body
+// reproduction (~85 LOC) lives at `overlay-backend/src/runtime.rs`.
 
 /// Flushes a SessionSummary (from accumulated counters) and a SessionStop
 /// event, then closes the journal. Called from both start_session (when

@@ -11,5 +11,6 @@ pub mod events;
 pub mod health;
 pub mod journal;
 pub mod kb;
+pub mod runtime;
 pub mod screenshot;
 pub mod stt;

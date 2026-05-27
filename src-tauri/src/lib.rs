@@ -42,6 +42,87 @@ use std::sync::Mutex;
 use tauri::Manager;
 use tile::SharedTiles;
 
+// ===== Phase B2 TauriEvents adapter =====
+//
+// Implements `overlay_backend::events::RuntimeEvents` for the Tauri
+// side. The first runtime fn ported to overlay-backend
+// (`run_post_meeting_debrief`) constructs one of these + delegates;
+// future ports follow the same pattern. Wraps AppHandle for emit +
+// SharedTiles for tile-registry access.
+//
+// Channel names match the existing `app.emit_to("overlay", ...)`
+// convention so React-side listeners are oblivious to the move.
+pub(crate) struct TauriEvents {
+    pub app: tauri::AppHandle,
+    pub tiles: SharedTiles,
+}
+
+impl overlay_backend::events::RuntimeEvents for TauriEvents {
+    fn emit(&self, channel: &str, payload: serde_json::Value) {
+        use tauri::Emitter as _;
+        if let Err(e) = self.app.emit_to("overlay", channel, payload) {
+            log::warn!("TauriEvents emit({channel}) failed: {e}");
+        }
+    }
+
+    fn spawn_tile(&self, spec: overlay_backend::events::TileSpec) -> String {
+        // Soft-deprecated path. Maps to spawn_tile_full with Auto +
+        // stealth=false + TileKind::Ai defaults.
+        self.spawn_tile_full(
+            spec,
+            overlay_backend::events::MonitorHint::Auto,
+            false,
+            overlay_backend::events::TileKind::Ai,
+        )
+        .unwrap_or_else(|e| {
+            log::warn!("TauriEvents spawn_tile failed: {e}");
+            String::new()
+        })
+    }
+
+    fn spawn_tile_full(
+        &self,
+        spec: overlay_backend::events::TileSpec,
+        monitor: overlay_backend::events::MonitorHint,
+        stealth: bool,
+        kind: overlay_backend::events::TileKind,
+    ) -> Result<String, String> {
+        // Translate semantic events::TileKind → React-side tile::TileKind
+        // (CSS color class). All semantic kinds map to Manual today —
+        // future polish can extend tile.rs with per-kind accents.
+        let tauri_kind = match kind {
+            overlay_backend::events::TileKind::Ai
+            | overlay_backend::events::TileKind::Kb
+            | overlay_backend::events::TileKind::Snippet
+            | overlay_backend::events::TileKind::Translate
+            | overlay_backend::events::TileKind::Reload
+            | overlay_backend::events::TileKind::Followup
+            | overlay_backend::events::TileKind::Bookmark
+            | overlay_backend::events::TileKind::Debrief => tile::TileKind::Manual,
+        };
+        // Translate MonitorHint → tile::pick_monitor's Option<String>.
+        // tile::pick_monitor still only knows name-matching (it pre-dates
+        // the trait); Primary/Index/Auto all map to None which falls
+        // through to the existing first-non-primary heuristic. Named
+        // preserves the original behavior — important for users with
+        // cfg.tile_monitor_name set (e.g. portrait second monitor).
+        let preferred_name = match monitor {
+            overlay_backend::events::MonitorHint::Named(name) if !name.is_empty() => Some(name),
+            _ => None,
+        };
+        tile::spawn_tile_with_stealth(
+            &self.app,
+            &self.tiles,
+            spec.question,
+            spec.answer,
+            preferred_name,
+            stealth,
+            tauri_kind,
+        )
+        .map_err(|e| e.to_string())
+    }
+}
+
 /// Remembers the overlay window's pre-settings position so close_settings
 /// can restore it instead of always snapping back to (200, 40). Lazy-init
 /// from None — first open_settings call sets it; close_settings reads + clears.

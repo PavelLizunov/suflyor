@@ -153,7 +153,7 @@ impl TileKind {
 }
 
 /// Monitor placement hint for new tile windows.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MonitorHint {
     /// Use the `pick_monitor` heuristic (default to primary unless a
     /// non-primary monitor is landscape AND at least as wide as primary).
@@ -163,6 +163,12 @@ pub enum MonitorHint {
     /// Index into `EnumDisplayMonitors` output (0-based). Falls back
     /// to Primary if out of range.
     Index(usize),
+    /// Match a specific OS-side monitor name (Windows
+    /// `EnumDisplayDevices` `DeviceString`). Falls back to `Auto` if
+    /// no such monitor exists. Carries `cfg.tile_monitor_name` —
+    /// added Phase B2 port #1 so the ported `run_post_meeting_debrief`
+    /// doesn't silently drop the user's monitor pin.
+    Named(String),
 }
 
 /// Headless no-op events sink — for backend tests + situations
@@ -284,6 +290,44 @@ mod tests {
         assert_eq!(id_ai, "noop-tile-ai-5");
         assert_eq!(id_kb, "noop-tile-kb-5");
         assert_ne!(id_ai, id_kb, "different kinds must produce different ids");
+    }
+
+    #[test]
+    fn monitor_hint_named_carries_string_through_clone_and_debug() {
+        // Named must accept non-empty + empty names, clone cheaply, and
+        // render its content in Debug output so log lines stay useful.
+        let h = MonitorHint::Named("\\\\.\\DISPLAY2".into());
+        let cloned = h.clone();
+        assert_eq!(h, cloned);
+        let dbg = format!("{h:?}");
+        assert!(
+            dbg.contains("DISPLAY2"),
+            "Named monitor name must appear in Debug output, got: {dbg}"
+        );
+        // Empty-name Named is allowed at the type level; consumers
+        // (TauriEvents adapter) translate it to None. Sanity-check the
+        // round-trip:
+        let empty = MonitorHint::Named(String::new());
+        assert_ne!(empty, MonitorHint::Auto);
+    }
+
+    #[test]
+    fn noop_spawn_tile_full_does_not_panic_on_named_hint() {
+        let sink: Arc<dyn RuntimeEvents> = noop();
+        let id = sink
+            .spawn_tile_full(
+                TileSpec {
+                    question: "q".into(),
+                    answer: "a".into(),
+                    source: "debrief".into(),
+                    is_translation: false,
+                },
+                MonitorHint::Named("\\\\.\\DISPLAY2".into()),
+                true,
+                TileKind::Debrief,
+            )
+            .unwrap();
+        assert!(id.starts_with("noop-tile-debrief-"));
     }
 
     #[test]
