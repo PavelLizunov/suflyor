@@ -274,11 +274,8 @@ export component SettingsWindow inherits Window {
                     }
                     if root.active-tab == 6 : VerticalLayout {
                         spacing: 8px;
-                        // SCAFFOLDING: "Phase 2.7 ports the WASAPI device enumeration..."
-                        // self-identifies as placeholder content. Tab will be rewritten
-                        // when audio device enumeration lands. Wrap is skipped.
                         Text {
-                            text: "Microphone + system audio device selection. Phase 2.7 ports the WASAPI device enumeration + level meter from Audio.tsx.";
+                            text: @tr("Microphone + system audio device selection.");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;

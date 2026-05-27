@@ -1,14 +1,13 @@
-// Phase 3 — Real overlay bar with full chip set.
+// Real overlay bar with full chip set.
 //
 // Ports the structural pattern of src/Overlay.tsx: a horizontal strip
-// of small chips on a translucent dark rounded background, drawn always
-// on top + transparent + click-through. Each chip is a reusable
-// Component so Phase 3+ can add new chips without touching the layout.
+// of small chips on a translucent dark rounded background, drawn
+// always on top + transparent + click-through. Each chip is a reusable
+// Component so future chips slot in without touching the layout.
 //
-// Backend calls are stubs at the .slint level — the Rust side wires
-// real callbacks to audio/stt/ai/journal modules. Day 2 binary just
-// logs button presses; future binaries integrate with the actual
-// overlay-mvp backend.
+// Consumed by the `overlay-host` binary (src/bin/overlay_host.rs)
+// which wires every callback to real backend modules: audio probe,
+// AI ask, KB palette, hotkey dispatch, journal bookmark, etc.
 
 import { Button } from "std-widgets.slint";
 

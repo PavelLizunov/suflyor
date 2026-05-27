@@ -1,9 +1,9 @@
 //! Subsystem health signals — shared between stt/audio/ai modules
 //! and the runtime that emits `health:update` events to the UI.
 //!
-//! Extracted from `src-tauri/src/runtime.rs` lines 110-178 as part
-//! of Phase B1 (overlay-backend extraction). The struct + its
-//! `snapshot()` method are pure Rust with zero Tauri dependencies.
+//! Extracted from `src-tauri/src/runtime.rs` as part of Phase B1
+//! (overlay-backend extraction). The struct + its `snapshot()`
+//! method are pure Rust with zero Tauri dependencies.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 

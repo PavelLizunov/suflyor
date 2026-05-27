@@ -34,7 +34,47 @@ pub trait RuntimeEvents: Send + Sync {
     /// tile label/identifier (e.g. "tile-42") for downstream
     /// `pin_tile` / `close_tile` calls. For headless impls returns
     /// a synthetic id.
+    ///
+    /// **Soft-deprecated** — use `spawn_tile_full` for any new caller
+    /// that needs monitor / stealth / kind. Kept for the current
+    /// overlay-host callsites that don't yet pass those fields.
     fn spawn_tile(&self, spec: TileSpec) -> String;
+
+    /// Phase B2 trait extension — spawn a tile with the full set of
+    /// fields the Tauri-side `tile::spawn_tile_with_stealth(...)` call
+    /// receives today. Required for all 8 runtime.rs tile-spawn sites
+    /// when they port to take `Arc<dyn RuntimeEvents>` instead of
+    /// `(AppHandle, SharedTiles)`.
+    ///
+    /// - `monitor`: which display to land on. Default impl ignores
+    ///   and the Tauri side uses pick_monitor's portrait-aware logic.
+    /// - `stealth`: when true, apply WDA_EXCLUDEFROMCAPTURE to the
+    ///   spawned tile window (carries the session-wide stealth flag).
+    /// - `kind`: discriminates Ai / Kb / Snippet / Translate / Reload
+    ///   / Followup / Bookmark / Debrief — drives chrome glyph +
+    ///   journal categorization.
+    ///
+    /// Returns Ok(tile_label) on success or Err(diagnostic) on
+    /// failure (e.g. window creation failed). Default trait
+    /// implementation forwards to `spawn_tile` ignoring the new
+    /// fields — lets existing callers migrate incrementally.
+    ///
+    /// # Errors
+    /// Implementations return Err with a human-readable diagnostic
+    /// when tile window creation fails or the registry rejects.
+    fn spawn_tile_full(
+        &self,
+        spec: TileSpec,
+        monitor: MonitorHint,
+        stealth: bool,
+        kind: TileKind,
+    ) -> Result<String, String> {
+        // Default — preserves source label + question + answer; drops
+        // the new fields. Real impls (TauriEvents / SlintEvents) will
+        // override to honor monitor + stealth + kind.
+        let _ = (monitor, stealth, kind);
+        Ok(self.spawn_tile(spec))
+    }
 }
 
 /// Description of a tile to spawn — replaces the React-side
@@ -49,6 +89,80 @@ pub struct TileSpec {
     /// True when the tile carries a translation rather than an
     /// AI-generated answer (chrome adds the 🌐 glyph).
     pub is_translation: bool,
+}
+
+/// Tile kind — discriminates the chrome glyph, journal
+/// categorization, and (in Phase 4 polish) the per-kind accent
+/// color. Replaces today's stringly-typed source field for the new
+/// `spawn_tile_full` trait method; the old `spawn_tile(spec)` keeps
+/// using `spec.source: String` for incremental migration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TileKind {
+    /// AI-generated answer (default).
+    Ai,
+    /// Knowledge-base entry spawned from F4 palette or /key snippet.
+    Kb,
+    /// User snippet expansion (`/k8s` body → tile).
+    Snippet,
+    /// Translation of an existing tile body to RU↔EN.
+    Translate,
+    /// Re-ask the same question (F9) → fresh answer overwrites
+    /// existing tile or spawns sibling tile.
+    Reload,
+    /// Follow-up suggestions tile (💡 chip after an answer).
+    Followup,
+    /// Bookmark tile (one-off, prints a confirmation rather than
+    /// answer content; could be removed if bookmark stays
+    /// statusbar-only).
+    Bookmark,
+    /// Post-meeting debrief tile (one per stop_session when opt-in).
+    Debrief,
+}
+
+impl TileKind {
+    /// Stable string tag for journal serialization.
+    #[must_use]
+    pub fn as_journal_tag(&self) -> &'static str {
+        match self {
+            Self::Ai => "ai",
+            Self::Kb => "kb",
+            Self::Snippet => "snippet",
+            Self::Translate => "translate",
+            Self::Reload => "reload",
+            Self::Followup => "followup",
+            Self::Bookmark => "bookmark",
+            Self::Debrief => "debrief",
+        }
+    }
+
+    /// Chrome glyph for the tile's source-label area. Some kinds
+    /// share glyphs (Reload + Followup both use 💡 by convention).
+    #[must_use]
+    pub fn chrome_glyph(&self) -> &'static str {
+        match self {
+            Self::Ai => "",
+            Self::Kb => "📚",
+            Self::Snippet => "✂",
+            Self::Translate => "🌐",
+            Self::Reload => "🔄",
+            Self::Followup => "💡",
+            Self::Bookmark => "⭐",
+            Self::Debrief => "🎯",
+        }
+    }
+}
+
+/// Monitor placement hint for new tile windows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MonitorHint {
+    /// Use the `pick_monitor` heuristic (default to primary unless a
+    /// non-primary monitor is landscape AND at least as wide as primary).
+    Auto,
+    /// Force the primary display.
+    Primary,
+    /// Index into `EnumDisplayMonitors` output (0-based). Falls back
+    /// to Primary if out of range.
+    Index(usize),
 }
 
 /// Headless no-op events sink — for backend tests + situations
@@ -70,6 +184,25 @@ impl RuntimeEvents for Noop {
             spec.answer.len()
         );
         format!("noop-tile-{}", spec.question.len())
+    }
+    fn spawn_tile_full(
+        &self,
+        spec: TileSpec,
+        monitor: MonitorHint,
+        stealth: bool,
+        kind: TileKind,
+    ) -> Result<String, String> {
+        log::debug!(
+            "[runtime-events:noop] spawn_tile_full kind={} monitor={monitor:?} stealth={stealth} q.len={}",
+            kind.as_journal_tag(),
+            spec.question.len()
+        );
+        // Deterministic id: encode kind tag for verifiable test output.
+        Ok(format!(
+            "noop-tile-{}-{}",
+            kind.as_journal_tag(),
+            spec.question.len()
+        ))
     }
 }
 
@@ -111,5 +244,73 @@ mod tests {
         // deterministic by design; real impls assign unique ids).
         assert_eq!(id1, id2);
         assert!(id1.starts_with("noop-tile-"));
+    }
+
+    #[test]
+    fn tile_kind_journal_tags_are_unique() {
+        use std::collections::HashSet;
+        let all = [
+            TileKind::Ai,
+            TileKind::Kb,
+            TileKind::Snippet,
+            TileKind::Translate,
+            TileKind::Reload,
+            TileKind::Followup,
+            TileKind::Bookmark,
+            TileKind::Debrief,
+        ];
+        let tags: HashSet<_> = all.iter().map(|k| k.as_journal_tag()).collect();
+        assert_eq!(tags.len(), all.len(), "duplicate journal tag in TileKind");
+        for k in &all {
+            assert!(!k.as_journal_tag().is_empty());
+        }
+    }
+
+    #[test]
+    fn noop_spawn_tile_full_encodes_kind_in_id() {
+        let sink: Arc<dyn RuntimeEvents> = noop();
+        let spec = TileSpec {
+            question: "hello".into(),
+            answer: "world".into(),
+            source: "ai".into(),
+            is_translation: false,
+        };
+        let id_ai = sink
+            .spawn_tile_full(spec.clone(), MonitorHint::Auto, false, TileKind::Ai)
+            .expect("noop never fails");
+        let id_kb = sink
+            .spawn_tile_full(spec, MonitorHint::Primary, true, TileKind::Kb)
+            .expect("noop never fails");
+        assert_eq!(id_ai, "noop-tile-ai-5");
+        assert_eq!(id_kb, "noop-tile-kb-5");
+        assert_ne!(id_ai, id_kb, "different kinds must produce different ids");
+    }
+
+    #[test]
+    fn spawn_tile_full_default_forwards_to_spawn_tile() {
+        // A custom impl that overrides only spawn_tile (not _full).
+        struct MinimalImpl;
+        impl RuntimeEvents for MinimalImpl {
+            fn emit(&self, _channel: &str, _payload: serde_json::Value) {}
+            fn spawn_tile(&self, _spec: TileSpec) -> String {
+                "minimal-impl-tile".into()
+            }
+            // Note: spawn_tile_full is NOT overridden — default fwd.
+        }
+        let sink: Arc<dyn RuntimeEvents> = Arc::new(MinimalImpl);
+        let id = sink
+            .spawn_tile_full(
+                TileSpec {
+                    question: "q".into(),
+                    answer: "a".into(),
+                    source: "ai".into(),
+                    is_translation: false,
+                },
+                MonitorHint::Auto,
+                false,
+                TileKind::Ai,
+            )
+            .unwrap();
+        assert_eq!(id, "minimal-impl-tile");
     }
 }

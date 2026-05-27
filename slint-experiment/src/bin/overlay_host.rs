@@ -42,6 +42,40 @@ use ui::{
 
 type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
 
+// ===== Tuning constants — extracted from inline literals 2026-05-27 =====
+//
+// Code-quality audit (top-3 priority) flagged 9 scattered bare-number
+// sites: probe durations, status auto-revert, hotkey poll, HWND grab
+// delay, tile dimensions. Grouped here so a future config-driven UI
+// can wire each to a Settings tab without grepping the binary.
+
+/// Mic/sys probe record duration (audio::record_*_blocking).
+const PROBE_DURATION_MS: u64 = 3000;
+/// Status pill auto-revert delay after a chip-action flash (mic/sys
+/// test result, bookmark saved/failed, etc.).
+const STATUS_REVERT_SECS: u64 = 5;
+/// Bookmark status flash auto-revert (shorter than mic/sys since the
+/// success/failure message is brief, not data).
+const BOOKMARK_REVERT_SECS: u64 = 3;
+/// global-hotkey channel poll interval. 50 ms is the standard
+/// responsiveness/CPU trade-off for desktop hotkeys.
+const HOTKEY_POLL_MS: u64 = 50;
+/// Delay after window.show() before grabbing the HWND. winit realizes
+/// the native window lazily; calling earlier returns NotSupported.
+const HWND_GRAB_DELAY_MS: u64 = 200;
+/// SLINT_OVERLAY_AUTO_TILE auto-spawn delay (smoke-test convenience).
+const AUTO_TILE_DELAY_MS: u64 = 500;
+/// Periodic session-timer chip update interval.
+const TIMER_TICK_SECS: u64 = 1;
+/// Default tile window dimensions (match ui/tile.slint preferred-*
+/// values so the spawned window isn't forcibly shrunk on first paint).
+const TILE_DEFAULT_W: i32 = 460;
+const TILE_DEFAULT_H: i32 = 360;
+/// AI ask cap. Sized to fit typical session-question answers without
+/// runaway cost; Phase 2.11 (Settings → AI bridge) will surface as
+/// user-configurable.
+const AI_MAX_TOKENS: u32 = 600;
+
 fn main() -> Result<(), slint::PlatformError> {
     // Phase 6 — MCP server enablement hint.
     //
@@ -168,7 +202,7 @@ fn main() -> Result<(), slint::PlatformError> {
             rt_mic.spawn_blocking(move || {
                 let started_label = mic_device.clone().unwrap_or_else(|| "default".into());
                 eprintln!("[overlay-host] mic test 3s — device={started_label}");
-                let result = audio::record_mic_blocking(3000, mic_device);
+                let result = audio::record_mic_blocking(PROBE_DURATION_MS, mic_device);
                 let peak_dbfs = match result {
                     Ok(samples) if samples.is_empty() => None,
                     Ok(samples) => {
@@ -236,7 +270,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     // Auto-revert status after 5s.
                     let weak_revert = weak_for_status.clone();
                     let s_revert = s_for_status.clone();
-                    slint::Timer::single_shot(Duration::from_secs(5), move || {
+                    slint::Timer::single_shot(Duration::from_secs(STATUS_REVERT_SECS), move || {
                         if let Some(o) = weak_revert.upgrade() {
                             refresh_status(
                                 &o,
@@ -292,7 +326,7 @@ fn main() -> Result<(), slint::PlatformError> {
             rt_sys.spawn_blocking(move || {
                 let device_label = sys_device.clone().unwrap_or_else(|| "default".into());
                 eprintln!("[overlay-host] sys test 3s — device={device_label}");
-                let result = audio::record_sys_blocking(3000, sys_device);
+                let result = audio::record_sys_blocking(PROBE_DURATION_MS, sys_device);
                 let peak_dbfs = match result {
                     Ok(samples) if samples.is_empty() => None,
                     Ok(samples) => {
@@ -351,7 +385,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     );
                     let weak_revert = weak_for_status.clone();
                     let s_revert = s_for_status.clone();
-                    slint::Timer::single_shot(Duration::from_secs(5), move || {
+                    slint::Timer::single_shot(Duration::from_secs(STATUS_REVERT_SECS), move || {
                         if let Some(o) = weak_revert.upgrade() {
                             refresh_status(
                                 &o,
@@ -396,23 +430,27 @@ fn main() -> Result<(), slint::PlatformError> {
     let tick_state = state.clone();
     let tick_weak = overlay.as_weak();
     let tick_timer = Timer::default();
-    tick_timer.start(TimerMode::Repeated, Duration::from_secs(1), move || {
-        let (active, secs) = {
-            let mut st = match tick_state.lock() {
-                Ok(g) => g,
-                Err(p) => p.into_inner(),
+    tick_timer.start(
+        TimerMode::Repeated,
+        Duration::from_secs(TIMER_TICK_SECS),
+        move || {
+            let (active, secs) = {
+                let mut st = match tick_state.lock() {
+                    Ok(g) => g,
+                    Err(p) => p.into_inner(),
+                };
+                if st.timer_active {
+                    st.session_secs += 1;
+                }
+                (st.timer_active, st.session_secs)
             };
-            if st.timer_active {
-                st.session_secs += 1;
+            if active {
+                if let Some(o) = tick_weak.upgrade() {
+                    o.set_timer_label(SharedString::from(format_timer(secs)));
+                }
             }
-            (st.timer_active, st.session_secs)
-        };
-        if active {
-            if let Some(o) = tick_weak.upgrade() {
-                o.set_timer_label(SharedString::from(format_timer(secs)));
-            }
-        }
-    });
+        },
+    );
 
     // ===== AI model cycle (Phase C: writes to config) =====
     {
@@ -485,7 +523,7 @@ fn main() -> Result<(), slint::PlatformError> {
             // Auto-revert status after 3s.
             let weak_revert = weak.clone();
             let s_revert = s.clone();
-            slint::Timer::single_shot(Duration::from_secs(3), move || {
+            slint::Timer::single_shot(Duration::from_secs(BOOKMARK_REVERT_SECS), move || {
                 if let Some(o) = weak_revert.upgrade() {
                     refresh_status(&o, get_mic_active(&s_revert), get_sys_active(&s_revert));
                 }
@@ -545,7 +583,10 @@ fn main() -> Result<(), slint::PlatformError> {
     let hp_tiles = tiles.clone();
     let hp_state = state.clone();
     let hp_weak_overlay = overlay.as_weak();
-    hotkey_poll.start(TimerMode::Repeated, Duration::from_millis(50), move || {
+    hotkey_poll.start(
+        TimerMode::Repeated,
+        Duration::from_millis(HOTKEY_POLL_MS),
+        move || {
         while let Ok(event) = global_hotkey::GlobalHotKeyEvent::receiver().try_recv() {
             if event.state != global_hotkey::HotKeyState::Pressed {
                 continue;
@@ -630,9 +671,19 @@ fn main() -> Result<(), slint::PlatformError> {
                 }
             };
 
-            // Hardcoded demo prompt — Phase C extension would source
-            // this from the actual session transcript / detector hit.
-            let question = format!("Explain Kubernetes in 3 sentences. (Tile #{seq})");
+            // Demo prompt — only used when SLINT_OVERLAY_DEMO=1 is
+            // set in the env, otherwise the tile shows an informative
+            // placeholder explaining that real live-transcript wiring
+            // arrives with Phase B2 (runtime.rs port). Gating behind
+            // env var prevents production users from seeing canned
+            // Kubernetes nonsense when they click +tile.
+            // Code-quality audit 2026-05-27 (priority cleanup #1).
+            let demo_mode = std::env::var("SLINT_OVERLAY_DEMO").is_ok();
+            let question = if demo_mode {
+                format!("Explain Kubernetes in 3 sentences. (Tile #{seq})")
+            } else {
+                format!("Tile #{seq} — no active session prompt")
+            };
             tile.set_sequence(seq as i32);
             tile.set_tile_title(SharedString::from(question.clone()));
             tile.set_source_label(SharedString::from("ai · asking…"));
@@ -681,13 +732,22 @@ fn main() -> Result<(), slint::PlatformError> {
             };
             let (base_url, bearer, model) = snapshot;
 
-            if base_url.is_empty() || bearer.is_empty() {
-                // No AI config — render a fallback markdown explaining how
-                // to configure. Stays on UI thread so no invoke needed.
-                let md = format!(
-                    "# {question}\n\n*AI bridge not configured.* Open Settings → AI bridge to set `base_url` + `bearer token`, then re-spawn this tile.\n\n## Sample fallback content\n\n{}",
-                    markdown::sample_tile_markdown(seq)
-                );
+            if base_url.is_empty() || bearer.is_empty() || !demo_mode {
+                // EITHER no AI config OR demo-mode disabled — render
+                // an informative tile instead of firing an AI call
+                // with a canned demo prompt. Phase B2 work will read
+                // the live mic transcript here and ask about it.
+                let md = if base_url.is_empty() || bearer.is_empty() {
+                    format!(
+                        "# {question}\n\n*AI bridge not configured.* Open Settings → AI bridge to set `base_url` + `bearer token`, then re-spawn this tile.\n\n## Sample fallback content\n\n{}",
+                        markdown::sample_tile_markdown(seq)
+                    )
+                } else {
+                    format!(
+                        "# Tile #{seq}\n\n*Demo mode disabled.* Set `SLINT_OVERLAY_DEMO=1` to re-enable the canned 'Explain Kubernetes' prompt. Phase B2 (runtime.rs port) will wire this chip to the live mic transcript.\n\n## Sample fallback content\n\n{}",
+                        markdown::sample_tile_markdown(seq)
+                    )
+                };
                 let blocks: Vec<MarkdownBlock> = markdown::parse(&md)
                     .into_iter()
                     .map(|b| MarkdownBlock {
@@ -698,7 +758,12 @@ fn main() -> Result<(), slint::PlatformError> {
                     .collect();
                 if let Some(t) = weak_for_ai.upgrade() {
                     t.set_blocks(ModelRc::new(VecModel::from(blocks)));
-                    t.set_source_label(SharedString::from("ai · not configured"));
+                    let label = if base_url.is_empty() || bearer.is_empty() {
+                        "ai · not configured"
+                    } else {
+                        "ai · demo-mode off"
+                    };
+                    t.set_source_label(SharedString::from(label));
                 }
                 return;
             }
@@ -714,7 +779,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     &bearer,
                     &model,
                     messages,
-                    /* max_tokens */ 600,
+                    AI_MAX_TOKENS,
                 )
                 .await;
 
@@ -798,7 +863,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // without driving the UI. Removable Phase 6 cleanup.
     if std::env::var("SLINT_OVERLAY_AUTO_TILE").is_ok() {
         let weak = overlay.as_weak();
-        Timer::single_shot(Duration::from_millis(500), move || {
+        Timer::single_shot(Duration::from_millis(AUTO_TILE_DELAY_MS), move || {
             if let Some(o) = weak.upgrade() {
                 o.invoke_spawn_tile_clicked();
             }
@@ -843,7 +908,7 @@ fn get_sys_active(state: &slint_replay::app_state::SharedState) -> bool {
 /// Apply transparent-overlay HWND flags to the overlay bar.
 fn apply_overlay_hwnd(overlay: &OverlayBarWindow) {
     let weak = overlay.as_weak();
-    Timer::single_shot(Duration::from_millis(200), move || {
+    Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
         let Some(o) = weak.upgrade() else { return };
         match grab_hwnd(o.window()) {
             Ok(hwnd) => match make_transparent_overlay(hwnd) {
@@ -860,7 +925,7 @@ fn apply_overlay_hwnd(overlay: &OverlayBarWindow) {
 /// (default to primary unless non-primary is landscape + at-least-as-wide).
 fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
     let weak = tile.as_weak();
-    Timer::single_shot(Duration::from_millis(200), move || {
+    Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
         let Some(t) = weak.upgrade() else { return };
         let Ok(hwnd) = grab_hwnd(t.window()) else {
             return;
@@ -873,8 +938,8 @@ fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
         // would compute (x,y) from monitor + grid slot.
         let monitors = enum_monitors();
         if let Some(mon) = pick_monitor(&monitors) {
-            let tile_w = 440;
-            let tile_h = 260;
+            let tile_w = TILE_DEFAULT_W;
+            let tile_h = TILE_DEFAULT_H;
             let x = mon.left + (mon.width() - tile_w) / 2;
             let y = mon.top + (mon.height() - tile_h) / 2;
             let _ = move_window(hwnd, x, y, tile_w, tile_h);

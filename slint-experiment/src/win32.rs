@@ -15,8 +15,9 @@
 //! - `set_stealth(hwnd, bool)` — toggles WDA_EXCLUDEFROMCAPTURE; window
 //!   becomes invisible to Print Screen + Teams/Meet screen-share.
 //!
-//! Phase 1 Day 3 will productionize this further (multi-monitor
-//! positioning via EnumDisplayMonitors).
+//! Multi-monitor positioning via EnumDisplayMonitors + pick_monitor
+//! is used by overlay_host to place tiles on the correct display
+//! (respects the user's portrait-secondary setup).
 
 #![allow(clippy::missing_errors_doc)]
 
@@ -161,10 +162,9 @@ impl MonitorRect {
 
 /// Enumerate all attached display monitors with their bounds + primary flag.
 ///
-/// Uses `EnumDisplayMonitors` (Win32). The pick_monitor logic from
-/// src-tauri/src/tile.rs uses this to decide which display to spawn
-/// a tile on; Phase 1 Day 3 will port that logic to operate on Slint
-/// windows via `position_on_monitor()`.
+/// Uses `EnumDisplayMonitors` (Win32). Consumed by `pick_monitor`
+/// below + by overlay_host's `apply_tile_hwnd_with_monitor` helper
+/// to choose a tile-spawn display + call `move_window` for placement.
 pub fn enum_monitors() -> Vec<MonitorRect> {
     use std::cell::RefCell;
     use windows::core::BOOL;
@@ -212,8 +212,8 @@ pub fn enum_monitors() -> Vec<MonitorRect> {
 }
 
 /// Position a window at the given screen coordinates with the given size.
-/// Used by Phase 1 Day 3's `position_on_monitor` to drive tiles onto
-/// specific displays.
+/// Used by `apply_tile_hwnd_with_monitor` in overlay_host to drive
+/// freshly-spawned tile windows onto the chosen display.
 pub fn move_window(
     hwnd: HWND,
     x: i32,

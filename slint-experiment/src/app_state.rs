@@ -23,10 +23,13 @@ pub struct AppState {
     /// True when the overlay should be hidden from screen capture.
     /// Wired to settings stealth toggle (WDA_EXCLUDEFROMCAPTURE).
     pub stealth: bool,
-    /// True when microphone capture is active. Phase 3 stub — Phase 1
-    /// proper integration with audio module pending.
+    /// True while the mic chip is in active mode. Drives the 3-second
+    /// WASAPI probe via `audio::record_mic_blocking` in overlay_host.rs.
+    /// Phase B2 continuous-capture wiring will keep this flag with the
+    /// same semantics (active = capture pipeline running).
     pub mic_active: bool,
-    /// True when system audio capture is active.
+    /// True while the sys chip is in active mode. Drives the 3-second
+    /// WASAPI loopback probe via `audio::record_sys_blocking`.
     pub sys_active: bool,
     /// True when the session timer is running.
     pub timer_active: bool,
@@ -164,26 +167,62 @@ pub fn classify_ai_error(msg: &str) -> &'static str {
 mod tests {
     use super::*;
 
-    /// All next_model outputs must be valid IDs accepted by
-    /// overlay_backend::ai::pricing_per_million (otherwise we ship
-    /// model strings that the bridge rejects + cost calc falls to the
-    /// safe-upper-bound default). Caught by review-agent 2026-05-27.
+    /// Strengthened invariant: every next_model output must be
+    /// recognized by `overlay_backend::ai::pricing_per_million` —
+    /// NOT just present in a local hardcoded list. The earlier
+    /// version (a local `canonical` array) would have passed if
+    /// both the array AND next_model were edited together to wrong
+    /// IDs. This version asks the real pricing fn whether the
+    /// output is a known model. If pricing_per_million falls through
+    /// to its safe-default arm (3.0, 15.0), that's an unknown ID
+    /// and the bridge will likely reject the API call. Caught by
+    /// hallucination audit 2026-05-27.
     #[test]
     fn next_model_outputs_are_canonical_ids() {
-        let canonical = ["claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-7"];
-        for start in canonical {
+        use overlay_backend::ai::pricing_per_million;
+        // Safe-default arm output — any (3.0, 15.0) match is the
+        // "unknown model" fallback, NOT a real recognized ID.
+        const SAFE_DEFAULT: (f64, f64) = (3.0, 15.0);
+
+        // Cycle from each of the 3 canonical full IDs 4 times each —
+        // must always land on a recognized ID per pricing.
+        let starts = ["claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-7"];
+        for start in starts {
+            // Verify the start ID itself is recognized — paranoia
+            // since it's the test setup.
+            let p0 = pricing_per_million(start);
+            // sonnet-4-6 happens to share pricing (3.0, 15.0) with the
+            // safe default. Allow that explicit case; reject everything
+            // else hitting that exact arm.
+            assert!(
+                p0 != SAFE_DEFAULT || start == "claude-sonnet-4-6" || start == "claude-sonnet-4-5",
+                "start ID {start:?} hits safe-default pricing — bad test setup"
+            );
             let mut cur = start;
             for _ in 0..4 {
                 cur = next_model(cur);
+                let p = pricing_per_million(cur);
                 assert!(
-                    canonical.contains(&cur),
-                    "next_model({start} ...) produced non-canonical {cur:?}"
+                    p != SAFE_DEFAULT
+                        || cur == "claude-sonnet-4-6"
+                        || cur == "claude-sonnet-4-5",
+                    "next_model({start} → ...) produced {cur:?} which pricing_per_million doesn't recognize \
+                     (hits safe-default arm) — bridge will reject the API call"
                 );
             }
         }
-        assert!(canonical.contains(&next_model("haiku")));
-        assert!(canonical.contains(&next_model("sonnet")));
-        assert!(canonical.contains(&next_model("opus")));
+
+        // Legacy short-name aliases also map to recognized IDs.
+        for alias in ["haiku", "sonnet", "opus"] {
+            let out = next_model(alias);
+            let p = pricing_per_million(out);
+            assert!(
+                p != SAFE_DEFAULT || out == "claude-sonnet-4-6" || out == "claude-sonnet-4-5",
+                "next_model({alias:?}) → {out:?} pricing unrecognized"
+            );
+        }
+
+        // Unknown input falls back to cheap default (haiku-4-5).
         assert_eq!(next_model("garbage"), "claude-haiku-4-5");
     }
 

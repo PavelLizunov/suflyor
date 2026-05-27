@@ -291,3 +291,8 @@ msgstr "Свой промпт для Whisper (доменный словарь)..
 
 msgid "Test microphone (3s record)"
 msgstr "Проверить микрофон (3 сек записи)"
+
+# --- Tab 6: Audio description (added during cleanup sweep) ---
+
+msgid "Microphone + system audio device selection."
+msgstr "Выбор устройств микрофона и системного аудио."
