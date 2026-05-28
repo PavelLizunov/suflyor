@@ -24,7 +24,54 @@
 // panels. Day 2 stub (the original two cross-window toggles) now
 // lives inside tab 0 (Stealth).
 
-import { Button, CheckBox, LineEdit, ScrollView, SpinBox, ComboBox, Slider } from "std-widgets.slint";
+import { Button, LineEdit, ScrollView, SpinBox, ComboBox, Slider } from "std-widgets.slint";
+
+// Phase E6 v24 — custom checkbox. Slint's std-widgets CheckBox renders
+// the label of an UNCHECKED box in a dim palette colour that's nearly
+// invisible on our #14161e panel ("чёрный на чёрном"). This component
+// draws the box + label ourselves with an explicit always-bright text
+// colour so both checked + unchecked states are readable.
+component DarkCheck inherits Rectangle {
+    in property <string> text;
+    in-out property <bool> checked: false;
+    callback toggled(bool);
+    height: 24px;
+    horizontal-stretch: 1;
+    HorizontalLayout {
+        spacing: 8px;
+        alignment: start;
+        // The box — filled inner square when checked (NO glyph; the
+        // ✓ glyph is a missing-box on this font, same as ✕). Pure
+        // Rectangle = font-independent.
+        Rectangle {
+            width: 18px;
+            height: 18px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: root.checked ? #2ac760 : #4a4c54;
+            background: root.checked ? #2ac76033 : transparent;
+            Rectangle {
+                width: 10px;
+                height: 10px;
+                border-radius: 2px;
+                background: root.checked ? #2ac760 : transparent;
+            }
+        }
+        Text {
+            text: root.text;
+            font-size: 12px;
+            color: #e8e8ec;
+            vertical-alignment: center;
+        }
+    }
+    TouchArea {
+        clicked => {
+            root.checked = !root.checked;
+            root.toggled(root.checked);
+        }
+    }
+}
 
 export component SettingsWindow inherits Window {
     title: @tr("overlay-mvp settings (Slint)");
@@ -174,15 +221,15 @@ export component SettingsWindow inherits Window {
                             color: #999;
                             wrap: word-wrap;
                         }
-                        CheckBox {
+                        DarkCheck {
                             text: @tr("Always on top (HWND_TOPMOST)");
                             checked <=> root.always-on-top-toggle;
-                            toggled => { root.always-on-top-changed(self.checked); }
+                            toggled(v) => { root.always-on-top-changed(v); }
                         }
-                        CheckBox {
+                        DarkCheck {
                             text: @tr("Stealth (hide from screen capture)");
                             checked <=> root.stealth-toggle;
-                            toggled => { root.stealth-changed(self.checked); }
+                            toggled(v) => { root.stealth-changed(v); }
                         }
                         Rectangle { height: 12px; }
                         // Phase E6 v20 — tile opacity slider.
@@ -215,7 +262,7 @@ export component SettingsWindow inherits Window {
                             color: #999;
                             wrap: word-wrap;
                         }
-                        CheckBox { text: @tr("Enable post-meeting debrief"); }
+                        DarkCheck { text: @tr("Enable post-meeting debrief"); }
                         HorizontalLayout {
                             spacing: 8px;
                             Text {
@@ -362,7 +409,7 @@ export component SettingsWindow inherits Window {
                             color: #999;
                             wrap: word-wrap;
                         }
-                        CheckBox { text: @tr("Enable auto-tile detector"); checked: true; }
+                        DarkCheck { text: @tr("Enable auto-tile detector"); checked: true; }
                         LineEdit { placeholder-text: @tr("Add keyword..."); }
                     }
                     if root.active-tab == 8 : VerticalLayout {
