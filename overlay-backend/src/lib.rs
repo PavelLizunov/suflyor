@@ -14,3 +14,4 @@ pub mod kb;
 pub mod runtime;
 pub mod screenshot;
 pub mod stt;
+pub mod update;

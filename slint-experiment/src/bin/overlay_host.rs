@@ -3379,6 +3379,8 @@ fn open_settings(
         }
     }
     populate_token_status(&win, cfg);
+    // Phase E8 — show the running version in the Updates tab.
+    win.set_app_version(SharedString::from(env!("CARGO_PKG_VERSION")));
     // Phase E6 v29 — load meeting_context into the Profile+context editor.
     win.set_meeting_context_input(SharedString::from(cfg.read().meeting_context.clone()));
 
@@ -3980,6 +3982,108 @@ fn open_settings(
                     drag_update(hwnd);
                 }
             }
+        });
+    }
+
+    // Phase E8 — in-app auto-update (Updates tab). Network calls run on a
+    // detached thread with a local current-thread tokio runtime (same
+    // pattern as the AI/STT test buttons — open_settings has no rt_handle).
+    {
+        let weak = win.as_weak();
+        win.on_check_updates_clicked(move || {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            w.set_update_checking(true);
+            w.set_update_available(false);
+            w.set_update_status(SharedString::from("Проверка GitHub…"));
+            diag!("update: checking GitHub for newer release");
+            let weak2 = w.as_weak();
+            std::thread::spawn(move || {
+                let res = match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(rt) => rt.block_on(overlay_backend::update::check_latest(env!(
+                        "CARGO_PKG_VERSION"
+                    ))),
+                    Err(e) => Err(anyhow::anyhow!("runtime: {e}")),
+                };
+                let _ = slint::invoke_from_event_loop(move || {
+                    let Some(w) = weak2.upgrade() else {
+                        return;
+                    };
+                    w.set_update_checking(false);
+                    match res {
+                        Ok(info) if info.newer && !info.download_url.is_empty() => {
+                            w.set_update_download_url(SharedString::from(info.download_url));
+                            w.set_update_available(true);
+                            w.set_update_status(SharedString::from(format!(
+                                "Доступна версия {} — нажмите «Обновить сейчас»",
+                                info.latest_version
+                            )));
+                        }
+                        Ok(info) if info.newer => w.set_update_status(SharedString::from(format!(
+                            "Есть версия {}, но в релизе нет установщика",
+                            info.latest_version
+                        ))),
+                        Ok(info) => w.set_update_status(SharedString::from(format!(
+                            "У вас последняя версия ({})",
+                            info.latest_version
+                        ))),
+                        Err(e) => {
+                            w.set_update_status(SharedString::from(format!("Ошибка проверки: {e}")))
+                        }
+                    }
+                });
+            });
+        });
+    }
+    {
+        let weak = win.as_weak();
+        win.on_install_update_clicked(move || {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            let url = w.get_update_download_url().to_string();
+            if url.is_empty() {
+                return;
+            }
+            w.set_update_checking(true);
+            w.set_update_status(SharedString::from("Скачивание установщика…"));
+            diag!("update: downloading installer");
+            let weak2 = w.as_weak();
+            std::thread::spawn(move || {
+                let res = match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(rt) => rt.block_on(overlay_backend::update::download_installer(&url)),
+                    Err(e) => Err(anyhow::anyhow!("runtime: {e}")),
+                };
+                match res {
+                    Ok(path) => {
+                        // Launch the installer, then quit so it can overwrite
+                        // the running binary (its first page is interactive,
+                        // so the app is gone before it reaches the File step).
+                        diag!("update: launching installer, quitting app");
+                        let _ = overlay_backend::update::run_installer(&path);
+                        let _ = slint::invoke_from_event_loop(|| {
+                            let _ = slint::quit_event_loop();
+                        });
+                    }
+                    Err(e) => {
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(w) = weak2.upgrade() {
+                                w.set_update_checking(false);
+                                w.set_update_status(SharedString::from(format!(
+                                    "Ошибка обновления: {e}"
+                                )));
+                            }
+                        });
+                    }
+                }
+            });
         });
     }
 

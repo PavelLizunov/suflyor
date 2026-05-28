@@ -230,6 +230,20 @@ export component SettingsWindow inherits Window {
     in-out property <int> ui-language-index: 0;
     callback language-selected(int);
 
+    // Phase E8 — in-app auto-update (Updates tab). Rust sets app-version
+    // from CARGO_PKG_VERSION on open; check-updates-clicked queries GitHub
+    // and fills update-status / update-available; install-update-clicked
+    // downloads + runs the installer (then the app quits).
+    in-out property <string> app-version: "0.0.0";
+    in-out property <string> update-status: "";
+    in-out property <bool> update-available: false;
+    in-out property <bool> update-checking: false;
+    // Download URL of the found installer (set by Rust after a successful
+    // check; read back by the install handler). Hidden plumbing.
+    in-out property <string> update-download-url: "";
+    callback check-updates-clicked();
+    callback install-update-clicked();
+
     // Phase E6 v26 — rounded root. clip:true so the square-cornered
     // sidebar + content get masked to the 12px radius. Border + bg
     // moved here from the Window (which is now transparent).
@@ -532,15 +546,40 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 4 : VerticalLayout {
                         spacing: 8px;
                         Text {
-                            text: @tr("Check for updates and view diagnostic info.");
+                            text: @tr("Check GitHub for a newer release. If one is found you can download + install it in one click (the app restarts).");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
                         }
-                        Button { text: @tr("Check for updates"); }
-                        Button { text: @tr("Save diagnostic dump"); }
+                        HorizontalLayout {
+                            spacing: 6px;
+                            Button {
+                                text: root.update-checking
+                                    ? @tr("Checking…")
+                                    : @tr("Check for updates");
+                                enabled: !root.update-checking;
+                                clicked => {
+                                    root.check-updates-clicked();
+                                }
+                            }
+                            // Shown only when a newer release was found.
+                            if root.update-available : Button {
+                                text: @tr("⬇ Update now");
+                                enabled: !root.update-checking;
+                                clicked => {
+                                    root.install-update-clicked();
+                                }
+                            }
+                        }
+                        // Result line: "up to date" / "vX available" / errors.
+                        if root.update-status != "" : Text {
+                            text: root.update-status;
+                            font-size: 11px;
+                            color: root.update-available ? #34d399 : #999;
+                            wrap: word-wrap;
+                        }
                         Text {
-                            text: @tr("Version: 0.2.0-slint-pre (slint-experiment branch)");
+                            text: @tr("Version: {} (suflyor / Slint)", root.app-version);
                             font-size: 10px;
                             color: #666;
                         }

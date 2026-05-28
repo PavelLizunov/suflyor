@@ -13,8 +13,8 @@
 ; Phase E (full v0.2.0 cut) will rename product back to "suflyor"
 ; and bump the upgrade GUID so it overwrites v0.1.1 cleanly.
 
-!define PRODUCT_NAME "suflyor (Slint preview)"
-!define PRODUCT_VERSION "0.2.0-pre"
+!define PRODUCT_NAME "suflyor"
+!define PRODUCT_VERSION "0.2.0"
 !define PRODUCT_PUBLISHER "x3d_mutant"
 !define PRODUCT_EXE "overlay-host.exe"
 !define PRODUCT_INSTALL_DIR "$LOCALAPPDATA\suflyor-slint"
