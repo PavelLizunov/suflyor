@@ -5,7 +5,7 @@
 // CommonMark via slint_replay::markdown::parse() and pushes the
 // resulting Vec<Block> into the `blocks` property.
 
-import { Button, ScrollView } from "std-widgets.slint";
+import { Button, LineEdit, ScrollView } from "std-widgets.slint";
 
 // MarkdownBlock is shared with markdown_spike — defined here in the
 // canonical location and re-exported through index.slint.
@@ -43,6 +43,14 @@ export component TileWindow inherits Window {
     // Cherry-picked from Anthropic design bundle 2 (only this prop;
     // no other design changes — see chat thread cycle 26).
     in-out property <float> body-opacity: 1.0;
+    // Phase E6 v45 (continue-dialog) — conversation key for this tile.
+    // >= 0 means the tile supports follow-up questions (the input row at
+    // the bottom is shown). -1 = no dialog (KB / snippet / auto tiles).
+    in-out property <int> convo-id: -1;
+    // True while an answer is streaming — disables the follow-up input.
+    in-out property <bool> followup-busy: false;
+    // Bound to the follow-up LineEdit so do-submit() can read + clear it.
+    in-out property <string> followup-text;
 
     callback close-clicked();
     callback pin-clicked();
@@ -53,6 +61,21 @@ export component TileWindow inherits Window {
     // old WM_NCLBUTTONDOWN modal drag that left TouchArea stuck.
     callback drag-start-requested();
     callback drag-moved();
+    // Phase E6 v45 — user submitted a follow-up question (the text).
+    callback followup-submitted(string);
+
+    // Guarded submit shared by the input's Enter + the send button. No-op
+    // while busy or empty; clears the field after firing.
+    function do-submit() {
+        if (root.followup-busy) {
+            return;
+        }
+        if (root.followup-text == "") {
+            return;
+        }
+        root.followup-submitted(root.followup-text);
+        root.followup-text = "";
+    }
 
     Rectangle {
         background: #14161eea;
@@ -246,9 +269,13 @@ export component TileWindow inherits Window {
                 viewport-width: self.width;
                 VerticalLayout {
                     spacing: 4px;
-                    for block[i] in root.blocks: Rectangle {
-                        background: transparent;
-                        horizontal-stretch: 1;
+                    // Per-block wrapper is a LAYOUT, not a bare Rectangle.
+                    // A Rectangle does NOT size its height to non-layout
+                    // children, so long Text blocks collapsed to ~0px and
+                    // painted on top of the next block. A VerticalLayout
+                    // sizes to its one active child → blocks stack cleanly.
+                    // User: "текст наслаивается друг на друге".
+                    for block[i] in root.blocks: VerticalLayout {
 
                         // H1
                         if block.kind == 1 : Text {
@@ -257,7 +284,6 @@ export component TileWindow inherits Window {
                             font-weight: 700;
                             color: #e8e8ec;
                             wrap: word-wrap;
-                            width: parent.width;
                         }
                         // H2
                         if block.kind == 2 : Text {
@@ -266,7 +292,6 @@ export component TileWindow inherits Window {
                             font-weight: 700;
                             color: #c8c8cc;
                             wrap: word-wrap;
-                            width: parent.width;
                         }
                         // H3
                         if block.kind == 3 : Text {
@@ -275,7 +300,6 @@ export component TileWindow inherits Window {
                             font-weight: 700;
                             color: #a8a8ac;
                             wrap: word-wrap;
-                            width: parent.width;
                         }
                         // Paragraph
                         if block.kind == 0 : Text {
@@ -283,7 +307,6 @@ export component TileWindow inherits Window {
                             font-size: 12px;
                             color: #c8c8cc;
                             wrap: word-wrap;
-                            width: parent.width;
                         }
                         // Bullet
                         if block.kind == 4 : HorizontalLayout {
@@ -324,7 +347,6 @@ export component TileWindow inherits Window {
                                     color: #d8e8f8;
                                     font-family: "Consolas";
                                     wrap: word-wrap;
-                                    width: parent.width;
                                 }
                             }
                         }
@@ -333,6 +355,31 @@ export component TileWindow inherits Window {
                             background: #2a2c3a;
                             height: 1px;
                         }
+                    }
+                }
+            }
+
+            // ===== Follow-up input — continue the dialog in this tile =====
+            // Phase E6 v45 — only shown for tiles that carry a conversation
+            // (F9 / push-to-record answers; convo-id >= 0). Enter or the
+            // → button sends; both are disabled while the answer streams.
+            // User: "нет возможности продолжить диалог в рамках тайла".
+            if root.convo-id >= 0 : HorizontalLayout {
+                spacing: 6px;
+                LineEdit {
+                    placeholder-text: @tr("Continue the dialog…");
+                    text <=> root.followup-text;
+                    enabled: !root.followup-busy;
+                    horizontal-stretch: 1;
+                    accepted => {
+                        root.do-submit();
+                    }
+                }
+                Button {
+                    text: root.followup-busy ? "…" : "→";
+                    enabled: !root.followup-busy;
+                    clicked => {
+                        root.do-submit();
                     }
                 }
             }

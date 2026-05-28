@@ -8,6 +8,7 @@
 //! wire the overlay-host binary to overlay-backend's ported fns.
 
 pub mod app_state;
+pub mod logging;
 pub mod markdown;
 pub mod runtime_state;
 pub mod slint_events;

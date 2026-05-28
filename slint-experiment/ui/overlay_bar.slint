@@ -217,6 +217,16 @@ export component OverlayBarWindow inherits Window {
     in-out property <bool> mic-recording: false;
     in-out property <bool> sys-recording: false;
 
+    // Phase E6 v45 — ⚙ Settings chip lights up while the Settings window
+    // is open (Rust flips this on open / close). User: "значок настроек
+    // не загорается когда настройки открыты".
+    in-out property <bool> settings-open: false;
+    // Phase E6 v45 — X quit is two-step: first press arms an inline
+    // "Quit? Yes/No" confirm (Rust auto-disarms after a few seconds) so a
+    // stray click can't kill the app. User: "крестик моментально всё
+    // закрывает без предупреждения".
+    in-out property <bool> quit-armed: false;
+
     // ===== Callbacks =====
     callback mic-toggle-clicked();
     callback sys-toggle-clicked();
@@ -233,7 +243,9 @@ export component OverlayBarWindow inherits Window {
     callback stealth-toggle-clicked();
     callback aggressive-toggle-clicked();
     callback open-settings-clicked();
-    callback quit-clicked();
+    callback quit-clicked();   // X pressed → Rust arms the inline confirm
+    callback quit-confirm();   // "Yes" → really quit the app
+    callback quit-cancel();    // "No" → disarm the confirm
     // Phase E6 v22 — manual cursor-delta drag (replaces modal
     // WM_NCLBUTTONDOWN which left TouchArea stuck pressed). down →
     // drag-start-requested (anchor), move-while-pressed → drag-moved.
@@ -412,15 +424,38 @@ export component OverlayBarWindow inherits Window {
             }
             Chip {
                 label: "⚙";
+                active: root.settings-open;
                 accent: #94a3b8;
                 clicked => { root.open-settings-clicked(); }
             }
-            // ASCII "X" — Unicode ✕ renders as a missing-glyph box on the
-            // Slint+skia font fallback (same fix as the tile close button).
-            Chip {
+            // Quit — two-step. Idle: a single ASCII "X" (Unicode ✕ renders
+            // as a missing-glyph box on the Slint+skia fallback). Armed:
+            // inline "Quit? [Yes] [No]" so a stray click can't kill the app.
+            if !root.quit-armed : Chip {
                 label: "X";
                 accent: #ef4444;
                 clicked => { root.quit-clicked(); }
+            }
+            if root.quit-armed : HorizontalLayout {
+                spacing: 4px;
+                Text {
+                    text: @tr("Quit?");
+                    font-size: 11px;
+                    font-weight: 600;
+                    color: #e8e8ec;
+                    vertical-alignment: center;
+                }
+                Chip {
+                    label: @tr("Yes");
+                    active: true;
+                    accent: #ef4444;
+                    clicked => { root.quit-confirm(); }
+                }
+                Chip {
+                    label: @tr("No");
+                    accent: #6cf;
+                    clicked => { root.quit-cancel(); }
+                }
             }
         }
 

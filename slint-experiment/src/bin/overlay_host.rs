@@ -1,3 +1,8 @@
+// Release builds run without a console window (no black cmd window on
+// launch — user feedback). Debug builds KEEP the console so `eprintln!`
+// tracing is visible during development. Diagnostics in release go to
+// %APPDATA%\overlay-mvp\overlay-host.log via `slint_replay::logging`.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 //! Phase 1 Day 2 + Phase 3 — multi-window manager with real overlay bar.
 //!
 //! Spawns the overlay bar with a full chip set (status pill, mic/sys
@@ -22,6 +27,7 @@ use slint_replay::slint_session;
 use slint_replay::win32::{
     drag_begin, drag_update, enum_monitors, get_window_rect, grab_hwnd, make_transparent_overlay,
     make_transparent_tile, move_window_pos_only, pick_monitor, set_always_on_top, set_stealth,
+    work_area_for_window,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -29,6 +35,16 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc as tokio_mpsc;
+
+/// Diagnostic log line → `%APPDATA%\overlay-mvp\overlay-host.log` AND
+/// stderr (debug builds keep a console; release has none). Use for
+/// lifecycle + error events worth keeping for tester debugging. NEVER
+/// pass secrets (API keys) — log presence booleans, not values.
+macro_rules! diag {
+    ($($arg:tt)*) => {
+        slint_replay::logging::line(&format!($($arg)*))
+    };
+}
 
 #[allow(
     clippy::unwrap_used,
@@ -48,6 +64,49 @@ use ui::{
 };
 
 type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
+
+/// Parse markdown source into the Slint `MarkdownBlock` rows a tile body
+/// renders. Shared by the streaming Delta/Error paths + follow-ups.
+fn to_md_blocks(md: &str) -> Vec<MarkdownBlock> {
+    markdown::parse(md)
+        .into_iter()
+        .map(|b| MarkdownBlock {
+            kind: b.kind,
+            text: SharedString::from(b.text),
+            lang: SharedString::from(b.lang),
+        })
+        .collect()
+}
+
+/// Phase E6 v45 — monotonic conversation id for the in-tile continue-dialog
+/// feature. Each F9/PTT tile that supports follow-ups gets a unique id.
+static CONVO_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// Install `new_tile` as the active streaming tile, FIRST clearing the
+/// slot's previous occupant. The single `current_streaming` slot is shared
+/// across F9/PTT/follow-up; starting a new stream aborts the prior task,
+/// which then emits no Done/Error — so without this the superseded tile
+/// would keep `followup-busy = true` (a permanently dead input). Must run
+/// on the UI thread (every ask path registers from a UI-thread callback or
+/// timer), so the direct `upgrade()` + setter is safe.
+fn install_streaming_tile(bridge: &Arc<OverlayBarBridge>, new_tile: StreamingTile) {
+    let new_convo = new_tile.convo_id;
+    let mut slot = match bridge.current_streaming.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    if let Some(old) = slot.take() {
+        // Re-enable only a DIFFERENT tile — the new one is intentionally
+        // busy until its own answer completes.
+        if old.convo_id != new_convo {
+            if let Some(t) = old.weak.upgrade() {
+                t.set_followup_busy(false);
+                t.set_source_label(SharedString::from("ai · superseded"));
+            }
+        }
+    }
+    *slot = Some(new_tile);
+}
 
 // ===== Phase E3 — OverlayBarBridge =====
 //
@@ -82,6 +141,10 @@ struct OverlayBarBridge {
     /// flag mirrors `counter > 0`. Incremented on AiEvent::Start,
     /// decremented on AiEvent::Done/Error.
     ai_in_flight: std::sync::atomic::AtomicI32,
+    /// Phase E6 v45 — per-tile conversations for the in-tile "continue
+    /// dialog" feature, keyed by the tile's `convo-id`. Seeded when an
+    /// F9/PTT answer completes; read+extended on each follow-up.
+    conversations: std::sync::Mutex<std::collections::HashMap<i32, ConvoState>>,
 }
 
 /// Per-streaming-tile state: weak handle + accumulated answer text.
@@ -90,6 +153,30 @@ struct OverlayBarBridge {
 struct StreamingTile {
     weak: slint::Weak<TileWindow>,
     accumulated: String,
+    /// Phase E6 v45 (continue-dialog) — rendered markdown of the prior
+    /// conversation turns. Each Delta re-renders `prefix + accumulated`
+    /// so a follow-up answer appends BELOW the existing thread instead of
+    /// replacing it. Empty for the first answer in a tile.
+    prefix: String,
+    /// Conversation key (mirrors the tile's `convo-id` property). On
+    /// `AiEvent::Done` the finished answer is folded into
+    /// `OverlayBarBridge::conversations[convo_id]` so the next follow-up
+    /// carries full context. `-1` = this stream is not part of a
+    /// continuable dialog (nothing is folded).
+    convo_id: i32,
+    /// The messages SENT for this turn (system + history + this user
+    /// turn). On Done we append the assistant answer → the new history.
+    request_messages: Vec<ai::ChatMessage>,
+}
+
+/// Phase E6 v45 — per-tile conversation, keyed by `convo-id`. Lets the
+/// user keep asking inside one tile with full context. `messages` is the
+/// running chat history (system + alternating user/assistant); `rendered`
+/// is the markdown of the whole thread shown so far (used as the next
+/// follow-up's `prefix`).
+struct ConvoState {
+    messages: Vec<ai::ChatMessage>,
+    rendered: String,
 }
 
 /// Tile-spawn request sent from the bridge (any thread) to the UI
@@ -130,61 +217,79 @@ impl OverlayBarBridge {
                         return; // No active stream; drop the delta.
                     };
                     stream.accumulated.push_str(&text);
-                    (stream.weak.clone(), stream.accumulated.clone())
+                    // Render prior thread + the live answer (continue-dialog):
+                    // `prefix` is empty for the first answer, non-empty after
+                    // a follow-up so the new answer appends below the thread.
+                    let body = format!("{}{}", stream.prefix, stream.accumulated);
+                    (stream.weak.clone(), body)
                 };
                 let _ = slint::invoke_from_event_loop(move || {
                     let Some(tile) = weak.upgrade() else {
                         return;
                     };
-                    let blocks: Vec<MarkdownBlock> = markdown::parse(&body)
-                        .into_iter()
-                        .map(|b| MarkdownBlock {
-                            kind: b.kind,
-                            text: SharedString::from(b.text),
-                            lang: SharedString::from(b.lang),
-                        })
-                        .collect();
-                    tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
+                    tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&body))));
                 });
             }
             ai::AiEvent::Done { reason } => {
                 self.dec_ai_in_flight();
-                let weak = {
+                // Take the finished stream out of the slot, then fold its
+                // answer into the tile's conversation so the next follow-up
+                // carries full context.
+                let finished = {
                     let mut slot = match self.current_streaming.lock() {
                         Ok(g) => g,
                         Err(p) => p.into_inner(),
                     };
-                    slot.take().map(|s| s.weak)
+                    slot.take()
                 };
-                if let Some(weak) = weak {
+                if let Some(stream) = finished {
+                    if stream.convo_id >= 0 {
+                        let mut messages = stream.request_messages;
+                        messages.push(ai::ChatMessage {
+                            role: "assistant".into(),
+                            content: ai::MessageContent::Text(stream.accumulated.clone()),
+                        });
+                        let rendered = format!("{}{}", stream.prefix, stream.accumulated);
+                        let mut convos = match self.conversations.lock() {
+                            Ok(g) => g,
+                            Err(p) => p.into_inner(),
+                        };
+                        convos.insert(stream.convo_id, ConvoState { messages, rendered });
+                    }
+                    let weak = stream.weak;
                     let _ = slint::invoke_from_event_loop(move || {
                         if let Some(tile) = weak.upgrade() {
                             tile.set_source_label(SharedString::from(format!(
                                 "ai · done ({reason})"
                             )));
+                            tile.set_followup_busy(false);
                         }
                     });
                 }
             }
             ai::AiEvent::Error { message } => {
                 self.dec_ai_in_flight();
-                let weak = {
+                let captured = {
                     let mut slot = match self.current_streaming.lock() {
                         Ok(g) => g,
                         Err(p) => p.into_inner(),
                     };
-                    slot.take().map(|s| s.weak)
+                    slot.take()
                 };
-                if let Some(weak) = weak {
+                if let Some(stream) = captured {
+                    let weak = stream.weak;
+                    // Keep any prior thread; append the error below it so a
+                    // follow-up failure doesn't wipe the conversation.
+                    let body = if stream.prefix.is_empty() {
+                        format!("⚠ AI error: {message}")
+                    } else {
+                        format!("{}\n\n⚠ AI error: {message}", stream.prefix)
+                    };
                     let _ = slint::invoke_from_event_loop(move || {
                         if let Some(tile) = weak.upgrade() {
-                            let blocks = vec![MarkdownBlock {
-                                kind: markdown::kind::PARAGRAPH,
-                                text: SharedString::from(format!("⚠ AI error: {message}")),
-                                lang: SharedString::from(""),
-                            }];
-                            tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
+                            tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&body))));
                             tile.set_source_label(SharedString::from("⚠ error"));
+                            tile.set_followup_busy(false);
                         }
                     });
                 }
@@ -399,6 +504,11 @@ const TILE_DEFAULT_H: i32 = 360;
 const AI_MAX_TOKENS: u32 = 600;
 
 fn main() -> Result<(), slint::PlatformError> {
+    // Open the diagnostics log + install the panic hook FIRST so any
+    // early failure (config, tokio, window create) is captured even in a
+    // release build that has no console.
+    slint_replay::logging::init();
+
     // Phase 6 — MCP server enablement hint.
     //
     // The mcp feature on i-slint-backend-selector auto-starts an HTTP MCP
@@ -439,15 +549,30 @@ fn main() -> Result<(), slint::PlatformError> {
     // Phase C — load config once at startup. SharedConfig (Arc<RwLock>)
     // because Settings tab will eventually mutate it.
     let cfg = config::shared();
-    eprintln!(
-        "[overlay-host] config loaded: ai_model={} ai_base_url={}",
-        cfg.read().ai_model,
-        if cfg.read().ai_base_url.is_empty() {
-            "(unset)"
-        } else {
-            "(set)"
-        }
-    );
+    {
+        // Log key PRESENCE only (never the values) so a tester can confirm
+        // from the log file whether their AI/STT keys are configured.
+        let c = cfg.read();
+        diag!(
+            "config loaded: ai_model={} base_url={} ai_bearer={} groq_key={}",
+            c.ai_model,
+            if c.ai_base_url.is_empty() {
+                "unset"
+            } else {
+                "set"
+            },
+            if c.ai_bearer.is_empty() {
+                "MISSING"
+            } else {
+                "set"
+            },
+            if c.groq_api_key.is_empty() {
+                "MISSING"
+            } else {
+                "set"
+            }
+        );
+    }
 
     // Phase E6 v36 — seed the process-global tile opacity from config so
     // the very first tile spawned (before the Settings panel is ever
@@ -476,6 +601,7 @@ fn main() -> Result<(), slint::PlatformError> {
         tile_seq: AtomicU64::new(0),
         current_streaming: std::sync::Mutex::new(None),
         ai_in_flight: std::sync::atomic::AtomicI32::new(0),
+        conversations: std::sync::Mutex::new(std::collections::HashMap::new()),
         last_transcript_push: std::sync::Mutex::new(
             std::time::Instant::now() - std::time::Duration::from_secs(1),
         ),
@@ -1686,8 +1812,15 @@ fn main() -> Result<(), slint::PlatformError> {
         let settings_ref = settings.clone();
         let tiles_ref = tiles.clone();
         let cfg_for_settings = cfg.clone();
+        let overlay_weak = overlay.as_weak();
         overlay.on_open_settings_clicked(move || {
-            open_settings(&s, &settings_ref, &tiles_ref, &cfg_for_settings);
+            open_settings(
+                &s,
+                &settings_ref,
+                &tiles_ref,
+                &cfg_for_settings,
+                &overlay_weak,
+            );
         });
     }
 
@@ -1743,11 +1876,40 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== Quit =====
-    overlay.on_quit_clicked(|| {
-        eprintln!("[overlay-host] quit requested");
+    // ===== Quit (two-step inline confirm) =====
+    // The X press ARMS an inline "Quit? Yes/No" on the bar instead of
+    // killing the app outright (user: "крестик моментально всё закрывает
+    // без предупреждения"). A 4s timer auto-disarms so the bar doesn't
+    // get stuck in the armed state if the user walks away.
+    {
+        let weak = overlay.as_weak();
+        overlay.on_quit_clicked(move || {
+            let Some(o) = weak.upgrade() else { return };
+            o.set_quit_armed(true);
+            diag!("quit armed (awaiting confirm)");
+            let disarm = o.as_weak();
+            Timer::single_shot(Duration::from_secs(4), move || {
+                if let Some(o) = disarm.upgrade() {
+                    if o.get_quit_armed() {
+                        o.set_quit_armed(false);
+                        diag!("quit auto-disarmed (timeout)");
+                    }
+                }
+            });
+        });
+    }
+    overlay.on_quit_confirm(|| {
+        diag!("quit confirmed");
         let _ = slint::quit_event_loop();
     });
+    {
+        let weak = overlay.as_weak();
+        overlay.on_quit_cancel(move || {
+            if let Some(o) = weak.upgrade() {
+                o.set_quit_armed(false);
+            }
+        });
+    }
 
     // Smoke convenience: SLINT_OVERLAY_AUTO_TILE=1 spawns one tile
     // after 500 ms so screenshot scripts can verify markdown rendering
@@ -2105,6 +2267,11 @@ fn fire_f9_ask(
     // sees which tile came from a hotkey vs auto-detector.
     tile.set_trigger_label(SharedString::from("✋ F9 manual ask"));
     tile.set_trigger_color(slint::Color::from_rgb_u8(0xa7, 0x8b, 0xfa));
+    // Phase E6 v45 — this tile carries a conversation, so it shows the
+    // continue-dialog input. busy=true until the first answer completes.
+    let convo_id = CONVO_SEQ.fetch_add(1, Ordering::Relaxed) as i32;
+    tile.set_convo_id(convo_id);
+    tile.set_followup_busy(true);
     wire_tile_drag(&tile);
     let placeholder = vec![MarkdownBlock {
         kind: markdown::kind::PARAGRAPH,
@@ -2144,22 +2311,45 @@ fn fire_f9_ask(
             toggle_tile_maximize(hwnd, &t);
         }
     });
+    // Phase E6 v45 — continue-dialog: a follow-up question reuses this
+    // tile's conversation + streams the reply below the thread.
+    {
+        let weak_fu = tile.as_weak();
+        let bridge_fu = bridge.clone();
+        let events_fu = events.clone();
+        let cfg_fu = cfg.clone();
+        let slint_rt_fu = slint_rt.clone();
+        let rt_handle_fu = rt_handle.clone();
+        tile.on_followup_submitted(move |q| {
+            fire_followup_ask(
+                (convo_id, q.to_string()),
+                weak_fu.clone(),
+                &bridge_fu,
+                &events_fu,
+                &cfg_fu,
+                &slint_rt_fu,
+                &rt_handle_fu,
+            );
+        });
+    }
     let _ = tile.show();
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
     tiles.borrow_mut().push(tile);
 
     // ===== 2. Register the tile in the bridge's streaming slot =====
-    {
-        let mut slot = match bridge.current_streaming.lock() {
-            Ok(g) => g,
-            Err(p) => p.into_inner(),
-        };
-        *slot = Some(StreamingTile {
+    // request_messages is filled once `messages` is built below (before
+    // the stream task spawns, so no event can fold an empty history).
+    install_streaming_tile(
+        bridge,
+        StreamingTile {
             weak: weak_for_stream,
             accumulated: String::new(),
-        });
-    }
+            prefix: String::new(),
+            convo_id,
+            request_messages: Vec::new(),
+        },
+    );
 
     // ===== 3. Snapshot cfg + cost-cap + transcript + screenshot =====
     let (base_url, bearer, model, meeting_context, response_language, cap_usd) = {
@@ -2208,6 +2398,19 @@ fn fire_f9_ask(
         screenshot.as_deref(),
         None,
     );
+
+    // Phase E6 v45 — record the sent messages in the streaming slot so
+    // AiEvent::Done can fold this turn into the tile's conversation for
+    // follow-ups. Done before the stream task spawns → no race.
+    {
+        let mut slot = match bridge.current_streaming.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        if let Some(s) = slot.as_mut() {
+            s.request_messages = messages.clone();
+        }
+    }
 
     let (journal_for_request, journal_for_loop, health_for_stream) = {
         let s = slint_replay::runtime_state::lock(slint_rt);
@@ -2362,6 +2565,10 @@ fn fire_ptt_ask(
     tile.set_source_label(SharedString::from("stt · расшифровка…"));
     tile.set_trigger_label(SharedString::from(format!("{icon} push-to-talk")));
     tile.set_trigger_color(slint::Color::from_rgb_u8(0xef, 0x44, 0x44));
+    // Phase E6 v45 — PTT answers are continuable dialogs too.
+    let convo_id = CONVO_SEQ.fetch_add(1, Ordering::Relaxed) as i32;
+    tile.set_convo_id(convo_id);
+    tile.set_followup_busy(true);
     wire_tile_drag(&tile);
     tile.set_blocks(ModelRc::new(VecModel::from(vec![MarkdownBlock {
         kind: markdown::kind::PARAGRAPH,
@@ -2397,6 +2604,26 @@ fn fire_ptt_ask(
             toggle_tile_maximize(hwnd, &t);
         }
     });
+    // Phase E6 v45 — continue-dialog follow-ups on PTT answer tiles.
+    {
+        let weak_fu = tile.as_weak();
+        let bridge_fu = bridge.clone();
+        let events_fu = events.clone();
+        let cfg_fu = cfg.clone();
+        let slint_rt_fu = slint_rt.clone();
+        let rt_handle_fu = rt_handle.clone();
+        tile.on_followup_submitted(move |q| {
+            fire_followup_ask(
+                (convo_id, q.to_string()),
+                weak_fu.clone(),
+                &bridge_fu,
+                &events_fu,
+                &cfg_fu,
+                &slint_rt_fu,
+                &rt_handle_fu,
+            );
+        });
+    }
     let _ = tile.show();
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
@@ -2404,16 +2631,18 @@ fn fire_ptt_ask(
     tiles.borrow_mut().push(tile);
 
     // ===== 2. Register tile in the streaming slot (same as F9) =====
-    {
-        let mut slot = match bridge.current_streaming.lock() {
-            Ok(g) => g,
-            Err(p) => p.into_inner(),
-        };
-        *slot = Some(StreamingTile {
+    // request_messages is filled inside the transcribe→ask task once the
+    // STT question is known and `messages` is built.
+    install_streaming_tile(
+        bridge,
+        StreamingTile {
             weak: weak_for_stream,
             accumulated: String::new(),
-        });
-    }
+            prefix: String::new(),
+            convo_id,
+            request_messages: Vec::new(),
+        },
+    );
 
     // ===== 3. Snapshot config + rolling transcript (context) =====
     let (base_url, bearer, model, meeting_context, response_language) = {
@@ -2463,6 +2692,7 @@ fn fire_ptt_ask(
 
     // ===== 5. Spawn transcribe → ask =====
     let events_for_task = events.clone();
+    let bridge_for_task = bridge.clone();
     let task = rt_handle.spawn(async move {
         let whisper_prompt = stt::build_whisper_prompt(&trigger_keywords, &meeting_context);
         let result = if groq_key.is_empty() {
@@ -2506,6 +2736,21 @@ fn fire_ptt_ask(
             None,
             Some(&question),
         );
+        // Phase E6 v45 — record the sent messages so AiEvent::Done folds
+        // this turn into the tile's conversation for follow-ups. Guard on
+        // convo_id in case another ask grabbed the slot during the
+        // (slow) transcription step.
+        {
+            let mut slot = match bridge_for_task.current_streaming.lock() {
+                Ok(g) => g,
+                Err(p) => p.into_inner(),
+            };
+            if let Some(s) = slot.as_mut() {
+                if s.convo_id == convo_id {
+                    s.request_messages = messages.clone();
+                }
+            }
+        }
         let sys_full = messages
             .first()
             .and_then(|m| match &m.content {
@@ -2554,6 +2799,131 @@ fn fire_ptt_ask(
     slint_replay::runtime_state::lock(slint_rt).ai_task = Some(task);
 }
 
+/// Phase E6 v45 — continue the dialog inside a tile. Reads the tile's
+/// stored conversation (seeded when the previous answer completed),
+/// appends the new user question, and streams the reply BELOW the
+/// existing thread via the SAME `current_streaming` slot + `ai:event`
+/// path as F9. `turn` = (convo_id, question).
+fn fire_followup_ask(
+    turn: (i32, String),
+    tile_weak: slint::Weak<TileWindow>,
+    bridge: &Arc<OverlayBarBridge>,
+    events: &Arc<dyn RuntimeEvents>,
+    cfg: &overlay_backend::config::SharedConfig,
+    slint_rt: &SharedSlintRuntime,
+    rt_handle: &tokio::runtime::Handle,
+) {
+    let (convo_id, question) = turn;
+    let question = question.trim().to_string();
+    if question.is_empty() {
+        return;
+    }
+
+    // Pull the prior conversation (history + rendered thread). Absent only
+    // if the input was used before the first answer folded in — the input
+    // is disabled until then, so this is a defensive bail.
+    let (history, prior_rendered) = {
+        let convos = match bridge.conversations.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        match convos.get(&convo_id) {
+            Some(c) => (c.messages.clone(), c.rendered.clone()),
+            None => {
+                diag!("followup: no conversation for convo_id={convo_id}");
+                return;
+            }
+        }
+    };
+
+    // New request = full history + this user turn.
+    let mut messages = history;
+    messages.push(ai::ChatMessage {
+        role: "user".into(),
+        content: ai::MessageContent::Text(question.clone()),
+    });
+
+    // Visible thread = prior thread + the new question header; the streamed
+    // answer renders after this prefix.
+    let prefix = format!("{prior_rendered}\n\n---\n\n**🧑 {question}**\n\n");
+
+    // Show the question immediately + mark busy; register the slot so the
+    // ai:event deltas land in this tile.
+    if let Some(tile) = tile_weak.upgrade() {
+        tile.set_followup_busy(true);
+        tile.set_source_label(SharedString::from("ai · asking…"));
+        let shown = format!("{prefix}⏳ …");
+        tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&shown))));
+    }
+    install_streaming_tile(
+        bridge,
+        StreamingTile {
+            weak: tile_weak,
+            accumulated: String::new(),
+            prefix,
+            convo_id,
+            request_messages: messages.clone(),
+        },
+    );
+
+    // Snapshot config + journal/health, abort any in-flight task, then
+    // spawn the stream (mirrors fire_f9_ask's tail).
+    let (base_url, bearer, model) = {
+        let c = cfg.read();
+        (
+            c.ai_base_url.clone(),
+            c.ai_bearer.clone(),
+            c.ai_model.clone(),
+        )
+    };
+    let (journal_for_loop, health_for_stream) = {
+        let s = slint_replay::runtime_state::lock(slint_rt);
+        (s.journal.clone(), s.health.clone())
+    };
+    {
+        let mut s = slint_replay::runtime_state::lock(slint_rt);
+        if let Some(h) = s.ai_task.take() {
+            h.abort();
+        }
+    }
+    let sys_full = messages
+        .first()
+        .and_then(|m| match &m.content {
+            ai::MessageContent::Text(t) => Some(t.clone()),
+            _ => None,
+        })
+        .unwrap_or_default();
+    let usr_full = question.clone();
+    let rt_for_cost = slint_rt.clone();
+    let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
+        let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
+        s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
+        (s.session_cost_microcents as f64) / 100_000_000.0
+    });
+    let t0 = std::time::Instant::now();
+    let events_for_task = events.clone();
+    let task = rt_handle.spawn(async move {
+        let ai_rx = ai::stream_chat(base_url, bearer, model.clone(), messages, 4096);
+        overlay_backend::runtime::ask_stream_loop(
+            events_for_task,
+            ai_rx,
+            model,
+            sys_full,
+            usr_full,
+            journal_for_loop,
+            health_for_stream,
+            t0,
+            cost_apply,
+        )
+        .await;
+    });
+    slint_replay::runtime_state::lock(slint_rt).ai_task = Some(task);
+    diag!(
+        "followup sent (convo_id={convo_id}, {} chars)",
+        question.len()
+    );
+}
+
 /// Atomic counter for tile-slot index — increments per spawn so
 /// successive tiles distribute across a 2-column grid on the right
 /// half of the chosen monitor.
@@ -2599,7 +2969,7 @@ fn global_tile_opacity() -> f32 {
 /// Win32 SetWindowPos with current position so the tile expands in
 /// place from its top-left corner. Flips tile.maximized so the
 /// button glyph updates.
-fn toggle_tile_maximize(_hwnd: windows::Win32::Foundation::HWND, tile: &TileWindow) {
+fn toggle_tile_maximize(hwnd: windows::Win32::Foundation::HWND, tile: &TileWindow) {
     // Phase E6 v18 fix — use Slint's window().set_size() not raw
     // Win32 SetWindowPos. SetWindowPos resized the OS window but
     // left Slint's layout pass thinking the size was still 460×360
@@ -2611,7 +2981,41 @@ fn toggle_tile_maximize(_hwnd: windows::Win32::Foundation::HWND, tile: &TileWind
     let (w, h): (f32, f32) = if new { (800.0, 600.0) } else { (460.0, 360.0) };
     tile.window().set_size(slint::LogicalSize::new(w, h));
     tile.set_maximized(new);
-    eprintln!("[overlay-host]   tile maximized -> {new} (size={w}x{h})");
+
+    // Phase E6 v45 — keep the resized tile fully on-screen. Growing in
+    // place from the top-left pushed tiles near a screen edge/corner off
+    // the monitor (user: "тайл у угла раскрывается за экран"). Work in
+    // PHYSICAL pixels (logical × DPI scale) since Win32 rects/positions
+    // are physical, then nudge the origin back inside the tile's monitor.
+    let scale = tile.window().scale_factor();
+    let pw = (w * scale) as i32;
+    let ph = (h * scale) as i32;
+    // Clamp against the WORK AREA (monitor minus taskbar) of the tile's
+    // own monitor so a maximized tile near an edge/corner stays fully
+    // visible AND its bottom row (the follow-up input) clears the taskbar.
+    if let (Ok((x, y, _r, _b)), Some(m)) = (get_window_rect(hwnd), work_area_for_window(hwnd)) {
+        let mut nx = x;
+        let mut ny = y;
+        // Pull the right/bottom edges inside first, then guarantee the
+        // top-left stays visible (matters if the tile is wider/taller
+        // than the work area — keep the top-left corner reachable).
+        if nx + pw > m.right {
+            nx = m.right - pw;
+        }
+        if ny + ph > m.bottom {
+            ny = m.bottom - ph;
+        }
+        if nx < m.left {
+            nx = m.left;
+        }
+        if ny < m.top {
+            ny = m.top;
+        }
+        if nx != x || ny != y {
+            let _ = move_window_pos_only(hwnd, nx, ny);
+        }
+    }
+    diag!("tile maximized -> {new} (logical {w}x{h}, phys {pw}x{ph})");
 }
 
 /// Wire the chrome-row drag callbacks on a tile so the user can move
@@ -2945,7 +3349,14 @@ fn open_settings(
     settings_ref: &Rc<RefCell<Option<SettingsWindow>>>,
     tiles_ref: &TileWindows,
     cfg: &overlay_backend::config::SharedConfig,
+    overlay_weak: &slint::Weak<OverlayBarWindow>,
 ) {
+    // Light up the bar's ⚙ chip while Settings is open (user: "значок
+    // настроек не загорается когда настройки открыты"). Cleared in the
+    // window's close handler below.
+    if let Some(o) = overlay_weak.upgrade() {
+        o.set_settings_open(true);
+    }
     let mut settings_slot = settings_ref.borrow_mut();
     if let Some(existing) = settings_slot.as_ref() {
         // Refresh token status — config might have changed since last open.
@@ -3574,11 +3985,16 @@ fn open_settings(
 
     let weak_close = win.as_weak();
     let settings_close = settings_ref.clone();
+    let overlay_for_close = overlay_weak.clone();
     win.on_close_clicked(move || {
         if let Some(w) = weak_close.upgrade() {
             let _ = w.hide();
         }
         *settings_close.borrow_mut() = None;
+        // Un-light the bar's ⚙ chip.
+        if let Some(o) = overlay_for_close.upgrade() {
+            o.set_settings_open(false);
+        }
     });
 
     let _ = win.show();

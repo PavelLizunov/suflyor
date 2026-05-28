@@ -44,10 +44,24 @@ msgstr "🧠 {}"
 msgid "+ tile ({})"
 msgstr "+ тайл ({})"
 
+# Phase E6 v45 — two-step quit confirm (X arms "Quit? Yes/No").
+msgid "Quit?"
+msgstr "Выйти?"
+
+msgid "Yes"
+msgstr "Да"
+
+msgid "No"
+msgstr "Нет"
+
 # === tile.slint ===
 
 msgid "#{}  {}"
 msgstr "№{}  {}"
+
+# Phase E6 v45 — in-tile continue-dialog follow-up input placeholder.
+msgid "Continue the dialog…"
+msgstr "Продолжить диалог…"
 
 # === palette.slint ===
 

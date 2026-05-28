@@ -304,6 +304,36 @@ pub fn get_window_rect(hwnd: HWND) -> Result<(i32, i32, i32, i32), Box<dyn std::
     Ok((r.left, r.top, r.right - r.left, r.bottom - r.top))
 }
 
+/// Work area (monitor bounds MINUS the taskbar) of the monitor that most
+/// contains `hwnd`, as a `MonitorRect`. Used by `toggle_tile_maximize` to
+/// keep a maximized tile fully on-screen AND clear of the taskbar (so the
+/// tile's bottom row — e.g. the follow-up input — stays reachable).
+/// `is_primary` is meaningless here and always false.
+#[must_use]
+pub fn work_area_for_window(hwnd: HWND) -> Option<MonitorRect> {
+    use windows::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    };
+    unsafe {
+        let hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if GetMonitorInfoW(hmon, &mut info).as_bool() {
+            Some(MonitorRect {
+                left: info.rcWork.left,
+                top: info.rcWork.top,
+                right: info.rcWork.right,
+                bottom: info.rcWork.bottom,
+                is_primary: false,
+            })
+        } else {
+            None
+        }
+    }
+}
+
 // Phase E6 v22 — manual cursor-delta drag state.
 //
 // REPLACES the old WM_NCLBUTTONDOWN system-drag. That approach
