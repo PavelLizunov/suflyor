@@ -330,6 +330,18 @@ msgstr "напр.: Я Senior SRE на собеседовании на платф
 msgid "Save context"
 msgstr "Сохранить контекст"
 
+msgid "✨ Structure via AI"
+msgstr "✨ Структурировать (AI)"
+
+msgid "Structuring…"
+msgstr "Обработка…"
+
+msgid "🎤 Dictate"
+msgstr "🎤 Диктовать"
+
+msgid "🔴 Stop recording"
+msgstr "🔴 Остановить запись"
+
 # --- Tab 11: AI bridge ---
 
 msgid "Claude AI bridge — bearer token + base URL + model."

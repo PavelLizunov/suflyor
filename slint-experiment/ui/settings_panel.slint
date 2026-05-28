@@ -210,6 +210,18 @@ export component SettingsWindow inherits Window {
     in-out property <string> meeting-context-input: "";
     in-out property <string> meeting-context-result: "";
     callback meeting-context-save(string);
+    // Phase E6 v43 — "Structure via AI" button: sends the current context
+    // text to the AI with a profile-structuring prompt; Rust replaces the
+    // field with the cleaned result. context-processing dims the button
+    // while the AI call is in flight.
+    in-out property <bool> context-processing: false;
+    callback context-process-clicked();
+    // Phase E6 v43 — voice dictation INTO the context field: click to
+    // start recording the mic, click again to stop; Rust transcribes
+    // (Groq) and appends the text to the editor. context-dictating drives
+    // the red "stop" state.
+    in-out property <bool> context-dictating: false;
+    callback context-dictate-clicked();
 
     // Phase E6 v38 — interface-language selector. ui-language-index
     // reflects the saved config (0=Русский, 1=English); language-selected
@@ -697,9 +709,24 @@ export component SettingsWindow inherits Window {
                         HorizontalLayout {
                             spacing: 8px;
                             alignment: start;
+                            // Phase E6 v43 — voice dictation toggle.
+                            Button {
+                                text: root.context-dictating
+                                    ? @tr("🔴 Stop recording")
+                                    : @tr("🎤 Dictate");
+                                clicked => { root.context-dictate-clicked(); }
+                            }
                             Button {
                                 text: @tr("Save context");
                                 clicked => { root.meeting-context-save(root.meeting-context-input); }
+                            }
+                            // Phase E6 v43 — structure the context via AI.
+                            Button {
+                                text: root.context-processing
+                                    ? @tr("Structuring…")
+                                    : @tr("✨ Structure via AI");
+                                enabled: !root.context-processing;
+                                clicked => { root.context-process-clicked(); }
                             }
                             if root.meeting-context-result != "" : Text {
                                 text: root.meeting-context-result;

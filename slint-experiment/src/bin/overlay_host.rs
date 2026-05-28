@@ -3364,6 +3364,193 @@ fn open_settings(
         });
     }
 
+    // Phase E6 v43 — "Structure via AI": one-shot ai::complete that turns
+    // the free-form / dictated context into a clean interview profile, then
+    // replaces the editor field (user reviews + Saves). Off-thread (tokio)
+    // so the UI doesn't block; result posted back via invoke_from_event_loop.
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_context_process_clicked(move || {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            let current = w.get_meeting_context_input().to_string();
+            if current.trim().is_empty() {
+                w.set_meeting_context_result(SharedString::from(
+                    "[--] пусто — нечего обрабатывать",
+                ));
+                return;
+            }
+            let (base_url, bearer, model) = {
+                let c = cfg_c.read();
+                (
+                    c.ai_base_url.clone(),
+                    c.ai_bearer.clone(),
+                    c.ai_model.clone(),
+                )
+            };
+            if base_url.is_empty() || bearer.is_empty() {
+                w.set_meeting_context_result(SharedString::from(
+                    "[--] AI мост не настроен (вкладка AI мост)",
+                ));
+                return;
+            }
+            w.set_context_processing(true);
+            w.set_meeting_context_result(SharedString::from("обработка через AI…"));
+            let weak2 = w.as_weak();
+            // Off-thread with a local current-thread runtime (reqwest is
+            // async-only); same pattern as the AI-bridge / STT test buttons.
+            std::thread::spawn(move || {
+                let messages = vec![
+                    ai::ChatMessage {
+                        role: "system".into(),
+                        content: ai::MessageContent::Text(
+                            "Преобразуй текст пользователя в чёткий профиль для интервью: \
+                             роль, ключевые навыки, технологии, области фокуса. Кратко, по \
+                             пунктам, на русском. Исправь ошибки распознавания речи. Без \
+                             преамбулы — сразу профиль."
+                                .into(),
+                        ),
+                    },
+                    ai::ChatMessage {
+                        role: "user".into(),
+                        content: ai::MessageContent::Text(current),
+                    },
+                ];
+                let res = match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(rt) => rt.block_on(ai::complete(&base_url, &bearer, &model, messages, 1024)),
+                    Err(e) => Err(anyhow::anyhow!("runtime: {e}")),
+                };
+                let _ = slint::invoke_from_event_loop(move || {
+                    let Some(w) = weak2.upgrade() else {
+                        return;
+                    };
+                    w.set_context_processing(false);
+                    match res {
+                        Ok(text) if !text.trim().is_empty() => {
+                            w.set_meeting_context_input(SharedString::from(
+                                text.trim().to_string(),
+                            ));
+                            w.set_meeting_context_result(SharedString::from(
+                                "[ok] обработано — проверь и нажми «Сохранить контекст»",
+                            ));
+                        }
+                        Ok(_) => w.set_meeting_context_result(SharedString::from(
+                            "[--] AI вернул пустой ответ",
+                        )),
+                        Err(e) => w.set_meeting_context_result(SharedString::from(format!(
+                            "[--] ошибка AI: {e}"
+                        ))),
+                    }
+                });
+            });
+        });
+    }
+
+    // Phase E6 v43 — voice dictation into the context field. Toggle:
+    // click to start recording the mic, click again to stop. The record
+    // thread (audio::record_source_until_stop) transcribes on a local
+    // runtime then APPENDS the text to the editor (user reviews + Saves).
+    // Reuses the PTT 30s watchdog so a forgotten "stop" can't leak a
+    // thread. dictate_stop is owned by the handler closure.
+    {
+        let dictate_stop: Rc<RefCell<Option<Arc<AtomicBool>>>> = Rc::new(RefCell::new(None));
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_context_dictate_clicked(move || {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            // Toggle OFF: stop the in-flight recording.
+            if let Some(stop) = dictate_stop.borrow_mut().take() {
+                stop.store(true, Ordering::Release);
+                w.set_context_dictating(false);
+                w.set_meeting_context_result(SharedString::from("расшифровка…"));
+                return;
+            }
+            // Toggle ON: start a new recording.
+            let (mic_dev, groq_key, stt_language, stt_model, trigger_keywords, meeting_context) = {
+                let c = cfg_c.read();
+                (
+                    c.mic_device.clone(),
+                    c.groq_api_key.clone(),
+                    c.stt_language.clone(),
+                    c.stt_model.clone(),
+                    c.trigger_keywords.clone(),
+                    c.meeting_context.clone(),
+                )
+            };
+            if groq_key.is_empty() {
+                w.set_meeting_context_result(SharedString::from(
+                    "[--] ключ Groq не задан (вкладка STT)",
+                ));
+                return;
+            }
+            let stop = Arc::new(AtomicBool::new(false));
+            *dictate_stop.borrow_mut() = Some(stop.clone());
+            spawn_ptt_watchdog(stop.clone());
+            w.set_context_dictating(true);
+            w.set_meeting_context_result(SharedString::from("запись… (нажми «Остановить»)"));
+            let weak_res = w.as_weak();
+            std::thread::spawn(move || {
+                let pcm =
+                    audio::record_source_until_stop(audio::AudioSource::Mic, mic_dev, None, stop)
+                        .unwrap_or_else(|e| {
+                            eprintln!("[overlay-host] dictation record failed: {e:#}");
+                            Vec::new()
+                        });
+                let text = if pcm.len() < 4800 {
+                    String::new()
+                } else {
+                    let whisper_prompt =
+                        stt::build_whisper_prompt(&trigger_keywords, &meeting_context);
+                    match tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                    {
+                        Ok(rt) => rt
+                            .block_on(stt::transcribe_once(
+                                &pcm,
+                                &groq_key,
+                                stt_language.as_deref(),
+                                whisper_prompt.as_deref(),
+                                &stt_model,
+                            ))
+                            .unwrap_or_default(),
+                        Err(_) => String::new(),
+                    }
+                };
+                let _ = slint::invoke_from_event_loop(move || {
+                    let Some(w) = weak_res.upgrade() else {
+                        return;
+                    };
+                    w.set_context_dictating(false);
+                    let trimmed = text.trim();
+                    if trimmed.is_empty() {
+                        w.set_meeting_context_result(SharedString::from(
+                            "[--] ничего не распознано",
+                        ));
+                        return;
+                    }
+                    let cur = w.get_meeting_context_input().to_string();
+                    let joined = if cur.trim().is_empty() {
+                        trimmed.to_string()
+                    } else {
+                        format!("{cur} {trimmed}")
+                    };
+                    w.set_meeting_context_input(SharedString::from(joined));
+                    w.set_meeting_context_result(SharedString::from(
+                        "[ok] добавлено — проверь и нажми «Сохранить контекст»",
+                    ));
+                });
+            });
+        });
+    }
+
     // Phase E6 v25 — frameless Settings drag (cursor-delta, same as
     // bar + tiles). The "Settings" sidebar header is the handle.
     {
