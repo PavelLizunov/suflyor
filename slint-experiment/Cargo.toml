@@ -44,6 +44,10 @@ path = "src/bin/overlay_host.rs"
 # Compiles ui/*.slint into Rust at build time. include_modules!() in
 # src/main.rs pulls the generated code in.
 slint-build = "1.16"
+# Embeds assets/icon.ico into the .exe (Explorer + taskbar). Best-effort:
+# build.rs ignores its error so a missing Windows SDK rc.exe never breaks
+# the build — the NSIS installer also sets the shortcut icon directly.
+winresource = "0.1"
 
 [dependencies]
 # Default features include the winit + skia backends, which on Windows

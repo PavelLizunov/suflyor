@@ -24,5 +24,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_bundled_translations("translations")
         .with_default_translation_context(slint_build::DefaultTranslationContext::None);
     slint_build::compile_with_config("ui/index.slint", config)?;
+
+    // Embed the app icon into the .exe so Explorer / the taskbar / a
+    // pinned shortcut show the suflyor mark instead of the generic
+    // Windows default. Best-effort: if the Windows SDK resource compiler
+    // (rc.exe) is missing, log a warning and continue — the NSIS
+    // installer also points the Start-menu/Desktop shortcuts at the
+    // same icon.ico, so the user-facing launchers stay branded either way.
+    #[cfg(windows)]
+    {
+        println!("cargo:rerun-if-changed=assets/icon.ico");
+        let mut res = winresource::WindowsResource::new();
+        res.set_icon("assets/icon.ico");
+        if let Err(e) = res.compile() {
+            println!("cargo:warning=app icon embed skipped ({e})");
+        }
+    }
+
     Ok(())
 }

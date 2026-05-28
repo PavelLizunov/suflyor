@@ -37,6 +37,9 @@ UninstPage instfiles
 Section "Main" SEC_MAIN
   SetOutPath "$INSTDIR"
   File "..\slint-experiment\target\release\${PRODUCT_EXE}"
+  ; App icon — used by the Start-menu + Desktop shortcuts and the
+  ; Add/Remove Programs entry (the .exe also embeds it via build.rs).
+  File "..\slint-experiment\assets\icon.ico"
   ; Bundle translations directory so @tr() can find .po files at runtime.
   ; (Slint compiles translations INTO the binary via with_bundled_translations,
   ; so technically not needed at runtime; included for future runtime-load mode.)
@@ -45,7 +48,10 @@ Section "Main" SEC_MAIN
 
   ; Start menu shortcut
   CreateDirectory "$SMPROGRAMS\suflyor-slint"
-  CreateShortcut "$SMPROGRAMS\suflyor-slint\suflyor (Slint).lnk" "$INSTDIR\${PRODUCT_EXE}" "" "$INSTDIR\${PRODUCT_EXE}" 0
+  CreateShortcut "$SMPROGRAMS\suflyor-slint\suflyor (Slint).lnk" "$INSTDIR\${PRODUCT_EXE}" "" "$INSTDIR\icon.ico" 0
+
+  ; Desktop shortcut
+  CreateShortcut "$DESKTOP\suflyor (Slint).lnk" "$INSTDIR\${PRODUCT_EXE}" "" "$INSTDIR\icon.ico" 0
 
   ; Uninstaller
   WriteUninstaller "$INSTDIR\uninstall.exe"
@@ -56,13 +62,14 @@ Section "Main" SEC_MAIN
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "Publisher" "${PRODUCT_PUBLISHER}"
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "UninstallString" "$\"$INSTDIR\uninstall.exe$\""
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "InstallLocation" "$\"$INSTDIR$\""
-  WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayIcon" "$\"$INSTDIR\${PRODUCT_EXE}$\""
+  WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayIcon" "$\"$INSTDIR\icon.ico$\""
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "NoModify" "1"
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "NoRepair" "1"
 SectionEnd
 
 Section "Uninstall"
   Delete "$INSTDIR\${PRODUCT_EXE}"
+  Delete "$INSTDIR\icon.ico"
   Delete "$INSTDIR\uninstall.exe"
   Delete "$INSTDIR\translations\ru\LC_MESSAGES\slint-replay.po"
   RMDir "$INSTDIR\translations\ru\LC_MESSAGES"
@@ -71,5 +78,6 @@ Section "Uninstall"
   RMDir "$INSTDIR"
   Delete "$SMPROGRAMS\suflyor-slint\suflyor (Slint).lnk"
   RMDir "$SMPROGRAMS\suflyor-slint"
+  Delete "$DESKTOP\suflyor (Slint).lnk"
   DeleteRegKey HKCU "${PRODUCT_UNINST_KEY}"
 SectionEnd
