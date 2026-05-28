@@ -54,7 +54,7 @@ slint = { version = "1.16", features = ["raw-window-handle-06"] }
 
 # Journal data layer (Day 2). serde_json parses the per-line JSONL
 # events; dirs resolves %APPDATA%; anyhow gives Context-friendly errors.
-# These three are already deps of src-tauri so no new third-party risk.
+# All three are also overlay-backend deps, so no new third-party risk.
 serde_json = "1"
 dirs = "5"
 anyhow = "1"
@@ -64,9 +64,9 @@ anyhow = "1"
 # call doesn't starve the UI event loop.
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
-# Phase 0.5 overlay-spike: raw HWND + Win32 calls. Same versions
-# src-tauri uses (tauri 2.x ships windows 0.61/0.62 internally), so no
-# new third-party deps in the workspace.
+# Raw HWND + Win32 calls for the frameless transparent overlay
+# (SetWindowLongPtrW, DWM blur, layered/click-through styles).
+# windows 0.62 is Microsoft's official Win32 binding.
 raw-window-handle = "0.6"
 windows = { version = "0.62", features = [
     "Win32_Foundation",
@@ -100,9 +100,9 @@ global-hotkey = "0.6"
 # no GTK on Windows. Used only by the Settings Export/Import buttons.
 rfd = { version = "0.15", default-features = false }
 
-# Phase B1 — overlay-backend Tauri-free crate. Holds the 7 modules
-# (audio/stt/ai/journal/kb/screenshot/config) + health.rs. Both
-# src-tauri (legacy) and this crate consume them.
+# overlay-backend — the shared no-UI crate (audio, STT, AI, journal,
+# KB, screenshot, config, runtime + health.rs). This binary is its
+# only consumer, via path dep.
 [dependencies.overlay-backend]
 path = "../overlay-backend"
 
@@ -119,7 +119,7 @@ path = "../overlay-backend"
 i-slint-backend-testing = "1.16"
 
 [lints.clippy]
-# Mirror src-tauri/src/lib.rs (Tier 3 baseline). `deny` (not `forbid`) so
+# Tier 3 lint baseline (unwrap/expect/panic denied). `deny` (not `forbid`) so
 # Slint's generated code can use the inner `#[allow(...)]` it needs — the
 # VTable macros emit `unsafe` blocks that `forbid` cannot tolerate.
 # `unsafe_code = "forbid"` deliberately omitted: the slint-build output
