@@ -304,34 +304,77 @@ pub fn get_window_rect(hwnd: HWND) -> Result<(i32, i32, i32, i32), Box<dyn std::
     Ok((r.left, r.top, r.right - r.left, r.bottom - r.top))
 }
 
-/// Start a Windows system-drag on a frameless window. Releases any
-/// mouse capture then sends WM_NCLBUTTONDOWN with HTCAPTION wParam —
-/// Windows then handles the drag natively (smooth, no JS-side
-/// cursor tracking needed). Called from the tile's title-bar
-/// TouchArea on pointer-down. Phase E6 fix for user complaint
-/// "тайлы нельзя двигать".
-pub fn start_window_drag(hwnd: HWND) -> Result<(), Box<dyn std::error::Error>> {
-    use windows::Win32::Foundation::{LPARAM, WPARAM};
-    use windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
-    use windows::Win32::UI::WindowsAndMessaging::{SendMessageW, HTCAPTION, WM_NCLBUTTONDOWN};
-    // Phase E6 v7 diagnostic — stderr-log every drag invocation so
-    // we can confirm the chrome-row TouchArea is reaching this code.
-    // If we see this log but the window still doesn't drag, the bug
-    // is in WM_NCLBUTTONDOWN handling (maybe Slint intercepts it).
-    eprintln!(
-        "[overlay-host] start_window_drag invoked for hwnd={:?}",
-        hwnd.0
-    );
+// Phase E6 v22 — manual cursor-delta drag state.
+//
+// REPLACES the old WM_NCLBUTTONDOWN system-drag. That approach
+// entered a Windows MODAL drag loop (SendMessageW blocks until
+// mouse-up), and the modal loop CONSUMED the mouse-up event before
+// Slint could see it. Slint's TouchArea then stayed stuck in the
+// "pressed" state forever → every subsequent click was treated as
+// a drag → bar + tiles became unclickable. User: "после того как
+// кликнул на :: idle вся зона стала drag и больше ничего не
+// кликается; вызванный тайл завис, двигается но ничего не
+// прожимается".
+//
+// New model: no modal loop. We track the cursor delta ourselves.
+//   drag_begin(hwnd) on pointer-down  → record cursor + window pos
+//   drag_update(hwnd) on pointer-move → move window by the delta
+// Slint sees the real mouse-up normally, so TouchArea state stays
+// consistent and clicks keep working after a drag.
+
+use std::cell::Cell;
+
+thread_local! {
+    /// (cursor_start_x, cursor_start_y, window_start_x, window_start_y).
+    /// Set on drag_begin, read on drag_update. UI-thread-only so a
+    /// thread-local Cell is sufficient (no cross-thread sharing).
+    static DRAG_ANCHOR: Cell<Option<(i32, i32, i32, i32)>> = const { Cell::new(None) };
+}
+
+/// Begin a manual window drag — capture the cursor + window origin so
+/// subsequent `drag_update` calls can move the window by the delta.
+/// Call from the drag-handle TouchArea's pointer-event(down).
+pub fn drag_begin(hwnd: HWND) {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetWindowRect};
+    let mut cursor = POINT::default();
+    let mut rect = RECT::default();
     unsafe {
-        ReleaseCapture()?;
-        SendMessageW(
-            hwnd,
-            WM_NCLBUTTONDOWN,
-            Some(WPARAM(HTCAPTION as usize)),
-            Some(LPARAM(0)),
-        );
+        if GetCursorPos(&mut cursor).is_err() {
+            return;
+        }
+        if GetWindowRect(hwnd, &mut rect).is_err() {
+            return;
+        }
     }
-    Ok(())
+    DRAG_ANCHOR.with(|a| a.set(Some((cursor.x, cursor.y, rect.left, rect.top))));
+}
+
+/// Continue a manual window drag — move the window so its origin
+/// tracks the cursor by the same delta seen since `drag_begin`.
+/// Call from the drag-handle TouchArea's `moved` callback (guarded
+/// by `self.pressed` on the Slint side). No-op if no drag is active.
+pub fn drag_update(hwnd: HWND) {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, SWP_NOSIZE, SWP_NOZORDER};
+    let Some((cx0, cy0, wx0, wy0)) = DRAG_ANCHOR.with(Cell::get) else {
+        return;
+    };
+    let mut cursor = POINT::default();
+    unsafe {
+        if GetCursorPos(&mut cursor).is_err() {
+            return;
+        }
+        let nx = wx0 + (cursor.x - cx0);
+        let ny = wy0 + (cursor.y - cy0);
+        let _ = SetWindowPos(hwnd, None, nx, ny, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+    }
+}
+
+/// Clear drag anchor. Optional — `drag_begin` overwrites it anyway —
+/// but calling on pointer-up keeps the state tidy.
+pub fn drag_end() {
+    DRAG_ANCHOR.with(|a| a.set(None));
 }
 
 /// Pick a target monitor for a new tile. Mirrors the heuristic in

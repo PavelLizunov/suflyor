@@ -47,7 +47,12 @@ export component TileWindow inherits Window {
     callback close-clicked();
     callback pin-clicked();
     callback maximize-clicked();
+    // Phase E6 v22 — manual cursor-delta drag. drag-start-requested
+    // fires on pointer-down (records anchor), drag-moved fires on
+    // each move while pressed (moves window by delta). Replaces the
+    // old WM_NCLBUTTONDOWN modal drag that left TouchArea stuck.
     callback drag-start-requested();
+    callback drag-moved();
 
     Rectangle {
         background: #14161eea;
@@ -86,6 +91,9 @@ export component TileWindow inherits Window {
                                 && ev.kind == PointerEventKind.down) {
                                 root.drag-start-requested();
                             }
+                        }
+                        moved => {
+                            if (self.pressed) { root.drag-moved(); }
                         }
                     }
                     Text {

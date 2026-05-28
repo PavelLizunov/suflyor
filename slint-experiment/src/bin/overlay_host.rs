@@ -20,8 +20,8 @@ use slint_replay::runtime_state::{shared_runtime, SharedSlintRuntime};
 use slint_replay::slint_events::{SlintEvents, SlintUiBridge};
 use slint_replay::slint_session;
 use slint_replay::win32::{
-    enum_monitors, get_window_rect, grab_hwnd, make_transparent_overlay, make_transparent_tile,
-    move_window_pos_only, pick_monitor, set_always_on_top, set_stealth, start_window_drag,
+    drag_begin, drag_update, enum_monitors, get_window_rect, grab_hwnd, make_transparent_overlay,
+    make_transparent_tile, move_window_pos_only, pick_monitor, set_always_on_top, set_stealth,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -1523,24 +1523,27 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== Bar drag-to-move (Phase E6 v16) =====
-    // Wires the overlay bar's drag-start-requested callback to
-    // win32::start_window_drag, same path used by tiles in
-    // wire_tile_drag. User feedback: "не могу нормально передвигать
-    // его". TouchArea on the bar background fires on empty-space
-    // pointer-down — chip TouchAreas shadow it on their pixels so
-    // chip clicks still work.
+    // ===== Bar drag-to-move (Phase E6 v22 — manual cursor-delta) =====
+    // drag-start-requested (pointer-down on status pill) records the
+    // anchor; drag-moved (move while pressed) moves the window by the
+    // cursor delta. No WM_NCLBUTTONDOWN modal loop → Slint sees the
+    // mouse-up normally → TouchArea never sticks → chips stay
+    // clickable after a drag. User: "вся зона стала drag".
     {
         let weak_for_drag = overlay.as_weak();
         overlay.on_drag_start_requested(move || {
-            let Some(o) = weak_for_drag.upgrade() else {
-                return;
-            };
-            let Ok(hwnd) = grab_hwnd(o.window()) else {
-                return;
-            };
-            if let Err(e) = start_window_drag(hwnd) {
-                eprintln!("[overlay-host] bar drag start failed: {e:#}");
+            if let Some(o) = weak_for_drag.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(o.window()) {
+                    drag_begin(hwnd);
+                }
+            }
+        });
+        let weak_for_move = overlay.as_weak();
+        overlay.on_drag_moved(move || {
+            if let Some(o) = weak_for_move.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(o.window()) {
+                    drag_update(hwnd);
+                }
             }
         });
     }
@@ -2120,36 +2123,28 @@ fn toggle_tile_maximize(_hwnd: windows::Win32::Foundation::HWND, tile: &TileWind
     eprintln!("[overlay-host]   tile maximized -> {new} (size={w}x{h})");
 }
 
-/// Wire the chrome-row drag callback on a tile so the user can move
-/// it by pressing+dragging the title area. Win32 system-drag handles
-/// the actual cursor tracking + repaint. Phase E6 — fixes user
-/// complaint "тайлы нельзя двигать".
-///
-/// Phase E6 v9 — after WM_NCLBUTTONDOWN/HTCAPTION returns (Windows
-/// finished the modal drag loop), re-apply HWND_TOPMOST. Without
-/// this, the dragged tile sometimes loses topmost status (Windows
-/// can decide to demote it during the drag) and another topmost
-/// window comes in front → clicks on the X button miss the tile.
-/// Fixes user complaint "close сработал не сразу".
+/// Wire the chrome-row drag callbacks on a tile so the user can move
+/// it by pressing+dragging the title area. Phase E6 v22 — manual
+/// cursor-delta drag (drag_begin on down, drag_update on move-while-
+/// pressed). REPLACES the old WM_NCLBUTTONDOWN modal system-drag
+/// which consumed the mouse-up before Slint saw it, leaving the
+/// TouchArea stuck "pressed" → tile became undraggable/unclickable.
+/// User: "вызванный тайл завис, двигается но ничего не прожимается".
 fn wire_tile_drag(tile: &TileWindow) {
     let weak = tile.as_weak();
     tile.on_drag_start_requested(move || {
-        let Some(t) = weak.upgrade() else {
-            return;
-        };
-        let Ok(hwnd) = grab_hwnd(t.window()) else {
-            return;
-        };
-        if let Err(e) = start_window_drag(hwnd) {
-            eprintln!("[overlay-host] start_window_drag failed: {e:#}");
-            return;
+        if let Some(t) = weak.upgrade() {
+            if let Ok(hwnd) = grab_hwnd(t.window()) {
+                drag_begin(hwnd);
+            }
         }
-        // Re-assert topmost after Windows' modal drag loop ends —
-        // WM_NCLBUTTONDOWN/HTCAPTION is synchronous (SendMessageW
-        // blocks), so by the time start_window_drag returns the user
-        // has released the mouse and the drag is complete.
-        if let Err(e) = set_always_on_top(hwnd, true) {
-            eprintln!("[overlay-host] post-drag set_always_on_top failed: {e:#}");
+    });
+    let weak_move = tile.as_weak();
+    tile.on_drag_moved(move || {
+        if let Some(t) = weak_move.upgrade() {
+            if let Ok(hwnd) = grab_hwnd(t.window()) {
+                drag_update(hwnd);
+            }
         }
     });
 }

@@ -153,10 +153,11 @@ export component OverlayBarWindow inherits Window {
     callback aggressive-toggle-clicked();
     callback open-settings-clicked();
     callback quit-clicked();
-    // Phase E6 v16 — drag the whole bar via system-drag. User: "не
-    // могу нормально передвигать его". Wired to win32::
-    // start_window_drag in Rust, same path as tile drag.
+    // Phase E6 v22 — manual cursor-delta drag (replaces modal
+    // WM_NCLBUTTONDOWN which left TouchArea stuck pressed). down →
+    // drag-start-requested (anchor), move-while-pressed → drag-moved.
     callback drag-start-requested();
+    callback drag-moved();
 
     Rectangle {
         background: #14161eea;
@@ -201,6 +202,9 @@ export component OverlayBarWindow inherits Window {
                             && ev.kind == PointerEventKind.down) {
                             root.drag-start-requested();
                         }
+                    }
+                    moved => {
+                        if (self.pressed) { root.drag-moved(); }
                     }
                 }
                 HorizontalLayout {
