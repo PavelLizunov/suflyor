@@ -1,13 +1,18 @@
 # Russian translations for slint-replay (overlay-host binary).
-# Extracted manually pre-Phase-6 (slint-tr-extractor sweep + msgmerge
-# will replace this once more strings get @tr() wraps in
-# settings_panel.slint + tile body content).
+#
+# IMPORTANT: gettext matches by EXACT English msgid. When a @tr("…")
+# string changes in any ui/*.slint file, the matching msgid here must be
+# updated in lockstep or the lookup silently falls back to English.
+# This file was FULLY re-synced in Phase E6 cycle 38 against the live
+# @tr() set in overlay_bar / tile / palette / settings_panel (the old
+# extraction had drifted across ~35 UI cycles, which is why Russian
+# "was selected but not actually there").
 #
 # Wrapped surfaces:
-# - ui/overlay_bar.slint    (5 chip labels)
-# - ui/tile.slint           (1 chrome title with sequence + title)
-# - ui/palette.slint        (3 hint strings)
-# - ui/settings_panel.slint (Phase D1 full extraction — 13-tab sidebar)
+# - ui/overlay_bar.slint
+# - ui/tile.slint
+# - ui/palette.slint
+# - ui/settings_panel.slint
 
 msgid ""
 msgstr ""
@@ -22,14 +27,38 @@ msgstr "🎤 микрофон"
 msgid "🗣 sys"
 msgstr "🗣 система"
 
-msgid "⏱ {}"
-msgstr "⏱ {}"
+msgid "⏸ {}"
+msgstr "⏸ {}"
+
+msgid "▶ start"
+msgstr "▶ старт"
 
 msgid "🧠 {}"
 msgstr "🧠 {}"
 
 msgid "+ tile ({})"
 msgstr "+ тайл ({})"
+
+msgid "💡 tips"
+msgstr "💡 подсказки"
+
+msgid "⭐ bm"
+msgstr "⭐ закладка"
+
+msgid "🎯 stealth"
+msgstr "🎯 скрытность"
+
+msgid "🔥 auto"
+msgstr "🔥 авто"
+
+msgid "🔥 auto-ON"
+msgstr "🔥 авто-ВКЛ"
+
+msgid "⚙ settings"
+msgstr "⚙ настройки"
+
+msgid "X quit"
+msgstr "X выход"
 
 # === tile.slint ===
 
@@ -48,10 +77,10 @@ msgid "Esc to close · Enter to spawn tile"
 msgstr "Esc — закрыть · Enter — открыть тайл"
 
 msgid "Start typing to search the embedded knowledge base (1,696 entries)…"
-msgstr "Начните печатать для поиска по базе знаний (1696 записей)…"
+msgstr "Начните печатать для поиска по встроенной базе знаний (1696 записей)…"
 
 msgid "No results for \"{}\"."
-msgstr "Нет результатов по запросу «{}»."
+msgstr "Нет результатов: «{}»."
 
 # === settings_panel.slint ===
 
@@ -63,10 +92,10 @@ msgstr "Настройки overlay-mvp (Slint)"
 msgid "Settings"
 msgstr "Настройки"
 
-msgid "✕ Close"
-msgstr "✕ Закрыть"
+msgid "X  Close"
+msgstr "X  Закрыть"
 
-# --- Sidebar tab labels (13 tabs, emoji prefixes preserved as identity) ---
+# --- Sidebar tab labels (emoji prefixes preserved) ---
 
 msgid "🎯 Stealth"
 msgstr "🎯 Скрытность"
@@ -159,10 +188,16 @@ msgstr "Поверх всех окон (HWND_TOPMOST)"
 msgid "Stealth (hide from screen capture)"
 msgstr "Скрытность (прятать от захвата экрана)"
 
+msgid "Tile opacity ({}%)"
+msgstr "Прозрачность тайлов ({}%)"
+
+msgid "Lower values let you see the meeting through tiles. 100% = opaque, 50% = half-transparent."
+msgstr "Меньшие значения позволяют видеть встречу сквозь тайлы. 100% — непрозрачно, 50% — наполовину прозрачно."
+
 # --- Tab 1: Coaching ---
 
 msgid "Post-meeting debrief: AI critique of pacing, filler density, key points. Opt-in."
-msgstr "Разбор после встречи: AI критикует темп, плотность слов-паразитов, ключевые моменты. По желанию."
+msgstr "Разбор после встречи: AI оценивает темп, плотность слов-паразитов и ключевые моменты. По желанию."
 
 msgid "Enable post-meeting debrief"
 msgstr "Включить разбор после встречи"
@@ -199,7 +234,7 @@ msgstr "Перезагрузить последний тайл"
 # --- Tab 3: Interface ---
 
 msgid "Interface language. Wires gettext for all UI strings (Phase 6)."
-msgstr "Язык интерфейса. Подключает gettext ко всем строкам UI (Phase 6)."
+msgstr "Язык интерфейса. Подключает gettext ко всем строкам интерфейса (Phase 6)."
 
 msgid "Language:"
 msgstr "Язык:"
@@ -218,10 +253,30 @@ msgstr "Сохранить диагностический дамп"
 msgid "Version: 0.2.0-slint-pre (slint-experiment branch)"
 msgstr "Версия: 0.2.0-slint-pre (ветка slint-experiment)"
 
+msgid "Backup / transfer settings"
+msgstr "Резервная копия / перенос настроек"
+
+msgid "Exports the WHOLE config to a .json file you choose — INCLUDING the Claude bearer + Groq API key. Keep the file private. Import overwrites current settings (restart to apply)."
+msgstr "Экспортирует ВЕСЬ конфиг в выбранный вами .json-файл — ВКЛЮЧАЯ bearer-токен Claude и ключ API Groq. Храните файл в секрете. Импорт перезаписывает текущие настройки (перезапустите для применения)."
+
+msgid "Export settings (incl. keys)…"
+msgstr "Экспорт настроек (с ключами)…"
+
+msgid "Import settings…"
+msgstr "Импорт настроек…"
+
 # --- Tab 5: Stats ---
 
 msgid "Session stats aggregated across all journals."
 msgstr "Статистика сессий, агрегированная по всем журналам."
+
+# --- Tab 6: Audio ---
+
+msgid "Microphone device selection. List is live from WASAPI capture endpoints."
+msgstr "Выбор устройства микрофона. Список берётся напрямую из точек захвата WASAPI."
+
+msgid "Test microphone (3s record)"
+msgstr "Проверить микрофон (запись 3 сек)"
 
 # --- Tab 7: Auto-tiles ---
 
@@ -244,55 +299,65 @@ msgstr "+ Добавить сниппет"
 
 # --- Tab 9: Knowledge base ---
 
-msgid "Embedded knowledge base (1,696 entries: ~53 snippets + 1,643 KB entries across glossary/commands/patterns)."
-msgstr "Встроенная база знаний (1696 записей: ~53 сниппета + 1643 записи KB в глоссарии, командах и паттернах)."
+msgid "Embedded knowledge base — 1,696 entries (glossary / commands / patterns), compiled into the binary."
+msgstr "Встроенная база знаний — 1696 записей (глоссарий / команды / паттерны), вшита в бинарник."
 
-msgid "Search the KB..."
-msgstr "Поиск по базе знаний..."
+msgid "Press F4 anywhere to search the knowledge base and spawn a tile from any entry."
+msgstr "Нажмите F4 в любом месте, чтобы искать по базе знаний и открыть тайл из любой записи."
 
 # --- Tab 10: Profile + context ---
 
-msgid "Persistent context shared with every AI request — your role, focus areas, vocabulary. Up to 8 KB."
-msgstr "Постоянный контекст, который отправляется с каждым запросом к AI — ваша роль, области фокуса, словарь. До 8 КБ."
+msgid "Persistent context sent with every AI request — your role, focus areas, vocabulary. Saved to config; applied to new AI calls immediately."
+msgstr "Постоянный контекст, отправляемый с каждым запросом к AI — ваша роль, области фокуса, словарь. Сохраняется в конфиг и сразу применяется к новым запросам."
 
-msgid "(profile text — multi-line input editor)"
-msgstr "(текст профиля — многострочный редактор)"
+msgid "e.g. I'm a Senior SRE interviewing for a platform role. Answer concisely, prefer Kubernetes/AWS examples, Russian output."
+msgstr "напр.: Я Senior SRE на собеседовании на платформенную роль. Отвечай кратко, предпочитай примеры с Kubernetes/AWS, вывод на русском."
 
-msgid "Import"
-msgstr "Импорт"
-
-msgid "Export"
-msgstr "Экспорт"
+msgid "Save context"
+msgstr "Сохранить контекст"
 
 # --- Tab 11: AI bridge ---
 
-msgid "Claude AI bridge — bearer token + cost cap. Probe button validates connectivity."
-msgstr "Мост Claude AI — bearer-токен и лимит затрат. Кнопка проверки тестирует подключение."
+msgid "Claude AI bridge — bearer token + base URL + model."
+msgstr "Мост Claude AI — bearer-токен, базовый URL и модель."
 
-msgid "AI bearer token (masked when set)"
-msgstr "Bearer-токен AI (скрывается после ввода)"
+msgid "Bearer token:"
+msgstr "Bearer-токен:"
 
-msgid "Session cost cap ($):"
-msgstr "Лимит затрат на сессию ($):"
+msgid "paste new bearer token then Save"
+msgstr "вставьте новый bearer-токен и нажмите «Сохранить»"
 
-msgid "Probe Claude"
-msgstr "Проверить Claude"
+msgid "Save"
+msgstr "Сохранить"
+
+msgid "Base URL (Claude bridge endpoint):"
+msgstr "Базовый URL (адрес моста Claude):"
+
+msgid "http://your.bridge.host:PORT/v1"
+msgstr "http://your.bridge.host:PORT/v1"
+
+msgid "AI model (Claude full ID):"
+msgstr "Модель AI (полный ID Claude):"
+
+msgid "claude-haiku-4-5 / claude-sonnet-4-6 / claude-opus-4-7"
+msgstr "claude-haiku-4-5 / claude-sonnet-4-6 / claude-opus-4-7"
+
+msgid "Test AI bridge connection"
+msgstr "Проверить подключение к AI мосту"
+
+msgid "Tip: Save writes to %APPDATA%\\overlay-mvp\\config.json. Restart binary to re-load."
+msgstr "Подсказка: «Сохранить» пишет в %APPDATA%\\overlay-mvp\\config.json. Перезапустите бинарник для перезагрузки."
 
 # --- Tab 12: STT ---
 
-msgid "Groq STT (Whisper) settings — model + custom Whisper prompt (improves transcription on domain vocabulary)."
-msgstr "Настройки Groq STT (Whisper) — модель и собственный промпт для Whisper (улучшает транскрипцию доменного словаря)."
+msgid "Groq STT (Whisper) — API key + model. Required for speech-to-text on audio capture."
+msgstr "Groq STT (Whisper) — ключ API и модель. Нужны для распознавания речи при захвате аудио."
 
-msgid "Custom Whisper prompt (domain vocab)..."
-msgstr "Свой промпт для Whisper (доменный словарь)..."
+msgid "Groq API key:"
+msgstr "Ключ API Groq:"
 
-# --- Tab 6: Audio (button only — description and dropdown items are
-#     scaffolding placeholders that Phase 2.7 will replace) ---
+msgid "paste new Groq key then Save"
+msgstr "вставьте новый ключ Groq и нажмите «Сохранить»"
 
-msgid "Test microphone (3s record)"
-msgstr "Проверить микрофон (3 сек записи)"
-
-# --- Tab 6: Audio description (added during cleanup sweep) ---
-
-msgid "Microphone + system audio device selection."
-msgstr "Выбор устройств микрофона и системного аудио."
+msgid "Test STT (Groq) connection"
+msgstr "Проверить подключение STT (Groq)"

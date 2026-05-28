@@ -42,22 +42,43 @@ export component PaletteWindow inherits Window {
     callback result-activated(int);
     callback close-requested();
 
+    // Phase E6 v37 — direct initial keyboard focus to the search box so
+    // the palette is ready to type the instant it opens AND so Escape
+    // has a focused element to bubble up from to the FocusScope below.
+    // (Bug A: "при вызове f4 я не могу сразу закрыть его" — Esc was
+    // advertised but never wired, and nothing held focus.)
+    forward-focus: search-input;
+
     Rectangle {
         background: #14161eee;
         border-radius: 12px;
         border-width: 1px;
         border-color: #2a2c3a;
 
-        VerticalLayout {
-            padding: 12px;
-            spacing: 8px;
-
-            // Input field
-            LineEdit {
-                placeholder-text: @tr("type to search KB / snippets — /snip lists snippets, +key body adds one");
-                text <=> root.query;
-                edited(t) => { root.query-changed(t); }
+        FocusScope {
+            width: 100%;
+            height: 100%;
+            // Escape closes the palette. The search LineEdit holds focus
+            // (forward-focus above); it rejects Escape, which then
+            // bubbles up to this ancestor FocusScope.
+            key-pressed(event) => {
+                if (event.text == Key.Escape) {
+                    root.close-requested();
+                    return accept;
+                }
+                return reject;
             }
+
+            VerticalLayout {
+                padding: 12px;
+                spacing: 8px;
+
+                // Input field
+                search-input := LineEdit {
+                    placeholder-text: @tr("type to search KB / snippets — /snip lists snippets, +key body adds one");
+                    text <=> root.query;
+                    edited(t) => { root.query-changed(t); }
+                }
 
             // Recent chips row
             HorizontalLayout {
@@ -158,6 +179,7 @@ export component PaletteWindow inherits Window {
                         }
                     }
                 }
+            }
             }
         }
     }

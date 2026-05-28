@@ -98,9 +98,12 @@ export component OverlayBarWindow inherits Window {
     // (💡 tips, ⭐ bm, 🎯 stealth, 🔥 auto, ⚙ settings, X quit) all
     // fit without truncating the rightmost (X quit) chip.
     // Phase E6 v11 — height bumped 56 → 86 to fit live transcript row.
-    preferred-width: 980px;
+    // Phase E6 v38 — widened 980 → 1140: the Russian chip labels
+    // (подсказки / закладка / скрытность / настройки / выход) are wider
+    // than the English originals and were clipping the rightmost chip.
+    preferred-width: 1140px;
     preferred-height: 86px;
-    min-width: 700px;
+    min-width: 820px;
 
     // Status pill text (idle / recording / etc).
     in-out property <string> status-text: "idle";
@@ -277,28 +280,28 @@ export component OverlayBarWindow inherits Window {
 
             // AI tips / followups
             Chip {
-                label: "💡 tips";
+                label: @tr("💡 tips");
                 accent: #fde68a;
                 clicked => { root.tips-clicked(); }
             }
 
             // Bookmark
             Chip {
-                label: "⭐ bm";
+                label: @tr("⭐ bm");
                 accent: #fcd34d;
                 clicked => { root.bookmark-clicked(); }
             }
 
             // Stealth toggle (hide from screen capture)
             Chip {
-                label: "🎯 stealth";
+                label: @tr("🎯 stealth");
                 accent: #ec4899;
                 clicked => { root.stealth-toggle-clicked(); }
             }
 
             // Aggressive auto-tile mode (every transcript line spawns)
             Chip {
-                label: root.aggressive-active ? "🔥 auto-ON" : "🔥 auto";
+                label: root.aggressive-active ? @tr("🔥 auto-ON") : @tr("🔥 auto");
                 accent: #fb923c;
                 active: root.aggressive-active;
                 clicked => { root.aggressive-toggle-clicked(); }
@@ -316,7 +319,7 @@ export component OverlayBarWindow inherits Window {
 
             // Settings
             Chip {
-                label: "⚙ settings";
+                label: @tr("⚙ settings");
                 accent: #94a3b8;
                 clicked => { root.open-settings-clicked(); }
             }
@@ -325,7 +328,7 @@ export component OverlayBarWindow inherits Window {
             // on some Slint+skia font fallbacks; same root cause as
             // tile close glyph fix in cycle 7)
             Chip {
-                label: "X quit";
+                label: @tr("X quit");
                 accent: #ef4444;
                 clicked => { root.quit-clicked(); }
             }

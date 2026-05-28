@@ -449,6 +449,11 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     );
 
+    // Phase E6 v36 — seed the process-global tile opacity from config so
+    // the very first tile spawned (before the Settings panel is ever
+    // opened) already honours the saved transparency.
+    set_global_tile_opacity(cfg.read().tile_body_opacity);
+
     let state = new_shared_state();
     let tiles: TileWindows = Rc::new(RefCell::new(Vec::new()));
     let settings: Rc<RefCell<Option<SettingsWindow>>> = Rc::new(RefCell::new(None));
@@ -1198,8 +1203,24 @@ fn main() -> Result<(), slint::PlatformError> {
                     continue;
                 }
                 if event.id == f4_id {
-                    eprintln!("[overlay-host] F4 pressed — opening palette");
-                    open_palette(&hp_palette, &hp_tiles, &hp_state, &hp_weak_overlay);
+                    // Phase E6 v37 — F4 is a TOGGLE, not open-only. User
+                    // report: "при вызове f4 я не могу сразу закрыть его".
+                    // Previously the second F4 press hit open_palette's
+                    // reuse branch (just re-show) so F4 could never close
+                    // the palette; and Esc inside the window doesn't fire
+                    // because a hotkey-spawned always-on-top window has no
+                    // keyboard focus yet. A toggle is focus-independent —
+                    // the global hotkey always fires regardless of focus.
+                    let palette_open = hp_palette.borrow().is_some();
+                    if palette_open {
+                        eprintln!("[overlay-host] F4 pressed — closing palette (toggle)");
+                        if let Some(p) = hp_palette.borrow_mut().take() {
+                            let _ = p.hide();
+                        }
+                    } else {
+                        eprintln!("[overlay-host] F4 pressed — opening palette");
+                        open_palette(&hp_palette, &hp_tiles, &hp_state, &hp_weak_overlay);
+                    }
                 } else if event.id == f3_id {
                     // Phase E3 slice 3 — F3 reask via overlay-backend's
                     // ported reask_last. Refines the last AI answer using
@@ -2102,6 +2123,35 @@ static TILE_SLOT_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::At
 /// session. Reset only at process restart.
 static TILE_DISPLAY_SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
+/// Phase E6 v36 — process-global tile body opacity (f32 bits).
+///
+/// Bug fix: tile transparency from Settings only applied to tiles that
+/// already existed when the slider moved; every NEW tile (F9 ask, F3
+/// reask, KB-palette activate, auto-spawn) was created at the default
+/// 1.0 and ignored the saved `config.tile_body_opacity`. User report:
+/// "Прозрачность из настроек ... работает только на уже вызванные
+/// тайлы как только вызову новый все сбрасывается".
+///
+/// Root cause: only the spawn-poll Timer read `cfg.tile_body_opacity`;
+/// the other spawn paths never did. Fix: a single process-global value
+/// that EVERY spawn path picks up via `apply_tile_hwnd_with_monitor`
+/// (the one helper they all call). Seeded from config at startup,
+/// updated live by the Settings slider handler. Stored as raw f32 bits
+/// in an AtomicU32 so it stays lock-free.
+static TILE_BODY_OPACITY_BITS: std::sync::atomic::AtomicU32 =
+    std::sync::atomic::AtomicU32::new(0x3F80_0000); // 1.0_f32
+
+/// Store the current global tile body opacity (clamped 0.5..=1.0).
+fn set_global_tile_opacity(value: f32) {
+    let clamped = value.clamp(0.5, 1.0);
+    TILE_BODY_OPACITY_BITS.store(clamped.to_bits(), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Read the current global tile body opacity (defaults to 1.0).
+fn global_tile_opacity() -> f32 {
+    f32::from_bits(TILE_BODY_OPACITY_BITS.load(std::sync::atomic::Ordering::Relaxed))
+}
+
 /// Phase E6 v17 — maximize toggle helper. User: "нет функционала
 /// развернуть, нужно отдельной кнопкой или даб-кликом". Maximized
 /// tile is 800×600 (~1.7× default); restored back to 460×360. Uses
@@ -2159,6 +2209,14 @@ fn wire_tile_drag(tile: &TileWindow) {
 /// (~80 LOC of layered math); this is a simpler 2-col wrap that
 /// fits on any landscape monitor without overflow.
 fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
+    // Phase E6 v36 — every spawn path funnels through here, so this is
+    // the one place to apply the saved tile body opacity. Without this,
+    // only tiles that existed when the Settings slider moved went
+    // transparent; freshly spawned tiles reset to opaque (user bug
+    // report). Set synchronously on the passed handle so it takes
+    // effect on the first painted frame.
+    tile.set_body_opacity(global_tile_opacity());
+
     let weak = tile.as_weak();
     Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
         let Some(t) = weak.upgrade() else { return };
@@ -2678,11 +2736,37 @@ fn open_settings(
                     return;
                 }
             }
+            // Phase E6 v36 — update the process-global so EVERY future
+            // tile (F9 / F3 / KB-palette / auto-spawn) spawns at this
+            // opacity, not just the ones currently on screen.
+            set_global_tile_opacity(clamped);
             // Apply live to all currently-visible tiles.
             for tile in tiles_c.borrow().iter() {
                 tile.set_body_opacity(clamped);
             }
             eprintln!("[overlay-host] tile_body_opacity -> {clamped:.2}");
+        });
+    }
+
+    // Phase E6 v38 — interface-language switch. Selecting Русский/English
+    // in the Interface tab switches the bundled translation LIVE (Slint
+    // re-evaluates every @tr() binding) and persists ui_language so the
+    // choice survives restart. Previously the dropdown was inert — it
+    // showed "Русский" but never applied anything, so a stale .po made
+    // the UI look English even though "ru" was nominally selected.
+    {
+        let cfg_lang = cfg.clone();
+        win.on_language_selected(move |idx| {
+            let lang = if idx == 1 { "en" } else { "ru" };
+            match slint::select_bundled_translation(lang) {
+                Ok(()) => eprintln!("[overlay-host] UI language -> {lang}"),
+                Err(e) => eprintln!("[overlay-host] language {lang} not available: {e}"),
+            }
+            let mut c = cfg_lang.write();
+            c.ui_language = lang.to_string();
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] ui_language save failed: {e:#}");
+            }
         });
     }
 
@@ -2929,4 +3013,7 @@ fn populate_token_status(win: &SettingsWindow, cfg: &overlay_backend::config::Sh
     win.set_tile_body_opacity(c.tile_body_opacity);
     win.set_ai_base_url_input(SharedString::from(c.ai_base_url.clone()));
     win.set_ai_model_input(SharedString::from(c.ai_model.clone()));
+    // Phase E6 v38 — reflect the saved interface language in the
+    // Interface-tab dropdown (0=Русский, 1=English).
+    win.set_ui_language_index(if c.ui_language == "en" { 1 } else { 0 });
 }

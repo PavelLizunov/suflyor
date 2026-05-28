@@ -147,6 +147,13 @@ export component SettingsWindow inherits Window {
     in-out property <string> meeting-context-result: "";
     callback meeting-context-save(string);
 
+    // Phase E6 v38 — interface-language selector. ui-language-index
+    // reflects the saved config (0=Русский, 1=English); language-selected
+    // fires when the ComboBox changes so Rust can switch the bundled
+    // translation live AND persist it.
+    in-out property <int> ui-language-index: 0;
+    callback language-selected(int);
+
     // Phase E6 v26 — rounded root. clip:true so the square-cornered
     // sidebar + content get masked to the 12px radius. Border + bg
     // moved here from the Window (which is now transparent).
@@ -395,7 +402,15 @@ export component SettingsWindow inherits Window {
                                 // Language names are themselves untranslated identifiers
                                 // (each appears in its own language as a self-label).
                                 model: ["Русский", "English"];
-                                current-index: 0;
+                                // Phase E6 v38 — reflect the actual saved
+                                // language (0=ru, 1=en) and fire a callback
+                                // on change. Previously hardcoded index 0
+                                // with no handler → the dropdown looked set
+                                // to Russian but switching did nothing.
+                                current-index: root.ui-language-index;
+                                selected => {
+                                    root.language-selected(self.current-index);
+                                }
                             }
                         }
                     }
