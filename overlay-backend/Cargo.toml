@@ -1,14 +1,12 @@
-# Tauri-free backend crate. Holds the 7 modules audited as
-# zero-Tauri-references during Phase A2 of the Slint migration.
-# Both src-tauri (legacy) and slint-experiment (new) depend on this
-# via path dep, sharing the same compiled code.
+# Backend crate (no UI). Holds the shared modules — audio, stt, ai,
+# journal, kb, config, runtime — consumed by the Slint overlay binary.
 
 [package]
 name = "overlay-backend"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "Tauri-free backend modules shared by src-tauri and the Slint binary"
+description = "Shared backend for suflyor — audio, STT, AI, journal, KB, config, runtime"
 
 [lib]
 path = "src/lib.rs"

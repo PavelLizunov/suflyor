@@ -1,13 +1,11 @@
-# Phase 0 pilot crate — standalone (NOT a workspace member of src-tauri/).
-# Rationale: src-tauri/Cargo.toml is a standalone package, not a workspace.
-# Converting it to a workspace mid-pilot would risk the existing build.
-# This crate sits as a sibling at the repo root and compiles independently.
-# If the pilot greenlights Phase 1, the repo gets restructured then.
+# suflyor UI crate — the Slint overlay binary + orchestration layer.
+# Standalone package (the repo has no root workspace); compiles against
+# the sibling overlay-backend crate for audio/STT/AI/journal/KB/config.
 [package]
 name = "slint-replay"
 version = "0.1.0"
 edition = "2021"
-description = "Phase 0 Slint pilot — port of the Replay viewer for stack evaluation"
+description = "suflyor — AI-interview overlay (Slint UI + orchestration)"
 publish = false
 
 [lib]
