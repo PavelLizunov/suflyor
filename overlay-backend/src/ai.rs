@@ -24,6 +24,44 @@ fn http_client() -> reqwest::Client {
         .clone()
 }
 
+/// EXPERIMENTAL prompt-cache toggle (see `Config::ai_prompt_cache`). When
+/// on, the system prompt is sent with Anthropic `cache_control: ephemeral`.
+/// Default OFF → request body unchanged, so no regression by default.
+static PROMPT_CACHE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Set the prompt-cache toggle (called at startup from config + on the
+/// Settings switch). Cheap atomic; safe from any thread.
+pub fn set_prompt_cache(on: bool) {
+    PROMPT_CACHE.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// If prompt-caching is on, attach `cache_control: ephemeral` to the system
+/// message so a pass-through bridge caches the static system-prompt prefix
+/// (cuts time-to-first-token on repeat/follow-up asks). No-op when off.
+fn apply_prompt_cache(body: &mut Value) {
+    if !PROMPT_CACHE.load(std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    if let Some(msgs) = body.get_mut("messages").and_then(Value::as_array_mut) {
+        if let Some(sys) = msgs
+            .iter_mut()
+            .find(|m| m.get("role").and_then(Value::as_str) == Some("system"))
+        {
+            if let Some(text) = sys
+                .get("content")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+            {
+                sys["content"] = json!([{
+                    "type": "text",
+                    "text": text,
+                    "cache_control": { "type": "ephemeral" },
+                }]);
+            }
+        }
+    }
+}
+
 /// Frontend-visible event stream.
 ///
 /// Both `Serialize` AND `Deserialize` — the Slint binary's
@@ -133,12 +171,13 @@ async fn stream_inner(
     let client = http_client();
 
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
-    let body = json!({
+    let mut body = json!({
         "model": model,
         "messages": messages,
         "stream": true,
         "max_tokens": max_tokens,
     });
+    apply_prompt_cache(&mut body);
 
     // SECURITY: do NOT log the full URL — the configured ai_base_url often
     // contains the user's LAN IP / proxy port (network topology leak in
@@ -392,12 +431,13 @@ async fn complete_once(
 ) -> Result<(String, TokenUsage)> {
     let client = http_client();
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
-    let body = serde_json::json!({
+    let mut body = serde_json::json!({
         "model": model,
         "messages": messages,
         "stream": false,
         "max_tokens": max_tokens,
     });
+    apply_prompt_cache(&mut body);
 
     // SECURITY: don't log the host portion of the URL (LAN IP/topology). See
     // the matching comment on stream_chat above for the rationale.

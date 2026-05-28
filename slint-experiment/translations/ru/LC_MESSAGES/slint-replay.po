@@ -366,6 +366,12 @@ msgstr "claude-haiku-4-5 / claude-sonnet-4-6 / claude-opus-4-7"
 msgid "Test AI bridge connection"
 msgstr "Проверить подключение к AI мосту"
 
+msgid "Prompt-caching (experimental — needs bridge support)"
+msgstr "Кэширование промпта (эксперимент — нужна поддержка моста)"
+
+msgid "Marks the system prompt as cacheable for faster repeat asks. If your bridge rejects it (AI stops answering), turn this back off."
+msgstr "Помечает системный промпт кэшируемым для ускорения повторных запросов. Если мост его не принимает (AI перестаёт отвечать) — выключите обратно."
+
 msgid "Tip: Save writes to %APPDATA%\\overlay-mvp\\config.json. Restart binary to re-load."
 msgstr "Подсказка: «Сохранить» пишет в %APPDATA%\\overlay-mvp\\config.json. Перезапустите бинарник для перезагрузки."
 

@@ -170,6 +170,8 @@ export component SettingsWindow inherits Window {
     in-out property <string> groq-api-key-input: "";
     in-out property <string> ai-base-url-input: "";
     in-out property <string> ai-model-input: "";
+    // E9 — experimental prompt-caching toggle (default off).
+    in-out property <bool> ai-prompt-cache: false;
 
     // Phase E6 v20 — tile body opacity (50..100%). Slider on Stealth
     // tab; Rust writes to cfg.tile_body_opacity + applies to spawning
@@ -197,6 +199,7 @@ export component SettingsWindow inherits Window {
     callback groq-api-key-save(string);
     callback ai-base-url-save(string);
     callback ai-model-save(string);
+    callback ai-prompt-cache-changed(bool);
     // Phase E6 v27 — connection test buttons (AI bridge + STT).
     in-out property <string> ai-bridge-test-result: "";
     in-out property <string> stt-test-result: "";
@@ -868,6 +871,21 @@ export component SettingsWindow inherits Window {
                                 color: #6cf;
                                 vertical-alignment: center;
                             }
+                        }
+
+                        Rectangle { background: #2a2c3a; height: 1px; }
+
+                        // E9 — experimental prompt-caching toggle.
+                        DarkCheck {
+                            text: @tr("Prompt-caching (experimental — needs bridge support)");
+                            checked <=> root.ai-prompt-cache;
+                            toggled(v) => { root.ai-prompt-cache-changed(v); }
+                        }
+                        Text {
+                            text: @tr("Marks the system prompt as cacheable for faster repeat asks. If your bridge rejects it (AI stops answering), turn this back off.");
+                            font-size: 10px;
+                            color: #666;
+                            wrap: word-wrap;
                         }
 
                         Text {

@@ -107,6 +107,12 @@ pub struct SlintRuntime {
     /// One-shot guard so the meeting-ending detector emits
     /// `meeting:ending` exactly once per session.
     pub meeting_ending_emitted: bool,
+
+    /// E9 — session generation, bumped on every start/stop. Auto-tile
+    /// detector tasks capture it at spawn time and bail after their (long)
+    /// AI call if it changed, so a call that outlives its session can't
+    /// spawn a stray tile or bill its cost onto the next session.
+    pub session_gen: u64,
 }
 
 /// Convenience alias matching src-tauri's `SharedRuntime`.

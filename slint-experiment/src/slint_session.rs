@@ -57,6 +57,9 @@ pub fn start_session(
         s.capture = None; // Drop signals capture thread to stop.
         s.transcript.clear();
         s.session_cost_microcents = 0;
+        // New session generation — invalidates any in-flight auto-tile task
+        // from a prior session (it bails post-AI-call on the gen mismatch).
+        s.session_gen = s.session_gen.wrapping_add(1);
         if let Some(h) = s.transcript_task.take() {
             h.abort();
         }
@@ -265,6 +268,9 @@ async fn transcript_forwarder(
             let rt_for_tile = rt.clone();
             let journal_for_tile = journal.clone();
             let line_text = line.text.clone();
+            // Stamp the task with the current session generation so it can
+            // detect a stop/restart that happens during its AI call.
+            let gen_for_tile = lock(&rt).session_gen;
             tokio::spawn(async move {
                 maybe_spawn_auto_tile(
                     events_for_tile,
@@ -272,6 +278,7 @@ async fn transcript_forwarder(
                     rt_for_tile,
                     journal_for_tile,
                     line_text,
+                    gen_for_tile,
                 )
                 .await;
             });
@@ -344,6 +351,7 @@ async fn maybe_spawn_auto_tile(
     rt: SharedSlintRuntime,
     journal: Journal,
     text: String,
+    session_gen: u64,
 ) {
     let (
         enabled,
@@ -620,6 +628,14 @@ async fn maybe_spawn_auto_tile(
         };
     let latency_ms = t0.elapsed().as_millis() as u64;
 
+    // E9 — if the session was stopped/restarted during this (up to
+    // ~9-minute, with retries) AI call, abandon the result: don't cache,
+    // bill, or spawn a tile into a session that no longer exists.
+    if lock(&rt).session_gen != session_gen {
+        log_info("auto-tile: session changed during AI call — discarding result");
+        return;
+    }
+
     // ===== Cache the answer =====
     {
         let mut s = lock(&rt);
@@ -721,6 +737,9 @@ async fn maybe_spawn_auto_tile(
 pub fn stop_session(rt: SharedSlintRuntime) -> Vec<TranscriptLine> {
     let mut s = lock(&rt);
     s.capture = None;
+    // Bump generation so an in-flight auto-tile call from this session
+    // discards its result instead of spawning a tile after the stop.
+    s.session_gen = s.session_gen.wrapping_add(1);
     if let Some(h) = s.transcript_task.take() {
         h.abort();
     }

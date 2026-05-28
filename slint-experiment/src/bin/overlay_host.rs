@@ -89,11 +89,14 @@ static CONVO_SEQ: AtomicU64 = AtomicU64::new(0);
 /// would keep `followup-busy = true` (a permanently dead input). Must run
 /// on the UI thread (every ask path registers from a UI-thread callback or
 /// timer), so the direct `upgrade()` + setter is safe.
-fn install_streaming_tile(bridge: &Arc<OverlayBarBridge>, new_tile: StreamingTile) {
+fn install_streaming_tile(bridge: &Arc<OverlayBarBridge>, new_tile: StreamingTile) -> u64 {
     // A new stream supersedes any prior one; reset the in-flight pulse
     // count so an aborted prior stream (which never emits Done/Error)
     // can't leak its Start increment and pin the bar pulse ON forever.
     bridge.reset_ai_in_flight();
+    // Bump the stream generation: any still-running prior stream is now
+    // "stale" and its GenGatedEvents wrapper will drop further emits.
+    let generation = bridge.stream_gen.fetch_add(1, Ordering::SeqCst) + 1;
     let new_convo = new_tile.convo_id;
     let mut slot = match bridge.current_streaming.lock() {
         Ok(g) => g,
@@ -110,6 +113,55 @@ fn install_streaming_tile(bridge: &Arc<OverlayBarBridge>, new_tile: StreamingTil
         }
     }
     *slot = Some(new_tile);
+    generation
+}
+
+/// RuntimeEvents wrapper that drops a SUPERSEDED AI stream's emits. Each
+/// ask captures `my_gen` (the generation current when it installed its
+/// tile); the next ask bumps `current` via `install_streaming_tile`. Once
+/// `my_gen != current` this stream is stale, so its emits — including a
+/// buffered `ai:event` Delta delivered after `JoinHandle::abort` but before
+/// the loop's next `.await` — are discarded instead of folding into the
+/// now-current tile. Closes the wrong-tile race the bare abort leaves open.
+struct GenGatedEvents {
+    inner: Arc<dyn RuntimeEvents>,
+    my_gen: u64,
+    current: Arc<AtomicU64>,
+}
+
+impl RuntimeEvents for GenGatedEvents {
+    fn emit(&self, channel: &str, payload: serde_json::Value) {
+        if self.my_gen == self.current.load(Ordering::SeqCst) {
+            self.inner.emit(channel, payload);
+        }
+        // else: stale stream — drop the event.
+    }
+    fn spawn_tile(&self, spec: TileSpec) -> String {
+        self.inner.spawn_tile(spec)
+    }
+    fn spawn_tile_full(
+        &self,
+        spec: TileSpec,
+        monitor: MonitorHint,
+        stealth: bool,
+        kind: TileKind,
+    ) -> Result<String, String> {
+        self.inner.spawn_tile_full(spec, monitor, stealth, kind)
+    }
+}
+
+/// Wrap `inner` so a stream spawned at `generation` stops emitting once a
+/// newer ask supersedes it.
+fn gated_events(
+    bridge: &Arc<OverlayBarBridge>,
+    inner: Arc<dyn RuntimeEvents>,
+    generation: u64,
+) -> Arc<dyn RuntimeEvents> {
+    Arc::new(GenGatedEvents {
+        inner,
+        my_gen: generation,
+        current: bridge.stream_gen.clone(),
+    })
 }
 
 // ===== Phase E3 — OverlayBarBridge =====
@@ -149,6 +201,19 @@ struct OverlayBarBridge {
     /// dialog" feature, keyed by the tile's `convo-id`. Seeded when an
     /// F9/PTT answer completes; read+extended on each follow-up.
     conversations: std::sync::Mutex<std::collections::HashMap<i32, ConvoState>>,
+    /// E9 — monotonic stream generation. `install_streaming_tile` bumps it
+    /// per new ask; each spawned `ask_stream_loop` runs behind a
+    /// `GenGatedEvents` wrapper carrying the generation it was spawned at.
+    /// A superseded stream (older generation) has its emits DROPPED, so a
+    /// buffered `ai:event` from a torn-down stream can't fold into the new
+    /// tile (closes the wrong-tile race that `JoinHandle::abort` alone
+    /// leaves open until the next .await).
+    stream_gen: Arc<AtomicU64>,
+    /// E9 — throttle for the streaming tile re-render. The Delta handler
+    /// re-parses the WHOLE answer markdown per token; gating it to ~50ms
+    /// bounds that cost independent of token speed. The terminal Done/Error
+    /// render is never throttled, so the final answer always shows in full.
+    last_tile_render: std::sync::Mutex<std::time::Instant>,
 }
 
 /// Per-streaming-tile state: weak handle + accumulated answer text.
@@ -227,6 +292,20 @@ impl OverlayBarBridge {
                     let body = format!("{}{}", stream.prefix, stream.accumulated);
                     (stream.weak.clone(), body)
                 };
+                // Throttle the full-answer re-parse to ~50ms. The text is
+                // already accumulated above; a skipped delta just defers its
+                // repaint, and the terminal Done render shows the full answer.
+                {
+                    let now = std::time::Instant::now();
+                    let mut last = match self.last_tile_render.lock() {
+                        Ok(g) => g,
+                        Err(p) => p.into_inner(),
+                    };
+                    if now.duration_since(*last) < std::time::Duration::from_millis(50) {
+                        return;
+                    }
+                    *last = now;
+                }
                 let _ = slint::invoke_from_event_loop(move || {
                     let Some(tile) = weak.upgrade() else {
                         return;
@@ -247,22 +326,36 @@ impl OverlayBarBridge {
                     slot.take()
                 };
                 if let Some(stream) = finished {
+                    // Final body — used for the conversation snapshot AND the
+                    // terminal render below (which is never throttled).
+                    let final_body = format!("{}{}", stream.prefix, stream.accumulated);
                     if stream.convo_id >= 0 {
                         let mut messages = stream.request_messages;
                         messages.push(ai::ChatMessage {
                             role: "assistant".into(),
                             content: ai::MessageContent::Text(stream.accumulated.clone()),
                         });
-                        let rendered = format!("{}{}", stream.prefix, stream.accumulated);
                         let mut convos = match self.conversations.lock() {
                             Ok(g) => g,
                             Err(p) => p.into_inner(),
                         };
-                        convos.insert(stream.convo_id, ConvoState { messages, rendered });
+                        convos.insert(
+                            stream.convo_id,
+                            ConvoState {
+                                messages,
+                                rendered: final_body.clone(),
+                            },
+                        );
                     }
                     let weak = stream.weak;
                     let _ = slint::invoke_from_event_loop(move || {
                         if let Some(tile) = weak.upgrade() {
+                            // Terminal render — NOT throttled, so the complete
+                            // answer always shows even if the throttle skipped
+                            // the last Delta repaint.
+                            tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(
+                                &final_body,
+                            ))));
                             tile.set_source_label(SharedString::from(format!(
                                 "ai · done ({reason})"
                             )));
@@ -527,10 +620,15 @@ const TIMER_TICK_SECS: u64 = 1;
 /// values so the spawned window isn't forcibly shrunk on first paint).
 const TILE_DEFAULT_W: i32 = 460;
 const TILE_DEFAULT_H: i32 = 360;
-/// AI ask cap. Sized to fit typical session-question answers without
-/// runaway cost; Phase 2.11 (Settings → AI bridge) will surface as
-/// user-configurable.
+/// AI ask cap for the non-streaming auto-tile/reask `complete` path.
+/// Sized to fit typical session-question answers without runaway cost.
 const AI_MAX_TOKENS: u32 = 600;
+/// Upper bound for the STREAMING F9/PTT/follow-up asks. Higher than
+/// `AI_MAX_TOKENS` because these are interactive and may want a longer
+/// answer; in streaming mode the cap does NOT affect time-to-first-token
+/// (it only bounds the worst-case length). One source of truth for the
+/// three `stream_chat` sites (was a bare `4096` literal repeated 3×).
+const AI_STREAM_MAX_TOKENS: u32 = 4096;
 
 fn main() -> Result<(), slint::PlatformError> {
     // Open the diagnostics log + install the panic hook FIRST so any
@@ -607,6 +705,8 @@ fn main() -> Result<(), slint::PlatformError> {
     // the very first tile spawned (before the Settings panel is ever
     // opened) already honours the saved transparency.
     set_global_tile_opacity(cfg.read().tile_body_opacity);
+    // E9 — seed the experimental prompt-cache toggle from config.
+    ai::set_prompt_cache(cfg.read().ai_prompt_cache);
 
     let state = new_shared_state();
     let tiles: TileWindows = Rc::new(RefCell::new(Vec::new()));
@@ -631,6 +731,8 @@ fn main() -> Result<(), slint::PlatformError> {
         current_streaming: std::sync::Mutex::new(None),
         ai_in_flight: std::sync::atomic::AtomicI32::new(0),
         conversations: std::sync::Mutex::new(std::collections::HashMap::new()),
+        stream_gen: Arc::new(AtomicU64::new(0)),
+        last_tile_render: std::sync::Mutex::new(std::time::Instant::now()),
         last_transcript_push: std::sync::Mutex::new(
             std::time::Instant::now() - std::time::Duration::from_secs(1),
         ),
@@ -2305,7 +2407,7 @@ fn fire_f9_ask(
     // ===== 2. Register the tile in the bridge's streaming slot =====
     // request_messages is filled once `messages` is built below (before
     // the stream task spawns, so no event can fold an empty history).
-    install_streaming_tile(
+    let generation = install_streaming_tile(
         bridge,
         StreamingTile {
             weak: weak_for_stream,
@@ -2429,7 +2531,7 @@ fn fire_f9_ask(
     });
 
     let t0 = std::time::Instant::now();
-    let events_for_task = events.clone();
+    let events_for_task = gated_events(bridge, events.clone(), generation);
     // CRITICAL: `ai::stream_chat` internally calls `tokio::spawn`,
     // which panics with "there is no reactor running" when called
     // from a non-tokio thread (Slint UI / hotkey poll Timer closure).
@@ -2438,7 +2540,13 @@ fn fire_f9_ask(
     // We move stream_chat INSIDE the rt_handle.spawn future so the
     // tokio runtime context exists when it runs.
     let task = rt_handle.spawn(async move {
-        let ai_rx = ai::stream_chat(base_url, bearer, model.clone(), messages, 4096);
+        let ai_rx = ai::stream_chat(
+            base_url,
+            bearer,
+            model.clone(),
+            messages,
+            AI_STREAM_MAX_TOKENS,
+        );
         overlay_backend::runtime::ask_stream_loop(
             events_for_task,
             ai_rx,
@@ -2598,7 +2706,7 @@ fn fire_ptt_ask(
     // ===== 2. Register tile in the streaming slot (same as F9) =====
     // request_messages is filled inside the transcribe→ask task once the
     // STT question is known and `messages` is built.
-    install_streaming_tile(
+    let generation = install_streaming_tile(
         bridge,
         StreamingTile {
             weak: weak_for_stream,
@@ -2656,7 +2764,7 @@ fn fire_ptt_ask(
     });
 
     // ===== 5. Spawn transcribe → ask =====
-    let events_for_task = events.clone();
+    let events_for_task = gated_events(bridge, events.clone(), generation);
     let bridge_for_task = bridge.clone();
     let task = rt_handle.spawn(async move {
         let whisper_prompt = stt::build_whisper_prompt(&trigger_keywords, &meeting_context);
@@ -2747,7 +2855,13 @@ fn fire_ptt_ask(
             });
         }
         let t0 = std::time::Instant::now();
-        let ai_rx = ai::stream_chat(base_url, bearer, model.clone(), messages, 4096);
+        let ai_rx = ai::stream_chat(
+            base_url,
+            bearer,
+            model.clone(),
+            messages,
+            AI_STREAM_MAX_TOKENS,
+        );
         overlay_backend::runtime::ask_stream_loop(
             events_for_task,
             ai_rx,
@@ -2820,7 +2934,7 @@ fn fire_followup_ask(
         let shown = format!("{prefix}⏳ …");
         tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&shown))));
     }
-    install_streaming_tile(
+    let generation = install_streaming_tile(
         bridge,
         StreamingTile {
             weak: tile_weak,
@@ -2880,9 +2994,15 @@ fn fire_followup_ask(
         (s.session_cost_microcents as f64) / 100_000_000.0
     });
     let t0 = std::time::Instant::now();
-    let events_for_task = events.clone();
+    let events_for_task = gated_events(bridge, events.clone(), generation);
     let task = rt_handle.spawn(async move {
-        let ai_rx = ai::stream_chat(base_url, bearer, model.clone(), messages, 4096);
+        let ai_rx = ai::stream_chat(
+            base_url,
+            bearer,
+            model.clone(),
+            messages,
+            AI_STREAM_MAX_TOKENS,
+        );
         overlay_backend::runtime::ask_stream_loop(
             events_for_task,
             ai_rx,
@@ -3555,6 +3675,23 @@ fn open_settings(
             eprintln!("[overlay-host] ai_model saved: {trimmed}");
         });
     }
+    {
+        // E9 — experimental prompt-caching toggle (default off; persists +
+        // applies live via the ai.rs static).
+        let cfg_c = cfg.clone();
+        win.on_ai_prompt_cache_changed(move |on| {
+            {
+                let mut c = cfg_c.write();
+                c.ai_prompt_cache = on;
+                if let Err(e) = overlay_backend::config::save(&c) {
+                    eprintln!("[overlay-host] ai_prompt_cache save failed: {e:#}");
+                    return;
+                }
+            }
+            overlay_backend::ai::set_prompt_cache(on);
+            diag!("ai_prompt_cache -> {on}");
+        });
+    }
 
     // Phase E6 v20 — tile opacity slider. Persists to config AND
     // applies to all currently-visible tiles via tiles_ref.
@@ -4142,6 +4279,7 @@ fn populate_token_status(win: &SettingsWindow, cfg: &overlay_backend::config::Sh
     win.set_tile_body_opacity(c.tile_body_opacity);
     win.set_ai_base_url_input(SharedString::from(c.ai_base_url.clone()));
     win.set_ai_model_input(SharedString::from(c.ai_model.clone()));
+    win.set_ai_prompt_cache(c.ai_prompt_cache);
     // Phase E6 v38 — reflect the saved interface language in the
     // Interface-tab dropdown (0=Русский, 1=English).
     win.set_ui_language_index(if c.ui_language == "en" { 1 } else { 0 });

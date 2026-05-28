@@ -30,6 +30,14 @@ pub struct Config {
     pub ai_model: String,   // Live answers — fast, default claude-haiku-4-5
     pub prep_model: String, // Pre-meeting context structuring — smart, default claude-sonnet-4-5
 
+    /// EXPERIMENTAL — when true, the system prompt is sent with Anthropic
+    /// `cache_control: ephemeral` so a pass-through bridge can prompt-cache
+    /// it (faster repeat/follow-up asks). Default OFF: some OpenAI-compat
+    /// bridges reject the unknown field, so enable + test against YOUR
+    /// bridge. `#[serde(default)]` keeps old config.json files loading.
+    #[serde(default)]
+    pub ai_prompt_cache: bool,
+
     /// Language tag (ISO 639-1) the assistant should ALWAYS respond in.
     /// Injected into the system prompt at runtime.
     pub response_language: String, // e.g. "ru"
@@ -215,6 +223,7 @@ impl Config {
             ai_bearer: String::new(),
             ai_model: "claude-haiku-4-5".into(),
             prep_model: "claude-sonnet-4-6".into(),
+            ai_prompt_cache: false,
             response_language: "ru".into(),
             groq_api_key: String::new(),
             stt_language: Some("ru".into()),
