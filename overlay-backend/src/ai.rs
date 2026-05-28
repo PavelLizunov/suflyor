@@ -7,6 +7,23 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
+/// Process-wide HTTP client, built once and reused across AI calls so the
+/// 2nd+ ask in a session reuses a warm TLS/HTTP connection (cuts
+/// time-to-first-token). `reqwest::Client` is cheap to clone (Arc inside).
+/// Per-call timeouts are applied on the request builder (`.timeout(..)`),
+/// NOT on the client, so the existing 10s/120s/180s budgets are preserved.
+fn http_client() -> reqwest::Client {
+    use std::sync::OnceLock;
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new())
+        })
+        .clone()
+}
+
 /// Frontend-visible event stream.
 ///
 /// Both `Serialize` AND `Deserialize` — the Slint binary's
@@ -80,10 +97,7 @@ pub fn stream_chat(
 /// so a dead endpoint doesn't hang the UI thread (caller runs this
 /// off-thread anyway). Does NOT log the URL or bearer (secrets).
 pub async fn test_connection(base_url: String, bearer: String, model: String) -> Result<String> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .context("build reqwest client")?;
+    let client = http_client();
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
     let body = json!({
         "model": model,
@@ -92,6 +106,7 @@ pub async fn test_connection(base_url: String, bearer: String, model: String) ->
     });
     let resp = client
         .post(&url)
+        .timeout(std::time::Duration::from_secs(10))
         .bearer_auth(&bearer)
         .json(&body)
         .send()
@@ -115,9 +130,7 @@ async fn stream_inner(
     max_tokens: u32,
     tx: mpsc::Sender<AiEvent>,
 ) -> Result<()> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(120))
-        .build()?;
+    let client = http_client();
 
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
     let body = json!({
@@ -138,6 +151,7 @@ async fn stream_inner(
 
     let resp = client
         .post(&url)
+        .timeout(std::time::Duration::from_secs(120))
         .bearer_auth(&bearer)
         .json(&body)
         .send()
@@ -376,9 +390,7 @@ async fn complete_once(
     messages: Vec<ChatMessage>,
     max_tokens: u32,
 ) -> Result<(String, TokenUsage)> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(180))
-        .build()?;
+    let client = http_client();
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
     let body = serde_json::json!({
         "model": model,
@@ -397,6 +409,7 @@ async fn complete_once(
 
     let resp = client
         .post(&url)
+        .timeout(std::time::Duration::from_secs(180))
         .bearer_auth(bearer)
         .json(&body)
         .send()
