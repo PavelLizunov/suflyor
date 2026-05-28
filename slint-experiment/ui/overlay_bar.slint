@@ -164,19 +164,14 @@ export component OverlayBarWindow inherits Window {
         border-width: 1px;
         border-color: #2a2c3a;
 
-        // Phase E6 v16 — background drag handle. Sits behind every
-        // chip's TouchArea so click on chip → chip fires; click on
-        // empty bar background → start system-drag (move window).
-        // Slint TouchArea capture rule: deepest TouchArea with
-        // matching event wins, so child chips always shadow this.
-        bar-drag-area := TouchArea {
-            pointer-event(ev) => {
-                if (ev.button == PointerEventButton.left
-                    && ev.kind == PointerEventKind.down) {
-                    root.drag-start-requested();
-                }
-            }
-        }
+        // Phase E6 v21 — bar drag is now SCOPED to the status pill
+        // only (see drag-handle TouchArea inside the pill below).
+        // Cycle 20's full-background TouchArea stole every chip click
+        // because Slint's pointer-event fires for ALL events in the
+        // bbox even when children have their own TouchAreas (same
+        // root cause as tile chrome cycle 10). User: "интерфейс
+        // сразу стал не кликабельным". Now only the ~80px status
+        // pill is the drag zone; every chip is freely clickable.
 
         VerticalLayout {
             padding: 6px;
@@ -187,7 +182,10 @@ export component OverlayBarWindow inherits Window {
             spacing: 6px;
             alignment: start;
 
-            // Status pill (left edge)
+            // Status pill (left edge) — DOUBLES AS DRAG HANDLE.
+            // It has no click action of its own, so a pointer-event
+            // TouchArea here is safe: its bbox is only the pill, so
+            // it can't shadow the sibling chips' TouchAreas.
             Rectangle {
                 background: root.status-color.with-alpha(0.18);
                 border-color: root.status-color;
@@ -195,11 +193,24 @@ export component OverlayBarWindow inherits Window {
                 border-radius: 10px;
                 height: 22px;
                 horizontal-stretch: 0;
+                // Drag handle — press-and-drag to move the whole bar.
+                TouchArea {
+                    mouse-cursor: grab;
+                    pointer-event(ev) => {
+                        if (ev.button == PointerEventButton.left
+                            && ev.kind == PointerEventKind.down) {
+                            root.drag-start-requested();
+                        }
+                    }
+                }
                 HorizontalLayout {
                     padding-left: 8px;
                     padding-right: 8px;
                     Text {
-                        text: root.status-text;
+                        // ":: " ASCII grip affordance (always renders) +
+                        // grab cursor on hover signals this pill is the
+                        // bar drag handle.
+                        text: ":: " + root.status-text;
                         font-size: 11px;
                         font-weight: 600;
                         color: root.status-color;
