@@ -2470,6 +2470,76 @@ fn open_settings(
     }
     populate_token_status(&win, cfg);
 
+    // Phase E6 v23 — populate the Audio tab's mic dropdown from real
+    // WASAPI capture endpoints + select the saved device. User: "Audio
+    // не подгружает реальные микрофоны".
+    {
+        let devices = overlay_backend::audio::list_devices()
+            .map(|d| d.inputs)
+            .unwrap_or_default();
+        let saved = cfg.read().mic_device.clone();
+        let model: Vec<SharedString> = if devices.is_empty() {
+            vec![SharedString::from("(no capture devices found)")]
+        } else {
+            devices
+                .iter()
+                .map(|d| SharedString::from(d.as_str()))
+                .collect()
+        };
+        // Find the saved device's index (default 0 = system default).
+        let sel = saved
+            .as_deref()
+            .and_then(|name| devices.iter().position(|d| d == name))
+            .unwrap_or(0);
+        win.set_mic_devices(ModelRc::new(VecModel::from(model)));
+        win.set_mic_device_index(sel as i32);
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_mic_device_selected(move |name| {
+            let mut c = cfg_c.write();
+            c.mic_device = Some(name.to_string());
+            let _ = overlay_backend::config::save(&c);
+            eprintln!("[overlay-host] mic_device -> {name}");
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_mic_test_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            w.set_mic_test_result(SharedString::from("recording 3s…"));
+            let device = cfg_c.read().mic_device.clone();
+            let weak_for_result = w.as_weak();
+            // Blocking WASAPI record off the UI thread; post result back.
+            std::thread::spawn(move || {
+                let result = overlay_backend::audio::record_mic_blocking(3000, device);
+                let msg = match result {
+                    Ok(samples) if samples.is_empty() => "no audio captured".to_string(),
+                    Ok(samples) => {
+                        let peak = samples
+                            .iter()
+                            .map(|s| s.unsigned_abs() as u32)
+                            .max()
+                            .unwrap_or(0);
+                        if peak == 0 {
+                            "silent (-inf dBFS) — check mic".to_string()
+                        } else {
+                            let dbfs = 20.0 * (peak as f32 / 32768.0).log10();
+                            format!("OK — peak {dbfs:.1} dBFS")
+                        }
+                    }
+                    Err(e) => format!("error: {e}"),
+                };
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = weak_for_result.upgrade() {
+                        w.set_mic_test_result(SharedString::from(msg));
+                    }
+                });
+            });
+        });
+    }
+
     let s2 = state.clone();
     let tiles_ref2 = tiles_ref.clone();
     win.on_always_on_top_changed(move |on| {

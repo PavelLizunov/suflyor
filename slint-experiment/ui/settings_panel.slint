@@ -57,6 +57,15 @@ export component SettingsWindow inherits Window {
     in-out property <float> tile-body-opacity: 1.0;
     callback tile-body-opacity-changed(float);
 
+    // Phase E6 v23 — real audio device list (populated by Rust from
+    // audio::list_devices().inputs on Settings open). mic-test-result
+    // shows the dBFS probe outcome. Replaces the mock device list.
+    in-out property <[string]> mic-devices: ["(loading devices…)"];
+    in-out property <int> mic-device-index: 0;
+    in-out property <string> mic-test-result: "";
+    callback mic-device-selected(string);
+    callback mic-test-clicked();
+
     callback always-on-top-changed(bool);
     callback stealth-changed(bool);
     callback close-clicked();
@@ -185,7 +194,10 @@ export component SettingsWindow inherits Window {
                         Text {
                             text: @tr("Lower values let you see the meeting through tiles. 100% = opaque, 50% = half-transparent.");
                             font-size: 10px;
-                            color: #777;
+                            // Phase E6 v23 — was #777 (too dark, "чёрный на
+                            // чёрном"); bumped to #999 to match other
+                            // description text in the panel.
+                            color: #999;
                             wrap: word-wrap;
                         }
                         Slider {
@@ -319,17 +331,28 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 6 : VerticalLayout {
                         spacing: 8px;
                         Text {
-                            text: @tr("Microphone + system audio device selection.");
+                            text: @tr("Microphone device selection. List is live from WASAPI capture endpoints.");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
                         }
-                        // SCAFFOLDING: mock device list
+                        // Phase E6 v23 — real device list from
+                        // audio::list_devices().inputs, wired by Rust.
                         ComboBox {
-                            model: ["Default microphone", "USB Mic", "Bluetooth headset"];
-                            current-index: 0;
+                            model: root.mic-devices;
+                            current-index <=> root.mic-device-index;
+                            selected(val) => { root.mic-device-selected(val); }
                         }
-                        Button { text: @tr("Test microphone (3s record)"); }
+                        Button {
+                            text: @tr("Test microphone (3s record)");
+                            clicked => { root.mic-test-clicked(); }
+                        }
+                        if root.mic-test-result != "" : Text {
+                            text: root.mic-test-result;
+                            font-size: 11px;
+                            color: #6cf;
+                            wrap: word-wrap;
+                        }
                     }
                     if root.active-tab == 7 : VerticalLayout {
                         spacing: 8px;
