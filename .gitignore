@@ -1,37 +1,21 @@
 # Logs
 logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
 *.sw?
 
 # Rust / Cargo build artifacts (~3 GB) + visual-test PNGs
 target/
-src-tauri/target/
 
-# Tauri generated bindings (rebuilt automatically)
-src-tauri/gen/
-
-# Slint pilot crate build artifacts (Phase 0)
+# Slint crate build artifacts
 slint-experiment/target/
+slint-experiment/verify*.png
+slint-experiment/overlay-host.*.log
 
 # Phase B1 — overlay-backend crate build artifacts
 overlay-backend/target/

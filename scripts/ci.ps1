@@ -39,31 +39,31 @@ function Run-Step($name, $block) {
     Write-Host "PASS: $name (${elapsed}s)" -ForegroundColor Green
 }
 
-# Layer 1a — fmt check (most common CI killer per vpnctl methodology)
-Run-Step "Layer 1a: cargo fmt --check" {
-    & $cargoExe fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+# Phase 7 cut: the React/Tauri (src-tauri) + `npx tsc` layers were removed
+# with the stack. The product is now slint-experiment + overlay-backend.
+
+# --- slint-experiment (UI + orchestration) ---
+Run-Step "slint fmt --check" {
+    & $cargoExe fmt --manifest-path slint-experiment/Cargo.toml --all -- --check
+}
+Run-Step "slint clippy -D warnings" {
+    & $cargoExe clippy --manifest-path slint-experiment/Cargo.toml --all-targets -- -D warnings
+}
+Run-Step "slint test --lib" {
+    & $cargoExe test --manifest-path slint-experiment/Cargo.toml --lib --quiet
 }
 
-# Layer 1b — clippy (workspace = lib + bins + tests)
-Run-Step "Layer 1b: cargo clippy -D warnings" {
-    & $cargoExe clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+# --- overlay-backend (shared logic) ---
+Run-Step "backend fmt --check" {
+    & $cargoExe fmt --manifest-path overlay-backend/Cargo.toml --all -- --check
 }
-
-# Layer 2 — cargo test (260+ unit + integration)
-Run-Step "Layer 2: cargo test --lib" {
-    & $cargoExe test --manifest-path src-tauri/Cargo.toml --lib --quiet
+Run-Step "backend clippy -D warnings" {
+    & $cargoExe clippy --manifest-path overlay-backend/Cargo.toml --all-targets -- -D warnings
 }
-
-# Layer 3a — copy contract (canonical strings frozen)
-Run-Step "Layer 3a: copy contract tests" {
-    & $cargoExe test --manifest-path src-tauri/Cargo.toml --test copy_contract --quiet
-}
-
-# Layer 3b — TypeScript correctness (catches noUnusedLocals + type errors)
-Run-Step "Layer 3b: npx tsc --noEmit" {
-    & npx tsc --noEmit
+Run-Step "backend test --lib" {
+    & $cargoExe test --manifest-path overlay-backend/Cargo.toml --lib --quiet
 }
 
 Write-Host ""
-Write-Host "All gating layers green. Run scripts/visual_check.ps1 before pushing." -ForegroundColor Green
+Write-Host "All gating layers green." -ForegroundColor Green
 exit 0

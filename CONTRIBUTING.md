@@ -1,122 +1,91 @@
 # Contributing to suflyor
 
-This is a single-user pet project, but if you fork or want to send a PR — here's the lay of the land.
+Single-user pet project, but if you fork or want to send a PR — here's the lay of the land. The app is **pure Rust + [Slint](https://slint.dev)** (no Node, no browser engine).
 
 ## Setup
 
 **Prerequisites:**
-- Windows 10/11 (only OS supported — uses WASAPI native APIs)
+- Windows 10/11 (only OS supported — uses WASAPI + Win32 native APIs)
 - Rust + cargo via rustup, **MSVC toolchain** (not GNU): `rustup default stable-msvc`
-- Visual Studio Build Tools 2022 with C++ workload (for MSVC linker)
-- Node 20+ + npm
-- WebView2 runtime (preinstalled on Win 11; old Win 10 needs the Edge runtime installer)
+- Visual Studio Build Tools 2022 with the C++ workload (for the MSVC linker)
 
 **One-time:**
 ```bash
 git clone https://github.com/PavelLizunov/suflyor.git
 cd suflyor
-npm install
 ```
 
 **Dev loop:**
 ```bash
-npm run tauri dev          # full hot-reload, opens overlay window
-# OR for frontend-only iteration:
-npm run dev                # vite only, no Tauri (no overlay window, just URL preview)
+cd slint-experiment
+cargo run --bin overlay-host          # builds + launches the overlay
 ```
 
-**Build release MSI:**
-```bash
-npm run tauri build        # → src-tauri/target/release/bundle/msi/suflyor_X.Y.Z_x64_en-US.msi
+`.slint` UI files are compiled at build time (via `build.rs` + `slint-build`); editing them triggers a rebuild on the next `cargo run`.
+
+**Build release + Windows installer:**
+```powershell
+scripts\build-slint-release.ps1 -Installer
+# → slint-experiment\target\release\bundle\suflyor-slint-setup.exe (NSIS)
 ```
 
-⚠️ **Do NOT use bare `cargo build`** — it skips the vite frontend bundle, you'll get a working binary that fails at runtime trying to load `localhost:1420`. Always go through `npm run tauri build`.
+## Tests / gates
 
-## Tests
-
-```bash
-cargo test --lib                                    # 239 tests, <1 sec
-cargo test --bin journal-eval                       # 25 CLI tests, <1 sec
-cargo clippy --bin overlay-mvp -- -D warnings       # strict lint
-npm run build                                       # TS + vite build (tsc --noEmit then vite build)
-```
-
-All three should be green before any commit.
-
-Test coverage map: see `docs/architecture.md` section "Test coverage".
-
-## Version-bump checklist
-
-When releasing a new version, update **THREE** files in sync:
-
-1. `package.json` — `"version": "X.Y.Z"`
-2. `src-tauri/Cargo.toml` — `version = "X.Y.Z"`
-3. `src-tauri/tauri.conf.json` — `"version": "X.Y.Z"`
-
-Then:
-```bash
-npm run tauri build                # produces installer files
-git commit -am "vX.Y.Z — <theme>"  # standard commit message
-git push
-gh release create vX.Y.Z \
-  src-tauri/target/release/bundle/msi/suflyor_X.Y.Z_x64_en-US.msi \
-  src-tauri/target/release/bundle/nsis/suflyor_X.Y.Z_x64-setup.exe \
-  --title "vX.Y.Z — <theme>" --notes-file release-notes.md
-```
-
-The in-app update button (Settings → 🆙 Обновления) reads `tag_name` from GitHub Releases API, so the git tag must match the version string.
-
-## Hooks / autonomous mode caveat
-
-`.claude/settings.json` configures Claude Code hooks for an autonomous-development mode this repo uses. If you fork and don't want them:
+Both crates must pass before any commit (the `.claude/hooks/git-gate.ps1` hook enforces this):
 
 ```bash
-rm -rf .claude/hooks .claude/autonomous_active .claude/AUTONOMOUS_RULES.md
-# OR comment out hooks in .claude/settings.json
+# slint-experiment (UI + orchestration)
+cargo fmt   --manifest-path slint-experiment/Cargo.toml --all -- --check
+cargo clippy --manifest-path slint-experiment/Cargo.toml --all-targets -- -D warnings
+cargo test  --manifest-path slint-experiment/Cargo.toml --lib
+
+# overlay-backend (shared logic — audio/stt/ai/journal/kb/config/runtime)
+cargo fmt   --manifest-path overlay-backend/Cargo.toml --all -- --check
+cargo clippy --manifest-path overlay-backend/Cargo.toml --all-targets -- -D warnings
+cargo test  --manifest-path overlay-backend/Cargo.toml --lib
 ```
 
-If `.claude/autonomous_active` exists with a future ISO deadline, the stop-guard hook prevents Claude from ending a turn — that's intentional for marathon work but will surprise anyone unfamiliar.
+`scripts\ci.ps1` runs all of the above in one shot.
 
 ## Project layout
 
 ```
-src-tauri/src/         # Rust backend (audio, STT, AI, journal, tile manager)
-src-tauri/capabilities/ # Tauri 2 capability files (overlay vs tile-* scope split)
-src-tauri/knowledge/   # Embedded KB (1643 entries) — glossary + commands + patterns
-src/                   # React frontend (Overlay, Settings, TileWindow, Replay)
-docs/                  # architecture.md + local-whisper-options.md
-.claude/               # Claude Code hooks + autonomous mode marker
-NIGHT_RUN_PLAN.md      # Marathon work log (only useful if you're running autonomous mode)
-README.md              # User-facing
+slint-experiment/        # the product: `overlay-host` binary
+  src/bin/overlay_host.rs # multi-window manager + all callback wiring
+  src/                    # app_state, slint_session, win32 (HWND helpers), markdown, …
+  ui/*.slint              # overlay_bar / tile / palette / settings_panel + tokens
+  translations/ru/…/*.po  # bundled RU translation (gettext-style, msgctxt-free)
+overlay-backend/         # shared crate (no UI): audio, stt, ai, journal, kb, config, runtime
+  knowledge/*.md          # embedded KB (~1696 entries) — glossary + commands + patterns
+scripts/                 # build-slint-release.ps1, ci.ps1, capture/click helpers
+docs/                    # ADRs + migration history (the React→Slint move)
+.claude/                 # Claude Code hooks (git-gate, etc.)
+README.md                # user-facing
 ```
 
-Critical invariants (DO NOT BREAK):
-- `assert_overlay(window)` guard at the top of sensitive Tauri commands (config, session, screenshot, mic, spawn_tile, expand_snippet, kb_spawn). Tile-* windows must not be able to invoke these — they could be poisoned by AI-rendered markdown.
-- `core:window:default` permission set does NOT include `allow-start-dragging` — capability files explicitly add it. Same for any other window:* perm beyond the default.
-- React StrictMode mounts → unmounts → re-mounts components in dev. `mountedRef.current = true` MUST be set at the start of every useEffect that uses it as a guard. Otherwise second-mount's mountedRef stays false (inherited from first cleanup) and the component silently no-ops.
+## Critical invariants (DO NOT BREAK)
+
+- Transparent always-on-top windows are set via Win32 in `slint-experiment/src/win32.rs` (`make_transparent_overlay`/`_tile`, `set_always_on_top`, `set_stealth`). Apply them after the HWND exists (a short Timer after `show()`).
+- Tile windows are not `Send`; spawn them on the UI thread. Cross-thread work (record/STT/AI) ships results back via an mpsc channel drained by a UI-thread Timer, or `slint::invoke_from_event_loop` with a `slint::Weak` (Weak IS Send).
+- Slint+skia font fallback renders some glyphs (✕ ✓ ⏹ …) as empty boxes — prefer ASCII or a `Rectangle` over an exotic glyph.
+- gettext matches by exact msgid; `build.rs` uses `DefaultTranslationContext::None`, so the `.po` is context-free and every `@tr("…")` string must have an exact matching `msgid`.
 
 ## Code style
 
-- Rust: `cargo fmt` (default 4-space indent). Comments explain WHY, not WHAT. Cite live-test or bug-hunt origin where relevant.
-- TS/React: 2-space indent. Functional components only. No class components. State via useState/useReducer.
-- CSS: plain CSS in `src/styles.css`, custom properties for theming. No Tailwind.
-- Commit messages: imperative mood. First line under 70 chars. Body explains motivation + design tradeoffs.
+- Rust: `cargo fmt` (4-space). Comments explain WHY, not WHAT; cite live-test / bug-hunt origin where relevant.
+- Crate lints deny `unwrap_used` / `expect_used` / `panic` — use `?`, `match`, `unwrap_or_*`.
+- Commit messages: imperative mood, first line < 70 chars, body explains motivation + tradeoffs.
+
+## Version bump / release
+
+1. `slint-experiment/Cargo.toml` — `version = "X.Y.Z"`
+2. `scripts/slint-installer.nsi` — `PRODUCT_VERSION`
+3. `scripts\build-slint-release.ps1 -Installer`, then `gh release create vX.Y.Z … suflyor-slint-setup.exe`
 
 ## Security
 
-Personal-use app, BUT:
-- `config.json` at `%APPDATA%\overlay-mvp\config.json` contains live `groq_api_key` + `ai_bearer`. NEVER print these to chat / logs / screenshots.
-- Release build excludes the auto-open DevTools call (which dev build has). In dev mode, DevTools is open by default and the entire React state (including secrets) is visible.
-
-## Architecture deep dive
-
-See `docs/architecture.md` for:
-- 3-tier data flow diagram (audio → STT → AI → tile)
-- Tauri 2 capability model
-- All 7 global hotkeys
-- 7 critical invariants
-- Per-file size + role table
-- Out-of-scope features (local Whisper, code signing, auto-update download, telemetry)
+- `config.json` at `%APPDATA%\overlay-mvp\config.json` holds live `groq_api_key` + `ai_bearer`. NEVER print these to chat / logs / screenshots.
+- The diagnostic dump (Settings → Updates) blanks secrets before writing.
 
 ## License
 

@@ -30,11 +30,19 @@ starting any autonomous session.
 
 ## Project conventions
 
-- Frontend: React 19 + Vite + plain CSS in `src/styles.css` (no Tailwind).
-  Run with `npm run dev` (vite only) or `npm run tauri dev` (full app).
-- Backend: Rust + Tauri 2 in `src-tauri/`. Two binaries — `default-run`
-  in `Cargo.toml` is `overlay-mvp`. Build via `npm run tauri build` (NOT
-  `cargo build` — that bypasses the vite frontend bundle).
+> **Phase 7 cut (2026-05-28):** the React/Tauri stack was removed. The
+> product is now **pure Rust + Slint**. Older sections below may still
+> reference src-tauri / React / WebView2 / npm — that's historical; treat
+> the two crates below as the source of truth.
+
+- **App:** `slint-experiment/` — the `overlay-host` binary (Slint UI in
+  `ui/*.slint` + orchestration in `src/bin/overlay_host.rs`). Run/build via
+  `cargo run/build --bin overlay-host` from `slint-experiment/`. Installer:
+  `scripts/build-slint-release.ps1 -Installer`.
+- **Shared logic:** `overlay-backend/` — audio / stt / ai / journal / kb /
+  config / runtime (no UI). The app depends on it via a path dep.
+- No browser engine, no Node. UI compiles at build time via `build.rs` +
+  `slint-build`.
 - Tests: `cargo test --lib` (255 tests, <1s) — the `--bin overlay-mvp`
   variant in older docs runs zero tests (the binary itself has none —
   all unit tests live in the library target). `cargo clippy --all-targets
