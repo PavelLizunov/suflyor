@@ -20,11 +20,10 @@
 //!   `slint::invoke_from_event_loop(...)` because Slint property
 //!   setters must run on the main thread.
 
-use overlay_backend::audio::{AudioSource, CaptureHandle, TranscriptLine};
+use overlay_backend::audio::{CaptureHandle, TranscriptLine};
 use overlay_backend::health::HealthSignals;
 use overlay_backend::journal::Journal;
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Instant;
@@ -81,15 +80,6 @@ pub struct SlintRuntime {
     /// System audio remains unaffected. Toggled by the mic chip.
     pub mic_muted: bool,
 
-    /// Push-to-talk capture state. `Some` while the user is
-    /// holding F7/F8; `None` otherwise.
-    pub push_to_talk: Option<PushToTalkCapture>,
-
-    /// Per-source PTT start timestamps (unix ms) for the UI
-    /// duration display. Removed when the corresponding F-key
-    /// release fires.
-    pub manual_ask_start_ms: HashMap<AudioSource, u64>,
-
     /// Sliding window of recent tile-spawn timestamps for the
     /// auto-detector rate-limit (drops triggers exceeding
     /// `MAX_TILES_PER_MIN` in the last 60s).
@@ -117,27 +107,6 @@ pub struct SlintRuntime {
     /// One-shot guard so the meeting-ending detector emits
     /// `meeting:ending` exactly once per session.
     pub meeting_ending_emitted: bool,
-}
-
-/// Push-to-talk capture state — held in `SlintRuntime.push_to_talk`
-/// between PTT start and release. Same shape as src-tauri's
-/// `PushToTalkCapture`; future cleanup could move both to
-/// `overlay_backend::audio` once the structure stabilizes.
-pub struct PushToTalkCapture {
-    /// Which side the user is holding (mic or system audio).
-    pub source: AudioSource,
-    /// Unix ms when the F-key was first pressed.
-    pub start_ms: u64,
-    /// Atomic flag the capture thread polls every 500ms. Setting
-    /// it to true signals stop.
-    pub stop: Arc<AtomicBool>,
-    /// Oneshot the capture thread fills with `Ok(Vec<i16>)` on
-    /// clean exit, or `Err(String)` on WASAPI/COM failure.
-    pub samples_rx: tokio::sync::oneshot::Receiver<Result<Vec<i16>, String>>,
-    /// JoinHandle of the dedicated capture thread. PTT release
-    /// detaches a cleanup thread to await join without blocking
-    /// the async path.
-    pub thread: Option<std::thread::JoinHandle<()>>,
 }
 
 /// Convenience alias matching src-tauri's `SharedRuntime`.
@@ -174,14 +143,6 @@ pub fn push_transcript_line(rt: &mut SlintRuntime, line: TranscriptLine) {
     }
 }
 
-/// Set `last_question` + `last_answer` atomically. Called by the
-/// reask / manual-spawn / manual-ask shim-writeback paths.
-pub fn store_last_qa(rt: &SharedSlintRuntime, q: &str, a: &str) {
-    let mut s = lock(rt);
-    s.last_question = Some(q.to_string());
-    s.last_answer = Some(a.to_string());
-}
-
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,
@@ -191,6 +152,7 @@ pub fn store_last_qa(rt: &SharedSlintRuntime, q: &str, a: &str) {
 )]
 mod tests {
     use super::*;
+    use overlay_backend::audio::AudioSource;
 
     #[test]
     fn shared_runtime_starts_empty() {
@@ -226,20 +188,5 @@ mod tests {
         assert_eq!(first, "line 5");
         let last = &s.transcript.back().expect("non-empty").text;
         assert_eq!(last, &format!("line {}", TRANSCRIPT_MAX_LINES + 4));
-    }
-
-    #[test]
-    fn store_last_qa_writes_both_atomically() {
-        let rt = shared_runtime();
-        store_last_qa(&rt, "Q1", "A1");
-        {
-            let s = lock(&rt);
-            assert_eq!(s.last_question.as_deref(), Some("Q1"));
-            assert_eq!(s.last_answer.as_deref(), Some("A1"));
-        }
-        store_last_qa(&rt, "Q2", "A2");
-        let s = lock(&rt);
-        assert_eq!(s.last_question.as_deref(), Some("Q2"));
-        assert_eq!(s.last_answer.as_deref(), Some("A2"));
     }
 }

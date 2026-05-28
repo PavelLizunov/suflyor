@@ -2,8 +2,7 @@
 //!
 //! This is the analog of `src-tauri/src/lib.rs::TauriEvents` — when
 //! the ported overlay-backend fns (reask_last, manual_spawn_tile,
-//! manual_ask_source, manual_ask_window_end, ask_stream_loop,
-//! run_post_meeting_debrief) call `events.emit(...)` or
+//! ask_stream_loop, run_post_meeting_debrief) call `events.emit(...)` or
 //! `events.spawn_tile_full(...)`, this adapter is what receives the
 //! call from the Slint binary side and updates the UI accordingly.
 //!

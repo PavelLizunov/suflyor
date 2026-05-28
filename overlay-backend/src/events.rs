@@ -168,26 +168,6 @@ impl TileKind {
             Self::Mic => "mic",
         }
     }
-
-    /// Chrome glyph for the tile's source-label area. Some kinds
-    /// share glyphs (Reload + Followup both use 💡 by convention).
-    #[must_use]
-    pub fn chrome_glyph(&self) -> &'static str {
-        match self {
-            Self::Ai => "",
-            Self::Kb => "📚",
-            Self::Snippet => "✂",
-            Self::Translate => "🌐",
-            Self::Reload => "🔄",
-            Self::Followup => "💡",
-            Self::Bookmark => "⭐",
-            Self::Debrief => "🎯",
-            Self::Manual => "✋",
-            Self::Auto => "",
-            Self::System => "🔊",
-            Self::Mic => "🎤",
-        }
-    }
 }
 
 /// Monitor placement hint for new tile windows.

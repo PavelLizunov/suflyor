@@ -183,35 +183,6 @@ pub fn get(key: &str) -> Option<&'static KBEntry> {
     all().iter().find(|e| e.key == q)
 }
 
-/// Summary stats for the Settings UI banner ("📚 KB: 1300 glossary,
-/// 120 commands, 180 patterns").
-#[derive(Debug, Clone, Serialize)]
-pub struct KBStats {
-    pub total: usize,
-    pub glossary: usize,
-    pub commands: usize,
-    pub patterns: usize,
-}
-
-pub fn stats() -> KBStats {
-    let entries = all();
-    let mut stats = KBStats {
-        total: entries.len(),
-        glossary: 0,
-        commands: 0,
-        patterns: 0,
-    };
-    for e in entries {
-        match e.source {
-            "glossary" => stats.glossary += 1,
-            "commands" => stats.commands += 1,
-            "patterns" => stats.patterns += 1,
-            _ => {}
-        }
-    }
-    stats
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -221,21 +192,20 @@ mod tests {
     /// truncation in PR review.
     #[test]
     fn all_loads_three_sources_with_floors() {
-        let s = stats();
+        let entries = all();
+        let total = entries.len();
+        let glossary = entries.iter().filter(|e| e.source == "glossary").count();
+        let commands = entries.iter().filter(|e| e.source == "commands").count();
+        let patterns = entries.iter().filter(|e| e.source == "patterns").count();
         assert!(
-            s.total >= 1500,
-            "KB total {} below floor 1500 — was a file truncated?",
-            s.total
+            total >= 1500,
+            "KB total {total} below floor 1500 — was a file truncated?"
         );
-        assert!(
-            s.glossary >= 1000,
-            "glossary {} below floor 1000",
-            s.glossary
-        );
-        assert!(s.commands >= 100, "commands {} below floor 100", s.commands);
-        assert!(s.patterns >= 100, "patterns {} below floor 100", s.patterns);
+        assert!(glossary >= 1000, "glossary {glossary} below floor 1000");
+        assert!(commands >= 100, "commands {commands} below floor 100");
+        assert!(patterns >= 100, "patterns {patterns} below floor 100");
         // sanity: source tags are correctly populated
-        let by_source: std::collections::HashSet<_> = all().iter().map(|e| e.source).collect();
+        let by_source: std::collections::HashSet<_> = entries.iter().map(|e| e.source).collect();
         assert!(by_source.contains("glossary"));
         assert!(by_source.contains("commands"));
         assert!(by_source.contains("patterns"));

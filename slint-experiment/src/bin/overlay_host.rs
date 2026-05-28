@@ -90,6 +90,10 @@ static CONVO_SEQ: AtomicU64 = AtomicU64::new(0);
 /// on the UI thread (every ask path registers from a UI-thread callback or
 /// timer), so the direct `upgrade()` + setter is safe.
 fn install_streaming_tile(bridge: &Arc<OverlayBarBridge>, new_tile: StreamingTile) {
+    // A new stream supersedes any prior one; reset the in-flight pulse
+    // count so an aborted prior stream (which never emits Done/Error)
+    // can't leak its Start increment and pin the bar pulse ON forever.
+    bridge.reset_ai_in_flight();
     let new_convo = new_tile.convo_id;
     let mut slot = match bridge.current_streaming.lock() {
         Ok(g) => g,
@@ -338,6 +342,25 @@ impl OverlayBarBridge {
             });
         }
     }
+
+    /// Force the in-flight AI stream count to 0 and clear the bar pulse.
+    /// Called from `install_streaming_tile` (each new ask supersedes the
+    /// prior stream) and on `session:stopped`. An aborted `ask_stream_loop`
+    /// never emits Done/Error, so its earlier Start increment would
+    /// otherwise leak and pin the "AI streaming" pulse ON permanently after
+    /// any rapid re-ask. Single-slot model makes reset-to-0 correct; a rare
+    /// concurrent auto-tile at worst clears the pulse a beat early (cosmetic,
+    /// never stuck).
+    fn reset_ai_in_flight(&self) {
+        self.ai_in_flight
+            .store(0, std::sync::atomic::Ordering::SeqCst);
+        let weak = self.overlay_weak.clone();
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(o) = weak.upgrade() {
+                o.set_ai_streaming(false);
+            }
+        });
+    }
 }
 
 impl SlintUiBridge for OverlayBarBridge {
@@ -366,6 +389,12 @@ impl SlintUiBridge for OverlayBarBridge {
                 return;
             }
             *last = now;
+        }
+        // A stopped session leaves no live AI stream — clear any leaked
+        // in-flight count so the "AI streaming" pulse can't stick ON
+        // (an aborted stream emits no Done/Error to decrement it).
+        if channel == "session:stopped" {
+            self.reset_ai_in_flight();
         }
         let weak = self.overlay_weak.clone();
         let _ = slint::invoke_from_event_loop(move || {
@@ -2150,70 +2179,6 @@ fn fire_f6_manual_spawn(
     });
 }
 
-/// Phase E3 slice 4 — chip-driven manual ask for a specific source
-/// (sys chip → System, future PTT → Mic). Snapshots rt into
-/// ManualAskSourceInputs, spawns the ported `manual_ask_source`,
-/// applies outcome writeback. Shape mirrors fire_f6.
-///
-/// Currently unwired — the existing mic/sys chip handlers are 3-second
-/// audio-device probes (useful diagnostic, kept for now). Proper PTT
-/// (press-and-hold) requires Slint UI changes — adding
-/// `pointer-event` callbacks on the chip TouchAreas — to distinguish
-/// press from release. That's deferred to a Phase E UX commit. When
-/// it lands, the press handler calls
-/// `slint_session::manual_ask_window_start` and the release handler
-/// calls `manual_ask_window_end` (already ported as B2 port #6).
-#[allow(dead_code, reason = "wired in Phase E PTT UX phase")]
-fn fire_manual_ask_source(
-    events: &Arc<dyn RuntimeEvents>,
-    cfg: &overlay_backend::config::SharedConfig,
-    slint_rt: &SharedSlintRuntime,
-    rt_handle: &tokio::runtime::Handle,
-    source: overlay_backend::audio::AudioSource,
-) {
-    let inputs = {
-        let s = slint_replay::runtime_state::lock(slint_rt);
-        let recent = select_recent_labeled(&s.transcript, 8);
-        // Trigger = last line from THIS source.
-        let trigger_text = s
-            .transcript
-            .iter()
-            .rev()
-            .find(|l| l.source == source)
-            .map(|l| l.text.clone())
-            .unwrap_or_default();
-        let cap_usd = cfg.read().max_session_cost_usd;
-        let cost_cap = cost_cap_reason(cap_usd, s.session_cost_microcents);
-        overlay_backend::runtime::ManualAskSourceInputs {
-            recent_transcript_labeled: recent,
-            trigger_text,
-            cost_cap_reason: cost_cap,
-            source,
-            journal: s.journal.clone(),
-            health: s.health.clone(),
-        }
-    };
-    let events_c = events.clone();
-    let cfg_c = cfg.clone();
-    let rt_c = slint_rt.clone();
-    rt_handle.spawn(async move {
-        let outcome =
-            overlay_backend::runtime::manual_ask_source(events_c.clone(), cfg_c, inputs).await;
-        if let Some(out) = outcome {
-            let total = {
-                let mut s = slint_replay::runtime_state::lock(&rt_c);
-                s.session_cost_microcents = s
-                    .session_cost_microcents
-                    .saturating_add(out.cost_microcents_delta);
-                s.last_question = Some(out.display_question);
-                s.last_answer = Some(out.answer_trimmed);
-                (s.session_cost_microcents as f64) / 100_000_000.0
-            };
-            events_c.emit("cost:update", serde_json::json!({ "session_usd": total }));
-        }
-    });
-}
-
 /// Phase E3 slice 2 — F9 ask handler.
 ///
 /// Runs on the Slint UI thread (called from the hotkey poll Timer
@@ -2894,6 +2859,20 @@ fn fire_followup_ask(
         })
         .unwrap_or_default();
     let usr_full = question.clone();
+    // Journal the follow-up request so it pairs with the AiResponse that
+    // ask_stream_loop writes on completion (F9 + PTT already do this;
+    // without it every follow-up turn leaves an orphaned response).
+    if let Some(j) = journal_for_loop.as_ref() {
+        j.write(&journal::JournalEvent::AiRequest {
+            unix_ms: journal::now_unix_ms(),
+            purpose: "followup_ask",
+            model: &model,
+            system_prompt: &sys_full,
+            user_prompt: &usr_full,
+            attached_screenshot: false,
+            input_tokens_est: ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4,
+        });
+    }
     let rt_for_cost = slint_rt.clone();
     let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
         let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
@@ -3552,7 +3531,9 @@ fn open_settings(
                     return;
                 }
             }
-            eprintln!("[overlay-host] ai_base_url saved: {trimmed}");
+            // Log presence only — ai_base_url often embeds the user's LAN
+            // IP / proxy port (network-topology leak). See ai.rs no-log note.
+            eprintln!("[overlay-host] ai_base_url saved ({} chars)", trimmed.len());
         });
     }
     {

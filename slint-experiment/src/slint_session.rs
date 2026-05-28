@@ -111,7 +111,7 @@ pub fn start_session(
     ));
     log_info(&format!(
         "stt config — model={stt_model} language={:?} whisper_prompt={}",
-        cfg.read().stt_language.as_deref().unwrap_or("<auto>"),
+        language.as_deref().unwrap_or("<auto>"),
         if cfg.read().trigger_keywords.is_empty() {
             "<no kw prompt>"
         } else {

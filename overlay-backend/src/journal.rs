@@ -216,12 +216,6 @@ impl Journal {
     pub fn current_path(&self) -> Option<PathBuf> {
         self.path.as_ref().map(|p| (**p).clone())
     }
-
-    /// Drop the sender — writer task will see channel close and flush+exit.
-    pub fn close(self) {
-        // Dropping tx closes the channel.
-        drop(self.tx);
-    }
 }
 
 /// Mutates `c` based on the kind of `event`. Pure function (excluding
