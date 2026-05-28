@@ -47,7 +47,11 @@ if ($Installer) {
     $candidates = @(
         "C:\Program Files (x86)\NSIS\makensis.exe",
         "C:\Program Files\NSIS\makensis.exe",
-        "$env:USERPROFILE\scoop\apps\nsis\current\makensis.exe"
+        "$env:USERPROFILE\scoop\apps\nsis\current\makensis.exe",
+        # Phase E7 — reuse the NSIS the Tauri bundler already downloaded
+        # (avoids a separate NSIS install on the build machine).
+        "$env:LOCALAPPDATA\tauri\NSIS\makensis.exe",
+        "$env:LOCALAPPDATA\tauri\NSIS\Bin\makensis.exe"
     )
     $makensis = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
     if (-not $makensis) {
@@ -60,17 +64,14 @@ if ($Installer) {
     $bundleDir = Join-Path $crate "target\release\bundle"
     New-Item -ItemType Directory -Force -Path $bundleDir | Out-Null
     $nsi = Join-Path $PSScriptRoot "slint-installer.nsi"
-    & $makensis "/V2" $nsi
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "makensis failed: exit $LASTEXITCODE" -ForegroundColor Red
-        exit $LASTEXITCODE
+    # NOTE: invoke makensis via Start-Process (not the `&` call operator).
+    # Under `powershell -File`, `& $makensis ...` left the parser in a state
+    # that bound the *next* statement as an argument and threw a bogus
+    # SwitchParameter cast error. Start-Process side-steps it entirely.
+    $proc = Start-Process -FilePath $makensis -ArgumentList @("/V2", $nsi) -NoNewWindow -Wait -PassThru
+    if ($proc.ExitCode -ne 0) {
+        Write-Host "makensis failed: exit $($proc.ExitCode)" -ForegroundColor Red
+        exit $proc.ExitCode
     }
-    $installer = Join-Path $crate "target\release\bundle\suflyor-slint-setup.exe"
-    if (Test-Path $installer) {
-        $iInfo = Get-Item $installer
-        Write-Host ""
-        Write-Host "Installer built:" -ForegroundColor Green
-        Write-Host "  Path : $installer"
-        Write-Host "  Size : $([math]::Round($iInfo.Length / 1MB, 2)) MB"
-    }
+    Write-Host "Installer built: target\release\bundle\suflyor-slint-setup.exe" -ForegroundColor Green
 }
