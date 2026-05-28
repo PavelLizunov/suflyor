@@ -24,7 +24,7 @@
 // panels. Day 2 stub (the original two cross-window toggles) now
 // lives inside tab 0 (Stealth).
 
-import { Button, LineEdit, ScrollView, SpinBox, ComboBox, Slider } from "std-widgets.slint";
+import { Button, LineEdit, ScrollView, SpinBox, ComboBox, Slider, TextEdit } from "std-widgets.slint";
 
 // Phase E6 v24 — custom checkbox. Slint's std-widgets CheckBox renders
 // the label of an UNCHECKED box in a dim palette colour that's nearly
@@ -142,6 +142,10 @@ export component SettingsWindow inherits Window {
     in-out property <string> profile-io-result: "";
     callback export-profile-clicked();
     callback import-profile-clicked();
+    // Phase E6 v29 — meeting-context editor (Profile+context tab).
+    in-out property <string> meeting-context-input: "";
+    in-out property <string> meeting-context-result: "";
+    callback meeting-context-save(string);
 
     // Phase E6 v26 — rounded root. clip:true so the square-cornered
     // sidebar + content get masked to the 12px radius. Border + bg
@@ -540,37 +544,51 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 9 : VerticalLayout {
                         spacing: 8px;
                         Text {
-                            text: @tr("Embedded knowledge base (1,696 entries: ~53 snippets + 1,643 KB entries across glossary/commands/patterns).");
+                            text: @tr("Embedded knowledge base — 1,696 entries (glossary / commands / patterns), compiled into the binary.");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
                         }
-                        LineEdit { placeholder-text: @tr("Search the KB..."); }
+                        // Phase E6 v29 — the in-Settings search box was a
+                        // dead stub. KB search lives in the F4 palette
+                        // (fully wired). Point the user there instead of
+                        // shipping a non-functional second search box.
+                        Text {
+                            text: @tr("Press F4 anywhere to search the knowledge base and spawn a tile from any entry.");
+                            font-size: 11px;
+                            color: #6cf;
+                            wrap: word-wrap;
+                        }
                     }
                     if root.active-tab == 10 : VerticalLayout {
                         spacing: 8px;
                         Text {
-                            text: @tr("Persistent context shared with every AI request — your role, focus areas, vocabulary. Up to 8 KB.");
+                            text: @tr("Persistent context sent with every AI request — your role, focus areas, vocabulary. Saved to config; applied to new AI calls immediately.");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
                         }
-                        Rectangle {
-                            background: #0d0f15;
-                            border-color: #2a2c3a;
-                            border-width: 1px;
-                            border-radius: 4px;
-                            height: 120px;
-                            Text {
-                                text: @tr("(profile text — multi-line input editor)");
-                                color: #666;
-                                font-size: 11px;
-                            }
+                        // Phase E6 v29 — real multi-line editor wired to
+                        // cfg.meeting_context (was a dead placeholder box).
+                        TextEdit {
+                            text <=> root.meeting-context-input;
+                            wrap: word-wrap;
+                            height: 220px;
+                            placeholder-text: @tr("e.g. I'm a Senior SRE interviewing for a platform role. Answer concisely, prefer Kubernetes/AWS examples, Russian output.");
                         }
                         HorizontalLayout {
                             spacing: 8px;
-                            Button { text: @tr("Import"); }
-                            Button { text: @tr("Export"); }
+                            alignment: start;
+                            Button {
+                                text: @tr("Save context");
+                                clicked => { root.meeting-context-save(root.meeting-context-input); }
+                            }
+                            if root.meeting-context-result != "" : Text {
+                                text: root.meeting-context-result;
+                                font-size: 11px;
+                                color: #6cf;
+                                vertical-alignment: center;
+                            }
                         }
                     }
                     if root.active-tab == 11 : VerticalLayout {

@@ -2469,6 +2469,8 @@ fn open_settings(
         }
     }
     populate_token_status(&win, cfg);
+    // Phase E6 v29 — load meeting_context into the Profile+context editor.
+    win.set_meeting_context_input(SharedString::from(cfg.read().meeting_context.clone()));
 
     // Phase E6 v23 — populate the Audio tab's mic dropdown from real
     // WASAPI capture endpoints + select the saved device. User: "Audio
@@ -2806,6 +2808,34 @@ fn open_settings(
                 },
             };
             w.set_profile_io_result(SharedString::from(msg));
+        });
+    }
+
+    // Phase E6 v29 — meeting-context (Profile) save. Writes to
+    // cfg.meeting_context + persists; new AI calls read it from cfg
+    // so it applies immediately (no restart needed for this field).
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_meeting_context_save(move |text| {
+            {
+                let mut c = cfg_c.write();
+                c.meeting_context = text.to_string();
+                if let Err(e) = overlay_backend::config::save(&c) {
+                    eprintln!("[overlay-host] meeting_context save failed: {e:#}");
+                    if let Some(w) = weak.upgrade() {
+                        w.set_meeting_context_result(SharedString::from("[err] save failed"));
+                    }
+                    return;
+                }
+            }
+            let chars = text.chars().count();
+            eprintln!("[overlay-host] meeting_context saved ({chars} chars)");
+            if let Some(w) = weak.upgrade() {
+                w.set_meeting_context_result(SharedString::from(format!(
+                    "[ok] saved ({chars} chars)"
+                )));
+            }
         });
     }
 
