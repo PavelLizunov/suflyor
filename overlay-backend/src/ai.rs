@@ -73,6 +73,40 @@ pub fn stream_chat(
     rx
 }
 
+/// Phase E6 v27 — lightweight connection test for the Settings "AI
+/// bridge" tab. POSTs a 1-token completion to `{base_url}/chat/
+/// completions` with the bearer; returns a short status string on
+/// HTTP 2xx, or an error with the status + body snippet. 10s timeout
+/// so a dead endpoint doesn't hang the UI thread (caller runs this
+/// off-thread anyway). Does NOT log the URL or bearer (secrets).
+pub async fn test_connection(base_url: String, bearer: String, model: String) -> Result<String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .context("build reqwest client")?;
+    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+    let body = json!({
+        "model": model,
+        "messages": [{ "role": "user", "content": "ping" }],
+        "max_tokens": 1,
+    });
+    let resp = client
+        .post(&url)
+        .bearer_auth(&bearer)
+        .json(&body)
+        .send()
+        .await
+        .context("POST chat/completions")?;
+    let status = resp.status();
+    if status.is_success() {
+        Ok(format!("HTTP {}", status.as_u16()))
+    } else {
+        let txt = resp.text().await.unwrap_or_default();
+        let snippet: String = txt.chars().take(100).collect();
+        Err(anyhow!("HTTP {} — {}", status.as_u16(), snippet))
+    }
+}
+
 async fn stream_inner(
     base_url: String,
     bearer: String,

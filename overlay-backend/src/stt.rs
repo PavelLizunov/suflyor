@@ -13,6 +13,34 @@ use std::io::Write;
 use tokio::sync::mpsc;
 
 const GROQ_STT_URL: &str = "https://api.groq.com/openai/v1/audio/transcriptions";
+/// Models-list endpoint — used by `test_connection` to validate the
+/// Groq API key without uploading audio.
+const GROQ_MODELS_URL: &str = "https://api.groq.com/openai/v1/models";
+
+/// Phase E6 v27 — connection test for the Settings "STT" tab. GETs the
+/// Groq models list with the bearer; HTTP 2xx means the key is valid +
+/// the endpoint is reachable. 10s timeout. Does NOT log the key.
+pub async fn test_connection(api_key: String) -> Result<String> {
+    if api_key.trim().is_empty() {
+        return Err(anyhow::anyhow!("no Groq API key set"));
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .context("build reqwest client")?;
+    let resp = client
+        .get(GROQ_MODELS_URL)
+        .bearer_auth(&api_key)
+        .send()
+        .await
+        .context("GET groq models")?;
+    let status = resp.status();
+    if status.is_success() {
+        Ok(format!("HTTP {} — key valid", status.as_u16()))
+    } else {
+        Err(anyhow::anyhow!("HTTP {} — check key", status.as_u16()))
+    }
+}
 /// Fallback Groq model id if config doesn't specify one. Both "whisper-large-v3"
 /// (most accurate) and "whisper-large-v3-turbo" (~3× faster) are valid.
 const DEFAULT_GROQ_MODEL: &str = "whisper-large-v3";

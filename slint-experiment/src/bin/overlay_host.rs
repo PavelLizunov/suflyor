@@ -2671,6 +2671,77 @@ fn open_settings(
         });
     }
 
+    // Phase E6 v27 — AI bridge connection test. Off-thread (local
+    // current-thread tokio runtime) so the blocking HTTP round-trip
+    // doesn't freeze the UI; result posted back via invoke_from_
+    // event_loop. ASCII status prefixes (no ✓/✗ missing-glyphs).
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_ai_bridge_test_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            w.set_ai_bridge_test_result(SharedString::from("testing…"));
+            let (base_url, bearer, model) = {
+                let c = cfg_c.read();
+                (
+                    c.ai_base_url.clone(),
+                    c.ai_bearer.clone(),
+                    c.ai_model.clone(),
+                )
+            };
+            let weak_res = w.as_weak();
+            std::thread::spawn(move || {
+                let msg = match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(rt) => match rt.block_on(overlay_backend::ai::test_connection(
+                        base_url, bearer, model,
+                    )) {
+                        Ok(s) => format!("[ok] {s}"),
+                        Err(e) => format!("[err] {e:#}").chars().take(90).collect(),
+                    },
+                    Err(e) => format!("[err] runtime: {e}"),
+                };
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = weak_res.upgrade() {
+                        w.set_ai_bridge_test_result(SharedString::from(msg));
+                    }
+                });
+            });
+        });
+    }
+
+    // Phase E6 v27 — STT (Groq) connection test. Same off-thread
+    // pattern; hits the Groq /models endpoint with the saved key.
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_stt_test_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            w.set_stt_test_result(SharedString::from("testing…"));
+            let api_key = cfg_c.read().groq_api_key.clone();
+            let weak_res = w.as_weak();
+            std::thread::spawn(move || {
+                let msg = match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(rt) => match rt.block_on(overlay_backend::stt::test_connection(api_key)) {
+                        Ok(s) => format!("[ok] {s}"),
+                        Err(e) => format!("[err] {e:#}").chars().take(90).collect(),
+                    },
+                    Err(e) => format!("[err] runtime: {e}"),
+                };
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = weak_res.upgrade() {
+                        w.set_stt_test_result(SharedString::from(msg));
+                    }
+                });
+            });
+        });
+    }
+
     // Phase E6 v25 — frameless Settings drag (cursor-delta, same as
     // bar + tiles). The "Settings" sidebar header is the handle.
     {

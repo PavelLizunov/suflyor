@@ -133,6 +133,11 @@ export component SettingsWindow inherits Window {
     callback groq-api-key-save(string);
     callback ai-base-url-save(string);
     callback ai-model-save(string);
+    // Phase E6 v27 — connection test buttons (AI bridge + STT).
+    in-out property <string> ai-bridge-test-result: "";
+    in-out property <string> stt-test-result: "";
+    callback ai-bridge-test-clicked();
+    callback stt-test-clicked();
 
     // Phase E6 v26 — rounded root. clip:true so the square-cornered
     // sidebar + content get masked to the 12px radius. Border + bg
@@ -609,6 +614,23 @@ export component SettingsWindow inherits Window {
                             }
                         }
 
+                        Rectangle { background: #2a2c3a; height: 1px; }
+
+                        // ----- Connection test (Phase E6 v27) -----
+                        HorizontalLayout {
+                            spacing: 6px;
+                            Button {
+                                text: @tr("Test AI bridge connection");
+                                clicked => { root.ai-bridge-test-clicked(); }
+                            }
+                            if root.ai-bridge-test-result != "" : Text {
+                                text: root.ai-bridge-test-result;
+                                font-size: 11px;
+                                color: #6cf;
+                                vertical-alignment: center;
+                            }
+                        }
+
                         Text {
                             text: @tr("Tip: Save writes to %APPDATA%\\overlay-mvp\\config.json. Restart binary to re-load.");
                             font-size: 10px;
@@ -645,6 +667,23 @@ export component SettingsWindow inherits Window {
                                     root.groq-api-key-save(root.groq-api-key-input);
                                     root.groq-api-key-input = "";
                                 }
+                            }
+                        }
+
+                        Rectangle { background: #2a2c3a; height: 1px; }
+
+                        // ----- Connection test (Phase E6 v27) -----
+                        HorizontalLayout {
+                            spacing: 6px;
+                            Button {
+                                text: @tr("Test STT (Groq) connection");
+                                clicked => { root.stt-test-clicked(); }
+                            }
+                            if root.stt-test-result != "" : Text {
+                                text: root.stt-test-result;
+                                font-size: 11px;
+                                color: #6cf;
+                                vertical-alignment: center;
                             }
                         }
 
