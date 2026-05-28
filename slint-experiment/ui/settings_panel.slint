@@ -73,6 +73,63 @@ component DarkCheck inherits Rectangle {
     }
 }
 
+// Phase E6 v39 — grouped sidebar, cherry-picked from the Claude Design
+// bundle (claude.ai/design handoff). Borrows the STRUCTURE — section
+// headers + an active left-accent bar — while keeping the app's cyan
+// accent (#6cf, same as the bar grip) for visual continuity. Each
+// NavItem maps to its EXISTING pane index, so the content panes and the
+// Rust `tab-selected` wiring stay untouched (low-risk increment).
+component NavGroupHeader inherits Rectangle {
+    in property <string> label;
+    height: 22px;
+    HorizontalLayout {
+        padding-left: 9px;
+        padding-top: 8px;
+        Text {
+            text: root.label;
+            font-size: 10px;
+            font-weight: 700;
+            color: #6b6b76;
+            vertical-alignment: bottom;
+        }
+    }
+}
+
+component NavItem inherits Rectangle {
+    in property <string> label;
+    in property <int> tab-index;
+    in property <bool> active: false;
+    callback chosen(int);
+    height: 26px;
+    border-radius: 4px;
+    background: root.active
+        ? #6cf.with-alpha(0.13)
+        : (ta.has-hover ? #1f2230 : transparent);
+    animate background { duration: 120ms; }
+    // active left-accent bar
+    if root.active: Rectangle {
+        x: 0px;
+        y: 6px;
+        width: 3px;
+        height: parent.height - 12px;
+        border-radius: 2px;
+        background: #6cf;
+    }
+    HorizontalLayout {
+        padding-left: 11px;
+        Text {
+            text: root.label;
+            font-size: 12px;
+            color: root.active ? #6cf : #c8c8cc;
+            vertical-alignment: center;
+            animate color { duration: 120ms; }
+        }
+    }
+    ta := TouchArea {
+        clicked => { root.chosen(root.tab-index); }
+    }
+}
+
 export component SettingsWindow inherits Window {
     title: @tr("overlay-mvp settings (Slint)");
     // Phase E6 v25 — frameless. User: "хедер, он нам разве нужен?".
@@ -82,7 +139,10 @@ export component SettingsWindow inherits Window {
     // "X Close" button.
     no-frame: true;
     preferred-width: 720px;
-    preferred-height: 480px;
+    // Phase E6 v39 — taller (480→560) to fit the grouped sidebar
+    // (3 section headers + 13 items) borrowed from the design bundle
+    // without clipping the bottom-pinned Close button.
+    preferred-height: 560px;
     min-width: 480px;
     min-height: 320px;
     // Phase E6 v26 — transparent window so the inner rounded Rectangle's
@@ -217,41 +277,80 @@ export component SettingsWindow inherits Window {
                 }
                 Rectangle { background: #2a2c3a; height: 1px; }
 
-                // Tab labels — emoji prefixes preserved as identity (not translated),
-                // text suffix wrapped in @tr() so gettext picks up the translatable part.
-                for entry[i] in [
-                    @tr("🎯 Stealth"),
-                    @tr("🎯 Coaching"),
-                    @tr("⌨ Hotkeys"),
-                    @tr("🌐 Interface"),
-                    @tr("⬆ Updates"),
-                    @tr("📊 Stats"),
-                    @tr("🎤 Audio"),
-                    @tr("🪟 Auto-tiles"),
-                    @tr("✂ Snippets"),
-                    @tr("📚 Knowledge base"),
-                    @tr("👤 Profile + context"),
-                    @tr("🧠 AI bridge"),
-                    @tr("🗣 STT"),
-                ] : Rectangle {
-                    height: 28px;
-                    background: i == root.active-tab ? #2a2c3a : transparent;
-                    border-radius: 4px;
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        Text {
-                            text: entry;
-                            font-size: 12px;
-                            color: i == root.active-tab ? #6cf : #c8c8cc;
-                            vertical-alignment: center;
-                        }
-                    }
-                    TouchArea {
-                        clicked => {
-                            root.active-tab = i;
-                            root.tab-selected(i);
-                        }
-                    }
+                // Phase E6 v39 — grouped nav (borrowed from design bundle).
+                // Each item keeps its ORIGINAL pane index (0-12) so the
+                // content panes + tab-selected wiring are untouched; only
+                // the visual order + section grouping changes. Labels
+                // reuse the existing emoji+text @tr msgids verbatim.
+                NavGroupHeader { label: @tr("SESSION"); }
+                NavItem {
+                    label: @tr("👤 Profile + context"); tab-index: 10;
+                    active: root.active-tab == 10;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
+                }
+                NavItem {
+                    label: @tr("🎤 Audio"); tab-index: 6;
+                    active: root.active-tab == 6;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
+                }
+                NavItem {
+                    label: @tr("🗣 STT"); tab-index: 12;
+                    active: root.active-tab == 12;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
+                }
+
+                NavGroupHeader { label: "AI"; }
+                NavItem {
+                    label: @tr("🧠 AI bridge"); tab-index: 11;
+                    active: root.active-tab == 11;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
+                }
+                NavItem {
+                    label: @tr("🪟 Auto-tiles"); tab-index: 7;
+                    active: root.active-tab == 7;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
+                }
+                NavItem {
+                    label: @tr("✂ Snippets"); tab-index: 8;
+                    active: root.active-tab == 8;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
+                }
+                NavItem {
+                    label: @tr("📚 Knowledge base"); tab-index: 9;
+                    active: root.active-tab == 9;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
+                }
+                NavItem {
+                    label: @tr("🎯 Coaching"); tab-index: 1;
+                    active: root.active-tab == 1;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
+                }
+
+                NavGroupHeader { label: @tr("APP"); }
+                NavItem {
+                    label: @tr("🌐 Interface"); tab-index: 3;
+                    active: root.active-tab == 3;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
+                }
+                NavItem {
+                    label: @tr("⌨ Hotkeys"); tab-index: 2;
+                    active: root.active-tab == 2;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
+                }
+                NavItem {
+                    label: @tr("🎯 Stealth"); tab-index: 0;
+                    active: root.active-tab == 0;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
+                }
+                NavItem {
+                    label: @tr("📊 Stats"); tab-index: 5;
+                    active: root.active-tab == 5;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
+                }
+                NavItem {
+                    label: @tr("⬆ Updates"); tab-index: 4;
+                    active: root.active-tab == 4;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
 
                 Rectangle { vertical-stretch: 1; }

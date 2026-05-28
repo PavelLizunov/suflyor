@@ -95,6 +95,14 @@ msgstr "Настройки"
 msgid "X  Close"
 msgstr "X  Закрыть"
 
+# --- Sidebar group headers (Phase E6 v39 grouped nav) ---
+
+msgid "SESSION"
+msgstr "СЕССИЯ"
+
+msgid "APP"
+msgstr "ПРИЛОЖЕНИЕ"
+
 # --- Sidebar tab labels (emoji prefixes preserved) ---
 
 msgid "🎯 Stealth"
