@@ -7,8 +7,9 @@
 #   stdin: JSON like {"tool_input":{"command":"git commit -m foo"}}
 #   exit 0 -> allow the Bash tool to run
 #   exit 2 -> block with stderr shown to operator
-#   git commit -> cargo fmt --check + cargo clippy --all-targets -D warnings
-#   git push   -> above + cargo test --lib + cargo test --test copy_contract + npx tsc --noEmit
+#   git commit/push -> for slint-experiment + overlay-backend:
+#     cargo fmt --check + cargo clippy --all-targets -D warnings + test --lib
+#   (Phase 7 cut: src-tauri/React gates + npx tsc removed with the stack.)
 #   --no-verify in command -> bypass with WARN
 #   Not git commit/push -> instant exit 0 (zero overhead)
 #   cargo missing -> exit 0 + WARN (don't brick commits in transient envs)
@@ -52,13 +53,15 @@ if ($cmd -match '--no-verify') {
 }
 
 # --- Locate project root + cargo --------------------------------------
+# Phase 7 cut: root marker is now overlay-backend/Cargo.toml (src-tauri
+# was the marker before the React/Tauri stack was removed).
 $projectRoot = $PSScriptRoot
-while ($projectRoot -and -not (Test-Path (Join-Path $projectRoot "src-tauri\Cargo.toml"))) {
+while ($projectRoot -and -not (Test-Path (Join-Path $projectRoot "overlay-backend\Cargo.toml"))) {
     $parent = Split-Path -Parent $projectRoot
     if ($parent -eq $projectRoot) { break }
     $projectRoot = $parent
 }
-if (-not (Test-Path (Join-Path $projectRoot "src-tauri\Cargo.toml"))) {
+if (-not (Test-Path (Join-Path $projectRoot "overlay-backend\Cargo.toml"))) {
     exit 0
 }
 
@@ -69,7 +72,6 @@ if (-not (Test-Path $cargoExe)) {
 }
 
 Set-Location $projectRoot
-$manifest = "src-tauri/Cargo.toml"
 
 # --- Run a gate command. Uses Start-Process to capture stderr cleanly
 # without the PS 5.1 `2>&1` NativeCommandError trap (see CLAUDE.md
@@ -103,9 +105,8 @@ function Invoke-Gate($name, $exe, $argsList) {
 }
 
 # --- Always (on commit + push): fmt + clippy + fast tests ------------
-# src-tauri (React/Tauri legacy stack).
-Invoke-Gate "src-tauri fmt --check"        $cargoExe @("fmt", "--manifest-path", $manifest, "--all", "--", "--check")
-Invoke-Gate "src-tauri clippy -D warnings" $cargoExe @("clippy", "--manifest-path", $manifest, "--all-targets", "--", "-D", "warnings")
+# (Phase 7 cut: the src-tauri/React legacy gates were removed with the
+# stack. The Slint binary + overlay-backend are now the whole product.)
 
 # Slint pilot crate (Phase 0+) — added 2026-05-27.
 # Phase E6 v18 update (2026-05-27 evening): move tests from push-only
@@ -133,14 +134,9 @@ if (Test-Path (Join-Path $projectRoot $backendManifest)) {
     Invoke-Gate "backend cargo test --lib"   $cargoExe @("test", "--manifest-path", $backendManifest, "--lib", "--quiet")
 }
 
-# --- Push-only: heavier checks (slow tsc + integration tests) --------
-if ($isPush) {
-    Invoke-Gate "src-tauri test --lib"            $cargoExe @("test", "--manifest-path", $manifest, "--lib", "--quiet")
-    Invoke-Gate "src-tauri test copy_contract"    $cargoExe @("test", "--manifest-path", $manifest, "--test", "copy_contract", "--quiet")
-
-    # npx is a .cmd shim — Start-Process handles it the same way.
-    Invoke-Gate "npx tsc --noEmit" "npx.cmd" @("tsc", "--noEmit")
-}
+# (Phase 7 cut: the push-only block ran src-tauri integration tests +
+# `npx tsc --noEmit` for the React stack — both removed. The slint +
+# overlay-backend suites above run on every commit AND push.)
 
 [Console]::Error.WriteLine("[git-gate] All gating layers green. Proceeding with: $cmd")
 exit 0
