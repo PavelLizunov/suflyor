@@ -2671,6 +2671,27 @@ fn open_settings(
         });
     }
 
+    // Phase E6 v25 — frameless Settings drag (cursor-delta, same as
+    // bar + tiles). The "Settings" sidebar header is the handle.
+    {
+        let weak = win.as_weak();
+        win.on_drag_start_requested(move || {
+            if let Some(w) = weak.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(w.window()) {
+                    drag_begin(hwnd);
+                }
+            }
+        });
+        let weak_move = win.as_weak();
+        win.on_drag_moved(move || {
+            if let Some(w) = weak_move.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(w.window()) {
+                    drag_update(hwnd);
+                }
+            }
+        });
+    }
+
     let weak_close = win.as_weak();
     let settings_close = settings_ref.clone();
     win.on_close_clicked(move || {

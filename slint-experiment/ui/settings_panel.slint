@@ -75,6 +75,12 @@ component DarkCheck inherits Rectangle {
 
 export component SettingsWindow inherits Window {
     title: @tr("overlay-mvp settings (Slint)");
+    // Phase E6 v25 — frameless. User: "хедер, он нам разве нужен?".
+    // Native title bar removed; drag via the "Settings" sidebar header
+    // (drag-start-requested + drag-moved → win32 cursor-delta drag,
+    // same mechanism as the overlay bar). Close via the existing
+    // "X Close" button.
+    no-frame: true;
     preferred-width: 720px;
     preferred-height: 480px;
     min-width: 480px;
@@ -117,6 +123,9 @@ export component SettingsWindow inherits Window {
     callback stealth-changed(bool);
     callback close-clicked();
     callback tab-selected(int);
+    // Phase E6 v25 — frameless window drag (cursor-delta, wired in Rust).
+    callback drag-start-requested();
+    callback drag-moved();
     callback ai-bearer-save(string);
     callback groq-api-key-save(string);
     callback ai-base-url-save(string);
@@ -137,12 +146,31 @@ export component SettingsWindow inherits Window {
                 padding: 8px;
                 spacing: 2px;
 
-                Text {
-                    text: @tr("Settings");
-                    font-size: 14px;
-                    font-weight: 700;
-                    color: #e8e8ec;
-                    horizontal-alignment: left;
+                // "Settings" header doubles as the window drag handle
+                // (frameless — no native title bar). Phase E6 v25.
+                Rectangle {
+                    height: 26px;
+                    horizontal-stretch: 1;
+                    drag-handle := TouchArea {
+                        mouse-cursor: grab;
+                        pointer-event(ev) => {
+                            if (ev.button == PointerEventButton.left
+                                && ev.kind == PointerEventKind.down) {
+                                root.drag-start-requested();
+                            }
+                        }
+                        moved => { if (self.pressed) { root.drag-moved(); } }
+                    }
+                    Text {
+                        // ":: " ASCII grip (always renders) + grab cursor
+                        // signal this header is the drag handle.
+                        text: ":: " + @tr("Settings");
+                        font-size: 14px;
+                        font-weight: 700;
+                        color: #e8e8ec;
+                        horizontal-alignment: left;
+                        vertical-alignment: center;
+                    }
                 }
                 Rectangle { background: #2a2c3a; height: 1px; }
 
