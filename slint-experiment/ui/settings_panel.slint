@@ -26,11 +26,13 @@
 
 import { Button, LineEdit, ScrollView, SpinBox, ComboBox, Slider, TextEdit } from "std-widgets.slint";
 
-// Phase E6 v24 — custom checkbox. Slint's std-widgets CheckBox renders
-// the label of an UNCHECKED box in a dim palette colour that's nearly
-// invisible on our #14161e panel ("чёрный на чёрном"). This component
-// draws the box + label ourselves with an explicit always-bright text
-// colour so both checked + unchecked states are readable.
+// Phase E6 v40 — toggle SWITCH (borrowed from the Claude Design bundle:
+// "SwitchRow вместо чекбоксов"). Was a custom square checkbox (v24, to
+// dodge the std CheckBox's near-invisible unchecked label on #14161e).
+// Now renders a pill track + sliding knob — bigger hit-target, clearer
+// on/off read. NAME kept as `DarkCheck` so all call sites + the
+// `checked`/`toggled` API stay untouched (pure visual swap). Green
+// (#2ac760) = ON, neutral grey = OFF; font-independent (no glyphs).
 component DarkCheck inherits Rectangle {
     in property <string> text;
     in-out property <bool> checked: false;
@@ -38,24 +40,26 @@ component DarkCheck inherits Rectangle {
     height: 24px;
     horizontal-stretch: 1;
     HorizontalLayout {
-        spacing: 8px;
+        spacing: 9px;
         alignment: start;
-        // The box — filled inner square when checked (NO glyph; the
-        // ✓ glyph is a missing-box on this font, same as ✕). Pure
-        // Rectangle = font-independent.
+        // Track + knob. Knob slides right & turns green when ON.
         Rectangle {
-            width: 18px;
+            width: 34px;
             height: 18px;
             y: (parent.height - self.height) / 2;
-            border-radius: 4px;
+            border-radius: 9px;
             border-width: 1px;
             border-color: root.checked ? #2ac760 : #4a4c54;
-            background: root.checked ? #2ac76033 : transparent;
+            background: root.checked ? #2ac76033 : #ffffff0f;
+            animate background, border-color { duration: 140ms; }
             Rectangle {
-                width: 10px;
-                height: 10px;
-                border-radius: 2px;
-                background: root.checked ? #2ac760 : transparent;
+                width: 12px;
+                height: 12px;
+                border-radius: 6px;
+                y: (parent.height - self.height) / 2;
+                x: root.checked ? parent.width - self.width - 3px : 3px;
+                background: root.checked ? #2ac760 : #9a9ca4;
+                animate x, background { duration: 140ms; }
             }
         }
         Text {
