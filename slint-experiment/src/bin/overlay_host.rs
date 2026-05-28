@@ -2702,6 +2702,20 @@ fn open_settings(
     });
 
     let _ = win.show();
+    // Phase E6 v26 — apply DWM per-pixel alpha so the frameless
+    // window's rounded corners composite over the desktop (otherwise
+    // the corners show black). make_transparent_tile = WS_EX_TOOLWINDOW
+    // + DWM blur-behind, NO click-through (settings needs clicks).
+    {
+        let weak = win.as_weak();
+        Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
+            if let Some(w) = weak.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(w.window()) {
+                    let _ = make_transparent_tile(hwnd);
+                }
+            }
+        });
+    }
     *settings_slot = Some(win);
 }
 

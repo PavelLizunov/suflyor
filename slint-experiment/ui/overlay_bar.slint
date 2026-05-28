@@ -210,11 +210,20 @@ export component OverlayBarWindow inherits Window {
                 HorizontalLayout {
                     padding-left: 8px;
                     padding-right: 8px;
+                    spacing: 0px;
+                    // Phase E6 v26 — ":: " grip in accent #6cf (matches
+                    // Settings header) so the drag affordance reads the
+                    // same in both windows. Status text keeps its
+                    // state colour.
                     Text {
-                        // ":: " ASCII grip affordance (always renders) +
-                        // grab cursor on hover signals this pill is the
-                        // bar drag handle.
-                        text: ":: " + root.status-text;
+                        text: "::";
+                        font-size: 11px;
+                        font-weight: 600;
+                        color: #6cf;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: " " + root.status-text;
                         font-size: 11px;
                         font-weight: 600;
                         color: root.status-color;

@@ -85,7 +85,10 @@ export component SettingsWindow inherits Window {
     preferred-height: 480px;
     min-width: 480px;
     min-height: 320px;
-    background: #14161e;
+    // Phase E6 v26 — transparent window so the inner rounded Rectangle's
+    // corners composite over the desktop (DWM per-pixel alpha applied
+    // via make_transparent_tile on show). User: "закруглить рамки".
+    background: transparent;
 
     in-out property <int> active-tab: 0;
     // Persisted cross-window toggles (driven by overlay-host).
@@ -131,7 +134,17 @@ export component SettingsWindow inherits Window {
     callback ai-base-url-save(string);
     callback ai-model-save(string);
 
-    HorizontalLayout {
+    // Phase E6 v26 — rounded root. clip:true so the square-cornered
+    // sidebar + content get masked to the 12px radius. Border + bg
+    // moved here from the Window (which is now transparent).
+    Rectangle {
+        background: #14161e;
+        border-radius: 12px;
+        border-width: 1px;
+        border-color: #2a2c3a;
+        clip: true;
+
+        HorizontalLayout {
         padding: 0px;
         spacing: 0px;
 
@@ -161,15 +174,25 @@ export component SettingsWindow inherits Window {
                         }
                         moved => { if (self.pressed) { root.drag-moved(); } }
                     }
-                    Text {
-                        // ":: " ASCII grip (always renders) + grab cursor
-                        // signal this header is the drag handle.
-                        text: ":: " + @tr("Settings");
-                        font-size: 14px;
-                        font-weight: 700;
-                        color: #e8e8ec;
-                        horizontal-alignment: left;
-                        vertical-alignment: center;
+                    // Phase E6 v26 — ":: " grip in accent #6cf (same as
+                    // overlay bar) for visual continuity; label neutral.
+                    HorizontalLayout {
+                        spacing: 0px;
+                        alignment: start;
+                        Text {
+                            text: "::";
+                            font-size: 14px;
+                            font-weight: 700;
+                            color: #6cf;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: " " + @tr("Settings");
+                            font-size: 14px;
+                            font-weight: 700;
+                            color: #e8e8ec;
+                            vertical-alignment: center;
+                        }
                     }
                 }
                 Rectangle { background: #2a2c3a; height: 1px; }
@@ -642,7 +665,8 @@ export component SettingsWindow inherits Window {
                 }
             }
         }
-    }
+        } // HorizontalLayout
+    } // rounded root Rectangle
 
     pure function tab-name-for(idx: int) -> string {
         return idx == 0 ? @tr("Stealth") :
