@@ -204,8 +204,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // current dir's parent when running via `cargo run` from
     // slint-experiment/, so try both relative paths.
     let candidates = [
-        "../src-tauri/knowledge/glossary.md",
-        "src-tauri/knowledge/glossary.md",
+        "../overlay-backend/knowledge/glossary.md",
+        "overlay-backend/knowledge/glossary.md",
     ];
     let (path, raw) = candidates
         .iter()

@@ -1,7 +1,7 @@
 //! Knowledge Base — embedded markdown reference loaded on first access.
 //!
-//! Files in `src-tauri/knowledge/*.md` are pulled into the binary at compile
-//! time via `include_str!`. Each file is split on `\n## ` headings into
+//! Files in `overlay-backend/knowledge/*.md` are pulled into the binary at
+//! compile time via `include_str!`. Each file is split on `\n## ` headings into
 //! `KBEntry`s. A small in-memory inverted index makes case-insensitive
 //! substring search fast enough to call on every keystroke (<5ms for
 //! ~2000 entries).

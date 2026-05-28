@@ -1,19 +1,15 @@
-# overlay-mvp local CI runner — layers 1, 2, 3 of the methodology.
-# Mirrors what vpnctl's `just ci` does. Run BEFORE every commit.
+# overlay-mvp local CI runner — fmt + clippy + tests for both crates.
+# Run BEFORE every commit (the .claude/hooks/git-gate.ps1 hook runs the
+# same checks automatically on commit/push).
 #
-# Layers covered:
-#   1. cargo clippy --all-targets -- -D warnings
-#   2. cargo test --lib  (Rust unit + integration)
-#   3. cargo test --test copy_contract  (canonical strings)
-#      AND  npx tsc --noEmit               (TypeScript correctness)
+# Covered: cargo fmt --check, clippy --all-targets -D warnings, test --lib
+#   for slint-experiment AND overlay-backend.
 #
-# What this script does NOT do (separate scripts):
-#   4. review-agent — manual Agent call, see docs/REVIEW_AGENT_PROMPT.md
-#   5. live install + smoke — scripts/visual_check.ps1
-#   6. visual gate — Claude reads scripts/visual_check.ps1's PNG output
+# Not covered here (do manually): review-agent pass
+# (docs/REVIEW_AGENT_PROMPT.md) + a live smoke run of the overlay.
 #
-# Exit code: 0 = green, non-zero = first failing layer.
-# Run from project root:  pwsh scripts/ci.ps1
+# Exit code: 0 = green, non-zero = first failing step.
+# Run from project root:  powershell scripts/ci.ps1
 
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
