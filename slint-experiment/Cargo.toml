@@ -97,6 +97,11 @@ pulldown-cmark = { version = "0.13", default-features = false, features = ["html
 # event channel that UI code can poll from a Slint Timer.
 global-hotkey = "0.6"
 
+# Phase E6 v28 — native file dialogs for Settings import/export.
+# rfd (PolyMeilex) wraps the OS-native picker (IFileDialog on Windows);
+# no GTK on Windows. Used only by the Settings Export/Import buttons.
+rfd = { version = "0.15", default-features = false }
+
 # Phase B1 — overlay-backend Tauri-free crate. Holds the 7 modules
 # (audio/stt/ai/journal/kb/screenshot/config) + health.rs. Both
 # src-tauri (legacy) and this crate consume them.

@@ -1468,6 +1468,27 @@ pub fn save(cfg: &Config) -> Result<()> {
     Ok(())
 }
 
+/// Phase E6 v28 — export the full config (INCLUDING ai_bearer +
+/// groq_api_key) to an arbitrary path the user picks. Pretty JSON so
+/// it's human-editable. The caller is responsible for warning that
+/// the file contains secrets.
+pub fn export_to(path: &std::path::Path, cfg: &Config) -> Result<()> {
+    let bytes = serde_json::to_vec_pretty(cfg).context("serialize config")?;
+    std::fs::write(path, bytes).context("write export")?;
+    Ok(())
+}
+
+/// Phase E6 v28 — import a config from an arbitrary path, validate by
+/// deserializing into `Config` (unknown fields ignored, missing fields
+/// filled by serde defaults), then persist to the canonical location.
+/// Returns the imported Config so the caller can re-apply live state.
+pub fn import_from(path: &std::path::Path) -> Result<Config> {
+    let bytes = std::fs::read(path).context("read import file")?;
+    let cfg: Config = serde_json::from_slice(&bytes).context("parse import JSON")?;
+    save(&cfg).context("persist imported config")?;
+    Ok(cfg)
+}
+
 /// Global, thread-safe handle.
 pub type SharedConfig = Arc<RwLock<Config>>;
 

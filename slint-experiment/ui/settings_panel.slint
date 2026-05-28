@@ -138,6 +138,10 @@ export component SettingsWindow inherits Window {
     in-out property <string> stt-test-result: "";
     callback ai-bridge-test-clicked();
     callback stt-test-clicked();
+    // Phase E6 v28 — full-profile import/export (incl. API keys).
+    in-out property <string> profile-io-result: "";
+    callback export-profile-clicked();
+    callback import-profile-clicked();
 
     // Phase E6 v26 — rounded root. clip:true so the square-cornered
     // sidebar + content get masked to the 12px radius. Border + bg
@@ -405,6 +409,39 @@ export component SettingsWindow inherits Window {
                             text: @tr("Version: 0.2.0-slint-pre (slint-experiment branch)");
                             font-size: 10px;
                             color: #666;
+                        }
+
+                        Rectangle { background: #2a2c3a; height: 1px; }
+
+                        // Phase E6 v28 — full-profile import/export.
+                        Text {
+                            text: @tr("Backup / transfer settings");
+                            font-size: 12px;
+                            font-weight: 700;
+                            color: #e8e8ec;
+                        }
+                        Text {
+                            text: @tr("Exports the WHOLE config to a .json file you choose — INCLUDING the Claude bearer + Groq API key. Keep the file private. Import overwrites current settings (restart to apply).");
+                            font-size: 10px;
+                            color: #e5b44b;
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            spacing: 6px;
+                            Button {
+                                text: @tr("Export settings (incl. keys)…");
+                                clicked => { root.export-profile-clicked(); }
+                            }
+                            Button {
+                                text: @tr("Import settings…");
+                                clicked => { root.import-profile-clicked(); }
+                            }
+                        }
+                        if root.profile-io-result != "" : Text {
+                            text: root.profile-io-result;
+                            font-size: 11px;
+                            color: #6cf;
+                            wrap: word-wrap;
                         }
                     }
                     if root.active-tab == 5 : VerticalLayout {

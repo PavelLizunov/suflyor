@@ -2517,16 +2517,29 @@ fn open_settings(
                 let msg = match result {
                     Ok(samples) if samples.is_empty() => "no audio captured".to_string(),
                     Ok(samples) => {
-                        let peak = samples
+                        // Phase E6 v28 — use RMS (average energy) not just
+                        // peak, + a dBFS threshold. User: "я могу ничего
+                        // не говорить, но всё равно будет OK" — the old
+                        // peak==0 check passed on any tiny noise. Real
+                        // speech RMS is > -40 dBFS; a silent room is
+                        // < -55 dBFS. Threshold at -45 dBFS.
+                        let sum_sq: f64 = samples
                             .iter()
-                            .map(|s| s.unsigned_abs() as u32)
-                            .max()
-                            .unwrap_or(0);
-                        if peak == 0 {
-                            "silent (-inf dBFS) — check mic".to_string()
+                            .map(|s| {
+                                let v = f64::from(*s) / 32768.0;
+                                v * v
+                            })
+                            .sum();
+                        let rms = (sum_sq / samples.len() as f64).sqrt();
+                        let dbfs = if rms <= 0.0 {
+                            f64::NEG_INFINITY
                         } else {
-                            let dbfs = 20.0 * (peak as f32 / 32768.0).log10();
-                            format!("OK — peak {dbfs:.1} dBFS")
+                            20.0 * rms.log10()
+                        };
+                        if dbfs < -45.0 {
+                            format!("[!] too quiet ({dbfs:.0} dBFS) — say something / check mic")
+                        } else {
+                            format!("[ok] heard you ({dbfs:.0} dBFS RMS)")
                         }
                     }
                     Err(e) => format!("error: {e}"),
@@ -2742,6 +2755,60 @@ fn open_settings(
         });
     }
 
+    // Phase E6 v28 — full-profile export (incl. keys). Native save
+    // dialog via rfd; writes the whole config.json to the chosen path.
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_export_profile_clicked(move || {
+            let snapshot = cfg_c.read().clone();
+            let picked = rfd::FileDialog::new()
+                .set_title("Export overlay-mvp settings (contains API keys)")
+                .set_file_name("suflyor-settings.json")
+                .add_filter("JSON", &["json"])
+                .save_file();
+            let Some(w) = weak.upgrade() else { return };
+            let msg = match picked {
+                None => "export cancelled".to_string(),
+                Some(path) => match overlay_backend::config::export_to(&path, &snapshot) {
+                    Ok(()) => format!("[ok] exported to {}", path.display()),
+                    Err(e) => format!("[err] {e:#}"),
+                },
+            };
+            w.set_profile_io_result(SharedString::from(msg));
+        });
+    }
+
+    // Phase E6 v28 — full-profile import. Native open dialog; loads +
+    // persists the config, then re-syncs the token-status display.
+    // Live re-apply of every field would need a broader refresh, so
+    // we tell the user to restart for full effect.
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_import_profile_clicked(move || {
+            let picked = rfd::FileDialog::new()
+                .set_title("Import overlay-mvp settings")
+                .add_filter("JSON", &["json"])
+                .pick_file();
+            let Some(w) = weak.upgrade() else { return };
+            let msg = match picked {
+                None => "import cancelled".to_string(),
+                Some(path) => match overlay_backend::config::import_from(&path) {
+                    Ok(imported) => {
+                        // Push the freshly-loaded values into the shared
+                        // config so the running session sees them, then
+                        // refresh the token-status display.
+                        *cfg_c.write() = imported;
+                        msg_refresh_after_import(&w, &cfg_c)
+                    }
+                    Err(e) => format!("[err] {e:#}"),
+                },
+            };
+            w.set_profile_io_result(SharedString::from(msg));
+        });
+    }
+
     // Phase E6 v25 — frameless Settings drag (cursor-delta, same as
     // bar + tiles). The "Settings" sidebar header is the handle.
     {
@@ -2788,6 +2855,17 @@ fn open_settings(
         });
     }
     *settings_slot = Some(win);
+}
+
+/// Phase E6 v28 — after a profile import, refresh the token-status +
+/// mic-opacity display so the user sees the new values, and return a
+/// confirmation string for the result line.
+fn msg_refresh_after_import(
+    win: &SettingsWindow,
+    cfg: &overlay_backend::config::SharedConfig,
+) -> String {
+    populate_token_status(win, cfg);
+    "[ok] imported — restart binary for full effect".to_string()
 }
 
 /// Populate the Settings window's token-status display properties
