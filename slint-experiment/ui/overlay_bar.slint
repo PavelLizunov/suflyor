@@ -143,6 +143,15 @@ component RecordBtn inherits Rectangle {
     }
 }
 
+// Phase E6 v44 — thin vertical separator between chip groups. Fixed
+// height (Slint forbids `parent.*` inside a component body); the
+// HorizontalLayout centres it on the cross axis.
+component VDivider inherits Rectangle {
+    width: 1px;
+    height: 16px;
+    background: #3a3c44;
+}
+
 // ===== Main overlay bar =====
 
 export component OverlayBarWindow inherits Window {
@@ -157,11 +166,12 @@ export component OverlayBarWindow inherits Window {
     // Phase E6 v38 — widened 980 → 1140: the Russian chip labels
     // (подсказки / закладка / скрытность / настройки / выход) are wider
     // than the English originals and were clipping the rightmost chip.
-    // Phase E6 v42 — widened 1140 → 1320 for the two push-to-record
-    // buttons (🎤 спросить / 🔊 захватить).
-    preferred-width: 1320px;
+    // Phase E6 v44 — narrowed 1320 → 1000: the grouped layout makes the
+    // capture toggles + quick actions icon-only, so the row is far more
+    // compact (icons + 3 short labels instead of 15 text chips).
+    preferred-width: 1000px;
     preferred-height: 86px;
-    min-width: 820px;
+    min-width: 720px;
 
     // Status pill text (idle / recording / etc).
     in-out property <string> status-text: "idle";
@@ -303,45 +313,50 @@ export component OverlayBarWindow inherits Window {
                 }
             }
 
-            // Live capture chips
+            // Phase E6 v44 — grouped, scannable layout (user: "слишком
+            // много надписей в ряд"). Groups separated by VDividers:
+            // [state] · [capture toggles] · [push-to-ask] · [session info]
+            // · [quick actions] · →spring→ · [primary + system]. Toggles
+            // and secondary actions are ICON-ONLY; the push-to-record
+            // buttons keep words (the key feature) with a colour-coded
+            // record dot (green=mic, cyan=sys).
+
+            // ── Capture toggles (continuous mic / sys) — icon-only + dot ──
             LiveChip {
-                label: @tr("🎤 mic");
+                label: "🎤";
                 active: root.mic-active;
                 accent: #34d399;
                 clicked => { root.mic-toggle-clicked(); }
             }
+            LiveChip {
+                label: "🔊";
+                active: root.sys-active;
+                accent: #6cf;
+                clicked => { root.sys-toggle-clicked(); }
+            }
 
-            // Phase E6 v42 — push-to-record buttons (hold to ask). Distinct
-            // from the mic/sys capture toggles above: these record a one-off
-            // question while held → STT → AI answer tile. mic=green (your
-            // voice), sys=cyan (interviewer), red while recording.
+            VDivider { }
+
+            // ── Push-to-record (hold to ask) — labelled; dot colour marks
+            //    the source: green = mic (your voice), cyan = sys (them).
             RecordBtn {
-                label: @tr("🎤 ask");
+                label: @tr("ask");
                 accent: #34d399;
                 recording: root.mic-recording;
                 pressed => { root.ptt-mic-pressed(); }
                 released => { root.ptt-mic-released(); }
             }
             RecordBtn {
-                label: @tr("🔊 grab");
+                label: @tr("grab");
                 accent: #6cf;
                 recording: root.sys-recording;
                 pressed => { root.ptt-sys-pressed(); }
                 released => { root.ptt-sys-released(); }
             }
 
-            LiveChip {
-                label: @tr("🗣 sys");
-                active: root.sys-active;
-                accent: #6cf;
-                clicked => { root.sys-toggle-clicked(); }
-            }
+            VDivider { }
 
-            // Session timer — Phase E6 v12: label hints at what the
-            // click does. User feedback: "нажать на часики не очень
-            // очевидно" — the bare "⏱ 00:00" gave no hint that
-            // clicking starts a session. Now shows "▶ start" when
-            // idle, "⏸ MM:SS" when recording.
+            // ── Session info (timer / model / cost) ──
             Chip {
                 label: root.timer-active
                     ? @tr("⏸ {}", root.timer-label)
@@ -350,72 +365,60 @@ export component OverlayBarWindow inherits Window {
                 accent: #fbbf24;
                 clicked => { root.timer-toggle-clicked(); }
             }
-
-            // AI model selector
             Chip {
                 label: @tr("🧠 {}", root.ai-model);
                 accent: #818cf8;
                 clicked => { root.ai-model-cycle-clicked(); }
             }
-
-            // Cost display (always shown)
             Chip {
                 label: root.cost-label;
                 accent: #f59e0b;
                 clicked => { /* no-op for now */ }
             }
 
-            // AI tips / followups
+            VDivider { }
+
+            // ── Quick actions — icon-only (tips / bookmark / stealth / auto)
             Chip {
-                label: @tr("💡 tips");
+                label: "💡";
                 accent: #fde68a;
                 clicked => { root.tips-clicked(); }
             }
-
-            // Bookmark
             Chip {
-                label: @tr("⭐ bm");
+                label: "⭐";
                 accent: #fcd34d;
                 clicked => { root.bookmark-clicked(); }
             }
-
-            // Stealth toggle (hide from screen capture)
             Chip {
-                label: @tr("🎯 stealth");
+                label: "🎯";
                 accent: #ec4899;
                 clicked => { root.stealth-toggle-clicked(); }
             }
-
-            // Aggressive auto-tile mode (every transcript line spawns)
             Chip {
-                label: root.aggressive-active ? @tr("🔥 auto-ON") : @tr("🔥 auto");
-                accent: #fb923c;
+                label: "🔥";
                 active: root.aggressive-active;
+                accent: #fb923c;
                 clicked => { root.aggressive-toggle-clicked(); }
             }
 
-            // Spring spacer
-            Rectangle { horizontal-stretch: 1; }
+            // Spring spacer — pushes the primary + system cluster right.
+            Rectangle { horizontal-stretch: 1; min-width: 12px; }
 
-            // Tile counter + spawn (F6 manual ask)
+            // ── Primary + system ──
             Chip {
                 label: @tr("+ tile ({})", root.tiles-spawned);
                 accent: #f472b6;
                 clicked => { root.spawn-tile-clicked(); }
             }
-
-            // Settings
             Chip {
-                label: @tr("⚙ settings");
+                label: "⚙";
                 accent: #94a3b8;
                 clicked => { root.open-settings-clicked(); }
             }
-
-            // Quit (ASCII X — Unicode ✕ U+2715 renders as missing glyph
-            // on some Slint+skia font fallbacks; same root cause as
-            // tile close glyph fix in cycle 7)
+            // ASCII "X" — Unicode ✕ renders as a missing-glyph box on the
+            // Slint+skia font fallback (same fix as the tile close button).
             Chip {
-                label: @tr("X quit");
+                label: "X";
                 accent: #ef4444;
                 clicked => { root.quit-clicked(); }
             }

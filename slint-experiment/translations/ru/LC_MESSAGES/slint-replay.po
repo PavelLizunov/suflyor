@@ -21,17 +21,16 @@ msgstr ""
 
 # === overlay_bar.slint ===
 
-msgid "🎤 mic"
-msgstr "🎤 микрофон"
+# Phase E6 v44 — bar redesign: capture toggles (🎤/🔊) and the quick
+# actions (💡 ⭐ 🎯 🔥 ⚙ X) became ICON-ONLY, so their text msgids were
+# removed. Only the push-to-record words + the timer/model/tile labels
+# stay translatable.
 
-msgid "🗣 sys"
-msgstr "🗣 система"
+msgid "ask"
+msgstr "спросить"
 
-msgid "🎤 ask"
-msgstr "🎤 спросить"
-
-msgid "🔊 grab"
-msgstr "🔊 захватить"
+msgid "grab"
+msgstr "захватить"
 
 msgid "⏸ {}"
 msgstr "⏸ {}"
@@ -44,27 +43,6 @@ msgstr "🧠 {}"
 
 msgid "+ tile ({})"
 msgstr "+ тайл ({})"
-
-msgid "💡 tips"
-msgstr "💡 подсказки"
-
-msgid "⭐ bm"
-msgstr "⭐ закладка"
-
-msgid "🎯 stealth"
-msgstr "🎯 скрытность"
-
-msgid "🔥 auto"
-msgstr "🔥 авто"
-
-msgid "🔥 auto-ON"
-msgstr "🔥 авто-ВКЛ"
-
-msgid "⚙ settings"
-msgstr "⚙ настройки"
-
-msgid "X quit"
-msgstr "X выход"
 
 # === tile.slint ===
 
