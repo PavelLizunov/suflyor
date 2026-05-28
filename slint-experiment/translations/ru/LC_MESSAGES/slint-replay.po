@@ -27,6 +27,12 @@ msgstr "🎤 микрофон"
 msgid "🗣 sys"
 msgstr "🗣 система"
 
+msgid "🎤 ask"
+msgstr "🎤 спросить"
+
+msgid "🔊 grab"
+msgstr "🔊 захватить"
+
 msgid "⏸ {}"
 msgstr "⏸ {}"
 

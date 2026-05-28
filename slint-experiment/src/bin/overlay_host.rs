@@ -12,7 +12,7 @@
 //! Run: `cargo run --bin overlay-host` from `slint-experiment/`.
 
 use overlay_backend::events::{MonitorHint, RuntimeEvents, TileKind, TileSpec};
-use overlay_backend::{ai, audio, config, journal, kb};
+use overlay_backend::{ai, audio, config, journal, kb, stt};
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
 use slint_replay::app_state::{format_timer, new_shared_state, next_model};
 use slint_replay::markdown;
@@ -25,7 +25,7 @@ use slint_replay::win32::{
 };
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc as tokio_mpsc;
@@ -1258,6 +1258,180 @@ fn main() -> Result<(), slint::PlatformError> {
         },
     );
 
+    // ===== Phase E6 v42 — push-to-record (hold mic/sys → STT → AI tile) =====
+    //
+    // Hold a record button → a std::thread runs audio::record_source_until_
+    // stop with a shared stop flag (one PTT at a time). Release flips the
+    // flag; the thread finishes and ships the PCM through ptt_pcm_tx. A
+    // UI-thread Timer drains it (TileWindow isn't Send — same constraint as
+    // the spawn channel) and calls fire_ptt_ask, which transcribes via Groq
+    // then streams the AI answer into a tile (same path as F9).
+    struct PttRec {
+        is_mic: bool,
+        stop: Arc<AtomicBool>,
+    }
+    let ptt_state: Rc<RefCell<Option<PttRec>>> = Rc::new(RefCell::new(None));
+    let (ptt_pcm_tx, mut ptt_pcm_rx) =
+        tokio_mpsc::unbounded_channel::<(audio::AudioSource, Arc<AtomicBool>, Vec<i16>)>();
+
+    {
+        let ptt_state = ptt_state.clone();
+        let weak = overlay.as_weak();
+        let cfg_p = cfg.clone();
+        let tx = ptt_pcm_tx.clone();
+        overlay.on_ptt_mic_pressed(move || {
+            if ptt_state.borrow().is_some() {
+                return; // one PTT at a time
+            }
+            let stop = Arc::new(AtomicBool::new(false));
+            *ptt_state.borrow_mut() = Some(PttRec {
+                is_mic: true,
+                stop: stop.clone(),
+            });
+            if let Some(o) = weak.upgrade() {
+                o.set_mic_recording(true);
+            }
+            let (mic_dev, sys_dev) = {
+                let c = cfg_p.read();
+                (c.mic_device.clone(), c.system_audio_device.clone())
+            };
+            let tx = tx.clone();
+            let id = stop.clone();
+            spawn_ptt_watchdog(stop.clone());
+            std::thread::spawn(move || {
+                let pcm = audio::record_source_until_stop(
+                    audio::AudioSource::Mic,
+                    mic_dev,
+                    sys_dev,
+                    stop,
+                )
+                .unwrap_or_else(|e| {
+                    eprintln!("[overlay-host] PTT mic record failed: {e:#}");
+                    Vec::new()
+                });
+                let _ = tx.send((audio::AudioSource::Mic, id, pcm));
+            });
+            eprintln!("[overlay-host] PTT mic — recording (hold)…");
+        });
+    }
+    {
+        let ptt_state = ptt_state.clone();
+        let weak = overlay.as_weak();
+        overlay.on_ptt_mic_released(move || {
+            let mut slot = ptt_state.borrow_mut();
+            if let Some(rec) = slot.as_ref() {
+                if rec.is_mic {
+                    rec.stop.store(true, Ordering::Release);
+                    *slot = None;
+                }
+            }
+            drop(slot);
+            if let Some(o) = weak.upgrade() {
+                o.set_mic_recording(false);
+            }
+        });
+    }
+    {
+        let ptt_state = ptt_state.clone();
+        let weak = overlay.as_weak();
+        let cfg_p = cfg.clone();
+        let tx = ptt_pcm_tx.clone();
+        overlay.on_ptt_sys_pressed(move || {
+            if ptt_state.borrow().is_some() {
+                return;
+            }
+            let stop = Arc::new(AtomicBool::new(false));
+            *ptt_state.borrow_mut() = Some(PttRec {
+                is_mic: false,
+                stop: stop.clone(),
+            });
+            if let Some(o) = weak.upgrade() {
+                o.set_sys_recording(true);
+            }
+            let (mic_dev, sys_dev) = {
+                let c = cfg_p.read();
+                (c.mic_device.clone(), c.system_audio_device.clone())
+            };
+            let tx = tx.clone();
+            let id = stop.clone();
+            spawn_ptt_watchdog(stop.clone());
+            std::thread::spawn(move || {
+                let pcm = audio::record_source_until_stop(
+                    audio::AudioSource::System,
+                    mic_dev,
+                    sys_dev,
+                    stop,
+                )
+                .unwrap_or_else(|e| {
+                    eprintln!("[overlay-host] PTT sys record failed: {e:#}");
+                    Vec::new()
+                });
+                let _ = tx.send((audio::AudioSource::System, id, pcm));
+            });
+            eprintln!("[overlay-host] PTT sys — recording (hold)…");
+        });
+    }
+    {
+        let ptt_state = ptt_state.clone();
+        let weak = overlay.as_weak();
+        overlay.on_ptt_sys_released(move || {
+            let mut slot = ptt_state.borrow_mut();
+            if let Some(rec) = slot.as_ref() {
+                if !rec.is_mic {
+                    rec.stop.store(true, Ordering::Release);
+                    *slot = None;
+                }
+            }
+            drop(slot);
+            if let Some(o) = weak.upgrade() {
+                o.set_sys_recording(false);
+            }
+        });
+    }
+    // UI-thread drain: transcribe + ask for each finished recording.
+    let ptt_timer = Timer::default();
+    {
+        let bridge_p = bridge.clone();
+        let events_p = events.clone();
+        let cfg_p = cfg.clone();
+        let rt_p = slint_rt.clone();
+        let rth_p = rt_handle.clone();
+        let tiles_p = tiles.clone();
+        let ptt_state_t = ptt_state.clone();
+        let weak = overlay.as_weak();
+        ptt_timer.start(TimerMode::Repeated, Duration::from_millis(120), move || {
+            while let Ok((source, rec_id, pcm)) = ptt_pcm_rx.try_recv() {
+                if let Some(o) = weak.upgrade() {
+                    o.set_mic_recording(false);
+                    o.set_sys_recording(false);
+                }
+                // Self-heal: if this finished recording is still the active
+                // slot (e.g. a pointer-up was lost mid-hold and the 30 s
+                // watchdog stopped it), clear the guard so PTT isn't
+                // permanently blocked. ptr_eq matches THIS recording only —
+                // a newer hold's slot is left intact.
+                {
+                    let mut slot = ptt_state_t.borrow_mut();
+                    if slot.as_ref().is_some_and(|r| Arc::ptr_eq(&r.stop, &rec_id)) {
+                        *slot = None;
+                    }
+                }
+                if pcm.is_empty() {
+                    continue; // record error or empty hold — nothing to ask
+                }
+                fire_ptt_ask(
+                    (source, pcm),
+                    &bridge_p,
+                    &events_p,
+                    &cfg_p,
+                    &rt_p,
+                    &rth_p,
+                    &tiles_p,
+                );
+            }
+        });
+    }
+
     // ===== Stealth toggle on overlay bar =====
     {
         let s = state.clone();
@@ -2096,6 +2270,273 @@ fn fire_f9_ask(
     // We move stream_chat INSIDE the rt_handle.spawn future so the
     // tokio runtime context exists when it runs.
     let task = rt_handle.spawn(async move {
+        let ai_rx = ai::stream_chat(base_url, bearer, model.clone(), messages, 4096);
+        overlay_backend::runtime::ask_stream_loop(
+            events_for_task,
+            ai_rx,
+            model,
+            sys_full,
+            usr_full,
+            journal_for_loop,
+            health_for_stream,
+            t0,
+            cost_apply,
+        )
+        .await;
+    });
+    slint_replay::runtime_state::lock(slint_rt).ai_task = Some(task);
+}
+
+/// Phase E6 v42 — hard cap on a push-to-record hold (30 s). Backstop for a
+/// lost pointer-up (alt-tab / focus loss mid-hold): without it the record
+/// thread would loop forever on the stop flag and the PTT guard would stay
+/// stuck, permanently blocking the feature. Forcing `stop` after the cap
+/// makes the thread finish + ship its PCM, which the drain timer uses to
+/// self-heal the guard.
+fn spawn_ptt_watchdog(stop: Arc<AtomicBool>) {
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(30));
+        stop.store(true, Ordering::Release);
+    });
+}
+
+/// Phase E6 v42 — set a PTT tile's body to an error line. Called from the
+/// transcribe task (off the UI thread) so it hops back via the event loop;
+/// `slint::Weak` is Send, the strong handle is not.
+fn ptt_tile_error(weak: slint::Weak<TileWindow>, msg: &str) {
+    let msg = msg.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(t) = weak.upgrade() {
+            t.set_source_label(SharedString::from("stt · error"));
+            t.set_blocks(ModelRc::new(VecModel::from(vec![MarkdownBlock {
+                kind: markdown::kind::PARAGRAPH,
+                text: SharedString::from(msg),
+                lang: SharedString::from(""),
+            }])));
+        }
+    });
+}
+
+/// Phase E6 v42 — push-to-talk ask. Given PCM captured while a record
+/// button was held, spawn a placeholder tile, then a tokio task that
+/// (1) transcribes via Groq, (2) feeds the text as the explicit
+/// `user_question` to `ai::build_request` (rolling transcript = context),
+/// (3) streams the answer into the tile via the SAME `current_streaming`
+/// slot + `ai:event` path as F9. Mirrors `fire_f9_ask` with a transcribe
+/// step prepended; F9 itself is untouched.
+fn fire_ptt_ask(
+    recording: (audio::AudioSource, Vec<i16>),
+    bridge: &Arc<OverlayBarBridge>,
+    events: &Arc<dyn RuntimeEvents>,
+    cfg: &overlay_backend::config::SharedConfig,
+    slint_rt: &SharedSlintRuntime,
+    rt_handle: &tokio::runtime::Handle,
+    tiles: &TileWindows,
+) {
+    let (source, pcm) = recording;
+    let icon = match source {
+        audio::AudioSource::Mic => "🎤",
+        audio::AudioSource::System => "🔊",
+    };
+
+    // Ignore trivially short holds (<~0.3 s @ 16 kHz mono = 4800 samples).
+    if pcm.len() < 4800 {
+        eprintln!(
+            "[overlay-host] PTT: hold too short ({} samples) — skipping",
+            pcm.len()
+        );
+        return;
+    }
+
+    // ===== 1. Sync placeholder tile =====
+    let tile = match TileWindow::new() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("[overlay-host] PTT: TileWindow::new failed: {e}");
+            return;
+        }
+    };
+    let seq = TILE_DISPLAY_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
+    tile.set_sequence(seq as i32);
+    tile.set_tile_title(SharedString::from(format!("{icon} Запись")));
+    tile.set_source_label(SharedString::from("stt · расшифровка…"));
+    tile.set_trigger_label(SharedString::from(format!("{icon} push-to-talk")));
+    tile.set_trigger_color(slint::Color::from_rgb_u8(0xef, 0x44, 0x44));
+    wire_tile_drag(&tile);
+    tile.set_blocks(ModelRc::new(VecModel::from(vec![MarkdownBlock {
+        kind: markdown::kind::PARAGRAPH,
+        text: SharedString::from("⏳ Расшифровка…"),
+        lang: SharedString::from(""),
+    }])));
+    let weak_close = tile.as_weak();
+    let vec_for_close = tiles.clone();
+    tile.on_close_clicked(move || {
+        if let Some(t) = weak_close.upgrade() {
+            let close_hwnd = grab_hwnd(t.window()).ok();
+            let _ = t.hide();
+            if let Some(target) = close_hwnd {
+                vec_for_close
+                    .borrow_mut()
+                    .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
+            }
+        }
+    });
+    let weak_pin = tile.as_weak();
+    tile.on_pin_clicked(move || {
+        if let Some(t) = weak_pin.upgrade() {
+            let new = !t.get_pinned();
+            t.set_pinned(new);
+        }
+    });
+    let weak_max = tile.as_weak();
+    tile.on_maximize_clicked(move || {
+        if let Some(t) = weak_max.upgrade() {
+            let Ok(hwnd) = grab_hwnd(t.window()) else {
+                return;
+            };
+            toggle_tile_maximize(hwnd, &t);
+        }
+    });
+    let _ = tile.show();
+    apply_tile_hwnd_with_monitor(&tile);
+    let weak_for_stream = tile.as_weak();
+    let weak_for_title = tile.as_weak();
+    tiles.borrow_mut().push(tile);
+
+    // ===== 2. Register tile in the streaming slot (same as F9) =====
+    {
+        let mut slot = match bridge.current_streaming.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        *slot = Some(StreamingTile {
+            weak: weak_for_stream,
+            accumulated: String::new(),
+        });
+    }
+
+    // ===== 3. Snapshot config + rolling transcript (context) =====
+    let (base_url, bearer, model, meeting_context, response_language) = {
+        let c = cfg.read();
+        (
+            c.ai_base_url.clone(),
+            c.ai_bearer.clone(),
+            c.ai_model.clone(),
+            c.meeting_context.clone(),
+            c.response_language.clone(),
+        )
+    };
+    let (groq_key, stt_language, stt_model, trigger_keywords) = {
+        let c = cfg.read();
+        (
+            c.groq_api_key.clone(),
+            c.stt_language.clone(),
+            c.stt_model.clone(),
+            c.trigger_keywords.clone(),
+        )
+    };
+    let transcript_lines: Vec<String> = {
+        let s = slint_replay::runtime_state::lock(slint_rt);
+        s.transcript
+            .iter()
+            .map(|l| format!("[{:?}] {}", l.source, l.text))
+            .collect()
+    };
+    let (journal_for_loop, health_for_stream) = {
+        let s = slint_replay::runtime_state::lock(slint_rt);
+        (s.journal.clone(), s.health.clone())
+    };
+
+    // ===== 4. Cancel in-flight AI + cost closure =====
+    {
+        let mut s = slint_replay::runtime_state::lock(slint_rt);
+        if let Some(h) = s.ai_task.take() {
+            h.abort();
+        }
+    }
+    let rt_for_cost = slint_rt.clone();
+    let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
+        let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
+        s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
+        (s.session_cost_microcents as f64) / 100_000_000.0
+    });
+
+    // ===== 5. Spawn transcribe → ask =====
+    let events_for_task = events.clone();
+    let task = rt_handle.spawn(async move {
+        let whisper_prompt = stt::build_whisper_prompt(&trigger_keywords, &meeting_context);
+        let result = if groq_key.is_empty() {
+            Err(anyhow::anyhow!("Groq API key not set (Settings → STT)"))
+        } else {
+            stt::transcribe_once(
+                &pcm,
+                &groq_key,
+                stt_language.as_deref(),
+                whisper_prompt.as_deref(),
+                &stt_model,
+            )
+            .await
+        };
+        let question = match result {
+            Ok(q) if !q.trim().is_empty() => q.trim().to_string(),
+            Ok(_) => {
+                ptt_tile_error(weak_for_title.clone(), "Речь не распознана (тишина?)");
+                return;
+            }
+            Err(e) => {
+                ptt_tile_error(weak_for_title.clone(), &format!("Ошибка STT: {e}"));
+                return;
+            }
+        };
+        // Reflect the recognised question in the tile chrome.
+        {
+            let q = question.clone();
+            let w = weak_for_title.clone();
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(t) = w.upgrade() {
+                    t.set_tile_title(SharedString::from(q));
+                    t.set_source_label(SharedString::from("ai · asking…"));
+                }
+            });
+        }
+        let messages = ai::build_request(
+            &meeting_context,
+            &response_language,
+            &transcript_lines,
+            None,
+            Some(&question),
+        );
+        let sys_full = messages
+            .first()
+            .and_then(|m| match &m.content {
+                ai::MessageContent::Text(t) => Some(t.clone()),
+                _ => None,
+            })
+            .unwrap_or_default();
+        let usr_full = match messages.get(1).map(|m| &m.content) {
+            Some(ai::MessageContent::Text(t)) => t.clone(),
+            Some(ai::MessageContent::Parts(parts)) => parts
+                .iter()
+                .find_map(|p| match p {
+                    ai::ContentPart::Text { text } => Some(text.clone()),
+                    _ => None,
+                })
+                .unwrap_or_default(),
+            None => String::new(),
+        };
+        if let Some(j) = journal_for_loop.as_ref() {
+            j.write(&journal::JournalEvent::AiRequest {
+                unix_ms: journal::now_unix_ms(),
+                purpose: "ptt_ask",
+                model: &model,
+                system_prompt: &sys_full,
+                user_prompt: &usr_full,
+                attached_screenshot: false,
+                input_tokens_est: ((sys_full.chars().count() + usr_full.chars().count()) as u64)
+                    / 4,
+            });
+        }
+        let t0 = std::time::Instant::now();
         let ai_rx = ai::stream_chat(base_url, bearer, model.clone(), messages, 4096);
         overlay_backend::runtime::ask_stream_loop(
             events_for_task,

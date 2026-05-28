@@ -87,6 +87,62 @@ component LiveChip inherits Rectangle {
     TouchArea { clicked => { root.clicked(); } }
 }
 
+// Phase E6 v42 — push-to-record button. HOLD to record: pointer-down
+// fires `pressed`, pointer-up fires `released` (Slint grabs the pointer
+// on press, so `up` lands here even if the cursor drifts off). Rust
+// records the chosen source while held, then transcribes + asks AI on
+// release. Turns red with a filled dot while `recording` (set by Rust);
+// no ⏺ glyph — a Rectangle dot dodges the missing-glyph font issue.
+component RecordBtn inherits Rectangle {
+    in property <string> label;
+    in property <color> accent: #34d399;
+    in property <bool> recording: false;
+    callback pressed();
+    callback released();
+
+    accessible-role: button;
+    accessible-label: label;
+
+    background: recording ? #ef444433 : transparent;
+    border-color: recording ? #ef4444 : #3a3c44;
+    border-width: 1px;
+    border-radius: 10px;
+    height: 22px;
+    horizontal-stretch: 0;
+    animate background, border-color { duration: 120ms; }
+
+    HorizontalLayout {
+        padding-left: 7px;
+        padding-right: 8px;
+        spacing: 5px;
+        // Record dot: filled red while recording, hollow accent ring idle.
+        Rectangle {
+            width: 8px;
+            height: 8px;
+            border-radius: 4px;
+            y: (parent.height - self.height) / 2;
+            background: root.recording ? #ef4444 : transparent;
+            border-width: root.recording ? 0px : 1px;
+            border-color: root.accent;
+        }
+        Text {
+            text: root.label;
+            font-size: 11px;
+            color: root.recording ? #ef4444 : #c8c8cc;
+            vertical-alignment: center;
+        }
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(ev) => {
+            if (ev.button == PointerEventButton.left) {
+                if (ev.kind == PointerEventKind.down) { root.pressed(); }
+                if (ev.kind == PointerEventKind.up) { root.released(); }
+            }
+        }
+    }
+}
+
 // ===== Main overlay bar =====
 
 export component OverlayBarWindow inherits Window {
@@ -101,7 +157,9 @@ export component OverlayBarWindow inherits Window {
     // Phase E6 v38 — widened 980 → 1140: the Russian chip labels
     // (подсказки / закладка / скрытность / настройки / выход) are wider
     // than the English originals and were clipping the rightmost chip.
-    preferred-width: 1140px;
+    // Phase E6 v42 — widened 1140 → 1320 for the two push-to-record
+    // buttons (🎤 спросить / 🔊 захватить).
+    preferred-width: 1320px;
     preferred-height: 86px;
     min-width: 820px;
 
@@ -144,9 +202,19 @@ export component OverlayBarWindow inherits Window {
     // colour-code which side of the conversation it came from.
     in-out property <string> last-transcript-source: "";
 
+    // Phase E6 v42 — push-to-record (hold) state. Rust flips these true
+    // while the corresponding source is recording so the button glows red.
+    in-out property <bool> mic-recording: false;
+    in-out property <bool> sys-recording: false;
+
     // ===== Callbacks =====
     callback mic-toggle-clicked();
     callback sys-toggle-clicked();
+    // Phase E6 v42 — push-to-record hold callbacks (down = start, up = stop).
+    callback ptt-mic-pressed();
+    callback ptt-mic-released();
+    callback ptt-sys-pressed();
+    callback ptt-sys-released();
     callback timer-toggle-clicked();
     callback ai-model-cycle-clicked();
     callback spawn-tile-clicked();
@@ -241,6 +309,25 @@ export component OverlayBarWindow inherits Window {
                 active: root.mic-active;
                 accent: #34d399;
                 clicked => { root.mic-toggle-clicked(); }
+            }
+
+            // Phase E6 v42 — push-to-record buttons (hold to ask). Distinct
+            // from the mic/sys capture toggles above: these record a one-off
+            // question while held → STT → AI answer tile. mic=green (your
+            // voice), sys=cyan (interviewer), red while recording.
+            RecordBtn {
+                label: @tr("🎤 ask");
+                accent: #34d399;
+                recording: root.mic-recording;
+                pressed => { root.ptt-mic-pressed(); }
+                released => { root.ptt-mic-released(); }
+            }
+            RecordBtn {
+                label: @tr("🔊 grab");
+                accent: #6cf;
+                recording: root.sys-recording;
+                pressed => { root.ptt-sys-pressed(); }
+                released => { root.ptt-sys-released(); }
             }
 
             LiveChip {
