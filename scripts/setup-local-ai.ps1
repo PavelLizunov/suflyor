@@ -86,13 +86,38 @@ function Get-ReleaseAsset([string]$Repo, [string]$Pattern) {
     return $asset
 }
 
-function Get-ZipAsset([string]$Repo, [string]$Pattern, [string]$DestDir) {
-    $asset = Get-ReleaseAsset $Repo $Pattern
-    $zip = Join-Path $DestDir $asset.name
-    Write-Host "  $($asset.name)"
-    & curl.exe -L --retry 8 --retry-all-errors -o $zip $asset.browser_download_url
+function Expand-AssetZip($Asset, [string]$DestDir) {
+    $zip = Join-Path $DestDir $Asset.name
+    Write-Host "  $($Asset.name)"
+    & curl.exe -L --retry 8 --retry-all-errors -o $zip $Asset.browser_download_url
     Expand-Archive -Path $zip -DestinationPath $DestDir -Force
     Remove-Item $zip -Force
+}
+
+function Get-ZipAsset([string]$Repo, [string]$Pattern, [string]$DestDir) {
+    Expand-AssetZip (Get-ReleaseAsset $Repo $Pattern) $DestDir
+}
+
+# Pick the llama.cpp Windows CUDA build with the HIGHEST CUDA version, plus its
+# matching cudart. Newer GPUs need newer CUDA: the RTX 50-series (Blackwell,
+# sm_120) needs CUDA >= 12.8 -- an older 12.4 build loads but offloads 0 layers
+# and silently runs on CPU. Picking the newest build tracks new GPUs
+# automatically. Returns @{ Build; Cudart; Version }.
+function Get-LlamaCudaPair([string]$Repo) {
+    $json = & curl.exe -sL --retry 6 --retry-all-errors --max-time 40 "https://api.github.com/repos/$Repo/releases/latest" | ConvertFrom-Json
+    $builds = $json.assets |
+        Where-Object { $_.name -match '^llama-.*-bin-win-cuda-(\d+)\.(\d+)-x64\.zip$' } |
+        ForEach-Object {
+            $null = $_.name -match 'cuda-(\d+)\.(\d+)-x64'
+            [pscustomobject]@{ Asset = $_; Major = [int]$Matches[1]; Minor = [int]$Matches[2] }
+        } | Sort-Object Major, Minor -Descending
+    if (-not $builds) { throw "no llama CUDA build in latest $Repo release" }
+    $top = $builds[0]
+    $ver = "$($top.Major).$($top.Minor)"
+    $verEsc = [regex]::Escape($ver)
+    $cudart = $json.assets | Where-Object { $_.name -match "^cudart-.*-cuda-$verEsc-x64\.zip$" } | Select-Object -First 1
+    if (-not $cudart) { throw "no cudart for CUDA $ver in latest $Repo release" }
+    return [pscustomobject]@{ Build = $top.Asset; Cudart = $cudart; Version = $ver }
 }
 
 New-Item -ItemType Directory -Force $Root | Out-Null
@@ -101,6 +126,7 @@ $whisperDir = Join-Path $Root 'whisper.cpp'
 $gigaamDir  = Join-Path $Root 'gigaam-v3'
 
 $hasNvidia = [bool](Get-Command nvidia-smi -ErrorAction SilentlyContinue) -and -not $Cpu
+$CudaVer = 'installed'   # filled with the chosen CUDA version when we download it
 Write-Host "Install root : $Root"
 Write-Host ("GPU build    : {0}" -f $(if ($hasNvidia) { 'CUDA (NVIDIA detected)' } else { 'CPU' }))
 
@@ -110,15 +136,17 @@ if (-not $SkipLlama) {
     New-Item -ItemType Directory -Force $llamaDir | Out-Null
     if (-not (Get-ChildItem $llamaDir -Recurse -Filter 'llama-server.exe' -ErrorAction SilentlyContinue)) {
         if ($hasNvidia) {
-            # Pin CUDA 12.4 (the release also ships 13.3): the bundled cudart
-            # provides the CUDA runtime DLLs, but the NVIDIA *driver* must support
-            # the CUDA version. 12.4 has the widest driver support (>= ~550.x), so
-            # it is the safe default for a tester box. The matching cudart-*-12.4
-            # zip extracts cudart64_12.dll etc. alongside llama-server.exe.
-            Get-ZipAsset 'ggml-org/llama.cpp' '^llama-.*-bin-win-cuda-12\.4-x64\.zip$' $llamaDir
-            Get-ZipAsset 'ggml-org/llama.cpp' '^cudart-.*-cuda-12\.4-x64\.zip$'       $llamaDir
+            # Newest CUDA build (the release ships several, e.g. 12.4 + 13.3).
+            # RTX 50-series / Blackwell needs CUDA >= 12.8, so pinning 12.4 made
+            # those GPUs fall back to CPU. We pick the HIGHEST version; the
+            # matching cudart ships the runtime DLLs next to llama-server.exe.
+            $pair = Get-LlamaCudaPair 'ggml-org/llama.cpp'
+            $CudaVer = $pair.Version
+            Write-Host ("  CUDA build: {0} (cuda {1})" -f $pair.Build.name, $pair.Version) -ForegroundColor Cyan
+            Expand-AssetZip $pair.Build  $llamaDir
+            Expand-AssetZip $pair.Cudart $llamaDir
         } else {
-            Get-ZipAsset 'ggml-org/llama.cpp' '^llama-.*-bin-win-cpu-x64\.zip$'       $llamaDir
+            Get-ZipAsset 'ggml-org/llama.cpp' '^llama-.*-bin-win-cpu-x64\.zip$' $llamaDir
         }
     } else { Write-Host '  llama-server.exe already present - skipping binary' }
     $gemmaPath = Join-Path $llamaDir $GEMMA_FILE
@@ -156,6 +184,28 @@ if (-not $NoLaunch) {
             '-m', (Join-Path $llamaDir $GEMMA_FILE), '--host', '127.0.0.1', '--port', '8080',
             '-ngl', $ngl, '-c', '8192', '--jinja')
         Write-Host '  llama-server launching (model load takes a few seconds)'
+        if ($hasNvidia) {
+            # Verify the GPU is ACTUALLY used. A CUDA build too old for the
+            # driver/arch loads fine but offloads 0 layers -> silent CPU. Poll
+            # nvidia-smi until llama-server shows up as a compute app (or give up).
+            Write-Host '  checking GPU offload (up to ~30s)...'
+            $apps = $null
+            $onGpu = $false
+            foreach ($try in 1..6) {
+                Start-Sleep -Seconds 5
+                $apps = & nvidia-smi --query-compute-apps=process_name,used_memory --format=csv,noheader 2>$null
+                if ($apps | Select-String -SimpleMatch 'llama-server') { $onGpu = $true; break }
+            }
+            if ($onGpu) {
+                $line = ($apps | Select-String -SimpleMatch 'llama-server' | Select-Object -First 1).ToString().Trim()
+                Write-Host ("  LLM compute: GPU  (CUDA {0}; {1})" -f $CudaVer, $line) -ForegroundColor Green
+            } else {
+                Write-Host ("  LLM compute: CPU  -- GPU offload NOT detected with CUDA {0}." -f $CudaVer) -ForegroundColor Yellow
+                Write-Host '    Likely the NVIDIA driver is too old for this GPU/CUDA. Update the driver and re-run.' -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host '  LLM compute: CPU  (no NVIDIA GPU detected, or -Cpu set)' -ForegroundColor Yellow
+        }
     }
     if (-not $SkipWhisper) {
         Write-Step 'Starting whisper-server on :8081'
