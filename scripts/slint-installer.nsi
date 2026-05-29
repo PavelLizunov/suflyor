@@ -37,6 +37,11 @@ UninstPage instfiles
 Section "Main" SEC_MAIN
   SetOutPath "$INSTDIR"
   File "..\slint-experiment\target\release\${PRODUCT_EXE}"
+  ; onnxruntime (GigaAM STT) is STATICALLY linked into the exe (ort 2.0
+  ; download-binaries, no load-dynamic) -> no onnxruntime.dll to ship.
+  ; DirectML.dll is ort's 152-byte placeholder for the unused DirectML EP
+  ; (CPU build); bundled to match the exact layout GigaAM is verified under.
+  File "..\slint-experiment\target\release\DirectML.dll"
   ; App icon — used by the Start-menu + Desktop shortcuts and the
   ; Add/Remove Programs entry (the .exe also embeds it via build.rs).
   File "..\slint-experiment\assets\icon.ico"
@@ -69,6 +74,7 @@ SectionEnd
 
 Section "Uninstall"
   Delete "$INSTDIR\${PRODUCT_EXE}"
+  Delete "$INSTDIR\DirectML.dll"
   Delete "$INSTDIR\icon.ico"
   Delete "$INSTDIR\uninstall.exe"
   Delete "$INSTDIR\translations\ru\LC_MESSAGES\slint-replay.po"
