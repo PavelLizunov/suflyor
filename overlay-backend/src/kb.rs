@@ -41,6 +41,11 @@ pub struct KBEntry {
     heading_lower: String,
     #[serde(skip)]
     body_lower: String,
+    /// Extra match terms (curated mis-spellings / STT variants / transliterations,
+    /// e.g. "starrox", "экзасол") parsed from an `Aliases:` line in the body.
+    /// Lowercased. Used by `reference_for` so a mangled term still pulls the entry.
+    #[serde(skip)]
+    aliases: Vec<String>,
 }
 
 impl KBEntry {
@@ -59,6 +64,7 @@ impl KBEntry {
             source,
             heading_lower,
             body_lower,
+            aliases: Vec::new(),
         }
     }
 }
@@ -90,8 +96,8 @@ fn parse(md: &str, source: &'static str) -> Vec<KBEntry> {
     for chunk in iter {
         let mut lines = chunk.splitn(2, '\n');
         let heading = lines.next().unwrap_or("").trim();
-        let body = lines.next().unwrap_or("").trim();
-        if heading.is_empty() || body.is_empty() {
+        let raw_body = lines.next().unwrap_or("").trim();
+        if heading.is_empty() || raw_body.is_empty() {
             continue;
         }
         // Key = first whitespace token of the heading. e.g.
@@ -105,15 +111,40 @@ fn parse(md: &str, source: &'static str) -> Vec<KBEntry> {
         if key.is_empty() {
             continue;
         }
+        // Pull optional `Aliases: a, b, c` line(s) out of the body so the terms
+        // match queries (curated mis-spellings / STT variants) without
+        // cluttering the displayed/injected definition.
+        let mut aliases: Vec<String> = Vec::new();
+        let mut kept: Vec<&str> = Vec::new();
+        for line in raw_body.lines() {
+            let t = line.trim_start();
+            if t.to_lowercase().starts_with("aliases:") {
+                if let Some(idx) = t.find(':') {
+                    for a in t[idx + 1..].split(',') {
+                        let a = a.trim().to_lowercase();
+                        if a.chars().count() >= 2 {
+                            aliases.push(a);
+                        }
+                    }
+                }
+            } else {
+                kept.push(line);
+            }
+        }
+        let body = kept.join("\n").trim().to_string();
+        if body.is_empty() {
+            continue;
+        }
         let heading_lower = heading.to_lowercase();
         let body_lower = body.to_lowercase();
         out.push(KBEntry {
             key,
             heading: heading.to_string(),
-            body: body.to_string(),
+            body,
             source,
             heading_lower,
             body_lower,
+            aliases,
         });
     }
     out
@@ -206,7 +237,13 @@ pub fn reference_for(query: &str, max_entries: usize, max_chars: usize) -> Optio
         if count >= max_entries {
             break;
         }
-        if tokens.contains(e.key.as_str()) {
+        // Match the canonical key (as a whole word) OR any curated alias
+        // (substring, so multi-word + mis-spelled STT variants match too).
+        let matched = tokens.contains(e.key.as_str())
+            || e.aliases
+                .iter()
+                .any(|a| a.chars().count() >= 4 && q.contains(a.as_str()));
+        if matched {
             let block = format!("### {}\n{}\n\n", e.heading, e.body);
             if out.len() + block.len() > max_chars {
                 continue;
@@ -239,6 +276,22 @@ mod tests {
         }
         // A generic question naming no KB key injects nothing (no noise).
         assert!(reference_for("zzqq xkcdq vmwpq blortz", 3, 2000).is_none());
+    }
+
+    #[test]
+    fn reference_for_matches_aliases() {
+        // Curated mis-spelling / STT variant "starrox" pulls the StarRocks entry.
+        let r = reference_for("что такое starrox", 3, 4000);
+        assert!(r.is_some(), "alias 'starrox' should match StarRocks");
+        if let Some(t) = r {
+            assert!(t.to_lowercase().contains("starrocks"));
+        }
+        // Cyrillic transliteration of Exasol.
+        let e = reference_for("расскажи про экзасол", 3, 4000);
+        assert!(e.is_some(), "alias 'экзасол' should match Exasol");
+        if let Some(t) = e {
+            assert!(t.to_lowercase().contains("exasol"));
+        }
     }
 
     /// First call populates cache; check we got a non-trivial number of
