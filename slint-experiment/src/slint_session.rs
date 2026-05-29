@@ -91,16 +91,7 @@ pub fn start_session(
     events.emit("cost:update", serde_json::json!({ "session_usd": 0.0_f64 }));
 
     // ===== 2. Read cfg fields needed for capture + STT =====
-    let (
-        mic_dev,
-        sys_dev,
-        stt_backend,
-        stt_is_local,
-        groq_key,
-        language,
-        whisper_prompt,
-        stt_model,
-    ) = {
+    let (mic_dev, sys_dev, stt_backend, stt_is_local, groq_key, language, whisper_prompt) = {
         let c = cfg.read();
         (
             c.mic_device.clone(),
@@ -110,12 +101,19 @@ pub fn start_session(
             c.groq_api_key.clone(),
             c.stt_language.clone(),
             stt::build_whisper_prompt(&c.trigger_keywords, &c.meeting_context),
-            c.stt_model.clone(),
         )
     };
     // Only the cloud (Groq) backend needs a key — local GigaAM/Whisper don't.
     if !stt_is_local && groq_key.trim().is_empty() {
         anyhow::bail!("Groq API key not set in settings (cfg.groq_api_key empty)");
+    }
+    // Local GigaAM: validate the model dir loads up front so we fail fast with a
+    // clear message instead of silently producing no transcripts once capture
+    // starts (mirrors the cloud-key bail above). One-shot blocking load (~0.5s).
+    if let overlay_backend::config::SttBackendCfg::Gigaam { model_dir } = &stt_backend {
+        if let Err(e) = stt::validate_gigaam_dir(model_dir) {
+            anyhow::bail!("GigaAM model dir invalid: {e}");
+        }
     }
     // Phase E6 diagnostic — surface device names so we can debug
     // mic-transcript-not-working complaints. Empty = "default device".
@@ -124,8 +122,22 @@ pub fn start_session(
         mic_dev.as_deref().unwrap_or("<default>"),
         sys_dev.as_deref().unwrap_or("<default>"),
     ));
+    // Log the RESOLVED backend (not just cfg.stt_model, which is the Groq model
+    // and is meaningless for the local engines). model= still shown for the
+    // Whisper-family backends where it's the actual model id.
+    let backend_desc = match &stt_backend {
+        overlay_backend::config::SttBackendCfg::Cloud { model, .. } => {
+            format!("cloud-groq (model={model})")
+        }
+        overlay_backend::config::SttBackendCfg::Whisper {
+            base_url, model, ..
+        } => format!("local-whisper (url={base_url} model={model})"),
+        overlay_backend::config::SttBackendCfg::Gigaam { model_dir } => {
+            format!("local-gigaam (dir={model_dir})")
+        }
+    };
     log_info(&format!(
-        "stt config — model={stt_model} language={:?} whisper_prompt={}",
+        "stt config — backend={backend_desc} language={:?} whisper_prompt={}",
         language.as_deref().unwrap_or("<auto>"),
         if cfg.read().trigger_keywords.is_empty() {
             "<no kw prompt>"

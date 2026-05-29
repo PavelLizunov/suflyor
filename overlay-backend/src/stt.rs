@@ -87,6 +87,18 @@ pub async fn test_connection_backend(backend: &SttBackendCfg) -> Result<String> 
         }
     }
 }
+
+/// Synchronous one-shot validation that a GigaAM model directory actually
+/// loads. Used by the session-start path (which is sync + on the UI thread) to
+/// fail fast with a clear error BEFORE the capture/STT pipeline spins up,
+/// mirroring the cloud "Groq key not set" bail. Blocks for the load duration
+/// (~0.5 s) — acceptable for a once-per-session start gate. The model handle is
+/// dropped immediately; the live pipeline loads its own copy via `spawn`.
+pub fn validate_gigaam_dir(model_dir: &str) -> Result<()> {
+    GigaAMModel::load(Path::new(model_dir), &Quantization::Int8)
+        .map(|_m| ())
+        .map_err(|e| anyhow::anyhow!("{e}"))
+}
 /// Fallback Groq model id if config doesn't specify one. Both "whisper-large-v3"
 /// (most accurate) and "whisper-large-v3-turbo" (~3× faster) are valid.
 const DEFAULT_GROQ_MODEL: &str = "whisper-large-v3";
@@ -524,9 +536,22 @@ fn rms_i16(samples: &[i16]) -> f32 {
     (sum / samples.len() as f64).sqrt() as f32
 }
 
+/// Process-global single-entry cache for the ad-hoc GigaAM path
+/// (`transcribe_once`). Loading GigaAM is ~250 MB + ONNX init (~0.5 s), so
+/// re-loading on every push-to-talk / dictation call stalls the user each
+/// time. We keep ONE `(model_dir, model)` pair alive: repeated calls with the
+/// same dir reuse it; a different dir reloads (replacing the entry). The live
+/// session pipeline (`spawn`) keeps its OWN preloaded model, so this is purely
+/// for the ad-hoc one-shot flows. GigaAM already serialises through its own
+/// `&mut self`, so holding this lock across the transcribe call is fine.
+static GIGAAM_CACHE: std::sync::OnceLock<std::sync::Mutex<Option<(String, GigaAMModel)>>> =
+    std::sync::OnceLock::new();
+
 /// Public one-shot transcription helper for ad-hoc flows (e.g. prep recording).
 /// Provider-aware: cloud Groq, local whisper-server, or in-process GigaAM
-/// (loaded ad-hoc here — fine for a one-shot; the live pipeline preloads it).
+/// (cached in `GIGAAM_CACHE` so repeated ad-hoc calls with the same model dir
+/// don't pay the ~250 MB + ONNX-init reload cost; the live pipeline preloads
+/// its own copy).
 pub async fn transcribe_once(
     backend: &SttBackendCfg,
     pcm: &[i16],
@@ -567,10 +592,25 @@ pub async fn transcribe_once(
             let dir = model_dir.clone();
             let pcm = pcm.to_vec();
             tokio::task::spawn_blocking(move || {
-                let mut m = GigaAMModel::load(Path::new(&dir), &Quantization::Int8)
-                    .map_err(|e| anyhow::anyhow!("GigaAM load: {e}"))?;
                 let f32s: Vec<f32> = pcm.iter().map(|&s| f32::from(s) / 32768.0).collect();
-                let r = m
+                // Reuse the cached model when the dir matches; otherwise load
+                // (and replace any stale entry). Held across transcribe — fine
+                // since GigaAM serialises through `&mut self` anyway.
+                let mut guard = GIGAAM_CACHE
+                    .get_or_init(|| Mutex::new(None))
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner());
+                if !matches!(&*guard, Some((cached_dir, _)) if *cached_dir == dir) {
+                    let m = GigaAMModel::load(Path::new(&dir), &Quantization::Int8)
+                        .map_err(|e| anyhow::anyhow!("GigaAM load: {e}"))?;
+                    *guard = Some((dir.clone(), m));
+                }
+                let model = match guard.as_mut() {
+                    Some((_, m)) => m,
+                    // Unreachable: we just ensured an entry for `dir` above.
+                    None => return Err(anyhow::anyhow!("GigaAM cache empty after load")),
+                };
+                let r = model
                     .transcribe(&f32s, &TranscribeOptions::default())
                     .map_err(|e| anyhow::anyhow!("GigaAM transcribe: {e}"))?;
                 Ok::<String, anyhow::Error>(r.text)
@@ -742,9 +782,10 @@ async fn finish_transcript(
 /// under its mutex. GigaAM is Russian-specialised and takes no prompt.
 fn gigaam_transcribe(model: &Arc<Mutex<GigaAMModel>>, pcm: &[i16]) -> Result<String> {
     let f32s: Vec<f32> = pcm.iter().map(|&s| f32::from(s) / 32768.0).collect();
-    let mut m = model
-        .lock()
-        .map_err(|_| anyhow::anyhow!("GigaAM model mutex poisoned"))?;
+    // Recover from a poisoned mutex instead of erroring out: a single ORT
+    // panic on one utterance must not brick STT for the rest of the session
+    // (the model's internal state is re-entrant per transcribe call).
+    let mut m = model.lock().unwrap_or_else(|p| p.into_inner());
     let res = m
         .transcribe(&f32s, &TranscribeOptions::default())
         .map_err(|e| anyhow::anyhow!("GigaAM transcribe: {e}"))?;
