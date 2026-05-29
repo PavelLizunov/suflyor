@@ -9,10 +9,10 @@
 //! Phase 4 scope: H1-H3, paragraphs, bullet lists, code blocks (no
 //! syntect colors), horizontal rules. Inline emphasis renders as
 //! plaintext (bold/italic dropped; inline code wrapped in literal
-//! backticks). Tables, links, images, footnotes, HTML are silently
-//! dropped — Phase 4.x follow-up.
+//! backticks). GFM tables render as an aligned monospace block (#109);
+//! links, images, footnotes, HTML are silently dropped — Phase 4.x.
 
-use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Parser, Tag, TagEnd};
+use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 /// Block discriminant values — keep in sync with
 /// `ui/markdown_spike.slint` and `ui/tile.slint`.
@@ -24,6 +24,8 @@ pub mod kind {
     pub const BULLET: i32 = 4;
     pub const CODE: i32 = 5;
     pub const HR: i32 = 6;
+    /// GFM table rendered as an aligned monospace block (#109).
+    pub const TABLE: i32 = 7;
 }
 
 /// Plain-Rust block record. Binaries map this to whatever Slint
@@ -49,8 +51,17 @@ pub fn parse(source: &str) -> Vec<Block> {
     let mut current_kind: Option<i32> = None;
     let mut current_lang = String::new();
     let mut list_depth: usize = 0;
+    // #109 — GFM table accumulation. pulldown-cmark only emits table
+    // events when ENABLE_TABLES is set; otherwise `| a | b |` arrives as
+    // plain paragraph text (the old "tables silently dropped" behaviour
+    // that overlapped in the tile). Cells are collected per row, then
+    // rendered to an aligned monospace block on End(Table).
+    let mut in_cell = false;
+    let mut table_rows: Vec<Vec<String>> = Vec::new();
+    let mut current_row: Vec<String> = Vec::new();
+    let mut current_cell = String::new();
 
-    for event in Parser::new(source) {
+    for event in Parser::new_ext(source, Options::ENABLE_TABLES) {
         match event {
             Event::Start(Tag::Heading { level, .. }) => {
                 flush(
@@ -110,15 +121,28 @@ pub fn parse(source: &str) -> Vec<Block> {
                 }
             }
             Event::Text(t) => {
-                current_text.push_str(&t);
+                if in_cell {
+                    current_cell.push_str(&t);
+                } else {
+                    current_text.push_str(&t);
+                }
             }
             Event::Code(t) => {
-                current_text.push('`');
-                current_text.push_str(&t);
-                current_text.push('`');
+                let buf = if in_cell {
+                    &mut current_cell
+                } else {
+                    &mut current_text
+                };
+                buf.push('`');
+                buf.push_str(&t);
+                buf.push('`');
             }
             Event::SoftBreak | Event::HardBreak => {
-                current_text.push(' ');
+                if in_cell {
+                    current_cell.push(' ');
+                } else {
+                    current_text.push(' ');
+                }
             }
             Event::End(TagEnd::Heading(_))
             | Event::End(TagEnd::Paragraph)
@@ -130,6 +154,40 @@ pub fn parse(source: &str) -> Vec<Block> {
                     &mut current_kind,
                     &mut current_lang,
                 );
+            }
+            Event::Start(Tag::Table(_)) => {
+                flush(
+                    &mut out,
+                    &mut current_text,
+                    &mut current_kind,
+                    &mut current_lang,
+                );
+                table_rows.clear();
+                current_row.clear();
+            }
+            Event::Start(Tag::TableHead | Tag::TableRow) => {
+                current_row.clear();
+            }
+            Event::Start(Tag::TableCell) => {
+                current_cell.clear();
+                in_cell = true;
+            }
+            Event::End(TagEnd::TableCell) => {
+                current_row.push(std::mem::take(&mut current_cell));
+                in_cell = false;
+            }
+            Event::End(TagEnd::TableHead | TagEnd::TableRow) => {
+                table_rows.push(std::mem::take(&mut current_row));
+            }
+            Event::End(TagEnd::Table) => {
+                if !table_rows.is_empty() {
+                    out.push(Block::new(
+                        kind::TABLE,
+                        format_table(&table_rows),
+                        String::new(),
+                    ));
+                }
+                table_rows.clear();
             }
             Event::Rule => {
                 flush(
@@ -165,6 +223,59 @@ fn flush(out: &mut Vec<Block>, text: &mut String, kind_slot: &mut Option<i32>, l
     lang.clear();
 }
 
+/// Render parsed table rows (rows\[0\] = header) into an aligned monospace
+/// block. GFM tables used to fall through pulldown-cmark as raw `|`
+/// paragraph text that overlapped in the tile (#109). Each column is
+/// padded to its (capped) max width and separated with box-drawing
+/// glyphs; the tile renders this with `wrap: no-wrap` so the alignment
+/// holds. Over-long cells are truncated with `…` to bound the width.
+fn format_table(rows: &[Vec<String>]) -> String {
+    /// Per-column character cap so one verbose cell can't blow the width.
+    const MAX_COL: usize = 28;
+    let ncols = rows.iter().map(Vec::len).max().unwrap_or(0);
+    if ncols == 0 {
+        return String::new();
+    }
+    let mut widths = vec![0_usize; ncols];
+    for row in rows {
+        for (i, cell) in row.iter().enumerate() {
+            let w = cell.trim().chars().count().min(MAX_COL);
+            if w > widths[i] {
+                widths[i] = w;
+            }
+        }
+    }
+    let mut lines: Vec<String> = Vec::with_capacity(rows.len() + 1);
+    for (ri, row) in rows.iter().enumerate() {
+        let cells: Vec<String> = widths
+            .iter()
+            .enumerate()
+            .map(|(i, width)| {
+                let cell = truncate_cell(row.get(i).map_or("", |s| s.trim()), MAX_COL);
+                let pad = width.saturating_sub(cell.chars().count());
+                format!("{cell}{}", " ".repeat(pad))
+            })
+            .collect();
+        lines.push(cells.join(" │ ").trim_end().to_string());
+        if ri == 0 {
+            let sep: Vec<String> = widths.iter().map(|w| "─".repeat(*w)).collect();
+            lines.push(sep.join("─┼─"));
+        }
+    }
+    lines.join("\n")
+}
+
+/// Truncate a cell to `max` chars, appending `…` when cut.
+fn truncate_cell(cell: &str, max: usize) -> String {
+    if cell.chars().count() <= max {
+        cell.to_string()
+    } else {
+        let mut s: String = cell.chars().take(max.saturating_sub(1)).collect();
+        s.push('…');
+        s
+    }
+}
+
 /// Sample tile markdown text — used by Phase 4's overlay-host stub
 /// before the AI / knowledge-base backend wiring lands.
 #[must_use]
@@ -197,4 +308,74 @@ fn main() {
 - Images (HTTP fetch + cache)
 "##;
     template.replace("{N}", &sequence.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+
+    #[test]
+    fn gfm_table_parses_to_single_aligned_table_block() {
+        let md = "\
+| A | B |
+|---|---|
+| 1 | 22 |
+| 333 | 4 |
+";
+        let blocks = parse(md);
+        let tables: Vec<&Block> = blocks.iter().filter(|b| b.kind == kind::TABLE).collect();
+        assert_eq!(tables.len(), 1, "exactly one TABLE block expected");
+        let t = &tables[0].text;
+        // Header + body cells survive.
+        assert!(t.contains('A') && t.contains('B') && t.contains("333"));
+        // Box-drawing column separator + header underline are present.
+        assert!(t.contains('│'), "column separator missing: {t:?}");
+        assert!(t.contains('─'), "header underline missing: {t:?}");
+        // The raw GFM dashes separator row must NOT leak as content.
+        assert!(!t.contains("---"), "raw pipe separator leaked: {t:?}");
+        // Column A is padded so every data line starts at the same width
+        // ("333" is the widest → width 3): the "1" cell becomes "1  ".
+        assert!(t.contains("1  "), "column A not padded to width 3: {t:?}");
+    }
+
+    #[test]
+    fn table_cells_do_not_bleed_into_surrounding_paragraphs() {
+        let md = "before\n\n| X | Y |\n|---|---|\n| a | b |\n\nafter";
+        let blocks = parse(md);
+        assert!(
+            blocks
+                .iter()
+                .any(|b| b.kind == kind::PARAGRAPH && b.text == "before"),
+            "leading paragraph lost"
+        );
+        assert!(
+            blocks.iter().any(|b| b.kind == kind::TABLE),
+            "table not detected"
+        );
+        assert!(
+            blocks
+                .iter()
+                .any(|b| b.kind == kind::PARAGRAPH && b.text == "after"),
+            "trailing paragraph lost or merged into the table"
+        );
+    }
+
+    #[test]
+    fn over_long_table_cell_is_truncated_with_ellipsis() {
+        let long = "x".repeat(60);
+        let md = format!("| H |\n|---|\n| {long} |\n");
+        let blocks = parse(&md);
+        let t = &blocks
+            .iter()
+            .find(|b| b.kind == kind::TABLE)
+            .expect("table block")
+            .text;
+        assert!(t.contains('…'), "long cell should be truncated: {t:?}");
+        // No single line should exceed the cap by much (28 + separators).
+        assert!(
+            t.lines().all(|l| l.chars().count() <= 40),
+            "line exceeded width cap: {t:?}"
+        );
+    }
 }
