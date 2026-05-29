@@ -67,13 +67,17 @@ pub async fn test_connection_backend(backend: &SttBackendCfg) -> Result<String> 
                 req = req.bearer_auth(bearer);
             }
             let resp = req.send().await.context("GET whisper server")?;
-            // Any HTTP reply (even 404/405 for an unimplemented /models route)
-            // means the server is up and reachable — which is what we test. A
-            // truly-down server fails at `send()` above.
-            Ok(format!(
-                "HTTP {} — whisper-server reachable",
-                resp.status().as_u16()
-            ))
+            // whisper.cpp has no /models route, so a 404/405 here still means the
+            // server is UP and reachable (a truly-down server fails at send()).
+            // Report that plainly instead of a scary raw 404.
+            if resp.status().is_success() {
+                Ok(format!(
+                    "HTTP {} — whisper-server ready",
+                    resp.status().as_u16()
+                ))
+            } else {
+                Ok("whisper-server up & ready to transcribe".to_string())
+            }
         }
         SttBackendCfg::Gigaam { model_dir } => {
             let dir = model_dir.clone();

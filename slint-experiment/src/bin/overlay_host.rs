@@ -4139,6 +4139,7 @@ fn open_settings(
                 match overlay_backend::local_ai::install(&opts, &cancel, &on) {
                     Ok(res) => {
                         let model = res.ai_local_model.clone();
+                        let gigaam_dir = res.stt_gigaam_dir.clone();
                         let on_gpu = res.on_gpu;
                         {
                             let mut c = cfg_t.write();
@@ -4171,6 +4172,7 @@ fn open_settings(
                                 w.set_stt_whisper_url_input(SharedString::from(
                                     overlay_backend::local_ai::WHISPER_BASE_URL,
                                 ));
+                                w.set_stt_gigaam_dir_input(SharedString::from(gigaam_dir));
                             }
                             if let Some(o) = overlay_done.upgrade() {
                                 o.set_active_stack(SharedString::from(active_stack_label(
