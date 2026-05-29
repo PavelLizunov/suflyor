@@ -4,6 +4,16 @@ Hand-curated technical glossary for AI-assisted SRE/DevOps interviews.
 Each entry: heading line `## <key> [— full name]`, body is 1-3 sentence definition with operational notes.
 Parser: split on `\n## `, key = first whitespace-separated token of heading (lowercased).
 
+## Exasol — in-memory аналитическая СУБД (MPP, columnar)
+Exasol — высокопроизводительная **in-memory**, **колоночная** (columnar), **MPP** (massively parallel processing) реляционная СУБД для аналитики и хранилищ данных (DWH / OLAP). Родом из Германии (Нюрнберг); известна рекордами скорости в бенчмарке TPC-H.
+- **Архитектура:** shared-nothing кластер — данные распределяются по нодам, запрос выполняется параллельно на всех нодах (MPP).
+- **In-memory + columnar:** горячие данные в RAM, колоночное хранение со сжатием, прозрачный сброс на диск.
+- **SQL:** ANSI-SQL — стандартные JOIN / агрегации / window-функции.
+- **UDF (in-database analytics):** скрипты на **Lua, Python, R, Java** прямо в БД.
+- **Подключение:** JDBC / ODBC / ADO.NET, `pyexasol` (Python), нативный клиент **EXAplus**.
+- **Ниша:** OLAP / BI / аналитика, НЕ OLTP. Конкуренты: ClickHouse, Vertica, Snowflake, Teradata.
+- **Деплой:** on-prem кластер, Docker (single-node для разработки), облако (AWS/Azure/GCP), Exasol SaaS.
+
 ## kubernetes — k8s
 Container orchestration platform. Manages deployment, scaling, healing of containerized apps across a cluster of nodes. Originally Google Borg-derived, donated to CNCF in 2015. Declarative API: you describe desired state, controllers reconcile.
 

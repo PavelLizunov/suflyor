@@ -588,6 +588,25 @@ pub fn build_request(
             meeting_context.trim()
         )
     };
+    // RAG: pull curated KB entries for any domain term explicitly named in the
+    // question/transcript, so the model answers from the reference instead of
+    // guessing (e.g. a term like "Exasol" a small local model wasn't trained on).
+    let kb_query = {
+        let mut s = transcript_lines.join("\n");
+        if let Some(q) = user_question {
+            s.push('\n');
+            s.push_str(q);
+        }
+        s
+    };
+    let kb_block = crate::kb::reference_for(&kb_query, 3, 1400)
+        .map(|r| {
+            format!(
+                "\n\n=== Справка из базы знаний (точные определения терминов из вопроса; \
+                 опирайся на них, НЕ выдумывай факты по этим терминам) ===\n{r}"
+            )
+        })
+        .unwrap_or_default();
     let system_prompt = format!(
         "Ты — техничный AI-ассистент пользователя на встрече/интервью в реальном времени. \
          Пользователь нажимает F9 чтобы попросить тебя помочь с ответом на последний \
@@ -606,7 +625,7 @@ pub fn build_request(
          - {lang_block}\n\
          - В транскрипте могут быть Whisper-артефакты — восстанавливай смысл из контекста \
            (\"К87С\" → \"K8s\", \"лоуд-эвередж\" → \"load average\", \"гинкс\" → \"nginx\").\n\
-         - Источник `[System]` — собеседник, `[Mic]` — пользователь."
+         - Источник `[System]` — собеседник, `[Mic]` — пользователь.{kb_block}"
     );
     messages.push(ChatMessage {
         role: "system".into(),

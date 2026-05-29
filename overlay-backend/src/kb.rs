@@ -183,9 +183,63 @@ pub fn get(key: &str) -> Option<&'static KBEntry> {
     all().iter().find(|e| e.key == q)
 }
 
+/// Build a compact reference block from KB entries whose KEY appears as a whole
+/// word in `query`. This grounds the LLM on domain terms it may not know (e.g.
+/// "Exasol") WITHOUT injecting noise into generic questions — only an explicit
+/// term mention pulls its entry. Returns `None` if nothing matches.
+/// `max_entries` caps the count; `max_chars` caps the total length.
+#[must_use]
+pub fn reference_for(query: &str, max_entries: usize, max_chars: usize) -> Option<String> {
+    let q = query.to_lowercase();
+    // Tokenize into the set of words (alphanumeric + '-'/'_'), keeping tokens
+    // of >= 2 chars so single letters don't match short keys.
+    let tokens: std::collections::HashSet<&str> = q
+        .split(|c: char| !(c.is_alphanumeric() || c == '-' || c == '_'))
+        .filter(|t| t.chars().count() >= 2)
+        .collect();
+    if tokens.is_empty() {
+        return None;
+    }
+    let mut out = String::new();
+    let mut count = 0usize;
+    for e in all() {
+        if count >= max_entries {
+            break;
+        }
+        if tokens.contains(e.key.as_str()) {
+            let block = format!("### {}\n{}\n\n", e.heading, e.body);
+            if out.len() + block.len() > max_chars {
+                continue;
+            }
+            out.push_str(&block);
+            count += 1;
+        }
+    }
+    let out = out.trim_end().to_string();
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reference_for_grounds_domain_terms() {
+        // An explicit domain term pulls its curated entry (grounds the LLM).
+        let r = reference_for("расскажи про Exasol и его архитектуру", 3, 2000);
+        assert!(r.is_some(), "an Exasol mention should match its KB entry");
+        if let Some(text) = r {
+            let lower = text.to_lowercase();
+            assert!(lower.contains("exasol"));
+            assert!(lower.contains("mpp") || lower.contains("columnar"));
+        }
+        // A generic question naming no KB key injects nothing (no noise).
+        assert!(reference_for("zzqq xkcdq vmwpq blortz", 3, 2000).is_none());
+    }
 
     /// First call populates cache; check we got a non-trivial number of
     /// entries from each source. Floors guard against accidental file
