@@ -30,9 +30,10 @@ use windows::Win32::Graphics::Dwm::{
 use windows::Win32::Graphics::Gdi::{CreateRectRgn, DeleteObject};
 use windows::Win32::UI::Controls::MARGINS;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetWindowLongPtrW, SetWindowDisplayAffinity, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE,
-    HWND_NOTOPMOST, HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
-    WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
+    GetWindowLongPtrW, SetWindowDisplayAffinity, SetWindowLongPtrW, SetWindowPos, ShowWindow,
+    GWL_EXSTYLE, HWND_NOTOPMOST, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SW_HIDE,
+    SW_SHOWNOACTIVATE, WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
+    WS_EX_TRANSPARENT,
 };
 
 /// Extract a raw Win32 HWND from any Slint window. Requires the
@@ -172,6 +173,42 @@ pub fn set_stealth(hwnd: HWND, on: bool) -> Result<(), Box<dyn std::error::Error
     let affinity = if on { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE };
     unsafe {
         SetWindowDisplayAffinity(hwnd, affinity)?;
+    }
+    Ok(())
+}
+
+/// Show or hide the window's TASKBAR button. Wired to the stealth toggle so the
+/// overlay also disappears from the taskbar (a screen-share viewer shouldn't see
+/// "suflyor" in the taskbar). WS_EX_TOOLWINDOW/APPWINDOW only affect the taskbar
+/// at show-time, so we do a brief hide -> restyle -> show-no-activate and
+/// re-assert topmost. Only the TOOLWINDOW/APPWINDOW bits are touched; all other
+/// ex-style bits (layered / transparent / etc.) are preserved.
+pub fn set_skip_taskbar(hwnd: HWND, skip: bool) -> Result<(), Box<dyn std::error::Error>> {
+    unsafe {
+        let before = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        let tool = WS_EX_TOOLWINDOW.0 as isize;
+        let app = WS_EX_APPWINDOW.0 as isize;
+        let after = if skip {
+            (before | tool) & !app
+        } else {
+            (before & !tool) | app
+        };
+        if after == before {
+            return Ok(());
+        }
+        let _ = ShowWindow(hwnd, SW_HIDE);
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, after);
+        let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        // hide/show can drop topmost — re-assert it without stealing focus.
+        SetWindowPos(
+            hwnd,
+            Some(HWND_TOPMOST),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        )?;
     }
     Ok(())
 }

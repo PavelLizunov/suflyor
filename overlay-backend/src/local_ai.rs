@@ -323,6 +323,79 @@ pub fn install(
     })
 }
 
+/// One-shot reachability probe: true if the URL answers anything (even a 404),
+/// i.e. a server is listening. A connection failure returns false.
+fn is_reachable(url: &str) -> bool {
+    run_capture("curl.exe", &["-s", "-o", "NUL", "--max-time", "2", url])
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// On launch, start the local servers the config points at but that aren't
+/// already running (the app kills its servers on quit, so after a restart
+/// following an in-app install they'd be down). Uses the binaries + models
+/// under `root` (the installer/script layout); skips a server whose port
+/// already answers. Best-effort — a missing binary just means that server is
+/// not started. Returns the launched child handles for kill-on-quit tracking.
+#[must_use]
+pub fn ensure_servers(root: &Path, want_llama: bool, want_whisper: bool) -> Vec<Child> {
+    let mut started = Vec::new();
+    let use_gpu = detect_nvidia();
+    if want_llama && !is_reachable(&format!("{LLAMA_BASE_URL}/models")) {
+        let llama_dir = root.join("llama.cpp");
+        let gguf = llama_dir.join(GEMMA_FILE);
+        if let Some(exe) = find_exe(&llama_dir, "llama-server.exe") {
+            if gguf.exists() {
+                let ngl = if use_gpu { "99" } else { "0" };
+                if let Ok(child) = launch_hidden(
+                    &exe,
+                    &[
+                        "-m",
+                        &gguf.to_string_lossy(),
+                        "--host",
+                        "127.0.0.1",
+                        "--port",
+                        LLAMA_PORT,
+                        "-ngl",
+                        ngl,
+                        "-c",
+                        "8192",
+                        "--jinja",
+                    ],
+                ) {
+                    started.push(child);
+                }
+            }
+        }
+    }
+    if want_whisper && !is_reachable(&format!("{WHISPER_BASE_URL}/models")) {
+        let whisper_dir = root.join("whisper.cpp");
+        let bin = whisper_dir.join(WHISPER_FILE);
+        let exe = find_exe(&whisper_dir, "whisper-server.exe")
+            .or_else(|| find_exe(&whisper_dir, "server.exe"));
+        if let Some(exe) = exe {
+            if bin.exists() {
+                if let Ok(child) = launch_hidden(
+                    &exe,
+                    &[
+                        "-m",
+                        &bin.to_string_lossy(),
+                        "--host",
+                        "127.0.0.1",
+                        "--port",
+                        WHISPER_PORT,
+                        "--inference-path",
+                        "/v1/audio/transcriptions",
+                    ],
+                ) {
+                    started.push(child);
+                }
+            }
+        }
+    }
+    started
+}
+
 // ---- GitHub release asset selection ---------------------------------------
 
 #[derive(Debug, Deserialize)]

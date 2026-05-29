@@ -26,8 +26,8 @@ use slint_replay::slint_events::{SlintEvents, SlintUiBridge};
 use slint_replay::slint_session;
 use slint_replay::win32::{
     drag_begin, drag_update, enum_monitors, get_window_rect, grab_hwnd, make_transparent_overlay,
-    make_transparent_tile, move_window_pos_only, pick_monitor, set_always_on_top, set_stealth,
-    work_area_for_window,
+    make_transparent_tile, move_window_pos_only, pick_monitor, set_always_on_top, set_skip_taskbar,
+    set_stealth, work_area_for_window,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -746,6 +746,34 @@ fn main() -> Result<(), slint::PlatformError> {
     let state = new_shared_state();
     if let Ok(mut st) = state.lock() {
         st.stealth = cfg.read().stealth_enabled;
+    }
+    // E10.5 — auto-start the local AI servers the config points at but that
+    // aren't already running (after a restart following an in-app install the
+    // app's own servers are gone — it kills them on quit). Off the UI thread;
+    // tracked in app_state for kill-on-quit.
+    {
+        let (want_llama, want_whisper) = {
+            let c = cfg.read();
+            (
+                c.ai_provider == "local" && c.ai_local_base_url.contains(":8080"),
+                c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081"),
+            )
+        };
+        if want_llama || want_whisper {
+            let state_auto = state.clone();
+            std::thread::spawn(move || {
+                let root = overlay_backend::local_ai::default_root();
+                let started =
+                    overlay_backend::local_ai::ensure_servers(&root, want_llama, want_whisper);
+                if !started.is_empty() {
+                    state_auto
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .local_ai_servers
+                        .extend(started);
+                }
+            });
+        }
     }
     let tiles: TileWindows = Rc::new(RefCell::new(Vec::new()));
     let settings: Rc<RefCell<Option<SettingsWindow>>> = Rc::new(RefCell::new(None));
@@ -1667,6 +1695,9 @@ fn main() -> Result<(), slint::PlatformError> {
                 o.set_stealth_active(new_stealth);
                 if let Ok(hwnd) = grab_hwnd(o.window()) {
                     let _ = set_stealth(hwnd, new_stealth);
+                    // Stealth also removes the taskbar button so a screen-share
+                    // viewer doesn't spot the app in the taskbar.
+                    let _ = set_skip_taskbar(hwnd, new_stealth);
                 }
             }
             // Apply to all tiles
@@ -2142,6 +2173,7 @@ fn apply_overlay_hwnd(overlay: &OverlayBarWindow) {
                 // #E10.2 — apply persisted stealth to the bar on launch.
                 if global_stealth() {
                     let _ = set_stealth(hwnd, true);
+                    let _ = set_skip_taskbar(hwnd, true);
                 }
             }
             Err(e) => eprintln!("[overlay-host] overlay HWND grab failed: {e}"),

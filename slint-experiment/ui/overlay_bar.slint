@@ -364,14 +364,14 @@ export component OverlayBarWindow inherits Window {
             // ── Push-to-record (hold to ask) — labelled; dot colour marks
             //    the source: green = mic (your voice), cyan = sys (them).
             RecordBtn {
-                label: @tr("ask");
+                label: "🎤 " + @tr("ask");
                 accent: #34d399;
                 recording: root.mic-recording;
                 pressed => { root.ptt-mic-pressed(); }
                 released => { root.ptt-mic-released(); }
             }
             RecordBtn {
-                label: @tr("grab");
+                label: "🔊 " + @tr("grab");
                 accent: #6cf;
                 recording: root.sys-recording;
                 pressed => { root.ptt-sys-pressed(); }
