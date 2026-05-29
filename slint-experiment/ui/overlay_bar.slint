@@ -169,7 +169,10 @@ export component OverlayBarWindow inherits Window {
     // Phase E6 v44 — narrowed 1320 → 1000: the grouped layout makes the
     // capture toggles + quick actions icon-only, so the row is far more
     // compact (icons + 3 short labels instead of 15 text chips).
-    preferred-width: 1000px;
+    // E10.2 — 1000 → 1080 after the "close all" chip landed, so the Settings
+    // + quit chips never clip; the active-stack readout moved to the bottom
+    // status row to keep the action row compact.
+    preferred-width: 1080px;
     preferred-height: 86px;
     min-width: 720px;
 
@@ -393,12 +396,6 @@ export component OverlayBarWindow inherits Window {
                 accent: #f59e0b;
                 clicked => { /* no-op for now */ }
             }
-            // Active stack readout (read-only): 🟢/☁/◐ + STT engine → AI model.
-            Chip {
-                label: root.active-stack;
-                accent: #34d399;
-                clicked => { /* read-only indicator */ }
-            }
 
             VDivider { }
 
@@ -488,6 +485,16 @@ export component OverlayBarWindow inherits Window {
             padding-left: 4px;
             padding-right: 4px;
             spacing: 6px;
+            // Active-stack readout (read-only) — moved here from the top row
+            // so Settings + quit fit. Shows local/cloud/mixed · STT · AI model.
+            Text {
+                text: root.active-stack;
+                font-size: 10px;
+                font-weight: 600;
+                color: #6cf;
+                vertical-alignment: center;
+                horizontal-stretch: 0;
+            }
             // Source tag — "mic" green dot, "sys" cyan dot, "" gray.
             Rectangle {
                 width: 8px;
