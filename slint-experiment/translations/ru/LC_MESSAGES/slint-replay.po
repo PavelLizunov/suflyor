@@ -44,6 +44,10 @@ msgstr "🧠 {}"
 msgid "+ tile ({})"
 msgstr "+ тайл ({})"
 
+# #110 — bulk-close all open tiles.
+msgid "close all"
+msgstr "закрыть все"
+
 # Phase E6 v45 — two-step quit confirm (X arms "Quit? Yes/No").
 msgid "Quit?"
 msgstr "Выйти?"

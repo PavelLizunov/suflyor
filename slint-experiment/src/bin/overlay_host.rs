@@ -1742,6 +1742,35 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // ===== Close all tiles (#110) =====
+    // User: "не хватает кнопки закрыть все тайлы когда их много". Bulk-close
+    // every open tile window in one click. Resets the spawn counter to 0,
+    // which also hides the bar's "close all" chip again (it's gated on
+    // tiles-spawned > 0).
+    {
+        let tiles_ref = tiles.clone();
+        let s = state.clone();
+        let weak = overlay.as_weak();
+        overlay.on_close_all_tiles_clicked(move || {
+            let n = {
+                let mut v = tiles_ref.borrow_mut();
+                let count = v.len();
+                for t in v.iter() {
+                    let _ = t.hide();
+                }
+                v.clear();
+                count
+            };
+            eprintln!("[overlay-host] close-all-tiles: closed {n} tile(s)");
+            if let Ok(mut st) = s.lock() {
+                st.tiles_spawned = 0;
+            }
+            if let Some(o) = weak.upgrade() {
+                o.set_tiles_spawned(0);
+            }
+        });
+    }
+
     // ===== Spawn tile (Phase C: real AI ask via overlay_backend::ai) =====
     {
         let s = state.clone();

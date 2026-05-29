@@ -238,6 +238,7 @@ export component OverlayBarWindow inherits Window {
     callback timer-toggle-clicked();
     callback ai-model-cycle-clicked();
     callback spawn-tile-clicked();
+    callback close-all-tiles-clicked();
     callback bookmark-clicked();
     callback tips-clicked();
     callback stealth-toggle-clicked();
@@ -417,6 +418,14 @@ export component OverlayBarWindow inherits Window {
             Rectangle { horizontal-stretch: 1; min-width: 12px; }
 
             // ── Primary + system ──
+            // Close-all appears once tiles have been spawned so the user can
+            // dismiss a screenful in one click (#110); resets the counter,
+            // which also hides this chip again.
+            if root.tiles-spawned > 0 : Chip {
+                label: @tr("close all");
+                accent: #fb7185;
+                clicked => { root.close-all-tiles-clicked(); }
+            }
             Chip {
                 label: @tr("+ tile ({})", root.tiles-spawned);
                 accent: #f472b6;
