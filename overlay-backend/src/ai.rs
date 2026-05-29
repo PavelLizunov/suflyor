@@ -599,7 +599,9 @@ pub fn build_request(
         }
         s
     };
-    let kb_block = crate::kb::reference_for(&kb_query, 3, 1400)
+    // Cap is in BYTES; KB bodies are mostly Cyrillic (~2 bytes/char), so a
+    // single entry can be ~1.8 KB. Keep the cap generous enough to fit it.
+    let kb_block = crate::kb::reference_for(&kb_query, 3, 4000)
         .map(|r| {
             format!(
                 "\n\n=== Справка из базы знаний (точные определения терминов из вопроса; \
@@ -751,6 +753,37 @@ mod tests {
         // Russian directive present
         if let MessageContent::Text(s) = &msgs[0].content {
             assert!(s.contains("русском"));
+        } else {
+            panic!("system message should be text");
+        }
+    }
+
+    #[test]
+    fn build_request_injects_kb_reference_for_named_term() {
+        // A question naming a KB term (Exasol) pulls its entry into the system
+        // prompt. Regression guard for the byte-cap bug: the Cyrillic Exasol
+        // body is ~1.8 KB, so too small a cap silently dropped it.
+        let msgs = build_request("", "ru", &[], None, Some("Что такое Exasol?"));
+        if let MessageContent::Text(s) = &msgs[0].content {
+            assert!(
+                s.contains("Справка из базы знаний"),
+                "KB reference block missing from system prompt"
+            );
+            assert!(s.contains("Exasol"), "Exasol entry not injected");
+            assert!(
+                s.contains("MPP") || s.contains("columnar"),
+                "Exasol body not injected"
+            );
+        } else {
+            panic!("system message should be text");
+        }
+        // A generic question naming no KB key must NOT inject a block (no noise).
+        let plain = build_request("", "ru", &[], None, Some("zzqq xkcdq vmwpq blortz"));
+        if let MessageContent::Text(s) = &plain[0].content {
+            assert!(
+                !s.contains("Справка из базы знаний"),
+                "KB block wrongly injected for a generic question"
+            );
         } else {
             panic!("system message should be text");
         }
