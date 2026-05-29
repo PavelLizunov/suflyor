@@ -1700,6 +1700,8 @@ fn main() -> Result<(), slint::PlatformError> {
         let s = state.clone();
         let tiles_ref = tiles.clone();
         let weak = overlay.as_weak();
+        let palette_for_stealth = palette.clone();
+        let settings_for_stealth = settings.clone();
         overlay.on_stealth_toggle_clicked(move || {
             let new_stealth = {
                 let mut st = match s.lock() {
@@ -1710,6 +1712,9 @@ fn main() -> Result<(), slint::PlatformError> {
                 st.stealth
             };
             eprintln!("[overlay-host] stealth -> {new_stealth}");
+            // #111 — source-of-truth so windows created later (palette /
+            // Settings / freshly-spawned tiles) inherit stealth on realize.
+            set_global_stealth(new_stealth);
             // Apply to overlay
             if let Some(o) = weak.upgrade() {
                 if let Ok(hwnd) = grab_hwnd(o.window()) {
@@ -1719,6 +1724,18 @@ fn main() -> Result<(), slint::PlatformError> {
             // Apply to all tiles
             for t in tiles_ref.borrow().iter() {
                 if let Ok(hwnd) = grab_hwnd(t.window()) {
+                    let _ = set_stealth(hwnd, new_stealth);
+                }
+            }
+            // #111 — flip the F4 palette + Settings windows if they're open,
+            // so toggling stealth while they're up hides them immediately.
+            if let Some(p) = palette_for_stealth.borrow().as_ref() {
+                if let Ok(hwnd) = grab_hwnd(p.window()) {
+                    let _ = set_stealth(hwnd, new_stealth);
+                }
+            }
+            if let Some(sw) = settings_for_stealth.borrow().as_ref() {
+                if let Ok(hwnd) = grab_hwnd(sw.window()) {
                     let _ = set_stealth(hwnd, new_stealth);
                 }
             }
@@ -3092,6 +3109,44 @@ fn global_tile_opacity() -> f32 {
     f32::from_bits(TILE_BODY_OPACITY_BITS.load(std::sync::atomic::Ordering::Relaxed))
 }
 
+/// #111 — process-global stealth (WDA_EXCLUDEFROMCAPTURE) state.
+///
+/// The stealth toggle only ever flipped the bar + already-open tiles, so any
+/// window created WHILE stealth was on (the F4 KB palette, the Settings
+/// window, freshly-spawned tiles) never received the capture-exclusion flag
+/// and leaked the overlay into screen-share / recording. Mirror of
+/// `global_tile_opacity`: one lock-free flag every window-realize path
+/// consults so new windows inherit stealth. Flipped by both stealth toggles.
+static STEALTH_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Store the current global stealth state.
+fn set_global_stealth(on: bool) {
+    STEALTH_ON.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Read the current global stealth state (defaults to off).
+fn global_stealth() -> bool {
+    STEALTH_ON.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Apply the current global stealth flag to a freshly-shown window once
+/// winit realizes its native HWND (same 200 ms delay as tile placement).
+/// No-op when stealth is off. Used by windows that don't otherwise grab
+/// their HWND post-show (the F4 palette). (#111)
+fn apply_stealth_on_realize<W: slint::ComponentHandle + 'static>(win: &W) {
+    let weak = win.as_weak();
+    Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
+        if !global_stealth() {
+            return;
+        }
+        if let Some(w) = weak.upgrade() {
+            if let Ok(hwnd) = grab_hwnd(w.window()) {
+                let _ = set_stealth(hwnd, true);
+            }
+        }
+    });
+}
+
 /// Phase E6 v17 — maximize toggle helper. User: "нет функционала
 /// развернуть, нужно отдельной кнопкой или даб-кликом". Maximized
 /// tile is 800×600 (~1.7× default); restored back to 460×360. Uses
@@ -3215,6 +3270,13 @@ fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
         // Without this, clicks land on whatever non-topmost window
         // is at the pixel under the tile.
         let _ = set_always_on_top(hwnd, true);
+
+        // #111 — inherit stealth: a tile spawned while stealth is on must
+        // also be excluded from screen capture (the toggle only covered tiles
+        // that already existed). No-op when stealth is off.
+        if global_stealth() {
+            let _ = set_stealth(hwnd, true);
+        }
 
         // Phase E6 fix v3 — read the ACTUAL physical window size that
         // Slint produced (HiDPI-aware), then place using that real
@@ -3419,6 +3481,8 @@ fn open_palette(
     });
 
     let _ = win.show();
+    // #111 — if stealth is on, exclude the palette from capture once realized.
+    apply_stealth_on_realize(&win);
     *slot = Some(win);
 }
 
@@ -3611,12 +3675,28 @@ fn open_settings(
 
     let s3 = state.clone();
     let tiles_ref3 = tiles_ref.clone();
+    let overlay_for_stealth = overlay_weak.clone();
+    let self_weak_stealth = win.as_weak();
     win.on_stealth_changed(move |on| {
         if let Ok(mut st) = s3.lock() {
             st.stealth = on;
         }
+        // #111 — global source-of-truth so later-created windows inherit it.
+        set_global_stealth(on);
         for t in tiles_ref3.borrow().iter() {
             if let Ok(hwnd) = grab_hwnd(t.window()) {
+                let _ = set_stealth(hwnd, on);
+            }
+        }
+        // #111 — also flip the overlay bar + this Settings window itself
+        // (toggling stealth here previously left both visible to capture).
+        if let Some(o) = overlay_for_stealth.upgrade() {
+            if let Ok(hwnd) = grab_hwnd(o.window()) {
+                let _ = set_stealth(hwnd, on);
+            }
+        }
+        if let Some(sw) = self_weak_stealth.upgrade() {
+            if let Ok(hwnd) = grab_hwnd(sw.window()) {
                 let _ = set_stealth(hwnd, on);
             }
         }
@@ -4399,6 +4479,10 @@ fn open_settings(
             if let Some(w) = weak.upgrade() {
                 if let Ok(hwnd) = grab_hwnd(w.window()) {
                     let _ = make_transparent_tile(hwnd);
+                    // #111 — Settings window inherits stealth when on.
+                    if global_stealth() {
+                        let _ = set_stealth(hwnd, true);
+                    }
                 }
             }
         });
