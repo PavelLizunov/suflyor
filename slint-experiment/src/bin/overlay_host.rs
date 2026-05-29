@@ -2085,6 +2085,15 @@ fn main() -> Result<(), slint::PlatformError> {
     }
 
     let result = overlay.run();
+    // E10.4 — kill any local-AI servers the in-app installer launched so they
+    // do not outlive the app (best-effort; clean-exit path only).
+    {
+        let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
+        for mut child in s.local_ai_servers.drain(..) {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
     // Tokio MT-runtime drop cancels spawned tasks at their next .await
     // (NOT graceful — they don't get to finish their HTTP response).
     // shutdown_timeout gives in-flight tasks a budgeted window to wrap
@@ -4055,6 +4064,126 @@ fn open_settings(
                         w.set_ai_local_test_result(SharedString::from(msg));
                     }
                 });
+            });
+        });
+    }
+
+    // E10.4 — one-click in-app local-AI installer. Runs the whole
+    // download + launch pipeline on a worker thread, streams progress to
+    // the panel, and on success stores the server handles (for kill-on-
+    // quit), writes the local config (secrets preserved), and refreshes
+    // the panel dropdowns + the bar's active-stack readout.
+    {
+        let cfg_c = cfg.clone();
+        let state_c = state.clone();
+        let overlay_c = overlay_weak.clone();
+        let weak = win.as_weak();
+        win.on_install_local_ai_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            if w.get_local_ai_installing() {
+                return; // re-entry guard
+            }
+            w.set_local_ai_installing(true);
+            w.set_local_ai_progress(0.0);
+            w.set_local_ai_gpu(SharedString::from(""));
+            w.set_local_ai_status(SharedString::from("Подготовка…"));
+            let cfg_t = cfg_c.clone();
+            let state_t = state_c.clone();
+            let overlay_t = overlay_c.clone();
+            let weak_t = w.as_weak();
+            std::thread::spawn(move || {
+                let on = {
+                    let weak_p = weak_t.clone();
+                    move |p: overlay_backend::local_ai::Progress| {
+                        let weak_p = weak_p.clone();
+                        let _ = slint::invoke_from_event_loop(move || {
+                            let Some(w) = weak_p.upgrade() else { return };
+                            match p {
+                                overlay_backend::local_ai::Progress::Step(s) => {
+                                    w.set_local_ai_status(SharedString::from(s));
+                                }
+                                overlay_backend::local_ai::Progress::Bytes {
+                                    label,
+                                    done,
+                                    total,
+                                } => {
+                                    let frac = if total > 0 {
+                                        (done as f64 / total as f64) as f32
+                                    } else {
+                                        0.0
+                                    };
+                                    w.set_local_ai_progress(frac);
+                                    let mb = |b: u64| (b as f64) / 1_048_576.0;
+                                    w.set_local_ai_status(SharedString::from(format!(
+                                        "{label}: {:.0} / {:.0} MB",
+                                        mb(done),
+                                        mb(total)
+                                    )));
+                                }
+                                overlay_backend::local_ai::Progress::Gpu(s) => {
+                                    w.set_local_ai_on_gpu(s.starts_with("GPU"));
+                                    w.set_local_ai_gpu(SharedString::from(s));
+                                }
+                            }
+                        });
+                    }
+                };
+                let opts = overlay_backend::local_ai::InstallOptions::default();
+                match overlay_backend::local_ai::install(&opts, &on) {
+                    Ok(res) => {
+                        let model = res.ai_local_model.clone();
+                        let on_gpu = res.on_gpu;
+                        {
+                            let mut c = cfg_t.write();
+                            overlay_backend::local_ai::apply_result(&mut c, &res);
+                            if let Err(e) = overlay_backend::config::save(&c) {
+                                eprintln!("[overlay-host] local-ai config save failed: {e:#}");
+                            }
+                            overlay_backend::ai::set_local_no_think(!c.ai_local_thinking);
+                        }
+                        {
+                            let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
+                            s.local_ai_servers.extend(res.servers);
+                        }
+                        let weak_done = weak_t.clone();
+                        let overlay_done = overlay_t.clone();
+                        let cfg_done = cfg_t.clone();
+                        let _ = slint::invoke_from_event_loop(move || {
+                            diag!("local-ai installed: model={} gpu={}", model, on_gpu);
+                            if let Some(w) = weak_done.upgrade() {
+                                w.set_local_ai_installing(false);
+                                w.set_local_ai_progress(1.0);
+                                w.set_local_ai_status(SharedString::from(
+                                    "Готово. Локальный AI настроен и запущен.",
+                                ));
+                                w.set_ai_provider_index(1);
+                                w.set_ai_local_base_url_input(SharedString::from(
+                                    overlay_backend::local_ai::LLAMA_BASE_URL,
+                                ));
+                                w.set_stt_provider_index(2);
+                                w.set_stt_whisper_url_input(SharedString::from(
+                                    overlay_backend::local_ai::WHISPER_BASE_URL,
+                                ));
+                            }
+                            if let Some(o) = overlay_done.upgrade() {
+                                o.set_active_stack(SharedString::from(active_stack_label(
+                                    &cfg_done.read(),
+                                )));
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        let msg = format!("Ошибка установки: {e}");
+                        eprintln!("[overlay-host] local-ai install failed: {e:#}");
+                        let weak_err = weak_t.clone();
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(w) = weak_err.upgrade() {
+                                w.set_local_ai_installing(false);
+                                w.set_local_ai_status(SharedString::from(msg));
+                            }
+                        });
+                    }
+                }
             });
         });
     }

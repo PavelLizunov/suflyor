@@ -46,6 +46,10 @@ pub struct AppState {
     /// Same as mic_probe_in_flight but for the sys chip's loopback
     /// probe (record_sys_blocking).
     pub sys_probe_in_flight: bool,
+    /// Live local-AI server child processes (llama-server, whisper-server)
+    /// launched by the in-app installer. Tracked so they can be killed on
+    /// app quit instead of being orphaned.
+    pub local_ai_servers: Vec<std::process::Child>,
 }
 
 /// Convenience alias used by all window-spawning callbacks.

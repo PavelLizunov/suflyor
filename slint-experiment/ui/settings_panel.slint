@@ -186,6 +186,14 @@ export component SettingsWindow inherits Window {
     // enable_thinking=false for faster answers; on lets the model reason.
     in-out property <bool> ai-local-thinking: false;
     in-out property <string> ai-local-test-result: "";
+    // E10.4 — in-app local-AI installer: downloads llama.cpp/whisper.cpp + models,
+    // launches the servers, then auto-configures. Progress + GPU/CPU shown live.
+    in-out property <bool> local-ai-installing: false;
+    in-out property <string> local-ai-status: "";
+    in-out property <float> local-ai-progress: 0.0; // 0.0..1.0
+    in-out property <string> local-ai-gpu: "";
+    in-out property <bool> local-ai-on-gpu: false;
+    callback install-local-ai-clicked();
 
     // Phase E6 v20 — tile body opacity (50..100%). Slider on Stealth
     // tab; Rust writes to cfg.tile_body_opacity + applies to spawning
@@ -987,6 +995,49 @@ export component SettingsWindow inherits Window {
                                 font-size: 11px;
                                 color: #6cf;
                                 vertical-alignment: center;
+                            }
+                        }
+                        // ----- E10.4 — one-click in-app local-AI installer -----
+                        Rectangle { background: #2a2c3a; height: 1px; }
+                        Text {
+                            text: @tr("One-click local AI: downloads llama.cpp + whisper.cpp + models (~6 GB) and starts the servers on this PC, then configures everything. Picks GPU (CUDA) automatically.");
+                            font-size: 11px;
+                            color: #999;
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            spacing: 6px;
+                            Button {
+                                text: root.local-ai-installing ? @tr("Installing…") : @tr("Install local AI");
+                                enabled: !root.local-ai-installing;
+                                clicked => {
+                                    root.install-local-ai-clicked();
+                                }
+                            }
+                            if root.local-ai-gpu != "" : Text {
+                                text: root.local-ai-gpu;
+                                font-size: 11px;
+                                color: root.local-ai-on-gpu ? #6f6 : #fc6;
+                                vertical-alignment: center;
+                            }
+                        }
+                        if root.local-ai-status != "" : Text {
+                            text: root.local-ai-status;
+                            font-size: 11px;
+                            color: #6cf;
+                            wrap: word-wrap;
+                        }
+                        if root.local-ai-installing : Rectangle {
+                            height: 6px;
+                            border-radius: 3px;
+                            background: #2a2c3a;
+                            Rectangle {
+                                x: 0;
+                                y: 0;
+                                height: parent.height;
+                                width: parent.width * root.local-ai-progress;
+                                border-radius: 3px;
+                                background: #6cf;
                             }
                         }
 
