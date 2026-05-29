@@ -188,9 +188,6 @@ export component OverlayBarWindow inherits Window {
     in-out property <string> timer-label: "00:00";
     in-out property <bool> timer-active: false;
 
-    // AI model chip cycle: "sonnet" / "haiku" / "opus".
-    in-out property <string> ai-model: "sonnet";
-
     // Phase E10.2 — read-only "active stack" readout: which STT engine +
     // which AI model are actually live, with a 🟢 local / ☁ cloud / ◐ mixed
     // icon. So the user can tell at a glance what's transcribing + answering.
@@ -244,7 +241,6 @@ export component OverlayBarWindow inherits Window {
     callback ptt-sys-pressed();
     callback ptt-sys-released();
     callback timer-toggle-clicked();
-    callback ai-model-cycle-clicked();
     callback spawn-tile-clicked();
     callback close-all-tiles-clicked();
     callback bookmark-clicked();
@@ -385,11 +381,6 @@ export component OverlayBarWindow inherits Window {
                 active: root.timer-active;
                 accent: #fbbf24;
                 clicked => { root.timer-toggle-clicked(); }
-            }
-            Chip {
-                label: @tr("🧠 {}", root.ai-model);
-                accent: #818cf8;
-                clicked => { root.ai-model-cycle-clicked(); }
             }
             Chip {
                 label: root.cost-label;

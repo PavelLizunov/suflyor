@@ -19,7 +19,7 @@
 use overlay_backend::events::{MonitorHint, RuntimeEvents, TileKind, TileSpec};
 use overlay_backend::{ai, audio, config, journal, kb, stt};
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
-use slint_replay::app_state::{format_timer, new_shared_state, next_model};
+use slint_replay::app_state::{format_timer, new_shared_state};
 use slint_replay::markdown;
 use slint_replay::runtime_state::{shared_runtime, SharedSlintRuntime};
 use slint_replay::slint_events::{SlintEvents, SlintUiBridge};
@@ -758,10 +758,6 @@ fn main() -> Result<(), slint::PlatformError> {
 
     overlay.set_status_text(SharedString::from("idle"));
     overlay.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
-    // Initialize ai-model chip from loaded config. (Was previously
-    // overwritten by a stale `set_ai_model("sonnet")` boilerplate line
-    // — caught by review-agent catch-up audit 2026-05-27.)
-    overlay.set_ai_model(SharedString::from(cfg.read().ai_model.clone()));
     overlay.set_active_stack(SharedString::from(active_stack_label(&cfg.read())));
     overlay.set_cost_label(SharedString::from("$0.000"));
     overlay.set_timer_label(SharedString::from("00:00"));
@@ -1290,37 +1286,9 @@ fn main() -> Result<(), slint::PlatformError> {
         },
     );
 
-    // ===== AI model cycle (Phase C: writes to config) =====
-    {
-        let s = state.clone();
-        let weak = overlay.as_weak();
-        let cfg_cycle = cfg.clone();
-        overlay.on_ai_model_cycle_clicked(move || {
-            let new_model = {
-                let mut st = match s.lock() {
-                    Ok(g) => g,
-                    Err(p) => p.into_inner(),
-                };
-                st.ai_model = next_model(&st.ai_model).to_string();
-                st.ai_model.clone()
-            };
-            // Persist to config.json — next AI call uses the new model.
-            {
-                let mut w = cfg_cycle.write();
-                w.ai_model = new_model.clone();
-            }
-            let snapshot = cfg_cycle.read().clone();
-            if let Err(e) = config::save(&snapshot) {
-                eprintln!("[overlay-host] config save failed: {e}");
-            } else {
-                eprintln!("[overlay-host] ai_model -> {new_model} (saved)");
-            }
-            if let Some(o) = weak.upgrade() {
-                o.set_ai_model(SharedString::from(new_model));
-                o.set_active_stack(SharedString::from(active_stack_label(&cfg_cycle.read())));
-            }
-        });
-    }
+    // (#E10.2) The bar's brain-emoji cloud-model cycle chip was removed —
+    // model choice now lives in Settings (the cloud + local model dropdowns)
+    // and the bar's active-stack readout shows what's actually live.
 
     // ===== Bookmark chip (Phase C + E3 slice 4: read from SlintRuntime) =====
     //

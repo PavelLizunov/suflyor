@@ -35,8 +35,6 @@ pub struct AppState {
     pub timer_active: bool,
     /// Elapsed session seconds (formatted to MM:SS by overlay bar).
     pub session_secs: u64,
-    /// Current AI model — cycles through "sonnet" / "haiku" / "opus".
-    pub ai_model: String,
     /// Cumulative session cost in USD.
     pub cost_usd: f64,
     /// True while a record_mic_blocking probe is running. Set on
@@ -62,7 +60,6 @@ pub type SharedState = Arc<Mutex<AppState>>;
 pub fn new_shared_state() -> SharedState {
     Arc::new(Mutex::new(AppState {
         always_on_top: true, // overlay defaults to topmost
-        ai_model: "sonnet".to_string(),
         ..Default::default()
     }))
 }
