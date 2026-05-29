@@ -35,8 +35,6 @@ pub struct AppState {
     pub timer_active: bool,
     /// Elapsed session seconds (formatted to MM:SS by overlay bar).
     pub session_secs: u64,
-    /// Current AI model — cycles through "sonnet" / "haiku" / "opus".
-    pub ai_model: String,
     /// Cumulative session cost in USD.
     pub cost_usd: f64,
     /// True while a record_mic_blocking probe is running. Set on
@@ -48,11 +46,6 @@ pub struct AppState {
     /// Same as mic_probe_in_flight but for the sys chip's loopback
     /// probe (record_sys_blocking).
     pub sys_probe_in_flight: bool,
-    /// Last (question, answer) tile spawned with a successful AI
-    /// response. Bookmark chip reads this and appends to
-    /// %APPDATA%\overlay-mvp\bookmarks.md. None if no tile has
-    /// completed an AI call yet this session.
-    pub last_tile_qa: Option<(String, String)>,
 }
 
 /// Convenience alias used by all window-spawning callbacks.
@@ -62,7 +55,6 @@ pub type SharedState = Arc<Mutex<AppState>>;
 pub fn new_shared_state() -> SharedState {
     Arc::new(Mutex::new(AppState {
         always_on_top: true, // overlay defaults to topmost
-        ai_model: "sonnet".to_string(),
         ..Default::default()
     }))
 }

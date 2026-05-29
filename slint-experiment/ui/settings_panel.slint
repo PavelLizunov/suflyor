@@ -169,14 +169,22 @@ export component SettingsWindow inherits Window {
     in-out property <string> groq-api-key-status: "(loading...)";
     in-out property <string> groq-api-key-input: "";
     in-out property <string> ai-base-url-input: "";
-    in-out property <string> ai-model-input: "";
+    // Phase E10.1 — cloud model dropdown from GET {ai_base_url}/models.
+    in-out property <[string]> ai-models: [];
+    in-out property <int> ai-model-index: 0;
     // E9 — experimental prompt-caching toggle (default off).
     in-out property <bool> ai-prompt-cache: false;
     // Local AI provider (Phase 1): 0 = cloud bridge, 1 = local (Ollama/llama.cpp).
     in-out property <int> ai-provider-index: 0;
     in-out property <string> ai-local-base-url-input: "";
-    in-out property <string> ai-local-model-input: "";
+    // Phase E10.1 — model dropdown populated from GET {base_url}/models so the
+    // user picks a loaded model instead of typing its id.
+    in-out property <[string]> ai-local-models: [];
+    in-out property <int> ai-local-model-index: 0;
     in-out property <bool> ai-local-vision: false;
+    // E10 — local-model "thinking"/reasoning toggle. Off (default) sends
+    // enable_thinking=false for faster answers; on lets the model reason.
+    in-out property <bool> ai-local-thinking: false;
     in-out property <string> ai-local-test-result: "";
 
     // Phase E6 v20 — tile body opacity (50..100%). Slider on Stealth
@@ -204,18 +212,32 @@ export component SettingsWindow inherits Window {
     callback ai-bearer-save(string);
     callback groq-api-key-save(string);
     callback ai-base-url-save(string);
-    callback ai-model-save(string);
+    callback ai-model-selected(string);
+    callback ai-models-refresh();
     callback ai-prompt-cache-changed(bool);
     callback ai-provider-changed(int);
     callback ai-local-base-url-save(string);
-    callback ai-local-model-save(string);
+    callback ai-local-model-selected(string);
+    callback ai-local-models-refresh();
     callback ai-local-vision-changed(bool);
+    callback ai-local-thinking-changed(bool);
     callback ai-local-test-clicked();
     // Phase E6 v27 — connection test buttons (AI bridge + STT).
     in-out property <string> ai-bridge-test-result: "";
     in-out property <string> stt-test-result: "";
+    // STT provider (Phase E10): 0=cloud Groq, 1=local GigaAM, 2=local whisper-server.
+    in-out property <int> stt-provider-index: 0;
+    in-out property <string> stt-gigaam-dir-input: "";
+    in-out property <string> stt-whisper-url-input: "";
+    in-out property <string> stt-whisper-bearer-input: "";
+    in-out property <string> stt-whisper-model-input: "";
     callback ai-bridge-test-clicked();
     callback stt-test-clicked();
+    callback stt-provider-changed(int);
+    callback stt-gigaam-dir-save(string);
+    callback stt-whisper-url-save(string);
+    callback stt-whisper-bearer-save(string);
+    callback stt-whisper-model-save(string);
     // Phase E6 v28 — full-profile import/export (incl. API keys).
     in-out property <string> profile-io-result: "";
     callback export-profile-clicked();
@@ -852,19 +874,32 @@ export component SettingsWindow inherits Window {
                             font-size: 11px;
                             color: #c8c8cc;
                         }
+                        // Model picker — populated from GET {base_url}/models
+                        // (Anthropic bridge / OpenAI-compatible endpoint).
+                        // "refresh" re-queries; saving the URL or bearer also
+                        // re-fetches. No hand-typing the model id.
                         HorizontalLayout {
                             spacing: 6px;
-                            LineEdit {
-                                placeholder-text: @tr("claude-haiku-4-5 / claude-sonnet-4-6 / claude-opus-4-7");
-                                text <=> root.ai-model-input;
+                            ComboBox {
+                                model: root.ai-models;
+                                current-index: root.ai-model-index;
                                 horizontal-stretch: 1;
-                            }
-                            Button {
-                                text: @tr("Save");
-                                clicked => {
-                                    root.ai-model-save(root.ai-model-input);
+                                selected => {
+                                    root.ai-model-selected(self.current-value);
                                 }
                             }
+                            Button {
+                                text: @tr("refresh");
+                                clicked => {
+                                    root.ai-models-refresh();
+                                }
+                            }
+                        }
+                        if root.ai-models.length == 0 : Text {
+                            text: @tr("No models found — check the bridge URL/token, then press refresh.");
+                            font-size: 10px;
+                            color: #999;
+                            wrap: word-wrap;
                         }
 
                         Rectangle { background: #2a2c3a; height: 1px; }
@@ -897,25 +932,45 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                         }
+                        // Model picker — populated from GET {URL}/models
+                        // (llama.cpp serves the loaded model; Ollama the full
+                        // list). "refresh" re-queries; switching to Local or
+                        // saving the URL also auto-fetches. No hand-typing.
                         HorizontalLayout {
                             spacing: 6px;
-                            LineEdit {
-                                placeholder-text: @tr("local model — e.g. qwen2.5:7b-instruct");
-                                text <=> root.ai-local-model-input;
+                            ComboBox {
+                                model: root.ai-local-models;
+                                current-index: root.ai-local-model-index;
                                 horizontal-stretch: 1;
-                            }
-                            Button {
-                                text: @tr("Save");
-                                clicked => {
-                                    root.ai-local-model-save(root.ai-local-model-input);
+                                selected => {
+                                    root.ai-local-model-selected(self.current-value);
                                 }
                             }
+                            Button {
+                                text: @tr("refresh");
+                                clicked => {
+                                    root.ai-local-models-refresh();
+                                }
+                            }
+                        }
+                        if root.ai-local-models.length == 0 : Text {
+                            text: @tr("No models found — start the local server, then press refresh.");
+                            font-size: 10px;
+                            color: #999;
+                            wrap: word-wrap;
                         }
                         DarkCheck {
                             text: @tr("Local model supports images (vision)");
                             checked <=> root.ai-local-vision;
                             toggled(v) => {
                                 root.ai-local-vision-changed(v);
+                            }
+                        }
+                        DarkCheck {
+                            text: @tr("Local model reasoning/thinking (slower, off = faster)");
+                            checked <=> root.ai-local-thinking;
+                            toggled(v) => {
+                                root.ai-local-thinking-changed(v);
                             }
                         }
                         HorizontalLayout {
@@ -975,8 +1030,83 @@ export component SettingsWindow inherits Window {
                     }
                     if root.active-tab == 12 : VerticalLayout {
                         spacing: 8px;
+
+                        // ===== STT engine (Phase E10) =====
                         Text {
-                            text: @tr("Groq STT (Whisper) — API key + model. Required for speech-to-text on audio capture.");
+                            text: @tr("Speech-to-text engine. Local options run on this PC (no cloud, no Groq key needed).");
+                            font-size: 11px;
+                            color: #999;
+                            wrap: word-wrap;
+                        }
+                        ComboBox {
+                            model: [@tr("Cloud (Groq Whisper)"), @tr("Local GigaAM-v3 (Russian)"), @tr("Local Whisper (whisper.cpp)")];
+                            current-index: root.stt-provider-index;
+                            selected => {
+                                root.stt-provider-changed(self.current-index);
+                            }
+                        }
+                        if root.stt-provider-index == 1 : HorizontalLayout {
+                            spacing: 6px;
+                            LineEdit {
+                                placeholder-text: @tr("GigaAM model dir — folder with model.int8.onnx + vocab.txt");
+                                text <=> root.stt-gigaam-dir-input;
+                                horizontal-stretch: 1;
+                            }
+                            Button {
+                                text: @tr("Save");
+                                clicked => {
+                                    root.stt-gigaam-dir-save(root.stt-gigaam-dir-input);
+                                }
+                            }
+                        }
+                        if root.stt-provider-index == 2 : HorizontalLayout {
+                            spacing: 6px;
+                            LineEdit {
+                                placeholder-text: @tr("whisper-server URL — http://127.0.0.1:8081/v1");
+                                text <=> root.stt-whisper-url-input;
+                                horizontal-stretch: 1;
+                            }
+                            Button {
+                                text: @tr("Save");
+                                clicked => {
+                                    root.stt-whisper-url-save(root.stt-whisper-url-input);
+                                }
+                            }
+                        }
+                        if root.stt-provider-index == 2 : HorizontalLayout {
+                            spacing: 6px;
+                            LineEdit {
+                                placeholder-text: @tr("whisper-server bearer token (optional)");
+                                input-type: password;
+                                text <=> root.stt-whisper-bearer-input;
+                                horizontal-stretch: 1;
+                            }
+                            Button {
+                                text: @tr("Save");
+                                clicked => {
+                                    root.stt-whisper-bearer-save(root.stt-whisper-bearer-input);
+                                }
+                            }
+                        }
+                        if root.stt-provider-index == 2 : HorizontalLayout {
+                            spacing: 6px;
+                            LineEdit {
+                                placeholder-text: @tr("whisper model — e.g. whisper-large-v3-turbo");
+                                text <=> root.stt-whisper-model-input;
+                                horizontal-stretch: 1;
+                            }
+                            Button {
+                                text: @tr("Save");
+                                clicked => {
+                                    root.stt-whisper-model-save(root.stt-whisper-model-input);
+                                }
+                            }
+                        }
+
+                        Rectangle { background: #2a2c3a; height: 1px; }
+
+                        Text {
+                            text: @tr("Groq STT (Whisper) — API key + model. Used only when the engine above is Cloud.");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
@@ -1011,7 +1141,7 @@ export component SettingsWindow inherits Window {
                         HorizontalLayout {
                             spacing: 6px;
                             Button {
-                                text: @tr("Test STT (Groq) connection");
+                                text: @tr("Test STT connection");
                                 clicked => { root.stt-test-clicked(); }
                             }
                             if root.stt-test-result != "" : Text {

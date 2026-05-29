@@ -355,6 +355,26 @@ export component TileWindow inherits Window {
                             background: #2a2c3a;
                             height: 1px;
                         }
+                        // Table (kind 7) — aligned monospace block (#109).
+                        // no-wrap preserves column alignment; very wide
+                        // tables clip on the right rather than scrambling
+                        // (maximize the tile with □ to see them in full).
+                        if block.kind == 7 : Rectangle {
+                            background: #0d0f15;
+                            border-radius: 4px;
+                            border-width: 1px;
+                            border-color: #2a2c3a;
+                            VerticalLayout {
+                                padding: 8px;
+                                Text {
+                                    text: block.text;
+                                    font-size: 11px;
+                                    color: #d8e8f8;
+                                    font-family: "Consolas";
+                                    wrap: no-wrap;
+                                }
+                            }
+                        }
                     }
                 }
             }

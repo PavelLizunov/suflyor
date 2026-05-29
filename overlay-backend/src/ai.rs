@@ -62,6 +62,34 @@ fn apply_prompt_cache(body: &mut Value) {
     }
 }
 
+/// When the LOCAL AI provider is a hybrid "thinking" model (e.g. Gemma 4 E4B),
+/// we send `chat_template_kwargs.enable_thinking=false` so it answers directly
+/// instead of emitting long hidden reasoning (≈5× faster). Toggled from config
+/// (`ai_local_thinking`): thinking-OFF is the default. Cloud requests leave the
+/// flag false, so their bodies are unchanged.
+static LOCAL_NO_THINK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Set the "disable local-model thinking" toggle. Called at startup from config
+/// + whenever the AI provider / thinking setting changes. Cheap atomic.
+pub fn set_local_no_think(on: bool) {
+    LOCAL_NO_THINK.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// If the no-think toggle is on, attach `chat_template_kwargs.enable_thinking
+/// = false` (a llama.cpp / OpenAI-compat extension). Servers that don't know
+/// the field ignore it, so this is safe. No-op when off.
+fn apply_local_no_think(body: &mut Value) {
+    if !LOCAL_NO_THINK.load(std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    if let Some(obj) = body.as_object_mut() {
+        obj.insert(
+            "chat_template_kwargs".to_string(),
+            json!({ "enable_thinking": false }),
+        );
+    }
+}
+
 /// Frontend-visible event stream.
 ///
 /// Both `Serialize` AND `Deserialize` — the Slint binary's
@@ -160,6 +188,39 @@ pub async fn test_connection(base_url: String, bearer: String, model: String) ->
     }
 }
 
+/// List the model ids a local OpenAI-compatible server (llama.cpp / Ollama)
+/// currently serves, via `GET {base_url}/models`. Powers the Settings → AI
+/// provider model dropdown so the user picks a loaded model instead of typing
+/// its id. 8s timeout (caller runs this off-thread). Returns the ids from the
+/// OpenAI-shaped `{ "data": [ { "id": ... } ] }` response (empty vec if the
+/// field is missing). Does NOT log the URL or bearer (secrets).
+pub async fn list_models(base_url: &str, bearer: &str) -> Result<Vec<String>> {
+    let client = http_client();
+    let url = format!("{}/models", base_url.trim_end_matches('/'));
+    let mut req = client.get(&url).timeout(std::time::Duration::from_secs(8));
+    if !bearer.is_empty() {
+        req = req.bearer_auth(bearer);
+    }
+    let resp = req.send().await.context("GET models")?;
+    let status = resp.status();
+    if !status.is_success() {
+        let txt = resp.text().await.unwrap_or_default();
+        let snippet: String = txt.chars().take(100).collect();
+        return Err(anyhow!("HTTP {} — {}", status.as_u16(), snippet));
+    }
+    let v: Value = resp.json().await.context("parse models json")?;
+    let ids: Vec<String> = v
+        .get("data")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| m.get("id").and_then(Value::as_str).map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(ids)
+}
+
 async fn stream_inner(
     base_url: String,
     bearer: String,
@@ -178,6 +239,7 @@ async fn stream_inner(
         "max_tokens": max_tokens,
     });
     apply_prompt_cache(&mut body);
+    apply_local_no_think(&mut body);
 
     // SECURITY: do NOT log the full URL — the configured ai_base_url often
     // contains the user's LAN IP / proxy port (network topology leak in
@@ -438,6 +500,7 @@ async fn complete_once(
         "max_tokens": max_tokens,
     });
     apply_prompt_cache(&mut body);
+    apply_local_no_think(&mut body);
 
     // SECURITY: don't log the host portion of the URL (LAN IP/topology). See
     // the matching comment on stream_chat above for the rationale.
