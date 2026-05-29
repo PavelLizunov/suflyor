@@ -170,6 +170,9 @@ export component SettingsWindow inherits Window {
     in-out property <string> groq-api-key-input: "";
     in-out property <string> ai-base-url-input: "";
     in-out property <string> ai-model-input: "";
+    // Phase E10.1 — cloud model dropdown from GET {ai_base_url}/models.
+    in-out property <[string]> ai-models: [];
+    in-out property <int> ai-model-index: 0;
     // E9 — experimental prompt-caching toggle (default off).
     in-out property <bool> ai-prompt-cache: false;
     // Local AI provider (Phase 1): 0 = cloud bridge, 1 = local (Ollama/llama.cpp).
@@ -208,7 +211,8 @@ export component SettingsWindow inherits Window {
     callback ai-bearer-save(string);
     callback groq-api-key-save(string);
     callback ai-base-url-save(string);
-    callback ai-model-save(string);
+    callback ai-model-selected(string);
+    callback ai-models-refresh();
     callback ai-prompt-cache-changed(bool);
     callback ai-provider-changed(int);
     callback ai-local-base-url-save(string);
@@ -864,19 +868,32 @@ export component SettingsWindow inherits Window {
                             font-size: 11px;
                             color: #c8c8cc;
                         }
+                        // Model picker — populated from GET {base_url}/models
+                        // (Anthropic bridge / OpenAI-compatible endpoint).
+                        // "refresh" re-queries; saving the URL or bearer also
+                        // re-fetches. No hand-typing the model id.
                         HorizontalLayout {
                             spacing: 6px;
-                            LineEdit {
-                                placeholder-text: @tr("claude-haiku-4-5 / claude-sonnet-4-6 / claude-opus-4-7");
-                                text <=> root.ai-model-input;
+                            ComboBox {
+                                model: root.ai-models;
+                                current-index: root.ai-model-index;
                                 horizontal-stretch: 1;
-                            }
-                            Button {
-                                text: @tr("Save");
-                                clicked => {
-                                    root.ai-model-save(root.ai-model-input);
+                                selected => {
+                                    root.ai-model-selected(self.current-value);
                                 }
                             }
+                            Button {
+                                text: @tr("refresh");
+                                clicked => {
+                                    root.ai-models-refresh();
+                                }
+                            }
+                        }
+                        if root.ai-models.length == 0 : Text {
+                            text: @tr("No models found — check the bridge URL/token, then press refresh.");
+                            font-size: 10px;
+                            color: #999;
+                            wrap: word-wrap;
                         }
 
                         Rectangle { background: #2a2c3a; height: 1px; }
