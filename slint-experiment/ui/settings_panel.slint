@@ -214,8 +214,15 @@ export component SettingsWindow inherits Window {
     // Phase E6 v27 — connection test buttons (AI bridge + STT).
     in-out property <string> ai-bridge-test-result: "";
     in-out property <string> stt-test-result: "";
+    // STT provider (Phase E10): 0=cloud Groq, 1=local GigaAM, 2=local whisper-server.
+    in-out property <int> stt-provider-index: 0;
+    in-out property <string> stt-gigaam-dir-input: "";
+    in-out property <string> stt-whisper-url-input: "";
     callback ai-bridge-test-clicked();
     callback stt-test-clicked();
+    callback stt-provider-changed(int);
+    callback stt-gigaam-dir-save(string);
+    callback stt-whisper-url-save(string);
     // Phase E6 v28 — full-profile import/export (incl. API keys).
     in-out property <string> profile-io-result: "";
     callback export-profile-clicked();
@@ -975,8 +982,54 @@ export component SettingsWindow inherits Window {
                     }
                     if root.active-tab == 12 : VerticalLayout {
                         spacing: 8px;
+
+                        // ===== STT engine (Phase E10) =====
                         Text {
-                            text: @tr("Groq STT (Whisper) — API key + model. Required for speech-to-text on audio capture.");
+                            text: @tr("Speech-to-text engine. Local options run on this PC (no cloud, no Groq key needed).");
+                            font-size: 11px;
+                            color: #999;
+                            wrap: word-wrap;
+                        }
+                        ComboBox {
+                            model: [@tr("Cloud (Groq Whisper)"), @tr("Local GigaAM-v3 (Russian)"), @tr("Local Whisper (whisper.cpp)")];
+                            current-index: root.stt-provider-index;
+                            selected => {
+                                root.stt-provider-changed(self.current-index);
+                            }
+                        }
+                        if root.stt-provider-index == 1 : HorizontalLayout {
+                            spacing: 6px;
+                            LineEdit {
+                                placeholder-text: @tr("GigaAM model dir — folder with model.int8.onnx + vocab.txt");
+                                text <=> root.stt-gigaam-dir-input;
+                                horizontal-stretch: 1;
+                            }
+                            Button {
+                                text: @tr("Save");
+                                clicked => {
+                                    root.stt-gigaam-dir-save(root.stt-gigaam-dir-input);
+                                }
+                            }
+                        }
+                        if root.stt-provider-index == 2 : HorizontalLayout {
+                            spacing: 6px;
+                            LineEdit {
+                                placeholder-text: @tr("whisper-server URL — http://127.0.0.1:8081/v1");
+                                text <=> root.stt-whisper-url-input;
+                                horizontal-stretch: 1;
+                            }
+                            Button {
+                                text: @tr("Save");
+                                clicked => {
+                                    root.stt-whisper-url-save(root.stt-whisper-url-input);
+                                }
+                            }
+                        }
+
+                        Rectangle { background: #2a2c3a; height: 1px; }
+
+                        Text {
+                            text: @tr("Groq STT (Whisper) — API key + model. Used only when the engine above is Cloud.");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
@@ -1011,7 +1064,7 @@ export component SettingsWindow inherits Window {
                         HorizontalLayout {
                             spacing: 6px;
                             Button {
-                                text: @tr("Test STT (Groq) connection");
+                                text: @tr("Test STT connection");
                                 clicked => { root.stt-test-clicked(); }
                             }
                             if root.stt-test-result != "" : Text {

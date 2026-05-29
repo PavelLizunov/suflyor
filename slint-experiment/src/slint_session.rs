@@ -91,18 +91,30 @@ pub fn start_session(
     events.emit("cost:update", serde_json::json!({ "session_usd": 0.0_f64 }));
 
     // ===== 2. Read cfg fields needed for capture + STT =====
-    let (mic_dev, sys_dev, groq_key, language, whisper_prompt, stt_model) = {
+    let (
+        mic_dev,
+        sys_dev,
+        stt_backend,
+        stt_is_local,
+        groq_key,
+        language,
+        whisper_prompt,
+        stt_model,
+    ) = {
         let c = cfg.read();
         (
             c.mic_device.clone(),
             c.system_audio_device.clone(),
+            c.stt_backend(),
+            c.stt_is_local(),
             c.groq_api_key.clone(),
             c.stt_language.clone(),
             stt::build_whisper_prompt(&c.trigger_keywords, &c.meeting_context),
             c.stt_model.clone(),
         )
     };
-    if groq_key.trim().is_empty() {
+    // Only the cloud (Groq) backend needs a key — local GigaAM/Whisper don't.
+    if !stt_is_local && groq_key.trim().is_empty() {
         anyhow::bail!("Groq API key not set in settings (cfg.groq_api_key empty)");
     }
     // Phase E6 diagnostic — surface device names so we can debug
@@ -151,10 +163,9 @@ pub fn start_session(
     // ===== 5. Spawn STT pipeline =====
     let stt_rx = stt::spawn(
         audio_rx,
-        groq_key,
+        stt_backend,
         language,
         whisper_prompt,
-        stt_model,
         health.clone(),
     );
     lock(&rt).capture = Some(capture_handle);

@@ -410,3 +410,27 @@ msgstr "вставьте новый ключ Groq и нажмите «Сохра
 
 msgid "Test STT (Groq) connection"
 msgstr "Проверить подключение STT (Groq)"
+
+msgid "Test STT connection"
+msgstr "Проверить подключение STT"
+
+msgid "Speech-to-text engine. Local options run on this PC (no cloud, no Groq key needed)."
+msgstr "Движок распознавания речи. Локальные варианты работают на этом ПК (без облака и ключа Groq)."
+
+msgid "Cloud (Groq Whisper)"
+msgstr "Облако (Groq Whisper)"
+
+msgid "Local GigaAM-v3 (Russian)"
+msgstr "Локально GigaAM-v3 (русский)"
+
+msgid "Local Whisper (whisper.cpp)"
+msgstr "Локально Whisper (whisper.cpp)"
+
+msgid "GigaAM model dir — folder with model.int8.onnx + vocab.txt"
+msgstr "Папка модели GigaAM — с model.int8.onnx + vocab.txt"
+
+msgid "whisper-server URL — http://127.0.0.1:8081/v1"
+msgstr "URL whisper-server — http://127.0.0.1:8081/v1"
+
+msgid "Groq STT (Whisper) — API key + model. Used only when the engine above is Cloud."
+msgstr "Groq STT (Whisper) — ключ и модель. Используется, только если движок выше — Облако."

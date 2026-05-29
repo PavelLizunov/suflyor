@@ -707,6 +707,12 @@ fn main() -> Result<(), slint::PlatformError> {
     set_global_tile_opacity(cfg.read().tile_body_opacity);
     // E9 — seed the experimental prompt-cache toggle from config.
     ai::set_prompt_cache(cfg.read().ai_prompt_cache);
+    // E10 — disable local-model "thinking" for fast answers unless the user
+    // opted in. Only affects the local AI provider (cloud bodies unchanged).
+    {
+        let c = cfg.read();
+        ai::set_local_no_think(c.ai_provider == "local" && !c.ai_local_thinking);
+    }
 
     let state = new_shared_state();
     let tiles: TileWindows = Rc::new(RefCell::new(Vec::new()));
@@ -2751,12 +2757,13 @@ fn fire_ptt_ask(
             ep.is_local,
         )
     };
-    let (groq_key, stt_language, stt_model, trigger_keywords) = {
+    let (stt_backend, stt_is_local, groq_key, stt_language, trigger_keywords) = {
         let c = cfg.read();
         (
+            c.stt_backend(),
+            c.stt_is_local(),
             c.groq_api_key.clone(),
             c.stt_language.clone(),
-            c.stt_model.clone(),
             c.trigger_keywords.clone(),
         )
     };
@@ -2793,15 +2800,14 @@ fn fire_ptt_ask(
     let bridge_for_task = bridge.clone();
     let task = rt_handle.spawn(async move {
         let whisper_prompt = stt::build_whisper_prompt(&trigger_keywords, &meeting_context);
-        let result = if groq_key.is_empty() {
+        let result = if !stt_is_local && groq_key.is_empty() {
             Err(anyhow::anyhow!("Groq API key not set (Settings → STT)"))
         } else {
             stt::transcribe_once(
+                &stt_backend,
                 &pcm,
-                &groq_key,
                 stt_language.as_deref(),
                 whisper_prompt.as_deref(),
-                &stt_model,
             )
             .await
         };
@@ -3727,6 +3733,7 @@ fn open_settings(
                 eprintln!("[overlay-host] ai_provider save failed: {e:#}");
                 return;
             }
+            overlay_backend::ai::set_local_no_think(provider == "local" && !c.ai_local_thinking);
             diag!("ai_provider -> {provider}");
         });
     }
@@ -3900,17 +3907,19 @@ fn open_settings(
         win.on_stt_test_clicked(move || {
             let Some(w) = weak.upgrade() else { return };
             w.set_stt_test_result(SharedString::from("testing…"));
-            let api_key = cfg_c.read().groq_api_key.clone();
+            let backend = cfg_c.read().stt_backend();
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
                 let msg = match tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
                 {
-                    Ok(rt) => match rt.block_on(overlay_backend::stt::test_connection(api_key)) {
-                        Ok(s) => format!("[ok] {s}"),
-                        Err(e) => format!("[err] {e:#}").chars().take(90).collect(),
-                    },
+                    Ok(rt) => {
+                        match rt.block_on(overlay_backend::stt::test_connection_backend(&backend)) {
+                            Ok(s) => format!("[ok] {s}"),
+                            Err(e) => format!("[err] {e:#}").chars().take(90).collect(),
+                        }
+                    }
                     Err(e) => format!("[err] runtime: {e}"),
                 };
                 let _ = slint::invoke_from_event_loop(move || {
@@ -3919,6 +3928,51 @@ fn open_settings(
                     }
                 });
             });
+        });
+    }
+
+    // Phase E10 — STT provider selector + local-engine fields.
+    {
+        let cfg_c = cfg.clone();
+        win.on_stt_provider_changed(move |idx| {
+            let provider = match idx {
+                1 => "gigaam",
+                2 => "whisper",
+                _ => "cloud",
+            };
+            let mut c = cfg_c.write();
+            c.stt_provider = provider.to_string();
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] stt_provider save failed: {e:#}");
+                return;
+            }
+            diag!("stt_provider -> {provider}");
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_stt_gigaam_dir_save(move |v| {
+            let trimmed = v.trim().to_string();
+            let mut c = cfg_c.write();
+            c.stt_gigaam_dir = trimmed.clone();
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] stt_gigaam_dir save failed: {e:#}");
+                return;
+            }
+            diag!("stt_gigaam_dir saved ({} chars)", trimmed.len());
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_stt_whisper_url_save(move |v| {
+            let trimmed = v.trim().to_string();
+            let mut c = cfg_c.write();
+            c.stt_whisper_url = trimmed.clone();
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] stt_whisper_url save failed: {e:#}");
+                return;
+            }
+            diag!("stt_whisper_url saved ({} chars)", trimmed.len());
         });
     }
 
@@ -4111,18 +4165,27 @@ fn open_settings(
                 return;
             }
             // Toggle ON: start a new recording.
-            let (mic_dev, groq_key, stt_language, stt_model, trigger_keywords, meeting_context) = {
+            let (
+                mic_dev,
+                stt_backend,
+                stt_is_local,
+                groq_key,
+                stt_language,
+                trigger_keywords,
+                meeting_context,
+            ) = {
                 let c = cfg_c.read();
                 (
                     c.mic_device.clone(),
+                    c.stt_backend(),
+                    c.stt_is_local(),
                     c.groq_api_key.clone(),
                     c.stt_language.clone(),
-                    c.stt_model.clone(),
                     c.trigger_keywords.clone(),
                     c.meeting_context.clone(),
                 )
             };
-            if groq_key.is_empty() {
+            if !stt_is_local && groq_key.is_empty() {
                 w.set_meeting_context_result(SharedString::from(
                     "[--] ключ Groq не задан (вкладка STT)",
                 ));
@@ -4152,11 +4215,10 @@ fn open_settings(
                     {
                         Ok(rt) => rt
                             .block_on(stt::transcribe_once(
+                                &stt_backend,
                                 &pcm,
-                                &groq_key,
                                 stt_language.as_deref(),
                                 whisper_prompt.as_deref(),
-                                &stt_model,
                             ))
                             .unwrap_or_default(),
                         Err(_) => String::new(),
@@ -4391,6 +4453,14 @@ fn populate_token_status(win: &SettingsWindow, cfg: &overlay_backend::config::Sh
     win.set_ai_local_base_url_input(SharedString::from(c.ai_local_base_url.clone()));
     win.set_ai_local_model_input(SharedString::from(c.ai_local_model.clone()));
     win.set_ai_local_vision(c.ai_local_vision);
+    // Phase E10 — STT provider selector + local-engine fields.
+    win.set_stt_provider_index(match c.stt_provider.as_str() {
+        "gigaam" => 1,
+        "whisper" => 2,
+        _ => 0,
+    });
+    win.set_stt_gigaam_dir_input(SharedString::from(c.stt_gigaam_dir.clone()));
+    win.set_stt_whisper_url_input(SharedString::from(c.stt_whisper_url.clone()));
     // Phase E6 v38 — reflect the saved interface language in the
     // Interface-tab dropdown (0=Русский, 1=English).
     win.set_ui_language_index(if c.ui_language == "en" { 1 } else { 0 });
