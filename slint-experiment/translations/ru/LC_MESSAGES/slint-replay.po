@@ -386,8 +386,8 @@ msgstr "Облако (мост)"
 msgid "Local (Ollama / llama.cpp)"
 msgstr "Локально (Ollama / llama.cpp)"
 
-msgid "local URL — http://127.0.0.1:11434/v1"
-msgstr "локальный URL — http://127.0.0.1:11434/v1"
+msgid "local URL — http://127.0.0.1:8080/v1 (llama.cpp) or :11434 (Ollama)"
+msgstr "локальный URL — http://127.0.0.1:8080/v1 (llama.cpp) или :11434 (Ollama)"
 
 msgid "local model — e.g. qwen2.5:7b-instruct"
 msgstr "локальная модель — напр. qwen2.5:7b-instruct"

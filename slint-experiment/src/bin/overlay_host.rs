@@ -696,6 +696,35 @@ fn main() -> Result<(), slint::PlatformError> {
                 "set"
             }
         );
+        // E10.3 — log the resolved AI + STT stack (which engine + which
+        // endpoint) so the log shows what is actually used. The tester could
+        // not tell from logs whether AI was local/cloud or on which port.
+        let ai_desc = if c.ai_provider == "local" {
+            format!(
+                "local {} model={}",
+                c.ai_local_base_url,
+                if c.ai_local_model.is_empty() {
+                    "(unset)"
+                } else {
+                    c.ai_local_model.as_str()
+                }
+            )
+        } else {
+            format!("cloud {}", c.ai_model)
+        };
+        let stt_desc = match c.stt_provider.as_str() {
+            "gigaam" => format!(
+                "GigaAM in-process/CPU dir={}",
+                if c.stt_gigaam_dir.is_empty() {
+                    "(unset)"
+                } else {
+                    c.stt_gigaam_dir.as_str()
+                }
+            ),
+            "whisper" => format!("Whisper {}", c.stt_whisper_url),
+            _ => "cloud Groq".to_string(),
+        };
+        diag!("stack: AI={} STT={}", ai_desc, stt_desc);
     }
 
     // Phase E6 v36 — seed the process-global tile opacity from config so

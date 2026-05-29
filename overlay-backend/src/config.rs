@@ -44,7 +44,8 @@ pub struct Config {
     /// phase.) `#[serde(default)]` → old configs default to "cloud".
     #[serde(default = "default_ai_provider")]
     pub ai_provider: String,
-    /// Local server base URL (OpenAI-compatible), e.g. Ollama's
+    /// Local server base URL (OpenAI-compatible). Default is llama.cpp's
+    /// "http://127.0.0.1:8080/v1" (the shipped setup pipeline); Ollama uses
     /// "http://127.0.0.1:11434/v1".
     #[serde(default = "default_ai_local_base_url")]
     pub ai_local_base_url: String,
@@ -415,7 +416,9 @@ fn default_ai_provider() -> String {
 }
 
 fn default_ai_local_base_url() -> String {
-    "http://127.0.0.1:11434/v1".into()
+    // llama.cpp (the shipped setup-local-ai.ps1 pipeline) serves on :8080.
+    // Ollama users can change this to :11434 in Settings.
+    "http://127.0.0.1:8080/v1".into()
 }
 
 fn default_stt_provider() -> String {
@@ -1846,10 +1849,10 @@ mod tests {
     #[test]
     fn config_missing_provider_fields_default_cloud() {
         // An old config.json without the new fields loads as cloud + the
-        // Ollama default URL, and resolves to the cloud endpoint.
+        // llama.cpp default URL, and resolves to the cloud endpoint.
         let cfg: Config = serde_json::from_str(r#"{"ai_model":"x"}"#).expect("parse");
         assert_eq!(cfg.ai_provider, "cloud");
-        assert_eq!(cfg.ai_local_base_url, "http://127.0.0.1:11434/v1");
+        assert_eq!(cfg.ai_local_base_url, "http://127.0.0.1:8080/v1");
         assert!(!cfg.ai_endpoint(false).is_local);
     }
 

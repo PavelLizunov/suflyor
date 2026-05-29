@@ -915,13 +915,14 @@ export component SettingsWindow inherits Window {
                             model: [@tr("Cloud (bridge)"), @tr("Local (Ollama / llama.cpp)")];
                             current-index: root.ai-provider-index;
                             selected => {
+                                root.ai-provider-index = self.current-index;
                                 root.ai-provider-changed(self.current-index);
                             }
                         }
                         HorizontalLayout {
                             spacing: 6px;
                             LineEdit {
-                                placeholder-text: @tr("local URL — http://127.0.0.1:11434/v1");
+                                placeholder-text: @tr("local URL — http://127.0.0.1:8080/v1 (llama.cpp) or :11434 (Ollama)");
                                 text <=> root.ai-local-base-url-input;
                                 horizontal-stretch: 1;
                             }
@@ -1042,6 +1043,11 @@ export component SettingsWindow inherits Window {
                             model: [@tr("Cloud (Groq Whisper)"), @tr("Local GigaAM-v3 (Russian)"), @tr("Local Whisper (whisper.cpp)")];
                             current-index: root.stt-provider-index;
                             selected => {
+                                // Write the index back so the conditional engine
+                                // fields (GigaAM dir / whisper-server URL) render
+                                // immediately on selection instead of only after
+                                // re-opening Settings.
+                                root.stt-provider-index = self.current-index;
                                 root.stt-provider-changed(self.current-index);
                             }
                         }
