@@ -407,7 +407,10 @@ async fn maybe_spawn_auto_tile(
             ep.is_local,
         )
     };
-    if !enabled || bearer.trim().is_empty() {
+    // A bearer is required only for the CLOUD bridge; local servers
+    // (llama.cpp / Ollama) need no auth, so an empty bearer is valid there —
+    // gating on it blocked ALL auto-spawn when the local provider was active.
+    if !enabled || (!is_local && bearer.trim().is_empty()) {
         return;
     }
 
