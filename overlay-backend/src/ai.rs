@@ -62,6 +62,34 @@ fn apply_prompt_cache(body: &mut Value) {
     }
 }
 
+/// When the LOCAL AI provider is a hybrid "thinking" model (e.g. Gemma 4 E4B),
+/// we send `chat_template_kwargs.enable_thinking=false` so it answers directly
+/// instead of emitting long hidden reasoning (≈5× faster). Toggled from config
+/// (`ai_local_thinking`): thinking-OFF is the default. Cloud requests leave the
+/// flag false, so their bodies are unchanged.
+static LOCAL_NO_THINK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Set the "disable local-model thinking" toggle. Called at startup from config
+/// + whenever the AI provider / thinking setting changes. Cheap atomic.
+pub fn set_local_no_think(on: bool) {
+    LOCAL_NO_THINK.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// If the no-think toggle is on, attach `chat_template_kwargs.enable_thinking
+/// = false` (a llama.cpp / OpenAI-compat extension). Servers that don't know
+/// the field ignore it, so this is safe. No-op when off.
+fn apply_local_no_think(body: &mut Value) {
+    if !LOCAL_NO_THINK.load(std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    if let Some(obj) = body.as_object_mut() {
+        obj.insert(
+            "chat_template_kwargs".to_string(),
+            json!({ "enable_thinking": false }),
+        );
+    }
+}
+
 /// Frontend-visible event stream.
 ///
 /// Both `Serialize` AND `Deserialize` — the Slint binary's
@@ -178,6 +206,7 @@ async fn stream_inner(
         "max_tokens": max_tokens,
     });
     apply_prompt_cache(&mut body);
+    apply_local_no_think(&mut body);
 
     // SECURITY: do NOT log the full URL — the configured ai_base_url often
     // contains the user's LAN IP / proxy port (network topology leak in
@@ -438,6 +467,7 @@ async fn complete_once(
         "max_tokens": max_tokens,
     });
     apply_prompt_cache(&mut body);
+    apply_local_no_think(&mut body);
 
     // SECURITY: don't log the host portion of the URL (LAN IP/topology). See
     // the matching comment on stream_chat above for the rationale.

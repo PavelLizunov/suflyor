@@ -6,11 +6,17 @@
 //! grow too large.
 
 use crate::audio::{AudioChunk, AudioSource, TARGET_SAMPLE_RATE};
+use crate::config::SttBackendCfg;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Write;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
+use transcribe_rs::onnx::gigaam::GigaAMModel;
+use transcribe_rs::onnx::Quantization;
+use transcribe_rs::{SpeechModel, TranscribeOptions};
 
 const GROQ_STT_URL: &str = "https://api.groq.com/openai/v1/audio/transcriptions";
 /// Models-list endpoint — used by `test_connection` to validate the
@@ -39,6 +45,46 @@ pub async fn test_connection(api_key: String) -> Result<String> {
         Ok(format!("HTTP {} — key valid", status.as_u16()))
     } else {
         Err(anyhow::anyhow!("HTTP {} — check key", status.as_u16()))
+    }
+}
+
+/// Backend-aware connection test for the Settings "STT" tab. Cloud → ping Groq
+/// models; local Whisper → ping the whisper-server; GigaAM → verify the model
+/// files actually load. Never logs secrets.
+pub async fn test_connection_backend(backend: &SttBackendCfg) -> Result<String> {
+    match backend {
+        SttBackendCfg::Cloud { api_key, .. } => test_connection(api_key.clone()).await,
+        SttBackendCfg::Whisper {
+            base_url, bearer, ..
+        } => {
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(10))
+                .build()
+                .context("build reqwest client")?;
+            let url = format!("{}/models", base_url.trim_end_matches('/'));
+            let mut req = client.get(&url);
+            if !bearer.trim().is_empty() {
+                req = req.bearer_auth(bearer);
+            }
+            let resp = req.send().await.context("GET whisper server")?;
+            // Any HTTP reply (even 404/405 for an unimplemented /models route)
+            // means the server is up and reachable — which is what we test. A
+            // truly-down server fails at `send()` above.
+            Ok(format!(
+                "HTTP {} — whisper-server reachable",
+                resp.status().as_u16()
+            ))
+        }
+        SttBackendCfg::Gigaam { model_dir } => {
+            let dir = model_dir.clone();
+            tokio::task::spawn_blocking(move || {
+                GigaAMModel::load(Path::new(&dir), &Quantization::Int8)
+                    .map(|_m| "GigaAM model loaded OK".to_string())
+                    .map_err(|e| anyhow::anyhow!("GigaAM load failed: {e}"))
+            })
+            .await
+            .map_err(|e| anyhow::anyhow!("GigaAM test join: {e}"))?
+        }
     }
 }
 /// Fallback Groq model id if config doesn't specify one. Both "whisper-large-v3"
@@ -82,29 +128,63 @@ struct GroqResponse {
 
 /// Spawn the STT pipeline. Returns receiver of TranscriptEvent.
 ///
+/// `backend` selects the transcription engine: cloud Groq, a local
+/// whisper.cpp server, or in-process GigaAM (loaded once here). All the
+/// VAD buffering + anti-hallucination logic below is backend-independent.
+///
 /// `whisper_prompt` (optional) biases recognition toward specific terms —
-/// see `build_whisper_prompt`. Without it, Whisper forces foreign words
-/// into Cyrillic phonetics ("kubernetes" → "кобернетес") which the AI
-/// can sometimes recover but the journal/detector keyword match fails.
+/// see `build_whisper_prompt`. It is only sent to the Whisper backends
+/// (cloud / local whisper-server); GigaAM has no prompt input and ignores it.
 pub fn spawn(
     mut audio_rx: mpsc::Receiver<AudioChunk>,
-    api_key: String,
+    backend: SttBackendCfg,
     language: Option<String>,
     whisper_prompt: Option<String>,
-    stt_model: String,
     health: std::sync::Arc<crate::health::HealthSignals>,
 ) -> mpsc::Receiver<TranscriptEvent> {
     let (tx, rx) = mpsc::channel::<TranscriptEvent>(64);
 
-    // Back-pressure cap on simultaneous in-flight Whisper requests.
-    // Carried over from 1st+2nd-pass audits: previously unbounded.
-    // During Groq rate-limit / network spike, dozens of inner spawns
-    // could pile up holding cloned prompts + reqwest connections.
-    // 6 = enough for both sources flushing fast + retry, not so many
-    // that we'd ever hit Groq's per-account QPS limit.
+    // Back-pressure cap on simultaneous in-flight HTTP STT requests (cloud /
+    // local whisper). Carried over from 1st+2nd-pass audits: previously
+    // unbounded. GigaAM serialises through its own model mutex, so this only
+    // bounds the network backends.
     let stt_semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(6));
 
     tokio::spawn(async move {
+        // Pre-load the GigaAM model ONCE (expensive: ~250 MB + ~0.5 s), OFF the
+        // async executor via spawn_blocking, when the local-GigaAM backend is
+        // selected. None for the HTTP backends. A load failure is logged and
+        // leaves the pipeline producing no transcripts (the Settings "Test"
+        // button surfaces the real error to the user).
+        let gigaam: Option<Arc<Mutex<GigaAMModel>>> =
+            if let SttBackendCfg::Gigaam { model_dir } = &backend {
+                let dir = model_dir.clone();
+                let dir_for_log = model_dir.clone();
+                match tokio::task::spawn_blocking(move || {
+                    GigaAMModel::load(Path::new(&dir), &Quantization::Int8)
+                })
+                .await
+                {
+                    Ok(Ok(m)) => {
+                        log::info!("STT GigaAM model loaded from {dir_for_log}");
+                        Some(Arc::new(Mutex::new(m)))
+                    }
+                    Ok(Err(e)) => {
+                        log::error!(
+                            "STT GigaAM load FAILED from '{dir_for_log}': {e} — \
+                             local STT produces no transcripts until fixed"
+                        );
+                        None
+                    }
+                    Err(e) => {
+                        log::error!("STT GigaAM load task join failed: {e}");
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
         // `reqwest::Client::builder().build()` only fails if TLS init
         // fails — that's a process-wide rustls bring-up failure, not a
         // recoverable runtime condition. Exempt from `expect_used` deny.
@@ -116,6 +196,26 @@ pub fn spawn(
             .timeout(std::time::Duration::from_secs(30))
             .build()
             .expect("reqwest client");
+
+        // Resolve the HTTP target (url, optional bearer, model) once for the
+        // Whisper-style backends. None for GigaAM (handled in-process).
+        let http_target: Option<(String, Option<String>, String)> = match &backend {
+            SttBackendCfg::Cloud { api_key, model } => Some((
+                GROQ_STT_URL.to_string(),
+                Some(api_key.clone()),
+                model.clone(),
+            )),
+            SttBackendCfg::Whisper {
+                base_url,
+                bearer,
+                model,
+            } => {
+                let url = format!("{}/audio/transcriptions", base_url.trim_end_matches('/'));
+                let bearer = (!bearer.trim().is_empty()).then(|| bearer.clone());
+                Some((url, bearer, model.clone()))
+            }
+            SttBackendCfg::Gigaam { .. } => None,
+        };
 
         // Per-source rolling buffer + silence tracking
         let mut buffers: HashMap<AudioSource, Utterance> = HashMap::new();
@@ -184,76 +284,85 @@ pub fn spawn(
                 let speech_like = buffer_likely_speech(&to_send.samples);
                 if !speech_like {
                     log::info!(
-                        "noise-gate dropped {:?} buffer ({:.1}s) — pre-Whisper",
+                        "noise-gate dropped {:?} buffer ({:.1}s) — pre-STT",
                         chunk.source,
                         dur_sec
                     );
                 }
                 if to_send.had_voice && dur_sec >= MIN_UTTERANCE_SEC && speech_like {
-                    let client = client.clone();
-                    let api_key = api_key.clone();
-                    let language = language.clone();
-                    let whisper_prompt = whisper_prompt.clone();
-                    let stt_model = stt_model.clone();
                     let tx = tx.clone();
                     let src = chunk.source;
                     let sample_count = to_send.samples.len();
+                    let start_ts = to_send.start_ts_ms;
                     let health_for_task = health.clone();
-                    let sem = stt_semaphore.clone();
-                    log::info!(
-                        "STT submitting {:?}: {} samples ({:.1}s, model={})",
-                        src,
-                        sample_count,
-                        dur_sec,
-                        stt_model
-                    );
-                    tokio::spawn(async move {
-                        // Bound concurrent Whisper calls — wait if 6 already in flight.
-                        let _permit = match sem.acquire_owned().await {
-                            Ok(p) => p,
-                            Err(_) => return, // semaphore closed, runtime shutting down
-                        };
-                        let health = health_for_task;
-                        match transcribe(
-                            &client,
-                            &api_key,
-                            &to_send.samples,
-                            language.as_deref(),
-                            whisper_prompt.as_deref(),
-                            &stt_model,
-                        )
-                        .await
-                        {
-                            Ok(text) if !text.trim().is_empty() => {
-                                // Post-Whisper hallucination filter — catches
-                                // patterns the noise-gate let through.
-                                if is_likely_hallucination(&text) {
-                                    log::info!(
-                                        "STT [{:?}] hallucination filtered: '{}'",
-                                        src,
-                                        text.chars().take(80).collect::<String>()
-                                    );
-                                } else {
-                                    // Health: successful Whisper response with usable text.
-                                    health.last_stt_ok_ms.store(
-                                        crate::journal::now_unix_ms() as u64,
-                                        std::sync::atomic::Ordering::Relaxed,
-                                    );
-                                    log::info!("STT got text [{:?}]: '{}'", src,
-                                        text.chars().take(80).collect::<String>());
-                                    let _ = tx
-                                        .send(TranscriptEvent {
-                                            source: src,
-                                            text,
-                                            timestamp_ms: to_send.start_ts_ms,
-                                        })
-                                        .await;
-                                }
-                            }
-                            Ok(_) => log::warn!("STT returned EMPTY for {:?} ({} samples) — Whisper heard silence/noise", src, sample_count),
-                            Err(e) => log::warn!("STT failed for {:?}: {e:#}", src),
-                        }
-                    });
+
+                    if let Some(model) = &gigaam {
+                        // In-process GigaAM — run inference on a blocking thread.
+                        let model = model.clone();
+                        let samples = to_send.samples;
+                        log::info!(
+                            "STT submitting {:?}: {} samples ({:.1}s, gigaam)",
+                            src,
+                            sample_count,
+                            dur_sec
+                        );
+                        tokio::spawn(async move {
+                            let joined = tokio::task::spawn_blocking(move || {
+                                gigaam_transcribe(&model, &samples)
+                            })
+                            .await;
+                            let result = joined
+                                .unwrap_or_else(|e| Err(anyhow::anyhow!("gigaam task join: {e}")));
+                            finish_transcript(
+                                result,
+                                src,
+                                start_ts,
+                                sample_count,
+                                &tx,
+                                &health_for_task,
+                            )
+                            .await;
+                        });
+                    } else if let Some((url, bearer, model)) = http_target.clone() {
+                        // Cloud Groq or local whisper-server — HTTP multipart.
+                        let client = client.clone();
+                        let language = language.clone();
+                        let whisper_prompt = whisper_prompt.clone();
+                        let sem = stt_semaphore.clone();
+                        log::info!(
+                            "STT submitting {:?}: {} samples ({:.1}s, model={})",
+                            src,
+                            sample_count,
+                            dur_sec,
+                            model
+                        );
+                        tokio::spawn(async move {
+                            // Bound concurrent HTTP calls — wait if 6 already in flight.
+                            let _permit = match sem.acquire_owned().await {
+                                Ok(p) => p,
+                                Err(_) => return, // semaphore closed, runtime shutting down
+                            };
+                            let result = transcribe(
+                                &client,
+                                &url,
+                                bearer.as_deref(),
+                                &to_send.samples,
+                                language.as_deref(),
+                                whisper_prompt.as_deref(),
+                                &model,
+                            )
+                            .await;
+                            finish_transcript(
+                                result,
+                                src,
+                                start_ts,
+                                sample_count,
+                                &tx,
+                                &health_for_task,
+                            )
+                            .await;
+                        });
+                    }
                 }
             }
         }
@@ -416,23 +525,66 @@ fn rms_i16(samples: &[i16]) -> f32 {
 }
 
 /// Public one-shot transcription helper for ad-hoc flows (e.g. prep recording).
+/// Provider-aware: cloud Groq, local whisper-server, or in-process GigaAM
+/// (loaded ad-hoc here — fine for a one-shot; the live pipeline preloads it).
 pub async fn transcribe_once(
+    backend: &SttBackendCfg,
     pcm: &[i16],
-    api_key: &str,
     language: Option<&str>,
     whisper_prompt: Option<&str>,
-    stt_model: &str,
 ) -> Result<String> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(60))
-        .build()
-        .context("build client")?;
-    transcribe(&client, api_key, pcm, language, whisper_prompt, stt_model).await
+    match backend {
+        SttBackendCfg::Cloud { api_key, model } => {
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(60))
+                .build()
+                .context("build client")?;
+            transcribe(
+                &client,
+                GROQ_STT_URL,
+                Some(api_key),
+                pcm,
+                language,
+                whisper_prompt,
+                model,
+            )
+            .await
+        }
+        SttBackendCfg::Whisper {
+            base_url,
+            bearer,
+            model,
+        } => {
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(60))
+                .build()
+                .context("build client")?;
+            let url = format!("{}/audio/transcriptions", base_url.trim_end_matches('/'));
+            let bearer = (!bearer.trim().is_empty()).then_some(bearer.as_str());
+            transcribe(&client, &url, bearer, pcm, language, whisper_prompt, model).await
+        }
+        SttBackendCfg::Gigaam { model_dir } => {
+            let dir = model_dir.clone();
+            let pcm = pcm.to_vec();
+            tokio::task::spawn_blocking(move || {
+                let mut m = GigaAMModel::load(Path::new(&dir), &Quantization::Int8)
+                    .map_err(|e| anyhow::anyhow!("GigaAM load: {e}"))?;
+                let f32s: Vec<f32> = pcm.iter().map(|&s| f32::from(s) / 32768.0).collect();
+                let r = m
+                    .transcribe(&f32s, &TranscribeOptions::default())
+                    .map_err(|e| anyhow::anyhow!("GigaAM transcribe: {e}"))?;
+                Ok::<String, anyhow::Error>(r.text)
+            })
+            .await
+            .map_err(|e| anyhow::anyhow!("GigaAM join: {e}"))?
+        }
+    }
 }
 
 async fn transcribe(
     client: &reqwest::Client,
-    api_key: &str,
+    url: &str,
+    bearer: Option<&str>,
     pcm: &[i16],
     language: Option<&str>,
     prompt: Option<&str>,
@@ -450,7 +602,8 @@ async fn transcribe(
             log::info!("STT retry attempt {} (after {:?})", attempt + 1, delay);
         }
 
-        match transcribe_once_attempt(client, api_key, &wav, language, prompt, stt_model).await {
+        match transcribe_once_attempt(client, url, bearer, &wav, language, prompt, stt_model).await
+        {
             Ok(text) => return Ok(text),
             Err(e) => {
                 let msg = format!("{e:#}");
@@ -481,7 +634,8 @@ fn is_permanent_error(msg: &str) -> bool {
 
 async fn transcribe_once_attempt(
     client: &reqwest::Client,
-    api_key: &str,
+    url: &str,
+    bearer: Option<&str>,
     wav: &[u8],
     language: Option<&str>,
     prompt: Option<&str>,
@@ -516,22 +670,85 @@ async fn transcribe_once_attempt(
         }
     }
 
-    let resp = client
-        .post(GROQ_STT_URL)
-        .bearer_auth(api_key)
+    let mut req = client.post(url);
+    if let Some(b) = bearer {
+        req = req.bearer_auth(b);
+    }
+    let resp = req
         .multipart(form)
         .send()
         .await
-        .context("POST groq stt")?;
+        .context("POST stt transcriptions")?;
 
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("Groq HTTP {status}: {body}");
+        anyhow::bail!("STT HTTP {status}: {body}");
     }
 
-    let parsed: GroqResponse = resp.json().await.context("parse groq json")?;
+    let parsed: GroqResponse = resp.json().await.context("parse stt json")?;
     Ok(parsed.text)
+}
+
+/// Shared post-transcription handling for every backend: drop empty results,
+/// apply the hallucination filter, bump the health timestamp on success, and
+/// emit the `TranscriptEvent`.
+async fn finish_transcript(
+    result: Result<String>,
+    src: AudioSource,
+    start_ts_ms: u64,
+    sample_count: usize,
+    tx: &mpsc::Sender<TranscriptEvent>,
+    health: &crate::health::HealthSignals,
+) {
+    match result {
+        Ok(text) if !text.trim().is_empty() => {
+            if is_likely_hallucination(&text) {
+                log::info!(
+                    "STT [{:?}] hallucination filtered: '{}'",
+                    src,
+                    text.chars().take(80).collect::<String>()
+                );
+            } else {
+                health.last_stt_ok_ms.store(
+                    crate::journal::now_unix_ms() as u64,
+                    std::sync::atomic::Ordering::Relaxed,
+                );
+                log::info!(
+                    "STT got text [{:?}]: '{}'",
+                    src,
+                    text.chars().take(80).collect::<String>()
+                );
+                let _ = tx
+                    .send(TranscriptEvent {
+                        source: src,
+                        text,
+                        timestamp_ms: start_ts_ms,
+                    })
+                    .await;
+            }
+        }
+        Ok(_) => log::warn!(
+            "STT returned EMPTY for {:?} ({} samples) — heard silence/noise",
+            src,
+            sample_count
+        ),
+        Err(e) => log::warn!("STT failed for {:?}: {e:#}", src),
+    }
+}
+
+/// Run one in-process GigaAM transcription (called on a blocking thread).
+/// Converts i16 PCM (16 kHz mono) to f32 in [-1, 1] then runs the shared model
+/// under its mutex. GigaAM is Russian-specialised and takes no prompt.
+fn gigaam_transcribe(model: &Arc<Mutex<GigaAMModel>>, pcm: &[i16]) -> Result<String> {
+    let f32s: Vec<f32> = pcm.iter().map(|&s| f32::from(s) / 32768.0).collect();
+    let mut m = model
+        .lock()
+        .map_err(|_| anyhow::anyhow!("GigaAM model mutex poisoned"))?;
+    let res = m
+        .transcribe(&f32s, &TranscribeOptions::default())
+        .map_err(|e| anyhow::anyhow!("GigaAM transcribe: {e}"))?;
+    Ok(res.text)
 }
 
 /// Canonical Latin spellings of high-frequency loanwords that Whisper

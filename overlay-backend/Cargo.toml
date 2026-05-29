@@ -26,6 +26,14 @@ once_cell = "1"
 reqwest = { version = "0.12", features = ["stream", "json", "multipart", "rustls-tls"], default-features = false }
 bytes = "1"
 
+# Local STT — GigaAM-v3 in-process via ONNX (Russian-specialised). The `ort`
+# crate downloads the onnxruntime binary at build time and runs on CPU by
+# default (GigaAM is ~22× real-time on CPU, so no VRAM contention with the LLM).
+# Local Whisper goes through the existing reqwest client (whisper.cpp server),
+# so we deliberately DON'T enable the whisper-cpp feature (avoids a libclang
+# build-dep on the whole project).
+transcribe-rs = { version = "0.3.11", default-features = false, features = ["onnx"] }
+
 # Audio capture (audio.rs)
 wasapi = "0.23"
 

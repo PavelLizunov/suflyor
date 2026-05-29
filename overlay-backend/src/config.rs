@@ -62,6 +62,13 @@ pub struct Config {
     /// false, screenshots are dropped for local asks (a text model would error).
     #[serde(default)]
     pub ai_local_vision: bool,
+    /// When the LOCAL AI model is a hybrid "thinking" model (e.g. Gemma 4
+    /// E4B), `false` (default) makes us send `chat_template_kwargs.enable_thinking
+    /// = false` so it answers directly instead of emitting long hidden
+    /// reasoning (≈5× faster for interview answers). Set `true` to allow the
+    /// model to think. Only affects the LOCAL provider.
+    #[serde(default)]
+    pub ai_local_thinking: bool,
 
     /// Language tag (ISO 639-1) the assistant should ALWAYS respond in.
     /// Injected into the system prompt at runtime.
@@ -74,6 +81,28 @@ pub struct Config {
     /// "whisper-large-v3-turbo" (~3× faster, slightly less accurate).
     /// Default: large-v3 — accuracy beats latency for interview use.
     pub stt_model: String,
+
+    /// STT provider: "cloud" (default — Groq Whisper), "gigaam" (local
+    /// in-process GigaAM-v3 via ONNX — Russian-specialised, runs on CPU), or
+    /// "whisper" (local whisper.cpp server, OpenAI-compatible — multilingual,
+    /// best for mixed RU+EN). `#[serde(default)]` → old configs stay "cloud".
+    #[serde(default = "default_stt_provider")]
+    pub stt_provider: String,
+    /// Directory holding the local GigaAM model (`model.int8.onnx` + `vocab.txt`).
+    /// Used when `stt_provider == "gigaam"`. Empty until the user sets it.
+    #[serde(default)]
+    pub stt_gigaam_dir: String,
+    /// Local whisper.cpp server base URL (OpenAI-compatible), e.g.
+    /// "http://127.0.0.1:8081/v1". Used when `stt_provider == "whisper"`.
+    #[serde(default = "default_stt_whisper_url")]
+    pub stt_whisper_url: String,
+    /// Bearer for the local whisper server (usually empty; whisper.cpp ignores it).
+    #[serde(default)]
+    pub stt_whisper_bearer: String,
+    /// Model id sent to the local whisper server. whisper.cpp serves the loaded
+    /// model regardless of this, but OpenAI-compat clients require the field.
+    #[serde(default = "default_stt_whisper_model")]
+    pub stt_whisper_model: String,
 
     /// Preferred monitor name for tile windows. None = first non-primary, fallback to primary.
     pub tile_monitor_name: Option<String>,
@@ -255,10 +284,16 @@ impl Config {
             ai_local_model: String::new(),
             ai_local_prep_model: String::new(),
             ai_local_vision: false,
+            ai_local_thinking: false,
             response_language: "ru".into(),
             groq_api_key: String::new(),
             stt_language: Some("ru".into()),
             stt_model: "whisper-large-v3".into(),
+            stt_provider: default_stt_provider(),
+            stt_gigaam_dir: String::new(),
+            stt_whisper_url: default_stt_whisper_url(),
+            stt_whisper_bearer: String::new(),
+            stt_whisper_model: default_stt_whisper_model(),
             tile_monitor_name: None,
             stealth_enabled: false, // OFF by default — easier to debug & not every use case needs stealth
             trigger_keywords: default_trigger_keywords(),
@@ -329,12 +364,70 @@ impl Config {
     }
 }
 
+/// Resolved STT backend for a session. Mirrors [`AiEndpoint`]: the config's
+/// `stt_provider` string selects which transcription engine `stt::spawn` uses.
+/// "cloud" (Groq) is the default so existing configs are unchanged.
+#[derive(Debug, Clone)]
+pub enum SttBackendCfg {
+    /// Groq Whisper cloud API.
+    Cloud { api_key: String, model: String },
+    /// Local whisper.cpp server (OpenAI-compatible `/audio/transcriptions`).
+    Whisper {
+        base_url: String,
+        bearer: String,
+        model: String,
+    },
+    /// Local in-process GigaAM-v3 (ONNX). `model_dir` holds `model.int8.onnx` + `vocab.txt`.
+    Gigaam { model_dir: String },
+}
+
+impl Config {
+    /// Resolve which STT backend to use from `stt_provider`. Unknown / "cloud"
+    /// → Groq, so old configs behave exactly as before.
+    #[must_use]
+    pub fn stt_backend(&self) -> SttBackendCfg {
+        match self.stt_provider.as_str() {
+            "gigaam" => SttBackendCfg::Gigaam {
+                model_dir: self.stt_gigaam_dir.clone(),
+            },
+            "whisper" => SttBackendCfg::Whisper {
+                base_url: self.stt_whisper_url.clone(),
+                bearer: self.stt_whisper_bearer.clone(),
+                model: self.stt_whisper_model.clone(),
+            },
+            _ => SttBackendCfg::Cloud {
+                api_key: self.groq_api_key.clone(),
+                model: self.stt_model.clone(),
+            },
+        }
+    }
+
+    /// True when STT runs locally (GigaAM or local Whisper) — callers skip the
+    /// Groq-key "configured" check.
+    #[must_use]
+    pub fn stt_is_local(&self) -> bool {
+        matches!(self.stt_provider.as_str(), "gigaam" | "whisper")
+    }
+}
+
 fn default_ai_provider() -> String {
     "cloud".into()
 }
 
 fn default_ai_local_base_url() -> String {
     "http://127.0.0.1:11434/v1".into()
+}
+
+fn default_stt_provider() -> String {
+    "cloud".into()
+}
+
+fn default_stt_whisper_url() -> String {
+    "http://127.0.0.1:8081/v1".into()
+}
+
+fn default_stt_whisper_model() -> String {
+    "whisper-large-v3-turbo".into()
 }
 
 fn default_tile_body_opacity() -> f32 {
@@ -1692,6 +1785,62 @@ mod tests {
         );
         d.ai_local_prep_model = "qwen2.5:14b".into();
         assert_eq!(d.ai_endpoint(true).model, "qwen2.5:14b");
+    }
+
+    #[test]
+    fn stt_backend_defaults_to_cloud() {
+        let d = Config::defaults();
+        assert_eq!(d.stt_provider, "cloud");
+        assert!(!d.stt_is_local());
+        match d.stt_backend() {
+            SttBackendCfg::Cloud { model, .. } => assert_eq!(model, "whisper-large-v3"),
+            other => panic!("expected Cloud, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn stt_backend_gigaam_uses_dir_and_is_local() {
+        let mut d = Config::defaults();
+        d.stt_provider = "gigaam".into();
+        d.stt_gigaam_dir = r"C:\models\gigaam-v3".into();
+        assert!(d.stt_is_local());
+        match d.stt_backend() {
+            SttBackendCfg::Gigaam { model_dir } => assert_eq!(model_dir, r"C:\models\gigaam-v3"),
+            other => panic!("expected Gigaam, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn stt_backend_whisper_uses_url_bearer_model_and_is_local() {
+        let mut d = Config::defaults();
+        d.stt_provider = "whisper".into();
+        d.stt_whisper_url = "http://127.0.0.1:8081/v1".into();
+        d.stt_whisper_bearer = "tok".into();
+        d.stt_whisper_model = "whisper-large-v3-turbo".into();
+        assert!(d.stt_is_local());
+        match d.stt_backend() {
+            SttBackendCfg::Whisper {
+                base_url,
+                bearer,
+                model,
+            } => {
+                assert_eq!(base_url, "http://127.0.0.1:8081/v1");
+                assert_eq!(bearer, "tok");
+                assert_eq!(model, "whisper-large-v3-turbo");
+            }
+            other => panic!("expected Whisper, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn stt_provider_defaults_from_partial_json() {
+        // Old config without the STT provider fields → cloud + whisper-server
+        // default URL, and thinking-off for local AI.
+        let cfg: Config = serde_json::from_str(r#"{"ai_model":"x"}"#).expect("parse");
+        assert_eq!(cfg.stt_provider, "cloud");
+        assert_eq!(cfg.stt_whisper_url, "http://127.0.0.1:8081/v1");
+        assert!(!cfg.stt_is_local());
+        assert!(!cfg.ai_local_thinking);
     }
 
     #[test]
