@@ -188,6 +188,39 @@ pub async fn test_connection(base_url: String, bearer: String, model: String) ->
     }
 }
 
+/// List the model ids a local OpenAI-compatible server (llama.cpp / Ollama)
+/// currently serves, via `GET {base_url}/models`. Powers the Settings → AI
+/// provider model dropdown so the user picks a loaded model instead of typing
+/// its id. 8s timeout (caller runs this off-thread). Returns the ids from the
+/// OpenAI-shaped `{ "data": [ { "id": ... } ] }` response (empty vec if the
+/// field is missing). Does NOT log the URL or bearer (secrets).
+pub async fn list_models(base_url: &str, bearer: &str) -> Result<Vec<String>> {
+    let client = http_client();
+    let url = format!("{}/models", base_url.trim_end_matches('/'));
+    let mut req = client.get(&url).timeout(std::time::Duration::from_secs(8));
+    if !bearer.is_empty() {
+        req = req.bearer_auth(bearer);
+    }
+    let resp = req.send().await.context("GET models")?;
+    let status = resp.status();
+    if !status.is_success() {
+        let txt = resp.text().await.unwrap_or_default();
+        let snippet: String = txt.chars().take(100).collect();
+        return Err(anyhow!("HTTP {} — {}", status.as_u16(), snippet));
+    }
+    let v: Value = resp.json().await.context("parse models json")?;
+    let ids: Vec<String> = v
+        .get("data")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| m.get("id").and_then(Value::as_str).map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(ids)
+}
+
 async fn stream_inner(
     base_url: String,
     bearer: String,

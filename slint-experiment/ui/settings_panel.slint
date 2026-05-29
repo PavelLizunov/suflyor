@@ -176,6 +176,10 @@ export component SettingsWindow inherits Window {
     in-out property <int> ai-provider-index: 0;
     in-out property <string> ai-local-base-url-input: "";
     in-out property <string> ai-local-model-input: "";
+    // Phase E10.1 — model dropdown populated from GET {base_url}/models so the
+    // user picks a loaded model instead of typing its id.
+    in-out property <[string]> ai-local-models: [];
+    in-out property <int> ai-local-model-index: 0;
     in-out property <bool> ai-local-vision: false;
     in-out property <string> ai-local-test-result: "";
 
@@ -208,7 +212,8 @@ export component SettingsWindow inherits Window {
     callback ai-prompt-cache-changed(bool);
     callback ai-provider-changed(int);
     callback ai-local-base-url-save(string);
-    callback ai-local-model-save(string);
+    callback ai-local-model-selected(string);
+    callback ai-local-models-refresh();
     callback ai-local-vision-changed(bool);
     callback ai-local-test-clicked();
     // Phase E6 v27 — connection test buttons (AI bridge + STT).
@@ -904,19 +909,32 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                         }
+                        // Model picker — populated from GET {URL}/models
+                        // (llama.cpp serves the loaded model; Ollama the full
+                        // list). "refresh" re-queries; switching to Local or
+                        // saving the URL also auto-fetches. No hand-typing.
                         HorizontalLayout {
                             spacing: 6px;
-                            LineEdit {
-                                placeholder-text: @tr("local model — e.g. qwen2.5:7b-instruct");
-                                text <=> root.ai-local-model-input;
+                            ComboBox {
+                                model: root.ai-local-models;
+                                current-index: root.ai-local-model-index;
                                 horizontal-stretch: 1;
-                            }
-                            Button {
-                                text: @tr("Save");
-                                clicked => {
-                                    root.ai-local-model-save(root.ai-local-model-input);
+                                selected => {
+                                    root.ai-local-model-selected(self.current-value);
                                 }
                             }
+                            Button {
+                                text: @tr("refresh");
+                                clicked => {
+                                    root.ai-local-models-refresh();
+                                }
+                            }
+                        }
+                        if root.ai-local-models.length == 0 : Text {
+                            text: @tr("No models found — start the local server, then press refresh.");
+                            font-size: 10px;
+                            color: #999;
+                            wrap: word-wrap;
                         }
                         DarkCheck {
                             text: @tr("Local model supports images (vision)");

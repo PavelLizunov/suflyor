@@ -3566,6 +3566,50 @@ impl PaletteResultExt for PaletteResult {
 }
 
 /// Open the settings window. Reuses existing instance if open.
+/// Fetch the local server's model list (`GET {base_url}/models`) off-thread and
+/// populate the Settings model dropdown, pre-selecting the saved model (kept in
+/// the list even if the server is down so it's never lost). Reuses the test-
+/// button pattern — a throwaway current-thread runtime + invoke_from_event_loop
+/// — because open_settings has no rt_handle. Reads cfg inside the worker thread
+/// so it never contends with a config lock held on the UI thread. (#E10.1)
+fn fetch_local_models(
+    weak: slint::Weak<SettingsWindow>,
+    cfg: overlay_backend::config::SharedConfig,
+) {
+    std::thread::spawn(move || {
+        let (base_url, bearer, saved) = {
+            let c = cfg.read();
+            (
+                c.ai_local_base_url.clone(),
+                c.ai_local_bearer.clone(),
+                c.ai_local_model.clone(),
+            )
+        };
+        let models: Vec<String> = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .ok()
+            .and_then(|rt| {
+                rt.block_on(overlay_backend::ai::list_models(&base_url, &bearer))
+                    .ok()
+            })
+            .unwrap_or_default();
+        let _ = slint::invoke_from_event_loop(move || {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            let mut list = models;
+            if !saved.is_empty() && !list.iter().any(|m| m == &saved) {
+                list.insert(0, saved.clone());
+            }
+            let idx = list.iter().position(|m| m == &saved).unwrap_or(0);
+            let shared: Vec<SharedString> = list.into_iter().map(SharedString::from).collect();
+            w.set_ai_local_models(ModelRc::new(VecModel::from(shared)));
+            w.set_ai_local_model_index(idx as i32);
+        });
+    });
+}
+
 fn open_settings(
     state: &slint_replay::app_state::SharedState,
     settings_ref: &Rc<RefCell<Option<SettingsWindow>>>,
@@ -3834,6 +3878,7 @@ fn open_settings(
     // E9 Phase 1 — local AI provider switch + local-field saves + test.
     {
         let cfg_c = cfg.clone();
+        let weak = win.as_weak();
         win.on_ai_provider_changed(move |idx| {
             let provider = if idx == 1 { "local" } else { "cloud" };
             let mut c = cfg_c.write();
@@ -3843,30 +3888,50 @@ fn open_settings(
                 return;
             }
             overlay_backend::ai::set_local_no_think(provider == "local" && !c.ai_local_thinking);
+            drop(c);
             diag!("ai_provider -> {provider}");
+            // #E10.1 — switching to Local auto-populates the model dropdown.
+            if provider == "local" {
+                fetch_local_models(weak.clone(), cfg_c.clone());
+            }
         });
     }
     {
         let cfg_c = cfg.clone();
+        let weak = win.as_weak();
         win.on_ai_local_base_url_save(move |v| {
             let mut c = cfg_c.write();
             c.ai_local_base_url = v.trim().to_string();
             if let Err(e) = overlay_backend::config::save(&c) {
                 eprintln!("[overlay-host] ai_local_base_url save failed: {e:#}");
+                return;
             }
+            drop(c);
+            // #E10.1 — re-query models against the new URL.
+            fetch_local_models(weak.clone(), cfg_c.clone());
         });
     }
     {
         let cfg_c = cfg.clone();
-        win.on_ai_local_model_save(move |v| {
-            let trimmed = v.trim().to_string();
+        win.on_ai_local_model_selected(move |model| {
+            let m = model.trim().to_string();
+            if m.is_empty() {
+                return;
+            }
             let mut c = cfg_c.write();
-            c.ai_local_model = trimmed.clone();
+            c.ai_local_model = m.clone();
             if let Err(e) = overlay_backend::config::save(&c) {
                 eprintln!("[overlay-host] ai_local_model save failed: {e:#}");
                 return;
             }
-            diag!("ai_local_model saved ({} chars)", trimmed.len());
+            diag!("ai_local_model selected: {m}");
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_ai_local_models_refresh(move || {
+            fetch_local_models(weak.clone(), cfg_c.clone());
         });
     }
     {
@@ -4564,7 +4629,21 @@ fn populate_token_status(win: &SettingsWindow, cfg: &overlay_backend::config::Sh
     win.set_ai_prompt_cache(c.ai_prompt_cache);
     win.set_ai_provider_index(i32::from(c.ai_provider == "local"));
     win.set_ai_local_base_url_input(SharedString::from(c.ai_local_base_url.clone()));
-    win.set_ai_local_model_input(SharedString::from(c.ai_local_model.clone()));
+    // #E10.1 — seed the model dropdown with the saved model so it shows
+    // immediately; if Local is the active provider, kick off an async /models
+    // fetch to fill the full list (the worker thread reads cfg itself).
+    {
+        let initial: Vec<SharedString> = if c.ai_local_model.is_empty() {
+            vec![]
+        } else {
+            vec![SharedString::from(c.ai_local_model.clone())]
+        };
+        win.set_ai_local_models(ModelRc::new(VecModel::from(initial)));
+        win.set_ai_local_model_index(0);
+        if c.ai_provider == "local" {
+            fetch_local_models(win.as_weak(), cfg.clone());
+        }
+    }
     win.set_ai_local_vision(c.ai_local_vision);
     // Phase E10 — STT provider selector + local-engine fields.
     win.set_stt_provider_index(match c.stt_provider.as_str() {
