@@ -603,9 +603,6 @@ const PROBE_DURATION_MS: u64 = 3000;
 /// Status pill auto-revert delay after a chip-action flash (mic/sys
 /// test result, bookmark saved/failed, etc.).
 const STATUS_REVERT_SECS: u64 = 5;
-/// Bookmark status flash auto-revert (shorter than mic/sys since the
-/// success/failure message is brief, not data).
-const BOOKMARK_REVERT_SECS: u64 = 3;
 /// global-hotkey channel poll interval. 50 ms is the standard
 /// responsiveness/CPU trade-off for desktop hotkeys.
 const HOTKEY_POLL_MS: u64 = 50;
@@ -1304,84 +1301,12 @@ fn main() -> Result<(), slint::PlatformError> {
     // model choice now lives in Settings (the cloud + local model dropdowns)
     // and the bar's active-stack readout shows what's actually live.
 
-    // ===== Bookmark chip (Phase C + E3 slice 4: read from SlintRuntime) =====
-    //
-    // Reads SlintRuntime.last_question / last_answer (canonical state
-    // post-port — populated by reask_last, manual_spawn_tile,
-    // manual_ask_source via their shim writebacks) and appends to
-    // %APPDATA%\overlay-mvp\bookmarks.md. Falls back to AppState
-    // .last_tile_qa for the legacy +tile chip path which still uses
-    // local AI calls (slated for future commit to route through
-    // events.spawn_tile_full like the other tile producers).
-    {
-        let s = state.clone();
-        let slint_rt_bookmark = slint_rt.clone();
-        let weak = overlay.as_weak();
-        overlay.on_bookmark_clicked(move || {
-            let qa_opt = {
-                // Prefer SlintRuntime (post-port canonical) — the ported
-                // F-key handlers write here via shim writeback.
-                let rt_guard = slint_replay::runtime_state::lock(&slint_rt_bookmark);
-                let from_rt = rt_guard
-                    .last_question
-                    .clone()
-                    .and_then(|q| rt_guard.last_answer.clone().map(|a| (q, a)));
-                drop(rt_guard);
-                if from_rt.is_some() {
-                    from_rt
-                } else {
-                    // Legacy +tile chip path — AppState.last_tile_qa.
-                    let st = match s.lock() {
-                        Ok(g) => g,
-                        Err(p) => p.into_inner(),
-                    };
-                    st.last_tile_qa.clone()
-                }
-            };
-            let Some(o) = weak.upgrade() else { return };
-            match qa_opt {
-                None => {
-                    o.set_status_text(SharedString::from("bookmark: spawn a tile first"));
-                    o.set_status_color(slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24));
-                    eprintln!("[overlay-host] bookmark: no last_tile_qa yet");
-                }
-                Some((question, answer)) => match journal::append_bookmark(&question, &answer) {
-                    Ok(path) => {
-                        eprintln!("[overlay-host] bookmark appended to {}", path.display());
-                        o.set_status_text(SharedString::from("bookmark saved"));
-                        o.set_status_color(slint::Color::from_rgb_u8(0xfc, 0xd3, 0x4d));
-                    }
-                    Err(e) => {
-                        eprintln!("[overlay-host] bookmark write failed: {e:#}");
-                        o.set_status_text(SharedString::from("bookmark failed"));
-                        o.set_status_color(slint::Color::from_rgb_u8(0xf8, 0x71, 0x71));
-                    }
-                },
-            }
-            // Auto-revert status after 3s.
-            let weak_revert = weak.clone();
-            let s_revert = s.clone();
-            slint::Timer::single_shot(Duration::from_secs(BOOKMARK_REVERT_SECS), move || {
-                if let Some(o) = weak_revert.upgrade() {
-                    refresh_status(&o, get_mic_active(&s_revert), get_sys_active(&s_revert));
-                }
-            });
-        });
-    }
+    // (#E10.2) The ⭐ bookmark chip was removed (no use-case found).
+    // journal::append_bookmark stays available for a future re-add.
 
-    // Tips chip opens the palette manually. The F4 global hotkey
-    // (registered below) does the same. Both routes converge on
-    // open_palette() for state consistency.
+    // KB palette — opened via the F4 global hotkey (registered below).
+    // (The 💡 tips chip was removed; F4 is the sole entry point.)
     let palette: Rc<RefCell<Option<PaletteWindow>>> = Rc::new(RefCell::new(None));
-    {
-        let palette_ref = palette.clone();
-        let tiles_ref = tiles.clone();
-        let s = state.clone();
-        let weak_overlay = overlay.as_weak();
-        overlay.on_tips_clicked(move || {
-            open_palette(&palette_ref, &tiles_ref, &s, &weak_overlay);
-        });
-    }
 
     // ===== Global hotkeys F3 / F4 / F7 (Phase D2 + B3 extra) =====
     //
@@ -1861,9 +1786,6 @@ fn main() -> Result<(), slint::PlatformError> {
             // Capture a Weak handle the tokio task can post back to
             // the UI thread via slint::invoke_from_event_loop.
             let weak_for_ai = tile.as_weak();
-            // Clone the Arc<Mutex<AppState>> for the AI task to use
-            // when storing last_tile_qa on success. Cheap arc clone.
-            let s_for_bookmark = s.clone();
             t.borrow_mut().push(tile);
             refresh_open_tiles(&weak, &t);
 
@@ -1954,12 +1876,6 @@ fn main() -> Result<(), slint::PlatformError> {
                                 "ai · {} · ${:.4}",
                                 model, cost_usd
                             )));
-                            // Phase C — remember this Q+A so the bookmark
-                            // chip can append it to bookmarks.md.
-                            if let Ok(mut st) = s_for_bookmark.lock() {
-                                st.last_tile_qa =
-                                    Some((question_for_task.clone(), response.clone()));
-                            }
                         }
                         Err(e) => {
                             // Privacy: classify the error rather than dump

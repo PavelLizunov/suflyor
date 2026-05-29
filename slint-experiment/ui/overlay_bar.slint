@@ -252,8 +252,6 @@ export component OverlayBarWindow inherits Window {
     callback timer-toggle-clicked();
     callback spawn-tile-clicked();
     callback close-all-tiles-clicked();
-    callback bookmark-clicked();
-    callback tips-clicked();
     callback stealth-toggle-clicked();
     callback aggressive-toggle-clicked();
     callback open-settings-clicked();
@@ -399,17 +397,7 @@ export component OverlayBarWindow inherits Window {
 
             VDivider { }
 
-            // ── Quick actions — icon-only (tips / bookmark / stealth / auto)
-            Chip {
-                label: "💡";
-                accent: #fde68a;
-                clicked => { root.tips-clicked(); }
-            }
-            Chip {
-                label: "⭐";
-                accent: #fcd34d;
-                clicked => { root.bookmark-clicked(); }
-            }
+            // ── Quick actions — icon-only (stealth / auto)
             Chip {
                 label: "🎯";
                 active: root.stealth-active;
