@@ -188,6 +188,11 @@ export component OverlayBarWindow inherits Window {
     // AI model chip cycle: "sonnet" / "haiku" / "opus".
     in-out property <string> ai-model: "sonnet";
 
+    // Phase E10.2 — read-only "active stack" readout: which STT engine +
+    // which AI model are actually live, with a 🟢 local / ☁ cloud / ◐ mixed
+    // icon. So the user can tell at a glance what's transcribing + answering.
+    in-out property <string> active-stack: "";
+
     // Cumulative session cost (formatted by Rust, e.g. "$0.024").
     in-out property <string> cost-label: "$0.000";
 
@@ -387,6 +392,12 @@ export component OverlayBarWindow inherits Window {
                 label: root.cost-label;
                 accent: #f59e0b;
                 clicked => { /* no-op for now */ }
+            }
+            // Active stack readout (read-only): 🟢/☁/◐ + STT engine → AI model.
+            Chip {
+                label: root.active-stack;
+                accent: #34d399;
+                clicked => { /* read-only indicator */ }
             }
 
             VDivider { }

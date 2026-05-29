@@ -762,6 +762,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // overwritten by a stale `set_ai_model("sonnet")` boilerplate line
     // — caught by review-agent catch-up audit 2026-05-27.)
     overlay.set_ai_model(SharedString::from(cfg.read().ai_model.clone()));
+    overlay.set_active_stack(SharedString::from(active_stack_label(&cfg.read())));
     overlay.set_cost_label(SharedString::from("$0.000"));
     overlay.set_timer_label(SharedString::from("00:00"));
 
@@ -1316,6 +1317,7 @@ fn main() -> Result<(), slint::PlatformError> {
             }
             if let Some(o) = weak.upgrade() {
                 o.set_ai_model(SharedString::from(new_model));
+                o.set_active_stack(SharedString::from(active_stack_label(&cfg_cycle.read())));
             }
         });
     }
@@ -3566,6 +3568,49 @@ impl PaletteResultExt for PaletteResult {
 }
 
 /// Open the settings window. Reuses existing instance if open.
+/// Short, human display name for a model id: drop a `.gguf`/`.bin` extension,
+/// then take the first token (or the tier after "claude-"). Used by the bar's
+/// active-stack readout. (#E10.2)
+fn short_model_name(full: &str) -> String {
+    let base = full.trim_end_matches(".gguf").trim_end_matches(".bin");
+    let parts: Vec<&str> = base
+        .split(['-', ':', '/', ' '])
+        .filter(|s| !s.is_empty())
+        .collect();
+    match parts.first() {
+        Some(&"claude") if parts.len() > 1 => parts[1].to_string(),
+        Some(first) => (*first).to_string(),
+        None => "—".to_string(),
+    }
+}
+
+/// Build the bar's "active stack" label: which STT engine + which AI model are
+/// live, prefixed with 🟢 (all-local), ☁ (all-cloud), or ◐ (mixed). (#E10.2)
+fn active_stack_label(c: &overlay_backend::config::Config) -> String {
+    let (stt, stt_local) = match c.stt_provider.as_str() {
+        "gigaam" => ("GigaAM", true),
+        "whisper" => ("Whisper", true),
+        _ => ("Groq", false),
+    };
+    let ai_local = c.ai_provider == "local";
+    let model_full = if ai_local {
+        c.ai_local_model.as_str()
+    } else {
+        c.ai_model.as_str()
+    };
+    let model = short_model_name(model_full);
+    // ASCII tag + Latin-1 middle dot only — fancier glyphs (✕/✓/arrows) render
+    // as missing-glyph boxes on the user's Slint+skia font fallback.
+    let tag = if stt_local && ai_local {
+        "local"
+    } else if !stt_local && !ai_local {
+        "cloud"
+    } else {
+        "mixed"
+    };
+    format!("{tag}: {stt} · {model}")
+}
+
 /// Which model dropdown a fetch populates — the cloud bridge or the local server.
 #[derive(Clone, Copy)]
 enum ModelTarget {
@@ -4588,14 +4633,19 @@ fn open_settings(
     let weak_close = win.as_weak();
     let settings_close = settings_ref.clone();
     let overlay_for_close = overlay_weak.clone();
+    let cfg_for_close = cfg.clone();
     win.on_close_clicked(move || {
         if let Some(w) = weak_close.upgrade() {
             let _ = w.hide();
         }
         *settings_close.borrow_mut() = None;
-        // Un-light the bar's ⚙ chip.
+        // Un-light the bar's ⚙ chip + refresh the active-stack readout (the
+        // user may have switched STT/AI provider while Settings was open).
         if let Some(o) = overlay_for_close.upgrade() {
             o.set_settings_open(false);
+            o.set_active_stack(SharedString::from(active_stack_label(
+                &cfg_for_close.read(),
+            )));
         }
     });
 
