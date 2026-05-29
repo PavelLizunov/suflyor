@@ -38,6 +38,31 @@ pub struct Config {
     #[serde(default)]
     pub ai_prompt_cache: bool,
 
+    /// AI provider for live answers: "cloud" (default — the bridge above) or
+    /// "local" (an OpenAI-compatible local server like Ollama / llama-server).
+    /// Lets a local model fully REPLACE Claude. (Auto-fallback is a later
+    /// phase.) `#[serde(default)]` → old configs default to "cloud".
+    #[serde(default = "default_ai_provider")]
+    pub ai_provider: String,
+    /// Local server base URL (OpenAI-compatible), e.g. Ollama's
+    /// "http://127.0.0.1:11434/v1".
+    #[serde(default = "default_ai_local_base_url")]
+    pub ai_local_base_url: String,
+    /// Bearer for the local server (Ollama ignores it; some servers want one).
+    #[serde(default)]
+    pub ai_local_bearer: String,
+    /// Local model id for live answers, e.g. "qwen2.5:7b-instruct". Empty
+    /// until the user sets it.
+    #[serde(default)]
+    pub ai_local_model: String,
+    /// Local model for prep/structuring; empty → falls back to ai_local_model.
+    #[serde(default)]
+    pub ai_local_prep_model: String,
+    /// True if the local model can accept screenshots (a vision model). When
+    /// false, screenshots are dropped for local asks (a text model would error).
+    #[serde(default)]
+    pub ai_local_vision: bool,
+
     /// Language tag (ISO 639-1) the assistant should ALWAYS respond in.
     /// Injected into the system prompt at runtime.
     pub response_language: String, // e.g. "ru"
@@ -224,6 +249,12 @@ impl Config {
             ai_model: "claude-haiku-4-5".into(),
             prep_model: "claude-sonnet-4-6".into(),
             ai_prompt_cache: false,
+            ai_provider: default_ai_provider(),
+            ai_local_base_url: default_ai_local_base_url(),
+            ai_local_bearer: String::new(),
+            ai_local_model: String::new(),
+            ai_local_prep_model: String::new(),
+            ai_local_vision: false,
             response_language: "ru".into(),
             groq_api_key: String::new(),
             stt_language: Some("ru".into()),
@@ -249,6 +280,61 @@ impl Config {
             tile_body_opacity: default_tile_body_opacity(),
         }
     }
+}
+
+/// Resolved AI endpoint for a single call (live answer or prep/structuring).
+#[derive(Debug, Clone)]
+pub struct AiEndpoint {
+    pub base_url: String,
+    pub bearer: String,
+    pub model: String,
+    /// True when the LOCAL provider is active. Callers zero out cost and
+    /// gate screenshots (text-only local models) on this flag.
+    pub is_local: bool,
+}
+
+impl Config {
+    /// Resolve which AI endpoint to use. `prep=true` selects the structuring
+    /// model, else the live-answer model. Provider `"local"` uses the
+    /// `ai_local_*` fields (a local prep model falls back to the local live
+    /// model); anything else (default `"cloud"`) uses the bridge fields — so
+    /// existing configs behave exactly as before.
+    #[must_use]
+    pub fn ai_endpoint(&self, prep: bool) -> AiEndpoint {
+        if self.ai_provider == "local" {
+            let model = if prep && !self.ai_local_prep_model.trim().is_empty() {
+                self.ai_local_prep_model.clone()
+            } else {
+                self.ai_local_model.clone()
+            };
+            AiEndpoint {
+                base_url: self.ai_local_base_url.clone(),
+                bearer: self.ai_local_bearer.clone(),
+                model,
+                is_local: true,
+            }
+        } else {
+            let model = if prep {
+                self.prep_model.clone()
+            } else {
+                self.ai_model.clone()
+            };
+            AiEndpoint {
+                base_url: self.ai_base_url.clone(),
+                bearer: self.ai_bearer.clone(),
+                model,
+                is_local: false,
+            }
+        }
+    }
+}
+
+fn default_ai_provider() -> String {
+    "cloud".into()
+}
+
+fn default_ai_local_base_url() -> String {
+    "http://127.0.0.1:11434/v1".into()
 }
 
 fn default_tile_body_opacity() -> f32 {
@@ -1571,6 +1657,51 @@ mod tests {
         assert_eq!(cfg.ai_model, "");
         assert_eq!(cfg.response_language, "");
         assert!(!cfg.stealth_enabled);
+    }
+
+    #[test]
+    fn ai_endpoint_defaults_to_cloud() {
+        let mut d = Config::defaults();
+        d.ai_base_url = "http://bridge/v1".into();
+        d.ai_bearer = "secret".into();
+        d.ai_model = "claude-haiku-4-5".into();
+        d.prep_model = "claude-sonnet-4-6".into();
+        let live = d.ai_endpoint(false);
+        assert!(!live.is_local);
+        assert_eq!(live.base_url, "http://bridge/v1");
+        assert_eq!(live.bearer, "secret");
+        assert_eq!(live.model, "claude-haiku-4-5");
+        assert_eq!(d.ai_endpoint(true).model, "claude-sonnet-4-6");
+    }
+
+    #[test]
+    fn ai_endpoint_local_uses_local_fields_and_prep_fallback() {
+        let mut d = Config::defaults();
+        d.ai_provider = "local".into();
+        d.ai_local_base_url = "http://127.0.0.1:11434/v1".into();
+        d.ai_local_model = "qwen2.5:7b".into();
+        d.ai_local_prep_model = String::new(); // empty → falls back to live
+        let live = d.ai_endpoint(false);
+        assert!(live.is_local);
+        assert_eq!(live.base_url, "http://127.0.0.1:11434/v1");
+        assert_eq!(live.model, "qwen2.5:7b");
+        assert_eq!(
+            d.ai_endpoint(true).model,
+            "qwen2.5:7b",
+            "empty local prep model falls back to live local model"
+        );
+        d.ai_local_prep_model = "qwen2.5:14b".into();
+        assert_eq!(d.ai_endpoint(true).model, "qwen2.5:14b");
+    }
+
+    #[test]
+    fn config_missing_provider_fields_default_cloud() {
+        // An old config.json without the new fields loads as cloud + the
+        // Ollama default URL, and resolves to the cloud endpoint.
+        let cfg: Config = serde_json::from_str(r#"{"ai_model":"x"}"#).expect("parse");
+        assert_eq!(cfg.ai_provider, "cloud");
+        assert_eq!(cfg.ai_local_base_url, "http://127.0.0.1:11434/v1");
+        assert!(!cfg.ai_endpoint(false).is_local);
     }
 
     /// REGRESSION: new config fields added in v0.0.2+ must have correct

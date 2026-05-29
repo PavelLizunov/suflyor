@@ -365,20 +365,23 @@ async fn maybe_spawn_auto_tile(
         cap_usd,
         preferred_monitor,
         stealth,
+        is_local,
     ) = {
         let c = cfg.read();
+        let ep = c.ai_endpoint(false);
         (
             c.auto_tiles_enabled,
             c.auto_tile_every_line,
             c.trigger_keywords.clone(),
-            c.ai_base_url.clone(),
-            c.ai_bearer.clone(),
-            c.ai_model.clone(),
+            ep.base_url,
+            ep.bearer,
+            ep.model,
             c.response_language.clone(),
             c.meeting_context.clone(),
             c.max_session_cost_usd,
             c.tile_monitor_name.clone(),
             c.stealth_enabled,
+            ep.is_local,
         )
     };
     if !enabled || bearer.trim().is_empty() {
@@ -656,7 +659,12 @@ async fn maybe_spawn_auto_tile(
     }
 
     // ===== Cost accumulate + emit =====
-    let micro = ai::cost_microcents(&model, usage.input, usage.output);
+    // Local inference is free — don't bill it.
+    let micro = if is_local {
+        0
+    } else {
+        ai::cost_microcents(&model, usage.input, usage.output)
+    };
     let total_usd = {
         let mut s = lock(&rt);
         s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);

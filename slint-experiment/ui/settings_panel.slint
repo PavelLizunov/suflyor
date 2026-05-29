@@ -172,6 +172,12 @@ export component SettingsWindow inherits Window {
     in-out property <string> ai-model-input: "";
     // E9 — experimental prompt-caching toggle (default off).
     in-out property <bool> ai-prompt-cache: false;
+    // Local AI provider (Phase 1): 0 = cloud bridge, 1 = local (Ollama/llama.cpp).
+    in-out property <int> ai-provider-index: 0;
+    in-out property <string> ai-local-base-url-input: "";
+    in-out property <string> ai-local-model-input: "";
+    in-out property <bool> ai-local-vision: false;
+    in-out property <string> ai-local-test-result: "";
 
     // Phase E6 v20 — tile body opacity (50..100%). Slider on Stealth
     // tab; Rust writes to cfg.tile_body_opacity + applies to spawning
@@ -200,6 +206,11 @@ export component SettingsWindow inherits Window {
     callback ai-base-url-save(string);
     callback ai-model-save(string);
     callback ai-prompt-cache-changed(bool);
+    callback ai-provider-changed(int);
+    callback ai-local-base-url-save(string);
+    callback ai-local-model-save(string);
+    callback ai-local-vision-changed(bool);
+    callback ai-local-test-clicked();
     // Phase E6 v27 — connection test buttons (AI bridge + STT).
     in-out property <string> ai-bridge-test-result: "";
     in-out property <string> stt-test-result: "";
@@ -853,6 +864,73 @@ export component SettingsWindow inherits Window {
                                 clicked => {
                                     root.ai-model-save(root.ai-model-input);
                                 }
+                            }
+                        }
+
+                        Rectangle { background: #2a2c3a; height: 1px; }
+
+                        // ===== Local model provider (Ollama / llama.cpp) =====
+                        Text {
+                            text: @tr("Provider — run a LOCAL model instead of the cloud bridge (fallback if Claude is down, or full replacement).");
+                            font-size: 11px;
+                            color: #999;
+                            wrap: word-wrap;
+                        }
+                        ComboBox {
+                            model: [@tr("Cloud (bridge)"), @tr("Local (Ollama / llama.cpp)")];
+                            current-index: root.ai-provider-index;
+                            selected => {
+                                root.ai-provider-changed(self.current-index);
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: 6px;
+                            LineEdit {
+                                placeholder-text: @tr("local URL — http://127.0.0.1:11434/v1");
+                                text <=> root.ai-local-base-url-input;
+                                horizontal-stretch: 1;
+                            }
+                            Button {
+                                text: @tr("Save");
+                                clicked => {
+                                    root.ai-local-base-url-save(root.ai-local-base-url-input);
+                                }
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: 6px;
+                            LineEdit {
+                                placeholder-text: @tr("local model — e.g. qwen2.5:7b-instruct");
+                                text <=> root.ai-local-model-input;
+                                horizontal-stretch: 1;
+                            }
+                            Button {
+                                text: @tr("Save");
+                                clicked => {
+                                    root.ai-local-model-save(root.ai-local-model-input);
+                                }
+                            }
+                        }
+                        DarkCheck {
+                            text: @tr("Local model supports images (vision)");
+                            checked <=> root.ai-local-vision;
+                            toggled(v) => {
+                                root.ai-local-vision-changed(v);
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: 6px;
+                            Button {
+                                text: @tr("Test local connection");
+                                clicked => {
+                                    root.ai-local-test-clicked();
+                                }
+                            }
+                            if root.ai-local-test-result != "" : Text {
+                                text: root.ai-local-test-result;
+                                font-size: 11px;
+                                color: #6cf;
+                                vertical-alignment: center;
                             }
                         }
 

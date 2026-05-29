@@ -372,6 +372,28 @@ msgstr "Кэширование промпта (эксперимент — нуж
 msgid "Marks the system prompt as cacheable for faster repeat asks. If your bridge rejects it (AI stops answering), turn this back off."
 msgstr "Помечает системный промпт кэшируемым для ускорения повторных запросов. Если мост его не принимает (AI перестаёт отвечать) — выключите обратно."
 
+# E9 Phase 1 — local AI provider switch.
+msgid "Provider — run a LOCAL model instead of the cloud bridge (fallback if Claude is down, or full replacement)."
+msgstr "Провайдер — запускать ЛОКАЛЬНУЮ модель вместо облачного моста (запасной вариант, если Claude недоступен, или полная замена)."
+
+msgid "Cloud (bridge)"
+msgstr "Облако (мост)"
+
+msgid "Local (Ollama / llama.cpp)"
+msgstr "Локально (Ollama / llama.cpp)"
+
+msgid "local URL — http://127.0.0.1:11434/v1"
+msgstr "локальный URL — http://127.0.0.1:11434/v1"
+
+msgid "local model — e.g. qwen2.5:7b-instruct"
+msgstr "локальная модель — напр. qwen2.5:7b-instruct"
+
+msgid "Local model supports images (vision)"
+msgstr "Локальная модель поддерживает изображения (vision)"
+
+msgid "Test local connection"
+msgstr "Проверить локальное подключение"
+
 msgid "Tip: Save writes to %APPDATA%\\overlay-mvp\\config.json. Restart binary to re-load."
 msgstr "Подсказка: «Сохранить» пишет в %APPDATA%\\overlay-mvp\\config.json. Перезапустите бинарник для перезагрузки."
 

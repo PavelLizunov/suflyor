@@ -2419,15 +2419,27 @@ fn fire_f9_ask(
     );
 
     // ===== 3. Snapshot cfg + cost-cap + transcript + screenshot =====
-    let (base_url, bearer, model, meeting_context, response_language, cap_usd) = {
+    let (
+        base_url,
+        bearer,
+        model,
+        meeting_context,
+        response_language,
+        cap_usd,
+        is_local,
+        local_vision,
+    ) = {
         let c = cfg.read();
+        let ep = c.ai_endpoint(false);
         (
-            c.ai_base_url.clone(),
-            c.ai_bearer.clone(),
-            c.ai_model.clone(),
+            ep.base_url,
+            ep.bearer,
+            ep.model,
             c.meeting_context.clone(),
             c.response_language.clone(),
             c.max_session_cost_usd,
+            ep.is_local,
+            c.ai_local_vision,
         )
     };
     let current_micro = slint_replay::runtime_state::lock(slint_rt).session_cost_microcents;
@@ -2456,6 +2468,13 @@ fn fire_f9_ask(
             .collect();
         let shot = s.last_screenshot.take();
         (lines, shot)
+    };
+    // A local TEXT model can't accept an image_url part — drop the
+    // screenshot unless the user flagged the local model as vision-capable.
+    let screenshot = if is_local && !local_vision {
+        None
+    } else {
+        screenshot
     };
 
     let messages = ai::build_request(
@@ -2525,6 +2544,8 @@ fn fire_f9_ask(
 
     let rt_for_cost = slint_rt.clone();
     let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
+        // Local inference is free — don't bill it (and don't trip the cap).
+        let micro = if is_local { 0 } else { micro };
         let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
         s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
         (s.session_cost_microcents as f64) / 100_000_000.0
@@ -2718,14 +2739,16 @@ fn fire_ptt_ask(
     );
 
     // ===== 3. Snapshot config + rolling transcript (context) =====
-    let (base_url, bearer, model, meeting_context, response_language) = {
+    let (base_url, bearer, model, meeting_context, response_language, is_local) = {
         let c = cfg.read();
+        let ep = c.ai_endpoint(false);
         (
-            c.ai_base_url.clone(),
-            c.ai_bearer.clone(),
-            c.ai_model.clone(),
+            ep.base_url,
+            ep.bearer,
+            ep.model,
             c.meeting_context.clone(),
             c.response_language.clone(),
+            ep.is_local,
         )
     };
     let (groq_key, stt_language, stt_model, trigger_keywords) = {
@@ -2758,6 +2781,8 @@ fn fire_ptt_ask(
     }
     let rt_for_cost = slint_rt.clone();
     let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
+        // Local inference is free — don't bill it (and don't trip the cap).
+        let micro = if is_local { 0 } else { micro };
         let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
         s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
         (s.session_cost_microcents as f64) / 100_000_000.0
@@ -2947,13 +2972,10 @@ fn fire_followup_ask(
 
     // Snapshot config + journal/health, abort any in-flight task, then
     // spawn the stream (mirrors fire_f9_ask's tail).
-    let (base_url, bearer, model) = {
+    let (base_url, bearer, model, is_local) = {
         let c = cfg.read();
-        (
-            c.ai_base_url.clone(),
-            c.ai_bearer.clone(),
-            c.ai_model.clone(),
-        )
+        let ep = c.ai_endpoint(false);
+        (ep.base_url, ep.bearer, ep.model, ep.is_local)
     };
     let (journal_for_loop, health_for_stream) = {
         let s = slint_replay::runtime_state::lock(slint_rt);
@@ -2989,6 +3011,8 @@ fn fire_followup_ask(
     }
     let rt_for_cost = slint_rt.clone();
     let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
+        // Local inference is free — don't bill it (and don't trip the cap).
+        let micro = if is_local { 0 } else { micro };
         let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
         s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
         (s.session_cost_microcents as f64) / 100_000_000.0
@@ -3692,6 +3716,91 @@ fn open_settings(
             diag!("ai_prompt_cache -> {on}");
         });
     }
+    // E9 Phase 1 — local AI provider switch + local-field saves + test.
+    {
+        let cfg_c = cfg.clone();
+        win.on_ai_provider_changed(move |idx| {
+            let provider = if idx == 1 { "local" } else { "cloud" };
+            let mut c = cfg_c.write();
+            c.ai_provider = provider.to_string();
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] ai_provider save failed: {e:#}");
+                return;
+            }
+            diag!("ai_provider -> {provider}");
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_ai_local_base_url_save(move |v| {
+            let mut c = cfg_c.write();
+            c.ai_local_base_url = v.trim().to_string();
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] ai_local_base_url save failed: {e:#}");
+            }
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_ai_local_model_save(move |v| {
+            let trimmed = v.trim().to_string();
+            let mut c = cfg_c.write();
+            c.ai_local_model = trimmed.clone();
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] ai_local_model save failed: {e:#}");
+                return;
+            }
+            diag!("ai_local_model saved ({} chars)", trimmed.len());
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_ai_local_vision_changed(move |on| {
+            let mut c = cfg_c.write();
+            c.ai_local_vision = on;
+            let _ = overlay_backend::config::save(&c);
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_ai_local_test_clicked(move || {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            w.set_ai_local_test_result(SharedString::from("testing…"));
+            let (base_url, bearer, model) = {
+                let c = cfg_c.read();
+                (
+                    c.ai_local_base_url.clone(),
+                    c.ai_local_bearer.clone(),
+                    c.ai_local_model.clone(),
+                )
+            };
+            let weak_res = w.as_weak();
+            std::thread::spawn(move || {
+                let msg = match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(rt) => {
+                        match rt.block_on(overlay_backend::ai::test_connection(
+                            base_url, bearer, model,
+                        )) {
+                            Ok(s) => format!("[ok] {s}"),
+                            Err(e) => format!("[--] {e}"),
+                        }
+                    }
+                    Err(e) => format!("[--] runtime: {e}"),
+                };
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = weak_res.upgrade() {
+                        w.set_ai_local_test_result(SharedString::from(msg));
+                    }
+                });
+            });
+        });
+    }
 
     // Phase E6 v20 — tile opacity slider. Persists to config AND
     // applies to all currently-visible tiles via tiles_ref.
@@ -3913,15 +4022,13 @@ fn open_settings(
                 ));
                 return;
             }
-            let (base_url, bearer, model) = {
+            let (base_url, bearer, model, is_local) = {
                 let c = cfg_c.read();
-                (
-                    c.ai_base_url.clone(),
-                    c.ai_bearer.clone(),
-                    c.ai_model.clone(),
-                )
+                // Structuring uses the smarter "prep" model.
+                let ep = c.ai_endpoint(true);
+                (ep.base_url, ep.bearer, ep.model, ep.is_local)
             };
-            if base_url.is_empty() || bearer.is_empty() {
+            if base_url.is_empty() || model.is_empty() || (!is_local && bearer.is_empty()) {
                 w.set_meeting_context_result(SharedString::from(
                     "[--] AI мост не настроен (вкладка AI мост)",
                 ));
@@ -4280,6 +4387,10 @@ fn populate_token_status(win: &SettingsWindow, cfg: &overlay_backend::config::Sh
     win.set_ai_base_url_input(SharedString::from(c.ai_base_url.clone()));
     win.set_ai_model_input(SharedString::from(c.ai_model.clone()));
     win.set_ai_prompt_cache(c.ai_prompt_cache);
+    win.set_ai_provider_index(i32::from(c.ai_provider == "local"));
+    win.set_ai_local_base_url_input(SharedString::from(c.ai_local_base_url.clone()));
+    win.set_ai_local_model_input(SharedString::from(c.ai_local_model.clone()));
+    win.set_ai_local_vision(c.ai_local_vision);
     // Phase E6 v38 — reflect the saved interface language in the
     // Interface-tab dropdown (0=Русский, 1=English).
     win.set_ui_language_index(if c.ui_language == "en" { 1 } else { 0 });
