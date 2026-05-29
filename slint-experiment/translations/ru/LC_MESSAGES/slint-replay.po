@@ -395,6 +395,9 @@ msgstr "локальная модель — напр. qwen2.5:7b-instruct"
 msgid "Local model supports images (vision)"
 msgstr "Локальная модель поддерживает изображения (vision)"
 
+msgid "Local model reasoning/thinking (slower, off = faster)"
+msgstr "Рассуждения локальной модели (медленнее, выкл = быстрее)"
+
 msgid "Test local connection"
 msgstr "Проверить локальное подключение"
 
@@ -435,6 +438,12 @@ msgstr "Папка модели GigaAM — с model.int8.onnx + vocab.txt"
 
 msgid "whisper-server URL — http://127.0.0.1:8081/v1"
 msgstr "URL whisper-server — http://127.0.0.1:8081/v1"
+
+msgid "whisper-server bearer token (optional)"
+msgstr "bearer-токен whisper-server (необязательно)"
+
+msgid "whisper model — e.g. whisper-large-v3-turbo"
+msgstr "модель whisper — напр. whisper-large-v3-turbo"
 
 msgid "Groq STT (Whisper) — API key + model. Used only when the engine above is Cloud."
 msgstr "Groq STT (Whisper) — ключ и модель. Используется, только если движок выше — Облако."

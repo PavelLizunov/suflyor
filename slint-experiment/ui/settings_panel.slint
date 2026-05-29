@@ -169,7 +169,6 @@ export component SettingsWindow inherits Window {
     in-out property <string> groq-api-key-status: "(loading...)";
     in-out property <string> groq-api-key-input: "";
     in-out property <string> ai-base-url-input: "";
-    in-out property <string> ai-model-input: "";
     // Phase E10.1 — cloud model dropdown from GET {ai_base_url}/models.
     in-out property <[string]> ai-models: [];
     in-out property <int> ai-model-index: 0;
@@ -178,12 +177,14 @@ export component SettingsWindow inherits Window {
     // Local AI provider (Phase 1): 0 = cloud bridge, 1 = local (Ollama/llama.cpp).
     in-out property <int> ai-provider-index: 0;
     in-out property <string> ai-local-base-url-input: "";
-    in-out property <string> ai-local-model-input: "";
     // Phase E10.1 — model dropdown populated from GET {base_url}/models so the
     // user picks a loaded model instead of typing its id.
     in-out property <[string]> ai-local-models: [];
     in-out property <int> ai-local-model-index: 0;
     in-out property <bool> ai-local-vision: false;
+    // E10 — local-model "thinking"/reasoning toggle. Off (default) sends
+    // enable_thinking=false for faster answers; on lets the model reason.
+    in-out property <bool> ai-local-thinking: false;
     in-out property <string> ai-local-test-result: "";
 
     // Phase E6 v20 — tile body opacity (50..100%). Slider on Stealth
@@ -219,6 +220,7 @@ export component SettingsWindow inherits Window {
     callback ai-local-model-selected(string);
     callback ai-local-models-refresh();
     callback ai-local-vision-changed(bool);
+    callback ai-local-thinking-changed(bool);
     callback ai-local-test-clicked();
     // Phase E6 v27 — connection test buttons (AI bridge + STT).
     in-out property <string> ai-bridge-test-result: "";
@@ -227,11 +229,15 @@ export component SettingsWindow inherits Window {
     in-out property <int> stt-provider-index: 0;
     in-out property <string> stt-gigaam-dir-input: "";
     in-out property <string> stt-whisper-url-input: "";
+    in-out property <string> stt-whisper-bearer-input: "";
+    in-out property <string> stt-whisper-model-input: "";
     callback ai-bridge-test-clicked();
     callback stt-test-clicked();
     callback stt-provider-changed(int);
     callback stt-gigaam-dir-save(string);
     callback stt-whisper-url-save(string);
+    callback stt-whisper-bearer-save(string);
+    callback stt-whisper-model-save(string);
     // Phase E6 v28 — full-profile import/export (incl. API keys).
     in-out property <string> profile-io-result: "";
     callback export-profile-clicked();
@@ -960,6 +966,13 @@ export component SettingsWindow inherits Window {
                                 root.ai-local-vision-changed(v);
                             }
                         }
+                        DarkCheck {
+                            text: @tr("Local model reasoning/thinking (slower, off = faster)");
+                            checked <=> root.ai-local-thinking;
+                            toggled(v) => {
+                                root.ai-local-thinking-changed(v);
+                            }
+                        }
                         HorizontalLayout {
                             spacing: 6px;
                             Button {
@@ -1057,6 +1070,35 @@ export component SettingsWindow inherits Window {
                                 text: @tr("Save");
                                 clicked => {
                                     root.stt-whisper-url-save(root.stt-whisper-url-input);
+                                }
+                            }
+                        }
+                        if root.stt-provider-index == 2 : HorizontalLayout {
+                            spacing: 6px;
+                            LineEdit {
+                                placeholder-text: @tr("whisper-server bearer token (optional)");
+                                input-type: password;
+                                text <=> root.stt-whisper-bearer-input;
+                                horizontal-stretch: 1;
+                            }
+                            Button {
+                                text: @tr("Save");
+                                clicked => {
+                                    root.stt-whisper-bearer-save(root.stt-whisper-bearer-input);
+                                }
+                            }
+                        }
+                        if root.stt-provider-index == 2 : HorizontalLayout {
+                            spacing: 6px;
+                            LineEdit {
+                                placeholder-text: @tr("whisper model — e.g. whisper-large-v3-turbo");
+                                text <=> root.stt-whisper-model-input;
+                                horizontal-stretch: 1;
+                            }
+                            Button {
+                                text: @tr("Save");
+                                clicked => {
+                                    root.stt-whisper-model-save(root.stt-whisper-model-input);
                                 }
                             }
                         }

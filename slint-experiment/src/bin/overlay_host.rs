@@ -713,8 +713,14 @@ fn main() -> Result<(), slint::PlatformError> {
         let c = cfg.read();
         ai::set_local_no_think(c.ai_provider == "local" && !c.ai_local_thinking);
     }
+    // E10.2 — restore persisted stealth (WDA_EXCLUDEFROMCAPTURE) so it survives
+    // a restart (was previously lost → overlay launched visible to capture).
+    set_global_stealth(cfg.read().stealth_enabled);
 
     let state = new_shared_state();
+    if let Ok(mut st) = state.lock() {
+        st.stealth = cfg.read().stealth_enabled;
+    }
     let tiles: TileWindows = Rc::new(RefCell::new(Vec::new()));
     let settings: Rc<RefCell<Option<SettingsWindow>>> = Rc::new(RefCell::new(None));
 
@@ -759,6 +765,7 @@ fn main() -> Result<(), slint::PlatformError> {
     overlay.set_status_text(SharedString::from("idle"));
     overlay.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
     overlay.set_active_stack(SharedString::from(active_stack_label(&cfg.read())));
+    overlay.set_stealth_active(cfg.read().stealth_enabled);
     overlay.set_cost_label(SharedString::from("$0.000"));
     overlay.set_timer_label(SharedString::from("00:00"));
 
@@ -1119,6 +1126,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // Rc internally and isn't Send.
     let tiles_for_poll = tiles.clone();
     let cfg_for_poll = cfg.clone();
+    let weak_overlay_poll = overlay.as_weak();
     let spawn_poll_timer = Timer::default();
     spawn_poll_timer.start(TimerMode::Repeated, Duration::from_millis(50), move || {
         // Phase E6 v19 — process at most 1 spawn request per 50 ms
@@ -1151,6 +1159,9 @@ fn main() -> Result<(), slint::PlatformError> {
                     "[overlay-host] live tile cap hit (>= {MAX_LIVE_TILES}) — dropping oldest"
                 );
             }
+            // Keep the bar's open-tile count honest even if the new() below
+            // fails after a cap eviction (review minor).
+            refresh_open_tiles(&weak_overlay_poll, &tiles_for_poll);
             let tile = match TileWindow::new() {
                 Ok(t) => t,
                 Err(e) => {
@@ -1208,6 +1219,7 @@ fn main() -> Result<(), slint::PlatformError> {
             // → UI thread saturated after 30+ tiles. User: "у
             // меня зависла основная панель".
             let vec_for_close = tiles_for_poll.clone();
+            let weak_overlay_close = weak_overlay_poll.clone();
             tile.on_close_clicked(move || {
                 eprintln!("[overlay-host] tile (poll/F3) close_clicked fired");
                 if let Some(t) = weak_tile.upgrade() {
@@ -1222,6 +1234,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         eprintln!(
                             "[overlay-host]   dropped from vec: before={before} after={after}"
                         );
+                        refresh_open_tiles(&weak_overlay_close, &vec_for_close);
                     }
                 }
             });
@@ -1255,6 +1268,7 @@ fn main() -> Result<(), slint::PlatformError> {
             let _ = tile.show();
             apply_tile_hwnd_with_monitor(&tile);
             tiles_for_poll.borrow_mut().push(tile);
+            refresh_open_tiles(&weak_overlay_poll, &tiles_for_poll);
         }
     });
 
@@ -1485,6 +1499,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         &hp_rt,
                         &hp_rt_handle,
                         &hp_tiles,
+                        &hp_weak_overlay,
                     );
                 }
             }
@@ -1660,6 +1675,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     &rt_p,
                     &rth_p,
                     &tiles_p,
+                    &weak,
                 );
             }
         });
@@ -1672,6 +1688,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let weak = overlay.as_weak();
         let palette_for_stealth = palette.clone();
         let settings_for_stealth = settings.clone();
+        let cfg_stealth = cfg.clone();
         overlay.on_stealth_toggle_clicked(move || {
             let new_stealth = {
                 let mut st = match s.lock() {
@@ -1685,8 +1702,15 @@ fn main() -> Result<(), slint::PlatformError> {
             // #111 — source-of-truth so windows created later (palette /
             // Settings / freshly-spawned tiles) inherit stealth on realize.
             set_global_stealth(new_stealth);
-            // Apply to overlay
+            // #E10.2 — persist so stealth survives a restart.
+            {
+                let mut c = cfg_stealth.write();
+                c.stealth_enabled = new_stealth;
+                let _ = config::save(&c);
+            }
+            // Apply to overlay + light the bar 🎯 chip.
             if let Some(o) = weak.upgrade() {
+                o.set_stealth_active(new_stealth);
                 if let Ok(hwnd) = grab_hwnd(o.window()) {
                     let _ = set_stealth(hwnd, new_stealth);
                 }
@@ -1705,6 +1729,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 }
             }
             if let Some(sw) = settings_for_stealth.borrow().as_ref() {
+                sw.set_stealth_toggle(new_stealth);
                 if let Ok(hwnd) = grab_hwnd(sw.window()) {
                     let _ = set_stealth(hwnd, new_stealth);
                 }
@@ -1738,6 +1763,8 @@ fn main() -> Result<(), slint::PlatformError> {
             if let Some(o) = weak.upgrade() {
                 o.set_tiles_spawned(0);
             }
+            // #B1 — vec was just cleared; sync the live open-tile count to 0.
+            refresh_open_tiles(&weak, &tiles_ref);
         });
     }
 
@@ -1798,6 +1825,7 @@ fn main() -> Result<(), slint::PlatformError> {
 
             let weak_tile = tile.as_weak();
             let vec_for_close = t.clone();
+            let weak_overlay_close = weak.clone();
             tile.on_close_clicked(move || {
                 eprintln!("[overlay-host] tile (spawn-poll) close_clicked fired");
                 if let Some(tw) = weak_tile.upgrade() {
@@ -1807,6 +1835,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         vec_for_close.borrow_mut().retain(|item| {
                             grab_hwnd(item.window()).ok() != Some(target)
                         });
+                        refresh_open_tiles(&weak_overlay_close, &vec_for_close);
                     }
                 }
             });
@@ -1836,6 +1865,7 @@ fn main() -> Result<(), slint::PlatformError> {
             // when storing last_tile_qa on success. Cheap arc clone.
             let s_for_bookmark = s.clone();
             t.borrow_mut().push(tile);
+            refresh_open_tiles(&weak, &t);
 
             // Spawn the AI call on the tokio runtime. Read config under
             // the lock briefly, drop, then run async.
@@ -2150,10 +2180,16 @@ fn apply_overlay_hwnd(overlay: &OverlayBarWindow) {
     Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
         let Some(o) = weak.upgrade() else { return };
         match grab_hwnd(o.window()) {
-            Ok(hwnd) => match make_transparent_overlay(hwnd) {
-                Ok(()) => eprintln!("[overlay-host] overlay transparency wired"),
-                Err(e) => eprintln!("[overlay-host] overlay transparency failed: {e}"),
-            },
+            Ok(hwnd) => {
+                match make_transparent_overlay(hwnd) {
+                    Ok(()) => eprintln!("[overlay-host] overlay transparency wired"),
+                    Err(e) => eprintln!("[overlay-host] overlay transparency failed: {e}"),
+                }
+                // #E10.2 — apply persisted stealth to the bar on launch.
+                if global_stealth() {
+                    let _ = set_stealth(hwnd, true);
+                }
+            }
             Err(e) => eprintln!("[overlay-host] overlay HWND grab failed: {e}"),
         }
     });
@@ -2336,6 +2372,7 @@ fn fire_f9_ask(
     slint_rt: &SharedSlintRuntime,
     rt_handle: &tokio::runtime::Handle,
     tiles: &TileWindows,
+    weak_overlay: &slint::Weak<OverlayBarWindow>,
 ) {
     // ===== 1. Sync placeholder tile creation =====
     let tile = match TileWindow::new() {
@@ -2370,6 +2407,7 @@ fn fire_f9_ask(
     tile.set_blocks(ModelRc::new(VecModel::from(placeholder)));
     let weak_close = tile.as_weak();
     let vec_for_close = tiles.clone();
+    let weak_overlay_close = weak_overlay.clone();
     tile.on_close_clicked(move || {
         eprintln!("[overlay-host] tile (F9) close_clicked fired");
         if let Some(t) = weak_close.upgrade() {
@@ -2379,6 +2417,7 @@ fn fire_f9_ask(
                 vec_for_close
                     .borrow_mut()
                     .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
+                refresh_open_tiles(&weak_overlay_close, &vec_for_close);
             }
         }
     });
@@ -2425,6 +2464,7 @@ fn fire_f9_ask(
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
     tiles.borrow_mut().push(tile);
+    refresh_open_tiles(weak_overlay, tiles);
 
     // ===== 2. Register the tile in the bridge's streaming slot =====
     // request_messages is filled once `messages` is built below (before
@@ -2643,6 +2683,10 @@ fn ptt_tile_error(weak: slint::Weak<TileWindow>, msg: &str) {
 /// (3) streams the answer into the tile via the SAME `current_streaming`
 /// slot + `ai:event` path as F9. Mirrors `fire_f9_ask` with a transcribe
 /// step prepended; F9 itself is untouched.
+// Wiring fn: bridge + events + cfg + runtime + tiles + overlay-weak are all
+// distinct shared handles this path needs; bundling them into a struct would
+// add indirection without clarifying anything. #B1 added the overlay weak.
+#[allow(clippy::too_many_arguments)]
 fn fire_ptt_ask(
     recording: (audio::AudioSource, Vec<i16>),
     bridge: &Arc<OverlayBarBridge>,
@@ -2651,6 +2695,7 @@ fn fire_ptt_ask(
     slint_rt: &SharedSlintRuntime,
     rt_handle: &tokio::runtime::Handle,
     tiles: &TileWindows,
+    weak_overlay: &slint::Weak<OverlayBarWindow>,
 ) {
     let (source, pcm) = recording;
     let icon = match source {
@@ -2693,6 +2738,7 @@ fn fire_ptt_ask(
     }])));
     let weak_close = tile.as_weak();
     let vec_for_close = tiles.clone();
+    let weak_overlay_close = weak_overlay.clone();
     tile.on_close_clicked(move || {
         if let Some(t) = weak_close.upgrade() {
             let close_hwnd = grab_hwnd(t.window()).ok();
@@ -2701,6 +2747,7 @@ fn fire_ptt_ask(
                 vec_for_close
                     .borrow_mut()
                     .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
+                refresh_open_tiles(&weak_overlay_close, &vec_for_close);
             }
         }
     });
@@ -2745,6 +2792,7 @@ fn fire_ptt_ask(
     let weak_for_stream = tile.as_weak();
     let weak_for_title = tile.as_weak();
     tiles.borrow_mut().push(tile);
+    refresh_open_tiles(weak_overlay, tiles);
 
     // ===== 2. Register tile in the streaming slot (same as F9) =====
     // request_messages is filled inside the transcribe→ask task once the
@@ -3201,6 +3249,17 @@ fn toggle_tile_maximize(hwnd: windows::Win32::Foundation::HWND, tile: &TileWindo
     diag!("tile maximized -> {new} (logical {w}x{h}, phys {pw}x{ph})");
 }
 
+/// #B1 — push the LIVE open-tile count to the bar's `open-tiles` property so
+/// the "+ tile (N)" label and the "close all" chip reflect reality. Call this
+/// after EVERY `tiles.push(...)` and EVERY close-handler `tiles.retain(...)`
+/// (and in the close-all handler). Distinct from `tiles_spawned`, which is a
+/// monotonic display counter for the per-tile #N badge and must not change.
+fn refresh_open_tiles(weak: &slint::Weak<OverlayBarWindow>, tiles: &TileWindows) {
+    if let Some(o) = weak.upgrade() {
+        o.set_open_tiles(tiles.borrow().len() as i32);
+    }
+}
+
 /// Wire the chrome-row drag callbacks on a tile so the user can move
 /// it by pressing+dragging the title area. Phase E6 v22 — manual
 /// cursor-delta drag (drag_begin on down, drag_update on move-while-
@@ -3438,6 +3497,7 @@ fn open_palette(
 
             let weak_tile = tile.as_weak();
             let vec_for_close = tiles_ref2.clone();
+            let weak_overlay_close = weak_overlay2.clone();
             tile.on_close_clicked(move || {
                 eprintln!("[overlay-host] tile (KB-palette) close_clicked fired");
                 if let Some(t) = weak_tile.upgrade() {
@@ -3447,6 +3507,7 @@ fn open_palette(
                         vec_for_close
                             .borrow_mut()
                             .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
+                        refresh_open_tiles(&weak_overlay_close, &vec_for_close);
                     }
                 }
             });
@@ -3471,6 +3532,7 @@ fn open_palette(
             let _ = tile.show();
             apply_tile_hwnd_with_monitor(&tile);
             tiles_ref2.borrow_mut().push(tile);
+            refresh_open_tiles(&weak_overlay2, &tiles_ref2);
         }
         // Close palette after activation.
         if let Some(p) = weak_self.upgrade() {
@@ -3791,12 +3853,19 @@ fn open_settings(
     let tiles_ref3 = tiles_ref.clone();
     let overlay_for_stealth = overlay_weak.clone();
     let self_weak_stealth = win.as_weak();
+    let cfg_st = cfg.clone();
     win.on_stealth_changed(move |on| {
         if let Ok(mut st) = s3.lock() {
             st.stealth = on;
         }
         // #111 — global source-of-truth so later-created windows inherit it.
         set_global_stealth(on);
+        // #E10.2 — persist so stealth survives a restart.
+        {
+            let mut c = cfg_st.write();
+            c.stealth_enabled = on;
+            let _ = config::save(&c);
+        }
         for t in tiles_ref3.borrow().iter() {
             if let Ok(hwnd) = grab_hwnd(t.window()) {
                 let _ = set_stealth(hwnd, on);
@@ -3805,6 +3874,7 @@ fn open_settings(
         // #111 — also flip the overlay bar + this Settings window itself
         // (toggling stealth here previously left both visible to capture).
         if let Some(o) = overlay_for_stealth.upgrade() {
+            o.set_stealth_active(on);
             if let Ok(hwnd) = grab_hwnd(o.window()) {
                 let _ = set_stealth(hwnd, on);
             }
@@ -3990,6 +4060,17 @@ fn open_settings(
             let mut c = cfg_c.write();
             c.ai_local_vision = on;
             let _ = overlay_backend::config::save(&c);
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_ai_local_thinking_changed(move |on| {
+            let mut c = cfg_c.write();
+            c.ai_local_thinking = on;
+            let _ = overlay_backend::config::save(&c);
+            // Mirror the boot-time + provider-switch logic: no-think is the
+            // INVERSE of "thinking" and only applies to the local provider.
+            overlay_backend::ai::set_local_no_think(c.ai_provider == "local" && !on);
         });
     }
     {
@@ -4197,6 +4278,32 @@ fn open_settings(
                 return;
             }
             diag!("stt_whisper_url saved ({} chars)", trimmed.len());
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_stt_whisper_bearer_save(move |v| {
+            let trimmed = v.trim().to_string();
+            let mut c = cfg_c.write();
+            c.stt_whisper_bearer = trimmed.clone();
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] stt_whisper_bearer save failed: {e:#}");
+                return;
+            }
+            diag!("stt_whisper_bearer saved ({} chars)", trimmed.len());
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_stt_whisper_model_save(move |v| {
+            let trimmed = v.trim().to_string();
+            let mut c = cfg_c.write();
+            c.stt_whisper_model = trimmed.clone();
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] stt_whisper_model save failed: {e:#}");
+                return;
+            }
+            diag!("stt_whisper_model saved ({} chars)", trimmed.len());
         });
     }
 
@@ -4680,7 +4787,6 @@ fn populate_token_status(win: &SettingsWindow, cfg: &overlay_backend::config::Sh
     // reflects the saved value on Settings re-open.
     win.set_tile_body_opacity(c.tile_body_opacity);
     win.set_ai_base_url_input(SharedString::from(c.ai_base_url.clone()));
-    win.set_ai_model_input(SharedString::from(c.ai_model.clone()));
     win.set_ai_prompt_cache(c.ai_prompt_cache);
     win.set_ai_provider_index(i32::from(c.ai_provider == "local"));
     win.set_ai_local_base_url_input(SharedString::from(c.ai_local_base_url.clone()));
@@ -4700,6 +4806,7 @@ fn populate_token_status(win: &SettingsWindow, cfg: &overlay_backend::config::Sh
     win.set_ai_local_models(seed_one(&c.ai_local_model));
     win.set_ai_local_model_index(0);
     win.set_ai_local_vision(c.ai_local_vision);
+    win.set_ai_local_thinking(c.ai_local_thinking);
     // Phase E10 — STT provider selector + local-engine fields.
     win.set_stt_provider_index(match c.stt_provider.as_str() {
         "gigaam" => 1,
@@ -4708,6 +4815,8 @@ fn populate_token_status(win: &SettingsWindow, cfg: &overlay_backend::config::Sh
     });
     win.set_stt_gigaam_dir_input(SharedString::from(c.stt_gigaam_dir.clone()));
     win.set_stt_whisper_url_input(SharedString::from(c.stt_whisper_url.clone()));
+    win.set_stt_whisper_bearer_input(SharedString::from(c.stt_whisper_bearer.clone()));
+    win.set_stt_whisper_model_input(SharedString::from(c.stt_whisper_model.clone()));
     // Phase E6 v38 — reflect the saved interface language in the
     // Interface-tab dropdown (0=Русский, 1=English).
     win.set_ui_language_index(if c.ui_language == "en" { 1 } else { 0 });

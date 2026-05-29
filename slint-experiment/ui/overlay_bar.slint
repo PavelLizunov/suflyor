@@ -199,12 +199,21 @@ export component OverlayBarWindow inherits Window {
     // Tile counter for the "+ Tile" button.
     in-out property <int> tiles-spawned: 0;
 
+    // #B1 — LIVE count of currently-open tiles (Rust keeps this in sync with
+    // the TileWindows vec on every spawn/close). Drives the "+ tile (N)" label
+    // and gates the "close all" chip, so closing tiles via their own X buttons
+    // updates the bar (tiles-spawned is a CUMULATIVE counter and must NOT be
+    // used for these — it never decrements except on close-all).
+    in-out property <int> open-tiles: 0;
+
     // Phase E6 v10 — aggressive (every-line) auto-tile mode flag.
     // When true, the bar shows the "🔥 auto" chip lit; user can
     // toggle to spawn a tile on every transcript line (vs. only on
     // Question/Keyword triggers). Backend already supports it via
     // cfg.auto_tile_every_line; this just surfaces the switch.
     in-out property <bool> aggressive-active: false;
+    // E10.2 — stealth on/off, so the 🎯 chip lights up + reflects restored state.
+    in-out property <bool> stealth-active: false;
 
     // Phase E6 v11 — live status indicators. `last-transcript-line`
     // shows the most recent STT output (truncated by Rust to ~120
@@ -403,6 +412,7 @@ export component OverlayBarWindow inherits Window {
             }
             Chip {
                 label: "🎯";
+                active: root.stealth-active;
                 accent: #ec4899;
                 clicked => { root.stealth-toggle-clicked(); }
             }
@@ -420,13 +430,13 @@ export component OverlayBarWindow inherits Window {
             // Close-all appears once tiles have been spawned so the user can
             // dismiss a screenful in one click (#110); resets the counter,
             // which also hides this chip again.
-            if root.tiles-spawned > 0 : Chip {
+            if root.open-tiles > 0 : Chip {
                 label: @tr("close all");
                 accent: #fb7185;
                 clicked => { root.close-all-tiles-clicked(); }
             }
             Chip {
-                label: @tr("+ tile ({})", root.tiles-spawned);
+                label: @tr("+ tile ({})", root.open-tiles);
                 accent: #f472b6;
                 clicked => { root.spawn-tile-clicked(); }
             }
