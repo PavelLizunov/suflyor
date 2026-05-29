@@ -50,6 +50,9 @@ pub struct AppState {
     /// launched by the in-app installer. Tracked so they can be killed on
     /// app quit instead of being orphaned.
     pub local_ai_servers: Vec<std::process::Child>,
+    /// Set true by the installer's "Cancel" button to abort an in-progress
+    /// local-AI install; the worker thread + the curl poll loop check it.
+    pub local_ai_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// Convenience alias used by all window-spawning callbacks.

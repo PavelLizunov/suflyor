@@ -194,6 +194,7 @@ export component SettingsWindow inherits Window {
     in-out property <string> local-ai-gpu: "";
     in-out property <bool> local-ai-on-gpu: false;
     callback install-local-ai-clicked();
+    callback cancel-local-ai-clicked();
 
     // Phase E6 v20 — tile body opacity (50..100%). Slider on Stealth
     // tab; Rust writes to cfg.tile_body_opacity + applies to spawning
@@ -1000,7 +1001,7 @@ export component SettingsWindow inherits Window {
                         // ----- E10.4 — one-click in-app local-AI installer -----
                         Rectangle { background: #2a2c3a; height: 1px; }
                         Text {
-                            text: @tr("One-click local AI: downloads llama.cpp + whisper.cpp + models (~6 GB) and starts the servers on this PC, then configures everything. Picks GPU (CUDA) automatically.");
+                            text: @tr("Installs the local stack on this PC (~6 GB total): llama.cpp + Gemma-4-E4B (~5 GB; needs ~6 GB VRAM on GPU), whisper.cpp + Whisper-turbo (~0.9 GB), GigaAM-v3 (~0.2 GB). With NVIDIA it picks the CUDA build, otherwise CPU. Models you already have are reused, not re-downloaded.");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
@@ -1012,6 +1013,12 @@ export component SettingsWindow inherits Window {
                                 enabled: !root.local-ai-installing;
                                 clicked => {
                                     root.install-local-ai-clicked();
+                                }
+                            }
+                            if root.local-ai-installing : Button {
+                                text: @tr("Cancel");
+                                clicked => {
+                                    root.cancel-local-ai-clicked();
                                 }
                             }
                             if root.local-ai-gpu != "" : Text {

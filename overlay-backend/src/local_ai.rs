@@ -16,6 +16,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -51,6 +52,10 @@ const WHISPER_PORT: &str = "8081";
 /// CREATE_NO_WINDOW — keep the spawned console servers windowless.
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// `install` returns this exact error message when the user cancels mid-run, so
+/// the UI can show "Отменено" instead of treating it as a failure.
+pub const CANCEL_SENTINEL: &str = "__cancelled__";
 
 // ---- public API ------------------------------------------------------------
 
@@ -139,14 +144,20 @@ pub fn apply_result(cfg: &mut crate::config::Config, res: &LocalAiResult) {
 
 /// Run the full install pipeline. BLOCKING — call from a worker thread. Reports
 /// progress via `on`. Returns the values to persist + the live server handles.
-pub fn install(opts: &InstallOptions, on: &dyn Fn(Progress)) -> Result<LocalAiResult> {
+pub fn install(
+    opts: &InstallOptions,
+    cancel: &AtomicBool,
+    on: &dyn Fn(Progress),
+) -> Result<LocalAiResult> {
     preflight().context("environment preflight failed")?;
     std::fs::create_dir_all(&opts.root)
         .with_context(|| format!("create install root {}", opts.root.display()))?;
+    bail_if_cancelled(cancel)?;
 
     let llama_dir = opts.root.join("llama.cpp");
     let whisper_dir = opts.root.join("whisper.cpp");
     let gigaam_dir = opts.root.join("gigaam-v3");
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
 
     let use_gpu = detect_nvidia() && !opts.force_cpu;
     let mut cuda_version: Option<String> = None;
@@ -159,64 +170,81 @@ pub fn install(opts: &InstallOptions, on: &dyn Fn(Progress)) -> Result<LocalAiRe
             let assets = github_assets(LLAMA_REPO)?;
             let pick = pick_llama(&assets, !use_gpu)?;
             cuda_version = pick.version.clone();
-            on(Progress::Step(format!(
-                "Downloading llama.cpp ({})",
-                pick.version.as_deref().unwrap_or("CPU")
-            )));
-            download_and_extract(&pick.build_url, &llama_dir, on)?;
+            let blabel = format!("llama.cpp {}", pick.version.as_deref().unwrap_or("CPU"));
+            download_and_extract(
+                &pick.build_url,
+                pick.build_size,
+                &blabel,
+                &llama_dir,
+                cancel,
+                on,
+            )?;
             if let Some(cu) = &pick.cudart_url {
-                on(Progress::Step("Downloading CUDA runtime".to_string()));
-                download_and_extract(cu, &llama_dir, on)?;
+                download_and_extract(cu, pick.cudart_size, "CUDA runtime", &llama_dir, cancel, on)?;
             }
         }
-        on(Progress::Step(
-            "Downloading Gemma-4-E4B (~5 GB)".to_string(),
-        ));
-        curl_resumable(
-            GEMMA_URL,
-            &llama_dir.join(GEMMA_FILE),
+        // Reuse an existing Gemma (e.g. a prior manual ~\llama.cpp) instead of
+        // re-downloading 5 GB.
+        let gemma_dest = llama_dir.join(GEMMA_FILE);
+        if reuse_if_available(
+            &gemma_dest,
             GEMMA_SIZE,
-            "Gemma",
-            on,
-        )?;
+            &[home.join("llama.cpp").join(GEMMA_FILE)],
+        ) {
+            on(Progress::Step("Reusing existing Gemma model".to_string()));
+        } else {
+            curl_resumable(GEMMA_URL, &gemma_dest, GEMMA_SIZE, "Gemma", cancel, on)?;
+        }
     }
 
     // ---- whisper.cpp + Whisper-turbo --------------------------------------
     if !opts.skip_whisper {
+        bail_if_cancelled(cancel)?;
         on(Progress::Step("Installing whisper.cpp".to_string()));
         std::fs::create_dir_all(&whisper_dir)?;
         if find_exe(&whisper_dir, "whisper-server.exe").is_none()
             && find_exe(&whisper_dir, "server.exe").is_none()
         {
             let assets = github_assets(WHISPER_REPO)?;
-            let url = pick_whisper(&assets)?;
-            on(Progress::Step("Downloading whisper.cpp".to_string()));
-            download_and_extract(&url, &whisper_dir, on)?;
+            let (url, size) = pick_whisper(&assets)?;
+            download_and_extract(&url, size, "whisper.cpp", &whisper_dir, cancel, on)?;
         }
-        on(Progress::Step(
-            "Downloading Whisper large-v3-turbo".to_string(),
-        ));
-        curl_resumable(
-            WHISPER_URL,
-            &whisper_dir.join(WHISPER_FILE),
+        let whisper_dest = whisper_dir.join(WHISPER_FILE);
+        if reuse_if_available(
+            &whisper_dest,
             WHISPER_SIZE,
-            "Whisper",
-            on,
-        )?;
+            &[home.join("whisper.cpp").join(WHISPER_FILE)],
+        ) {
+            on(Progress::Step("Reusing existing Whisper model".to_string()));
+        } else {
+            curl_resumable(
+                WHISPER_URL,
+                &whisper_dest,
+                WHISPER_SIZE,
+                "Whisper",
+                cancel,
+                on,
+            )?;
+        }
     }
 
     // ---- GigaAM-v3 (in-process; no server) --------------------------------
     if !opts.skip_gigaam {
+        bail_if_cancelled(cancel)?;
         on(Progress::Step("Downloading GigaAM-v3".to_string()));
         std::fs::create_dir_all(&gigaam_dir)?;
         // transcribe_rs loads exactly `model.int8.onnx` + `vocab.txt`.
-        curl_resumable(
-            GIGAAM_MODEL_URL,
-            &gigaam_dir.join("model.int8.onnx"),
-            GIGAAM_MODEL_SIZE,
-            "GigaAM",
-            on,
-        )?;
+        let giga_dest = gigaam_dir.join("model.int8.onnx");
+        if !reuse_if_available(&giga_dest, GIGAAM_MODEL_SIZE, &[]) {
+            curl_resumable(
+                GIGAAM_MODEL_URL,
+                &giga_dest,
+                GIGAAM_MODEL_SIZE,
+                "GigaAM",
+                cancel,
+                on,
+            )?;
+        }
         curl_small(GIGAAM_VOCAB_URL, &gigaam_dir.join("vocab.txt"))?;
     }
 
@@ -301,6 +329,8 @@ pub fn install(opts: &InstallOptions, on: &dyn Fn(Progress)) -> Result<LocalAiRe
 struct GhAsset {
     name: String,
     browser_download_url: String,
+    #[serde(default)]
+    size: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -311,7 +341,9 @@ struct GhRelease {
 #[derive(Debug, Clone)]
 struct LlamaPick {
     build_url: String,
+    build_size: u64,
     cudart_url: Option<String>,
+    cudart_size: u64,
     version: Option<String>,
 }
 
@@ -367,7 +399,9 @@ fn pick_llama(assets: &[GhAsset], force_cpu: bool) -> Result<LlamaPick> {
                 .ok_or_else(|| anyhow!("no cudart asset for CUDA {maj}.{min}"))?;
             return Ok(LlamaPick {
                 build_url: build.browser_download_url.clone(),
+                build_size: build.size,
                 cudart_url: Some(cudart.browser_download_url.clone()),
+                cudart_size: cudart.size,
                 version: Some(format!("{maj}.{min}")),
             });
         }
@@ -378,41 +412,37 @@ fn pick_llama(assets: &[GhAsset], force_cpu: bool) -> Result<LlamaPick> {
         .ok_or_else(|| anyhow!("no llama CPU build asset"))?;
     Ok(LlamaPick {
         build_url: cpu.browser_download_url.clone(),
+        build_size: cpu.size,
         cudart_url: None,
+        cudart_size: 0,
         version: None,
     })
 }
 
-/// Pick the plain CPU whisper.cpp build (`whisper-bin-x64.zip`).
-fn pick_whisper(assets: &[GhAsset]) -> Result<String> {
+/// Pick the plain CPU whisper.cpp build (`whisper-bin-x64.zip`) -> (url, size).
+fn pick_whisper(assets: &[GhAsset]) -> Result<(String, u64)> {
     assets
         .iter()
         .find(|a| a.name == "whisper-bin-x64.zip")
-        .map(|a| a.browser_download_url.clone())
+        .map(|a| (a.browser_download_url.clone(), a.size))
         .ok_or_else(|| anyhow!("no whisper-bin-x64.zip asset"))
 }
 
 // ---- downloads + extraction (curl.exe + tar.exe) ---------------------------
 
-fn download_and_extract(url: &str, dest_dir: &Path, on: &dyn Fn(Progress)) -> Result<()> {
+fn download_and_extract(
+    url: &str,
+    size: u64,
+    label: &str,
+    dest_dir: &Path,
+    cancel: &AtomicBool,
+    on: &dyn Fn(Progress),
+) -> Result<()> {
     let name = url.rsplit('/').next().unwrap_or("download.zip");
     let zip = dest_dir.join(name);
-    on(Progress::Step(format!("Downloading {name}")));
-    let status = launch_hidden_wait(
-        "curl.exe",
-        &[
-            "-L",
-            "--retry",
-            "8",
-            "--retry-all-errors",
-            "-o",
-            &zip.to_string_lossy(),
-            url,
-        ],
-    )?;
-    if !status.success() {
-        bail!("download failed: {name}");
-    }
+    // Download the zip with LIVE byte progress + cancel support (was a silent
+    // blocking curl before, so the bar sat empty during the binary downloads).
+    curl_resumable(url, &zip, size, label, cancel, on)?;
     extract_zip(&zip, dest_dir)?;
     let _ = std::fs::remove_file(&zip);
     Ok(())
@@ -444,9 +474,11 @@ fn curl_resumable(
     out: &Path,
     expected: u64,
     label: &str,
+    cancel: &AtomicBool,
     on: &dyn Fn(Progress),
 ) -> Result<()> {
     for _ in 0..60 {
+        bail_if_cancelled(cancel)?;
         let cur = file_len(out);
         if cur >= expected {
             break;
@@ -468,6 +500,11 @@ fn curl_resumable(
             ],
         )?;
         loop {
+            if cancel.load(Ordering::Relaxed) {
+                let _ = child.kill();
+                let _ = child.wait();
+                bail!("{CANCEL_SENTINEL}");
+            }
             match child.try_wait().context("poll curl")? {
                 Some(_) => break,
                 None => {
@@ -572,6 +609,34 @@ fn file_len(p: &Path) -> u64 {
     std::fs::metadata(p).map(|m| m.len()).unwrap_or(0)
 }
 
+/// Bail with the cancel sentinel if the user requested cancellation.
+fn bail_if_cancelled(cancel: &AtomicBool) -> Result<()> {
+    if cancel.load(Ordering::Relaxed) {
+        bail!("{CANCEL_SENTINEL}");
+    }
+    Ok(())
+}
+
+/// If `dest` already holds the full file, keep it. Otherwise look through
+/// `candidates` for a complete copy and hard-link it into `dest` (instant on
+/// the same volume; falls back to a byte copy). Returns true if `dest` now has
+/// the full file, so the caller can skip the download — lets the installer
+/// reuse a model the user already has elsewhere instead of re-fetching it.
+fn reuse_if_available(dest: &Path, expected: u64, candidates: &[PathBuf]) -> bool {
+    if file_len(dest) >= expected {
+        return true;
+    }
+    for cand in candidates {
+        if cand.as_path() != dest && file_len(cand) >= expected {
+            let _ = std::fs::remove_file(dest);
+            if std::fs::hard_link(cand, dest).is_ok() || std::fs::copy(cand, dest).is_ok() {
+                return file_len(dest) >= expected;
+            }
+        }
+    }
+    false
+}
+
 fn find_exe(dir: &Path, name: &str) -> Option<PathBuf> {
     let want = name.to_ascii_lowercase();
     let mut stack = vec![dir.to_path_buf()];
@@ -647,6 +712,7 @@ mod tests {
         GhAsset {
             name: name.to_string(),
             browser_download_url: format!("https://example/{name}"),
+            size: 123,
         }
     }
 
@@ -713,6 +779,7 @@ mod tests {
         ];
         assert!(pick_whisper(&assets)
             .unwrap()
+            .0
             .ends_with("whisper-bin-x64.zip"));
     }
 
@@ -726,11 +793,20 @@ mod tests {
         let maj: u32 = it.next().unwrap().parse().unwrap();
         let min: u32 = it.next().unwrap().parse().unwrap();
         // Blackwell (RTX 50xx) needs CUDA >= 12.8; the newest pick must satisfy it.
-        assert!(maj > 12 || (maj == 12 && min >= 8), "picked CUDA {v} is too old for Blackwell");
-        assert!(pick.cudart_url.is_some(), "a matching cudart must be picked");
+        assert!(
+            maj > 12 || (maj == 12 && min >= 8),
+            "picked CUDA {v} is too old for Blackwell"
+        );
+        assert!(
+            pick.cudart_url.is_some(),
+            "a matching cudart must be picked"
+        );
         // whisper picker against the live release too
         let wassets = github_assets(WHISPER_REPO).unwrap();
-        assert!(pick_whisper(&wassets).unwrap().ends_with("whisper-bin-x64.zip"));
+        assert!(pick_whisper(&wassets)
+            .unwrap()
+            .0
+            .ends_with("whisper-bin-x64.zip"));
     }
 
     #[test]

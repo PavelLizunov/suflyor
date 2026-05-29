@@ -4091,6 +4091,13 @@ fn open_settings(
             let state_t = state_c.clone();
             let overlay_t = overlay_c.clone();
             let weak_t = w.as_weak();
+            // Shared cancel flag (lives in AppState so the Cancel button can
+            // flip it); reset before each run.
+            let cancel = {
+                let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
+                s.local_ai_cancel.clone()
+            };
+            cancel.store(false, std::sync::atomic::Ordering::Relaxed);
             std::thread::spawn(move || {
                 let on = {
                     let weak_p = weak_t.clone();
@@ -4129,7 +4136,7 @@ fn open_settings(
                     }
                 };
                 let opts = overlay_backend::local_ai::InstallOptions::default();
-                match overlay_backend::local_ai::install(&opts, &on) {
+                match overlay_backend::local_ai::install(&opts, &cancel, &on) {
                     Ok(res) => {
                         let model = res.ai_local_model.clone();
                         let on_gpu = res.on_gpu;
@@ -4173,8 +4180,15 @@ fn open_settings(
                         });
                     }
                     Err(e) => {
-                        let msg = format!("Ошибка установки: {e}");
-                        eprintln!("[overlay-host] local-ai install failed: {e:#}");
+                        let cancelled = e
+                            .to_string()
+                            .contains(overlay_backend::local_ai::CANCEL_SENTINEL);
+                        let msg = if cancelled {
+                            "Отменено.".to_string()
+                        } else {
+                            eprintln!("[overlay-host] local-ai install failed: {e:#}");
+                            format!("Ошибка установки: {e}")
+                        };
                         let weak_err = weak_t.clone();
                         let _ = slint::invoke_from_event_loop(move || {
                             if let Some(w) = weak_err.upgrade() {
@@ -4185,6 +4199,23 @@ fn open_settings(
                     }
                 }
             });
+        });
+    }
+
+    // E10.4 — Cancel button: flip the shared cancel flag the install worker
+    // thread + the curl poll loop watch.
+    {
+        let state_c = state.clone();
+        let weak = win.as_weak();
+        win.on_cancel_local_ai_clicked(move || {
+            {
+                let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
+                s.local_ai_cancel
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+            if let Some(w) = weak.upgrade() {
+                w.set_local_ai_status(SharedString::from("Отмена…"));
+            }
         });
     }
 
