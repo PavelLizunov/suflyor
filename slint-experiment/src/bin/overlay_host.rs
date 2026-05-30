@@ -4792,6 +4792,39 @@ fn open_settings(
         });
     }
 
+    // #125 — server-ONLY settings import. Copies just the AI/STT server
+    // fields (providers / URLs / models / keys) onto the CURRENT config,
+    // keeping local profiles, devices, UI, hotkeys, and snippets — for
+    // carrying a server setup to another PC without clobbering its locals.
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_import_server_settings_clicked(move || {
+            let snapshot = cfg_c.read().clone();
+            let picked = rfd::FileDialog::new()
+                .set_title("Import server settings (AI/STT only) from a full backup")
+                .add_filter("JSON", &["json"])
+                .pick_file();
+            let Some(w) = weak.upgrade() else { return };
+            let msg = match picked {
+                None => "import cancelled".to_string(),
+                Some(path) => {
+                    match overlay_backend::config::import_server_settings_from(&path, &snapshot) {
+                        Ok(merged) => {
+                            // Apply to the running session + refresh the
+                            // token-status display (keys/providers changed).
+                            *cfg_c.write() = merged;
+                            let _ = msg_refresh_after_import(&w, &cfg_c);
+                            "[ok] server settings imported (AI/STT providers, URLs, models, keys). Local profiles, devices, UI and snippets kept. Check local model paths (GigaAM/Whisper/llama) — they may differ on this PC. Restart for full effect.".to_string()
+                        }
+                        Err(e) => format!("[err] {e:#}"),
+                    }
+                }
+            };
+            w.set_profile_io_result(SharedString::from(msg));
+        });
+    }
+
     // Phase E6 v29 — meeting-context (Profile) save. Writes to
     // cfg.meeting_context + persists; new AI calls read it from cfg
     // so it applies immediately (no restart needed for this field).

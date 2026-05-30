@@ -278,6 +278,14 @@ msgstr "Экспорт настроек (с ключами)…"
 msgid "Import settings…"
 msgstr "Импорт настроек…"
 
+# === #125 server-only settings import ===
+
+msgid "Server import copies ONLY AI/STT providers, URLs, models and keys — local UI, profiles, devices and snippets stay unchanged. Use it to carry your server setup to another PC."
+msgstr "Импорт сервера копирует ТОЛЬКО AI/STT-провайдеров, URL, модели и ключи — локальные UI, профили, устройства и сниппеты не меняются. Используйте, чтобы перенести серверную настройку на другой ПК."
+
+msgid "Import server settings…"
+msgstr "Импортировать серверные настройки…"
+
 # --- Tab 5: Stats ---
 
 msgid "Session stats aggregated across all journals."

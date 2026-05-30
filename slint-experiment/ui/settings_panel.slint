@@ -258,6 +258,8 @@ export component SettingsWindow inherits Window {
     in-out property <string> profile-io-result: "";
     callback export-profile-clicked();
     callback import-profile-clicked();
+    // #125 — server-ONLY import (AI/STT servers; keeps local prefs).
+    callback import-server-settings-clicked();
     // Phase E6 v29 — meeting-context editor (Profile+context tab).
     in-out property <string> meeting-context-input: "";
     in-out property <string> meeting-context-result: "";
@@ -718,6 +720,21 @@ export component SettingsWindow inherits Window {
                             Button {
                                 text: @tr("Import settings…");
                                 clicked => { root.import-profile-clicked(); }
+                            }
+                        }
+                        // #125 — server-only transfer: copies just AI/STT
+                        // servers, keeps local profiles/devices/UI/snippets.
+                        Text {
+                            text: @tr("Server import copies ONLY AI/STT providers, URLs, models and keys — local UI, profiles, devices and snippets stay unchanged. Use it to carry your server setup to another PC.");
+                            font-size: 10px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            Button {
+                                text: @tr("Import server settings…");
+                                clicked => { root.import-server-settings-clicked(); }
                             }
                         }
                         if root.profile-io-result != "" : Text {

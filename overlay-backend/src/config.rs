@@ -1797,6 +1797,58 @@ pub fn import_from(path: &std::path::Path) -> Result<Config> {
     Ok(cfg)
 }
 
+/// Server-only settings merge (#125): copy ONLY the AI/STT server fields
+/// (providers, base URLs, models, bearer/API keys, prompt-cache + the local
+/// model knobs) from `imported` onto a clone of `current`. EVERY local field —
+/// profiles, audio devices, monitor pin, trigger keywords, hotkeys, UI
+/// language, theme, snippets, etc. — is preserved from `current`. Pure (no IO)
+/// so it's trivially testable; [`import_server_settings_from`] wraps it with
+/// read + save.
+#[must_use]
+pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
+    let mut next = current.clone();
+    // Cloud AI provider/endpoint.
+    next.ai_provider = imported.ai_provider;
+    next.ai_base_url = imported.ai_base_url;
+    next.ai_bearer = imported.ai_bearer;
+    next.ai_model = imported.ai_model;
+    next.prep_model = imported.prep_model;
+    next.ai_prompt_cache = imported.ai_prompt_cache;
+    // Local AI provider/endpoint.
+    next.ai_local_base_url = imported.ai_local_base_url;
+    next.ai_local_bearer = imported.ai_local_bearer;
+    next.ai_local_model = imported.ai_local_model;
+    next.ai_local_prep_model = imported.ai_local_prep_model;
+    next.ai_local_vision = imported.ai_local_vision;
+    next.ai_local_thinking = imported.ai_local_thinking;
+    // STT provider + per-backend server settings.
+    next.stt_provider = imported.stt_provider;
+    next.groq_api_key = imported.groq_api_key;
+    next.stt_language = imported.stt_language;
+    next.stt_model = imported.stt_model;
+    next.stt_gigaam_dir = imported.stt_gigaam_dir;
+    next.stt_gigaam_gpu = imported.stt_gigaam_gpu;
+    next.stt_whisper_url = imported.stt_whisper_url;
+    next.stt_whisper_bearer = imported.stt_whisper_bearer;
+    next.stt_whisper_model = imported.stt_whisper_model;
+    next
+}
+
+/// Server-only import from a user-picked file (#125). Reads + validates the
+/// JSON (full `Config` shape — unknown fields ignored, missing filled by serde
+/// defaults), merges ONLY the AI/STT server fields onto `current` via
+/// [`merge_server_settings`], persists, and returns the merged Config. Lets a
+/// user carry their AI/STT server setup to another PC WITHOUT clobbering that
+/// PC's local profiles, devices, UI, hotkeys, or snippets — unlike the full
+/// [`import_from`], which replaces the whole config.
+pub fn import_server_settings_from(path: &std::path::Path, current: &Config) -> Result<Config> {
+    let bytes = std::fs::read(path).context("read server settings import file")?;
+    let imported: Config = serde_json::from_slice(&bytes).context("parse server settings JSON")?;
+    let next = merge_server_settings(current, imported);
+    save(&next).context("persist imported server settings")?;
+    Ok(next)
+}
+
 /// Global, thread-safe handle.
 pub type SharedConfig = Arc<RwLock<Config>>;
 
@@ -1807,6 +1859,121 @@ pub fn shared() -> SharedConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #125 — server-only import copies the AI/STT server fields and KEEPS
+    /// every local field (profiles, devices, UI, snippets, hotkeys). Exercises
+    /// the pure `merge_server_settings` (NOT `import_server_settings_from`,
+    /// which would `save()` to the real %APPDATA% config — a test must never
+    /// touch the user's live config).
+    #[test]
+    fn merge_server_settings_takes_servers_keeps_locals() {
+        // `current` = this PC: distinctive LOCAL values + placeholder servers.
+        let mut current = Config::defaults();
+        current.meeting_context = "LOCAL meeting ctx".into();
+        current.context_profiles = vec![ContextProfile {
+            name: "local-prof".into(),
+            context: "local ctx".into(),
+        }];
+        current.active_profile = Some("local-prof".into());
+        current.mic_device = Some("Local Mic".into());
+        current.system_audio_device = Some("Local Loopback".into());
+        current.tile_monitor_name = Some("Local Monitor".into());
+        current.trigger_keywords = "localkw".into();
+        current.ui_language = "en".into();
+        current.color_scheme = 3;
+        current.tile_font_size = 19;
+        current.hotkey_ask = "F11".into();
+        current.snippets = vec![Snippet {
+            key: "loc".into(),
+            title: "Local snippet".into(),
+            body: "stays".into(),
+        }];
+        // Local PLACEHOLDER server values (must be OVERWRITTEN by the import).
+        current.ai_provider = "cloud".into();
+        current.ai_base_url = "http://OLD-cloud/v1".into();
+        current.ai_bearer = "OLD-bearer".into();
+        current.groq_api_key = "OLD-groq".into();
+
+        // `imported` = backup carried from the other PC: different servers AND
+        // different locals (the locals must be IGNORED).
+        let mut imported = Config::defaults();
+        imported.ai_provider = "local".into();
+        imported.ai_base_url = "http://NEW-cloud:18902/v1".into();
+        imported.ai_bearer = "NEW-bearer".into();
+        imported.ai_model = "claude-haiku-4-5".into();
+        imported.prep_model = "claude-sonnet-4-6".into();
+        imported.ai_prompt_cache = true;
+        imported.ai_local_base_url = "http://127.0.0.1:8080/v1".into();
+        imported.ai_local_bearer = "NEW-local-bearer".into();
+        imported.ai_local_model = "gemma-4-E4B".into();
+        imported.ai_local_prep_model = "gemma-prep".into();
+        imported.ai_local_vision = true;
+        imported.ai_local_thinking = true;
+        imported.stt_provider = "gigaam".into();
+        imported.groq_api_key = "NEW-groq".into();
+        imported.stt_language = Some("en".into());
+        imported.stt_model = "whisper-large-v3-turbo".into();
+        imported.stt_gigaam_dir = r"C:\NEW\gigaam".into();
+        imported.stt_gigaam_gpu = true;
+        imported.stt_whisper_url = "http://127.0.0.1:9999/v1".into();
+        imported.stt_whisper_bearer = "NEW-whisper-bearer".into();
+        imported.stt_whisper_model = "whisper-NEW".into();
+        // Imported LOCALS that must NOT leak in.
+        imported.meeting_context = "IMPORTED ctx (ignore)".into();
+        imported.mic_device = Some("Imported Mic (ignore)".into());
+        imported.ui_language = "ru".into();
+        imported.color_scheme = 0;
+        imported.hotkey_ask = "F2".into();
+        imported.snippets = vec![Snippet {
+            key: "imp".into(),
+            title: "Imported snippet (ignore)".into(),
+            body: "nope".into(),
+        }];
+
+        let merged = merge_server_settings(&current, imported);
+
+        // --- server fields come from `imported` ---
+        assert_eq!(merged.ai_provider, "local");
+        assert_eq!(merged.ai_base_url, "http://NEW-cloud:18902/v1");
+        assert_eq!(merged.ai_bearer, "NEW-bearer");
+        assert_eq!(merged.ai_model, "claude-haiku-4-5");
+        assert_eq!(merged.prep_model, "claude-sonnet-4-6");
+        assert!(merged.ai_prompt_cache);
+        assert_eq!(merged.ai_local_base_url, "http://127.0.0.1:8080/v1");
+        assert_eq!(merged.ai_local_bearer, "NEW-local-bearer");
+        assert_eq!(merged.ai_local_model, "gemma-4-E4B");
+        assert_eq!(merged.ai_local_prep_model, "gemma-prep");
+        assert!(merged.ai_local_vision);
+        assert!(merged.ai_local_thinking);
+        assert_eq!(merged.stt_provider, "gigaam");
+        assert_eq!(merged.groq_api_key, "NEW-groq");
+        assert_eq!(merged.stt_language.as_deref(), Some("en"));
+        assert_eq!(merged.stt_model, "whisper-large-v3-turbo");
+        assert_eq!(merged.stt_gigaam_dir, r"C:\NEW\gigaam");
+        assert!(merged.stt_gigaam_gpu);
+        assert_eq!(merged.stt_whisper_url, "http://127.0.0.1:9999/v1");
+        assert_eq!(merged.stt_whisper_bearer, "NEW-whisper-bearer");
+        assert_eq!(merged.stt_whisper_model, "whisper-NEW");
+
+        // --- local fields stay from `current` (NOT from `imported`) ---
+        assert_eq!(merged.meeting_context, "LOCAL meeting ctx");
+        assert_eq!(merged.context_profiles.len(), 1);
+        assert_eq!(merged.context_profiles[0].name, "local-prof");
+        assert_eq!(merged.active_profile.as_deref(), Some("local-prof"));
+        assert_eq!(merged.mic_device.as_deref(), Some("Local Mic"));
+        assert_eq!(
+            merged.system_audio_device.as_deref(),
+            Some("Local Loopback")
+        );
+        assert_eq!(merged.tile_monitor_name.as_deref(), Some("Local Monitor"));
+        assert_eq!(merged.trigger_keywords, "localkw");
+        assert_eq!(merged.ui_language, "en");
+        assert_eq!(merged.color_scheme, 3);
+        assert_eq!(merged.tile_font_size, 19);
+        assert_eq!(merged.hotkey_ask, "F11");
+        assert_eq!(merged.snippets.len(), 1);
+        assert_eq!(merged.snippets[0].key, "loc");
+    }
 
     /// Write a config to a tmp file, read it back via raw serde_json,
     /// verify all fields match. Doesn't use the global config_path() —
