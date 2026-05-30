@@ -368,11 +368,6 @@ export component SettingsWindow inherits Window {
                     active: root.active-tab == 6;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
-                NavItem {
-                    label: @tr("🗣 STT"); tab-index: 12;
-                    active: root.active-tab == 12;
-                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
-                }
 
                 NavGroupHeader { label: "AI"; }
                 NavItem {
@@ -381,13 +376,13 @@ export component SettingsWindow inherits Window {
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
-                    label: @tr("🪟 Auto-tiles"); tab-index: 7;
-                    active: root.active-tab == 7;
+                    label: @tr("🗣 STT"); tab-index: 12;
+                    active: root.active-tab == 12;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
-                    label: @tr("✂ Snippets"); tab-index: 8;
-                    active: root.active-tab == 8;
+                    label: @tr("🪟 Auto-tiles"); tab-index: 7;
+                    active: root.active-tab == 7;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
@@ -413,13 +408,8 @@ export component SettingsWindow inherits Window {
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
-                    label: @tr("🎯 Stealth"); tab-index: 0;
+                    label: @tr("🛡 Stealth"); tab-index: 0;
                     active: root.active-tab == 0;
-                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
-                }
-                NavItem {
-                    label: @tr("📊 Stats"); tab-index: 5;
-                    active: root.active-tab == 5;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
@@ -521,24 +511,21 @@ export component SettingsWindow inherits Window {
                     }
                     if root.active-tab == 2 : VerticalLayout {
                         spacing: 4px;
-                        // SCAFFOLDING: "wire to RegisterHotKey in Phase 2.3" — internal
-                        // marker that Phase 2.3 will replace this stub with real config.
-                        // Description still user-facing → wrap.
+                        // Read-only list of the registered global hotkeys (see the
+                        // GlobalHotKeyManager registrations in overlay_host.rs).
                         Text {
-                            text: @tr("Global hotkeys (read-only — wire to RegisterHotKey in Phase 2.3):");
+                            text: @tr("Global hotkeys (work anywhere, even when the app isn't focused):");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
                         }
                         Rectangle { background: #2a2c3a; height: 1px; }
                         for entry in [
-                            ["F1",  @tr("Toggle hotkey-hint popover")],
-                            ["F2",  @tr("Cycle context profile")],
-                            ["F3",  @tr("Ask the AI now")],
-                            ["F4",  @tr("Open KB palette")],
-                            ["F7",  @tr("Bulk collapse/expand all tiles")],
-                            ["F8",  @tr("Push-to-talk (hold)")],
-                            ["F9",  @tr("Reload last tile")],
+                            ["F9",  @tr("Ask AI now (streams the answer into a tile)")],
+                            ["F3",  @tr("Re-ask the last question with fresh context")],
+                            ["F4",  @tr("Knowledge-base palette (open / close)")],
+                            ["F6",  @tr("Manual tile from the last transcript line")],
+                            ["F7",  @tr("Collapse / expand all tiles")],
                         ] : HorizontalLayout {
                             padding: 4px;
                             spacing: 12px;
@@ -559,7 +546,7 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 3 : VerticalLayout {
                         spacing: 8px;
                         Text {
-                            text: @tr("Interface language. Wires gettext for all UI strings (Phase 6).");
+                            text: @tr("Interface language — switches all UI text on the fly.");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
@@ -662,30 +649,6 @@ export component SettingsWindow inherits Window {
                             wrap: word-wrap;
                         }
                     }
-                    if root.active-tab == 5 : VerticalLayout {
-                        spacing: 8px;
-                        Text {
-                            text: @tr("Session stats aggregated across all journals.");
-                            font-size: 11px;
-                            color: #999;
-                            wrap: word-wrap;
-                        }
-                        // SCAFFOLDING: mock stats data — Phase 2.6 will wire to real
-                        // journal aggregation (replaces literal numbers).
-                        for line in [
-                            "Sessions logged:        112",
-                            "Total session time:     14h 22m",
-                            "AI requests:            1,847",
-                            "AI errors:              23 (1.2%)",
-                            "Tiles spawned:          612",
-                            "Total cost:             $1.84",
-                        ] : Text {
-                            text: line;
-                            font-size: 11px;
-                            color: #c8c8cc;
-                            font-family: "Consolas";
-                        }
-                    }
                     if root.active-tab == 6 : VerticalLayout {
                         spacing: 8px;
                         Text {
@@ -722,38 +685,6 @@ export component SettingsWindow inherits Window {
                         }
                         DarkCheck { text: @tr("Enable auto-tile detector"); checked: true; }
                         LineEdit { placeholder-text: @tr("Add keyword..."); }
-                    }
-                    if root.active-tab == 8 : VerticalLayout {
-                        spacing: 8px;
-                        Text {
-                            text: @tr("Custom snippets — invoke via /key in F4 palette to spawn a tile with the snippet body.");
-                            font-size: 11px;
-                            color: #999;
-                            wrap: word-wrap;
-                        }
-                        // SCAFFOLDING: mock snippet rows — Phase 2.9 wires to
-                        // config.json snippets array.
-                        for snip in [
-                            ["k8s",       "Kubernetes orchestrator notes"],
-                            ["postgres",  "PG cheatsheet"],
-                            ["docker",    "Docker reference"],
-                        ] : HorizontalLayout {
-                            padding: 4px;
-                            spacing: 8px;
-                            Text {
-                                text: "/" + snip[0];
-                                font-size: 11px;
-                                font-weight: 700;
-                                color: #6cf;
-                                width: 80px;
-                            }
-                            Text {
-                                text: snip[1];
-                                font-size: 11px;
-                                color: #c8c8cc;
-                            }
-                        }
-                        Button { text: @tr("+ Add snippet"); }
                     }
                     if root.active-tab == 9 : VerticalLayout {
                         spacing: 8px;
