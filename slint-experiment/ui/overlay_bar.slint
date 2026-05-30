@@ -514,7 +514,7 @@ export component OverlayBarWindow inherits Window {
             // The live transcript text — elide when too long.
             Text {
                 text: root.last-transcript-line == ""
-                    ? "🎙 ожидаю транскрипт... (mic/sys → STT)"
+                    ? @tr("🎙 waiting for transcript... (mic/sys → STT)")
                     : root.last-transcript-line;
                 font-size: 11px;
                 color: root.last-transcript-line == "" ? Theme.text-muted : Theme.text-secondary;
