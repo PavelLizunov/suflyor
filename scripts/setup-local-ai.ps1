@@ -120,6 +120,24 @@ function Get-LlamaCudaPair([string]$Repo) {
     return [pscustomobject]@{ Build = $top.Asset; Cudart = $cudart; Version = $ver }
 }
 
+# Pick the whisper.cpp Windows cuBLAS (GPU) build with the HIGHEST CUDA version.
+# Unlike llama.cpp the cuBLAS zip BUNDLES the CUDA runtime DLLs (cudart/cublas/
+# ggml-cuda) inside, so there's no separate cudart download. Verified on an
+# RTX 5060 Ti (Blackwell, sm_120): cublas-12.4 GPU-accelerates via PTX JIT
+# (whisper_init: use gpu = 1, model loads into VRAM, shows in nvidia-smi).
+# Returns the asset, or $null if no cuBLAS build exists in the latest release.
+function Get-WhisperCublas([string]$Repo) {
+    $json = & curl.exe -sL --retry 6 --retry-all-errors --max-time 40 "https://api.github.com/repos/$Repo/releases/latest" | ConvertFrom-Json
+    $builds = $json.assets |
+        Where-Object { $_.name -match '^whisper-cublas-(\d+)\.(\d+)\.(\d+)-bin-x64\.zip$' } |
+        ForEach-Object {
+            $null = $_.name -match '^whisper-cublas-(\d+)\.(\d+)\.(\d+)-bin-x64'
+            [pscustomobject]@{ Asset = $_; Major = [int]$Matches[1]; Minor = [int]$Matches[2]; Patch = [int]$Matches[3] }
+        } | Sort-Object Major, Minor, Patch -Descending
+    if (-not $builds) { return $null }
+    return $builds[0].Asset
+}
+
 New-Item -ItemType Directory -Force $Root | Out-Null
 $llamaDir   = Join-Path $Root 'llama.cpp'
 $whisperDir = Join-Path $Root 'whisper.cpp'
@@ -158,9 +176,16 @@ if (-not $SkipWhisper) {
     Write-Step 'whisper.cpp + Whisper large-v3-turbo'
     New-Item -ItemType Directory -Force $whisperDir | Out-Null
     if (-not (Get-ChildItem $whisperDir -Recurse -Filter '*server.exe' -ErrorAction SilentlyContinue)) {
-        # Plain CPU build (the release also ships blas + cublas variants). Whisper
-        # large-v3-turbo q8 is small + fast on CPU, so we skip the GPU matrix here.
-        Get-ZipAsset 'ggml-org/whisper.cpp' '^whisper-bin-x64\.zip$' $whisperDir
+        $wcublas = if ($hasNvidia) { Get-WhisperCublas 'ggml-org/whisper.cpp' } else { $null }
+        if ($wcublas) {
+            # GPU (cuBLAS) build -- self-contained, bundles the CUDA runtime DLLs.
+            # whisper-server auto-uses the GPU (use gpu = 1 by default).
+            Write-Host ("  cuBLAS build: {0}" -f $wcublas.name) -ForegroundColor Cyan
+            Expand-AssetZip $wcublas $whisperDir
+        } else {
+            # CPU build: no NVIDIA, -Cpu forced, or no cuBLAS asset in the release.
+            Get-ZipAsset 'ggml-org/whisper.cpp' '^whisper-bin-x64\.zip$' $whisperDir
+        }
     } else { Write-Host '  whisper-server.exe already present - skipping binary' }
     Save-Model $WHISPER_URL (Join-Path $whisperDir $WHISPER_FILE) $WHISPER_SIZE
 }

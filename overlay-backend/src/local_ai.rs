@@ -206,7 +206,7 @@ pub fn install(
             && find_exe(&whisper_dir, "server.exe").is_none()
         {
             let assets = github_assets(WHISPER_REPO)?;
-            let (url, size) = pick_whisper(&assets)?;
+            let (url, size) = pick_whisper(&assets, !use_gpu)?;
             download_and_extract(&url, size, "whisper.cpp", &whisper_dir, cancel, on)?;
         }
         let whisper_dest = whisper_dir.join(WHISPER_FILE);
@@ -492,8 +492,34 @@ fn pick_llama(assets: &[GhAsset], force_cpu: bool) -> Result<LlamaPick> {
     })
 }
 
-/// Pick the plain CPU whisper.cpp build (`whisper-bin-x64.zip`) -> (url, size).
-fn pick_whisper(assets: &[GhAsset]) -> Result<(String, u64)> {
+/// Parse the CUDA version from a whisper cuBLAS asset name, e.g.
+/// `whisper-cublas-12.4.0-bin-x64.zip` -> `(12, 4, 0)`.
+fn whisper_cublas_version_of(name: &str) -> Option<(u32, u32, u32)> {
+    let after = name.strip_prefix("whisper-cublas-")?; // "12.4.0-bin-x64.zip"
+    let ver = after.strip_suffix("-bin-x64.zip")?; // "12.4.0"
+    let mut it = ver.split('.');
+    let maj: u32 = it.next()?.parse().ok()?;
+    let min: u32 = it.next()?.parse().ok()?;
+    let patch: u32 = it.next()?.parse().ok()?;
+    Some((maj, min, patch))
+}
+
+/// Pick the whisper.cpp Windows build: the highest-version cuBLAS (GPU) build when
+/// a GPU is available, else the plain CPU build (`whisper-bin-x64.zip`). Unlike
+/// llama.cpp the cuBLAS zip BUNDLES the CUDA runtime DLLs, so there is no separate
+/// cudart download. Verified on an RTX 5060 Ti (Blackwell, sm_120): cublas-12.4
+/// GPU-accelerates via PTX JIT (whisper_init: use gpu = 1, model loads into VRAM).
+/// Returns (url, size).
+fn pick_whisper(assets: &[GhAsset], force_cpu: bool) -> Result<(String, u64)> {
+    if !force_cpu {
+        let best = assets
+            .iter()
+            .filter_map(|a| whisper_cublas_version_of(&a.name).map(|v| (v, a)))
+            .max_by_key(|(v, _)| *v);
+        if let Some((_, build)) = best {
+            return Ok((build.browser_download_url.clone(), build.size));
+        }
+    }
     assets
         .iter()
         .find(|a| a.name == "whisper-bin-x64.zip")
@@ -843,14 +869,44 @@ mod tests {
     }
 
     #[test]
-    fn pick_whisper_plain_cpu() {
+    fn pick_whisper_cpu_takes_plain_build() {
         let assets = vec![
             asset("whisper-bin-Win32.zip"),
             asset("whisper-blas-bin-x64.zip"),
             asset("whisper-cublas-12.4.0-bin-x64.zip"),
             asset("whisper-bin-x64.zip"),
         ];
-        assert!(pick_whisper(&assets)
+        // force_cpu = true -> plain CPU build even though a cuBLAS build exists.
+        assert!(pick_whisper(&assets, true)
+            .unwrap()
+            .0
+            .ends_with("whisper-bin-x64.zip"));
+    }
+
+    #[test]
+    fn pick_whisper_gpu_takes_highest_cublas() {
+        let assets = vec![
+            asset("whisper-bin-x64.zip"),
+            asset("whisper-cublas-11.8.0-bin-x64.zip"),
+            asset("whisper-cublas-12.4.0-bin-x64.zip"),
+            asset("whisper-blas-bin-x64.zip"),
+        ];
+        // force_cpu = false -> highest-version cuBLAS (GPU) build.
+        assert!(pick_whisper(&assets, false)
+            .unwrap()
+            .0
+            .ends_with("whisper-cublas-12.4.0-bin-x64.zip"));
+    }
+
+    #[test]
+    fn pick_whisper_gpu_falls_back_to_cpu_when_no_cublas() {
+        let assets = vec![
+            asset("whisper-bin-Win32.zip"),
+            asset("whisper-blas-bin-x64.zip"),
+            asset("whisper-bin-x64.zip"),
+        ];
+        // GPU requested but no cuBLAS asset in the release -> plain CPU build.
+        assert!(pick_whisper(&assets, false)
             .unwrap()
             .0
             .ends_with("whisper-bin-x64.zip"));
@@ -874,9 +930,14 @@ mod tests {
             pick.cudart_url.is_some(),
             "a matching cudart must be picked"
         );
-        // whisper picker against the live release too
+        // whisper picker against the live release too: GPU path must land on a
+        // cuBLAS build (Blackwell-capable via PTX JIT), CPU path on the plain build.
         let wassets = github_assets(WHISPER_REPO).unwrap();
-        assert!(pick_whisper(&wassets)
+        assert!(pick_whisper(&wassets, false)
+            .unwrap()
+            .0
+            .contains("whisper-cublas-"));
+        assert!(pick_whisper(&wassets, true)
             .unwrap()
             .0
             .ends_with("whisper-bin-x64.zip"));
