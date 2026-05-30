@@ -186,6 +186,7 @@ export component SettingsWindow inherits Window {
     // enable_thinking=false for faster answers; on lets the model reason.
     in-out property <bool> ai-local-thinking: false;
     in-out property <string> ai-local-test-result: "";
+    in-out property <string> ai-local-bearer-input: "";
     // E10.4 — in-app local-AI installer: downloads llama.cpp/whisper.cpp + models,
     // launches the servers, then auto-configures. Progress + GPU/CPU shown live.
     in-out property <bool> local-ai-installing: false;
@@ -226,6 +227,7 @@ export component SettingsWindow inherits Window {
     callback ai-prompt-cache-changed(bool);
     callback ai-provider-changed(int);
     callback ai-local-base-url-save(string);
+    callback ai-local-bearer-save(string);
     callback ai-local-model-selected(string);
     callback ai-local-models-refresh();
     callback ai-local-vision-changed(bool);
@@ -754,267 +756,272 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 11 : VerticalLayout {
                         spacing: 8px;
                         Text {
-                            text: @tr("Claude AI bridge — bearer token + base URL + model.");
+                            text: @tr("Where do live answers come from? Pick a type, then configure it.");
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
                         }
-
-                        // ----- ai_bearer (Claude token) -----
-                        Text {
-                            text: @tr("Bearer token:") + " " + root.ai-bearer-status;
-                            font-size: 11px;
-                            color: #c8c8cc;
-                        }
-                        HorizontalLayout {
-                            spacing: 6px;
-                            LineEdit {
-                                placeholder-text: @tr("paste new bearer token then Save");
-                                text <=> root.ai-bearer-input;
-                                input-type: password;
-                                horizontal-stretch: 1;
-                            }
-                            Button {
-                                text: @tr("Save");
-                                clicked => {
-                                    root.ai-bearer-save(root.ai-bearer-input);
-                                    root.ai-bearer-input = "";
-                                }
-                            }
-                        }
-
-                        Rectangle { background: #2a2c3a; height: 1px; }
-
-                        // ----- ai_base_url -----
-                        Text {
-                            text: @tr("Base URL (Claude bridge endpoint):");
-                            font-size: 11px;
-                            color: #c8c8cc;
-                        }
-                        HorizontalLayout {
-                            spacing: 6px;
-                            LineEdit {
-                                placeholder-text: @tr("http://your.bridge.host:PORT/v1");
-                                text <=> root.ai-base-url-input;
-                                horizontal-stretch: 1;
-                            }
-                            Button {
-                                text: @tr("Save");
-                                clicked => {
-                                    root.ai-base-url-save(root.ai-base-url-input);
-                                }
-                            }
-                        }
-
-                        Rectangle { background: #2a2c3a; height: 1px; }
-
-                        // ----- ai_model -----
-                        Text {
-                            text: @tr("AI model (Claude full ID):");
-                            font-size: 11px;
-                            color: #c8c8cc;
-                        }
-                        // Model picker — populated from GET {base_url}/models
-                        // (Anthropic bridge / OpenAI-compatible endpoint).
-                        // "refresh" re-queries; saving the URL or bearer also
-                        // re-fetches. No hand-typing the model id.
-                        HorizontalLayout {
-                            spacing: 6px;
-                            ComboBox {
-                                model: root.ai-models;
-                                current-index: root.ai-model-index;
-                                horizontal-stretch: 1;
-                                selected => {
-                                    root.ai-model-selected(self.current-value);
-                                }
-                            }
-                            Button {
-                                text: @tr("refresh");
-                                clicked => {
-                                    root.ai-models-refresh();
-                                }
-                            }
-                        }
-                        if root.ai-models.length == 0 : Text {
-                            text: @tr("No models found — check the bridge URL/token, then press refresh.");
-                            font-size: 10px;
-                            color: #999;
-                            wrap: word-wrap;
-                        }
-
-                        Rectangle { background: #2a2c3a; height: 1px; }
-
-                        // ===== Local model provider (Ollama / llama.cpp) =====
-                        Text {
-                            text: @tr("Provider — run a LOCAL model instead of the cloud bridge (fallback if Claude is down, or full replacement).");
-                            font-size: 11px;
-                            color: #999;
-                            wrap: word-wrap;
-                        }
+                        // ===== TYPE selector — gates everything below =====
                         ComboBox {
-                            model: [@tr("Cloud (bridge)"), @tr("Local (Ollama / llama.cpp)")];
+                            model: [@tr("Cloud (Claude bridge)"), @tr("Local (llama.cpp / Ollama)")];
                             current-index: root.ai-provider-index;
                             selected => {
                                 root.ai-provider-index = self.current-index;
                                 root.ai-provider-changed(self.current-index);
                             }
                         }
-                        HorizontalLayout {
-                            spacing: 6px;
-                            LineEdit {
-                                placeholder-text: @tr("local URL — http://127.0.0.1:8080/v1 (llama.cpp) or :11434 (Ollama)");
-                                text <=> root.ai-local-base-url-input;
-                                horizontal-stretch: 1;
+                        Rectangle { background: #2a2c3a; height: 1px; }
+
+                        // ============================ CLOUD ============================
+                        if root.ai-provider-index == 0 : VerticalLayout {
+                            spacing: 8px;
+                            Text {
+                                text: @tr("Cloud bridge");
+                                font-size: 12px;
+                                font-weight: 700;
+                                color: #e8e8ec;
                             }
-                            Button {
-                                text: @tr("Save");
-                                clicked => {
-                                    root.ai-local-base-url-save(root.ai-local-base-url-input);
+                            Text {
+                                text: @tr("Bearer token:") + " " + root.ai-bearer-status;
+                                font-size: 11px;
+                                color: #c8c8cc;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                LineEdit {
+                                    placeholder-text: @tr("paste new bearer token then Save");
+                                    text <=> root.ai-bearer-input;
+                                    input-type: password;
+                                    horizontal-stretch: 1;
+                                }
+                                Button {
+                                    text: @tr("Save");
+                                    clicked => {
+                                        root.ai-bearer-save(root.ai-bearer-input);
+                                        root.ai-bearer-input = "";
+                                    }
                                 }
                             }
-                        }
-                        // Model picker — populated from GET {URL}/models
-                        // (llama.cpp serves the loaded model; Ollama the full
-                        // list). "refresh" re-queries; switching to Local or
-                        // saving the URL also auto-fetches. No hand-typing.
-                        HorizontalLayout {
-                            spacing: 6px;
-                            ComboBox {
-                                model: root.ai-local-models;
-                                current-index: root.ai-local-model-index;
-                                horizontal-stretch: 1;
-                                selected => {
-                                    root.ai-local-model-selected(self.current-value);
+                            Text {
+                                text: @tr("Base URL (Claude bridge endpoint):");
+                                font-size: 11px;
+                                color: #c8c8cc;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                LineEdit {
+                                    placeholder-text: @tr("http://your.bridge.host:PORT/v1");
+                                    text <=> root.ai-base-url-input;
+                                    horizontal-stretch: 1;
+                                }
+                                Button {
+                                    text: @tr("Save");
+                                    clicked => {
+                                        root.ai-base-url-save(root.ai-base-url-input);
+                                    }
                                 }
                             }
-                            Button {
-                                text: @tr("refresh");
-                                clicked => {
-                                    root.ai-local-models-refresh();
+                            Text {
+                                text: @tr("AI model (Claude full ID):");
+                                font-size: 11px;
+                                color: #c8c8cc;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                ComboBox {
+                                    model: root.ai-models;
+                                    current-index: root.ai-model-index;
+                                    horizontal-stretch: 1;
+                                    selected => {
+                                        root.ai-model-selected(self.current-value);
+                                    }
+                                }
+                                Button {
+                                    text: @tr("refresh");
+                                    clicked => {
+                                        root.ai-models-refresh();
+                                    }
                                 }
                             }
-                        }
-                        if root.ai-local-models.length == 0 : Text {
-                            text: @tr("No models found — start the local server, then press refresh.");
-                            font-size: 10px;
-                            color: #999;
-                            wrap: word-wrap;
-                        }
-                        DarkCheck {
-                            text: @tr("Local model supports images (vision)");
-                            checked <=> root.ai-local-vision;
-                            toggled(v) => {
-                                root.ai-local-vision-changed(v);
+                            if root.ai-models.length == 0 : Text {
+                                text: @tr("No models found — check the bridge URL/token, then press refresh.");
+                                font-size: 10px;
+                                color: #999;
+                                wrap: word-wrap;
                             }
-                        }
-                        DarkCheck {
-                            text: @tr("Local model reasoning/thinking (slower, off = faster)");
-                            checked <=> root.ai-local-thinking;
-                            toggled(v) => {
-                                root.ai-local-thinking-changed(v);
-                            }
-                        }
-                        HorizontalLayout {
-                            spacing: 6px;
-                            Button {
-                                text: @tr("Test local connection");
-                                clicked => {
-                                    root.ai-local-test-clicked();
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: @tr("Test AI bridge connection");
+                                    clicked => { root.ai-bridge-test-clicked(); }
+                                }
+                                if root.ai-bridge-test-result != "" : Text {
+                                    text: root.ai-bridge-test-result;
+                                    font-size: 11px;
+                                    color: #6cf;
+                                    vertical-alignment: center;
                                 }
                             }
-                            if root.ai-local-test-result != "" : Text {
-                                text: root.ai-local-test-result;
+                            DarkCheck {
+                                text: @tr("Prompt-caching (experimental — needs bridge support)");
+                                checked <=> root.ai-prompt-cache;
+                                toggled(v) => { root.ai-prompt-cache-changed(v); }
+                            }
+                            Text {
+                                text: @tr("Marks the system prompt as cacheable for faster repeat asks. If your bridge rejects it (AI stops answering), turn this back off.");
+                                font-size: 10px;
+                                color: #888;
+                                wrap: word-wrap;
+                            }
+                        }
+
+                        // ============================ LOCAL ============================
+                        if root.ai-provider-index == 1 : VerticalLayout {
+                            spacing: 8px;
+                            Text {
+                                text: @tr("Local model");
+                                font-size: 12px;
+                                font-weight: 700;
+                                color: #e8e8ec;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                LineEdit {
+                                    placeholder-text: @tr("local URL — http://127.0.0.1:8080/v1 (llama.cpp) or :11434 (Ollama)");
+                                    text <=> root.ai-local-base-url-input;
+                                    horizontal-stretch: 1;
+                                }
+                                Button {
+                                    text: @tr("Save");
+                                    clicked => {
+                                        root.ai-local-base-url-save(root.ai-local-base-url-input);
+                                    }
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                ComboBox {
+                                    model: root.ai-local-models;
+                                    current-index: root.ai-local-model-index;
+                                    horizontal-stretch: 1;
+                                    selected => {
+                                        root.ai-local-model-selected(self.current-value);
+                                    }
+                                }
+                                Button {
+                                    text: @tr("refresh");
+                                    clicked => {
+                                        root.ai-local-models-refresh();
+                                    }
+                                }
+                            }
+                            if root.ai-local-models.length == 0 : Text {
+                                text: @tr("No models found — start the local server, then press refresh.");
+                                font-size: 10px;
+                                color: #999;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                LineEdit {
+                                    placeholder-text: @tr("local server bearer token (optional)");
+                                    text <=> root.ai-local-bearer-input;
+                                    input-type: password;
+                                    horizontal-stretch: 1;
+                                }
+                                Button {
+                                    text: @tr("Save");
+                                    clicked => {
+                                        root.ai-local-bearer-save(root.ai-local-bearer-input);
+                                        root.ai-local-bearer-input = "";
+                                    }
+                                }
+                            }
+                            DarkCheck {
+                                text: @tr("Local model supports images (vision)");
+                                checked <=> root.ai-local-vision;
+                                toggled(v) => {
+                                    root.ai-local-vision-changed(v);
+                                }
+                            }
+                            DarkCheck {
+                                text: @tr("Local model reasoning/thinking (slower, off = faster)");
+                                checked <=> root.ai-local-thinking;
+                                toggled(v) => {
+                                    root.ai-local-thinking-changed(v);
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: @tr("Test local connection");
+                                    clicked => {
+                                        root.ai-local-test-clicked();
+                                    }
+                                }
+                                if root.ai-local-test-result != "" : Text {
+                                    text: root.ai-local-test-result;
+                                    font-size: 11px;
+                                    color: #6cf;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            // ----- one-click in-app local-AI installer -----
+                            Rectangle { background: #2a2c3a; height: 1px; }
+                            Text {
+                                text: @tr("Installs the local stack on this PC (~6 GB total): llama.cpp + Gemma-4-E4B (~5 GB; needs ~6 GB VRAM on GPU), whisper.cpp + Whisper-turbo (~0.9 GB), GigaAM-v3 (~0.2 GB). With NVIDIA it picks the CUDA build, otherwise CPU. Models you already have are reused, not re-downloaded.");
+                                font-size: 11px;
+                                color: #999;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: root.local-ai-installing ? @tr("Installing…") : @tr("Install local AI");
+                                    enabled: !root.local-ai-installing;
+                                    clicked => {
+                                        root.install-local-ai-clicked();
+                                    }
+                                }
+                                if root.local-ai-installing : Button {
+                                    text: @tr("Cancel");
+                                    clicked => {
+                                        root.cancel-local-ai-clicked();
+                                    }
+                                }
+                                if root.local-ai-gpu != "" : Text {
+                                    text: root.local-ai-gpu;
+                                    font-size: 11px;
+                                    color: root.local-ai-on-gpu ? #6f6 : #fc6;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            if root.local-ai-status != "" : Text {
+                                text: root.local-ai-status;
                                 font-size: 11px;
                                 color: #6cf;
-                                vertical-alignment: center;
+                                wrap: word-wrap;
                             }
-                        }
-                        // ----- E10.4 — one-click in-app local-AI installer -----
-                        Rectangle { background: #2a2c3a; height: 1px; }
-                        Text {
-                            text: @tr("Installs the local stack on this PC (~6 GB total): llama.cpp + Gemma-4-E4B (~5 GB; needs ~6 GB VRAM on GPU), whisper.cpp + Whisper-turbo (~0.9 GB), GigaAM-v3 (~0.2 GB). With NVIDIA it picks the CUDA build, otherwise CPU. Models you already have are reused, not re-downloaded.");
-                            font-size: 11px;
-                            color: #999;
-                            wrap: word-wrap;
-                        }
-                        HorizontalLayout {
-                            spacing: 6px;
-                            Button {
-                                text: root.local-ai-installing ? @tr("Installing…") : @tr("Install local AI");
-                                enabled: !root.local-ai-installing;
-                                clicked => {
-                                    root.install-local-ai-clicked();
-                                }
-                            }
-                            if root.local-ai-installing : Button {
-                                text: @tr("Cancel");
-                                clicked => {
-                                    root.cancel-local-ai-clicked();
-                                }
-                            }
-                            if root.local-ai-gpu != "" : Text {
-                                text: root.local-ai-gpu;
-                                font-size: 11px;
-                                color: root.local-ai-on-gpu ? #6f6 : #fc6;
-                                vertical-alignment: center;
-                            }
-                        }
-                        if root.local-ai-status != "" : Text {
-                            text: root.local-ai-status;
-                            font-size: 11px;
-                            color: #6cf;
-                            wrap: word-wrap;
-                        }
-                        if root.local-ai-installing : Rectangle {
-                            height: 6px;
-                            border-radius: 3px;
-                            background: #2a2c3a;
-                            Rectangle {
-                                x: 0;
-                                y: 0;
-                                height: parent.height;
-                                width: parent.width * root.local-ai-progress;
+                            if root.local-ai-installing : Rectangle {
+                                height: 6px;
                                 border-radius: 3px;
-                                background: #6cf;
+                                background: #2a2c3a;
+                                Rectangle {
+                                    x: 0;
+                                    y: 0;
+                                    height: parent.height;
+                                    width: parent.width * root.local-ai-progress;
+                                    border-radius: 3px;
+                                    background: #6cf;
+                                }
                             }
                         }
 
                         Rectangle { background: #2a2c3a; height: 1px; }
-
-                        // ----- Connection test (Phase E6 v27) -----
-                        HorizontalLayout {
-                            spacing: 6px;
-                            Button {
-                                text: @tr("Test AI bridge connection");
-                                clicked => { root.ai-bridge-test-clicked(); }
-                            }
-                            if root.ai-bridge-test-result != "" : Text {
-                                text: root.ai-bridge-test-result;
-                                font-size: 11px;
-                                color: #6cf;
-                                vertical-alignment: center;
-                            }
-                        }
-
-                        Rectangle { background: #2a2c3a; height: 1px; }
-
-                        // E9 — experimental prompt-caching toggle.
-                        DarkCheck {
-                            text: @tr("Prompt-caching (experimental — needs bridge support)");
-                            checked <=> root.ai-prompt-cache;
-                            toggled(v) => { root.ai-prompt-cache-changed(v); }
-                        }
-                        Text {
-                            text: @tr("Marks the system prompt as cacheable for faster repeat asks. If your bridge rejects it (AI stops answering), turn this back off.");
-                            font-size: 10px;
-                            color: #666;
-                            wrap: word-wrap;
-                        }
-
                         Text {
                             text: @tr("Tip: Save writes to %APPDATA%\\overlay-mvp\\config.json. Restart binary to re-load.");
                             font-size: 10px;
-                            color: #666;
+                            color: #888;
                             wrap: word-wrap;
                         }
                     }

@@ -4019,6 +4019,16 @@ fn open_settings(
     }
     {
         let cfg_c = cfg.clone();
+        win.on_ai_local_bearer_save(move |v| {
+            let mut c = cfg_c.write();
+            c.ai_local_bearer = v.trim().to_string();
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] ai_local_bearer save failed: {e:#}");
+            }
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
         win.on_ai_local_model_selected(move |model| {
             let m = model.trim().to_string();
             if m.is_empty() {
