@@ -91,6 +91,22 @@ export component TileWindow inherits Window {
         border-color: Theme.border;
         opacity: root.body-opacity;
 
+        // Brand watermark — faint, centered; visible only while the tile
+        // has no answer yet (manual ask in flight / first token pending).
+        // Declared before the VerticalLayout so it sits behind the content;
+        // a Rectangle centers childless-x/y elements by default.
+        if root.blocks.length == 0 : Image {
+            source: @image-url("../assets/icon-mono-light.png");
+            // colorize the white mask to the theme's primary text colour so
+            // the watermark adapts to dark *and* light schemes.
+            colorize: Theme.text-primary;
+            width: 84px;
+            height: 84px;
+            x: parent.width - self.width - 16px;
+            image-fit: contain;
+            opacity: 0.10;
+        }
+
         VerticalLayout {
             padding: 10px;
             spacing: 6px;

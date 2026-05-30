@@ -320,22 +320,26 @@ export component OverlayBarWindow inherits Window {
                     }
                 }
                 HorizontalLayout {
-                    padding-left: 8px;
+                    padding-left: 7px;
                     padding-right: 8px;
-                    spacing: 0px;
-                    // Phase E6 v26 — ":: " grip in accent Theme.accent (matches
-                    // Settings header) so the drag affordance reads the
-                    // same in both windows. Status text keeps its
-                    // state colour.
-                    Text {
-                        text: "::";
-                        font-size: 11px;
-                        font-weight: 600;
-                        color: Theme.accent;
+                    spacing: 5px;
+                    // Brand logo (mono-light, transparent) — replaces the
+                    // old ":: " grip and doubles as the drag affordance.
+                    // The sibling drag TouchArea covers the whole pill, so
+                    // the logo region still drags the bar.
+                    Image {
+                        source: @image-url("../assets/icon-mono-light.png");
+                        // mono-light is white line-art + alpha; colorize
+                        // recolors it to the accent so it adapts to every
+                        // scheme (matches the old ":: " grip colour).
+                        colorize: Theme.accent;
+                        width: 16px;
+                        height: 16px;
+                        image-fit: contain;
                         vertical-alignment: center;
                     }
                     Text {
-                        text: " " + root.status-text;
+                        text: root.status-text;
                         font-size: 11px;
                         font-weight: 600;
                         color: root.status-color;
