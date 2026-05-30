@@ -170,14 +170,25 @@ pub async fn test_connection(base_url: String, bearer: String, model: String) ->
         "messages": [{ "role": "user", "content": "ping" }],
         "max_tokens": 1,
     });
-    let resp = client
+    // Generic on transport failure: a reqwest error's chain embeds the request
+    // `url` (the LAN base_url + port), which `{e:#}` at the Settings AI-bridge /
+    // Diagnostics call sites would paint into a screen-capturable field. Log the
+    // full detail to the file log; return a secret-free message. Mirrors the
+    // stt.rs fix and honours this fn's "does NOT log the URL" contract.
+    let resp = match client
         .post(&url)
         .timeout(std::time::Duration::from_secs(10))
         .bearer_auth(&bearer)
         .json(&body)
         .send()
         .await
-        .context("POST chat/completions")?;
+    {
+        Ok(r) => r,
+        Err(e) => {
+            log::warn!("AI bridge test transport error: {e:#}");
+            return Err(anyhow!("connection failed"));
+        }
+    };
     let status = resp.status();
     if status.is_success() {
         Ok(format!("HTTP {}", status.as_u16()))

@@ -1,5 +1,26 @@
 # Autonomous work plan
 
+## 🛡️ Slint-era overnight run — bug scout + slint-surface-audit (2026-05-30 → 31)
+
+User asleep: "проверем скаут багов и их исправления, затем 132, и slint-surface-audit — посторайся сделать как можно больше." All verification is build/clippy/test + review/scout agents (NO computer-use, per the user's standing instruction). These are code-quality/security fixes; batched for ONE verified release when the user is back (no marathon).
+
+**Shipped (commits, no release yet):**
+- `32e211a` — scout R1: F3 reask + manual_spawn now use the resolved `ai_endpoint` (local users no longer silently hit the cloud bridge); $0 cost for local; AI stream emits a terminal Done on EOF (no stuck "thinking" tile).
+- `58f2b7c` — scout R1: journal writer moved off the tokio runtime (std thread + `blocking_recv`); stopped reseeding a deliberately-emptied snippet list every launch; hid the API-key prefix from the Settings token-status line.
+- `6bda0ef` — slint-surface-audit: markdown adapter preserves link URLs (AI answers kept link text but dropped the destination); Replay window retitled from the dev-era "(Phase 0)".
+- `61bbbed` — scout R2: STT errors no longer leak the local Whisper base_url (LAN IP) / raw HTTP body into the screen-capturable PTT tile + Diagnostics field (the user screen-shares during interviews); updater requires the EXACT installer asset name (was: run any `*.exe` in the release).
+- (ai.rs) — scout R3: `ai::test_connection` had the SAME base_url leak as STT (reqwest transport error via `{e:#}` into the Settings AI-bridge + Diagnostics fields) — made generic. Live AI tile path was already safe (`classify_ai_error`).
+
+**Scout coverage:** R1 = runtime/ai/config/journal/overlay_host (4 agents). R2 = update/local_ai/health/events/kb/stt (3 agents). R3 = ai.rs core (cost/SSE/stream/error surfaces). 8 verified bugs fixed, each with a regression test where unit-testable. Clean modules (no real bugs): health, events, kb (char-safe truncation + guarded tokens), audio/win32 (R1 Scout C), local_ai (no shell injection — all `Command::new(exe).args()`, no panic surface), ai.rs cost/SSE (saturating math, byte-buffer SSE keeps partial UTF-8 tail — regression-tested for mid-Cyrillic splits).
+
+**Tracked for the user's decision / visual verify (NOT attempted blind):**
+- `#137` — harden the two "download an exe then spawn it" paths (updater + local-AI installer): both gate on byte-size only, no checksum/signature. Needs a release-pipeline choice (publish sha256/minisign, or Authenticode-verify). The local-AI `curl -C -` resume also accepts size≥expected (stale/partial corruption risk) + lacks `--max-time`.
+- `#135` — 3 UI-lifecycle bugs from R1 (followup_busy stuck on abort; F9 follow-up shares the `current_streaming` slot and truncates another tile; dictation thread not stopped on Settings close). All center on the shared-slot design → fix + visually verify together.
+- `#132` — full 7-step first-run wizard: NOT built blind. 6 open design questions in the concept doc + no overnight way to visually verify the multi-window flow = high regression risk vs the project's visual-verify-before-ship rule. The MVP (Diagnostics tab) already shipped as #131/#133.
+- slint-surface-audit remainder is DPI/transparency/layout (bar 1080px width, Settings DPI, table clipping) — all need a live screenshot to judge, so left for an interactive pass.
+
+---
+
 ## 🚀 Marathon block 5 — QOL chip + hotkey sprint (started ~17:13Z, 6h to 23:13Z, **29 releases shipped**)
 
 **Audit hotfix wave (v0.0.85-v0.0.88):**
