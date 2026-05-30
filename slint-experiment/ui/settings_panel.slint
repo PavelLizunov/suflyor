@@ -289,6 +289,13 @@ export component SettingsWindow inherits Window {
     in-out property <int> ui-language-index: 0;
     callback language-selected(int);
 
+    // Colour-scheme selector (Interface tab). color-scheme-index reflects
+    // the saved config (0=Glacier / 1=Graphite / 2=Obsidian / 3=Light Frost);
+    // color-scheme-selected fires on change so Rust can switch Theme.scheme
+    // live across every window AND persist it.
+    in-out property <int> color-scheme-index: 0;
+    callback color-scheme-selected(int);
+
     // Phase E8 — in-app auto-update (Updates tab). Rust sets app-version
     // from CARGO_PKG_VERSION on open; check-updates-clicked queries GitHub
     // and fills update-status / update-available; install-update-clicked
@@ -589,6 +596,35 @@ export component SettingsWindow inherits Window {
                                 current-index: root.ui-language-index;
                                 selected => {
                                     root.language-selected(self.current-index);
+                                }
+                            }
+                        }
+                        // Colour-scheme picker — switches the design tokens
+                        // (theme.slint) live across every window. Fixes the
+                        // recurring dark-on-dark complaints by letting the user
+                        // pick the contrast they like.
+                        Text {
+                            text: @tr("Colour scheme — recolours the whole app instantly.");
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Text {
+                                text: @tr("Scheme:");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                vertical-alignment: center;
+                            }
+                            ComboBox {
+                                // Self-labelled scheme names (proper nouns —
+                                // left untranslated so they read the same in
+                                // both languages).
+                                model: ["Glacier", "Graphite", "Obsidian", "Light Frost"];
+                                current-index: root.color-scheme-index;
+                                selected => {
+                                    root.color-scheme-selected(self.current-index);
                                 }
                             }
                         }

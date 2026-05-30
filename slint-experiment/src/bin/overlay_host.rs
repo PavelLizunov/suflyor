@@ -932,6 +932,12 @@ fn main() -> Result<(), slint::PlatformError> {
     let settings: Rc<RefCell<Option<SettingsWindow>>> = Rc::new(RefCell::new(None));
 
     let overlay = OverlayBarWindow::new()?;
+    // Seed the process-global colour scheme from config, then apply to the bar's
+    // Theme global so the very first paint uses the user's choice (default
+    // 0=Glacier). Every later-created window (tiles, palette, settings) reads
+    // `global_scheme()` at construction.
+    set_global_scheme(cfg.read().color_scheme);
+    apply_scheme_bar(&overlay, global_scheme());
 
     // ===== Phase E3 — SlintRuntime + SlintEvents bridge =====
     //
@@ -3298,6 +3304,25 @@ fn global_stealth() -> bool {
     STEALTH_ON.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// Process-global colour scheme (0=Glacier..3=Light Frost), mirror of
+/// `global_stealth`: tiles are spawned from 5 scattered sites and are
+/// ephemeral, so rather than thread the value through every call site we
+/// keep one lock-free copy that each tile-realize path consults. The
+/// Settings scheme handler updates it (so future tiles inherit the choice)
+/// AND walks the live tile list to re-skin existing ones. Seeded from
+/// config at startup.
+static COLOR_SCHEME: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+/// Store the current global colour scheme (clamped 0..=3).
+fn set_global_scheme(scheme: i32) {
+    COLOR_SCHEME.store(clamp_scheme(scheme), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Read the current global colour scheme (defaults to 0=Glacier).
+fn global_scheme() -> i32 {
+    COLOR_SCHEME.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Apply the current global stealth flag to a freshly-shown window once
 /// winit realizes its native HWND (same 200 ms delay as tile placement).
 /// No-op when stealth is off. Used by windows that don't otherwise grab
@@ -3382,6 +3407,37 @@ fn refresh_open_tiles(weak: &slint::Weak<OverlayBarWindow>, tiles: &TileWindows)
     }
 }
 
+/// Clamp a persisted `color_scheme` to the 4 schemes `theme.slint` defines
+/// (0=Glacier, 1=Graphite, 2=Obsidian, 3=Light Frost). A corrupt/out-of-range
+/// value falls back to Glacier rather than rendering an all-default (black)
+/// theme.
+fn clamp_scheme(n: i32) -> i32 {
+    if (0..=3).contains(&n) {
+        n
+    } else {
+        0
+    }
+}
+
+// `Theme` is a Slint GLOBAL, but globals are scoped to each window-component
+// INSTANCE — every window (bar, settings, each tile, palette) owns its own
+// copy. So switching the scheme means setting it on EVERY live window, and
+// every freshly-created window must be seeded at construction. These tiny
+// per-type helpers centralise the `global::<Theme>().set_scheme(..)` call so
+// the clamp + access pattern lives in one place.
+fn apply_scheme_bar(w: &OverlayBarWindow, scheme: i32) {
+    w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
+}
+fn apply_scheme_tile(w: &TileWindow, scheme: i32) {
+    w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
+}
+fn apply_scheme_settings(w: &SettingsWindow, scheme: i32) {
+    w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
+}
+fn apply_scheme_palette(w: &PaletteWindow, scheme: i32) {
+    w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
+}
+
 /// Wire the chrome-row drag callbacks on a tile so the user can move
 /// it by pressing+dragging the title area. Phase E6 v22 — manual
 /// cursor-delta drag (drag_begin on down, drag_update on move-while-
@@ -3390,6 +3446,10 @@ fn refresh_open_tiles(weak: &slint::Weak<OverlayBarWindow>, tiles: &TileWindows)
 /// TouchArea stuck "pressed" → tile became undraggable/unclickable.
 /// User: "вызванный тайл завис, двигается но ничего не прожимается".
 fn wire_tile_drag(tile: &TileWindow) {
+    // Seed this tile's Theme global from the process-global scheme. Called on
+    // every tile-creation path, so newly-spawned tiles inherit the live choice
+    // without threading the value through 5 call sites.
+    apply_scheme_tile(tile, global_scheme());
     let weak = tile.as_weak();
     tile.on_drag_start_requested(move || {
         if let Some(t) = weak.upgrade() {
@@ -3547,6 +3607,9 @@ fn open_palette(
             return;
         }
     };
+    // Seed the palette's Theme global from the live scheme (the palette is
+    // ephemeral — spawned per F4 — so it just reads at construction).
+    apply_scheme_palette(&win, global_scheme());
 
     // Phase C — wire palette to real overlay_backend::kb::search.
     // Initial load: show top 20 entries (popular/first in cache).
@@ -4476,6 +4539,42 @@ fn open_settings(
         });
     }
 
+    // Colour-scheme switch. Selecting a scheme in the Interface tab recolours
+    // EVERY window live (Theme is a per-window global, so we walk each one),
+    // updates the process-global so future tiles/palette inherit it, and
+    // persists color_scheme. Mirrors the tile-opacity handler's shape.
+    {
+        let cfg_scheme = cfg.clone();
+        let tiles_scheme = tiles_ref.clone();
+        let overlay_scheme = overlay_weak.clone();
+        let settings_weak = win.as_weak();
+        win.on_color_scheme_selected(move |idx| {
+            let scheme = clamp_scheme(idx);
+            // Persist first so a crash mid-repaint still survives the choice.
+            {
+                let mut c = cfg_scheme.write();
+                c.color_scheme = scheme;
+                if let Err(e) = overlay_backend::config::save(&c) {
+                    eprintln!("[overlay-host] color_scheme save failed: {e:#}");
+                    return;
+                }
+            }
+            // Future windows (tiles, palette) read this at construction.
+            set_global_scheme(scheme);
+            // Re-skin all currently-live windows.
+            if let Some(o) = overlay_scheme.upgrade() {
+                apply_scheme_bar(&o, scheme);
+            }
+            for tile in tiles_scheme.borrow().iter() {
+                apply_scheme_tile(tile, scheme);
+            }
+            if let Some(s) = settings_weak.upgrade() {
+                apply_scheme_settings(&s, scheme);
+            }
+            eprintln!("[overlay-host] color_scheme -> {scheme}");
+        });
+    }
+
     // Phase E6 v27 — AI bridge connection test. Off-thread (local
     // current-thread tokio runtime) so the blocking HTTP round-trip
     // doesn't freeze the UI; result posted back via invoke_from_
@@ -5245,6 +5344,10 @@ fn populate_token_status(win: &SettingsWindow, cfg: &overlay_backend::config::Sh
     // Phase E6 v38 — reflect the saved interface language in the
     // Interface-tab dropdown (0=Русский, 1=English).
     win.set_ui_language_index(if c.ui_language == "en" { 1 } else { 0 });
+    // Reflect the saved colour scheme in the Interface-tab dropdown, and seed
+    // this Settings window's own Theme global so it opens already skinned.
+    win.set_color_scheme_index(clamp_scheme(c.color_scheme));
+    apply_scheme_settings(win, c.color_scheme);
 
     // #E10.1 — release the config read guard, THEN fetch the model lists
     // off-thread (the worker also reads cfg, so we must not hold the guard

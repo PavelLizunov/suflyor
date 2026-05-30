@@ -232,6 +232,15 @@ pub struct Config {
     #[serde(default = "default_ui_language")]
     pub ui_language: String,
 
+    /// Active colour scheme for the Slint design tokens (`theme.slint`).
+    /// 0 = Glacier (default, cool graphite + blue accent), 1 = Graphite
+    /// (warm charcoal + teal), 2 = Obsidian (blue-black + violet), 3 =
+    /// Light Frost (daytime light mode). Out-of-range values clamp to 0
+    /// at the `Theme.scheme` set site. `#[serde(default)]` → old configs
+    /// land on Glacier. v0.1.2.
+    #[serde(default)]
+    pub color_scheme: i32,
+
     /// Tile body font size in px. Default 12. Reasonable range 11-18.
     /// Stored here (not localStorage) because tile windows can't read
     /// localStorage from the overlay window — has to be passed via
@@ -395,6 +404,7 @@ impl Config {
             hotkey_pause_audio: "F12".into(),
             manual_ask_mode: "hold".into(), // push-to-talk by default
             ui_language: default_ui_language(),
+            color_scheme: 0,
             tile_font_size: default_tile_font_size(),
             snippets: default_snippets(),
             post_meeting_debrief_enabled: default_post_meeting_debrief_enabled(),
@@ -1953,6 +1963,8 @@ mod tests {
         assert!(!cfg.ai_local_thinking);
         // GigaAM GPU (DirectML) is on by default; old configs opt in on upgrade.
         assert!(cfg.stt_gigaam_gpu);
+        // Colour scheme defaults to 0 (Glacier) for configs predating the field.
+        assert_eq!(cfg.color_scheme, 0);
     }
 
     #[test]
