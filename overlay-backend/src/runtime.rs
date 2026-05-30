@@ -744,11 +744,48 @@ pub async fn manual_spawn_tile(
     cfg: SharedConfig,
     inputs: ManualSpawnInputs,
 ) -> Option<ManualSpawnOutcome> {
+    // Resolve the ACTIVE endpoint (local vs cloud) ONCE, up-front. The old
+    // code read the raw cloud `ai_base_url`/`ai_bearer`/`ai_model` fields
+    // unconditionally — so for a local-provider user (ai_provider="local")
+    // F6 silently hit the offline cloud bridge and produced no tile. The
+    // `+ тайл` chip was already fixed the same way; this matches it. Reading
+    // everything up-front also lets the empty/error feedback tiles reuse the
+    // same monitor + stealth as the answer tile.
+    let (base_url, bearer, model, response_language, meeting_context, preferred_monitor, stealth) = {
+        let c = cfg.read();
+        let ep = c.ai_endpoint(false);
+        (
+            ep.base_url,
+            ep.bearer,
+            ep.model,
+            c.response_language.clone(),
+            c.meeting_context.clone(),
+            c.tile_monitor_name.clone(),
+            c.stealth_enabled,
+        )
+    };
+    let monitor_hint = match preferred_monitor.as_deref() {
+        Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
+        _ => MonitorHint::Auto,
+    };
+
     let Some(line) = inputs.last_line else {
         log::info!("manual_spawn_tile: no transcript yet");
-        events.emit(
-            "tile:error",
-            serde_json::json!({ "message": "Транскрипт пустой — нечего спрашивать" }),
+        // Spawn a VISIBLE feedback tile — the prior `tile:error` emit had no
+        // UI handler in the Slint adapter, so F6 on an empty transcript looked
+        // completely dead. Now the user always gets a tile explaining why.
+        let _ = events.spawn_tile_full(
+            TileSpec {
+                question: "✋ Ручной запрос (F6)".into(),
+                answer: "Транскрипт пустой — нечего спрашивать. Запустите сессию (захват аудио), дождитесь реплик и снова нажмите F6."
+                    .into(),
+                source: "manual_spawn".into(),
+                is_translation: false,
+                highlights: vec![],
+            },
+            monitor_hint.clone(),
+            stealth,
+            TileKind::Manual,
         );
         return None;
     };
@@ -764,18 +801,6 @@ pub async fn manual_spawn_tile(
         );
     }
 
-    let (base_url, bearer, model, response_language, meeting_context, preferred_monitor, stealth) = {
-        let c = cfg.read();
-        (
-            c.ai_base_url.clone(),
-            c.ai_bearer.clone(),
-            c.ai_model.clone(),
-            c.response_language.clone(),
-            c.meeting_context.clone(),
-            c.tile_monitor_name.clone(),
-            c.stealth_enabled,
-        )
-    };
     let trigger = Trigger::Question(line.text.clone());
     let (sys_full, usr_full) = build_auto_tile_prompts(
         &trigger,
@@ -805,31 +830,45 @@ pub async fn manual_spawn_tile(
         });
     }
     let t0 = std::time::Instant::now();
-    let (answer, usage) =
-        match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512).await {
-            Ok(t) => {
-                inputs
-                    .health
-                    .last_ai_ok_ms
-                    .store(crate::journal::now_unix_ms() as u64, Ordering::Relaxed);
-                t
+    let (answer, usage) = match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512)
+        .await
+    {
+        Ok(t) => {
+            inputs
+                .health
+                .last_ai_ok_ms
+                .store(crate::journal::now_unix_ms() as u64, Ordering::Relaxed);
+            t
+        }
+        Err(e) => {
+            log::warn!("manual_spawn_tile AI failed: {e:#}");
+            if let Some(j) = inputs.journal.as_ref() {
+                j.write(&JournalEvent::Error {
+                    unix_ms: crate::journal::now_unix_ms(),
+                    module: "manual_spawn",
+                    message: &format!("{e:#}"),
+                });
             }
-            Err(e) => {
-                log::warn!("manual_spawn_tile AI failed: {e:#}");
-                if let Some(j) = inputs.journal.as_ref() {
-                    j.write(&JournalEvent::Error {
-                        unix_ms: crate::journal::now_unix_ms(),
-                        module: "manual_spawn",
-                        message: &format!("{e:#}"),
-                    });
-                }
-                // Pre-port code did NOT emit tile:error on AI failure
-                // for manual_spawn (only reask_last did) — preserve
-                // that silence. The user sees the failure in journal
-                // + log only.
-                return None;
-            }
-        };
+            // Spawn a GENERIC error tile so F6 is never silent. The
+            // message is deliberately generic (NO `{e}` chain): the error
+            // can contain the base_url / LAN IP, which must never surface
+            // on-screen. Full detail stays in journal + log.
+            let _ = events.spawn_tile_full(
+                    TileSpec {
+                        question: format!("✋ {}", line.text),
+                        answer: "Не удалось получить ответ от AI. Проверьте, что выбранный провайдер запущен (Настройки → AI)."
+                            .into(),
+                        source: "manual_spawn".into(),
+                        is_translation: false,
+                        highlights: vec![],
+                    },
+                    monitor_hint.clone(),
+                    stealth,
+                    TileKind::Manual,
+                );
+            return None;
+        }
+    };
     let micro = ai::cost_microcents(&model, usage.input, usage.output);
     let answer_trimmed = answer.trim().to_string();
 
@@ -847,10 +886,8 @@ pub async fn manual_spawn_tile(
     }
 
     let question = format!("✋ {}", line.text);
-    let monitor_hint = match preferred_monitor.as_deref() {
-        Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
-        _ => MonitorHint::Auto,
-    };
+    // `monitor_hint` + `stealth` were resolved up-front (shared with the
+    // empty/error feedback tiles above), so just reuse them here.
     // TileKind::Manual (NOT Ai) — F6 / manual chip / PTT is the
     // user explicitly asking, so the tile chrome stays gray to
     // distinguish from auto-detector Ai (blue) spawns. Today the
@@ -1289,7 +1326,7 @@ mod tests {
         assert_eq!(*calls.lock().unwrap(), 1);
     }
 
-    /// Manual spawn with empty transcript → emits tile:error +
+    /// Manual spawn with empty transcript → spawns a feedback tile +
     /// returns None. No AI call attempted.
     #[tokio::test]
     async fn manual_spawn_tile_empty_transcript_returns_none() {
