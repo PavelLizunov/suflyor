@@ -1250,6 +1250,9 @@ export component SettingsWindow inherits Window {
                                 text: @tr("Save");
                                 clicked => {
                                     root.stt-whisper-bearer-save(root.stt-whisper-bearer-input);
+                                    // Clear the secret from the field after Save
+                                    // (matches ai-bearer / groq / local-bearer).
+                                    root.stt-whisper-bearer-input = "";
                                 }
                             }
                         }

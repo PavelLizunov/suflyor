@@ -68,6 +68,12 @@ export component PaletteWindow inherits Window {
             // Escape closes the palette. The search LineEdit holds focus
             // (forward-focus above); it rejects Escape, which then
             // bubbles up to this ancestor FocusScope.
+            // The std LineEdit (forward-focus target) consumes the arrow
+            // keys internally, so Up/Down never bubble here — keyboard list
+            // navigation can't be wired without replacing LineEdit with a
+            // custom TextInput (which loses clipboard paste + cursor editing).
+            // Enter (LineEdit.accepted) opens the top match; click any row to
+            // open it directly. Escape bubbles up (LineEdit rejects it).
             key-pressed(event) => {
                 if (event.text == Key.Escape) {
                     root.close-requested();
@@ -84,7 +90,17 @@ export component PaletteWindow inherits Window {
                 search-input := LineEdit {
                     placeholder-text: @tr("type to search KB / snippets — /snip lists snippets, +key body adds one");
                     text <=> root.query;
-                    edited(t) => { root.query-changed(t); }
+                    // Reset the highlight to the top on every edit so the
+                    // selection never points past a shorter result set.
+                    edited(t) => { root.query-changed(t); root.selected-index = 0; }
+                    // Enter spawns the highlighted result. Up/Down move the
+                    // selection (handled by the ancestor FocusScope, since a
+                    // single-line LineEdit lets those keys bubble).
+                    accepted => {
+                        if (root.results.length > 0) {
+                            root.result-activated(root.selected-index);
+                        }
+                    }
                 }
 
             // Recent chips row
