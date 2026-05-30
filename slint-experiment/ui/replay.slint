@@ -1,13 +1,11 @@
-// Phase 0 Day 1 — Replay viewer scaffold.
+// Replay viewer — JSONL session-journal timeline (wired to real data via the
+// shared replay_backend.rs module: list_sessions + load_session).
 //
-// Mirrors the structure of src/Replay.tsx in the React app:
+// Layout:
 //   - top bar: title + session combobox + back button
 //   - filter chip row: one chip per distinct event kind
 //   - timeline: vertical scrollable list of events
 //   - footer: counts + cumulative cost
-//
-// Day 1 ships static placeholder data. Day 2 wires real backend
-// (list_sessions + load_session via shared replay_backend.rs module).
 
 import { ComboBox, ScrollView, Button } from "std-widgets.slint";
 
@@ -30,7 +28,7 @@ export struct FilterChip {
 }
 
 export component MainWindow inherits Window {
-    title: "Replay — Slint pilot (Phase 0)";
+    title: "suflyor — Replay";
     preferred-width: 920px;
     preferred-height: 620px;
     min-width: 560px;

@@ -60,6 +60,11 @@ pub fn parse(source: &str) -> Vec<Block> {
     let mut table_rows: Vec<Vec<String>> = Vec::new();
     let mut current_row: Vec<String> = Vec::new();
     let mut current_cell = String::new();
+    // audit/#134 — preserve link destinations. The link TEXT already flows
+    // through as Event::Text; only the URL was dropped (the catch-all arm
+    // swallowed Tag::Link), so AI answers lost every link. Stash on Start(Link),
+    // append " (url)" on End(Link).
+    let mut link_url: Option<String> = None;
 
     for event in Parser::new_ext(source, Options::ENABLE_TABLES) {
         match event {
@@ -198,6 +203,24 @@ pub fn parse(source: &str) -> Vec<Block> {
                 );
                 out.push(Block::new(kind::HR, String::new(), String::new()));
             }
+            Event::Start(Tag::Link { dest_url, .. }) => {
+                link_url = Some(dest_url.to_string());
+            }
+            Event::End(TagEnd::Link) => {
+                if let Some(url) = link_url.take() {
+                    let buf = if in_cell {
+                        &mut current_cell
+                    } else {
+                        &mut current_text
+                    };
+                    // Skip autolinks (text already == url) to avoid "x (x)".
+                    if !url.is_empty() && !buf.ends_with(url.as_str()) {
+                        buf.push_str(" (");
+                        buf.push_str(&url);
+                        buf.push(')');
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -314,6 +337,37 @@ fn main() {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+
+    #[test]
+    fn link_url_is_preserved_in_text() {
+        // The link TEXT already survived (inner Event::Text); the URL was being
+        // dropped by the catch-all arm. Now it's appended as " (url)".
+        let blocks = parse("See the [docs](https://example.com/guide) for more.");
+        let para = blocks.iter().find(|b| b.kind == kind::PARAGRAPH).unwrap();
+        assert!(
+            para.text.contains("docs"),
+            "link text kept: {:?}",
+            para.text
+        );
+        assert!(
+            para.text.contains("https://example.com/guide"),
+            "link URL preserved: {:?}",
+            para.text
+        );
+    }
+
+    #[test]
+    fn autolink_url_not_duplicated() {
+        // text already == url → must not render "url (url)".
+        let blocks = parse("[https://example.com](https://example.com)");
+        let para = blocks.iter().find(|b| b.kind == kind::PARAGRAPH).unwrap();
+        assert_eq!(
+            para.text.matches("https://example.com").count(),
+            1,
+            "autolink must not duplicate the URL: {:?}",
+            para.text
+        );
+    }
 
     #[test]
     fn gfm_table_parses_to_single_aligned_table_block() {
