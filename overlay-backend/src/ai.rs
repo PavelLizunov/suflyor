@@ -343,6 +343,18 @@ async fn stream_inner(
         }
     }
 
+    // The stream ended WITHOUT a `[DONE]` sentinel or a finish_reason — some
+    // local llama.cpp servers (and dropped proxy connections) just close the
+    // body after the answer. Emit a terminal Done anyway so the UI always
+    // clears its in-flight state + finalizes the tile (consumers rely on the
+    // "exactly one terminal event per stream" contract; otherwise the bar's
+    // "AI working" pulse and the follow-up "busy" state stay stuck on).
+    log::info!("AI stream ended without [DONE]/finish_reason: deltas={delta_count}");
+    let _ = tx
+        .send(AiEvent::Done {
+            reason: "eof".into(),
+        })
+        .await;
     Ok(())
 }
 

@@ -546,12 +546,27 @@ pub async fn reask_last(
         }
     };
 
-    let (base_url, bearer, model, response_language, meeting_context, preferred_monitor, stealth) = {
+    // Resolve the ACTIVE endpoint (local vs cloud). F3 was reading the RAW
+    // cloud fields, so reask silently hit the offline cloud bridge for
+    // local-provider users (the same bug fixed for F6/manual_spawn in #128 —
+    // F3 was missed). is_local also lets us zero the (free) local cost below.
+    let (
+        base_url,
+        bearer,
+        model,
+        is_local,
+        response_language,
+        meeting_context,
+        preferred_monitor,
+        stealth,
+    ) = {
         let c = cfg.read();
+        let ep = c.ai_endpoint(false);
         (
-            c.ai_base_url.clone(),
-            c.ai_bearer.clone(),
-            c.ai_model.clone(),
+            ep.base_url,
+            ep.bearer,
+            ep.model,
+            ep.is_local,
             c.response_language.clone(),
             c.meeting_context.clone(),
             c.tile_monitor_name.clone(),
@@ -635,7 +650,13 @@ pub async fn reask_last(
                 return None;
             }
         };
-    let micro = ai::cost_microcents(&model, usage.input, usage.output);
+    // Local inference is free — don't bill it at the cloud fallback rate
+    // (cost_microcents maps an unknown local model id to Sonnet pricing).
+    let micro = if is_local {
+        0
+    } else {
+        ai::cost_microcents(&model, usage.input, usage.output)
+    };
     // cost:update emit + session_cost accumulation both happen in the
     // shim writeback (under one rt lock), so the port intentionally
     // does NOT emit cost:update — preserves wire-parity with the
@@ -751,13 +772,23 @@ pub async fn manual_spawn_tile(
     // `+ тайл` chip was already fixed the same way; this matches it. Reading
     // everything up-front also lets the empty/error feedback tiles reuse the
     // same monitor + stealth as the answer tile.
-    let (base_url, bearer, model, response_language, meeting_context, preferred_monitor, stealth) = {
+    let (
+        base_url,
+        bearer,
+        model,
+        is_local,
+        response_language,
+        meeting_context,
+        preferred_monitor,
+        stealth,
+    ) = {
         let c = cfg.read();
         let ep = c.ai_endpoint(false);
         (
             ep.base_url,
             ep.bearer,
             ep.model,
+            ep.is_local,
             c.response_language.clone(),
             c.meeting_context.clone(),
             c.tile_monitor_name.clone(),
@@ -869,7 +900,13 @@ pub async fn manual_spawn_tile(
             return None;
         }
     };
-    let micro = ai::cost_microcents(&model, usage.input, usage.output);
+    // Local inference is free (see reask_last) — zero it so F6 on a local
+    // model doesn't inflate the session cost meter / trip the cap.
+    let micro = if is_local {
+        0
+    } else {
+        ai::cost_microcents(&model, usage.input, usage.output)
+    };
     let answer_trimmed = answer.trim().to_string();
 
     if let Some(j) = inputs.journal.as_ref() {
