@@ -760,9 +760,6 @@ const TIMER_TICK_SECS: u64 = 1;
 /// values so the spawned window isn't forcibly shrunk on first paint).
 const TILE_DEFAULT_W: i32 = 460;
 const TILE_DEFAULT_H: i32 = 360;
-/// AI ask cap for the non-streaming auto-tile/reask `complete` path.
-/// Sized to fit typical session-question answers without runaway cost.
-const AI_MAX_TOKENS: u32 = 600;
 /// Upper bound for the STREAMING F9/PTT/follow-up asks. Higher than
 /// `AI_MAX_TOKENS` because these are interactive and may want a longer
 /// answer; in streaming mode the cap does NOT affect time-to-first-token
@@ -1912,215 +1909,19 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== Spawn tile (Phase C: real AI ask via overlay_backend::ai) =====
+    // ===== Spawn tile ("+ тайл") — real AI ask about the recent transcript,
+    // the SAME path as F6 manual spawn / F3 reask. User chose "реальный
+    // AI-запрос" over the old demo: this supersedes the inline placeholder
+    // tile that only asked a canned 'Explain Kubernetes' prompt under
+    // SLINT_OVERLAY_DEMO. manual_spawn_tile applies the system prompt,
+    // profile context, cost cap and journal — identical to F6.
     {
-        let s = state.clone();
-        let t = tiles.clone();
-        let weak = overlay.as_weak();
-        let cfg_ref = cfg.clone();
-        let rt = rt_handle.clone();
+        let events_st = events.clone();
+        let cfg_st = cfg.clone();
+        let slint_rt_st = slint_rt.clone();
+        let rt_st = rt_handle.clone();
         overlay.on_spawn_tile_clicked(move || {
-            let Some(overlay) = weak.upgrade() else {
-                return;
-            };
-            let seq = {
-                let mut st = match s.lock() {
-                    Ok(g) => g,
-                    Err(p) => p.into_inner(),
-                };
-                st.tiles_spawned += 1;
-                st.tiles_spawned
-            };
-            overlay.set_tiles_spawned(seq as i32);
-
-            let tile = match TileWindow::new() {
-                Ok(t) => t,
-                Err(e) => {
-                    eprintln!("[overlay-host] TileWindow::new failed: {e}");
-                    return;
-                }
-            };
-
-            // Demo prompt — only used when SLINT_OVERLAY_DEMO=1 is
-            // set in the env, otherwise the tile shows an informative
-            // placeholder explaining that real live-transcript wiring
-            // arrives with Phase B2 (runtime.rs port). Gating behind
-            // env var prevents production users from seeing canned
-            // Kubernetes nonsense when they click +tile.
-            // Code-quality audit 2026-05-27 (priority cleanup #1).
-            let demo_mode = std::env::var("SLINT_OVERLAY_DEMO").is_ok();
-            let question = if demo_mode {
-                format!("Explain Kubernetes in 3 sentences. (Tile #{seq})")
-            } else {
-                format!("Tile #{seq} — no active session prompt")
-            };
-            tile.set_sequence(seq as i32);
-            tile.set_tile_title(SharedString::from(question.clone()));
-            tile.set_source_label(SharedString::from("ai · asking…"));
-            wire_tile_drag(&tile);
-
-            // Initial placeholder body while the AI call is in flight.
-            let placeholder = vec![MarkdownBlock {
-                kind: markdown::kind::PARAGRAPH,
-                text: SharedString::from("⏳ Asking AI…"),
-                lang: SharedString::from(""),
-            }];
-            tile.set_blocks(ModelRc::new(VecModel::from(placeholder)));
-
-            let weak_tile = tile.as_weak();
-            let vec_for_close = t.clone();
-            let weak_overlay_close = weak.clone();
-            tile.on_close_clicked(move || {
-                eprintln!("[overlay-host] tile (spawn-poll) close_clicked fired");
-                if let Some(tw) = weak_tile.upgrade() {
-                    let close_hwnd = grab_hwnd(tw.window()).ok();
-                    let _ = tw.hide();
-                    if let Some(target) = close_hwnd {
-                        vec_for_close.borrow_mut().retain(|item| {
-                            grab_hwnd(item.window()).ok() != Some(target)
-                        });
-                        refresh_open_tiles(&weak_overlay_close, &vec_for_close);
-                    }
-                }
-            });
-            let weak_pin = tile.as_weak();
-            tile.on_pin_clicked(move || {
-                if let Some(tw) = weak_pin.upgrade() {
-                    let new = !tw.get_pinned();
-                    tw.set_pinned(new);
-                    eprintln!("[overlay-host] tile (spawn-poll) pin -> {new}");
-                }
-            });
-            let weak_max = tile.as_weak();
-            tile.on_maximize_clicked(move || {
-                if let Some(tw) = weak_max.upgrade() {
-                    let Ok(hwnd) = grab_hwnd(tw.window()) else { return };
-                    toggle_tile_maximize(hwnd, &tw);
-                }
-            });
-
-            let _ = tile.show();
-            apply_tile_hwnd_with_monitor(&tile);
-
-            // Capture a Weak handle the tokio task can post back to
-            // the UI thread via slint::invoke_from_event_loop.
-            let weak_for_ai = tile.as_weak();
-            t.borrow_mut().push(tile);
-            refresh_open_tiles(&weak, &t);
-
-            // Spawn the AI call on the tokio runtime. Read config under
-            // the lock briefly, drop, then run async.
-            let snapshot = {
-                let cfg_r = cfg_ref.read();
-                (
-                    cfg_r.ai_base_url.clone(),
-                    cfg_r.ai_bearer.clone(),
-                    cfg_r.ai_model.clone(),
-                )
-            };
-            let (base_url, bearer, model) = snapshot;
-
-            if base_url.is_empty() || bearer.is_empty() || !demo_mode {
-                // EITHER no AI config OR demo-mode disabled — render
-                // an informative tile instead of firing an AI call
-                // with a canned demo prompt. Phase B2 work will read
-                // the live mic transcript here and ask about it.
-                let md = if base_url.is_empty() || bearer.is_empty() {
-                    format!(
-                        "# {question}\n\n*AI bridge not configured.* Open Settings → AI bridge to set `base_url` + `bearer token`, then re-spawn this tile.\n\n## Sample fallback content\n\n{}",
-                        markdown::sample_tile_markdown(seq)
-                    )
-                } else {
-                    format!(
-                        "# Tile #{seq}\n\n*Demo mode disabled.* Set `SLINT_OVERLAY_DEMO=1` to re-enable the canned 'Explain Kubernetes' prompt. Phase B2 (runtime.rs port) will wire this chip to the live mic transcript.\n\n## Sample fallback content\n\n{}",
-                        markdown::sample_tile_markdown(seq)
-                    )
-                };
-                let blocks: Vec<MarkdownBlock> = markdown::parse(&md)
-                    .into_iter()
-                    .map(|b| MarkdownBlock {
-                        kind: b.kind,
-                        text: SharedString::from(b.text),
-                        lang: SharedString::from(b.lang),
-                    })
-                    .collect();
-                if let Some(t) = weak_for_ai.upgrade() {
-                    t.set_blocks(ModelRc::new(VecModel::from(blocks)));
-                    let label = if base_url.is_empty() || bearer.is_empty() {
-                        "ai · not configured"
-                    } else {
-                        "ai · demo-mode off"
-                    };
-                    t.set_source_label(SharedString::from(label));
-                }
-                return;
-            }
-
-            let question_for_task = question.clone();
-            rt.spawn(async move {
-                let messages = vec![ai::ChatMessage {
-                    role: "user".to_string(),
-                    content: ai::MessageContent::Text(question_for_task.clone()),
-                }];
-                let result = ai::complete_with_usage(
-                    &base_url,
-                    &bearer,
-                    &model,
-                    messages,
-                    AI_MAX_TOKENS,
-                )
-                .await;
-
-                // Post result back to UI thread.
-                let _ = slint::invoke_from_event_loop(move || {
-                    let Some(tile) = weak_for_ai.upgrade() else {
-                        return;
-                    };
-                    match result {
-                        Ok((response, usage)) => {
-                            let cost_micro =
-                                ai::cost_microcents(&model, usage.input, usage.output);
-                            let cost_usd = cost_micro as f64 / 100_000_000.0;
-                            let md = format!("# {question_for_task}\n\n{response}\n");
-                            let blocks: Vec<MarkdownBlock> = markdown::parse(&md)
-                                .into_iter()
-                                .map(|b| MarkdownBlock {
-                                    kind: b.kind,
-                                    text: SharedString::from(b.text),
-                                    lang: SharedString::from(b.lang),
-                                })
-                                .collect();
-                            tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
-                            tile.set_source_label(SharedString::from(format!(
-                                "ai · {} · ${:.4}",
-                                model, cost_usd
-                            )));
-                        }
-                        Err(e) => {
-                            // Privacy: classify the error rather than dump
-                            // the full chain — reqwest errors typically
-                            // include the full base_url (LAN IP) which
-                            // would leak into screenshots saved under
-                            // target/visual/. Caught by review-agent
-                            // 2026-05-27.
-                            let category = classify_ai_error(&format!("{e:#}"));
-                            let md = format!(
-                                "# {question_for_task}\n\n**AI call failed:** {category}\n\nCheck Settings → AI bridge or the bridge process / network.",
-                            );
-                            let blocks: Vec<MarkdownBlock> = markdown::parse(&md)
-                                .into_iter()
-                                .map(|b| MarkdownBlock {
-                                    kind: b.kind,
-                                    text: SharedString::from(b.text),
-                                    lang: SharedString::from(b.lang),
-                                })
-                                .collect();
-                            tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
-                            tile.set_source_label(SharedString::from("ai · error"));
-                        }
-                    }
-                });
-            });
+            fire_f6_manual_spawn(&events_st, &cfg_st, &slint_rt_st, &rt_st);
         });
     }
 
@@ -2293,10 +2094,6 @@ fn main() -> Result<(), slint::PlatformError> {
     tokio_rt.shutdown_timeout(Duration::from_secs(2));
     result
 }
-
-// `classify_ai_error` moved to slint_replay::app_state so the unit
-// tests can pin the categories table without spinning up the UI.
-use slint_replay::app_state::classify_ai_error;
 
 /// Recompute status pill based on capture flags.
 fn refresh_status(overlay: &OverlayBarWindow, mic: bool, sys: bool) {
