@@ -27,12 +27,19 @@ reqwest = { version = "0.12", features = ["stream", "json", "multipart", "rustls
 bytes = "1"
 
 # Local STT — GigaAM-v3 in-process via ONNX (Russian-specialised). The `ort`
-# crate downloads the onnxruntime binary at build time and runs on CPU by
-# default (GigaAM is ~22× real-time on CPU, so no VRAM contention with the LLM).
+# crate statically links the onnxruntime binary at build time. We enable
+# `ort-directml` so GigaAM can run on the GPU via the DirectML execution
+# provider (Windows, vendor-agnostic DX12 — works on Blackwell where CUDA
+# version matrices bite). Accelerator is chosen at runtime via
+# `stt::configure_gigaam_accelerator` (config `stt_gigaam_gpu`), defaulting to
+# DirectML and falling back to CPU automatically when no GPU is available — so
+# the int8 model stays ~22x real-time on CPU and ~7x faster again on the GPU.
+# DirectML needs a real `DirectML.dll` at runtime (Windows ships one in
+# System32 1903+; the release build copies it next to the exe).
 # Local Whisper goes through the existing reqwest client (whisper.cpp server),
 # so we deliberately DON'T enable the whisper-cpp feature (avoids a libclang
 # build-dep on the whole project).
-transcribe-rs = { version = "0.3.11", default-features = false, features = ["onnx"] }
+transcribe-rs = { version = "0.3.11", default-features = false, features = ["onnx", "ort-directml"] }
 
 # Audio capture (audio.rs)
 wasapi = "0.23"

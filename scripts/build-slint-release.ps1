@@ -33,6 +33,20 @@ if (-not (Test-Path $exe)) {
     Write-Host "ERROR: build succeeded but $exe missing" -ForegroundColor Red
     exit 11
 }
+
+# DirectML EP (GigaAM GPU): ort drops a DirectML.dll SYMLINK to a 0-byte
+# placeholder into target\release. We must NOT ship a DirectML.dll next to the
+# exe at all: verified on this box that ANY local DirectML.dll (the empty stub
+# OR a byte-for-byte copy of the real System32 one) fails DirectML graph fusion
+# at model load (0x80070715 ERROR_RESOURCE_TYPE_NOT_FOUND), while letting the
+# loader resolve C:\Windows\System32\DirectML.dll (Windows 10 1903+) works and
+# GPU-accelerates GigaAM (~280x real-time). So just delete the placeholder; the
+# app falls back to CPU automatically if the system DirectML.dll is unavailable.
+$dmlDst = Join-Path $crate "target\release\DirectML.dll"
+if (Test-Path $dmlDst) {
+    Remove-Item $dmlDst -Force
+    Write-Host "  DirectML.dll: removed ort placeholder (GigaAM GPU uses System32 DirectML.dll)" -ForegroundColor Cyan
+}
 $info = Get-Item $exe
 $sizeMb = [math]::Round($info.Length / 1MB, 2)
 Write-Host ""

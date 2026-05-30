@@ -39,9 +39,12 @@ Section "Main" SEC_MAIN
   File "..\slint-experiment\target\release\${PRODUCT_EXE}"
   ; onnxruntime (GigaAM STT) is STATICALLY linked into the exe (ort 2.0
   ; download-binaries, no load-dynamic) -> no onnxruntime.dll to ship.
-  ; DirectML.dll is ort's 152-byte placeholder for the unused DirectML EP
-  ; (CPU build); bundled to match the exact layout GigaAM is verified under.
-  File "..\slint-experiment\target\release\DirectML.dll"
+  ; We deliberately DO NOT ship DirectML.dll: the GigaAM GPU (DirectML) path
+  ; LoadLibrary()s it at runtime, and a DirectML.dll next to the exe -- even a
+  ; byte-for-byte copy of the real one -- fails DirectML graph fusion
+  ; (0x80070715). Letting the loader resolve C:\Windows\System32\DirectML.dll
+  ; (Windows 10 1903+) is what works; the app falls back to CPU if it's absent.
+  ; build-slint-release.ps1 deletes ort's placeholder so nothing shadows it.
   ; App icon — used by the Start-menu + Desktop shortcuts and the
   ; Add/Remove Programs entry (the .exe also embeds it via build.rs).
   File "..\slint-experiment\assets\icon.ico"
@@ -74,6 +77,8 @@ SectionEnd
 
 Section "Uninstall"
   Delete "$INSTDIR\${PRODUCT_EXE}"
+  ; legacy: older builds shipped a DirectML.dll next to the exe; remove it so an
+  ; upgrade from such a build doesn't leave a stub shadowing System32.
   Delete "$INSTDIR\DirectML.dll"
   Delete "$INSTDIR\icon.ico"
   Delete "$INSTDIR\uninstall.exe"

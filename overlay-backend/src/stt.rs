@@ -23,6 +23,43 @@ const GROQ_STT_URL: &str = "https://api.groq.com/openai/v1/audio/transcriptions"
 /// Groq API key without uploading audio.
 const GROQ_MODELS_URL: &str = "https://api.groq.com/openai/v1/models";
 
+/// Select the ONNX Runtime execution provider for the in-process GigaAM model.
+///
+/// Must be called once at startup, BEFORE any GigaAM model is loaded: the ORT
+/// session builder reads this global preference when it creates the session.
+/// `use_gpu` → DirectML (GPU, Windows DX12); otherwise CPU-only. ORT always
+/// appends a CPU fallback, so if DirectML can't initialise (no compatible GPU,
+/// or a missing/shadowed `DirectML.dll`) the model transparently runs on CPU.
+/// The first GPU transcription pays a ~1s one-time DirectML shader-compile.
+pub fn configure_gigaam_accelerator(use_gpu: bool) {
+    let pref = if use_gpu {
+        transcribe_rs::OrtAccelerator::DirectMl
+    } else {
+        transcribe_rs::OrtAccelerator::CpuOnly
+    };
+    transcribe_rs::set_ort_accelerator(pref);
+    log::info!("GigaAM ONNX Runtime accelerator = {pref}");
+}
+
+/// Load the GigaAM int8 model under the configured ORT accelerator, transparently
+/// falling back to CPU if a GPU (DirectML) session fails to build. DirectML can
+/// fail at graph fusion (0x80070715) when the system `DirectML.dll` is absent or
+/// shadowed; rather than break STT entirely we switch the process to the
+/// always-available CPU provider for this and all future loads, and log it.
+fn load_gigaam(dir: &str) -> std::result::Result<GigaAMModel, transcribe_rs::TranscribeError> {
+    match GigaAMModel::load(Path::new(dir), &Quantization::Int8) {
+        Ok(m) => Ok(m),
+        Err(e)
+            if transcribe_rs::get_ort_accelerator() != transcribe_rs::OrtAccelerator::CpuOnly =>
+        {
+            log::warn!("GigaAM GPU (DirectML) load failed ({e}); falling back to CPU");
+            transcribe_rs::set_ort_accelerator(transcribe_rs::OrtAccelerator::CpuOnly);
+            GigaAMModel::load(Path::new(dir), &Quantization::Int8)
+        }
+        Err(e) => Err(e),
+    }
+}
+
 /// Phase E6 v27 — connection test for the Settings "STT" tab. GETs the
 /// Groq models list with the bearer; HTTP 2xx means the key is valid +
 /// the endpoint is reachable. 10s timeout. Does NOT log the key.
@@ -82,7 +119,7 @@ pub async fn test_connection_backend(backend: &SttBackendCfg) -> Result<String> 
         SttBackendCfg::Gigaam { model_dir } => {
             let dir = model_dir.clone();
             tokio::task::spawn_blocking(move || {
-                GigaAMModel::load(Path::new(&dir), &Quantization::Int8)
+                load_gigaam(&dir)
                     .map(|_m| "GigaAM model loaded OK".to_string())
                     .map_err(|e| anyhow::anyhow!("GigaAM load failed: {e}"))
             })
@@ -99,7 +136,7 @@ pub async fn test_connection_backend(backend: &SttBackendCfg) -> Result<String> 
 /// (~0.5 s) — acceptable for a once-per-session start gate. The model handle is
 /// dropped immediately; the live pipeline loads its own copy via `spawn`.
 pub fn validate_gigaam_dir(model_dir: &str) -> Result<()> {
-    GigaAMModel::load(Path::new(model_dir), &Quantization::Int8)
+    load_gigaam(model_dir)
         .map(|_m| ())
         .map_err(|e| anyhow::anyhow!("{e}"))
 }
@@ -176,11 +213,7 @@ pub fn spawn(
             if let SttBackendCfg::Gigaam { model_dir } = &backend {
                 let dir = model_dir.clone();
                 let dir_for_log = model_dir.clone();
-                match tokio::task::spawn_blocking(move || {
-                    GigaAMModel::load(Path::new(&dir), &Quantization::Int8)
-                })
-                .await
-                {
+                match tokio::task::spawn_blocking(move || load_gigaam(&dir)).await {
                     Ok(Ok(m)) => {
                         log::info!("STT GigaAM model loaded from {dir_for_log}");
                         Some(Arc::new(Mutex::new(m)))
@@ -551,6 +584,17 @@ fn rms_i16(samples: &[i16]) -> f32 {
 static GIGAAM_CACHE: std::sync::OnceLock<std::sync::Mutex<Option<(String, GigaAMModel)>>> =
     std::sync::OnceLock::new();
 
+/// Drop the cached ad-hoc GigaAM model so the next transcription reloads it.
+/// The ORT session bakes its execution provider in at load time, so after the
+/// GPU/CPU preference changes (`configure_gigaam_accelerator`) a cached model
+/// would keep the old backend. The live session pipeline reloads its own copy
+/// on the next session start, so this only needs to clear the ad-hoc cache.
+pub fn reset_gigaam_cache() {
+    if let Some(lock) = GIGAAM_CACHE.get() {
+        *lock.lock().unwrap_or_else(|p| p.into_inner()) = None;
+    }
+}
+
 /// Public one-shot transcription helper for ad-hoc flows (e.g. prep recording).
 /// Provider-aware: cloud Groq, local whisper-server, or in-process GigaAM
 /// (cached in `GIGAAM_CACHE` so repeated ad-hoc calls with the same model dir
@@ -605,8 +649,7 @@ pub async fn transcribe_once(
                     .lock()
                     .unwrap_or_else(|p| p.into_inner());
                 if !matches!(&*guard, Some((cached_dir, _)) if *cached_dir == dir) {
-                    let m = GigaAMModel::load(Path::new(&dir), &Quantization::Int8)
-                        .map_err(|e| anyhow::anyhow!("GigaAM load: {e}"))?;
+                    let m = load_gigaam(&dir).map_err(|e| anyhow::anyhow!("GigaAM load: {e}"))?;
                     *guard = Some((dir.clone(), m));
                 }
                 let model = match guard.as_mut() {
