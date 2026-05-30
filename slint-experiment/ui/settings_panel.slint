@@ -344,9 +344,17 @@ export component SettingsWindow inherits Window {
                     }
                     // Phase E6 v26 — ":: " grip in accent #6cf (same as
                     // overlay bar) for visual continuity; label neutral.
+                    // App icon sits first as branding (also in taskbar/Start).
                     HorizontalLayout {
-                        spacing: 0px;
+                        spacing: 7px;
                         alignment: start;
+                        Image {
+                            source: @image-url("../assets/icon.png");
+                            width: 20px;
+                            height: 20px;
+                            image-fit: contain;
+                            vertical-alignment: center;
+                        }
                         Text {
                             text: "::";
                             font-size: 14px;
@@ -355,7 +363,7 @@ export component SettingsWindow inherits Window {
                             vertical-alignment: center;
                         }
                         Text {
-                            text: " " + @tr("Settings");
+                            text: @tr("Settings");
                             font-size: 14px;
                             font-weight: 700;
                             color: #e8e8ec;

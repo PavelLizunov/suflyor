@@ -1,13 +1,13 @@
-# Generates the suflyor app icon (no network, no external assets).
-# Renders a dark rounded-square with a cyan "S" at several sizes via
-# System.Drawing, packs them into a multi-image PNG-compressed .ico,
-# and also writes a 256px .png for the Slint window icon.
+# Generates the suflyor app icon from slint-experiment/assets/icon-source.png.
+# Resizes the source into a soft rounded square at several sizes via
+# System.Drawing, packs them into a multi-image PNG-compressed .ico, and also
+# writes a 256px .png for the Slint window icon.
 #
 # Outputs:
-#   slint-experiment/assets/icon.ico   (winres embed + NSIS shortcut)
-#   slint-experiment/assets/icon.png   (Slint Window `icon:` property)
+#   slint-experiment/assets/icon.ico   (winres exe embed + NSIS shortcut)
+#   slint-experiment/assets/icon.png   (Slint Window `icon` property)
 #
-# Re-run only when the icon design changes. Run from project root:
+# Re-run whenever icon-source.png changes. Run from project root:
 #   powershell scripts/gen_icon.ps1
 
 $ErrorActionPreference = "Stop"
@@ -15,61 +15,39 @@ Add-Type -AssemblyName System.Drawing
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $assetsDir = Join-Path $projectRoot "slint-experiment\assets"
-if (-not (Test-Path $assetsDir)) {
-    New-Item -ItemType Directory -Path $assetsDir | Out-Null
-}
-
-# Palette (matches the app: dark #14161E bg, #2A2C3A border, #6CF cyan).
-$bg = [System.Drawing.Color]::FromArgb(255, 0x16, 0x18, 0x22)
-$border = [System.Drawing.Color]::FromArgb(255, 0x2E, 0x4A, 0x5A)
-$fg = [System.Drawing.Color]::FromArgb(255, 0x66, 0xCC, 0xFF)
+$srcPath = Join-Path $assetsDir "icon-source.png"
+if (-not (Test-Path $srcPath)) { throw "icon-source.png not found in $assetsDir" }
+# Load into a fresh bitmap so the file handle is released immediately.
+$srcImg = [System.Drawing.Image]::FromFile($srcPath)
+$src = New-Object System.Drawing.Bitmap($srcImg)
+$srcImg.Dispose()
 
 function New-IconBitmap([int]$size) {
     $bmp = New-Object System.Drawing.Bitmap($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+    $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
     $g.Clear([System.Drawing.Color]::Transparent)
 
-    # Rounded-square plate inset slightly so the corners breathe.
-    $inset = [double]$size * 0.06
-    $rad = [double]$size * 0.24
-    $x = $inset
-    $y = $inset
-    $w = [double]$size - 2 * $inset
-    $h = [double]$size - 2 * $inset
+    # Soft rounded-square mask so the white plate gets gentle corners. Small
+    # sizes use less rounding so the art stays crisp at 16/24 px.
+    $rad = if ($size -le 24) { [double]$size * 0.12 } else { [double]$size * 0.20 }
     $d = 2 * $rad
+    $w = [double]$size
     $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $path.AddArc($x, $y, $d, $d, 180, 90)
-    $path.AddArc($x + $w - $d, $y, $d, $d, 270, 90)
-    $path.AddArc($x + $w - $d, $y + $h - $d, $d, $d, 0, 90)
-    $path.AddArc($x, $y + $h - $d, $d, $d, 90, 90)
+    $path.AddArc(0, 0, $d, $d, 180, 90)
+    $path.AddArc($w - $d, 0, $d, $d, 270, 90)
+    $path.AddArc($w - $d, $w - $d, $d, $d, 0, 90)
+    $path.AddArc(0, $w - $d, $d, $d, 90, 90)
     $path.CloseFigure()
+    $g.SetClip($path)
 
-    $brush = New-Object System.Drawing.SolidBrush($bg)
-    $g.FillPath($brush, $path)
-    $brush.Dispose()
+    # Draw the source scaled to fill the square (it already has a white field).
+    $rect = New-Object System.Drawing.Rectangle(0, 0, $size, $size)
+    $g.DrawImage($src, $rect)
+    $g.ResetClip()
 
-    if ($size -ge 32) {
-        $penW = [Math]::Max(1.0, [double]$size * 0.025)
-        $pen = New-Object System.Drawing.Pen($border, $penW)
-        $g.DrawPath($pen, $path)
-        $pen.Dispose()
-    }
-
-    # Centered bold "S".
-    $fontSize = [double]$size * 0.6
-    $font = New-Object System.Drawing.Font("Segoe UI", $fontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-    $fmt = New-Object System.Drawing.StringFormat
-    $fmt.Alignment = [System.Drawing.StringAlignment]::Center
-    $fmt.LineAlignment = [System.Drawing.StringAlignment]::Center
-    $rect = New-Object System.Drawing.RectangleF(0, [single](-$size * 0.04), [single]$size, [single]$size)
-    $textBrush = New-Object System.Drawing.SolidBrush($fg)
-    $g.DrawString("S", $font, $textBrush, $rect, $fmt)
-    $textBrush.Dispose()
-    $font.Dispose()
-    $fmt.Dispose()
     $path.Dispose()
     $g.Dispose()
     return $bmp
@@ -93,6 +71,7 @@ foreach ($s in $sizes) {
     }
     $bmp.Dispose()
 }
+$src.Dispose()
 
 # Assemble the .ico: ICONDIR (6) + N*ICONDIRENTRY (16) + concatenated PNGs.
 $ico = New-Object System.IO.MemoryStream
@@ -125,4 +104,4 @@ $bw.Flush()
 $bw.Dispose()
 $ico.Dispose()
 
-Write-Host "Wrote icon.ico ($count sizes) + icon.png to $assetsDir" -ForegroundColor Green
+Write-Host "Wrote icon.ico ($count sizes) + icon.png from icon-source.png to $assetsDir" -ForegroundColor Green
