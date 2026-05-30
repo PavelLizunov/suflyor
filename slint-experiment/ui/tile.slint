@@ -6,6 +6,7 @@
 // resulting Vec<Block> into the `blocks` property.
 
 import { Button, LineEdit, ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
 
 // MarkdownBlock is shared with markdown_spike — defined here in the
 // canonical location and re-exported through index.slint.
@@ -32,7 +33,7 @@ export component TileWindow inherits Window {
     in-out property <string> source-label: "—";
     // Phase E6 v12 — trigger badge.
     in-out property <string> trigger-label: "";
-    in-out property <color> trigger-color: #6cf;
+    in-out property <color> trigger-color: Theme.accent;
     // Phase E6 v17 — pinned bool: changes pin button visual; Rust
     // toggles on click. Maximize bool: Rust resizes window via Win32.
     in-out property <bool> pinned: false;
@@ -78,10 +79,10 @@ export component TileWindow inherits Window {
     }
 
     Rectangle {
-        background: #14161eea;
+        background: Theme.bg-surface.with-alpha(0.92);
         border-radius: 10px;
         border-width: 1px;
-        border-color: #2a2c3a;
+        border-color: Theme.border;
         opacity: root.body-opacity;
 
         VerticalLayout {
@@ -124,7 +125,7 @@ export component TileWindow inherits Window {
                         text: @tr("#{}  {}", root.sequence, root.tile-title);
                         font-size: 12px;
                         font-weight: 700;
-                        color: #e8e8ec;
+                        color: Theme.text-primary;
                         vertical-alignment: center;
                         overflow: elide;
                         width: parent.width;
@@ -132,7 +133,7 @@ export component TileWindow inherits Window {
                 }
                 Rectangle {
                     background: transparent;
-                    border-color: #3a3c44;
+                    border-color: Theme.border-strong;
                     border-width: 1px;
                     border-radius: 8px;
                     height: 20px;
@@ -143,7 +144,7 @@ export component TileWindow inherits Window {
                         Text {
                             text: root.source-label;
                             font-size: 10px;
-                            color: #999;
+                            color: Theme.text-muted;
                             vertical-alignment: center;
                         }
                     }
@@ -161,17 +162,17 @@ export component TileWindow inherits Window {
                     // Phase E6 v17 — pinned-state shows yellow tint.
                     background: root.pinned
                         ? #5a4a14
-                        : (pin-touch.has-hover ? #34354a : #2a2c3a);
+                        : (pin-touch.has-hover ? Theme.border-strong : Theme.border);
                     border-radius: 4px;
                     border-width: 1px;
-                    border-color: root.pinned ? #facc15 : #3a3c44;
+                    border-color: root.pinned ? Theme.warning : Theme.border-strong;
                     pin-touch := TouchArea {
                         clicked => { root.pin-clicked(); }
                     }
                     Text {
                         text: root.pinned ? "📌pin" : "pin";
                         font-size: 11px;
-                        color: root.pinned ? #facc15 : #e8e8ec;
+                        color: root.pinned ? Theme.warning : Theme.text-primary;
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
@@ -183,10 +184,10 @@ export component TileWindow inherits Window {
                 Rectangle {
                     width: 36px;
                     height: 28px;
-                    background: max-touch.has-hover ? #34354a : #2a2c3a;
+                    background: max-touch.has-hover ? Theme.border-strong : Theme.border;
                     border-radius: 4px;
                     border-width: 1px;
-                    border-color: #3a3c44;
+                    border-color: Theme.border-strong;
                     max-touch := TouchArea {
                         clicked => { root.maximize-clicked(); }
                     }
@@ -194,7 +195,7 @@ export component TileWindow inherits Window {
                         text: root.maximized ? "▢" : "□";
                         font-size: 13px;
                         font-weight: 700;
-                        color: #e8e8ec;
+                        color: Theme.text-primary;
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
@@ -202,10 +203,10 @@ export component TileWindow inherits Window {
                 Rectangle {
                     width: 30px;
                     height: 28px;
-                    background: close-touch.has-hover ? #5a2a2a : #2a2c3a;
+                    background: close-touch.has-hover ? #5a2a2a : Theme.border;
                     border-radius: 4px;
                     border-width: 1px;
-                    border-color: #3a3c44;
+                    border-color: Theme.border-strong;
                     close-touch := TouchArea {
                         clicked => { root.close-clicked(); }
                     }
@@ -213,7 +214,7 @@ export component TileWindow inherits Window {
                         text: "X";
                         font-size: 12px;
                         font-weight: 700;
-                        color: #e8e8ec;
+                        color: Theme.text-primary;
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
@@ -221,7 +222,7 @@ export component TileWindow inherits Window {
             }
 
             Rectangle {
-                background: #2a2c3a;
+                background: Theme.border;
                 height: 1px;
             }
 
@@ -282,7 +283,7 @@ export component TileWindow inherits Window {
                             text: block.text;
                             font-size: 18px;
                             font-weight: 700;
-                            color: #e8e8ec;
+                            color: Theme.text-primary;
                             wrap: word-wrap;
                         }
                         // H2
@@ -290,7 +291,7 @@ export component TileWindow inherits Window {
                             text: block.text;
                             font-size: 15px;
                             font-weight: 700;
-                            color: #c8c8cc;
+                            color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
                         // H3
@@ -298,14 +299,14 @@ export component TileWindow inherits Window {
                             text: block.text;
                             font-size: 13px;
                             font-weight: 700;
-                            color: #a8a8ac;
+                            color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
                         // Paragraph
                         if block.kind == 0 : Text {
                             text: block.text;
                             font-size: 12px;
-                            color: #c8c8cc;
+                            color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
                         // Bullet
@@ -315,36 +316,36 @@ export component TileWindow inherits Window {
                             Text {
                                 text: "•";
                                 font-size: 12px;
-                                color: #6cf;
+                                color: Theme.accent;
                                 width: 10px;
                             }
                             Text {
                                 text: block.text;
                                 font-size: 12px;
-                                color: #c8c8cc;
+                                color: Theme.text-secondary;
                                 wrap: word-wrap;
                                 horizontal-stretch: 1;
                             }
                         }
                         // Code block
                         if block.kind == 5 : Rectangle {
-                            background: #0d0f15;
+                            background: Theme.code-bg;
                             border-radius: 4px;
                             border-width: 1px;
-                            border-color: #2a2c3a;
+                            border-color: Theme.border;
                             VerticalLayout {
                                 padding: 8px;
                                 if block.lang != "" : Text {
                                     text: block.lang;
                                     font-size: 9px;
-                                    color: #666;
+                                    color: Theme.text-muted;
                                 }
                                 // Code blocks need horizontal scroll for
                                 // long lines (Consolas) — keep no-wrap.
                                 Text {
                                     text: block.text;
                                     font-size: 11px;
-                                    color: #d8e8f8;
+                                    color: Theme.code-text;
                                     font-family: "Consolas";
                                     wrap: word-wrap;
                                 }
@@ -352,7 +353,7 @@ export component TileWindow inherits Window {
                         }
                         // HR
                         if block.kind == 6 : Rectangle {
-                            background: #2a2c3a;
+                            background: Theme.border;
                             height: 1px;
                         }
                         // Table (kind 7) — aligned monospace block (#109).
@@ -360,16 +361,16 @@ export component TileWindow inherits Window {
                         // tables clip on the right rather than scrambling
                         // (maximize the tile with □ to see them in full).
                         if block.kind == 7 : Rectangle {
-                            background: #0d0f15;
+                            background: Theme.code-bg;
                             border-radius: 4px;
                             border-width: 1px;
-                            border-color: #2a2c3a;
+                            border-color: Theme.border;
                             VerticalLayout {
                                 padding: 8px;
                                 Text {
                                     text: block.text;
                                     font-size: 11px;
-                                    color: #d8e8f8;
+                                    color: Theme.code-text;
                                     font-family: "Consolas";
                                     wrap: no-wrap;
                                 }

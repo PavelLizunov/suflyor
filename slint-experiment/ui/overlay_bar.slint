@@ -10,6 +10,7 @@
 // AI ask, KB palette, hotkey dispatch, journal bookmark, etc.
 
 import { Button } from "std-widgets.slint";
+import { Theme } from "theme.slint";
 
 // ===== Reusable chip primitives =====
 
@@ -18,7 +19,7 @@ import { Button } from "std-widgets.slint";
 component Chip inherits Rectangle {
     in property <string> label;
     in property <bool> active: false;
-    in property <color> accent: #6cf;
+    in property <color> accent: Theme.accent;
 
     callback clicked();
 
@@ -26,7 +27,7 @@ component Chip inherits Rectangle {
     accessible-label: label;
 
     background: active ? accent.with-alpha(0.18) : transparent;
-    border-color: active ? accent : #3a3c44;
+    border-color: active ? accent : Theme.border-strong;
     border-width: 1px;
     border-radius: 10px;
     height: 22px;
@@ -38,7 +39,7 @@ component Chip inherits Rectangle {
         Text {
             text: label;
             font-size: 11px;
-            color: active ? accent : #c8c8cc;
+            color: active ? accent : Theme.text-secondary;
             vertical-alignment: center;
         }
     }
@@ -50,7 +51,7 @@ component Chip inherits Rectangle {
 component LiveChip inherits Rectangle {
     in property <string> label;
     in property <bool> active: false;
-    in property <color> accent: #34d399;
+    in property <color> accent: Theme.success;
 
     callback clicked();
 
@@ -60,7 +61,7 @@ component LiveChip inherits Rectangle {
     accessible-checked: active;
 
     background: active ? accent.with-alpha(0.18) : transparent;
-    border-color: active ? accent : #3a3c44;
+    border-color: active ? accent : Theme.border-strong;
     border-width: 1px;
     border-radius: 10px;
     height: 22px;
@@ -74,13 +75,13 @@ component LiveChip inherits Rectangle {
             width: 6px;
             height: 6px;
             border-radius: 3px;
-            background: active ? accent : #4a4c54;
+            background: active ? accent : Theme.border-strong;
             y: (parent.height - self.height) / 2;
         }
         Text {
             text: label;
             font-size: 11px;
-            color: active ? accent : #c8c8cc;
+            color: active ? accent : Theme.text-secondary;
             vertical-alignment: center;
         }
     }
@@ -95,7 +96,7 @@ component LiveChip inherits Rectangle {
 // no ⏺ glyph — a Rectangle dot dodges the missing-glyph font issue.
 component RecordBtn inherits Rectangle {
     in property <string> label;
-    in property <color> accent: #34d399;
+    in property <color> accent: Theme.success;
     in property <bool> recording: false;
     callback pressed();
     callback released();
@@ -103,8 +104,8 @@ component RecordBtn inherits Rectangle {
     accessible-role: button;
     accessible-label: label;
 
-    background: recording ? #ef444433 : transparent;
-    border-color: recording ? #ef4444 : #3a3c44;
+    background: recording ? Theme.danger.with-alpha(0.2) : transparent;
+    border-color: recording ? Theme.danger : Theme.border-strong;
     border-width: 1px;
     border-radius: 10px;
     height: 22px;
@@ -121,14 +122,14 @@ component RecordBtn inherits Rectangle {
             height: 8px;
             border-radius: 4px;
             y: (parent.height - self.height) / 2;
-            background: root.recording ? #ef4444 : transparent;
+            background: root.recording ? Theme.danger : transparent;
             border-width: root.recording ? 0px : 1px;
             border-color: root.accent;
         }
         Text {
             text: root.label;
             font-size: 11px;
-            color: root.recording ? #ef4444 : #c8c8cc;
+            color: root.recording ? Theme.danger : Theme.text-secondary;
             vertical-alignment: center;
         }
     }
@@ -149,7 +150,7 @@ component RecordBtn inherits Rectangle {
 component VDivider inherits Rectangle {
     width: 1px;
     height: 16px;
-    background: #3a3c44;
+    background: Theme.border-strong;
 }
 
 // ===== Main overlay bar =====
@@ -178,7 +179,7 @@ export component OverlayBarWindow inherits Window {
 
     // Status pill text (idle / recording / etc).
     in-out property <string> status-text: "idle";
-    in-out property <color> status-color: #999;
+    in-out property <color> status-color: Theme.text-muted;
 
     // Live capture flags.
     in-out property <bool> mic-active: false;
@@ -265,10 +266,10 @@ export component OverlayBarWindow inherits Window {
     callback drag-moved();
 
     Rectangle {
-        background: #14161eea;
+        background: Theme.bg-surface.with-alpha(0.92);
         border-radius: 12px;
         border-width: 1px;
-        border-color: #2a2c3a;
+        border-color: Theme.border;
 
         // Phase E6 v21 — bar drag is now SCOPED to the status pill
         // only (see drag-handle TouchArea inside the pill below).
@@ -316,7 +317,7 @@ export component OverlayBarWindow inherits Window {
                     padding-left: 8px;
                     padding-right: 8px;
                     spacing: 0px;
-                    // Phase E6 v26 — ":: " grip in accent #6cf (matches
+                    // Phase E6 v26 — ":: " grip in accent Theme.accent (matches
                     // Settings header) so the drag affordance reads the
                     // same in both windows. Status text keeps its
                     // state colour.
@@ -324,7 +325,7 @@ export component OverlayBarWindow inherits Window {
                         text: "::";
                         font-size: 11px;
                         font-weight: 600;
-                        color: #6cf;
+                        color: Theme.accent;
                         vertical-alignment: center;
                     }
                     Text {
@@ -349,13 +350,13 @@ export component OverlayBarWindow inherits Window {
             LiveChip {
                 label: "🎤";
                 active: root.mic-active;
-                accent: #34d399;
+                accent: Theme.success;
                 clicked => { root.mic-toggle-clicked(); }
             }
             LiveChip {
                 label: "🔊";
                 active: root.sys-active;
-                accent: #6cf;
+                accent: Theme.accent;
                 clicked => { root.sys-toggle-clicked(); }
             }
 
@@ -365,14 +366,14 @@ export component OverlayBarWindow inherits Window {
             //    the source: green = mic (your voice), cyan = sys (them).
             RecordBtn {
                 label: "🎤 " + @tr("ask");
-                accent: #34d399;
+                accent: Theme.success;
                 recording: root.mic-recording;
                 pressed => { root.ptt-mic-pressed(); }
                 released => { root.ptt-mic-released(); }
             }
             RecordBtn {
                 label: "🔊 " + @tr("grab");
-                accent: #6cf;
+                accent: Theme.accent;
                 recording: root.sys-recording;
                 pressed => { root.ptt-sys-pressed(); }
                 released => { root.ptt-sys-released(); }
@@ -431,7 +432,7 @@ export component OverlayBarWindow inherits Window {
             Chip {
                 label: "⚙";
                 active: root.settings-open;
-                accent: #94a3b8;
+                accent: Theme.text-muted;
                 clicked => { root.open-settings-clicked(); }
             }
             // Quit — two-step. Idle: a single ASCII "X" (Unicode ✕ renders
@@ -439,7 +440,7 @@ export component OverlayBarWindow inherits Window {
             // inline "Quit? [Yes] [No]" so a stray click can't kill the app.
             if !root.quit-armed : Chip {
                 label: "X";
-                accent: #ef4444;
+                accent: Theme.danger;
                 clicked => { root.quit-clicked(); }
             }
             if root.quit-armed : HorizontalLayout {
@@ -448,18 +449,18 @@ export component OverlayBarWindow inherits Window {
                     text: @tr("Quit?");
                     font-size: 11px;
                     font-weight: 600;
-                    color: #e8e8ec;
+                    color: Theme.text-primary;
                     vertical-alignment: center;
                 }
                 Chip {
                     label: @tr("Yes");
                     active: true;
-                    accent: #ef4444;
+                    accent: Theme.danger;
                     clicked => { root.quit-confirm(); }
                 }
                 Chip {
                     label: @tr("No");
-                    accent: #6cf;
+                    accent: Theme.accent;
                     clicked => { root.quit-cancel(); }
                 }
             }
@@ -480,7 +481,7 @@ export component OverlayBarWindow inherits Window {
                 text: root.active-stack;
                 font-size: 10px;
                 font-weight: 600;
-                color: #6cf;
+                color: Theme.accent;
                 vertical-alignment: center;
                 horizontal-stretch: 0;
             }
@@ -491,8 +492,8 @@ export component OverlayBarWindow inherits Window {
                 y: (parent.height - self.height) / 2;
                 border-radius: 4px;
                 background: root.last-transcript-source == "mic"
-                    ? #34d399
-                    : (root.last-transcript-source == "sys" ? #6cf : #3a3c44);
+                    ? Theme.success
+                    : (root.last-transcript-source == "sys" ? Theme.accent : Theme.border-strong);
             }
             // The live transcript text — elide when too long.
             Text {
@@ -500,7 +501,7 @@ export component OverlayBarWindow inherits Window {
                     ? "🎙 ожидаю транскрипт... (mic/sys → STT)"
                     : root.last-transcript-line;
                 font-size: 11px;
-                color: root.last-transcript-line == "" ? #6a6c74 : #c8c8cc;
+                color: root.last-transcript-line == "" ? Theme.text-muted : Theme.text-secondary;
                 overflow: elide;
                 vertical-alignment: center;
                 horizontal-stretch: 1;

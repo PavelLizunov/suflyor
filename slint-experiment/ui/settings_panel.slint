@@ -17,14 +17,15 @@
 //  12  STT              (AI)      provider selector + GigaAM GPU + Whisper
 
 import { Button, LineEdit, ScrollView, SpinBox, ComboBox, Slider, TextEdit } from "std-widgets.slint";
+import { Theme } from "theme.slint";
 
 // Phase E6 v40 — toggle SWITCH (borrowed from the Claude Design bundle:
 // "SwitchRow вместо чекбоксов"). Was a custom square checkbox (v24, to
-// dodge the std CheckBox's near-invisible unchecked label on #14161e).
+// dodge the std CheckBox's near-invisible unchecked label on Theme.bg-surface).
 // Now renders a pill track + sliding knob — bigger hit-target, clearer
 // on/off read. NAME kept as `DarkCheck` so all call sites + the
 // `checked`/`toggled` API stay untouched (pure visual swap). Green
-// (#2ac760) = ON, neutral grey = OFF; font-independent (no glyphs).
+// (Theme.accent) = ON, neutral grey = OFF; font-independent (no glyphs).
 component DarkCheck inherits Rectangle {
     in property <string> text;
     in-out property <bool> checked: false;
@@ -41,8 +42,8 @@ component DarkCheck inherits Rectangle {
             y: (parent.height - self.height) / 2;
             border-radius: 9px;
             border-width: 1px;
-            border-color: root.checked ? #2ac760 : #4a4c54;
-            background: root.checked ? #2ac76033 : #ffffff0f;
+            border-color: root.checked ? Theme.accent : Theme.border;
+            background: root.checked ? Theme.accent.with-alpha(0.2) : #ffffff0f;
             animate background, border-color { duration: 140ms; }
             Rectangle {
                 width: 12px;
@@ -50,14 +51,14 @@ component DarkCheck inherits Rectangle {
                 border-radius: 6px;
                 y: (parent.height - self.height) / 2;
                 x: root.checked ? parent.width - self.width - 3px : 3px;
-                background: root.checked ? #2ac760 : #9a9ca4;
+                background: root.checked ? Theme.accent : Theme.text-muted;
                 animate x, background { duration: 140ms; }
             }
         }
         Text {
             text: root.text;
             font-size: 12px;
-            color: #e8e8ec;
+            color: Theme.text-primary;
             vertical-alignment: center;
         }
     }
@@ -72,7 +73,7 @@ component DarkCheck inherits Rectangle {
 // Phase E6 v39 — grouped sidebar, cherry-picked from the Claude Design
 // bundle (claude.ai/design handoff). Borrows the STRUCTURE — section
 // headers + an active left-accent bar — while keeping the app's cyan
-// accent (#6cf, same as the bar grip) for visual continuity. Each
+// accent (Theme.accent, same as the bar grip) for visual continuity. Each
 // NavItem maps to its EXISTING pane index, so the content panes and the
 // Rust `tab-selected` wiring stay untouched (low-risk increment).
 component NavGroupHeader inherits Rectangle {
@@ -85,7 +86,7 @@ component NavGroupHeader inherits Rectangle {
             text: root.label;
             font-size: 10px;
             font-weight: 700;
-            color: #6b6b76;
+            color: Theme.text-muted;
             vertical-alignment: bottom;
         }
     }
@@ -99,8 +100,8 @@ component NavItem inherits Rectangle {
     height: 26px;
     border-radius: 4px;
     background: root.active
-        ? #6cf.with-alpha(0.13)
-        : (ta.has-hover ? #1f2230 : transparent);
+        ? Theme.accent.with-alpha(0.13)
+        : (ta.has-hover ? Theme.bg-elevated : transparent);
     animate background { duration: 120ms; }
     // active left-accent bar
     if root.active: Rectangle {
@@ -109,14 +110,14 @@ component NavItem inherits Rectangle {
         width: 3px;
         height: parent.height - 12px;
         border-radius: 2px;
-        background: #6cf;
+        background: Theme.accent;
     }
     HorizontalLayout {
         padding-left: 11px;
         Text {
             text: root.label;
             font-size: 12px;
-            color: root.active ? #6cf : #c8c8cc;
+            color: root.active ? Theme.accent : Theme.text-secondary;
             vertical-alignment: center;
             animate color { duration: 120ms; }
         }
@@ -306,10 +307,10 @@ export component SettingsWindow inherits Window {
     // sidebar + content get masked to the 12px radius. Border + bg
     // moved here from the Window (which is now transparent).
     Rectangle {
-        background: #14161e;
+        background: Theme.bg-surface;
         border-radius: 12px;
         border-width: 1px;
-        border-color: #2a2c3a;
+        border-color: Theme.border;
         clip: true;
 
         HorizontalLayout {
@@ -319,8 +320,8 @@ export component SettingsWindow inherits Window {
         // ----- Sidebar tab list -----
         Rectangle {
             width: 200px;
-            background: #0d0f15;
-            border-color: #2a2c3a;
+            background: Theme.bg-base;
+            border-color: Theme.border;
             border-width: 0px;
 
             VerticalLayout {
@@ -342,7 +343,7 @@ export component SettingsWindow inherits Window {
                         }
                         moved => { if (self.pressed) { root.drag-moved(); } }
                     }
-                    // Phase E6 v26 — ":: " grip in accent #6cf (same as
+                    // Phase E6 v26 — ":: " grip in accent Theme.accent (same as
                     // overlay bar) for visual continuity; label neutral.
                     // App icon sits first as branding (also in taskbar/Start).
                     HorizontalLayout {
@@ -359,19 +360,19 @@ export component SettingsWindow inherits Window {
                             text: "::";
                             font-size: 14px;
                             font-weight: 700;
-                            color: #6cf;
+                            color: Theme.accent;
                             vertical-alignment: center;
                         }
                         Text {
                             text: @tr("Settings");
                             font-size: 14px;
                             font-weight: 700;
-                            color: #e8e8ec;
+                            color: Theme.text-primary;
                             vertical-alignment: center;
                         }
                     }
                 }
-                Rectangle { background: #2a2c3a; height: 1px; }
+                Rectangle { background: Theme.border; height: 1px; }
 
                 // Phase E6 v39 — grouped nav (borrowed from design bundle).
                 // Each item keeps its ORIGINAL pane index (0-12) so the
@@ -453,7 +454,7 @@ export component SettingsWindow inherits Window {
         // ----- Content area -----
         Rectangle {
             horizontal-stretch: 1;
-            background: #14161e;
+            background: Theme.bg-surface;
             ScrollView {
                 VerticalLayout {
                     padding: 16px;
@@ -464,9 +465,9 @@ export component SettingsWindow inherits Window {
                         text: tab-name-for(root.active-tab);
                         font-size: 18px;
                         font-weight: 700;
-                        color: #e8e8ec;
+                        color: Theme.text-primary;
                     }
-                    Rectangle { background: #2a2c3a; height: 1px; }
+                    Rectangle { background: Theme.border; height: 1px; }
 
                     // Tab content
                     if root.active-tab == 0 : VerticalLayout {
@@ -474,7 +475,7 @@ export component SettingsWindow inherits Window {
                         Text {
                             text: @tr("Stealth mode hides the overlay window from screen capture (Print Screen, Teams/Meet, OBS). Uses WDA_EXCLUDEFROMCAPTURE on Windows 10/11.");
                             font-size: 11px;
-                            color: #999;
+                            color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         DarkCheck {
@@ -492,15 +493,15 @@ export component SettingsWindow inherits Window {
                         Text {
                             text: @tr("Tile opacity ({}%)", Math.round(root.tile-body-opacity * 100));
                             font-size: 11px;
-                            color: #c8c8cc;
+                            color: Theme.text-secondary;
                         }
                         Text {
                             text: @tr("Lower values let you see the meeting through tiles. 100% = opaque, 50% = half-transparent.");
                             font-size: 10px;
-                            // Phase E6 v23 — was #777 (too dark, "чёрный на
-                            // чёрном"); bumped to #999 to match other
+                            // Phase E6 v23 — was Theme.text-muted (too dark, "чёрный на
+                            // чёрном"); bumped to Theme.text-muted to match other
                             // description text in the panel.
-                            color: #999;
+                            color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         Slider {
@@ -515,7 +516,7 @@ export component SettingsWindow inherits Window {
                         Text {
                             text: @tr("Post-meeting debrief: AI critique of pacing, filler density, key points. Opt-in.");
                             font-size: 11px;
-                            color: #999;
+                            color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         DarkCheck {
@@ -533,10 +534,10 @@ export component SettingsWindow inherits Window {
                         Text {
                             text: @tr("Global hotkeys (work anywhere, even when the app isn't focused):");
                             font-size: 11px;
-                            color: #999;
+                            color: Theme.text-muted;
                             wrap: word-wrap;
                         }
-                        Rectangle { background: #2a2c3a; height: 1px; }
+                        Rectangle { background: Theme.border; height: 1px; }
                         for entry in [
                             ["F9",  @tr("Ask AI now (streams the answer into a tile)")],
                             ["F3",  @tr("Re-ask the last question with fresh context")],
@@ -550,13 +551,13 @@ export component SettingsWindow inherits Window {
                                 text: entry[0];
                                 font-size: 11px;
                                 font-weight: 700;
-                                color: #6cf;
+                                color: Theme.accent;
                                 width: 40px;
                             }
                             Text {
                                 text: entry[1];
                                 font-size: 11px;
-                                color: #c8c8cc;
+                                color: Theme.text-secondary;
                             }
                         }
                     }
@@ -565,7 +566,7 @@ export component SettingsWindow inherits Window {
                         Text {
                             text: @tr("Interface language — switches all UI text on the fly.");
                             font-size: 11px;
-                            color: #999;
+                            color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         HorizontalLayout {
@@ -573,7 +574,7 @@ export component SettingsWindow inherits Window {
                             Text {
                                 text: @tr("Language:");
                                 font-size: 11px;
-                                color: #c8c8cc;
+                                color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
                             ComboBox {
@@ -597,7 +598,7 @@ export component SettingsWindow inherits Window {
                         Text {
                             text: @tr("Check GitHub for a newer release. If one is found you can download + install it in one click (the app restarts).");
                             font-size: 11px;
-                            color: #999;
+                            color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         HorizontalLayout {
@@ -624,28 +625,28 @@ export component SettingsWindow inherits Window {
                         if root.update-status != "" : Text {
                             text: root.update-status;
                             font-size: 11px;
-                            color: root.update-available ? #34d399 : #999;
+                            color: root.update-available ? Theme.success : Theme.text-muted;
                             wrap: word-wrap;
                         }
                         Text {
                             text: @tr("Version: {} (suflyor / Slint)", root.app-version);
                             font-size: 10px;
-                            color: #666;
+                            color: Theme.text-muted;
                         }
 
-                        Rectangle { background: #2a2c3a; height: 1px; }
+                        Rectangle { background: Theme.border; height: 1px; }
 
                         // Phase E6 v28 — full-profile import/export.
                         Text {
                             text: @tr("Backup / transfer settings");
                             font-size: 12px;
                             font-weight: 700;
-                            color: #e8e8ec;
+                            color: Theme.text-primary;
                         }
                         Text {
                             text: @tr("Exports the WHOLE config to a .json file you choose — INCLUDING the Claude bearer + Groq API key. Keep the file private. Import overwrites current settings (restart to apply).");
                             font-size: 10px;
-                            color: #e5b44b;
+                            color: Theme.warning;
                             wrap: word-wrap;
                         }
                         HorizontalLayout {
@@ -662,7 +663,7 @@ export component SettingsWindow inherits Window {
                         if root.profile-io-result != "" : Text {
                             text: root.profile-io-result;
                             font-size: 11px;
-                            color: #6cf;
+                            color: Theme.accent;
                             wrap: word-wrap;
                         }
                     }
@@ -671,7 +672,7 @@ export component SettingsWindow inherits Window {
                         Text {
                             text: @tr("Microphone device selection. List is live from WASAPI capture endpoints.");
                             font-size: 11px;
-                            color: #999;
+                            color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         // Phase E6 v23 — real device list from
@@ -688,7 +689,7 @@ export component SettingsWindow inherits Window {
                         if root.mic-test-result != "" : Text {
                             text: root.mic-test-result;
                             font-size: 11px;
-                            color: #6cf;
+                            color: Theme.accent;
                             wrap: word-wrap;
                         }
                     }
@@ -697,7 +698,7 @@ export component SettingsWindow inherits Window {
                         Text {
                             text: @tr("Auto-tile triggers — when transcript contains these keywords, spawn an answer tile automatically.");
                             font-size: 11px;
-                            color: #999;
+                            color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         DarkCheck {
@@ -710,7 +711,7 @@ export component SettingsWindow inherits Window {
                         Text {
                             text: @tr("Trigger keywords (space-separated). A sentence ending in '?' also triggers.");
                             font-size: 11px;
-                            color: #999;
+                            color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         TextEdit {
@@ -730,7 +731,7 @@ export component SettingsWindow inherits Window {
                         Text {
                             text: @tr("Embedded knowledge base — 1,696 entries (glossary / commands / patterns), compiled into the binary.");
                             font-size: 11px;
-                            color: #999;
+                            color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         // Phase E6 v29 — the in-Settings search box was a
@@ -740,7 +741,7 @@ export component SettingsWindow inherits Window {
                         Text {
                             text: @tr("Press F4 anywhere to search the knowledge base and spawn a tile from any entry.");
                             font-size: 11px;
-                            color: #6cf;
+                            color: Theme.accent;
                             wrap: word-wrap;
                         }
                     }
@@ -749,7 +750,7 @@ export component SettingsWindow inherits Window {
                         Text {
                             text: @tr("Persistent context sent with every AI request — your role, focus areas, vocabulary. Saved to config; applied to new AI calls immediately.");
                             font-size: 11px;
-                            color: #999;
+                            color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         // Phase F — multi-profile picker. Row 1: select; row 2:
@@ -774,7 +775,7 @@ export component SettingsWindow inherits Window {
                             if root.profile-names.length == 0 : Text {
                                 text: @tr("none yet — name one and Add");
                                 font-size: 11px;
-                                color: #999;
+                                color: Theme.text-muted;
                                 vertical-alignment: center;
                             }
                             LineEdit {
@@ -842,7 +843,7 @@ export component SettingsWindow inherits Window {
                             if root.meeting-context-result != "" : Text {
                                 text: root.meeting-context-result;
                                 font-size: 11px;
-                                color: #6cf;
+                                color: Theme.accent;
                                 vertical-alignment: center;
                             }
                         }
@@ -852,7 +853,7 @@ export component SettingsWindow inherits Window {
                         Text {
                             text: @tr("Where do live answers come from? Pick a type, then configure it.");
                             font-size: 11px;
-                            color: #999;
+                            color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         // ===== TYPE selector — gates everything below =====
@@ -864,7 +865,7 @@ export component SettingsWindow inherits Window {
                                 root.ai-provider-changed(self.current-index);
                             }
                         }
-                        Rectangle { background: #2a2c3a; height: 1px; }
+                        Rectangle { background: Theme.border; height: 1px; }
 
                         // ============================ CLOUD ============================
                         if root.ai-provider-index == 0 : VerticalLayout {
@@ -873,12 +874,12 @@ export component SettingsWindow inherits Window {
                                 text: @tr("Cloud bridge");
                                 font-size: 12px;
                                 font-weight: 700;
-                                color: #e8e8ec;
+                                color: Theme.text-primary;
                             }
                             Text {
                                 text: @tr("Bearer token:") + " " + root.ai-bearer-status;
                                 font-size: 11px;
-                                color: #c8c8cc;
+                                color: Theme.text-secondary;
                             }
                             HorizontalLayout {
                                 spacing: 6px;
@@ -899,7 +900,7 @@ export component SettingsWindow inherits Window {
                             Text {
                                 text: @tr("Base URL (Claude bridge endpoint):");
                                 font-size: 11px;
-                                color: #c8c8cc;
+                                color: Theme.text-secondary;
                             }
                             HorizontalLayout {
                                 spacing: 6px;
@@ -918,7 +919,7 @@ export component SettingsWindow inherits Window {
                             Text {
                                 text: @tr("AI model (Claude full ID):");
                                 font-size: 11px;
-                                color: #c8c8cc;
+                                color: Theme.text-secondary;
                             }
                             HorizontalLayout {
                                 spacing: 6px;
@@ -940,7 +941,7 @@ export component SettingsWindow inherits Window {
                             if root.ai-models.length == 0 : Text {
                                 text: @tr("No models found — check the bridge URL/token, then press refresh.");
                                 font-size: 10px;
-                                color: #999;
+                                color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
                             HorizontalLayout {
@@ -952,7 +953,7 @@ export component SettingsWindow inherits Window {
                                 if root.ai-bridge-test-result != "" : Text {
                                     text: root.ai-bridge-test-result;
                                     font-size: 11px;
-                                    color: #6cf;
+                                    color: Theme.accent;
                                     vertical-alignment: center;
                                 }
                             }
@@ -964,7 +965,7 @@ export component SettingsWindow inherits Window {
                             Text {
                                 text: @tr("Marks the system prompt as cacheable for faster repeat asks. If your bridge rejects it (AI stops answering), turn this back off.");
                                 font-size: 10px;
-                                color: #888;
+                                color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
                         }
@@ -976,7 +977,7 @@ export component SettingsWindow inherits Window {
                                 text: @tr("Local model");
                                 font-size: 12px;
                                 font-weight: 700;
-                                color: #e8e8ec;
+                                color: Theme.text-primary;
                             }
                             HorizontalLayout {
                                 spacing: 6px;
@@ -1012,7 +1013,7 @@ export component SettingsWindow inherits Window {
                             if root.ai-local-models.length == 0 : Text {
                                 text: @tr("No models found — start the local server, then press refresh.");
                                 font-size: 10px;
-                                color: #999;
+                                color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
                             HorizontalLayout {
@@ -1056,16 +1057,16 @@ export component SettingsWindow inherits Window {
                                 if root.ai-local-test-result != "" : Text {
                                     text: root.ai-local-test-result;
                                     font-size: 11px;
-                                    color: #6cf;
+                                    color: Theme.accent;
                                     vertical-alignment: center;
                                 }
                             }
                             // ----- one-click in-app local-AI installer -----
-                            Rectangle { background: #2a2c3a; height: 1px; }
+                            Rectangle { background: Theme.border; height: 1px; }
                             Text {
                                 text: @tr("Installs the local stack on this PC (~6 GB total): llama.cpp + Gemma-4-E4B (~5 GB; needs ~6 GB VRAM on GPU), whisper.cpp + Whisper-turbo (~0.9 GB), GigaAM-v3 (~0.2 GB). With NVIDIA it picks the CUDA build, otherwise CPU. Models you already have are reused, not re-downloaded.");
                                 font-size: 11px;
-                                color: #999;
+                                color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
                             HorizontalLayout {
@@ -1086,36 +1087,36 @@ export component SettingsWindow inherits Window {
                                 if root.local-ai-gpu != "" : Text {
                                     text: root.local-ai-gpu;
                                     font-size: 11px;
-                                    color: root.local-ai-on-gpu ? #6f6 : #fc6;
+                                    color: root.local-ai-on-gpu ? Theme.success : Theme.warning;
                                     vertical-alignment: center;
                                 }
                             }
                             if root.local-ai-status != "" : Text {
                                 text: root.local-ai-status;
                                 font-size: 11px;
-                                color: #6cf;
+                                color: Theme.accent;
                                 wrap: word-wrap;
                             }
                             if root.local-ai-installing : Rectangle {
                                 height: 6px;
                                 border-radius: 3px;
-                                background: #2a2c3a;
+                                background: Theme.border;
                                 Rectangle {
                                     x: 0;
                                     y: 0;
                                     height: parent.height;
                                     width: parent.width * root.local-ai-progress;
                                     border-radius: 3px;
-                                    background: #6cf;
+                                    background: Theme.accent;
                                 }
                             }
                         }
 
-                        Rectangle { background: #2a2c3a; height: 1px; }
+                        Rectangle { background: Theme.border; height: 1px; }
                         Text {
                             text: @tr("Tip: Save writes to %APPDATA%\\overlay-mvp\\config.json. Restart binary to re-load.");
                             font-size: 10px;
-                            color: #888;
+                            color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                     }
@@ -1126,7 +1127,7 @@ export component SettingsWindow inherits Window {
                         Text {
                             text: @tr("Speech-to-text engine. Local options run on this PC (no cloud, no Groq key needed).");
                             font-size: 11px;
-                            color: #999;
+                            color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         ComboBox {
@@ -1206,12 +1207,12 @@ export component SettingsWindow inherits Window {
                             }
                         }
 
-                        Rectangle { background: #2a2c3a; height: 1px; }
+                        Rectangle { background: Theme.border; height: 1px; }
 
                         Text {
                             text: @tr("Groq STT (Whisper) — API key + model. Used only when the engine above is Cloud.");
                             font-size: 11px;
-                            color: #999;
+                            color: Theme.text-muted;
                             wrap: word-wrap;
                         }
 
@@ -1219,7 +1220,7 @@ export component SettingsWindow inherits Window {
                         Text {
                             text: @tr("Groq API key:") + " " + root.groq-api-key-status;
                             font-size: 11px;
-                            color: #c8c8cc;
+                            color: Theme.text-secondary;
                         }
                         HorizontalLayout {
                             spacing: 6px;
@@ -1238,7 +1239,7 @@ export component SettingsWindow inherits Window {
                             }
                         }
 
-                        Rectangle { background: #2a2c3a; height: 1px; }
+                        Rectangle { background: Theme.border; height: 1px; }
 
                         // ----- Connection test (Phase E6 v27) -----
                         HorizontalLayout {
@@ -1250,7 +1251,7 @@ export component SettingsWindow inherits Window {
                             if root.stt-test-result != "" : Text {
                                 text: root.stt-test-result;
                                 font-size: 11px;
-                                color: #6cf;
+                                color: Theme.accent;
                                 vertical-alignment: center;
                             }
                         }
@@ -1258,7 +1259,7 @@ export component SettingsWindow inherits Window {
                         Text {
                             text: @tr("Tip: Save writes to %APPDATA%\\overlay-mvp\\config.json. Restart binary to re-load.");
                             font-size: 10px;
-                            color: #666;
+                            color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                     }

@@ -1,0 +1,54 @@
+// Design tokens — from Claude Design bundle "suflyor — тёмные схемы & типографика".
+//
+// Centralises every colour into ONE place so the recurring "тёмный-на-тёмном"
+// (dark-text-on-dark-bg) bug can't come back: contrast is guaranteed here once,
+// instead of being scattered as ~80 raw hex literals across the .slint files.
+//
+// 16 roles × 4 schemes. Every text role passes WCAG AA (≥ 4.5:1) on the surface
+// it's checked against (verified in the source design doc). Switch the live
+// scheme via `Theme.scheme` (0..3); persisted in config as `color_scheme`.
+//
+//   0  Glacier      холодный графит · синий акцент   (рекомендуется / default)
+//   1  Graphite     тёплый уголь · бирюзовый акцент
+//   2  Obsidian     сине-чёрный · фиолетовый акцент
+//   3  Light Frost  светлая, для дневного режима     (опционально)
+export global Theme {
+    in-out property <int> scheme: 0;
+    out property <bool> is-light: scheme == 3;
+
+    // ---- Surfaces ----
+    // bg-base: deepest window backdrop · bg-surface: bar/tiles/panels ·
+    // bg-elevated: dropdowns, active row, hover.
+    out property <color> bg-base: scheme == 1 ? #131210 : scheme == 2 ? #0B0D14 : scheme == 3 ? #EEF1F5 : #0D1117;
+    out property <color> bg-surface: scheme == 1 ? #1C1A17 : scheme == 2 ? #12141F : scheme == 3 ? #F7F9FB : #151B23;
+    out property <color> bg-elevated: scheme == 1 ? #272320 : scheme == 2 ? #1B1E2D : scheme == 3 ? #FFFFFF : #1E2530;
+
+    // ---- Text ----
+    out property <color> text-primary: scheme == 1 ? #F1ECE3 : scheme == 2 ? #EAEAF5 : scheme == 3 ? #16202B : #E8EEF4;
+    out property <color> text-secondary: scheme == 1 ? #C0B8AC : scheme == 2 ? #B4B6CC : scheme == 3 ? #3E4A57 : #B3BECA;
+    out property <color> text-muted: scheme == 1 ? #948C7F : scheme == 2 ? #888BA6 : scheme == 3 ? #566270 : #8893A0;
+
+    // ---- Accent ----
+    out property <color> accent: scheme == 1 ? #2DD4BF : scheme == 2 ? #A98BFA : scheme == 3 ? #1A63CC : #4C8DFF;
+    out property <color> accent-hover: scheme == 1 ? #4FE3CF : scheme == 2 ? #C0A8FF : scheme == 3 ? #134FA6 : #6FA3FF;
+
+    // ---- Statuses (recognisable across all schemes) ----
+    out property <color> success: scheme == 1 ? #4ABE6E : scheme == 2 ? #3FB97A : scheme == 3 ? #1E7E3C : #3FB950;
+    out property <color> warning: scheme == 1 ? #E6B53C : scheme == 2 ? #E3B341 : scheme == 3 ? #8A5A00 : #E3B341;
+    out property <color> danger: scheme == 1 ? #F26157 : scheme == 2 ? #F0596B : scheme == 3 ? #C7362F : #F85149;
+
+    // ---- Borders ----
+    out property <color> border: scheme == 1 ? #2E2A25 : scheme == 2 ? #24273A : scheme == 3 ? #D4DAE1 : #283039;
+    out property <color> border-strong: scheme == 1 ? #423D36 : scheme == 2 ? #353953 : scheme == 3 ? #B7C0CA : #3A4552;
+
+    // ---- Code blocks + popup scrim (8-digit hex = #RRGGBBAA) ----
+    out property <color> code-bg: scheme == 1 ? #0E0D0A : scheme == 2 ? #07080E : scheme == 3 ? #EDEFF2 : #090C10;
+    out property <color> code-text: scheme == 1 ? #D6CFC4 : scheme == 2 ? #CACBE0 : scheme == 3 ? #1E2730 : #CAD4DE;
+    out property <color> scrim: scheme == 1 ? #0A09079E : scheme == 2 ? #06070EA3 : scheme == 3 ? #141C284C : #070A0E9E;
+
+    // ---- Typography ----
+    // Recommended pair (UI + code from one superfamily). The fonts must be
+    // installed or bundled for these to take effect; otherwise skia falls back.
+    out property <string> font-sans: "IBM Plex Sans";
+    out property <string> font-mono: "IBM Plex Mono";
+}

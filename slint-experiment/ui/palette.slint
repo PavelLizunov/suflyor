@@ -10,6 +10,7 @@
 // results loaded from a static list.
 
 import { LineEdit, ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
 
 export struct PaletteResult {
     key: string,
@@ -25,7 +26,7 @@ export component PaletteWindow inherits Window {
     // HWND causes text to render invisible (alpha-clamped). Use solid
     // opaque background so the dark theme actually shows up. Frame
     // stays off for the floating-palette feel.
-    background: #14161e;
+    background: Theme.bg-surface;
     no-frame: true;
     always-on-top: true;
     preferred-width: 620px;
@@ -50,10 +51,10 @@ export component PaletteWindow inherits Window {
     forward-focus: search-input;
 
     Rectangle {
-        background: #14161eee;
+        background: Theme.bg-surface.with-alpha(0.93);
         border-radius: 12px;
         border-width: 1px;
-        border-color: #2a2c3a;
+        border-color: Theme.border;
 
         FocusScope {
             width: 100%;
@@ -86,12 +87,12 @@ export component PaletteWindow inherits Window {
                 Text {
                     text: @tr("recent:");
                     font-size: 10px;
-                    color: #666;
+                    color: Theme.text-muted;
                     vertical-alignment: center;
                 }
                 for chip in root.recent-chips: Rectangle {
                     background: transparent;
-                    border-color: #3a3c44;
+                    border-color: Theme.border-strong;
                     border-width: 1px;
                     border-radius: 10px;
                     height: 20px;
@@ -102,7 +103,7 @@ export component PaletteWindow inherits Window {
                         Text {
                             text: chip;
                             font-size: 10px;
-                            color: #c8c8cc;
+                            color: Theme.text-secondary;
                             vertical-alignment: center;
                         }
                     }
@@ -112,13 +113,13 @@ export component PaletteWindow inherits Window {
                 Text {
                     text: @tr("Esc to close · Enter to spawn tile");
                     font-size: 9px;
-                    color: #555;
+                    color: Theme.text-muted;
                     vertical-alignment: center;
                 }
             }
 
             Rectangle {
-                background: #2a2c3a;
+                background: Theme.border;
                 height: 1px;
             }
 
@@ -132,13 +133,13 @@ export component PaletteWindow inherits Window {
                             ? @tr("Start typing to search the embedded knowledge base (1,696 entries)…")
                             : @tr("No results for \"{}\".", root.query);
                         font-size: 11px;
-                        color: #666;
+                        color: Theme.text-muted;
                         horizontal-alignment: center;
                     }
                     for result[i] in root.results: Rectangle {
-                        background: i == root.selected-index ? #1f2230 : transparent;
+                        background: i == root.selected-index ? Theme.bg-elevated : transparent;
                         border-radius: 4px;
-                        border-color: i == root.selected-index ? #6cf : transparent;
+                        border-color: i == root.selected-index ? Theme.accent : transparent;
                         border-width: 1px;
                         height: 44px;
 
@@ -156,20 +157,20 @@ export component PaletteWindow inherits Window {
                                         text: result.key;
                                         font-size: 12px;
                                         font-weight: 700;
-                                        color: i == root.selected-index ? #6cf : #c8c8cc;
+                                        color: i == root.selected-index ? Theme.accent : Theme.text-secondary;
                                         vertical-alignment: center;
                                     }
                                     Text {
                                         text: result.source;
                                         font-size: 9px;
-                                        color: #666;
+                                        color: Theme.text-muted;
                                         vertical-alignment: center;
                                     }
                                 }
                                 Text {
                                     text: result.preview;
                                     font-size: 10px;
-                                    color: #999;
+                                    color: Theme.text-muted;
                                     overflow: elide;
                                 }
                             }
