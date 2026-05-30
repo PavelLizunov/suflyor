@@ -161,17 +161,25 @@ impl Journal {
 
         let (tx, mut rx) = mpsc::unbounded_channel::<String>();
 
-        // Dedicated writer task. spawn_blocking — std::fs::write is sync.
-        tokio::spawn(async move {
-            while let Some(line) = rx.recv().await {
-                if let Err(e) = writeln!(file, "{line}") {
-                    log::warn!("journal write failed: {e}");
-                    break;
+        // Dedicated writer on a STD thread (NOT tokio::spawn) — `writeln!` is a
+        // blocking syscall, and running it on a tokio worker stalls the same
+        // runtime that drives audio capture / STT / AI streaming on a slow or
+        // full disk (esp. under aggressive mode's 30-50 events/min). The tokio
+        // UnboundedSender stays (Sync, multi-producer); the thread drains it via
+        // blocking_recv() so journal disk I/O never touches the async runtime.
+        std::thread::Builder::new()
+            .name("journal-writer".into())
+            .spawn(move || {
+                while let Some(line) = rx.blocking_recv() {
+                    if let Err(e) = writeln!(file, "{line}") {
+                        log::warn!("journal write failed: {e}");
+                        break;
+                    }
                 }
-            }
-            let _ = file.flush();
-            log::debug!("journal writer task exit");
-        });
+                let _ = file.flush();
+                log::debug!("journal writer thread exit");
+            })
+            .context("spawn journal writer thread")?;
 
         let counters = Arc::new(Mutex::new(SessionCounters {
             start_unix_ms: now_unix_ms(),

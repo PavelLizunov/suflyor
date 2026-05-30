@@ -1847,16 +1847,11 @@ pub fn load() -> Config {
             Config::defaults()
         }
     };
-    // Auto-populate newly-added fields when an OLD config file is loaded
-    // that pre-dates them. Without this, serde defaults to empty Vec and
-    // the user sees "no snippets" with no obvious way to get the canned
-    // SRE templates back.
-    if cfg.snippets.is_empty() {
-        cfg.snippets = Config::defaults().snippets;
-        // Persist so the user sees them in Settings AND can edit them on disk.
-        let _ = save(&cfg);
-        log::info!("auto-populated default snippets into config (was empty)");
-    }
+    // NB: we deliberately do NOT re-seed default snippets when the list is
+    // empty. A fresh install already gets them via Config::defaults() on the
+    // Err arm above; re-seeding on every empty list clobbered a user who had
+    // intentionally deleted all their snippets (and rewrote config.json on
+    // every launch). To restore the canned set, use Settings → reset. (#134)
     // Migrate a pre-profiles config: if the user already has a meeting_context
     // but no named profiles, seed it as their first profile so the new
     // multi-profile picker has something to show + select. Non-destructive: the

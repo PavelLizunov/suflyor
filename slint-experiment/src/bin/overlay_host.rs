@@ -5474,15 +5474,15 @@ fn populate_token_status(win: &SettingsWindow, cfg: &overlay_backend::config::Sh
         "[--] not set".to_string()
     } else {
         let len = c.ai_bearer.chars().count();
-        let prefix: String = c.ai_bearer.chars().take(3).collect();
-        format!("[ok] set ({len} chars, starts: {prefix}***)")
+        // #134: do NOT echo the key's leading chars into the UI — Settings is
+        // captured on screen-share unless stealth is on. Show presence only.
+        format!("[ok] set ({len} chars)")
     };
     let groq_status = if c.groq_api_key.is_empty() {
         "[--] not set".to_string()
     } else {
         let len = c.groq_api_key.chars().count();
-        let prefix: String = c.groq_api_key.chars().take(3).collect();
-        format!("[ok] set ({len} chars, starts: {prefix}***)")
+        format!("[ok] set ({len} chars)")
     };
     win.set_ai_bearer_status(SharedString::from(ai_status));
     win.set_groq_api_key_status(SharedString::from(groq_status));
