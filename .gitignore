@@ -33,6 +33,9 @@ sessions/
 Thumbs.db
 desktop.ini
 
+# Personal interview-prep notes — NEVER commit (personal data)
+nini-context-backup.txt
+
 # Python recovery scripts I cooked in temp (don't commit these)
 recover-config.py
 update-groq.ps1
