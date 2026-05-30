@@ -2330,6 +2330,29 @@ fn apply_overlay_hwnd(overlay: &OverlayBarWindow) {
                     let _ = set_stealth(hwnd, true);
                     let _ = set_skip_taskbar(hwnd, true);
                 }
+                // #127 — pin the bar to the PRIMARY monitor. The bar has no
+                // position logic of its own; Slint/winit's default placement
+                // can drop it onto the user's PORTRAIT secondary (at negative
+                // X) or straddle two displays. Centre it near the top of
+                // primary. One-shot at launch — the user can still drag it
+                // afterward (the logo is a drag handle).
+                if let Some(primary) = enum_monitors().into_iter().find(|m| m.is_primary) {
+                    match get_window_rect(hwnd) {
+                        Ok((_, _, bar_w, _)) => {
+                            let x = primary.left + ((primary.width() - bar_w) / 2).max(0);
+                            let y = primary.top + 24;
+                            match move_window_pos_only(hwnd, x, y) {
+                                Ok(()) => {
+                                    eprintln!("[overlay-host] bar pinned to primary at ({x}, {y})")
+                                }
+                                Err(e) => eprintln!("[overlay-host] bar pin failed: {e}"),
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("[overlay-host] bar pin: get_window_rect failed: {e}")
+                        }
+                    }
+                }
             }
             Err(e) => eprintln!("[overlay-host] overlay HWND grab failed: {e}"),
         }
