@@ -429,6 +429,29 @@ pub struct AiEndpoint {
     pub is_local: bool,
 }
 
+/// One subsystem's config-only readiness for the diagnostics panel (#131).
+/// `detail` carries only NEUTRAL values (provider tag, URL, model, device) —
+/// never a bearer / API-key value.
+#[derive(Debug, Clone)]
+pub struct ReadinessItem {
+    /// True if the active config for this subsystem is complete enough to use.
+    pub configured: bool,
+    /// Short neutral detail (e.g. "local · http://… · gemma-4"); may be empty.
+    pub detail: String,
+}
+
+/// Config-only (no network / no audio) readiness snapshot for the diagnostics
+/// panel. Built by [`Config::readiness`]; the live AI/STT pings are layered on
+/// top by the UI via the existing test handlers.
+#[derive(Debug, Clone)]
+pub struct ReadinessReport {
+    pub ai: ReadinessItem,
+    pub stt: ReadinessItem,
+    pub mic: ReadinessItem,
+    pub sys: ReadinessItem,
+    pub stealth_on: bool,
+}
+
 impl Config {
     /// Resolve which AI endpoint to use. `prep=true` selects the structuring
     /// model, else the live-answer model. Provider `"local"` uses the
@@ -461,6 +484,87 @@ impl Config {
                 model,
                 is_local: false,
             }
+        }
+    }
+
+    /// Config-only readiness snapshot for the diagnostics panel (#131). Pure
+    /// (no network, no audio) so it's instant + testable; the UI layers live
+    /// AI/STT pings on top. `detail` strings carry NO secrets.
+    #[must_use]
+    pub fn readiness(&self) -> ReadinessReport {
+        // AI — resolve the ACTIVE provider (local vs cloud) via the resolver.
+        let ep = self.ai_endpoint(false);
+        let ai_configured = !ep.base_url.trim().is_empty()
+            && !ep.model.trim().is_empty()
+            && (ep.is_local || !ep.bearer.trim().is_empty());
+        let ai_detail = if ai_configured {
+            format!(
+                "{} · {} · {}",
+                if ep.is_local { "local" } else { "cloud" },
+                ep.base_url,
+                ep.model
+            )
+        } else {
+            String::new()
+        };
+
+        // STT — the active backend, keyed by `stt_provider`.
+        let (stt_configured, stt_detail) = match self.stt_provider.as_str() {
+            "gigaam" => {
+                let ok = !self.stt_gigaam_dir.trim().is_empty();
+                let d = if ok {
+                    format!("gigaam · {}", self.stt_gigaam_dir)
+                } else {
+                    String::new()
+                };
+                (ok, d)
+            }
+            "whisper" => {
+                let ok = !self.stt_whisper_url.trim().is_empty();
+                let d = if ok {
+                    format!("whisper · {}", self.stt_whisper_url)
+                } else {
+                    String::new()
+                };
+                (ok, d)
+            }
+            _ => {
+                let ok = !self.groq_api_key.trim().is_empty();
+                let d = if ok {
+                    "groq cloud".to_string()
+                } else {
+                    String::new()
+                };
+                (ok, d)
+            }
+        };
+
+        // Mic / system audio — a None / empty device means "system default",
+        // a valid config (configured = true); the live signal check lives on
+        // the Audio tab. Empty detail → the UI renders the localized "default".
+        let device_detail = |d: &Option<String>| match d.as_deref() {
+            Some(name) if !name.trim().is_empty() => name.to_string(),
+            _ => String::new(),
+        };
+
+        ReadinessReport {
+            ai: ReadinessItem {
+                configured: ai_configured,
+                detail: ai_detail,
+            },
+            stt: ReadinessItem {
+                configured: stt_configured,
+                detail: stt_detail,
+            },
+            mic: ReadinessItem {
+                configured: true,
+                detail: device_detail(&self.mic_device),
+            },
+            sys: ReadinessItem {
+                configured: true,
+                detail: device_detail(&self.system_audio_device),
+            },
+            stealth_on: self.stealth_enabled,
         }
     }
 }
@@ -1973,6 +2077,63 @@ mod tests {
         assert_eq!(merged.hotkey_ask, "F11");
         assert_eq!(merged.snippets.len(), 1);
         assert_eq!(merged.snippets[0].key, "loc");
+    }
+
+    /// #131 — config-only readiness reflects the ACTIVE providers and never
+    /// puts a secret value (bearer / API key) into a detail string.
+    #[test]
+    fn readiness_reflects_active_providers() {
+        // Cloud AI + Groq STT, fully configured.
+        let mut c = Config::defaults();
+        c.ai_provider = "cloud".into();
+        c.ai_base_url = "http://bridge/v1".into();
+        c.ai_bearer = "SECRET-bearer".into();
+        c.ai_model = "claude-haiku".into();
+        c.stt_provider = "cloud".into();
+        c.groq_api_key = "gsk_SECRET".into();
+        let r = c.readiness();
+        assert!(r.ai.configured);
+        assert!(r.ai.detail.contains("cloud") && r.ai.detail.contains("http://bridge/v1"));
+        assert!(
+            !r.ai.detail.contains("SECRET"),
+            "no bearer/key in AI detail"
+        );
+        assert!(r.stt.configured);
+        assert!(!r.stt.detail.contains("SECRET"), "no key in STT detail");
+        assert!(r.mic.configured && r.sys.configured);
+
+        // Cloud AI with empty bearer → not configured (cloud needs a bearer).
+        let mut c_nb = c.clone();
+        c_nb.ai_bearer = String::new();
+        assert!(!c_nb.readiness().ai.configured);
+
+        // Local AI: needs URL + model, NO bearer.
+        let mut c2 = Config::defaults();
+        c2.ai_provider = "local".into();
+        c2.ai_local_base_url = "http://127.0.0.1:8080/v1".into();
+        c2.ai_local_bearer = String::new();
+        c2.ai_local_model = String::new();
+        assert!(
+            !c2.readiness().ai.configured,
+            "local AI with empty model must be unconfigured"
+        );
+        c2.ai_local_model = "gemma".into();
+        let r2 = c2.readiness();
+        assert!(r2.ai.configured, "local AI needs no bearer");
+        assert!(r2.ai.detail.contains("local"));
+
+        // GigaAM STT: needs a model dir.
+        let mut c3 = Config::defaults();
+        c3.stt_provider = "gigaam".into();
+        c3.stt_gigaam_dir = String::new();
+        assert!(!c3.readiness().stt.configured);
+        c3.stt_gigaam_dir = r"C:\m\gigaam".into();
+        assert!(c3.readiness().stt.detail.contains("gigaam"));
+
+        // Stealth bool passes through.
+        let mut c4 = Config::defaults();
+        c4.stealth_enabled = true;
+        assert!(c4.readiness().stealth_on);
     }
 
     /// Write a config to a tmp file, read it back via raw serde_json,

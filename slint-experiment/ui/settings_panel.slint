@@ -260,6 +260,18 @@ export component SettingsWindow inherits Window {
     callback import-profile-clicked();
     // #125 — server-ONLY import (AI/STT servers; keeps local prefs).
     callback import-server-settings-clicked();
+    // #131 — diagnostics / readiness panel. Config-readiness levels are pushed
+    // from Rust (Config::readiness); "Проверить всё" layers live AI/STT pings.
+    // level: -1 checking · 0 ok · 2 not-configured · 3 info · 4 live-error.
+    in-out property <string> diag-summary: "";
+    in-out property <int> diag-ai-level: 0;
+    in-out property <string> diag-ai-detail: "";
+    in-out property <int> diag-stt-level: 0;
+    in-out property <string> diag-stt-detail: "";
+    in-out property <string> diag-mic-detail: "";
+    in-out property <string> diag-sys-detail: "";
+    in-out property <bool> diag-stealth-on: false;
+    callback diagnostics-check-all-clicked();
     // Phase E6 v29 — meeting-context editor (Profile+context tab).
     in-out property <string> meeting-context-input: "";
     in-out property <string> meeting-context-result: "";
@@ -458,6 +470,11 @@ export component SettingsWindow inherits Window {
                     active: root.active-tab == 4;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
+                NavItem {
+                    label: @tr("🩺 Diagnostics"); tab-index: 13;
+                    active: root.active-tab == 13;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
+                }
 
                 Rectangle { vertical-stretch: 1; }
                 Button {
@@ -596,6 +613,73 @@ export component SettingsWindow inherits Window {
                                 font-size: 11px;
                                 color: Theme.text-secondary;
                             }
+                        }
+                    }
+                    if root.active-tab == 13 : VerticalLayout {
+                        spacing: 8px;
+                        Text {
+                            text: @tr("Session readiness");
+                            font-size: 13px;
+                            font-weight: 700;
+                            color: Theme.text-primary;
+                        }
+                        Text {
+                            text: root.diag-summary;
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
+                        Rectangle { background: Theme.border; height: 1px; }
+                        for row in [
+                            { label: @tr("AI (answers)"), level: root.diag-ai-level, detail: root.diag-ai-detail },
+                            { label: @tr("Speech recognition (STT)"), level: root.diag-stt-level, detail: root.diag-stt-detail },
+                            { label: @tr("Microphone"), level: 0, detail: root.diag-mic-detail == "" ? @tr("default") : root.diag-mic-detail },
+                            { label: @tr("System audio"), level: 0, detail: root.diag-sys-detail == "" ? @tr("default") : root.diag-sys-detail },
+                            { label: @tr("Stealth"), level: 3, detail: root.diag-stealth-on ? @tr("on — verify with a screen-share preview") : @tr("off") },
+                        ] : HorizontalLayout {
+                            padding: 4px;
+                            spacing: 10px;
+                            Text {
+                                text: row.label;
+                                font-size: 11px;
+                                font-weight: 600;
+                                color: Theme.text-primary;
+                                width: 150px;
+                            }
+                            Text {
+                                text: row.level == 0 ? @tr("Ready")
+                                    : row.level == -1 ? @tr("checking…")
+                                    : row.level == 2 ? @tr("Not configured")
+                                    : row.level == 4 ? @tr("Error")
+                                    : "—";
+                                font-size: 11px;
+                                font-weight: 700;
+                                width: 100px;
+                                color: row.level == 0 ? Theme.success
+                                    : (row.level == 2 || row.level == 4) ? Theme.danger
+                                    : Theme.text-muted;
+                            }
+                            Text {
+                                text: row.detail;
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                                horizontal-stretch: 1;
+                            }
+                        }
+                        Rectangle { height: 4px; }
+                        HorizontalLayout {
+                            alignment: start;
+                            Button {
+                                text: @tr("Check all (AI + STT)");
+                                clicked => { root.diagnostics-check-all-clicked(); }
+                            }
+                        }
+                        Text {
+                            text: @tr("“Check all” live-pings the AI and STT server. Microphone and system audio are checked by recording on the Audio tab.");
+                            font-size: 10px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
                         }
                     }
                     if root.active-tab == 3 : VerticalLayout {
@@ -1373,6 +1457,7 @@ export component SettingsWindow inherits Window {
                idx == 10 ? @tr("Profile + context") :
                idx == 11 ? @tr("AI bridge") :
                idx == 12 ? @tr("STT") :
+               idx == 13 ? @tr("Diagnostics") :
                "—";
     }
 }

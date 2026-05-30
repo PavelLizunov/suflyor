@@ -3938,6 +3938,7 @@ fn open_settings(
     if let Some(existing) = settings_slot.as_ref() {
         // Refresh token status + profiles — config might have changed since last open.
         populate_token_status(existing, cfg);
+        populate_diagnostics(existing, cfg);
         {
             let snap = cfg.read();
             refresh_profiles(existing, &snap);
@@ -3960,6 +3961,7 @@ fn open_settings(
         }
     }
     populate_token_status(&win, cfg);
+    populate_diagnostics(&win, cfg);
     // Phase E8 — show the running version in the Updates tab.
     win.set_app_version(SharedString::from(env!("CARGO_PKG_VERSION")));
     // Phase E6 v29 / F — load the profile list + active context into the editor,
@@ -4667,6 +4669,63 @@ fn open_settings(
         });
     }
 
+    // #131 — diagnostics "Проверить всё": live-ping the ACTIVE AI endpoint
+    // (resolved via ai_endpoint — NOT the raw cloud fields) + the active STT
+    // backend, in ONE off-thread runtime, and write both rows back. Mic / sys
+    // / stealth rows stay config-readiness (their live checks live on Audio).
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_diagnostics_check_all_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            w.set_diag_ai_level(-1);
+            w.set_diag_ai_detail(SharedString::from(""));
+            w.set_diag_stt_level(-1);
+            w.set_diag_stt_detail(SharedString::from(""));
+            let (ai_base, ai_bearer, ai_model, stt_backend) = {
+                let c = cfg_c.read();
+                let ep = c.ai_endpoint(false);
+                (ep.base_url, ep.bearer, ep.model, c.stt_backend())
+            };
+            let weak_res = w.as_weak();
+            std::thread::spawn(move || {
+                let (ai_level, ai_msg, stt_level, stt_msg): (i32, String, i32, String) =
+                    match tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                    {
+                        Ok(rt) => {
+                            let (al, am): (i32, String) = match rt.block_on(
+                                overlay_backend::ai::test_connection(ai_base, ai_bearer, ai_model),
+                            ) {
+                                Ok(s) => (0, format!("[ok] {s}")),
+                                Err(e) => (4, format!("[err] {e:#}").chars().take(80).collect()),
+                            };
+                            let (sl, sm): (i32, String) = match rt.block_on(
+                                overlay_backend::stt::test_connection_backend(&stt_backend),
+                            ) {
+                                Ok(s) => (0, format!("[ok] {s}")),
+                                Err(e) => (4, format!("[err] {e:#}").chars().take(80).collect()),
+                            };
+                            (al, am, sl, sm)
+                        }
+                        Err(e) => {
+                            let m = format!("[err] runtime: {e}");
+                            (4, m.clone(), 4, m)
+                        }
+                    };
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = weak_res.upgrade() {
+                        w.set_diag_ai_level(ai_level);
+                        w.set_diag_ai_detail(SharedString::from(ai_msg));
+                        w.set_diag_stt_level(stt_level);
+                        w.set_diag_stt_detail(SharedString::from(stt_msg));
+                    }
+                });
+            });
+        });
+    }
+
     // Phase E10 — STT provider selector + local-engine fields.
     {
         let cfg_c = cfg.clone();
@@ -5330,6 +5389,22 @@ fn refresh_profiles(win: &SettingsWindow, c: &overlay_backend::config::Config) {
     win.set_profile_names(ModelRc::new(VecModel::from(names)));
     win.set_active_profile_index(c.active_profile_index().map_or(-1, |i| i as i32));
     win.set_meeting_context_input(SharedString::from(c.meeting_context.as_str()));
+}
+
+/// #131 — push the config-only readiness snapshot + the active-stack summary
+/// into the diagnostics tab. Live AI/STT pings are layered on by the
+/// `on_diagnostics_check_all_clicked` handler.
+fn populate_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::config::SharedConfig) {
+    let c = cfg.read();
+    let r = c.readiness();
+    win.set_diag_summary(SharedString::from(active_stack_label(&c)));
+    win.set_diag_ai_level(if r.ai.configured { 0 } else { 2 });
+    win.set_diag_ai_detail(SharedString::from(r.ai.detail));
+    win.set_diag_stt_level(if r.stt.configured { 0 } else { 2 });
+    win.set_diag_stt_detail(SharedString::from(r.stt.detail));
+    win.set_diag_mic_detail(SharedString::from(r.mic.detail));
+    win.set_diag_sys_detail(SharedString::from(r.sys.detail));
+    win.set_diag_stealth_on(r.stealth_on);
 }
 
 /// Populate the Settings window's token-status display properties
