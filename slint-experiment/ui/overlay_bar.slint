@@ -295,16 +295,31 @@ export component OverlayBarWindow inherits Window {
             spacing: 6px;
             alignment: start;
 
-            // Brand logo — vector SVG, prominent, on the far left.
-            // colorize tints it per scheme (accent-blue on light; the
-            // bright accent reads as the inverted/light mark on dark).
-            Image {
-                source: @image-url("../assets/icon.svg");
-                colorize: Theme.accent;
+            // Brand logo — vector SVG, prominent, on the far left. It also
+            // DOUBLES AS A DRAG HANDLE (user: "иконка должна быть областью
+            // за которую можно таскать приложение"): the TouchArea mirrors
+            // the status pill's drag. colorize tints it per scheme.
+            Rectangle {
                 width: 40px;
                 height: 40px;
-                image-fit: contain;
-                vertical-alignment: center;
+                horizontal-stretch: 0;
+                TouchArea {
+                    mouse-cursor: grab;
+                    pointer-event(ev) => {
+                        if (ev.button == PointerEventButton.left
+                            && ev.kind == PointerEventKind.down) {
+                            root.drag-start-requested();
+                        }
+                    }
+                    moved => { if (self.pressed) { root.drag-moved(); } }
+                }
+                Image {
+                    source: @image-url("../assets/icon.svg");
+                    colorize: Theme.accent;
+                    width: 40px;
+                    height: 40px;
+                    image-fit: contain;
+                }
             }
 
             // Status pill (left edge) — DOUBLES AS DRAG HANDLE.
