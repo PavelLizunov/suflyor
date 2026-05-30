@@ -439,6 +439,131 @@ pub fn record_sys_blocking(duration_ms: u64, sys_device: Option<String>) -> Resu
     record_source_until_stop(AudioSource::System, None, sys_device, stop)
 }
 
+/// RMS energy of 16-bit PCM samples in dBFS (0 = full-scale, −∞ = silence).
+/// Shared by the mic chip + the diagnostics mic/system-audio level checks. A
+/// silent room is < −55 dBFS; real speech is > −40 dBFS (threshold −45 dBFS).
+#[must_use]
+pub fn rms_dbfs(samples: &[i16]) -> f64 {
+    if samples.is_empty() {
+        return f64::NEG_INFINITY;
+    }
+    let sum_sq: f64 = samples
+        .iter()
+        .map(|s| {
+            let v = f64::from(*s) / 32768.0;
+            v * v
+        })
+        .sum();
+    let rms = (sum_sq / samples.len() as f64).sqrt();
+    if rms <= 0.0 {
+        f64::NEG_INFINITY
+    } else {
+        20.0 * rms.log10()
+    }
+}
+
+/// A short, gentle, royalty-free ambient clip (faded + level-reduced) used as
+/// the diagnostics system-audio self-test cue. Raw interleaved **stereo** i16
+/// LE at 44.1 kHz, embedded into the binary. Stereo (not the old mono sine) so
+/// it plays in BOTH ears, and ambient (not a piercing tone) so it's pleasant.
+static DIAG_CHIME_S16: &[u8] = include_bytes!("../assets/diag-chime.s16");
+const DIAG_CHIME_RATE: u32 = 44_100;
+
+/// Read `frames` interleaved-stereo frames from the embedded clip (wrapping at
+/// the end), convert i16→f32, and return them as little-endian bytes ready for
+/// the WASAPI render buffer. `cursor` indexes individual i16 samples.
+fn clip_frames_to_bytes(clip: &[i16], cursor: &mut usize, frames: usize) -> Vec<u8> {
+    let mut out = Vec::with_capacity(frames * 8); // 2 ch × 4 bytes (f32)
+    for _ in 0..(frames * 2) {
+        let s = if clip.is_empty() {
+            0.0
+        } else {
+            f32::from(clip[*cursor % clip.len()]) / 32768.0
+        };
+        *cursor += 1;
+        out.extend_from_slice(&s.to_le_bytes());
+    }
+    out
+}
+
+/// Play the embedded ambient cue (stereo) through the default RENDER device
+/// until `stop` is set. 32-bit float, WASAPI shared event mode; autoconvert
+/// adapts the clip's 44.1 kHz stereo to the device format. Mirrors the capture
+/// loop in `record_source_until_stop`. Used by [`play_tone_and_capture`].
+fn play_test_clip(stop: Arc<AtomicBool>) -> Result<()> {
+    let _ = wasapi::initialize_mta();
+    let device = get_default_device(&Direction::Render).context("default render device")?;
+    let mut client = device.get_iaudioclient()?;
+    let (_def, min_period) = client.get_device_period()?;
+    // Present our format as 44.1 kHz STEREO f32; autoconvert resamples/upmixes
+    // to whatever the output device actually runs.
+    let desired = WaveFormat::new(
+        32,
+        32,
+        &SampleType::Float,
+        DIAG_CHIME_RATE as usize,
+        2,
+        None,
+    );
+    let mode = StreamMode::EventsShared {
+        autoconvert: true,
+        buffer_duration_hns: min_period,
+    };
+    client.initialize_client(&desired, &Direction::Render, &mode)?;
+    let event = client.set_get_eventhandle()?;
+    let render_client = client.get_audiorenderclient()?;
+    let buffer_frames = client.get_buffer_size()?;
+    let clip: Vec<i16> = DIAG_CHIME_S16
+        .chunks_exact(2)
+        .map(|b| i16::from_le_bytes([b[0], b[1]]))
+        .collect();
+    let mut cursor = 0_usize;
+    // Pre-fill the entire buffer before starting, then top it up on each event.
+    let pre = clip_frames_to_bytes(&clip, &mut cursor, buffer_frames as usize);
+    render_client.write_to_device(buffer_frames as usize, &pre, None)?;
+    client.start_stream()?;
+    while !stop.load(Ordering::Acquire) {
+        if event.wait_for_event(200).is_err() {
+            continue;
+        }
+        // `break` (not `?`) on a transient padding error so `stop_stream()`
+        // below always runs — graceful shutdown over abrupt early-return.
+        let padding = match client.get_current_padding() {
+            Ok(p) => p,
+            Err(_) => break,
+        };
+        let avail = buffer_frames.saturating_sub(padding);
+        if avail == 0 {
+            continue;
+        }
+        let chunk = clip_frames_to_bytes(&clip, &mut cursor, avail as usize);
+        let _ = render_client.write_to_device(avail as usize, &chunk, None);
+    }
+    let _ = client.stop_stream();
+    Ok(())
+}
+
+/// Diagnostics system-audio self-test: play a short test tone through the
+/// default output WHILE recording the system loopback, and return the captured
+/// PCM. If the loopback "hears" the tone the app just played, the whole
+/// output→loopback path works — the user doesn't have to play any audio. The
+/// caller measures the captured level (see `rms_dbfs`) to decide pass/fail.
+pub fn play_tone_and_capture(sys_device: Option<String>) -> Result<Vec<i16>> {
+    let stop = Arc::new(AtomicBool::new(false));
+    let stop_play = stop.clone();
+    let play = std::thread::spawn(move || {
+        if let Err(e) = play_test_clip(stop_play) {
+            log::warn!("diagnostics test cue failed: {e:#}");
+        }
+    });
+    // Let the render stream come up before sampling the loopback.
+    std::thread::sleep(std::time::Duration::from_millis(250));
+    let captured = record_sys_blocking(1200, sys_device);
+    stop.store(true, Ordering::Release);
+    let _ = play.join();
+    captured
+}
+
 pub fn record_mic_blocking(duration_ms: u64, mic_device: Option<String>) -> Result<Vec<i16>> {
     use std::time::Instant;
 
@@ -519,6 +644,37 @@ fn resample_and_quantise(input: &[f32], ratio: f64) -> Vec<i16> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rms_dbfs_silence_and_full_scale() {
+        // Empty / all-zero → -inf (silence).
+        assert_eq!(rms_dbfs(&[]), f64::NEG_INFINITY);
+        assert_eq!(rms_dbfs(&[0, 0, 0, 0]), f64::NEG_INFINITY);
+        // Full-scale square wave → ~0 dBFS.
+        let full = [i16::MAX, i16::MIN, i16::MAX, i16::MIN];
+        let d = rms_dbfs(&full);
+        assert!(d > -0.5 && d <= 0.0, "full-scale ~0 dBFS, got {d}");
+        // A tiny signal sits well below the -45 dBFS speech threshold.
+        assert!(
+            rms_dbfs(&[10, -10, 10, -10]) < -45.0,
+            "tiny signal must read as quiet"
+        );
+    }
+
+    #[test]
+    fn clip_frames_to_bytes_length_and_wrap() {
+        let clip = [100i16, -100, 200, -200]; // 2 stereo frames
+        let mut cursor = 0_usize;
+        // 3 frames → 3 × 2ch × 4 bytes = 24; reads wrap past the clip end.
+        let b = clip_frames_to_bytes(&clip, &mut cursor, 3);
+        assert_eq!(b.len(), 24);
+        assert_eq!(cursor, 6, "3 frames × 2 channels = 6 samples consumed");
+        // Empty clip → silence, no panic / no div-by-zero.
+        let mut c2 = 0_usize;
+        let z = clip_frames_to_bytes(&[], &mut c2, 2);
+        assert_eq!(z.len(), 16);
+        assert!(z.iter().all(|&x| x == 0));
+    }
 
     #[test]
     fn decimator_48k_to_16k_is_3_to_1() {

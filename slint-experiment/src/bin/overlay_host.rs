@@ -4021,25 +4021,11 @@ fn open_settings(
                 let msg = match result {
                     Ok(samples) if samples.is_empty() => "no audio captured".to_string(),
                     Ok(samples) => {
-                        // Phase E6 v28 — use RMS (average energy) not just
-                        // peak, + a dBFS threshold. User: "я могу ничего
-                        // не говорить, но всё равно будет OK" — the old
-                        // peak==0 check passed on any tiny noise. Real
-                        // speech RMS is > -40 dBFS; a silent room is
-                        // < -55 dBFS. Threshold at -45 dBFS.
-                        let sum_sq: f64 = samples
-                            .iter()
-                            .map(|s| {
-                                let v = f64::from(*s) / 32768.0;
-                                v * v
-                            })
-                            .sum();
-                        let rms = (sum_sq / samples.len() as f64).sqrt();
-                        let dbfs = if rms <= 0.0 {
-                            f64::NEG_INFINITY
-                        } else {
-                            20.0 * rms.log10()
-                        };
+                        // RMS energy + a -45 dBFS speech threshold (silent room
+                        // is < -55 dBFS). Shared helper with the diagnostics tab
+                        // — User: "я могу ничего не говорить, но всё равно OK"
+                        // was the old peak==0 check passing on any tiny noise.
+                        let dbfs = overlay_backend::audio::rms_dbfs(&samples);
                         if dbfs < -45.0 {
                             format!("[!] too quiet ({dbfs:.0} dBFS) — say something / check mic")
                         } else {
@@ -4682,13 +4668,23 @@ fn open_settings(
             w.set_diag_ai_detail(SharedString::from(""));
             w.set_diag_stt_level(-1);
             w.set_diag_stt_detail(SharedString::from(""));
-            let (ai_base, ai_bearer, ai_model, stt_backend) = {
+            w.set_diag_mic_level(-1);
+            w.set_diag_sys_level(-1);
+            let (ai_base, ai_bearer, ai_model, stt_backend, mic_device, sys_device) = {
                 let c = cfg_c.read();
                 let ep = c.ai_endpoint(false);
-                (ep.base_url, ep.bearer, ep.model, c.stt_backend())
+                (
+                    ep.base_url,
+                    ep.bearer,
+                    ep.model,
+                    c.stt_backend(),
+                    c.mic_device.clone(),
+                    c.system_audio_device.clone(),
+                )
             };
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
+                // 1. AI + STT live pings (async, on a throwaway runtime).
                 let (ai_level, ai_msg, stt_level, stt_msg): (i32, String, i32, String) =
                     match tokio::runtime::Builder::new_current_thread()
                         .enable_all()
@@ -4714,12 +4710,65 @@ fn open_settings(
                             (4, m.clone(), 4, m)
                         }
                     };
+                let weak_a = weak_res.clone();
                 let _ = slint::invoke_from_event_loop(move || {
-                    if let Some(w) = weak_res.upgrade() {
+                    if let Some(w) = weak_a.upgrade() {
                         w.set_diag_ai_level(ai_level);
                         w.set_diag_ai_detail(SharedString::from(ai_msg));
                         w.set_diag_stt_level(stt_level);
                         w.set_diag_stt_detail(SharedString::from(stt_msg));
+                    }
+                });
+                // 2. Microphone — record 3s. "Готов" if the capture path works
+                // (device opens + samples flow); a quiet result is fine (you
+                // just didn't speak) — only a device error fails.
+                let (mic_level, mic_msg): (i32, String) =
+                    match overlay_backend::audio::record_mic_blocking(3000, mic_device) {
+                        Ok(s) if s.is_empty() => (4, "[!] no audio captured".to_string()),
+                        Ok(s) => {
+                            let dbfs = overlay_backend::audio::rms_dbfs(&s);
+                            if dbfs >= -45.0 {
+                                (0, format!("[ok] heard you ({dbfs:.0} dBFS)"))
+                            } else {
+                                (0, format!("[ok] capture works · quiet ({dbfs:.0} dBFS)"))
+                            }
+                        }
+                        Err(e) => (4, format!("[err] {e}").chars().take(80).collect()),
+                    };
+                let weak_m = weak_res.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = weak_m.upgrade() {
+                        w.set_diag_mic_level(mic_level);
+                        w.set_diag_mic_detail(SharedString::from(mic_msg));
+                    }
+                });
+                // 3. System audio — SELF-TEST: play a short test tone through the
+                // default output while capturing the loopback. If the loopback
+                // hears our own tone, the output→loopback path works — the user
+                // doesn't have to play anything.
+                let (sys_level, sys_msg): (i32, String) =
+                    match overlay_backend::audio::play_tone_and_capture(sys_device) {
+                        Ok(s) => {
+                            let dbfs = overlay_backend::audio::rms_dbfs(&s);
+                            if dbfs > -60.0 {
+                                (
+                                    0,
+                                    format!("[ok] loopback heard the test tone ({dbfs:.0} dBFS)"),
+                                )
+                            } else {
+                                (
+                                    4,
+                                    "[!] test tone not captured — output device ≠ loopback source?"
+                                        .to_string(),
+                                )
+                            }
+                        }
+                        Err(e) => (4, format!("[err] {e}").chars().take(80).collect()),
+                    };
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = weak_res.upgrade() {
+                        w.set_diag_sys_level(sys_level);
+                        w.set_diag_sys_detail(SharedString::from(sys_msg));
                     }
                 });
             });
@@ -5402,7 +5451,11 @@ fn populate_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::config::Sha
     win.set_diag_ai_detail(SharedString::from(r.ai.detail));
     win.set_diag_stt_level(if r.stt.configured { 0 } else { 2 });
     win.set_diag_stt_detail(SharedString::from(r.stt.detail));
+    // mic/sys: neutral ("—") until "Check all" records a live sample (#133) —
+    // a configured device is NOT proof it actually hears.
+    win.set_diag_mic_level(3);
     win.set_diag_mic_detail(SharedString::from(r.mic.detail));
+    win.set_diag_sys_level(3);
     win.set_diag_sys_detail(SharedString::from(r.sys.detail));
     win.set_diag_stealth_on(r.stealth_on);
 }

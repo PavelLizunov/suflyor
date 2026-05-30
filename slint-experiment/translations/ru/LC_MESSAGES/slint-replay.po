@@ -279,11 +279,14 @@ msgstr "Не настроен"
 msgid "Error"
 msgstr "Ошибка"
 
-msgid "Check all (AI + STT)"
-msgstr "Проверить всё (AI + STT)"
+msgid "Check all"
+msgstr "Проверить всё"
 
-msgid "“Check all” live-pings the AI and STT server. Microphone and system audio are checked by recording on the Audio tab."
-msgstr "«Проверить всё» делает живой пинг AI и STT-сервера. Микрофон и системный звук проверяются записью на вкладке «Аудио»."
+msgid "“Check all” pings AI + STT, records the mic, and plays a test tone to verify system-audio capture. Speak during the check to see the mic level — you don't need to play anything yourself."
+msgstr "«Проверить всё» пингует AI + STT, пишет микрофон и проигрывает тестовый тон, чтобы проверить захват системного звука. Говорите во время проверки, чтобы увидеть уровень микрофона — самому ничего включать не нужно."
+
+msgid "No signal"
+msgstr "Нет сигнала"
 
 msgid "Toggle hotkey-hint popover"
 msgstr "Показать/скрыть подсказку по хоткеям"

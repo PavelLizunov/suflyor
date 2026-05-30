@@ -268,7 +268,9 @@ export component SettingsWindow inherits Window {
     in-out property <string> diag-ai-detail: "";
     in-out property <int> diag-stt-level: 0;
     in-out property <string> diag-stt-detail: "";
+    in-out property <int> diag-mic-level: 3;
     in-out property <string> diag-mic-detail: "";
+    in-out property <int> diag-sys-level: 3;
     in-out property <string> diag-sys-detail: "";
     in-out property <bool> diag-stealth-on: false;
     callback diagnostics-check-all-clicked();
@@ -633,8 +635,8 @@ export component SettingsWindow inherits Window {
                         for row in [
                             { label: @tr("AI (answers)"), level: root.diag-ai-level, detail: root.diag-ai-detail },
                             { label: @tr("Speech recognition (STT)"), level: root.diag-stt-level, detail: root.diag-stt-detail },
-                            { label: @tr("Microphone"), level: 0, detail: root.diag-mic-detail == "" ? @tr("default") : root.diag-mic-detail },
-                            { label: @tr("System audio"), level: 0, detail: root.diag-sys-detail == "" ? @tr("default") : root.diag-sys-detail },
+                            { label: @tr("Microphone"), level: root.diag-mic-level, detail: root.diag-mic-detail == "" ? @tr("default") : root.diag-mic-detail },
+                            { label: @tr("System audio"), level: root.diag-sys-level, detail: root.diag-sys-detail == "" ? @tr("default") : root.diag-sys-detail },
                             { label: @tr("Stealth"), level: 3, detail: root.diag-stealth-on ? @tr("on — verify with a screen-share preview") : @tr("off") },
                         ] : HorizontalLayout {
                             padding: 4px;
@@ -649,6 +651,7 @@ export component SettingsWindow inherits Window {
                             Text {
                                 text: row.level == 0 ? @tr("Ready")
                                     : row.level == -1 ? @tr("checking…")
+                                    : row.level == 1 ? @tr("No signal")
                                     : row.level == 2 ? @tr("Not configured")
                                     : row.level == 4 ? @tr("Error")
                                     : "—";
@@ -656,6 +659,7 @@ export component SettingsWindow inherits Window {
                                 font-weight: 700;
                                 width: 100px;
                                 color: row.level == 0 ? Theme.success
+                                    : row.level == 1 ? Theme.warning
                                     : (row.level == 2 || row.level == 4) ? Theme.danger
                                     : Theme.text-muted;
                             }
@@ -671,12 +675,12 @@ export component SettingsWindow inherits Window {
                         HorizontalLayout {
                             alignment: start;
                             Button {
-                                text: @tr("Check all (AI + STT)");
+                                text: @tr("Check all");
                                 clicked => { root.diagnostics-check-all-clicked(); }
                             }
                         }
                         Text {
-                            text: @tr("“Check all” live-pings the AI and STT server. Microphone and system audio are checked by recording on the Audio tab.");
+                            text: @tr("“Check all” pings AI + STT, records the mic, and plays a test tone to verify system-audio capture. Speak during the check to see the mic level — you don't need to play anything yourself.");
                             font-size: 10px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
