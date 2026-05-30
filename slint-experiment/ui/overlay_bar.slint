@@ -162,6 +162,7 @@ export component OverlayBarWindow inherits Window {
     init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     title: "overlay-mvp (Slint)";
+    icon: @image-url("../assets/icon.png");
     background: transparent;
     no-frame: true;
     always-on-top: true;
