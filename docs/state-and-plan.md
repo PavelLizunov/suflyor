@@ -3,8 +3,10 @@
 Живой документ для продолжения работы / после компакта контекста.
 
 ## Где мы
-- **Выпущен v0.5.0** (Latest) с NSIS-инсталлятором; авто-апдейтер его предлагает.
-  Репо: github.com/PavelLizunov/suflyor.
+- **Выпущен v0.5.1** (Latest) с NSIS-инсталлятором; авто-апдейтер его предлагает.
+  Репо: github.com/PavelLizunov/suflyor. v0.5.1 = F6-фикс + пин бара на основной
+  монитор + импорт серверных настроек + чистка легаси-доков. (v0.5.0 = новый бренд
+  + «+ тайл» с реальным AI.)
 - Стек: чистый Rust + Slint. Две crate-ы:
   - `slint-experiment/` — бинарь `overlay-host` (UI в `ui/*.slint`, оркестрация
     в `src/bin/overlay_host.rs`).
@@ -32,14 +34,18 @@
 
 ## План (что дальше)
 
-### Из трёх доков (юзер просил, по порядку)
-1. **#125 Импорт серверных настроек** (ФИЧА) — по `docs/server-settings-import-plan.md`:
-   `config::import_server_settings_from(path, current)` копирует ТОЛЬКО AI/STT-поля
-   серверов (провайдеры/URL/модели/ключи), не трогая профили/устройства/UI/хоткеи/
-   сниппеты. + кнопка «Import server settings» + хендлер + юнит-тест.
-2. **#126 Чистка легаси-доков** — по `docs/legacy-tauri-react-mentions.md`: убрать
-   упоминания React/Tauri/WebView2 в CLAUDE.md, docs/architecture.md, ADR-001,
-   security-audit, REVIEW_AGENT_PROMPT.
+### Из трёх доков (ВСЕ закрыты)
+1. ✅ **#125 Импорт серверных настроек** (98bf73e) — `config::merge_server_settings`
+   (чистая, без IO) + `import_server_settings_from` (read+merge+save) копируют ТОЛЬКО
+   AI/STT-поля серверов; локальные профили/устройства/UI/хоткеи/сниппеты сохраняются.
+   Кнопка «Import server settings…» в Настройках + RU-перевод + юнит-тест + ревью-агент
+   (чисто, `[]`).
+2. ✅ **#126 Чистка легаси-доков** (7e28e07) — CLAUDE.md / architecture.md /
+   REVIEW_AGENT_PROMPT переписаны под Slint; ADR-001 + security-audit получили
+   SUPERSEDED/HISTORICAL баннеры (история сохранена).
+3. ✅ Третий док `slint-surface-audit.md` — закрыт частично ранее (F4 Enter, код-блоки,
+   таблицы); остаток (markdown-ссылки, заголовок Replay, ширина бара на 125-150% DPI)
+   — в backlog ниже.
 
 ### Баги (статус)
 3. ✅ **СДЕЛАНО (8f8cfe5)** — бар прыгал между мониторами. Причина: у бара НЕ было
