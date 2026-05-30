@@ -164,6 +164,149 @@ fn gated_events(
     })
 }
 
+/// Per-tile streaming sink for push-to-talk asks. F9 shares the single
+/// `current_streaming` slot and SUPERSEDES the prior stream (latest-wins, which
+/// is correct for a re-ask). PTT is different: each push is a distinct question
+/// whose answer must survive — two rapid PTTs must NOT clobber each other. So a
+/// PTT streams its answer straight into ONE specific tile (no shared slot, no
+/// abort), reusing the bridge's conversation map (for follow-ups) and in-flight
+/// pulse counter. Mirrors `OverlayBarBridge::handle_ai_event` but bound to a
+/// fixed tile instead of "whatever is in the slot".
+struct PttStreamSink {
+    bridge: Arc<OverlayBarBridge>,
+    inner: Arc<dyn RuntimeEvents>,
+    tile: slint::Weak<TileWindow>,
+    convo_id: i32,
+    state: std::sync::Mutex<PttSinkState>,
+    last_render: std::sync::Mutex<std::time::Instant>,
+}
+
+struct PttSinkState {
+    accumulated: String,
+    request_messages: Vec<ai::ChatMessage>,
+}
+
+impl PttStreamSink {
+    fn new(
+        bridge: Arc<OverlayBarBridge>,
+        inner: Arc<dyn RuntimeEvents>,
+        tile: slint::Weak<TileWindow>,
+        convo_id: i32,
+        request_messages: Vec<ai::ChatMessage>,
+    ) -> Self {
+        // Seed last_render in the past so the first delta paints immediately.
+        let seeded = std::time::Instant::now()
+            .checked_sub(std::time::Duration::from_secs(1))
+            .unwrap_or_else(std::time::Instant::now);
+        Self {
+            bridge,
+            inner,
+            tile,
+            convo_id,
+            state: std::sync::Mutex::new(PttSinkState {
+                accumulated: String::new(),
+                request_messages,
+            }),
+            last_render: std::sync::Mutex::new(seeded),
+        }
+    }
+}
+
+impl RuntimeEvents for PttStreamSink {
+    fn emit(&self, channel: &str, payload: serde_json::Value) {
+        if channel != "ai:event" {
+            self.inner.emit(channel, payload);
+            return;
+        }
+        let Ok(evt) = serde_json::from_value::<ai::AiEvent>(payload) else {
+            return;
+        };
+        match evt {
+            ai::AiEvent::Start { .. } => self.bridge.inc_ai_in_flight(),
+            ai::AiEvent::Delta { text } => {
+                let body = {
+                    let mut st = self.state.lock().unwrap_or_else(|p| p.into_inner());
+                    st.accumulated.push_str(&text);
+                    st.accumulated.clone()
+                };
+                {
+                    let now = std::time::Instant::now();
+                    let mut last = self.last_render.lock().unwrap_or_else(|p| p.into_inner());
+                    if now.duration_since(*last) < std::time::Duration::from_millis(50) {
+                        return;
+                    }
+                    *last = now;
+                }
+                let weak = self.tile.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(t) = weak.upgrade() {
+                        t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&body))));
+                    }
+                });
+            }
+            ai::AiEvent::Done { reason } => {
+                self.bridge.dec_ai_in_flight();
+                let (final_body, messages) = {
+                    let st = self.state.lock().unwrap_or_else(|p| p.into_inner());
+                    (st.accumulated.clone(), st.request_messages.clone())
+                };
+                if self.convo_id >= 0 {
+                    let mut messages = messages;
+                    messages.push(ai::ChatMessage {
+                        role: "assistant".into(),
+                        content: ai::MessageContent::Text(final_body.clone()),
+                    });
+                    let mut convos = self
+                        .bridge
+                        .conversations
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner());
+                    convos.insert(
+                        self.convo_id,
+                        ConvoState {
+                            messages,
+                            rendered: final_body.clone(),
+                        },
+                    );
+                }
+                let weak = self.tile.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(t) = weak.upgrade() {
+                        t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&final_body))));
+                        t.set_source_label(SharedString::from(format!("ai · done ({reason})")));
+                        t.set_followup_busy(false);
+                    }
+                });
+            }
+            ai::AiEvent::Error { message } => {
+                self.bridge.dec_ai_in_flight();
+                let weak = self.tile.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(t) = weak.upgrade() {
+                        t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&format!(
+                            "⚠ AI error: {message}"
+                        )))));
+                        t.set_source_label(SharedString::from("⚠ error"));
+                        t.set_followup_busy(false);
+                    }
+                });
+            }
+        }
+    }
+    fn spawn_tile(&self, spec: TileSpec) -> String {
+        self.inner.spawn_tile(spec)
+    }
+    fn spawn_tile_full(
+        &self,
+        spec: TileSpec,
+        monitor: MonitorHint,
+        stealth: bool,
+        kind: TileKind,
+    ) -> Result<String, String> {
+        self.inner.spawn_tile_full(spec, monitor, stealth, kind)
+    }
+}
+
 // ===== Phase E3 — OverlayBarBridge =====
 //
 // Implements SlintUiBridge so the ported overlay-backend fns (called
@@ -714,7 +857,12 @@ fn main() -> Result<(), slint::PlatformError> {
         };
         let stt_desc = match c.stt_provider.as_str() {
             "gigaam" => format!(
-                "GigaAM in-process/CPU dir={}",
+                "GigaAM in-process/{} dir={}",
+                if c.stt_gigaam_gpu {
+                    "GPU(DirectML)"
+                } else {
+                    "CPU"
+                },
                 if c.stt_gigaam_dir.is_empty() {
                     "(unset)"
                 } else {
@@ -747,6 +895,11 @@ fn main() -> Result<(), slint::PlatformError> {
     if let Ok(mut st) = state.lock() {
         st.stealth = cfg.read().stealth_enabled;
     }
+    // Choose the GigaAM ONNX Runtime accelerator (GPU via DirectML, or CPU) ONCE
+    // at startup — the ORT session bakes its execution provider in at model load
+    // time, so this must run before any transcription. Falls back to CPU when no
+    // GPU / DirectML runtime is available.
+    overlay_backend::stt::configure_gigaam_accelerator(cfg.read().stt_gigaam_gpu);
     // E10.5 — auto-start the local AI servers the config points at but that
     // aren't already running (after a restart following an in-app install the
     // app's own servers are gone — it kills them on quit). Off the UI thread;
@@ -2780,19 +2933,11 @@ fn fire_ptt_ask(
     tiles.borrow_mut().push(tile);
     refresh_open_tiles(weak_overlay, tiles);
 
-    // ===== 2. Register tile in the streaming slot (same as F9) =====
-    // request_messages is filled inside the transcribe→ask task once the
-    // STT question is known and `messages` is built.
-    let generation = install_streaming_tile(
-        bridge,
-        StreamingTile {
-            weak: weak_for_stream,
-            accumulated: String::new(),
-            prefix: String::new(),
-            convo_id,
-            request_messages: Vec::new(),
-        },
-    );
+    // ===== 2. Independent per-tile streaming (NOT the shared F9 slot) =====
+    // Each PTT is a distinct question whose answer must survive a second rapid
+    // PTT, so we stream straight into THIS tile via a PttStreamSink (built in
+    // the task once `messages` exist) instead of the single `current_streaming`
+    // slot. No supersede, no abort — rapid PTTs no longer clobber each other.
 
     // ===== 3. Snapshot config + rolling transcript (context) =====
     let (base_url, bearer, model, meeting_context, response_language, is_local) = {
@@ -2829,13 +2974,8 @@ fn fire_ptt_ask(
         (s.journal.clone(), s.health.clone())
     };
 
-    // ===== 4. Cancel in-flight AI + cost closure =====
-    {
-        let mut s = slint_replay::runtime_state::lock(slint_rt);
-        if let Some(h) = s.ai_task.take() {
-            h.abort();
-        }
-    }
+    // ===== 4. Cost closure (NO abort — PTT streams run independently, so a
+    // second PTT must not cancel the first's in-flight answer) =====
     let rt_for_cost = slint_rt.clone();
     let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
         // Local inference is free — don't bill it (and don't trip the cap).
@@ -2845,10 +2985,11 @@ fn fire_ptt_ask(
         (s.session_cost_microcents as f64) / 100_000_000.0
     });
 
-    // ===== 5. Spawn transcribe → ask =====
-    let events_for_task = gated_events(bridge, events.clone(), generation);
+    // ===== 5. Spawn transcribe → ask (detached: never stored in ai_task, so a
+    // later F9/PTT/followup can't abort it) =====
     let bridge_for_task = bridge.clone();
-    let task = rt_handle.spawn(async move {
+    let events_inner = events.clone();
+    rt_handle.spawn(async move {
         let whisper_prompt = stt::build_whisper_prompt(&trigger_keywords, &meeting_context);
         let result = if !stt_is_local && groq_key.is_empty() {
             Err(anyhow::anyhow!("Groq API key not set (Settings → STT)"))
@@ -2890,21 +3031,17 @@ fn fire_ptt_ask(
             None,
             Some(&question),
         );
-        // Phase E6 v45 — record the sent messages so AiEvent::Done folds
-        // this turn into the tile's conversation for follow-ups. Guard on
-        // convo_id in case another ask grabbed the slot during the
-        // (slow) transcription step.
-        {
-            let mut slot = match bridge_for_task.current_streaming.lock() {
-                Ok(g) => g,
-                Err(p) => p.into_inner(),
-            };
-            if let Some(s) = slot.as_mut() {
-                if s.convo_id == convo_id {
-                    s.request_messages = messages.clone();
-                }
-            }
-        }
+        // Per-tile sink: streams this answer into THIS PTT tile and, on Done,
+        // folds the turn into its conversation (for follow-ups). Carries the
+        // sent messages so the fold has full context. Replaces the shared-slot
+        // registration — this is what makes rapid PTTs independent.
+        let sink: Arc<dyn RuntimeEvents> = Arc::new(PttStreamSink::new(
+            bridge_for_task.clone(),
+            events_inner.clone(),
+            weak_for_stream,
+            convo_id,
+            messages.clone(),
+        ));
         let sys_full = messages
             .first()
             .and_then(|m| match &m.content {
@@ -2944,7 +3081,7 @@ fn fire_ptt_ask(
             AI_STREAM_MAX_TOKENS,
         );
         overlay_backend::runtime::ask_stream_loop(
-            events_for_task,
+            sink,
             ai_rx,
             model,
             sys_full,
@@ -2956,7 +3093,6 @@ fn fire_ptt_ask(
         )
         .await;
     });
-    slint_replay::runtime_state::lock(slint_rt).ai_task = Some(task);
 }
 
 /// Phase E6 v45 — continue the dialog inside a tile. Reads the tile's
@@ -3603,10 +3739,14 @@ fn short_model_name(full: &str) -> String {
 /// Build the bar's "active stack" label: which STT engine + which AI model are
 /// live, prefixed with 🟢 (all-local), ☁ (all-cloud), or ◐ (mixed). (#E10.2)
 fn active_stack_label(c: &overlay_backend::config::Config) -> String {
-    let (stt, stt_local) = match c.stt_provider.as_str() {
-        "gigaam" => ("GigaAM", true),
-        "whisper" => ("Whisper", true),
-        _ => ("Groq", false),
+    let (stt, stt_local): (String, bool) = match c.stt_provider.as_str() {
+        // Show the GigaAM accelerator so the bar reflects GPU (DirectML) vs CPU.
+        "gigaam" => (
+            format!("GigaAM {}", if c.stt_gigaam_gpu { "GPU" } else { "CPU" }),
+            true,
+        ),
+        "whisper" => ("Whisper".to_string(), true),
+        _ => ("Groq".to_string(), false),
     };
     let ai_local = c.ai_provider == "local";
     let model_full = if ai_local {
@@ -3714,8 +3854,12 @@ fn open_settings(
     }
     let mut settings_slot = settings_ref.borrow_mut();
     if let Some(existing) = settings_slot.as_ref() {
-        // Refresh token status — config might have changed since last open.
+        // Refresh token status + profiles — config might have changed since last open.
         populate_token_status(existing, cfg);
+        {
+            let snap = cfg.read();
+            refresh_profiles(existing, &snap);
+        }
         let _ = existing.show();
         return;
     }
@@ -3736,8 +3880,15 @@ fn open_settings(
     populate_token_status(&win, cfg);
     // Phase E8 — show the running version in the Updates tab.
     win.set_app_version(SharedString::from(env!("CARGO_PKG_VERSION")));
-    // Phase E6 v29 — load meeting_context into the Profile+context editor.
-    win.set_meeting_context_input(SharedString::from(cfg.read().meeting_context.clone()));
+    // Phase E6 v29 / F — load the profile list + active context into the editor,
+    // and seed the Coaching + Auto-tiles controls (previously dead/cosmetic).
+    {
+        let snap = cfg.read();
+        refresh_profiles(&win, &snap);
+        win.set_coaching_debrief(snap.post_meeting_debrief_enabled);
+        win.set_auto_tiles_enabled(snap.auto_tiles_enabled);
+        win.set_trigger_keywords_input(SharedString::from(snap.trigger_keywords.as_str()));
+    }
 
     // Phase E6 v23 — populate the Audio tab's mic dropdown from real
     // WASAPI capture endpoints + select the saved device. User: "Audio
@@ -4067,6 +4218,19 @@ fn open_settings(
             // Mirror the boot-time + provider-switch logic: no-think is the
             // INVERSE of "thinking" and only applies to the local provider.
             overlay_backend::ai::set_local_no_think(c.ai_provider == "local" && !on);
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_stt_gigaam_gpu_changed(move |on| {
+            let mut c = cfg_c.write();
+            c.stt_gigaam_gpu = on;
+            let _ = overlay_backend::config::save(&c);
+            // Apply immediately: update the global ORT accelerator + drop the
+            // cached model so the next transcription reloads on the new backend.
+            // (The live session pipeline reloads its own copy next session.)
+            overlay_backend::stt::configure_gigaam_accelerator(on);
+            overlay_backend::stt::reset_gigaam_cache();
         });
     }
     {
@@ -4519,7 +4683,9 @@ fn open_settings(
         win.on_meeting_context_save(move |text| {
             {
                 let mut c = cfg_c.write();
-                c.meeting_context = text.to_string();
+                // Phase F — also mirror into the active profile so the picker
+                // and the live context never drift.
+                c.save_active_context(&text);
                 if let Err(e) = overlay_backend::config::save(&c) {
                     eprintln!("[overlay-host] meeting_context save failed: {e:#}");
                     if let Some(w) = weak.upgrade() {
@@ -4535,6 +4701,101 @@ fn open_settings(
                     "[ok] saved ({chars} chars)"
                 )));
             }
+        });
+    }
+    // Phase F — multi-profile picker handlers. Each mutates cfg, persists, and
+    // refreshes the picker + editor from cfg so the UI mirrors config exactly.
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_profile_selected(move |idx| {
+            if idx < 0 {
+                return;
+            }
+            let mut c = cfg_c.write();
+            c.select_profile(idx as usize);
+            let _ = overlay_backend::config::save(&c);
+            if let Some(w) = weak.upgrade() {
+                refresh_profiles(&w, &c);
+            }
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_profile_add(move |name| {
+            let mut c = cfg_c.write();
+            let ok = c.add_profile(name.as_str()).is_some();
+            if ok {
+                let _ = overlay_backend::config::save(&c);
+            }
+            if let Some(w) = weak.upgrade() {
+                refresh_profiles(&w, &c);
+                w.set_meeting_context_result(SharedString::from(if ok {
+                    "[ok] профиль добавлен"
+                } else {
+                    "[--] пустое или занятое имя"
+                }));
+            }
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_profile_rename(move |name| {
+            let mut c = cfg_c.write();
+            let ok = c.rename_active_profile(name.as_str());
+            if ok {
+                let _ = overlay_backend::config::save(&c);
+            }
+            if let Some(w) = weak.upgrade() {
+                refresh_profiles(&w, &c);
+                w.set_meeting_context_result(SharedString::from(if ok {
+                    "[ok] переименовано"
+                } else {
+                    "[--] пустое или занятое имя"
+                }));
+            }
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_profile_delete(move || {
+            let mut c = cfg_c.write();
+            c.delete_active_profile();
+            let _ = overlay_backend::config::save(&c);
+            if let Some(w) = weak.upgrade() {
+                refresh_profiles(&w, &c);
+                w.set_meeting_context_result(SharedString::from("[ok] профиль удалён"));
+            }
+        });
+    }
+    // Phase F — Coaching + Auto-tiles toggles (were dead). Each persists; the
+    // detector + session-stop logic read these from cfg at runtime, so changes
+    // apply without a restart.
+    {
+        let cfg_c = cfg.clone();
+        win.on_coaching_debrief_changed(move |on| {
+            let mut c = cfg_c.write();
+            c.post_meeting_debrief_enabled = on;
+            let _ = overlay_backend::config::save(&c);
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_auto_tiles_enabled_changed(move |on| {
+            let mut c = cfg_c.write();
+            c.auto_tiles_enabled = on;
+            let _ = overlay_backend::config::save(&c);
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_trigger_keywords_save(move |text| {
+            let mut c = cfg_c.write();
+            c.trigger_keywords = text.to_string();
+            let _ = overlay_backend::config::save(&c);
         });
     }
 
@@ -4906,6 +5167,20 @@ fn msg_refresh_after_import(
     "[ok] imported — restart binary for full effect".to_string()
 }
 
+/// Push the multi-profile state into the Settings UI: the profile-name list, the
+/// active index, and the active profile's context into the editor. Called on open
+/// and after every add/select/rename/delete so the picker never drifts from cfg.
+fn refresh_profiles(win: &SettingsWindow, c: &overlay_backend::config::Config) {
+    let names: Vec<SharedString> = c
+        .context_profiles
+        .iter()
+        .map(|p| SharedString::from(p.name.as_str()))
+        .collect();
+    win.set_profile_names(ModelRc::new(VecModel::from(names)));
+    win.set_active_profile_index(c.active_profile_index().map_or(-1, |i| i as i32));
+    win.set_meeting_context_input(SharedString::from(c.meeting_context.as_str()));
+}
+
 /// Populate the Settings window's token-status display properties
 /// from the current `cfg`. Phase E6 — gives the user a way to SEE
 /// whether ai_bearer / groq_api_key are configured without leaking
@@ -4963,6 +5238,7 @@ fn populate_token_status(win: &SettingsWindow, cfg: &overlay_backend::config::Sh
         _ => 0,
     });
     win.set_stt_gigaam_dir_input(SharedString::from(c.stt_gigaam_dir.clone()));
+    win.set_stt_gigaam_gpu(c.stt_gigaam_gpu);
     win.set_stt_whisper_url_input(SharedString::from(c.stt_whisper_url.clone()));
     win.set_stt_whisper_bearer_input(SharedString::from(c.stt_whisper_bearer.clone()));
     win.set_stt_whisper_model_input(SharedString::from(c.stt_whisper_model.clone()));

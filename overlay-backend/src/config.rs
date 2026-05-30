@@ -93,6 +93,12 @@ pub struct Config {
     /// Used when `stt_provider == "gigaam"`. Empty until the user sets it.
     #[serde(default)]
     pub stt_gigaam_dir: String,
+    /// Run the local GigaAM model on the GPU via the ONNX Runtime DirectML
+    /// execution provider (Windows, vendor-agnostic DX12). Falls back to CPU
+    /// automatically if no compatible GPU / DirectML runtime is present.
+    /// ~7x faster on long audio; ~1s one-time shader-compile on first use.
+    #[serde(default = "default_stt_gigaam_gpu")]
+    pub stt_gigaam_gpu: bool,
     /// Local whisper.cpp server base URL (OpenAI-compatible), e.g.
     /// "http://127.0.0.1:8081/v1". Used when `stt_provider == "whisper"`.
     #[serde(default = "default_stt_whisper_url")]
@@ -266,6 +272,89 @@ pub struct ContextProfile {
     pub context: String,
 }
 
+/// Name given to the auto-migrated profile seeded from a pre-profiles
+/// `meeting_context` (see `load`).
+pub const DEFAULT_PROFILE_NAME: &str = "Основной";
+
+impl Config {
+    /// Index of the active profile within `context_profiles`, if one is set and
+    /// still present.
+    #[must_use]
+    pub fn active_profile_index(&self) -> Option<usize> {
+        let name = self.active_profile.as_deref()?;
+        self.context_profiles.iter().position(|p| p.name == name)
+    }
+
+    /// Select a profile by index: make it active and load its context into the
+    /// live `meeting_context`. No-op if `idx` is out of range.
+    pub fn select_profile(&mut self, idx: usize) {
+        if let Some(p) = self.context_profiles.get(idx) {
+            self.active_profile = Some(p.name.clone());
+            self.meeting_context = p.context.clone();
+        }
+    }
+
+    /// Add a new profile capturing the current `meeting_context` and make it
+    /// active. Rejects a blank or duplicate name; returns the new index on success.
+    pub fn add_profile(&mut self, name: &str) -> Option<usize> {
+        let name = name.trim();
+        if name.is_empty() || self.context_profiles.iter().any(|p| p.name == name) {
+            return None;
+        }
+        self.context_profiles.push(ContextProfile {
+            name: name.to_string(),
+            context: self.meeting_context.clone(),
+        });
+        self.active_profile = Some(name.to_string());
+        Some(self.context_profiles.len() - 1)
+    }
+
+    /// Rename the active profile. Rejects a blank or duplicate name; returns
+    /// whether a rename happened.
+    pub fn rename_active_profile(&mut self, new_name: &str) -> bool {
+        let new_name = new_name.trim();
+        if new_name.is_empty() || self.context_profiles.iter().any(|p| p.name == new_name) {
+            return false;
+        }
+        if let Some(idx) = self.active_profile_index() {
+            self.context_profiles[idx].name = new_name.to_string();
+            self.active_profile = Some(new_name.to_string());
+            return true;
+        }
+        false
+    }
+
+    /// Delete the active profile. The profile that slides into its slot (or the
+    /// first remaining one) becomes active and loads into `meeting_context`; if
+    /// none remain, the active selection clears (live context is left as-is).
+    pub fn delete_active_profile(&mut self) {
+        if let Some(idx) = self.active_profile_index() {
+            self.context_profiles.remove(idx);
+            let next = self
+                .context_profiles
+                .get(idx)
+                .or_else(|| self.context_profiles.first())
+                .map(|p| (p.name.clone(), p.context.clone()));
+            match next {
+                Some((name, ctx)) => {
+                    self.active_profile = Some(name);
+                    self.meeting_context = ctx;
+                }
+                None => self.active_profile = None,
+            }
+        }
+    }
+
+    /// Persist edited context into the live `meeting_context` AND, if a profile
+    /// is active, into that profile so the picker and the live field never drift.
+    pub fn save_active_context(&mut self, text: &str) {
+        self.meeting_context = text.to_string();
+        if let Some(idx) = self.active_profile_index() {
+            self.context_profiles[idx].context = text.to_string();
+        }
+    }
+}
+
 impl Config {
     pub fn defaults() -> Self {
         Self {
@@ -292,6 +381,7 @@ impl Config {
             stt_model: "whisper-large-v3".into(),
             stt_provider: default_stt_provider(),
             stt_gigaam_dir: String::new(),
+            stt_gigaam_gpu: default_stt_gigaam_gpu(),
             stt_whisper_url: default_stt_whisper_url(),
             stt_whisper_bearer: String::new(),
             stt_whisper_model: default_stt_whisper_model(),
@@ -423,6 +513,10 @@ fn default_ai_local_base_url() -> String {
 
 fn default_stt_provider() -> String {
     "cloud".into()
+}
+
+fn default_stt_gigaam_gpu() -> bool {
+    true
 }
 
 fn default_stt_whisper_url() -> String {
@@ -1649,6 +1743,19 @@ pub fn load() -> Config {
         let _ = save(&cfg);
         log::info!("auto-populated default snippets into config (was empty)");
     }
+    // Migrate a pre-profiles config: if the user already has a meeting_context
+    // but no named profiles, seed it as their first profile so the new
+    // multi-profile picker has something to show + select. Non-destructive: the
+    // live meeting_context is unchanged, just mirrored into a profile.
+    if cfg.context_profiles.is_empty() && !cfg.meeting_context.trim().is_empty() {
+        cfg.context_profiles.push(ContextProfile {
+            name: DEFAULT_PROFILE_NAME.to_string(),
+            context: cfg.meeting_context.clone(),
+        });
+        cfg.active_profile = Some(DEFAULT_PROFILE_NAME.to_string());
+        let _ = save(&cfg);
+        log::info!("migrated meeting_context into a default profile");
+    }
     cfg
 }
 
@@ -1844,6 +1951,8 @@ mod tests {
         assert_eq!(cfg.stt_whisper_url, "http://127.0.0.1:8081/v1");
         assert!(!cfg.stt_is_local());
         assert!(!cfg.ai_local_thinking);
+        // GigaAM GPU (DirectML) is on by default; old configs opt in on upgrade.
+        assert!(cfg.stt_gigaam_gpu);
     }
 
     #[test]
@@ -2168,5 +2277,44 @@ mod tests {
         let back: Vec<ContextProfile> = serde_json::from_str(&json).unwrap();
         assert_eq!(back.len(), 2);
         assert_eq!(back[1].context, "long\nmulti-line\ncontext");
+    }
+
+    #[test]
+    fn profile_lifecycle_add_select_rename_delete() {
+        let mut c = Config::defaults();
+        c.meeting_context = "ctx A".into();
+        // add() captures the current meeting_context + makes it active
+        assert_eq!(c.add_profile("A"), Some(0));
+        assert_eq!(c.active_profile.as_deref(), Some("A"));
+        assert_eq!(c.context_profiles[0].context, "ctx A");
+        // blank + duplicate names are rejected
+        assert!(c.add_profile("  ").is_none());
+        assert!(c.add_profile("A").is_none());
+        // a second profile captures the then-current context
+        c.meeting_context = "ctx B".into();
+        assert_eq!(c.add_profile("B"), Some(1));
+        assert_eq!(c.active_profile_index(), Some(1));
+        // selecting loads that profile's context into the live field
+        c.select_profile(0);
+        assert_eq!(c.meeting_context, "ctx A");
+        assert_eq!(c.active_profile.as_deref(), Some("A"));
+        // editing + saving updates BOTH the live field and the active profile
+        c.save_active_context("ctx A edited");
+        assert_eq!(c.meeting_context, "ctx A edited");
+        assert_eq!(c.context_profiles[0].context, "ctx A edited");
+        // rename rejects duplicates, accepts a fresh name
+        assert!(!c.rename_active_profile("B"));
+        assert!(c.rename_active_profile("A2"));
+        assert_eq!(c.context_profiles[0].name, "A2");
+        assert_eq!(c.active_profile.as_deref(), Some("A2"));
+        // deleting the active profile activates the next + loads its context
+        c.delete_active_profile();
+        assert_eq!(c.context_profiles.len(), 1);
+        assert_eq!(c.active_profile.as_deref(), Some("B"));
+        assert_eq!(c.meeting_context, "ctx B");
+        // deleting the last profile clears the active selection
+        c.delete_active_profile();
+        assert!(c.context_profiles.is_empty());
+        assert!(c.active_profile.is_none());
     }
 }

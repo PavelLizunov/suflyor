@@ -1,28 +1,20 @@
-// Phase 2 — Tabbed Settings window.
+// Settings window — custom dark tab bar + content area (the std TabWidget
+// clashes with our theme, and we want per-tab control of content rendering).
+// The sidebar groups tabs into SESSION / AI / APP; `active-tab` indexes the
+// content pane. Indices have gaps (5 + 8) where the Stats + Snippets panes
+// were removed:
 //
-// Custom tab bar + content area: TabWidget std-widget exists but its
-// styling clashes with our dark theme, and we want fine-grained
-// control of per-tab content rendering for the migration. Tabs are
-// indexed 0-12, each a stub for the corresponding React Settings
-// panel from the migration plan order:
-//
-//   0  Stealth          (single toggle — sanity check)
-//   1  Coaching         (toggle + numeric input)
-//   2  Hotkeys          (table view, no edits)
-//   3  Interface        (language switcher → wires gettext)
-//   4  Updates          (external URL + diagnostic dump)
-//   5  Stats            (read-only dashboard with bars)
-//   6  Audio            (device dropdown + level meter + test)
-//   7  Auto-tiles       (toggle + chip cloud editor)
-//   8  Snippets         (CRUD modal)
-//   9  Knowledge base   (search + entry preview)
-//  10  Profile+context  (multi-text-field with import/export)
-//  11  AI bridge        (probe button + cost cap input)
-//  12  STT              (model dropdown + Whisper prompt editor)
-//
-// Phase 2.x ports each tab one at a time from the React Settings
-// panels. Day 2 stub (the original two cross-window toggles) now
-// lives inside tab 0 (Stealth).
+//   0  Stealth          (APP)     capture-affinity toggle
+//   1  Coaching         (SESSION) post-meeting debrief toggle
+//   2  Hotkeys          (APP)     read-only global-hotkey table
+//   3  Interface        (APP)     language switcher → gettext
+//   4  Updates          (APP)     in-app updater
+//   6  Audio            (APP)     device dropdowns + level meter + test
+//   7  Auto-tiles       (AI)      detector toggle + trigger-keyword editor
+//   9  Knowledge base   (AI)      search + entry preview
+//  10  Profile+context  (SESSION) multi-profile picker + context editor
+//  11  AI bridge        (AI)      cloud/local selector + probe + cost cap
+//  12  STT              (AI)      provider selector + GigaAM GPU + Whisper
 
 import { Button, LineEdit, ScrollView, SpinBox, ComboBox, Slider, TextEdit } from "std-widgets.slint";
 
@@ -239,6 +231,8 @@ export component SettingsWindow inherits Window {
     // STT provider (Phase E10): 0=cloud Groq, 1=local GigaAM, 2=local whisper-server.
     in-out property <int> stt-provider-index: 0;
     in-out property <string> stt-gigaam-dir-input: "";
+    // GigaAM GPU acceleration via the ONNX Runtime DirectML EP (default on).
+    in-out property <bool> stt-gigaam-gpu: true;
     in-out property <string> stt-whisper-url-input: "";
     in-out property <string> stt-whisper-bearer-input: "";
     in-out property <string> stt-whisper-model-input: "";
@@ -246,6 +240,7 @@ export component SettingsWindow inherits Window {
     callback stt-test-clicked();
     callback stt-provider-changed(int);
     callback stt-gigaam-dir-save(string);
+    callback stt-gigaam-gpu-changed(bool);
     callback stt-whisper-url-save(string);
     callback stt-whisper-bearer-save(string);
     callback stt-whisper-model-save(string);
@@ -257,6 +252,22 @@ export component SettingsWindow inherits Window {
     in-out property <string> meeting-context-input: "";
     in-out property <string> meeting-context-result: "";
     callback meeting-context-save(string);
+    // Phase F — multi-profile picker: named context presets. The active
+    // profile's context mirrors meeting-context-input.
+    in-out property <[string]> profile-names: [];
+    in-out property <int> active-profile-index: -1;
+    in-out property <string> profile-name-input: "";
+    callback profile-selected(int);
+    callback profile-add(string);
+    callback profile-rename(string);
+    callback profile-delete();
+    // Phase F — Coaching + Auto-tiles controls (were dead/cosmetic: no binding).
+    in-out property <bool> coaching-debrief: false;
+    callback coaching-debrief-changed(bool);
+    in-out property <bool> auto-tiles-enabled: true;
+    callback auto-tiles-enabled-changed(bool);
+    in-out property <string> trigger-keywords-input: "";
+    callback trigger-keywords-save(string);
     // Phase E6 v43 — "Structure via AI" button: sends the current context
     // text to the AI with a profile-structuring prompt; Rust replaces the
     // field with the cleaned result. context-processing dims the button
@@ -366,8 +377,8 @@ export component SettingsWindow inherits Window {
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
-                    label: @tr("🎤 Audio"); tab-index: 6;
-                    active: root.active-tab == 6;
+                    label: @tr("🎯 Coaching"); tab-index: 1;
+                    active: root.active-tab == 1;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
 
@@ -392,13 +403,13 @@ export component SettingsWindow inherits Window {
                     active: root.active-tab == 9;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
-                NavItem {
-                    label: @tr("🎯 Coaching"); tab-index: 1;
-                    active: root.active-tab == 1;
-                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
-                }
 
                 NavGroupHeader { label: @tr("APP"); }
+                NavItem {
+                    label: @tr("🎤 Audio"); tab-index: 6;
+                    active: root.active-tab == 6;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
+                }
                 NavItem {
                     label: @tr("🌐 Interface"); tab-index: 3;
                     active: root.active-tab == 3;
@@ -499,16 +510,12 @@ export component SettingsWindow inherits Window {
                             color: #999;
                             wrap: word-wrap;
                         }
-                        DarkCheck { text: @tr("Enable post-meeting debrief"); }
-                        HorizontalLayout {
-                            spacing: 8px;
-                            Text {
-                                text: @tr("Min session seconds:");
-                                font-size: 11px;
-                                color: #c8c8cc;
-                                vertical-alignment: center;
+                        DarkCheck {
+                            text: @tr("Enable post-meeting debrief");
+                            checked <=> root.coaching-debrief;
+                            toggled(v) => {
+                                root.coaching-debrief-changed(v);
                             }
-                            SpinBox { minimum: 30; maximum: 3600; value: 60; }
                         }
                     }
                     if root.active-tab == 2 : VerticalLayout {
@@ -685,8 +692,30 @@ export component SettingsWindow inherits Window {
                             color: #999;
                             wrap: word-wrap;
                         }
-                        DarkCheck { text: @tr("Enable auto-tile detector"); checked: true; }
-                        LineEdit { placeholder-text: @tr("Add keyword..."); }
+                        DarkCheck {
+                            text: @tr("Enable auto-tile detector");
+                            checked <=> root.auto-tiles-enabled;
+                            toggled(v) => {
+                                root.auto-tiles-enabled-changed(v);
+                            }
+                        }
+                        Text {
+                            text: @tr("Trigger keywords (space-separated). A sentence ending in '?' also triggers.");
+                            font-size: 11px;
+                            color: #999;
+                            wrap: word-wrap;
+                        }
+                        TextEdit {
+                            text <=> root.trigger-keywords-input;
+                            wrap: word-wrap;
+                            height: 150px;
+                        }
+                        Button {
+                            text: @tr("Save keywords");
+                            clicked => {
+                                root.trigger-keywords-save(root.trigger-keywords-input);
+                            }
+                        }
                     }
                     if root.active-tab == 9 : VerticalLayout {
                         spacing: 8px;
@@ -714,6 +743,63 @@ export component SettingsWindow inherits Window {
                             font-size: 11px;
                             color: #999;
                             wrap: word-wrap;
+                        }
+                        // Phase F — multi-profile picker. Row 1: select; row 2:
+                        // add/rename/delete (split rows so the buttons never clip).
+                        HorizontalLayout {
+                            spacing: 6px;
+                            alignment: start;
+                            Text {
+                                text: @tr("Profile:");
+                                font-size: 12px;
+                                vertical-alignment: center;
+                            }
+                            if root.profile-names.length > 0 : ComboBox {
+                                model: root.profile-names;
+                                current-index: root.active-profile-index;
+                                min-width: 170px;
+                                selected => {
+                                    root.active-profile-index = self.current-index;
+                                    root.profile-selected(self.current-index);
+                                }
+                            }
+                            if root.profile-names.length == 0 : Text {
+                                text: @tr("none yet — name one and Add");
+                                font-size: 11px;
+                                color: #999;
+                                vertical-alignment: center;
+                            }
+                            LineEdit {
+                                placeholder-text: @tr("profile name");
+                                text <=> root.profile-name-input;
+                                horizontal-stretch: 1;
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: 6px;
+                            alignment: start;
+                            Button {
+                                text: @tr("Add profile");
+                                clicked => {
+                                    root.profile-add(root.profile-name-input);
+                                    root.profile-name-input = "";
+                                }
+                            }
+                            Button {
+                                text: @tr("Rename");
+                                enabled: root.active-profile-index >= 0 && root.profile-name-input != "";
+                                clicked => {
+                                    root.profile-rename(root.profile-name-input);
+                                    root.profile-name-input = "";
+                                }
+                            }
+                            Button {
+                                text: @tr("Delete");
+                                enabled: root.active-profile-index >= 0;
+                                clicked => {
+                                    root.profile-delete();
+                                }
+                            }
                         }
                         // Phase E6 v29 — real multi-line editor wired to
                         // cfg.meeting_context (was a dead placeholder box).
@@ -1061,6 +1147,13 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                         }
+                        if root.stt-provider-index == 1 : DarkCheck {
+                            text: @tr("Use GPU (DirectML) — faster on long audio, ~1s warm-up on first use");
+                            checked <=> root.stt-gigaam-gpu;
+                            toggled(v) => {
+                                root.stt-gigaam-gpu-changed(v);
+                            }
+                        }
                         if root.stt-provider-index == 2 : HorizontalLayout {
                             spacing: 6px;
                             LineEdit {
@@ -1180,10 +1273,8 @@ export component SettingsWindow inherits Window {
                idx == 2 ? @tr("Hotkeys") :
                idx == 3 ? @tr("Interface") :
                idx == 4 ? @tr("Updates") :
-               idx == 5 ? @tr("Stats") :
                idx == 6 ? @tr("Audio") :
                idx == 7 ? @tr("Auto-tiles") :
-               idx == 8 ? @tr("Snippets") :
                idx == 9 ? @tr("Knowledge base") :
                idx == 10 ? @tr("Profile + context") :
                idx == 11 ? @tr("AI bridge") :
