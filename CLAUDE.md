@@ -23,316 +23,182 @@ starting any autonomous session.
 - `NIGHT_RUN_PLAN.md` — current backlog, work log, decision journal.
   Sections you maintain: `## Backlog`, `## In progress`, `## Done log`,
   `## Findings`, `## Decisions`. Update every ~30 min during autonomous.
+- `docs/state-and-plan.md` — living state/plan snapshot for interactive
+  work (survives context compaction). Keep it current when you finish a
+  chunk of work.
 - `.claude/autonomous_active` — ISO 8601 deadline. Presence = mode armed.
   Do NOT delete this file from inside an autonomous run (that defeats
   the whole point).
 - `.claude/_progress_counter` — internal, managed by hooks. Don't touch.
 
-## Project conventions
+## Stack (the source of truth)
 
-> **Phase 7 cut (2026-05-28):** the React/Tauri stack was removed. The
-> product is now **pure Rust + Slint**. Older sections below may still
-> reference src-tauri / React / WebView2 / npm — that's historical; treat
-> the two crates below as the source of truth.
+The product is **pure Rust + Slint** (Phase 7 cut, 2026-05-28 removed the
+old React/Tauri/WebView2 surface). No browser engine, no Node, no
+TypeScript. Two standalone crates, NO root workspace:
 
-- **App:** `slint-experiment/` — the `overlay-host` binary (Slint UI in
-  `ui/*.slint` + orchestration in `src/bin/overlay_host.rs`). Run/build via
-  `cargo run/build --bin overlay-host` from `slint-experiment/`. Installer:
-  `scripts/build-slint-release.ps1 -Installer`.
-- **Shared logic:** `overlay-backend/` — audio / stt / ai / journal / kb /
-  config / runtime (no UI). The app depends on it via a path dep.
-- No browser engine, no Node. UI compiles at build time via `build.rs` +
-  `slint-build`.
-- Tests: `cargo test --lib` (255 tests, <1s) — the `--bin overlay-mvp`
-  variant in older docs runs zero tests (the binary itself has none —
-  all unit tests live in the library target). `cargo clippy --all-targets
-  -- -D warnings` for strict lint covers lib + journal-eval CLI.
-- Cargo path issue: `cargo` is at `~/.cargo/bin/cargo.exe`. Git Bash
-  doesn't always pick it up — prepend
-  `export PATH="/c/Users/x3d_mutant/.cargo/bin:$PATH"`.
+- **`slint-experiment/`** — the `overlay-host` binary. UI in `ui/*.slint`
+  (compiled into the binary at build time via `build.rs` + `slint-build`);
+  orchestration in `src/bin/overlay_host.rs`; Win32 HWND helpers in
+  `src/win32.rs`; session/event/state glue in `src/{slint_session,
+  slint_events,runtime_state,app_state,markdown,logging}.rs`.
+- **`overlay-backend/`** — the no-UI shared crate (audio / stt / ai /
+  local_ai / config / runtime / events / journal / kb / health / update).
+  `slint-experiment` depends on it via a path dep.
 
-## Methodology — six-layer testing (adopted from vpnctl, 2026-05-26)
+Run/build from `slint-experiment/`:
+```pwsh
+# cargo lives at ~/.cargo/bin/cargo.exe; Git Bash often misses it — call it
+# by full path or prepend it to PATH.
+cargo run   --bin overlay-host
+cargo build --release --bin overlay-host
+```
+Installer (NSIS): `scripts/build-slint-release.ps1 -Installer` →
+`slint-experiment/target/release/bundle/suflyor-slint-setup.exe`. Version
+lives in BOTH `slint-experiment/Cargo.toml` and `scripts/slint-installer.nsi`
+(`!define PRODUCT_VERSION`) — keep them in sync.
 
-**Why this exists:** v0.0.67 → v0.1.2 attempt was a 33-release marathon
-where layers 1-2 (clippy + cargo test) passed every release but the user
-caught regressions live in WebView2 layout, focus races, multi-monitor
-geometry, and i18n drift. User cut 64 of 68 GitHub releases by hand
-(`«удалить большую часть релизов, зачем они там?»`) and asked for the
-methodology from their `vpnctl` Rust project where there were no large
-bugs. This section is that methodology, adapted to Tauri/WebView2.
+## Methodology — verification before commit (adopted from vpnctl, 2026-05-26)
 
-### The six layers (UI), three (logic-only)
+**Why this exists:** the v0.0.67 → v0.1.2 attempt was a 33-release marathon
+where static checks (clippy + cargo test) passed every release but the user
+caught regressions live in layout, focus races, multi-monitor geometry, and
+i18n drift. The user cut 64 of 68 GitHub releases by hand and asked for the
+vpnctl methodology (where there were no large bugs). **No marathons** — fewer,
+better-verified releases. See memory `[[no-marathon-releases]]`.
+
+### The layers
 
 Each layer catches a strict subset the others miss. **Do not skip.**
-Every skip in the past produced a user-facing regression.
 
-| # | Layer | Tool | Catches | Misses |
-|---|---|---|---|---|
-| 1 | clippy | `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings` | API misuse, dead code, `unwrap`/`expect`/`panic` outside `#[cfg(test)]` | CSS, HTML, runtime behaviour |
-| 2 | cargo test | `cargo test --manifest-path src-tauri/Cargo.toml --lib` | Rust unit + integration (260+ tests) | TS code, WebView paint, layout |
-| 3 | Copy-contract | `cargo test --test copy_contract` (and `npx tsc --noEmit` for TS) | Drift in canonical i18n strings, error message formats | Style of NEW text — additive: pin it the same commit it lands |
-| 4 | review-agent | `Agent(subagent_type:general-purpose, prompt=docs/REVIEW_AGENT_PROMPT.md)` BEFORE commit | Logic bugs, security, library misuse, codebase duplicates | Whether the WebView paints correctly |
-| 5 | Live install + smoke | `scripts/ci.ps1 && scripts/visual_check.ps1` | Runtime crashes, infinite-grow loops, missing assets in bundle | Cross-display-config edge cases (need user's monitor) |
-| 6 | Visual check | `scripts/visual_check.ps1` saves PNG → Claude reads it | Floating panels covering chrome, tile chrome overflow, font fallback, transparency paint glitches | Quirks specific to user's display setup |
+| # | Layer | Tool | Catches |
+|---|---|---|---|
+| 1 | clippy | `cargo clippy --manifest-path overlay-backend\Cargo.toml --all-targets` and `... slint-experiment\Cargo.toml --bin overlay-host` | API misuse, dead code, `unwrap`/`expect`/`panic` outside `#[cfg(test)]` (both crates `deny` these via `[lints.clippy]`) |
+| 2 | cargo test | `cargo test --manifest-path overlay-backend\Cargo.toml` (bulk of unit tests live here) + `... slint-experiment\Cargo.toml` | Rust unit + integration |
+| 3 | fmt | `cargo fmt --manifest-path <crate>\Cargo.toml` (run, NOT `--check`, then commit any change) | rustfmt drift — the most common gate killer |
+| 4 | review-agent | `Agent(subagent_type: general-purpose, prompt = docs/REVIEW_AGENT_PROMPT.md)` BEFORE commit | Logic bugs, security, library misuse, codebase duplicates |
+| 5 | Live install + smoke | run the freshly-built `overlay-host.exe`, read the startup log + visually confirm | Runtime crashes, transparency/paint glitches, the bar landing on the wrong monitor, anything static checks can't see |
 
-Logic-only changes (e.g. detector regex, kb parser) need 1, 2, 4, 5.
-Anything that touches Tauri windows, React, or CSS needs all six.
+Logic-only changes (detector regex, kb parser, cost math) need 1-4.
+Anything that touches the Slint UI / window geometry / transparency needs all five.
 
 ### Blocking workflow before every commit
 
 ```
 1. review-agent      (independent — paste full diff + invariants, do NOT
                       reference "the discussion above")
-2. npm run ci        = scripts/ci.ps1 (fmt-check + clippy + tests + tsc)
-3. scripts/visual_check.ps1 → Read the PNG it saves
-4. git commit / push (auto-gated by .claude/hooks/git-gate.ps1 — BLOCKS
-                      if fmt/clippy/test/tsc fail; --no-verify bypasses)
+2. clippy + test + fmt  (both crates — commands above)
+3. live smoke        (run overlay-host.exe; read its log; confirm the bar +
+                      the changed surface render correctly)
+4. git commit / push (auto-gated by .claude/hooks/git-gate.ps1 — BLOCKS if
+                      fmt/clippy fail on commit, or tests fail on push, for
+                      EITHER crate; --no-verify bypasses)
 ```
 
-The git-gate.ps1 PreToolUse hook is the ONLY piece that genuinely
-BLOCKS bad commits — without it, the methodology relies on discipline
-(remembering to run `npm run ci`). Setup:
-- `.claude/settings.json` registers the hook against `Bash` matcher
-- `.claude/hooks/git-gate.ps1` runs `cargo fmt --check + clippy` on
-  every `git commit`, plus `cargo test --lib + --test copy_contract +
-  npx tsc --noEmit` on every `git push`
-- `--no-verify` in the git command bypasses with a WARN line (rare;
-  hotfix only per the short-circuit below)
-- Required toolchain component: `rustup component add rustfmt`
-- After editing the hook script OR settings.json: RESTART Claude Code
-  (settings watcher does not pick up changes mid-session)
-- Pipe-test before trusting:
-  ```pwsh
-  '{"tool_input":{"command":"git commit -m x"}}' | powershell -NoProfile -ExecutionPolicy Bypass -File .claude\hooks\git-gate.ps1
-  ```
+The `git-gate.ps1` PreToolUse hook is the ONLY piece that genuinely BLOCKS
+bad commits. Setup:
+- `.claude/settings.json` registers the hook against the `Bash` matcher.
+- `.claude/hooks/git-gate.ps1` runs `cargo fmt --check + clippy` (both
+  crates) on every `git commit`, plus `cargo test` (both crates) on every
+  `git push`.
+- `--no-verify` bypasses with a WARN line (rare; hotfix only per below).
+- After editing the hook OR `settings.json`: RESTART Claude Code (the
+  settings watcher does not pick up changes mid-session).
 
 **Hotfix-only short-circuit** (review-agent skippable ONLY if ALL THREE):
 - impl ≤ 5 lines
-- touches exactly ONE surface (e.g. only a CSS rule, or only a single
-  Tauri command body)
-- changes no string pinned by `tests/copy_contract.rs`
+- touches exactly ONE surface
+- changes no user-facing string with a `ru.po` translation
 
-### Concrete test patterns
+### Live-smoke / visual verification (layer 5) — CRITICAL gotcha
 
-- **`src-tauri/tests/copy_contract.rs`** — pins canonical Russian + English
-  UI strings (`settings.save`, error format `tile spawn failed: {reason}`,
-  the F4 palette placeholder, etc.). Any drift fails the test in the same
-  commit. Adding a new visible string = add it to the contract test in
-  the same commit that adds the string. See [Copy contract](#copy-contract)
-  below for full coverage list.
-- **`src-tauri/tests/spec_*.rs`** — independent contract tests for new
-  public Rust functions. Written by `test-writer-agent` (Agent tool)
-  BEFORE the agent sees impl. Per-file feature scope. `#![allow(clippy::unwrap_used)]`
-  on module level. Each test = own tempdir / fresh state. Tests that
-  fail = either impl wrong or spec ambiguous — DO NOT weaken the test.
-- **Existing 260 `cargo test --lib` suite** — keep green at all times.
-  WAV roundtrip, decimator signal, detector regex, tile slot math,
-  config schema migration. Many of these are the most valuable bug-catchers
-  the project has.
-- **"Inverted impl" smell** — if `fn foo() -> Vec<T>` returned `Vec::new()`
-  and a test still passed, that test is useless. Every test must check
-  observable behaviour against the spec, not "didn't panic".
-
-### Operational rules
-
-- **`cargo fmt --all`** (NOT `--check`) BEFORE running tests. If it
-  changes anything, include in the same commit. fmt drift is the most
-  common CI killer.
-- **Build = `npm run tauri build`** (NOT `cargo build`). `cargo build`
-  bypasses the vite frontend bundle and ships a dev URL in release.
-  See the v0.0.95 P0 ROOT CAUSE incident.
-- **After Rust backend change** → mandatory NSIS install + visual check.
-  Don't trust "cargo test green = production sees new code". Verify
-  the installed binary timestamp updated and the new code path runs.
-- **Sub-agent isolation** — review-agent and test-writer-agent see only
-  what's in the prompt. Brief like a new colleague. Paste the full diff
-  and the architectural invariants. Don't reference earlier conversation.
-
-### Visual check (layer 6) for overlay-mvp
-
-`scripts/visual_check.ps1 [-Open]`:
-1. Kill any running overlay-mvp.
-2. (`-Open` only) Run the NSIS installer silently and confirm timestamp.
-3. Launch overlay via `Start-Process "$env:LOCALAPPDATA\suflyor\overlay-mvp.exe"`.
-4. Wait 2 s for WebView2 paint.
-5. Use `Add-Type` + System.Windows.Forms to grab a screenshot of the
-   primary display and save to `target/visual/overlay-{ts}.png`.
-6. (in future Claude session) `Read` that PNG to verify bar geometry,
-   chip overflow, content rendering.
-
-The script does the boring infra — the actual eyeball gate is Claude
-reading the PNG via the `Read` tool. Without that final read, layer 6
-is just bookkeeping. See `scripts/visual_check.ps1`.
-
-### Tier 4 status — Vitest + Docker scaffolds adopted 2026-05-27
-
-- **Vitest** (TS unit + component) installed; `vitest.config.ts`
-  configured with jsdom env + `src/__tests__/setup.ts` wiring
-  jest-dom matchers + clock reset between tests.
-- Baseline tests: `src/clock.test.ts` (6 tests, proves mock-clock
-  injection), `src/i18n.test.ts` (14 tests, TS-side copy contract).
-  Total **20 TS tests** passing.
-- Coverage thresholds set very low (10 % lines/branches) — aspirational
-  per spec § 7 is 90 %/85 %. Backlog: bring coverage up as more
-  components get spec tests.
-- **Docker scaffolds** in `docker/`: `static.Dockerfile` (layers 1+3)
-  and `unit.Dockerfile` (layer 2). Visual/e2e NOT scaffolded — Tauri
-  on Linux uses WebKit2GTK which would diverge from Windows WebView2;
-  see `docker/README.md` for the full deferral rationale.
-- New npm scripts: `npm test`, `npm run test:watch`, `npm run test:ui`.
-
-### Tier 5 status — stack decision
-
-**Variant D (keep React/Tauri + tighten via Tiers 1-4) — confirmed.**
-See `docs/ADR-001-stack.md` for the trade-off analysis and the trigger
-conditions that would re-open the question.
-
-### Tier 3 status — Rust selective deny baseline adopted 2026-05-27
-
-`src-tauri/src/lib.rs` denies (non-test compilation only):
-- `clippy::unwrap_used` — exempt: 12 sites in `audio.rs` (module-level
-  `#[allow]` with `reason = "bounds-checked precondition makes ..."`)
-- `clippy::expect_used` — exempt: 1 site in `stt.rs::tokio::spawn` (TLS
-  init), `#[allow]` with rationale
-- `clippy::panic`
-- `missing_docs` — all `pub` items must have doc comments (added to
-  `lib.rs::run()`, crate-level docs to `lib.rs` and `build.rs`)
-
-**Deliberately SKIPPED:**
-- `clippy::pedantic` — surfaces ~67 noisy style suggestions
-  (`must_use_candidate`, `missing_errors_doc`, `cast_possible_truncation`).
-  Not safety findings. Adopt selectively in a future Tier 3.5.
-- `clippy::indexing_slicing` — overlay-mvp's audio decimator + tile-grid
-  math use bounds-checked slicing in tight loops; rewriting to
-  `.get(i)?` would obscure invariants.
-
-`#[cfg_attr(not(test), deny(...))]` keeps test code (which uses
-`unwrap`/`expect` for setup brevity) compiling without per-module
-`#[allow]`. New `tests/copy_contract.rs`-style integration tests already
-add `#![allow(clippy::unwrap_used, clippy::expect_used)]` at module
-top per the methodology.
-
-Verified: `cargo clippy --all-targets -- -D warnings` and `cargo test
---lib` both green.
-
-### Tier 2 status — strict TS + ESLint adopted 2026-05-27
-
-**TypeScript:** all flags from the suflyor spec ARE enabled
-(`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`,
-`noImplicitOverride`, `noImplicitReturns`, `noPropertyAccessFromIndexSignature`,
-`useUnknownInCatchVariables`, `allowUnreachableCode: false`,
-`allowUnusedLabels: false`). `tsc --noEmit` is GREEN.
-
-**ESLint:** `eslint.config.js` extends `tseslint.configs.strictTypeChecked`
-+ `stylisticTypeChecked` + `react-hooks`. Spec-required rules ON:
-`no-explicit-any`, `no-non-null-assertion`, `consistent-type-assertions:
-never`, `switch-exhaustiveness-check`, `react-hooks/exhaustive-deps`,
-plus `no-restricted-syntax` for `Date.now()` / `Math.random()` (use
-`src/clock.ts` instead).
-
-**Pragmatic downgrades** (documented in `eslint.config.js`):
-`restrict-template-expressions`, `no-unnecessary-condition`,
-`no-empty-function`, `prefer-nullish-coalescing`, `no-invalid-void-type`
-— off because the overlay marathon left a long tail of idiom-mismatch
-that aren't safety issues. Pin these in the methodology backlog.
-
-**Residual error count:** 34. These are real (floating promises, type
-assertions, plus-coercion bugs). Backlog — fix as the surrounding code
-is touched. NOT YET wired into `git-gate.ps1` because gating on 34
-existing errors would block all commits. Re-evaluate Tier 2.5: once
-the residual drops to 0, add `npx eslint src` to git-gate's push gate
-alongside `tsc --noEmit`.
-
-Run `npm run lint` to see current state. `npm run lint:fix` for the
-~117 auto-fixable subset.
+**computer-use screenshots MIS-RENDER the transparent overlay's COLOURS**
+(they showed the bar dark when the active theme is light). Ground truth =
+**`CopyFromScreen` at the window's HWND rect** (Win32 `EnumWindows` +
+`GetWindowRect`, filter by pid + window title `overlay-mvp (Slint)`), saved
+to PNG and `Read`. Layout/text read fine in computer-use; colour does not.
+Alternative: the embedded Slint MCP server — run the binary with
+`SLINT_EMIT_DEBUG_INFO=1 SLINT_MCP_PORT=N` to inspect the UI tree / click /
+type. The debug binary's `eprintln!` startup log (hotkey registration, bar
+pin coords, transparency) is the cheapest smoke signal — launch, capture
+stderr ~5s, kill, read it. See memory `[[overlay-host-visual-verification]]`.
 
 ### Lessons learned (the "we got burned" list)
 
-1. **Don't skip a layer.** Every time I did during the marathon,
-   regressions reached the user. v0.0.85 reload+translate dead for 7
-   releases because layer 4 was skipped. v0.1.2 palette restore race
-   because layer 6 was skipped.
-2. **Don't run "fix waves"** when something's broken. Roll back to the
-   last known-good state FIRST, then fix with the full layer cake. The
-   marathon-block-5 hotfix waves compounded regressions because every
-   "fix" landed against an already-broken base.
-3. **Static checks are necessary, not sufficient.** clippy + cargo test +
-   tsc can all pass while the WebView shows a blank window. Treat them
-   as a sanity gate, not a release gate.
-4. **The user has 1 portrait secondary** (1200×1920 at x=-1200) + 1
-   landscape primary (1920×1080). Any default that depends on monitor
-   orientation needs both orientations live-tested. See
-   `tile.rs::pick_monitor` history.
-5. **WebView2 transparency + `always_on_top` is paint-flaky** on Windows
-   DWM. Always opaque-ish backgrounds (`rgba(20, 22, 30, 0.92)` not
-   fully transparent) to avoid "tile created but invisible" bugs.
-6. **No marathons.** User explicitly asked never to run another 29-release
-   sprint. Fewer, better-verified releases. See memory
-   `[[no-marathon-releases]]`.
+1. **Don't skip a layer.** Every skip during the marathon reached the user.
+2. **Don't run "fix waves"** when something's broken. Roll back to the last
+   known-good state FIRST, then fix with the full layer cake.
+3. **Static checks are necessary, not sufficient.** clippy + cargo test can
+   all pass while the overlay renders wrong. Treat them as a sanity gate.
+4. **The user has 1 portrait secondary** (1200×1920 at x=-1200) + 1 landscape
+   primary (1920×1080). Any default that depends on monitor orientation needs
+   both orientations live-tested. The bar pins to the PRIMARY at startup
+   (`apply_overlay_hwnd`) for exactly this reason; tiles use
+   `win32::pick_monitor` (primary unless a non-primary is landscape AND ≥
+   primary width).
+5. **Transparency is paint-sensitive** on Windows DWM — tile/bar backgrounds
+   stay opaque-ish, never fully transparent, to avoid "created but invisible".
+6. **No marathons.** Fewer, better-verified releases. See `[[no-marathon-releases]]`.
 
-### Reference
+## i18n (RU + EN)
 
-- **Methodology source:** memory `[[vpnctl-methodology]]` (full vpnctl
-  6-layer doc with example agent prompts).
-- **Project state:** memory `[[project-overlay-mvp-history]]`.
-- **User setup:** memory `[[user-setup-monitors]]`.
+Strings live in the `.slint` source as **English `@tr("…")`** — the source
+string IS the English msgid. The Russian translation is in
+`slint-experiment/translations/ru/LC_MESSAGES/slint-replay.po` (plain
+`msgid`/`msgstr`, no `msgctxt`). `slint::select_bundled_translation("en"|"ru")`
+switches live; `ui_language` in `%APPDATA%\overlay-mvp\config.json` persists
+it (en falls back to the msgid = English).
 
-## i18n (RU + EN, since v0.0.42)
-
-Typed-strings module at `src/i18n.ts`. ~212 keys × 2 langs. Pattern:
-```ts
-import { t, resolveLang, type Lang } from "./i18n";
-const lang: Lang = resolveLang(cfg?.ui_language); // "ru" default
-<button title={t("settings.save", lang)}>{t("settings.save", lang)}</button>
-```
-`{placeholder}` interpolation via `.replace("{token}", value)` — no
-helper. Adding a new string: append to the const map in `i18n.ts`
-(TS will type-check usage at call sites). Adding a new component:
-load `cfg.ui_language` from `get_config` on mount (overlay/settings/
-replay all in the overlay window can do this). Tile windows can't
-call `get_config` (gated by `assert_overlay`) — `tile.rs` bakes
-`&lang=ru|en` into the spawn URL via `app.try_state::<SharedConfig>()`.
+Adding a user-facing string: wrap it in `@tr("English…")`, append the
+`msgid`/`msgstr` pair to `slint-replay.po`, rebuild. A **hardcoded Cyrillic
+literal (no `@tr()`) won't translate** — that's a bug. Tiles/palette/settings
+are separate Slint windows in the same process; they get their text from
+`overlay_host.rs` at construction, so there's no per-window config fetch.
 
 ## Knowledge base
 
-Embedded reference at `src-tauri/knowledge/{glossary,commands,patterns}.md`
-(~1700 entries). Exposed via Tauri commands `kb_search`, `kb_get`,
-`kb_stats`, `kb_spawn`. Settings UI has a search panel + F4 inline palette
-in the overlay. Hyphenated keys (`kubectl-debug`) match correctly via
-`kb_key_matches_trigger` token-set check.
+Embedded reference in `overlay-backend/src/kb.rs` (~1700 glossary / commands /
+patterns entries, pre-lowercased). Accessed directly via `kb::search` /
+`kb::get` (no IPC layer). The overlay's **F4** palette is the inline search
+surface. Hyphenated keys (`kubectl-debug`) match via token-set check.
+`kb::search` clamps the query to 200 chars (DoS guard).
 
 ## Voice coach (live + retrospective)
 
-Two coaching surfaces:
-- **Live pill** in overlay bar: WPM + filler density over rolling 60s
-  mic-only window. Backend emits `speech:coach` event every 2s. Pace
-  buckets: low/<150 · ok/150-180 · fast/>200 · idle.
-- **Post-meeting debrief**: opt-in via Settings → 🎯 Coaching. On
-  `stop_session`, mic transcript + 3-point Sonnet ask → tile labeled
-  "🎯 Debrief: what to improve". Skip conditions: <30s session, <5 mic
-  lines, empty AI bearer. ~$0.005 per session when enabled.
+- **Live pill** in the overlay bar: WPM + filler density over a rolling 60s
+  mic-only window.
+- **Post-meeting debrief**: opt-in. On `stop_session`, the mic transcript + a
+  3-point ask → a tile labeled "🎯 Debrief". Skip conditions: <30s session,
+  <5 mic lines, empty AI bearer.
 
 ## Security boundaries
 
-- **Caller-window guard** (`assert_overlay`): all sensitive Tauri commands
-  reject calls from non-overlay (e.g. tile-*) windows. Applied to
-  config/session/screenshot/mic/spawn_tile/expand_snippet/kb_spawn.
-- **Capability split**: `capabilities/default.json` (overlay-only) +
-  `capabilities/tile.json` (tile-* with narrow perms; no opener,
-  no global-shortcut, no set-position/size).
-- **KB query cap**: `kb::search` clamps query to 200 chars to prevent
-  DoS via huge paste.
-
-## Active background processes
-
-If `tauri dev` is running, modifying Rust files triggers ~5-10s rebuild +
-overlay relaunch. Modifying TS triggers vite HMR (no relaunch). Prefer
-TS-only changes during interactive sessions; batch Rust changes.
+- **Single process, no IPC command surface.** Unlike the old Tauri build,
+  there are no "commands" a tile window can `invoke`. Tile / palette /
+  settings are Slint windows constructed by `overlay_host.rs`; they render
+  only what they're handed and never read `config.json` themselves. So the
+  old `assert_overlay` caller-guard is moot — secrets simply never reach a
+  tile's scope.
+- **AI endpoint:** resolve via `cfg.ai_endpoint(false)` (picks local vs cloud
+  by `ai_provider`); the raw `ai_base_url` field is ALWAYS the cloud bridge.
+- **AI error tiles** must use a GENERIC message (no error chain) so the
+  `base_url` / LAN IP can't leak into a screenshot.
+- **Stealth** (hide from screen capture) = Win32 `SetWindowDisplayAffinity`
+  (`WDA_EXCLUDEFROMCAPTURE`), applied to the bar + tiles + the F4 palette +
+  Settings when stealth is on.
 
 ## Security reminders
 
 - `config.json` at `%APPDATA%\overlay-mvp\config.json` contains live
-  `groq_api_key` + `ai_bearer`. NEVER print these to chat or logs.
-- DevTools is debug-only (release build excludes the auto-open call).
-  In dev (`tauri dev`), DevTools opens automatically — secrets are
-  visible to anyone with physical access. Treat dev box accordingly.
+  `groq_api_key` + `ai_bearer`. NEVER print these to chat or logs, and never
+  include them in journal entries.
+- `nini-context-backup.txt` (repo root) is the user's personal interview-prep
+  notes — gitignored; never commit it.
+
+## Reference
+
+- **Methodology source:** memory `[[vpnctl-methodology]]`.
+- **Project state:** memory `[[project-overlay-mvp-history]]`,
+  `docs/state-and-plan.md`.
+- **Visual verification:** memory `[[overlay-host-visual-verification]]`.
+- **User setup:** memory `[[user-setup-monitors]]`.

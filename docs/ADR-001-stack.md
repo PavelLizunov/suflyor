@@ -1,9 +1,17 @@
 # ADR-001 — Stack decision: React/Tauri vs Iced/Slint/Dioxus
 
-**Status:** Decided — keep React/Tauri (Variant D from the suflyor GUI
-strictness spec) with the Tier 1-4 harness adopted in commits e33d69e
-through this one. Re-evaluate in Q4 2026 if persistent WebView2 paint
-issues remain.
+**Status:** ⚠️ **SUPERSEDED (2026-05-28).** This ADR decided to KEEP React/Tauri
+(Variant D). That decision was reversed two days later: the WebView2 paint
+issues this ADR named as the re-evaluation trigger materialised, and the whole
+UI was rewritten in **Rust + Slint** (Phase 7 cut — see
+`docs/PHASE-7-CUT-PLAN.md` / `docs/MIGRATION-PLAN-SLINT.md`). The current stack
+is a pure-Rust two-crate layout (`overlay-backend` + `slint-experiment`) with
+NO React, Tauri, WebView2, npm, Vite, or TypeScript. The analysis below is kept
+verbatim as the historical record of why we first stayed and then left.
+
+**Original status (2026-05-27):** Decided — keep React/Tauri (Variant D from the
+suflyor GUI strictness spec) with the Tier 1-4 harness adopted in commits e33d69e
+through this one. Re-evaluate in Q4 2026 if persistent WebView2 paint issues remain.
 
 **Date:** 2026-05-27
 

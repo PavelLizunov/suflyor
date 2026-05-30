@@ -1,200 +1,154 @@
 # suflyor — architecture overview
 
-**Audience:** developer forking or auditing the codebase. Last full pass for v0.0.9 (227 tests). Touched up for v0.0.50 — current test count 255, see "Major additions since v0.0.9" below for what's new.
+**Audience:** developer forking or auditing the codebase.
 
-## Major additions since v0.0.9 (v0.0.10 → v0.0.50)
+**Stack:** pure **Rust + Slint** (the original Tauri 2 + React 19 + WebView2
+surface was removed in the Phase 7 cut, 2026-05-28 — see
+`docs/PHASE-7-CUT-PLAN.md`). No browser engine, no Node, no TypeScript. Two
+standalone crates, NO root workspace:
 
-- **Knowledge base** (v0.0.10–v0.0.11): embedded glossary + commands + patterns (~1700 entries) in `src-tauri/knowledge/*.md`, exposed via `kb_search`/`kb_get`/`kb_stats`/`kb_spawn` Tauri commands. F4 in overlay opens KB palette.
-- **Push-to-talk + voice coach** (v0.0.17): hold mic/system buttons in overlay, dedicated WASAPI capture per hold, live WPM/filler-density pill, opt-in post-meeting debrief Sonnet tile.
-- **Anti-hallucination** (v0.0.20+): pre-Whisper noise gate + post-Whisper output filter (artefact dictionary + repetition detector).
-- **Aggressive mode** (v0.0.18): bypass detector, tile per transcript line, 60 tiles/min cap.
-- **One-click update** (v0.0.23): backend `download_and_install_update` downloads NSIS + spawns + quit_app.
-- **Settings sidebar redesign** (v0.0.30) per Claude Design handoff: 4 groups + 11 panels + active-panel conditional render, pinned-bottom group.
-- **6-gate release verification** (v0.0.35) after a P0 infinite-grow bug shipped in v0.0.34 — see `RELEASE_CHECKLIST.md`.
-- **Settings polish** (v0.0.37–v0.0.40): all panels migrated from legacy `.field` to design `.card`/`.switch-row`/`.card-row` template.
-- **Sticky header/footer fix** (v0.0.41): removed conflicting `.settings-root` override that broke flex pin; `open_settings` window clamps to `monitor_h - 40`.
-- **i18n** (v0.0.42–v0.0.50): RU+EN UI with live switching. `src/i18n.ts` typed strings map (212 keys × 2 langs). Backend adds `ui_language: String` to Config. Tile chrome receives lang via URL param (tiles can't call `get_config`). See `docs/I18N_PLAN.md` for the implementation log.
+- **`slint-experiment/`** — the `overlay-host` binary. Declarative UI in
+  `ui/*.slint` (compiled into the binary at build time via `build.rs` +
+  `slint-build`), orchestration in `src/bin/overlay_host.rs`, Win32 HWND
+  helpers in `src/win32.rs`.
+- **`overlay-backend/`** — the no-UI shared crate (audio / stt / ai /
+  local_ai / config / runtime / events / journal / kb / health / update),
+  consumed by `slint-experiment` via a path dep.
 
-## 3-tier data flow
+## Data flow
 
 ```
-WASAPI loopback + mic (Windows)
+WASAPI loopback (system) + mic  (overlay-backend/src/audio.rs)
+        │  tokio::mpsc — audio chunks @ 16 kHz mono i16
+        ▼
+STT (overlay-backend/src/stt.rs) — backend chosen by config `stt_provider`:
+  · Cloud   → Groq /openai/v1/audio/transcriptions (Whisper)
+  · Whisper → local whisper.cpp server (OpenAI-compatible endpoint)
+  · GigaAM  → local, in-process (transcribe-rs / ort), CPU or DirectML
+  + noise gate, retry on 5xx/429, artefact/repetition post-filter
+        │  TranscriptLine { source, text }
+        ▼
+session driver (overlay-backend/src/runtime.rs + slint-experiment/src/slint_session.rs)
+  · push to rolling VecDeque (cap ~80)
+  · emit transcript line → SlintEvents bridge → overlay bar live line
+  · auto-detector → maybe spawn a tile (gated by skip-mic / aggressive mode)
         │
         ▼
-tokio::mpsc (audio chunks @ 16 kHz mono i16)
+detect_trigger (question / keyword) → KB-search injection → prompt build
         │
         ▼
-Whisper VAD pipeline (stt.rs):
-  · per-source rolling buffer
-  · noise gate (pre-Whisper)
-  · Groq /openai/v1/audio/transcriptions
-  · 3-attempt retry (1s/2s/4s) on 5xx/429
-  · post-filter (artefacts, repetitions)
-        │
-        ▼
-transcript events (TranscriptEvent {source, text})
-        │
-        ▼
-runtime.rs forwarder:
-  · push to rolling VecDeque (cap 80)
-  · emit transcript:line Tauri event
-  · maybe_spawn_tile (gated by detector_skip_mic)
-  · push_speech_window (mic only)
-        │
-        ▼
-detect_trigger (question/keyword) → KB-search injection → prompt build
-        │
-        ▼
-Claude Haiku SSE via OAuth bridge (ai.rs)
-  · complete_with_usage: 3 retries on 5xx/429, fail-fast on 4xx
+AI (overlay-backend/src/ai.rs) — endpoint chosen by config.ai_endpoint():
+  · "local" → local llama.cpp server (OpenAI-compatible)
+  · else    → cloud bridge (Claude OpenAI-compat)
+  · complete_with_usage / stream_chat; 3 retries on 5xx/429, fail-fast 4xx
   · cost_microcents accumulation
         │
         ▼
-tile.rs::spawn_tile_with_stealth
-  · grid_position picks first-free slot (HashSet diff)
-  · TTL 120s with atomic pin-race fix
-  · MAX_TILES=6 (2 cols × 3 rows)
-        │
-        ▼
-React TileWindow renders ReactMarkdown + remark-gfm
+tile spawn (slint-experiment/src/bin/overlay_host.rs)
+  · events.spawn_tile_full → spawn-poll Timer drains the queue on the UI thread
+  · TileWindow (ui/tile.slint), markdown via pulldown-cmark (src/markdown.rs)
+  · Win32 transparency + monitor placement + optional stealth
 ```
 
-## Tauri 2 security model
+## Windows
 
-**Capability split:**
+There is no URL router — each surface is a distinct Slint window component in
+the **same process**, created on the UI thread and given Win32 treatment
+(`win32.rs`: `make_transparent_overlay` / `make_transparent_tile` /
+`set_always_on_top` / `set_stealth`):
 
-- `capabilities/default.json` — overlay window only. Has global-shortcut + opener + window:* perms incl. `core:window:allow-start-dragging` (v0.0.1 patch).
-- `capabilities/tile.json` — tile-* windows. Narrow: no opener, no global-shortcut, no set-position/size. Can hide/show/close/drag self only.
+- **Overlay bar** (`ui/overlay_bar.slint`) — the always-on-top HUD strip. Brand
+  logo (drag handle) + status pill + live transcript line + chips. Pinned to
+  the **primary** monitor at startup.
+- **Tile** (`ui/tile.slint`) — a Q/A card with markdown body, pin / maximize /
+  close, follow-up input.
+- **Settings** (`ui/settings_panel.slint`) — grouped sidebar + panels.
+- **F4 palette** (`ui/palette.slint`) — inline KB search.
+- **Replay** (`ui/replay.slint`) — JSONL session-journal timeline.
 
-**Caller-window guard:**
+## Hotkeys
 
-`assert_overlay(window)` is called at the top of 31 sensitive Tauri commands (of 39 total). Rejects any call from non-overlay window (e.g. a tile rendering AI markdown can't `invoke("export_config")` to leak the bearer + Groq key). Catches markdown-driven prompt injection.
+Global, via the `global-hotkey` crate (registered in `overlay_host.rs`, drained
+by a Slint `Timer`):
 
-Unprotected commands (read-only or low-blast-radius): `list_audio_devices`, `kb_search`, `kb_get`, `kb_stats`, `list_snippets`, `close_tile`, `pin_tile`, `list_monitors`.
-
-## Frontend router
-
-`main.tsx` dispatches by URL query param:
-
-- `?settings=1` → Settings (13 sections, drag-region header, 760×900 window)
-- `?replay=1` → Replay viewer (JSONL session journal timeline)
-- `?tile=1&id=…&kind=…&q=…&a=…` → TileWindow (single Q/A card)
-- default → Overlay (36px glass bar with HUD)
-
-## Hotkeys (all global via tauri-plugin-global-shortcut)
-
-| Key | Action | Implementation |
+| Key | Action | Handler |
 |---|---|---|
-| F3 | Re-ask last question | `runtime::reask_last()` |
-| F4 | KB palette toggle | emit `hotkey:kb-palette` → React |
-| F6 | Manual tile from last transcript | `runtime::manual_spawn_tile()` |
-| F8 | Pause/resume session | emit → React toggles start/stop_session |
-| F9 | Ask AI now (with optional screenshot) | emit → React → invoke ai |
-| F10 | Take screenshot for next ask | emit → React → invoke take_screenshot |
-| F11 | PANIC HIDE (overlay + all tiles) | inline Rust handler — direct window.hide()/show() loop |
-| F7 | DEBUG: spawn hardcoded test tile | debug-only |
+| F3 | Re-ask last question | `runtime::reask_last` |
+| F4 | KB palette toggle | `open_palette` (focus-independent toggle) |
+| F6 | Manual tile from last transcript line | `runtime::manual_spawn_tile` (resolves local/cloud endpoint) |
+| F7 | Collapse-all tiles | stub |
+| F9 | Live AI ask (streaming) | `fire_f9_ask` → `ask_stream_loop` |
 
 ## Key invariants
 
-1. **Tile slot uniqueness** (`tile.rs`): each ActiveTile has a `slot: usize` field. Spawn picks the FIRST free slot via HashSet diff with occupied set. When MAX_TILES full, evict oldest and reuse its slot. Prevents the "tile spawned on tile" bug from v0.0.4 era.
-
-2. **TTL pin race fix** (`tile.rs::take_if_unpinned`): atomic check-and-remove under single lock. Prevents the race where pin() sneaks in between is_pinned check and close().
-
-3. **Single-instance lock** (`tauri-plugin-single-instance`): second launch focuses existing overlay window. Prevents orphan-process scenarios where global hotkeys silently fail to register on the second instance.
-
-4. **Settings stale-state heal** (Settings.tsx): on window-focus event, re-fetch get_config. Without it, after a binary restart while the WebView stays open, Save would persist the stale React state and wipe secrets.
-
-5. **mountedRef must reset on every mount** (Settings.tsx): React StrictMode mounts → unmounts → re-mounts in dev. Without explicit `mountedRef.current = true` at start of useEffect, second mount inherits `false` from first cleanup → all showPrompt/showConfirm silently no-op.
-
-6. **Stop-session zeros health atomics + emits final snapshot** (`runtime.rs`): without this, HUD dots froze on last green/yellow color forever after Stop. Now they transition to idle gray.
-
-7. **Cost cap is SOFT warning, not hard block** (v0.0.5): emits `cost:cap-hit` event with `blocking: false`, UI shows yellow "💰 over budget" chip, AI calls continue. User decides when to stop. Hard-block proved bad UX during interviews.
+1. **Slint windows are created on the UI thread.** Backend code requests a tile
+   via `events.spawn_tile_full(...)`; a 50 ms spawn-poll `Timer` in
+   `overlay_host.rs` drains the queue and constructs the `TileWindow`. The
+   `+ тайл` chip additionally spawns an INSTANT placeholder directly on the UI
+   thread for immediate feedback.
+2. **Bar pinned to the primary monitor at startup** (`apply_overlay_hwnd`) —
+   winit has no monitor preference, so on a multi-monitor setup (esp. a
+   portrait secondary at negative X) it would otherwise land unpredictably.
+3. **AI endpoint via `config.ai_endpoint(prep)`** — resolves local vs cloud by
+   `ai_provider`. The raw `ai_base_url` field is ALWAYS the cloud bridge; using
+   it directly silently fails for local-provider users.
+4. **Stop-session zeros health atomics + emits a final snapshot** — without it
+   the HUD dots freeze on their last colour instead of going idle-gray.
+5. **Cost cap is a SOFT warning**, not a hard block: emits `cost:cap-hit` with
+   `blocking: false`; the UI shows a yellow "over budget" chip and AI calls
+   continue. The user decides when to stop.
+6. **Transparency / stealth is applied per-window after show** (a short
+   HWND-grab delay) so winit/skia composition has settled first.
 
 ## Critical files
 
-| File | Lines | Role |
+| File | ~Lines | Role |
 |---|---|---|
-| `src-tauri/src/lib.rs` | 1741 | Tauri Builder, all Tauri commands, bridge/update probes, export_safe, diagnostic dump |
-| `src-tauri/src/runtime.rs` | 3259 | Session lifecycle, transcript forwarder, AI ask flows, voice coach, debrief |
-| `src-tauri/src/config.rs` | 1665 | Config struct + serde defaults + default snippets |
-| `src-tauri/src/stt.rs` | 965 | Whisper VAD pipeline, prompt budgeting, retry classifier |
-| `src-tauri/src/tile.rs` | 758 | Tile manager, grid_position layout math, TTL reaper |
-| `src-tauri/src/journal.rs` | 765 | JSONL writer, prune (count + size cap), session summary |
-| `src-tauri/src/ai.rs` | 674 | Claude OpenAI-compat client (stream + non-stream + retry) |
-| `src-tauri/src/kb.rs` | 319 | Embedded KB search (1643 entries, pre-lowercased) |
-| `src-tauri/src/audio.rs` | 580 | WASAPI loopback + mic, resampling, push-to-talk |
-| `src-tauri/src/hotkeys.rs` | 180 | Global hotkey registration |
-| `src-tauri/src/tray.rs` | 106 | Tray icon + menu (Show/Hide/Settings/Quit) |
-| `src/Overlay.tsx` | 763 | Main overlay bar (36px) |
-| `src/Settings.tsx` | 1483 | 13-section config panel |
-| `src/TileWindow.tsx` | 133 | Q/A tile card with markdown |
-| `src/Replay.tsx` | 439 | JSONL journal timeline viewer |
-
-## Test coverage (244 lib tests + 25 journal-eval tests as of v0.0.15 release)
-
-Strong coverage:
-- Config save/load + serde defaults + pricing-table sync (15 tests)
-- AI retry classifier `is_permanent_ai_error` (8 tests)
-- AI cost math `cost_microcents` (5 tests)
-- KB search + key-trigger matcher (12 tests)
-- Tile slot picker — gap reuse + eviction + ordering (4 tests)
-- Tile lifecycle — pin/take/reap (8 tests)
-- STT prompt budget — vocab fit, hard cap, overflow regression (9 tests)
-- Detector — v2/v3/v4 patterns, fuzzy match, skip-mic gate (35 tests)
-- Voice coach — WPM, fillers, pace buckets (10 tests)
-- Debrief gate — duration/mic-lines/text-length thresholds (7 tests)
-- Cost budget — disabled/under/at/over boundary (4 tests)
-- Bridge probe model-not-found matcher (9 tests)
-- Update semver compare (8 tests — equal/lower/higher, v-prefix, prerelease, empty, unequal segments, non-numeric)
-- Journal — JSONL serialize, counters, prune count-based + size-cap (12 tests)
-- Audio — WAV roundtrip, resample, decimator (~10 tests)
-- **blank_share_secrets** (10 tests) — security-critical: each share-export
-  field gets blanked / each kept field survives / idempotent
-- **sanitize_diagnostic_text** (5 tests) — v0.0.15: redacts gsk_/Bearer/sk-
-  patterns from crash report + journal tail before dump_diagnostics writes
-- **is_permanent_ai_error** (8 tests) — retry classifier gate (400/401/403/
-  404/413 permanent; 5xx/429/network transient; empty defensive)
-- **Tile slot picker** (4 tests) — gap-reuse after middle close, oldest
-  eviction with slot reuse, empty initial, unordered occupied
-
-Honest gaps:
-- No integration test that runs spawn_tile against a real Tauri AppHandle (mocking AppHandle is hard; pure-fn extracts cover most logic)
-- No coverage for the actual SSE streaming path in `ai.rs::stream_inner` (mocking reqwest::Response::bytes_stream is heavy)
-- WASAPI capture path tested only via decimator math + WAV roundtrip — no real-device test (CI doesn't have audio hardware)
+| `slint-experiment/src/bin/overlay_host.rs` | 5200 | App entry, all windows + handlers, hotkey poll, tile spawn, session wiring |
+| `overlay-backend/src/config.rs` | 2235 | Config struct + serde defaults + `ai_endpoint` resolver + default snippets |
+| `overlay-backend/src/runtime.rs` | 1330 | Session lifecycle, transcript forwarder, AI ask flows, debrief, manual spawn |
+| `overlay-backend/src/stt.rs` | 1260 | STT dispatch (Groq / whisper.cpp / GigaAM), VAD, prompt budgeting, retry |
+| `overlay-backend/src/journal.rs` | 956 | JSONL writer, prune (count + size cap), session summary |
+| `overlay-backend/src/local_ai.rs` | 910 | Local llama.cpp + GigaAM model management |
+| `overlay-backend/src/audio.rs` | 550 | WASAPI loopback + mic, resampling, push-to-talk |
+| `overlay-backend/src/ai.rs` | 840 | OpenAI-compat client (stream + non-stream + retry + cost) |
+| `overlay-backend/src/kb.rs` | 427 | Embedded KB search (pre-lowercased) |
+| `overlay-backend/src/events.rs` | 368 | `RuntimeEvents` trait (emit / spawn_tile / spawn_tile_full) |
+| `slint-experiment/src/slint_session.rs` | 925 | Slint-side session orchestrator + STT pipeline |
+| `slint-experiment/src/win32.rs` | 434 | HWND transparency, stealth, monitor enum, placement |
+| `slint-experiment/src/markdown.rs` | 360 | pulldown-cmark → Slint block model |
+| `slint-experiment/ui/settings_panel.slint` | 1318 | Grouped settings UI |
+| `slint-experiment/ui/overlay_bar.slint` | 514 | Overlay bar HUD |
+| `slint-experiment/ui/tile.slint` | 404 | Q/A tile card |
 
 ## Build & release
 
-```bash
-# Dev
-npm run dev               # vite only, no Tauri
-npm run tauri dev         # full app with HMR
+```pwsh
+# Dev / build (from slint-experiment/; cargo is at ~/.cargo/bin/cargo.exe)
+cargo run   --bin overlay-host
+cargo build --release --bin overlay-host
 
-# Production
-npm run tauri build       # → target/release/bundle/{msi,nsis}/
+# Tests + lint (both crates; no root workspace)
+cargo test  --manifest-path overlay-backend\Cargo.toml
+cargo clippy --manifest-path overlay-backend\Cargo.toml --all-targets
+cargo clippy --manifest-path slint-experiment\Cargo.toml --bin overlay-host
 
-# Tests
-cargo test --lib                                    # 227 tests, <1s
-cargo clippy --bin overlay-mvp -- -D warnings       # strict lint
+# Installer (NSIS)
+scripts\build-slint-release.ps1 -Installer
+#   → slint-experiment/target/release/bundle/suflyor-slint-setup.exe
 
 # Release
-gh release create vX.Y.Z \
-  target/release/bundle/msi/suflyor_X.Y.Z_x64_en-US.msi \
-  target/release/bundle/nsis/suflyor_X.Y.Z_x64-setup.exe \
+gh release create vX.Y.Z slint-experiment/target/release/bundle/suflyor-slint-setup.exe `
   --title "vX.Y.Z — …" --notes-file notes.md
 ```
 
-Version is tracked in 3 places (must be kept in sync):
-- `package.json`
-- `src-tauri/Cargo.toml`
-- `src-tauri/tauri.conf.json`
+Version is tracked in **2** places (keep in sync): `slint-experiment/Cargo.toml`
+and `scripts/slint-installer.nsi` (`!define PRODUCT_VERSION`).
 
 ## Out-of-scope (deferred or won't-do)
 
-- **Local Whisper** (CUDA/whisper-rs): research-only in `docs/local-whisper-options.md`. Defer until offline operation requested by a real user. Current Groq pipeline meets latency + quality needs.
-- **Code signing** (Authenticode for MSI): personal tool, single user, would cost $300+/yr cert. SmartScreen "Unknown publisher" warning acceptable.
-- **Auto-update download manager**: Settings → 🆙 Обновления currently opens the GitHub release page in browser. Auto-installing without signing is risky and would need elevation prompts.
-- **Telemetry**: explicit non-goal. Tool is personal-use, no analytics.
-- **Tauri MockRuntime integration tests**: would let us test commands like `start_session`'s emit + `dump_diagnostics`'s file write without a real WebviewWindow. Multi-hour setup; pure-fn extracts cover most logic for now.
-- **Ghost-tile cleanup at startup**: if `overlay-mvp.exe` is force-killed, WebView2 child windows can persist as orphans. Subsequent fresh launch sees an empty active list and a new spawn at slot 0 will overlap with the orphan window's position. Fix would need Win32 enumeration. Not a normal-flow bug — graceful shutdown cleans children. Documented; deferred.
-
-Note: snippet add/edit/delete modal (item from prior doc revision) shipped in v0.0.10 — `Settings → 📋 Snippets → + New / ✎`.
+- **Code signing** (Authenticode): personal tool, single user; SmartScreen
+  "Unknown publisher" accepted.
+- **Telemetry**: explicit non-goal.
+- **overlay_host.rs split**: at ~5200 lines it's a split candidate, but the
+  windows share a lot of closure-captured state; deferred until it hurts.

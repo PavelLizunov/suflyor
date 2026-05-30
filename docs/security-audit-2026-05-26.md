@@ -1,5 +1,13 @@
 # Security audit snapshot — 2026-05-26 (v0.0.15)
 
+> ⚠️ **HISTORICAL — pre-Slint stack.** This snapshot audited the original
+> **Tauri 2 + React 19 + Vite** stack as it stood on 2026-05-26. Two days later
+> the entire UI was rewritten in **Rust + Slint** (Phase 7 cut, 2026-05-28):
+> there is no longer any Tauri, React, Vite, WebView2, npm, or GTK dependency,
+> so the NPM-audit / capability-split / WebView sections below no longer apply.
+> The Cargo-side posture (Windows-only, WASAPI, secrets in `config.json`) still
+> holds. A fresh audit of the Slint stack is TODO. Kept as the historical record.
+
 ## Cargo (Rust deps): `cargo audit`
 
 **Scanned 626 crate dependencies. 0 actual vulnerabilities. 17 unmaintained warnings.**
