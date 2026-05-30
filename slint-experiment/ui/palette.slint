@@ -9,7 +9,7 @@
 // for outside-click + kb_search backend call. Stub displays sample
 // results loaded from a static list.
 
-import { LineEdit, ScrollView } from "std-widgets.slint";
+import { LineEdit, ScrollView, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 export struct PaletteResult {
@@ -20,6 +20,11 @@ export struct PaletteResult {
 }
 
 export component PaletteWindow inherits Window {
+    // Phase 4 — keep the std-widgets search LineEdit dark with the active
+    // scheme instead of Slint's light fluent default.
+    property <bool> widgets-light: Theme.is-light;
+    init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
+    changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     title: "F4 — KB palette";
     // Phase E6 fix: was `background: transparent` + frameless which
     // combined with WS_EX_LAYERED via make_transparent_overlay on the

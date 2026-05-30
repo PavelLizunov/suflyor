@@ -16,7 +16,7 @@
 //  11  AI bridge        (AI)      cloud/local selector + probe + cost cap
 //  12  STT              (AI)      provider selector + GigaAM GPU + Whisper
 
-import { Button, LineEdit, ScrollView, SpinBox, ComboBox, Slider, TextEdit } from "std-widgets.slint";
+import { Button, LineEdit, ScrollView, SpinBox, ComboBox, Slider, TextEdit, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 // Phase E6 v40 — toggle SWITCH (borrowed from the Claude Design bundle:
@@ -128,6 +128,14 @@ component NavItem inherits Rectangle {
 }
 
 export component SettingsWindow inherits Window {
+    // Phase 4 — drive the std-widgets Palette (ComboBox/LineEdit/TextEdit/
+    // Button/Slider/SpinBox) off our active scheme so they render dark like
+    // the rest of the UI instead of Slint's light fluent default. Light Frost
+    // (scheme 3) is the only light scheme; `changed` keeps widgets in sync
+    // when the user flips schemes live in Settings -> Interface.
+    property <bool> widgets-light: Theme.is-light;
+    init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
+    changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     title: @tr("overlay-mvp settings (Slint)");
     // Phase E6 v25 — frameless. User: "хедер, он нам разве нужен?".
     // Native title bar removed; drag via the "Settings" sidebar header
@@ -797,6 +805,7 @@ export component SettingsWindow inherits Window {
                             Text {
                                 text: @tr("Profile:");
                                 font-size: 12px;
+                                color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
                             if root.profile-names.length > 0 : ComboBox {

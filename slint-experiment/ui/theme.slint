@@ -47,8 +47,13 @@ export global Theme {
     out property <color> scrim: scheme == 1 ? #0A09079E : scheme == 2 ? #06070EA3 : scheme == 3 ? #141C284C : #070A0E9E;
 
     // ---- Typography ----
-    // Recommended pair (UI + code from one superfamily). The fonts must be
-    // installed or bundled for these to take effect; otherwise skia falls back.
-    out property <string> font-sans: "IBM Plex Sans";
-    out property <string> font-mono: "IBM Plex Mono";
+    // The design handoff recommends IBM Plex Sans/Mono, but those aren't
+    // installed on the target box and bundling .ttf is deferred. We use the
+    // best already-installed pair with full Cyrillic coverage instead:
+    // Segoe UI (the Windows system sans) + Cascadia Mono (ships with Windows
+    // Terminal / VS). Both render Russian cleanly with zero download. Swap
+    // these two strings if IBM Plex (or Golos Text + JetBrains Mono) ever gets
+    // bundled — every text element routes through these roles.
+    out property <string> font-sans: "Segoe UI";
+    out property <string> font-mono: "Cascadia Mono";
 }

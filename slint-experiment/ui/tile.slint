@@ -5,7 +5,7 @@
 // CommonMark via slint_replay::markdown::parse() and pushes the
 // resulting Vec<Block> into the `blocks` property.
 
-import { Button, LineEdit, ScrollView } from "std-widgets.slint";
+import { Button, LineEdit, ScrollView, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 // MarkdownBlock is shared with markdown_spike — defined here in the
@@ -17,6 +17,11 @@ export struct MarkdownBlock {
 }
 
 export component TileWindow inherits Window {
+    // Phase 4 — keep std-widgets (follow-up LineEdit, ScrollView) dark with
+    // the active scheme instead of Slint's light fluent default.
+    property <bool> widgets-light: Theme.is-light;
+    init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
+    changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     title: "tile";
     background: transparent;
     no-frame: true;
@@ -346,7 +351,7 @@ export component TileWindow inherits Window {
                                     text: block.text;
                                     font-size: 11px;
                                     color: Theme.code-text;
-                                    font-family: "Consolas";
+                                    font-family: Theme.font-mono;
                                     wrap: word-wrap;
                                 }
                             }
@@ -371,7 +376,7 @@ export component TileWindow inherits Window {
                                     text: block.text;
                                     font-size: 11px;
                                     color: Theme.code-text;
-                                    font-family: "Consolas";
+                                    font-family: Theme.font-mono;
                                     wrap: no-wrap;
                                 }
                             }

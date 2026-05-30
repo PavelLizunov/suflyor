@@ -9,7 +9,7 @@
 // which wires every callback to real backend modules: audio probe,
 // AI ask, KB palette, hotkey dispatch, journal bookmark, etc.
 
-import { Button } from "std-widgets.slint";
+import { Button, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 // ===== Reusable chip primitives =====
@@ -156,6 +156,11 @@ component VDivider inherits Rectangle {
 // ===== Main overlay bar =====
 
 export component OverlayBarWindow inherits Window {
+    // Phase 4 — keep std-widgets (Button etc.) dark with the active scheme
+    // instead of Slint's light fluent default. See settings_panel for detail.
+    property <bool> widgets-light: Theme.is-light;
+    init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
+    changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     title: "overlay-mvp (Slint)";
     background: transparent;
     no-frame: true;
