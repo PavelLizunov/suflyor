@@ -217,8 +217,23 @@ msgstr "Минимум секунд в сессии:"
 
 # --- Tab 2: Hotkeys ---
 
-msgid "Global hotkeys (read-only — wire to RegisterHotKey in Phase 2.3):"
-msgstr "Глобальные хоткеи (только чтение — будут подключены через RegisterHotKey в Phase 2.3):"
+msgid "Global hotkeys (work anywhere, even when the app isn't focused):"
+msgstr "Глобальные хоткеи (работают везде, даже когда приложение не в фокусе):"
+
+msgid "Ask AI now (streams the answer into a tile)"
+msgstr "Спросить AI сейчас (ответ стримится в тайл)"
+
+msgid "Re-ask the last question with fresh context"
+msgstr "Переспросить последний вопрос с обновлённым контекстом"
+
+msgid "Knowledge-base palette (open / close)"
+msgstr "Палитра базы знаний (открыть / закрыть)"
+
+msgid "Manual tile from the last transcript line"
+msgstr "Тайл вручную по последней реплике транскрипта"
+
+msgid "Collapse / expand all tiles"
+msgstr "Свернуть / развернуть все тайлы"
 
 msgid "Toggle hotkey-hint popover"
 msgstr "Показать/скрыть подсказку по хоткеям"
