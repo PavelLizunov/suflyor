@@ -72,6 +72,20 @@ pub fn version_gt(a: &str, b: &str) -> bool {
     parse_ver(a) > parse_ver(b)
 }
 
+/// Select the canonical installer asset's download URL from a release's assets.
+/// Requires the EXACT `INSTALLER_ASSET` name — there is deliberately NO "any
+/// *.exe" fallback, so a renamed/stray/attacker-attached executable in the
+/// release can never be chosen as the installer that `run_installer` spawns.
+/// Returns an empty string when the named asset is absent (the UI then offers
+/// the "open release page" path instead of auto-running anything).
+fn pick_installer_url(assets: &[GhAsset]) -> String {
+    assets
+        .iter()
+        .find(|a| a.name == INSTALLER_ASSET)
+        .map(|a| a.browser_download_url.clone())
+        .unwrap_or_default()
+}
+
 /// Query the latest release. `current_version` is the running build's
 /// version (e.g. `env!("CARGO_PKG_VERSION")`).
 ///
@@ -97,13 +111,7 @@ pub async fn check_latest(current_version: &str) -> Result<UpdateInfo> {
         .context("parse releases/latest JSON")?;
 
     let latest = rel.tag_name.trim_start_matches('v').to_string();
-    let download_url = rel
-        .assets
-        .iter()
-        .find(|a| a.name == INSTALLER_ASSET)
-        .or_else(|| rel.assets.iter().find(|a| a.name.ends_with(".exe")))
-        .map(|a| a.browser_download_url.clone())
-        .unwrap_or_default();
+    let download_url = pick_installer_url(&rel.assets);
 
     Ok(UpdateInfo {
         newer: version_gt(&latest, current_version),
@@ -188,5 +196,33 @@ mod tests {
         ));
         assert!(!is_trusted_download("https://evil.example.com/x.exe"));
         assert!(!is_trusted_download("http://github.com/x.exe")); // not https
+    }
+
+    #[test]
+    fn installer_asset_requires_exact_name() {
+        let canonical =
+            "https://github.com/PavelLizunov/suflyor/releases/download/v1/suflyor-slint-setup.exe";
+        let assets = vec![
+            GhAsset {
+                name: "release-notes.txt".to_string(),
+                browser_download_url: "https://x/notes.txt".to_string(),
+            },
+            GhAsset {
+                name: INSTALLER_ASSET.to_string(),
+                browser_download_url: canonical.to_string(),
+            },
+        ];
+        assert_eq!(pick_installer_url(&assets), canonical);
+
+        // A stray/renamed .exe must NOT be picked when the canonical asset is
+        // absent — pre-fix, the `.or_else(... ends_with(".exe"))` fallback would
+        // have returned this and run_installer would have spawned it.
+        let stray = vec![GhAsset {
+            name: "totally-not-the-installer.exe".to_string(),
+            browser_download_url: "https://github.com/x/stray.exe".to_string(),
+        }];
+        assert_eq!(pick_installer_url(&stray), "");
+
+        assert_eq!(pick_installer_url(&[]), "");
     }
 }

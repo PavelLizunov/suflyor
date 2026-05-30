@@ -103,7 +103,16 @@ pub async fn test_connection_backend(backend: &SttBackendCfg) -> Result<String> 
             if !bearer.trim().is_empty() {
                 req = req.bearer_auth(bearer);
             }
-            let resp = req.send().await.context("GET whisper server")?;
+            // Generic on transport failure: a reqwest error's chain embeds the
+            // request `url` (the LAN base_url), which must NOT reach the screen-
+            // capturable Settings/Diagnostics field. Full detail → file log only.
+            let resp = match req.send().await {
+                Ok(r) => r,
+                Err(e) => {
+                    log::warn!("STT whisper-server GET failed: {e:#}");
+                    anyhow::bail!("whisper-server unreachable");
+                }
+            };
             // whisper.cpp has no /models route, so a 404/405 here still means the
             // server is UP and reachable (a truly-down server fails at send()).
             // Report that plainly instead of a scary raw 404.
@@ -761,16 +770,31 @@ async fn transcribe_once_attempt(
     if let Some(b) = bearer {
         req = req.bearer_auth(b);
     }
-    let resp = req
-        .multipart(form)
-        .send()
-        .await
-        .context("POST stt transcriptions")?;
+    // Generic on transport failure: a reqwest error's chain embeds the request
+    // `url` (the local Whisper base_url / LAN IP), which must NOT surface in the
+    // screen-capturable PTT tile or Diagnostics field. Log full detail to the
+    // file log; return a secret-free message. Network errors stay retryable
+    // (no "HTTP 4xx" in the text, so is_permanent_error keeps them in the loop).
+    let resp = match req.multipart(form).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            log::warn!("STT POST failed: {e:#}");
+            anyhow::bail!("STT network error");
+        }
+    };
 
     if !resp.status().is_success() {
         let status = resp.status();
+        // Keep the status (drives is_permanent_error + tells the user 401 vs 5xx)
+        // but DROP the response body from the returned error: a local server's
+        // body can carry paths/internals that would paint into the screen-
+        // capturable PTT tile. Body → file log only.
         let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("STT HTTP {status}: {body}");
+        log::warn!(
+            "STT HTTP {status} body: {}",
+            body.chars().take(500).collect::<String>()
+        );
+        anyhow::bail!("STT HTTP {status}");
     }
 
     let parsed: GroqResponse = resp.json().await.context("parse stt json")?;
@@ -1012,6 +1036,22 @@ fn encode_wav_pcm_i16_mono_16k(pcm: &[i16]) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn permanent_error_classification_survives_redaction() {
+        // After secret-redaction, non-2xx errors keep the status (so auth/quota
+        // stay permanent → no pointless retries) while the body is dropped.
+        assert!(is_permanent_error("STT HTTP 401 Unauthorized"));
+        assert!(is_permanent_error("STT HTTP 403 Forbidden"));
+        assert!(is_permanent_error("STT HTTP 404 Not Found"));
+        assert!(is_permanent_error("STT HTTP 413 Payload Too Large"));
+        // Transport failures are now generic + retryable (carry no HTTP status).
+        assert!(!is_permanent_error("STT network error"));
+        assert!(!is_permanent_error("whisper-server unreachable"));
+        // 5xx / 429 remain retryable.
+        assert!(!is_permanent_error("STT HTTP 500 Internal Server Error"));
+        assert!(!is_permanent_error("STT HTTP 429 Too Many Requests"));
+    }
 
     #[test]
     fn wav_header_is_44_bytes() {
