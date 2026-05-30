@@ -1,13 +1,11 @@
-// Phase 5 — F4 KB palette stub.
+// F4 knowledge-base palette.
 //
-// Frameless centered window: input field at top, RECENT chips
-// below, results list. F4 (and clicking the overlay's 💡 chip, for
-// now) shows it; Esc / outside-click hides it. Enter on a result
-// spawns a tile via Phase 4 plumbing.
-//
-// Phase 5.x will wire RegisterHotKey for the global F4 + ResizeObserver
-// for outside-click + kb_search backend call. Stub displays sample
-// results loaded from a static list.
+// Frameless centered window: input field at top, RECENT chips below, a
+// results list. The global F4 hotkey (and the overlay's 💡 chip) shows it;
+// Esc / outside-click hides it. Up/Down navigate the results and Enter
+// activates the selected one (#121). Results come from the real kb::search
+// backend in overlay-backend; overlay_host.rs owns the wiring (global
+// hotkey, outside-click dismissal, and the search call).
 
 import { LineEdit, ScrollView, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
