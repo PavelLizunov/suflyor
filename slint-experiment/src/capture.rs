@@ -94,10 +94,86 @@ pub fn bgra_to_jpeg_data_url(
     Ok(format!("data:image/jpeg;base64,{b64}"))
 }
 
+/// Capture the ENTIRE virtual desktop (all monitors) as one frozen frame, for
+/// the region-select overlay. Returns the frame plus the virtual-desktop origin
+/// (vx, vy) — NEGATIVE on multi-monitor — which the caller needs to position the
+/// fullscreen overlay window. Hide our own windows first (caller's job).
+pub fn capture_virtual_desktop() -> Result<(CapturedBgra, i32, i32), Box<dyn std::error::Error>> {
+    let (vx, vy, vw, vh) = crate::win32::virtual_screen_bounds();
+    if vw <= 0 || vh <= 0 {
+        return Err(format!("virtual desktop has zero size {vw}x{vh}").into());
+    }
+    let bgra = crate::win32::capture_rect_bgra(vx, vy, vw, vh)?;
+    Ok((
+        CapturedBgra {
+            bgra,
+            width: vw as u32,
+            height: vh as u32,
+        },
+        vx,
+        vy,
+    ))
+}
+
+/// Crop a TOP-DOWN BGRA frame to a sub-rect (image-pixel coords), clamped to the
+/// source bounds. Returns a new owned frame (at least 1x1).
+#[must_use]
+pub fn crop_bgra(src: &CapturedBgra, x: u32, y: u32, w: u32, h: u32) -> CapturedBgra {
+    let x = x.min(src.width.saturating_sub(1));
+    let y = y.min(src.height.saturating_sub(1));
+    let w = w.min(src.width - x).max(1);
+    let h = h.min(src.height - y).max(1);
+    let stride = src.width as usize * 4;
+    let mut out: Vec<u8> = Vec::with_capacity(w as usize * h as usize * 4);
+    for row in 0..h as usize {
+        let start = (y as usize + row) * stride + x as usize * 4;
+        let end = start + w as usize * 4;
+        if let Some(slice) = src.bgra.get(start..end) {
+            out.extend_from_slice(slice);
+        }
+    }
+    CapturedBgra {
+        bgra: out,
+        width: w,
+        height: h,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+
+    #[test]
+    fn crop_extracts_subrect() {
+        // 2x2 frame; per-pixel B channel = col*10 + row. BGRA = [B,G,R,A].
+        let mut src = Vec::new();
+        for row in 0..2u8 {
+            for col in 0..2u8 {
+                src.extend_from_slice(&[col * 10 + row, 0, 0, 255]);
+            }
+        }
+        let frame = CapturedBgra {
+            bgra: src,
+            width: 2,
+            height: 2,
+        };
+        let c = crop_bgra(&frame, 1, 0, 1, 1); // pixel (col=1,row=0) → B=10
+        assert_eq!((c.width, c.height), (1, 1));
+        assert_eq!(c.bgra, vec![10u8, 0, 0, 255]);
+    }
+
+    #[test]
+    fn crop_clamps_out_of_bounds() {
+        let frame = CapturedBgra {
+            bgra: vec![1, 2, 3, 4],
+            width: 1,
+            height: 1,
+        };
+        let c = crop_bgra(&frame, 5, 5, 10, 10); // way out → clamps to 1x1
+        assert_eq!((c.width, c.height), (1, 1));
+        assert_eq!(c.bgra.len(), 4);
+    }
 
     #[test]
     fn bgra_to_jpeg_produces_data_uri() {

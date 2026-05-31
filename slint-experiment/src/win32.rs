@@ -457,6 +457,17 @@ pub fn show_windows(hwnds: &[(isize, bool)]) {
     }
 }
 
+/// Bring a window to the foreground + give it keyboard focus so its FocusScope
+/// receives key events (e.g. Esc on the capture overlay). Unlike the always-on-
+/// top bar (which avoids activation to not steal focus), the capture overlay is
+/// modal and SHOULD take focus.
+pub fn focus_window(hwnd: HWND) {
+    use windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow;
+    unsafe {
+        let _ = SetForegroundWindow(hwnd);
+    }
+}
+
 /// Position a window at the given screen coordinates with the given size.
 /// Used by `apply_tile_hwnd_with_monitor` in overlay_host to drive
 /// freshly-spawned tile windows onto the chosen display.

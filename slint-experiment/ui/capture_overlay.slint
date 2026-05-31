@@ -1,0 +1,186 @@
+// V3 — Lightshot-style region-select overlay.
+//
+// Shown fullscreen over a FROZEN snapshot of the whole virtual desktop (the
+// Rust host captures it, hands us the image, and positions this window to cover
+// every monitor). The user drags a rectangle; on release we emit
+// `region-selected` with the rect in LOGICAL px (the host multiplies by the
+// window scale-factor to get image pixels and crops the frozen buffer). Esc or
+// right-click or a too-small drag cancels.
+
+export component CaptureOverlay inherits Window {
+    title: "suflyor — capture";
+    no-frame: true;
+    always-on-top: true;
+    forward-focus: fs;
+
+    // Driven from Rust.
+    in property <image> frozen;
+    // Logical size of the view (physical virtual-desktop size / scale-factor).
+    in property <length> view-width: 1920px;
+    in property <length> view-height: 1080px;
+
+    // Selection state in logical px.
+    property <length> sx;
+    property <length> sy;
+    property <length> ex;
+    property <length> ey;
+    property <bool> dragging: false;
+
+    // Normalised selection rect.
+    property <length> rx: min(root.sx, root.ex);
+    property <length> ry: min(root.sy, root.ey);
+    property <length> rw: abs(root.ex - root.sx);
+    property <length> rh: abs(root.ey - root.sy);
+
+    // x1, y1, x2, y2 in LOGICAL px.
+    callback region-selected(length, length, length, length);
+    callback cancelled();
+
+    background: #000000;
+    width: root.view-width;
+    height: root.view-height;
+
+    // The frozen screenshot fills the window 1:1.
+    Image {
+        x: 0;
+        y: 0;
+        width: root.view-width;
+        height: root.view-height;
+        source: root.frozen;
+        image-fit: fill;
+    }
+
+    // Dim everything; while dragging, leave the selection bright via 4 bands.
+    if !root.dragging: Rectangle {
+        x: 0;
+        y: 0;
+        width: root.view-width;
+        height: root.view-height;
+        background: #00000055;
+    }
+    if root.dragging: Rectangle { // top
+        x: 0;
+        y: 0;
+        width: root.view-width;
+        height: root.ry;
+        background: #00000088;
+    }
+    if root.dragging: Rectangle { // bottom
+        x: 0;
+        y: root.ry + root.rh;
+        width: root.view-width;
+        height: root.view-height - (root.ry + root.rh);
+        background: #00000088;
+    }
+    if root.dragging: Rectangle { // left
+        x: 0;
+        y: root.ry;
+        width: root.rx;
+        height: root.rh;
+        background: #00000088;
+    }
+    if root.dragging: Rectangle { // right
+        x: root.rx + root.rw;
+        y: root.ry;
+        width: root.view-width - (root.rx + root.rw);
+        height: root.rh;
+        background: #00000088;
+    }
+
+    // Selection border + size readout.
+    if root.dragging: Rectangle {
+        x: root.rx;
+        y: root.ry;
+        width: root.rw;
+        height: root.rh;
+        border-color: #22d3ee;
+        border-width: 2px;
+        background: transparent;
+    }
+    if root.dragging && root.rw > 1px: Rectangle {
+        x: root.rx;
+        y: max(2px, root.ry - 22px);
+        width: 110px;
+        height: 20px;
+        background: #111827dd;
+        border-radius: 4px;
+        Text {
+            text: round(root.rw / 1px) + " × " + round(root.rh / 1px) + " px";
+            color: #e8e8ec;
+            font-size: 11px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    // Hint pill (top-left).
+    Rectangle {
+        x: 12px;
+        y: 12px;
+        width: hint.preferred-width + 20px;
+        height: 26px;
+        background: #111827dd;
+        border-radius: 6px;
+        hint := Text {
+            text: "Выделите область мышью · Esc / правый клик — отмена";
+            color: #e8e8ec;
+            font-size: 12px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    // Drag tracking.
+    TouchArea {
+        width: 100%;
+        height: 100%;
+        pointer-event(ev) => {
+            // OS-cancelled pointer grab (e.g. Alt-Tab mid-drag) — don't leave
+            // the frozen overlay stuck on screen.
+            if (ev.kind == PointerEventKind.cancel) {
+                root.dragging = false;
+                root.cancelled();
+                return;
+            }
+            if (ev.button == PointerEventButton.right && ev.kind == PointerEventKind.up) {
+                root.dragging = false;
+                root.cancelled();
+                return;
+            }
+            if (ev.button == PointerEventButton.left) {
+                if (ev.kind == PointerEventKind.down) {
+                    root.sx = self.mouse-x;
+                    root.sy = self.mouse-y;
+                    root.ex = self.mouse-x;
+                    root.ey = self.mouse-y;
+                    root.dragging = true;
+                } else if (ev.kind == PointerEventKind.up) {
+                    root.dragging = false;
+                    if (root.rw >= 4px && root.rh >= 4px) {
+                        root.region-selected(root.rx, root.ry, root.rx + root.rw, root.ry + root.rh);
+                    } else {
+                        root.cancelled();
+                    }
+                }
+            }
+        }
+        moved => {
+            if (root.dragging) {
+                root.ex = self.mouse-x;
+                root.ey = self.mouse-y;
+            }
+        }
+    }
+
+    // Esc to cancel (best-effort — needs keyboard focus, which the host grabs
+    // via SetForegroundWindow when it shows this overlay).
+    fs := FocusScope {
+        key-pressed(ev) => {
+            if (ev.text == Key.Escape) {
+                root.cancelled();
+                return accept;
+            }
+            return reject;
+        }
+    }
+}

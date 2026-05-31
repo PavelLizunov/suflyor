@@ -60,7 +60,8 @@ mod ui {
 }
 
 use ui::{
-    MarkdownBlock, OverlayBarWindow, PaletteResult, PaletteWindow, SettingsWindow, TileWindow,
+    CaptureOverlay, MarkdownBlock, OverlayBarWindow, PaletteResult, PaletteWindow, SettingsWindow,
+    TileWindow,
 };
 
 type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
@@ -76,6 +77,24 @@ fn to_md_blocks(md: &str) -> Vec<MarkdownBlock> {
             lang: SharedString::from(b.lang),
         })
         .collect()
+}
+
+/// Build a Slint RGBA image from a top-down BGRA capture. Alpha is forced
+/// opaque — GDI BitBlt leaves garbage in the alpha byte. Used by the V3 capture
+/// overlay to display the frozen virtual-desktop snapshot.
+fn bgra_to_slint_image(bgra: &[u8], w: u32, h: u32) -> slint::Image {
+    let mut buf = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(w, h);
+    let dst = buf.make_mut_bytes();
+    for (i, px) in bgra.chunks_exact(4).enumerate() {
+        let o = i * 4;
+        if let Some(slot) = dst.get_mut(o..o + 4) {
+            slot[0] = px[2]; // R
+            slot[1] = px[1]; // G
+            slot[2] = px[0]; // B
+            slot[3] = 255; // A
+        }
+    }
+    slint::Image::from_rgba8(buf)
 }
 
 /// Phase E6 v45 — monotonic conversation id for the in-tile continue-dialog
@@ -1531,6 +1550,8 @@ fn main() -> Result<(), slint::PlatformError> {
     // KB palette — opened via the F4 global hotkey (registered below).
     // (The 💡 tips chip was removed; F4 is the sole entry point.)
     let palette: Rc<RefCell<Option<PaletteWindow>>> = Rc::new(RefCell::new(None));
+    // V3 — the Lightshot capture overlay (one at a time; lifecycle mirrors the palette).
+    let capture_overlay: Rc<RefCell<Option<CaptureOverlay>>> = Rc::new(RefCell::new(None));
 
     // ===== Global hotkeys F3 / F4 / F7 (Phase D2 + B3 extra) =====
     //
@@ -1588,6 +1609,7 @@ fn main() -> Result<(), slint::PlatformError> {
 
     let hotkey_poll = Timer::default();
     let hp_palette = palette.clone();
+    let hp_capture_overlay = capture_overlay.clone();
     let hp_tiles = tiles.clone();
     let hp_state = state.clone();
     let hp_weak_overlay = overlay.as_weak();
@@ -1657,8 +1679,8 @@ fn main() -> Result<(), slint::PlatformError> {
                         &hp_weak_overlay,
                     );
                 } else if event.id == f8_id {
-                    // V2 — F8 screenshot → vision (separate endpoint).
-                    diag!("[overlay-host] F8 pressed — screenshot → vision");
+                    // V3 — F8 screenshot → Lightshot region select → vision.
+                    diag!("[overlay-host] F8 pressed — capture overlay");
                     fire_f8_vision_capture(
                         &hp_bridge,
                         &hp_events,
@@ -1667,6 +1689,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         &hp_rt_handle,
                         &hp_tiles,
                         &hp_weak_overlay,
+                        &hp_capture_overlay,
                     );
                 }
             }
@@ -3146,13 +3169,10 @@ fn fire_ptt_ask(
     });
 }
 
-/// V2 — F8 screenshot → vision. Captures the monitor under the cursor (hiding
-/// our own windows so they don't leak into the shot), then streams a vision
-/// model's reading of it into a tile via the SEPARATE vision endpoint
-/// (`cfg.vision_endpoint`). Independent of the text AI: a local text model
-/// keeps working while the image goes to cloud Sonnet (or a 2nd local vision
-/// model). No follow-up in V2 (a follow-up would route to the text endpoint),
-/// so the tile uses `convo_id = -1`.
+/// V3 — F8 screenshot. Freezes the whole virtual desktop, shows a Lightshot-
+/// style selection overlay, and on release crops the frozen frame to the chosen
+/// region and hands it to `launch_vision_for_bgra`. Esc / right-click / a tiny
+/// drag cancel. The capture goes to the SEPARATE vision endpoint.
 #[allow(clippy::too_many_arguments)]
 fn fire_f8_vision_capture(
     bridge: &Arc<OverlayBarBridge>,
@@ -3162,28 +3182,127 @@ fn fire_f8_vision_capture(
     rt_handle: &tokio::runtime::Handle,
     tiles: &TileWindows,
     weak_overlay: &slint::Weak<OverlayBarWindow>,
+    capture_overlay: &Rc<RefCell<Option<CaptureOverlay>>>,
 ) {
-    // ===== 1. Resolve the vision endpoint (separate channel) =====
     let Some(ep) = cfg.read().vision_endpoint() else {
         diag!("[overlay-host] F8: vision provider is 'off' (Settings -> Vision) — skipping");
         return;
     };
+    // Second F8 while an overlay is up → dismiss it. Escape hatch if a selection
+    // got stuck (e.g. focus lost mid-drag so no pointer-up arrived).
+    if let Some(w) = capture_overlay.borrow_mut().take() {
+        let _ = w.hide();
+        return;
+    }
 
-    // ===== 2. Capture the monitor under the cursor (hide our windows first) =====
-    // GDI BitBlt ignores WDA_EXCLUDEFROMCAPTURE, so our bar/tiles would show;
-    // hide them for the grab, then restore. Brief (<50 ms, UI thread).
+    // Freeze the full virtual desktop (hide our windows for a clean shot).
     let hidden = slint_replay::win32::hide_own_windows();
-    let shot = slint_replay::capture::capture_monitor_under_cursor();
+    let frozen = slint_replay::capture::capture_virtual_desktop();
     slint_replay::win32::show_windows(&hidden);
-    let shot = match shot {
-        Ok(s) => s,
+    let (frozen, vx, vy) = match frozen {
+        Ok(x) => x,
         Err(e) => {
-            diag!("[overlay-host] F8: capture failed: {e}");
+            diag!("[overlay-host] F8: virtual capture failed: {e}");
             return;
         }
     };
+    let (fw, fh) = (frozen.width, frozen.height);
+    let img = bgra_to_slint_image(&frozen.bgra, fw, fh);
 
-    // ===== 3. Placeholder vision tile (mirrors the PTT tile setup) =====
+    let win = match CaptureOverlay::new() {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln!("[overlay-host] F8: CaptureOverlay::new failed: {e}");
+            return;
+        }
+    };
+    win.set_frozen(img);
+    let _ = win.show();
+    // Position to cover the entire virtual desktop, THEN read scale on the
+    // destination monitor (Per-Monitor-DPI-v2: a cross-monitor move fires
+    // WM_DPICHANGED, so reading scale before the move could be stale). The
+    // view-* logical size = physical / scale drives the Window width/height so
+    // the frozen Image maps 1:1; the crop callback reuses the same scale.
+    if let Ok(hwnd) = grab_hwnd(win.window()) {
+        let _ = slint_replay::win32::move_window_pos_only(hwnd, vx, vy);
+        let _ = set_always_on_top(hwnd, true);
+        let _ = set_stealth(hwnd, true); // keep the frozen overlay out of screen-share
+        slint_replay::win32::focus_window(hwnd); // grab keyboard for Esc
+    }
+    let scale = win.window().scale_factor().max(0.1);
+    win.set_view_width(fw as f32 / scale);
+    win.set_view_height(fh as f32 / scale);
+
+    // Share the frozen frame into the region callback (UI thread only → Rc ok).
+    let frozen_rc = Rc::new(frozen);
+    {
+        let weak_self = win.as_weak();
+        let slot = capture_overlay.clone();
+        let frozen_c = frozen_rc.clone();
+        let bridge_c = bridge.clone();
+        let events_c = events.clone();
+        let rt_c = slint_rt.clone();
+        let h_c = rt_handle.clone();
+        let tiles_c = tiles.clone();
+        let wo_c = weak_overlay.clone();
+        win.on_region_selected(move |x1, y1, x2, y2| {
+            if let Some(w) = weak_self.upgrade() {
+                let _ = w.hide();
+            }
+            *slot.borrow_mut() = None;
+            // logical px × scale = image px.
+            let to_px = |v: f32| (v * scale).round().max(0.0) as u32;
+            let (px1, py1) = (to_px(x1), to_px(y1));
+            let (px2, py2) = (to_px(x2), to_px(y2));
+            let cropped = slint_replay::capture::crop_bgra(
+                &frozen_c,
+                px1,
+                py1,
+                px2.saturating_sub(px1),
+                py2.saturating_sub(py1),
+            );
+            launch_vision_for_bgra(
+                cropped,
+                ep.clone(),
+                &bridge_c,
+                &events_c,
+                &rt_c,
+                &h_c,
+                &tiles_c,
+                &wo_c,
+            );
+        });
+    }
+    {
+        let weak_self = win.as_weak();
+        let slot = capture_overlay.clone();
+        win.on_cancelled(move || {
+            if let Some(w) = weak_self.upgrade() {
+                let _ = w.hide();
+            }
+            *slot.borrow_mut() = None;
+        });
+    }
+
+    *capture_overlay.borrow_mut() = Some(win);
+}
+
+/// Spawn a vision tile for a captured BGRA frame and stream the answer into it
+/// via the SEPARATE vision endpoint. Shared entry for the F8 region capture.
+/// No follow-up (a follow-up would route to the text endpoint), so the tile
+/// uses `convo_id = -1`.
+#[allow(clippy::too_many_arguments)]
+fn launch_vision_for_bgra(
+    shot: slint_replay::capture::CapturedBgra,
+    ep: overlay_backend::config::AiEndpoint,
+    bridge: &Arc<OverlayBarBridge>,
+    events: &Arc<dyn RuntimeEvents>,
+    slint_rt: &SharedSlintRuntime,
+    rt_handle: &tokio::runtime::Handle,
+    tiles: &TileWindows,
+    weak_overlay: &slint::Weak<OverlayBarWindow>,
+) {
+    // ===== Placeholder vision tile (mirrors the PTT tile setup) =====
     let tile = match TileWindow::new() {
         Ok(t) => t,
         Err(e) => {
