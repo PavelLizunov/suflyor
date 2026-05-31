@@ -374,6 +374,9 @@ pub fn capture_rect_bgra(
             },
             ..Default::default()
         };
+        // Deselect the bitmap from the DC BEFORE reading its bits: GetDIBits
+        // requires the bitmap NOT be selected into any DC (documented contract).
+        SelectObject(mem, old);
         let lines = GetDIBits(
             mem,
             bmp,
@@ -383,8 +386,7 @@ pub fn capture_rect_bgra(
             &mut bi,
             DIB_RGB_COLORS,
         );
-        // Restore + free every GDI object on all paths.
-        SelectObject(mem, old);
+        // Free the remaining GDI objects on all paths.
         let _ = DeleteObject(HGDIOBJ(bmp.0));
         let _ = DeleteDC(mem);
         let _ = ReleaseDC(None, screen);

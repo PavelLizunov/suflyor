@@ -5544,8 +5544,12 @@ fn open_settings(
     {
         let cfg_c = cfg.clone();
         win.on_trigger_keywords_save(move |text| {
+            // Clamp: these keywords prepend to EVERY STT prompt, so a huge paste
+            // would balloon every transcription. Trim + cap (cf. kb::search's
+            // 200-char DoS guard).
+            let clamped: String = text.trim().chars().take(400).collect();
             let mut c = cfg_c.write();
-            c.trigger_keywords = text.to_string();
+            c.trigger_keywords = clamped;
             let _ = overlay_backend::config::save(&c);
         });
     }

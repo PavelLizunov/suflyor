@@ -162,27 +162,11 @@ export component TileWindow inherits Window {
                 // cause was pixel-perfect aim required (button ~15 px
                 // wide). Now each button is 44 px wide + 28 px tall so
                 // off-by-a-few-pixels clicks still land on the button.
-                Rectangle {
-                    width: 44px;
-                    height: 28px;
-                    // Phase E6 v17 — pinned-state shows yellow tint.
-                    background: root.pinned
-                        ? #5a4a14
-                        : (pin-touch.has-hover ? Theme.border-strong : Theme.border);
-                    border-radius: 4px;
-                    border-width: 1px;
-                    border-color: root.pinned ? Theme.warning : Theme.border-strong;
-                    pin-touch := TouchArea {
-                        clicked => { root.pin-clicked(); }
-                    }
-                    Text {
-                        text: root.pinned ? "📌pin" : "pin";
-                        font-size: 11px;
-                        color: root.pinned ? Theme.warning : Theme.text-primary;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
+                // Pin button removed (audit #135): the `pinned` flag never
+                // actually protected a tile from "close all" / the live-tile
+                // cap, so the button was a misleading no-op. The property +
+                // pin-clicked callback stay declared (Rust handlers reference
+                // them) but are now inert.
                 // Phase E6 v17 — Maximize button. User: "нет
                 // функционала развернуть, нужно отдельной кнопкой
                 // или даб-кликом". Win32 SetWindowPos resizes window

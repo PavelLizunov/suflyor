@@ -515,6 +515,82 @@ msgstr "Проверить подключение vision"
 msgid "Drag to select a region · Esc / right-click to cancel"
 msgstr "Выделите область мышью · Esc / правый клик — отмена"
 
+# === i18n drift fixes (audit #144) — settings strings added post-sync ===
+msgid "🛡 Stealth"
+msgstr "🛡 Скрытность"
+
+msgid "Interface language — switches all UI text on the fly."
+msgstr "Язык интерфейса — переключает все надписи на лету."
+
+msgid "Colour scheme — recolours the whole app instantly."
+msgstr "Цветовая схема — мгновенно перекрашивает всё приложение."
+
+msgid "Scheme:"
+msgstr "Схема:"
+
+msgid "Trigger keywords (space-separated). A sentence ending in '?' also triggers."
+msgstr "Триггер-слова (через пробел). Предложение с «?» на конце тоже срабатывает."
+
+msgid "Save keywords"
+msgstr "Сохранить слова"
+
+msgid "Where do live answers come from? Pick a type, then configure it."
+msgstr "Откуда брать живые ответы? Выберите тип и настройте его."
+
+msgid "Cloud (Claude bridge)"
+msgstr "Облако (мост Claude)"
+
+msgid "Local (llama.cpp / Ollama)"
+msgstr "Локально (llama.cpp / Ollama)"
+
+msgid "Cloud bridge"
+msgstr "Облачный мост"
+
+msgid "No models found — check the bridge URL/token, then press refresh."
+msgstr "Модели не найдены — проверьте URL/токен моста и нажмите «обновить»."
+
+msgid "Local model"
+msgstr "Локальная модель"
+
+msgid "No models found — start the local server, then press refresh."
+msgstr "Модели не найдены — запустите локальный сервер и нажмите «обновить»."
+
+msgid "local server bearer token (optional)"
+msgstr "bearer-токен локального сервера (необязательно)"
+
+msgid "Installs the local stack on this PC (~6 GB total): llama.cpp + Gemma-4-E4B (~5 GB; needs ~6 GB VRAM on GPU), whisper.cpp + Whisper-turbo (~0.9 GB), GigaAM-v3 (~0.2 GB). With NVIDIA it picks the CUDA build, otherwise CPU. Models you already have are reused, not re-downloaded."
+msgstr "Устанавливает локальный стек на этот ПК (~6 ГБ всего): llama.cpp + Gemma-4-E4B (~5 ГБ; нужно ~6 ГБ VRAM на GPU), whisper.cpp + Whisper-turbo (~0.9 ГБ), GigaAM-v3 (~0.2 ГБ). С NVIDIA выбирается сборка CUDA, иначе CPU. Уже скачанные модели переиспользуются, не качаются заново."
+
+msgid "Install local AI"
+msgstr "Установить локальный AI"
+
+msgid "Installing…"
+msgstr "Установка…"
+
+msgid "Cancel"
+msgstr "Отмена"
+
+msgid "Use GPU (DirectML) — faster on long audio, ~1s warm-up on first use"
+msgstr "GPU (DirectML) — быстрее на длинном аудио, ~1с прогрев при первом запуске"
+
+msgid "Profile:"
+msgstr "Профиль:"
+
+msgid "none yet — name one and Add"
+msgstr "пока нет — введите имя и «Добавить»"
+
+msgid "profile name"
+msgstr "имя профиля"
+
+msgid "Add profile"
+msgstr "Добавить профиль"
+
+msgid "Rename"
+msgstr "Переименовать"
+
+msgid "Delete"
+msgstr "Удалить"
+
 msgid "local model — e.g. qwen2.5:7b-instruct"
 msgstr "локальная модель — напр. qwen2.5:7b-instruct"
 
