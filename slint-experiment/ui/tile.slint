@@ -56,12 +56,17 @@ export component TileWindow inherits Window {
     in-out property <int> convo-id: -1;
     // True while an answer is streaming — disables the follow-up input.
     in-out property <bool> followup-busy: false;
+    // V5 — show the 🔄 regenerate button (vision tiles: re-run the screenshot
+    // query for a longer / different answer).
+    in-out property <bool> can-regenerate: false;
     // Bound to the follow-up LineEdit so do-submit() can read + clear it.
     in-out property <string> followup-text;
 
     callback close-clicked();
     callback pin-clicked();
     callback maximize-clicked();
+    // V5 — re-run the last request and replace the answer (item 4).
+    callback regenerate-clicked();
     // Phase E6 v22 — manual cursor-delta drag. drag-start-requested
     // fires on pointer-down (records anchor), drag-moved fires on
     // each move while pressed (moves window by delta). Replaces the
@@ -171,6 +176,25 @@ export component TileWindow inherits Window {
                 // функционала развернуть, нужно отдельной кнопкой
                 // или даб-кликом". Win32 SetWindowPos resizes window
                 // 460x360 → 800x600 (toggle).
+                // V5 — 🔄 regenerate (only on tiles that support it, e.g. F8
+                // vision). Re-runs the last request for a longer / different answer.
+                if root.can-regenerate: Rectangle {
+                    width: 30px;
+                    height: 28px;
+                    background: regen-touch.has-hover ? Theme.border-strong : Theme.border;
+                    border-radius: 4px;
+                    border-width: 1px;
+                    border-color: Theme.border-strong;
+                    regen-touch := TouchArea {
+                        clicked => { if (!root.followup-busy) { root.regenerate-clicked(); } }
+                    }
+                    Text {
+                        text: "🔄";
+                        font-size: 12px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
                 Rectangle {
                     width: 36px;
                     height: 28px;

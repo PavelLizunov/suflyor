@@ -3474,6 +3474,29 @@ fn launch_vision_for_bgra(
             );
         });
     }
+    // V5 — 🔄 regenerate: re-run the screenshot query (vision endpoint) for a
+    // longer / different answer when the first one was too short.
+    tile.set_can_regenerate(true);
+    {
+        let weak_re = tile.as_weak();
+        let bridge_re = bridge.clone();
+        let events_re = events.clone();
+        let cfg_re = cfg.clone();
+        let slint_rt_re = slint_rt.clone();
+        let rt_handle_re = rt_handle.clone();
+        tile.on_regenerate_clicked(move || {
+            fire_regenerate(
+                convo_id,
+                weak_re.clone(),
+                &bridge_re,
+                &events_re,
+                &cfg_re,
+                &slint_rt_re,
+                &rt_handle_re,
+                true,
+            );
+        });
+    }
     let _ = tile.show();
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
@@ -3719,6 +3742,105 @@ fn fire_followup_ask(
         "followup sent (convo_id={convo_id}, {} chars)",
         question.len()
     );
+}
+
+/// V5 — regenerate: re-run the last request (dropping the trailing assistant
+/// turn) and replace the tile's answer. For vision tiles (`use_vision`) the
+/// screenshot is still in the stored history, so a short first answer can be
+/// expanded with one click. Uses a per-tile PttStreamSink (independent of the
+/// shared streaming slot) which re-seeds the conversation on done.
+#[allow(clippy::too_many_arguments)]
+fn fire_regenerate(
+    convo_id: i32,
+    tile_weak: slint::Weak<TileWindow>,
+    bridge: &Arc<OverlayBarBridge>,
+    events: &Arc<dyn RuntimeEvents>,
+    cfg: &overlay_backend::config::SharedConfig,
+    slint_rt: &SharedSlintRuntime,
+    rt_handle: &tokio::runtime::Handle,
+    use_vision: bool,
+) {
+    let mut messages = {
+        let convos = match bridge.conversations.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        match convos.get(&convo_id) {
+            Some(c) => c.messages.clone(),
+            None => {
+                diag!("regenerate: no conversation for convo_id={convo_id}");
+                return;
+            }
+        }
+    };
+    // Drop the trailing assistant turn(s) so we re-ask the same question.
+    while matches!(messages.last(), Some(m) if m.role == "assistant") {
+        messages.pop();
+    }
+    if messages.is_empty() {
+        return;
+    }
+    let (base_url, bearer, model, is_local, max_tokens) = {
+        let c = cfg.read();
+        let ep = if use_vision {
+            c.vision_endpoint().unwrap_or_else(|| c.ai_endpoint(false))
+        } else {
+            c.ai_endpoint(false)
+        };
+        let mt = if use_vision {
+            vision::VISION_MAX_TOKENS
+        } else {
+            AI_STREAM_MAX_TOKENS
+        };
+        (ep.base_url, ep.bearer, ep.model, ep.is_local, mt)
+    };
+    if let Some(t) = tile_weak.upgrade() {
+        t.set_followup_busy(true);
+        t.set_source_label(SharedString::from("ai · перегенерация…"));
+        t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks("⏳ …"))));
+    }
+    let sys_full = messages
+        .first()
+        .and_then(|m| match &m.content {
+            ai::MessageContent::Text(t) => Some(t.clone()),
+            _ => None,
+        })
+        .unwrap_or_default();
+    let (journal_for_loop, health_for_stream) = {
+        let s = slint_replay::runtime_state::lock(slint_rt);
+        (s.journal.clone(), s.health.clone())
+    };
+    let rt_for_cost = slint_rt.clone();
+    let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
+        let micro = if is_local { 0 } else { micro };
+        let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
+        s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
+        (s.session_cost_microcents as f64) / 100_000_000.0
+    });
+    let sink: Arc<dyn RuntimeEvents> = Arc::new(PttStreamSink::new(
+        bridge.clone(),
+        events.clone(),
+        tile_weak,
+        convo_id,
+        messages.clone(),
+    ));
+    let t0 = std::time::Instant::now();
+    rt_handle.spawn(async move {
+        let ai_rx = ai::stream_chat(base_url, bearer, model.clone(), messages, max_tokens);
+        overlay_backend::runtime::ask_stream_loop(
+            sink,
+            ai_rx,
+            model,
+            sys_full,
+            String::new(),
+            journal_for_loop,
+            health_for_stream,
+            t0,
+            cost_apply,
+        )
+        .await;
+    });
+    diag!("regenerate sent (convo_id={convo_id}, use_vision={use_vision})");
 }
 
 /// Atomic counter for tile-slot index — increments per spawn so
