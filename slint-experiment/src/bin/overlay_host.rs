@@ -2730,6 +2730,7 @@ fn fire_f9_ask(
                 &cfg_fu,
                 &slint_rt_fu,
                 &rt_handle_fu,
+                false,
             );
         });
     }
@@ -3057,6 +3058,7 @@ fn fire_ptt_ask(
                 &cfg_fu,
                 &slint_rt_fu,
                 &rt_handle_fu,
+                false,
             );
         });
     }
@@ -3322,6 +3324,7 @@ fn fire_f8_vision_capture(
         let tiles_c = tiles.clone();
         let wo_c = weak_overlay.clone();
         let ep_c = ep.clone();
+        let cfg_c = cfg.clone();
         win.on_region_selected(move |x1, y1, x2, y2| {
             if let Some(w) = weak_self.upgrade() {
                 w.set_shown(false);
@@ -3343,6 +3346,7 @@ fn fire_f8_vision_capture(
                 ep_c.clone(),
                 &bridge_c,
                 &events_c,
+                &cfg_c,
                 &rt_c,
                 &h_c,
                 &tiles_c,
@@ -3384,6 +3388,7 @@ fn launch_vision_for_bgra(
     ep: overlay_backend::config::AiEndpoint,
     bridge: &Arc<OverlayBarBridge>,
     events: &Arc<dyn RuntimeEvents>,
+    cfg: &overlay_backend::config::SharedConfig,
     slint_rt: &SharedSlintRuntime,
     rt_handle: &tokio::runtime::Handle,
     tiles: &TileWindows,
@@ -3398,12 +3403,16 @@ fn launch_vision_for_bgra(
         }
     };
     let seq = TILE_DISPLAY_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
+    // V5 — give the vision tile a real conversation id so its follow-up input
+    // appears + PttStreamSink seeds the conversation (incl. the screenshot) on
+    // done; follow-ups then route to the VISION endpoint (use_vision = true).
+    let convo_id = CONVO_SEQ.fetch_add(1, Ordering::Relaxed) as i32;
     tile.set_sequence(seq as i32);
     tile.set_tile_title(SharedString::from("📷 Скриншот"));
     tile.set_source_label(SharedString::from("vision · анализ…"));
     tile.set_trigger_label(SharedString::from("📷 F8 vision"));
     tile.set_trigger_color(slint::Color::from_rgb_u8(0x22, 0xd3, 0xee)); // cyan
-    tile.set_convo_id(-1); // no follow-up for vision tiles in V2
+    tile.set_convo_id(convo_id);
     tile.set_followup_busy(true);
     wire_tile_drag(&tile);
     tile.set_blocks(ModelRc::new(VecModel::from(vec![MarkdownBlock {
@@ -3442,6 +3451,29 @@ fn launch_vision_for_bgra(
             toggle_tile_maximize(hwnd, &t);
         }
     });
+    // V5 — follow-up: a question typed in the tile continues the dialog ABOUT the
+    // screenshot via the VISION endpoint (use_vision = true). The conversation
+    // PttStreamSink seeds on done already carries the image.
+    {
+        let weak_fu = tile.as_weak();
+        let bridge_fu = bridge.clone();
+        let events_fu = events.clone();
+        let cfg_fu = cfg.clone();
+        let slint_rt_fu = slint_rt.clone();
+        let rt_handle_fu = rt_handle.clone();
+        tile.on_followup_submitted(move |q| {
+            fire_followup_ask(
+                (convo_id, q.to_string()),
+                weak_fu.clone(),
+                &bridge_fu,
+                &events_fu,
+                &cfg_fu,
+                &slint_rt_fu,
+                &rt_handle_fu,
+                true,
+            );
+        });
+    }
     let _ = tile.show();
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
@@ -3500,7 +3532,7 @@ fn launch_vision_for_bgra(
             bridge_for_task.clone(),
             events_inner.clone(),
             weak_for_stream,
-            -1,
+            convo_id,
             messages.clone(),
         ));
         if let Some(j) = journal_for_loop.as_ref() {
@@ -3542,6 +3574,7 @@ fn launch_vision_for_bgra(
 /// appends the new user question, and streams the reply BELOW the
 /// existing thread via the SAME `current_streaming` slot + `ai:event`
 /// path as F9. `turn` = (convo_id, question).
+#[allow(clippy::too_many_arguments)]
 fn fire_followup_ask(
     turn: (i32, String),
     tile_weak: slint::Weak<TileWindow>,
@@ -3550,6 +3583,10 @@ fn fire_followup_ask(
     cfg: &overlay_backend::config::SharedConfig,
     slint_rt: &SharedSlintRuntime,
     rt_handle: &tokio::runtime::Handle,
+    // V5 — when true the follow-up routes to the VISION endpoint (the stored
+    // conversation already carries the screenshot), so a vision tile keeps the
+    // dialog about the image rather than falling back to the text model.
+    use_vision: bool,
 ) {
     let (convo_id, question) = turn;
     let question = question.trim().to_string();
@@ -3606,10 +3643,19 @@ fn fire_followup_ask(
 
     // Snapshot config + journal/health, abort any in-flight task, then
     // spawn the stream (mirrors fire_f9_ask's tail).
-    let (base_url, bearer, model, is_local) = {
+    let (base_url, bearer, model, is_local, max_tokens) = {
         let c = cfg.read();
-        let ep = c.ai_endpoint(false);
-        (ep.base_url, ep.bearer, ep.model, ep.is_local)
+        let ep = if use_vision {
+            c.vision_endpoint().unwrap_or_else(|| c.ai_endpoint(false))
+        } else {
+            c.ai_endpoint(false)
+        };
+        let mt = if use_vision {
+            vision::VISION_MAX_TOKENS
+        } else {
+            AI_STREAM_MAX_TOKENS
+        };
+        (ep.base_url, ep.bearer, ep.model, ep.is_local, mt)
     };
     let (journal_for_loop, health_for_stream) = {
         let s = slint_replay::runtime_state::lock(slint_rt);
@@ -3639,7 +3685,7 @@ fn fire_followup_ask(
             model: &model,
             system_prompt: &sys_full,
             user_prompt: &usr_full,
-            attached_screenshot: false,
+            attached_screenshot: use_vision,
             input_tokens_est: ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4,
         });
     }
@@ -3654,13 +3700,7 @@ fn fire_followup_ask(
     let t0 = std::time::Instant::now();
     let events_for_task = gated_events(bridge, events.clone(), generation);
     let task = rt_handle.spawn(async move {
-        let ai_rx = ai::stream_chat(
-            base_url,
-            bearer,
-            model.clone(),
-            messages,
-            AI_STREAM_MAX_TOKENS,
-        );
+        let ai_rx = ai::stream_chat(base_url, bearer, model.clone(), messages, max_tokens);
         overlay_backend::runtime::ask_stream_loop(
             events_for_task,
             ai_rx,
