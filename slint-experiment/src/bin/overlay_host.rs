@@ -1576,7 +1576,6 @@ fn main() -> Result<(), slint::PlatformError> {
     // Phase E3 slice 3 — F6 manual spawn from last transcript line
     // (bypasses auto-detector). Matches src-tauri hotkey table.
     let f6_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F6);
-    let f7_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F7);
     // Phase E3 slice 2 — F9 ask (live AI streaming via overlay-backend's
     // ask_stream_loop). Matches src-tauri/React-side semantic where F9
     // is the "ask AI with full transcript context" hotkey.
@@ -1588,7 +1587,6 @@ fn main() -> Result<(), slint::PlatformError> {
     let f3_id = f3_hotkey.id();
     let f4_id = f4_hotkey.id();
     let f6_id = f6_hotkey.id();
-    let f7_id = f7_hotkey.id();
     let f9_id = f9_hotkey.id();
     let f8_id = f8_hotkey.id();
     if let Some(m) = hotkey_manager.as_ref() {
@@ -1596,7 +1594,6 @@ fn main() -> Result<(), slint::PlatformError> {
             ("F3", f3_hotkey),
             ("F4", f4_hotkey),
             ("F6", f6_hotkey),
-            ("F7", f7_hotkey),
             ("F8", f8_hotkey),
             ("F9", f9_hotkey),
         ] {
@@ -1657,10 +1654,6 @@ fn main() -> Result<(), slint::PlatformError> {
                     // transcript line (bypasses auto-detector).
                     eprintln!("[overlay-host] F6 pressed — manual_spawn_tile");
                     fire_f6_manual_spawn(&hp_events, &hp_cfg, &hp_rt, &hp_rt_handle);
-                } else if event.id == f7_id {
-                    eprintln!("[overlay-host] F7 pressed — collapse-all (stub)");
-                    // Phase 4+ would call `tile.set_collapsed(true)` on
-                    // every open tile via the registry.
                 } else if event.id == f9_id {
                     // Phase E3 slice 2 — F9 live AI ask via overlay-backend's
                     // `ask_stream_loop`. Synchronously creates a placeholder

@@ -30,13 +30,14 @@ const GEMMA_SIZE: u64 = 4_977_169_568;
 
 // Vision projector for Gemma 4 (multimodal). Loaded via llama-server `--mmproj`
 // so the SAME local model reads images — F8 screenshots stay fully local with no
-// cloud egress. Same HuggingFace repo as the model; F16 is the universally
-// compatible projector (BF16/F32 also exist; F16 is the smallest that runs
-// everywhere, ~945 MB).
+// cloud egress. Same HuggingFace repo as the model. We ship F32 (full
+// precision): F16, BF16 and F32 all score the same ~40% on local-vision
+// reliability (an upstream flash-attn/vision bug on Blackwell + llama.cpp 9412),
+// so precision is not the bottleneck — F32 is just the most numerically stable.
 const MMPROJ_URL: &str =
-    "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/mmproj-F16.gguf";
-const MMPROJ_FILE: &str = "mmproj-F16.gguf";
-const MMPROJ_SIZE: u64 = 990_372_672;
+    "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/mmproj-F32.gguf";
+const MMPROJ_FILE: &str = "mmproj-F32.gguf";
+const MMPROJ_SIZE: u64 = 1_912_464_192;
 
 const WHISPER_URL: &str =
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin";
