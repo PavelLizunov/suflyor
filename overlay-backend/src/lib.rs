@@ -15,3 +15,4 @@ pub mod local_ai;
 pub mod runtime;
 pub mod stt;
 pub mod update;
+pub mod vision;

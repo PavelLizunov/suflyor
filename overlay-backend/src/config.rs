@@ -71,6 +71,34 @@ pub struct Config {
     #[serde(default)]
     pub ai_local_thinking: bool,
 
+    /// Screenshot/vision channel — resolved INDEPENDENTLY of the text AI (via
+    /// [`Config::vision_endpoint`]) so a local text model can keep answering
+    /// while screenshots go to a vision-capable model. Provider: "off"
+    /// (disabled), "same" (reuse the text endpoint), "cloud" (the `vision_*`
+    /// bridge fields), or "local" (a 2nd local vision server). Default "cloud"
+    /// → F8 capture works out of the box through the configured bridge with a
+    /// Sonnet vision model.
+    #[serde(default = "default_vision_provider")]
+    pub vision_provider: String,
+    /// Cloud vision endpoint. Empty `base_url`/`bearer` fall back to the text
+    /// bridge (`ai_base_url`/`ai_bearer`); empty `model` falls back to Sonnet
+    /// (`DEFAULT_VISION_MODEL`).
+    #[serde(default)]
+    pub vision_base_url: String,
+    #[serde(default)]
+    pub vision_bearer: String,
+    #[serde(default)]
+    pub vision_model: String,
+    /// Local vision endpoint — a 2nd OpenAI-compatible server running a vision
+    /// model (e.g. Qwen2-VL on another port) while text stays on the primary
+    /// local model. Empty fields fall back to the text-local ones (`ai_local_*`).
+    #[serde(default)]
+    pub vision_local_base_url: String,
+    #[serde(default)]
+    pub vision_local_bearer: String,
+    #[serde(default)]
+    pub vision_local_model: String,
+
     /// Language tag (ISO 639-1) the assistant should ALWAYS respond in.
     /// Injected into the system prompt at runtime.
     pub response_language: String, // e.g. "ru"
@@ -384,6 +412,13 @@ impl Config {
             ai_local_prep_model: String::new(),
             ai_local_vision: false,
             ai_local_thinking: false,
+            vision_provider: default_vision_provider(),
+            vision_base_url: String::new(),
+            vision_bearer: String::new(),
+            vision_model: String::new(),
+            vision_local_base_url: String::new(),
+            vision_local_bearer: String::new(),
+            vision_local_model: String::new(),
             response_language: "ru".into(),
             groq_api_key: String::new(),
             stt_language: Some("ru".into()),
@@ -428,6 +463,10 @@ pub struct AiEndpoint {
     /// gate screenshots (text-only local models) on this flag.
     pub is_local: bool,
 }
+
+/// Default cloud vision model when `vision_model` is unset — Sonnet (strong
+/// vision + present in the ai.rs pricing table).
+pub const DEFAULT_VISION_MODEL: &str = "claude-sonnet-4-6";
 
 /// One subsystem's config-only readiness for the diagnostics panel (#131).
 /// `detail` carries only NEUTRAL values (provider tag, URL, model, device) —
@@ -484,6 +523,38 @@ impl Config {
                 model,
                 is_local: false,
             }
+        }
+    }
+
+    /// Resolve the SEPARATE vision endpoint, or `None` when vision is "off".
+    /// "same" reuses the text endpoint; "cloud"/"local" use the `vision_*` /
+    /// `vision_local_*` fields but fall back to the corresponding text fields
+    /// when left empty, so a configured bridge works without re-entering creds.
+    /// Cloud model falls back to Sonnet ([`DEFAULT_VISION_MODEL`]).
+    #[must_use]
+    pub fn vision_endpoint(&self) -> Option<AiEndpoint> {
+        let pick = |specific: &str, fallback: &str| {
+            if specific.trim().is_empty() {
+                fallback.to_string()
+            } else {
+                specific.to_string()
+            }
+        };
+        match self.vision_provider.as_str() {
+            "same" => Some(self.ai_endpoint(false)),
+            "cloud" => Some(AiEndpoint {
+                base_url: pick(&self.vision_base_url, &self.ai_base_url),
+                bearer: pick(&self.vision_bearer, &self.ai_bearer),
+                model: pick(&self.vision_model, DEFAULT_VISION_MODEL),
+                is_local: false,
+            }),
+            "local" => Some(AiEndpoint {
+                base_url: pick(&self.vision_local_base_url, &self.ai_local_base_url),
+                bearer: pick(&self.vision_local_bearer, &self.ai_local_bearer),
+                model: pick(&self.vision_local_model, &self.ai_local_model),
+                is_local: true,
+            }),
+            _ => None, // "off" (or unknown) → feature disabled
         }
     }
 
@@ -616,6 +687,11 @@ impl Config {
 }
 
 fn default_ai_provider() -> String {
+    "cloud".into()
+}
+
+fn default_vision_provider() -> String {
+    // F8 capture works out of the box via the already-configured cloud bridge.
     "cloud".into()
 }
 
@@ -1920,6 +1996,14 @@ pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
     next.ai_local_prep_model = imported.ai_local_prep_model;
     next.ai_local_vision = imported.ai_local_vision;
     next.ai_local_thinking = imported.ai_local_thinking;
+    // Vision channel (separate endpoint).
+    next.vision_provider = imported.vision_provider;
+    next.vision_base_url = imported.vision_base_url;
+    next.vision_bearer = imported.vision_bearer;
+    next.vision_model = imported.vision_model;
+    next.vision_local_base_url = imported.vision_local_base_url;
+    next.vision_local_bearer = imported.vision_local_bearer;
+    next.vision_local_model = imported.vision_local_model;
     // STT provider + per-backend server settings.
     next.stt_provider = imported.stt_provider;
     next.groq_api_key = imported.groq_api_key;
@@ -2008,6 +2092,13 @@ mod tests {
         imported.ai_local_prep_model = "gemma-prep".into();
         imported.ai_local_vision = true;
         imported.ai_local_thinking = true;
+        imported.vision_provider = "local".into();
+        imported.vision_base_url = "http://NEW-vision-cloud/v1".into();
+        imported.vision_bearer = "NEW-vision-bearer".into();
+        imported.vision_model = "claude-opus-4-7".into();
+        imported.vision_local_base_url = "http://127.0.0.1:8082/v1".into();
+        imported.vision_local_bearer = "NEW-vision-local-bearer".into();
+        imported.vision_local_model = "qwen2-vl".into();
         imported.stt_provider = "gigaam".into();
         imported.groq_api_key = "NEW-groq".into();
         imported.stt_language = Some("en".into());
@@ -2044,6 +2135,13 @@ mod tests {
         assert_eq!(merged.ai_local_prep_model, "gemma-prep");
         assert!(merged.ai_local_vision);
         assert!(merged.ai_local_thinking);
+        assert_eq!(merged.vision_provider, "local");
+        assert_eq!(merged.vision_base_url, "http://NEW-vision-cloud/v1");
+        assert_eq!(merged.vision_bearer, "NEW-vision-bearer");
+        assert_eq!(merged.vision_model, "claude-opus-4-7");
+        assert_eq!(merged.vision_local_base_url, "http://127.0.0.1:8082/v1");
+        assert_eq!(merged.vision_local_bearer, "NEW-vision-local-bearer");
+        assert_eq!(merged.vision_local_model, "qwen2-vl");
         assert_eq!(merged.stt_provider, "gigaam");
         assert_eq!(merged.groq_api_key, "NEW-groq");
         assert_eq!(merged.stt_language.as_deref(), Some("en"));
@@ -2208,6 +2306,88 @@ mod tests {
         assert_eq!(live.bearer, "secret");
         assert_eq!(live.model, "claude-haiku-4-5");
         assert_eq!(d.ai_endpoint(true).model, "claude-sonnet-4-6");
+    }
+
+    #[test]
+    fn vision_endpoint_off_is_none() {
+        let mut d = Config::defaults();
+        d.vision_provider = "off".into();
+        assert!(d.vision_endpoint().is_none());
+    }
+
+    #[test]
+    fn vision_endpoint_same_reuses_text_endpoint() {
+        let mut d = Config::defaults();
+        d.vision_provider = "same".into();
+        d.ai_provider = "local".into();
+        d.ai_local_base_url = "http://127.0.0.1:8080/v1".into();
+        d.ai_local_model = "gemma".into();
+        let v = d.vision_endpoint();
+        assert_eq!(v.as_ref().map(|e| e.is_local), Some(true));
+        assert_eq!(
+            v.as_ref().map(|e| e.base_url.clone()),
+            Some("http://127.0.0.1:8080/v1".to_string())
+        );
+        assert_eq!(v.map(|e| e.model), Some("gemma".to_string()));
+    }
+
+    #[test]
+    fn vision_endpoint_cloud_falls_back_to_text_bridge_and_sonnet() {
+        let mut d = Config::defaults();
+        d.vision_provider = "cloud".into();
+        d.ai_base_url = "http://bridge/v1".into();
+        d.ai_bearer = "secret".into();
+        // vision_* left empty → fall back to the text bridge + Sonnet default.
+        let v = d.vision_endpoint();
+        assert_eq!(v.as_ref().map(|e| e.is_local), Some(false));
+        assert_eq!(
+            v.as_ref().map(|e| e.base_url.clone()),
+            Some("http://bridge/v1".to_string())
+        );
+        assert_eq!(
+            v.as_ref().map(|e| e.bearer.clone()),
+            Some("secret".to_string())
+        );
+        assert_eq!(v.map(|e| e.model), Some(DEFAULT_VISION_MODEL.to_string()));
+    }
+
+    #[test]
+    fn vision_endpoint_cloud_uses_explicit_fields_when_set() {
+        let mut d = Config::defaults();
+        d.vision_provider = "cloud".into();
+        d.ai_base_url = "http://text-bridge/v1".into();
+        d.vision_base_url = "http://vision-bridge/v1".into();
+        d.vision_bearer = "vsecret".into();
+        d.vision_model = "claude-opus-4-7".into();
+        let v = d.vision_endpoint();
+        assert_eq!(
+            v.as_ref().map(|e| e.base_url.clone()),
+            Some("http://vision-bridge/v1".to_string())
+        );
+        assert_eq!(
+            v.as_ref().map(|e| e.bearer.clone()),
+            Some("vsecret".to_string())
+        );
+        assert_eq!(v.map(|e| e.model), Some("claude-opus-4-7".to_string()));
+    }
+
+    #[test]
+    fn vision_endpoint_local_falls_back_to_text_local() {
+        let mut d = Config::defaults();
+        d.vision_provider = "local".into();
+        d.ai_local_base_url = "http://127.0.0.1:8080/v1".into();
+        d.ai_local_model = "gemma".into();
+        // vision_local_* empty → fall back to ai_local_*.
+        let v = d.vision_endpoint();
+        assert_eq!(v.as_ref().map(|e| e.is_local), Some(true));
+        assert_eq!(v.map(|e| e.model), Some("gemma".to_string()));
+    }
+
+    #[test]
+    fn vision_endpoint_default_provider_is_cloud() {
+        // Fresh defaults → vision enabled (cloud) so F8 works out of the box.
+        assert_eq!(Config::defaults().vision_provider, "cloud");
+        assert!(Config::defaults().vision_endpoint().is_some());
     }
 
     #[test]
