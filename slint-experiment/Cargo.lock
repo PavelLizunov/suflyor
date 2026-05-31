@@ -5280,10 +5280,12 @@ name = "slint-replay"
 version = "0.5.2"
 dependencies = [
  "anyhow",
+ "base64",
  "dirs",
  "global-hotkey",
  "i-slint-backend-selector",
  "i-slint-backend-testing",
+ "image",
  "overlay-backend",
  "pulldown-cmark",
  "raw-window-handle",

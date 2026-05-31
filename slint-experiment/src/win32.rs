@@ -289,6 +289,174 @@ pub fn enum_monitors() -> Vec<MonitorRect> {
     MONITORS.with(|m| m.borrow().clone())
 }
 
+/// (x, y, width, height) of the ENTIRE virtual desktop spanning all monitors.
+/// The origin can be NEGATIVE (the user's portrait secondary sits at x = -1200),
+/// so callers must never assume (0,0). Physical pixels.
+#[must_use]
+pub fn virtual_screen_bounds() -> (i32, i32, i32, i32) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
+        SM_YVIRTUALSCREEN,
+    };
+    unsafe {
+        (
+            GetSystemMetrics(SM_XVIRTUALSCREEN),
+            GetSystemMetrics(SM_YVIRTUALSCREEN),
+            GetSystemMetrics(SM_CXVIRTUALSCREEN),
+            GetSystemMetrics(SM_CYVIRTUALSCREEN),
+        )
+    }
+}
+
+/// Current mouse-cursor position in physical virtual-screen coordinates.
+#[must_use]
+pub fn cursor_pos() -> (i32, i32) {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+    let mut p = POINT::default();
+    unsafe {
+        let _ = GetCursorPos(&mut p);
+    }
+    (p.x, p.y)
+}
+
+/// Capture a screen rectangle (physical virtual-screen coords) as TOP-DOWN
+/// BGRA bytes (4 bytes/pixel; `len == w*h*4`) via a GDI BitBlt of the desktop
+/// DC. NOTE: GDI capture IGNORES WDA_EXCLUDEFROMCAPTURE, so any of our own
+/// windows inside the rect WILL appear — hide them first (`hide_own_windows`).
+pub fn capture_rect_bgra(
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    use std::ffi::c_void;
+    use windows::Win32::Graphics::Gdi::{
+        BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC,
+        GetDIBits, ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
+        HGDIOBJ, SRCCOPY,
+    };
+    if w <= 0 || h <= 0 {
+        return Err(format!("invalid capture size {w}x{h}").into());
+    }
+    let buf_len = (w as usize)
+        .checked_mul(h as usize)
+        .and_then(|n| n.checked_mul(4))
+        .ok_or("capture size overflow")?;
+    unsafe {
+        let screen = GetDC(None);
+        if screen.is_invalid() {
+            return Err("GetDC(screen) failed".into());
+        }
+        let mem = CreateCompatibleDC(Some(screen));
+        if mem.is_invalid() {
+            let _ = ReleaseDC(None, screen);
+            return Err("CreateCompatibleDC failed".into());
+        }
+        let bmp = CreateCompatibleBitmap(screen, w, h);
+        if bmp.is_invalid() {
+            let _ = DeleteDC(mem);
+            let _ = ReleaseDC(None, screen);
+            return Err("CreateCompatibleBitmap failed".into());
+        }
+        let old = SelectObject(mem, HGDIOBJ(bmp.0));
+        let blt = BitBlt(mem, 0, 0, w, h, Some(screen), x, y, SRCCOPY);
+        let mut buf = vec![0u8; buf_len];
+        let mut bi = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: w,
+                biHeight: -h, // negative => top-down rows
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let lines = GetDIBits(
+            mem,
+            bmp,
+            0,
+            h as u32,
+            Some(buf.as_mut_ptr().cast::<c_void>()),
+            &mut bi,
+            DIB_RGB_COLORS,
+        );
+        // Restore + free every GDI object on all paths.
+        SelectObject(mem, old);
+        let _ = DeleteObject(HGDIOBJ(bmp.0));
+        let _ = DeleteDC(mem);
+        let _ = ReleaseDC(None, screen);
+        if blt.is_err() {
+            return Err("BitBlt failed".into());
+        }
+        if lines == 0 {
+            return Err("GetDIBits returned 0 scanlines".into());
+        }
+        Ok(buf)
+    }
+}
+
+/// Hide every visible top-level window owned by THIS process; returns each
+/// hidden window's HWND (as `isize`) PLUS whether it was topmost, so
+/// `show_windows` can restore BOTH visibility and the always-on-top band —
+/// keeps our bar/tiles out of a GDI screenshot without dropping them behind
+/// other windows afterward.
+#[must_use]
+pub fn hide_own_windows() -> Vec<(isize, bool)> {
+    use std::cell::RefCell;
+    use windows::core::BOOL;
+    use windows::Win32::Foundation::LPARAM;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowThreadProcessId, IsWindowVisible, WS_EX_TOPMOST,
+    };
+    thread_local! {
+        static HIDDEN: RefCell<Vec<(isize, bool)>> = const { RefCell::new(Vec::new()) };
+    }
+    unsafe extern "system" fn cb(hwnd: HWND, _l: LPARAM) -> BOOL {
+        let pid = std::process::id();
+        let mut wpid: u32 = 0;
+        unsafe { GetWindowThreadProcessId(hwnd, Some(&mut wpid)) };
+        if wpid == pid && unsafe { IsWindowVisible(hwnd) }.as_bool() {
+            let ex = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
+            let was_topmost = (ex & (WS_EX_TOPMOST.0 as isize)) != 0;
+            let _ = unsafe { ShowWindow(hwnd, SW_HIDE) };
+            HIDDEN.with(|h| h.borrow_mut().push((hwnd.0 as isize, was_topmost)));
+        }
+        true.into()
+    }
+    HIDDEN.with(|h| h.borrow_mut().clear());
+    unsafe {
+        let _ = EnumWindows(Some(cb), LPARAM(0));
+    }
+    HIDDEN.with(|h| h.borrow().clone())
+}
+
+/// Re-show windows hidden by `hide_own_windows` without stealing focus, and
+/// re-assert HWND_TOPMOST for those that were topmost — hide/show drops the
+/// always-on-top band, so without this the bar/tiles fall behind the foreground
+/// window after a capture (same fix as `apply_transparency`).
+pub fn show_windows(hwnds: &[(isize, bool)]) {
+    for &(h, was_topmost) in hwnds {
+        let hwnd = HWND(h as *mut std::ffi::c_void);
+        unsafe {
+            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            if was_topmost {
+                let _ = SetWindowPos(
+                    hwnd,
+                    Some(HWND_TOPMOST),
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                );
+            }
+        }
+    }
+}
+
 /// Position a window at the given screen coordinates with the given size.
 /// Used by `apply_tile_hwnd_with_monitor` in overlay_host to drive
 /// freshly-spawned tile windows onto the chosen display.

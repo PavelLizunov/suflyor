@@ -261,19 +261,37 @@ async fn stream_inner(
         messages.len()
     );
 
-    let resp = client
+    let resp = match client
         .post(&url)
         .timeout(std::time::Duration::from_secs(120))
         .bearer_auth(&bearer)
         .json(&body)
         .send()
         .await
-        .context("POST chat/completions")?;
+    {
+        Ok(r) => r,
+        // Generic on transport failure: the reqwest error chain embeds the
+        // request url (the LAN base_url), and `{e:#}` would paint it into the
+        // streamed error tile (screen-share leak — CLAUDE.md security boundary).
+        // Log the detail; return a secret-free, RETRYABLE message (no "HTTP 4xx"
+        // → is_permanent_ai_error keeps retrying).
+        Err(e) => {
+            log::warn!("AI stream POST failed: {e:#}");
+            return Err(anyhow!("AI connection error"));
+        }
+    };
 
     if !resp.status().is_success() {
         let status = resp.status();
+        // Keep the status (drives is_permanent_ai_error + classify_ai_error) but
+        // DROP the body: a server's body can carry paths/internals that would
+        // paint into the streamed error tile. Body → file log only.
         let body = resp.text().await.unwrap_or_default();
-        return Err(anyhow!("HTTP {status}: {body}"));
+        log::warn!(
+            "AI stream HTTP {status} body: {}",
+            body.chars().take(500).collect::<String>()
+        );
+        return Err(anyhow!("HTTP {status}"));
     }
 
     let mut byte_buf: Vec<u8> = Vec::with_capacity(8 * 1024);
@@ -533,18 +551,31 @@ async fn complete_once(
         messages.len()
     );
 
-    let resp = client
+    let resp = match client
         .post(&url)
         .timeout(std::time::Duration::from_secs(180))
         .bearer_auth(bearer)
         .json(&body)
         .send()
         .await
-        .context("POST chat/completions")?;
+    {
+        Ok(r) => r,
+        // Generic on transport failure (see stream_inner): the reqwest url must
+        // not reach a UI surface; log the detail, return a retryable message.
+        Err(e) => {
+            log::warn!("AI complete POST failed: {e:#}");
+            return Err(anyhow!("AI connection error"));
+        }
+    };
     if !resp.status().is_success() {
         let status = resp.status();
+        // Keep status (classification), drop body (see stream_inner).
         let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("HTTP {status}: {body}");
+        log::warn!(
+            "AI complete HTTP {status} body: {}",
+            body.chars().take(500).collect::<String>()
+        );
+        anyhow::bail!("HTTP {status}");
     }
     let v: serde_json::Value = resp.json().await.context("parse json")?;
     let text = v

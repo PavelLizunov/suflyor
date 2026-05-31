@@ -17,7 +17,7 @@
 //! Run: `cargo run --bin overlay-host` from `slint-experiment/`.
 
 use overlay_backend::events::{MonitorHint, RuntimeEvents, TileKind, TileSpec};
-use overlay_backend::{ai, audio, config, journal, kb, stt};
+use overlay_backend::{ai, audio, config, journal, kb, stt, vision};
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
 use slint_replay::app_state::{format_timer, new_shared_state};
 use slint_replay::markdown;
@@ -269,6 +269,14 @@ impl RuntimeEvents for PttStreamSink {
                         },
                     );
                 }
+                // A zero-token Done (some vision servers do this on an
+                // unsupported image, or a content filter) would replace the
+                // placeholder with an empty body — show a note, not a blank tile.
+                let final_body = if final_body.trim().is_empty() {
+                    "_(модель не вернула ответ)_".to_string()
+                } else {
+                    final_body
+                };
                 let weak = self.tile.clone();
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(t) = weak.upgrade() {
@@ -1552,17 +1560,23 @@ fn main() -> Result<(), slint::PlatformError> {
     // ask_stream_loop). Matches src-tauri/React-side semantic where F9
     // is the "ask AI with full transcript context" hotkey.
     let f9_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F9);
+    // V2 — F8 screenshot → vision (captures the monitor under the cursor and
+    // streams a vision model's reading into a tile, via the SEPARATE vision
+    // endpoint so text can stay local).
+    let f8_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F8);
     let f3_id = f3_hotkey.id();
     let f4_id = f4_hotkey.id();
     let f6_id = f6_hotkey.id();
     let f7_id = f7_hotkey.id();
     let f9_id = f9_hotkey.id();
+    let f8_id = f8_hotkey.id();
     if let Some(m) = hotkey_manager.as_ref() {
         for (label, hk) in [
             ("F3", f3_hotkey),
             ("F4", f4_hotkey),
             ("F6", f6_hotkey),
             ("F7", f7_hotkey),
+            ("F8", f8_hotkey),
             ("F9", f9_hotkey),
         ] {
             match m.register(hk) {
@@ -1634,6 +1648,18 @@ fn main() -> Result<(), slint::PlatformError> {
                     // the tile body live.
                     eprintln!("[overlay-host] F9 pressed — live ask streaming");
                     fire_f9_ask(
+                        &hp_bridge,
+                        &hp_events,
+                        &hp_cfg,
+                        &hp_rt,
+                        &hp_rt_handle,
+                        &hp_tiles,
+                        &hp_weak_overlay,
+                    );
+                } else if event.id == f8_id {
+                    // V2 — F8 screenshot → vision (separate endpoint).
+                    diag!("[overlay-host] F8 pressed — screenshot → vision");
+                    fire_f8_vision_capture(
                         &hp_bridge,
                         &hp_events,
                         &hp_cfg,
@@ -3104,6 +3130,191 @@ fn fire_ptt_ask(
             model.clone(),
             messages,
             AI_STREAM_MAX_TOKENS,
+        );
+        overlay_backend::runtime::ask_stream_loop(
+            sink,
+            ai_rx,
+            model,
+            sys_full,
+            usr_full,
+            journal_for_loop,
+            health_for_stream,
+            t0,
+            cost_apply,
+        )
+        .await;
+    });
+}
+
+/// V2 — F8 screenshot → vision. Captures the monitor under the cursor (hiding
+/// our own windows so they don't leak into the shot), then streams a vision
+/// model's reading of it into a tile via the SEPARATE vision endpoint
+/// (`cfg.vision_endpoint`). Independent of the text AI: a local text model
+/// keeps working while the image goes to cloud Sonnet (or a 2nd local vision
+/// model). No follow-up in V2 (a follow-up would route to the text endpoint),
+/// so the tile uses `convo_id = -1`.
+#[allow(clippy::too_many_arguments)]
+fn fire_f8_vision_capture(
+    bridge: &Arc<OverlayBarBridge>,
+    events: &Arc<dyn RuntimeEvents>,
+    cfg: &overlay_backend::config::SharedConfig,
+    slint_rt: &SharedSlintRuntime,
+    rt_handle: &tokio::runtime::Handle,
+    tiles: &TileWindows,
+    weak_overlay: &slint::Weak<OverlayBarWindow>,
+) {
+    // ===== 1. Resolve the vision endpoint (separate channel) =====
+    let Some(ep) = cfg.read().vision_endpoint() else {
+        diag!("[overlay-host] F8: vision provider is 'off' (Settings -> Vision) — skipping");
+        return;
+    };
+
+    // ===== 2. Capture the monitor under the cursor (hide our windows first) =====
+    // GDI BitBlt ignores WDA_EXCLUDEFROMCAPTURE, so our bar/tiles would show;
+    // hide them for the grab, then restore. Brief (<50 ms, UI thread).
+    let hidden = slint_replay::win32::hide_own_windows();
+    let shot = slint_replay::capture::capture_monitor_under_cursor();
+    slint_replay::win32::show_windows(&hidden);
+    let shot = match shot {
+        Ok(s) => s,
+        Err(e) => {
+            diag!("[overlay-host] F8: capture failed: {e}");
+            return;
+        }
+    };
+
+    // ===== 3. Placeholder vision tile (mirrors the PTT tile setup) =====
+    let tile = match TileWindow::new() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("[overlay-host] F8: TileWindow::new failed: {e}");
+            return;
+        }
+    };
+    let seq = TILE_DISPLAY_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
+    tile.set_sequence(seq as i32);
+    tile.set_tile_title(SharedString::from("📷 Скриншот"));
+    tile.set_source_label(SharedString::from("vision · анализ…"));
+    tile.set_trigger_label(SharedString::from("📷 F8 vision"));
+    tile.set_trigger_color(slint::Color::from_rgb_u8(0x22, 0xd3, 0xee)); // cyan
+    tile.set_convo_id(-1); // no follow-up for vision tiles in V2
+    tile.set_followup_busy(true);
+    wire_tile_drag(&tile);
+    tile.set_blocks(ModelRc::new(VecModel::from(vec![MarkdownBlock {
+        kind: markdown::kind::PARAGRAPH,
+        text: SharedString::from("⏳ Распознаю экран…"),
+        lang: SharedString::from(""),
+    }])));
+    let weak_close = tile.as_weak();
+    let vec_for_close = tiles.clone();
+    let weak_overlay_close = weak_overlay.clone();
+    tile.on_close_clicked(move || {
+        if let Some(t) = weak_close.upgrade() {
+            let close_hwnd = grab_hwnd(t.window()).ok();
+            let _ = t.hide();
+            if let Some(target) = close_hwnd {
+                vec_for_close
+                    .borrow_mut()
+                    .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
+                refresh_open_tiles(&weak_overlay_close, &vec_for_close);
+            }
+        }
+    });
+    let weak_pin = tile.as_weak();
+    tile.on_pin_clicked(move || {
+        if let Some(t) = weak_pin.upgrade() {
+            let new = !t.get_pinned();
+            t.set_pinned(new);
+        }
+    });
+    let weak_max = tile.as_weak();
+    tile.on_maximize_clicked(move || {
+        if let Some(t) = weak_max.upgrade() {
+            let Ok(hwnd) = grab_hwnd(t.window()) else {
+                return;
+            };
+            toggle_tile_maximize(hwnd, &t);
+        }
+    });
+    let _ = tile.show();
+    apply_tile_hwnd_with_monitor(&tile);
+    let weak_for_stream = tile.as_weak();
+    let weak_for_title = tile.as_weak();
+    tiles.borrow_mut().push(tile);
+    refresh_open_tiles(weak_overlay, tiles);
+
+    // ===== 4. Snapshot what the streaming task needs =====
+    let model = ep.model.clone();
+    let is_local = ep.is_local;
+    let (journal_for_loop, health_for_stream) = {
+        let s = slint_replay::runtime_state::lock(slint_rt);
+        (s.journal.clone(), s.health.clone())
+    };
+    let rt_for_cost = slint_rt.clone();
+    let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
+        // Local vision is free; cloud vision bills (image tokens under-counted
+        // by the text pricing table — acceptable for the MVP).
+        let micro = if is_local { 0 } else { micro };
+        let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
+        s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
+        (s.session_cost_microcents as f64) / 100_000_000.0
+    });
+    let bridge_for_task = bridge.clone();
+    let events_inner = events.clone();
+
+    // ===== 5. Encode the frame off-thread, then stream the vision answer =====
+    rt_handle.spawn(async move {
+        let (bgra, w, h) = (shot.bgra, shot.width, shot.height);
+        let data_url = match tokio::task::spawn_blocking(move || {
+            // Stringify the error inside the closure: Box<dyn Error> isn't Send,
+            // but spawn_blocking requires a Send return.
+            slint_replay::capture::bgra_to_jpeg_data_url(&bgra, w, h).map_err(|e| e.to_string())
+        })
+        .await
+        {
+            Ok(Ok(u)) => u,
+            Ok(Err(e)) => {
+                ptt_tile_error(
+                    weak_for_title.clone(),
+                    &format!("Не удалось обработать кадр: {e}"),
+                );
+                return;
+            }
+            Err(e) => {
+                ptt_tile_error(weak_for_title.clone(), &format!("Сбой кодирования: {e}"));
+                return;
+            }
+        };
+        let messages = vision::build_vision_request(&data_url, vision::DEFAULT_VISION_PROMPT);
+        let usr_full = vision::DEFAULT_VISION_PROMPT.to_string();
+        let sys_full = String::new();
+        // Dedicated per-tile sink (convo_id = -1 → no conversation fold) so a
+        // vision answer streams independently of any live text answer.
+        let sink: Arc<dyn RuntimeEvents> = Arc::new(PttStreamSink::new(
+            bridge_for_task.clone(),
+            events_inner.clone(),
+            weak_for_stream,
+            -1,
+            messages.clone(),
+        ));
+        if let Some(j) = journal_for_loop.as_ref() {
+            j.write(&journal::JournalEvent::AiRequest {
+                unix_ms: journal::now_unix_ms(),
+                purpose: "vision_ask",
+                model: &model,
+                system_prompt: &sys_full,
+                user_prompt: &usr_full,
+                attached_screenshot: true,
+                input_tokens_est: (usr_full.chars().count() as u64) / 4,
+            });
+        }
+        let t0 = std::time::Instant::now();
+        let ai_rx = ai::stream_chat(
+            ep.base_url,
+            ep.bearer,
+            model.clone(),
+            messages,
+            vision::VISION_MAX_TOKENS,
         );
         overlay_backend::runtime::ask_stream_loop(
             sink,

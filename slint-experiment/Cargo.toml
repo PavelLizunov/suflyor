@@ -104,6 +104,13 @@ global-hotkey = "0.6"
 # no GTK on Windows. Used only by the Settings Export/Import buttons.
 rfd = { version = "0.15", default-features = false }
 
+# V2 vision feature — encode the BitBlt screen capture. `image` (jpeg only,
+# default-features off to stay lean) downscales + JPEG-encodes; `base64` wraps
+# it in a data: URI for the vision endpoint. The BitBlt itself uses the already-
+# enabled windows `Win32_Graphics_Gdi` feature.
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+base64 = "0.22"
+
 # overlay-backend — the shared no-UI crate (audio, STT, AI, journal,
 # KB, screenshot, config, runtime + health.rs). This binary is its
 # only consumer, via path dep.
