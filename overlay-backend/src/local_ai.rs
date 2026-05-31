@@ -297,6 +297,10 @@ pub fn install(
         on(Progress::Step("Starting llama-server :8080".to_string()));
         let exe = find_exe(&llama_dir, "llama-server.exe")
             .context("llama-server.exe not found after install")?;
+        // Free :8080 from any stale/projector-less server (incl. one orphaned by
+        // a previous app run) so the fresh --mmproj server can actually bind.
+        stop_listener_on_port(LLAMA_PORT);
+        std::thread::sleep(Duration::from_millis(800));
         let gguf = llama_dir.join(GEMMA_FILE);
         let gguf_s = gguf.to_string_lossy().into_owned();
         let mmproj = llama_dir.join(MMPROJ_FILE);
@@ -380,6 +384,39 @@ fn is_reachable(url: &str) -> bool {
         .map(|o| o.status.success())
         .unwrap_or(false)
 }
+
+/// Best-effort: kill whatever process is LISTENING on `port` so a fresh server
+/// can bind it. Critical before (re)launching llama-server with `--mmproj`: a
+/// stale projector-less server (e.g. orphaned by a previous app run that was
+/// force-killed, so it was never reaped) keeps the port, the new server fails to
+/// bind, and `wait_ready` still sees the old one answer — so the install reports
+/// success while F8 vision returns HTTP 500. Parses `netstat -ano`.
+#[cfg(windows)]
+fn stop_listener_on_port(port: &str) {
+    let Ok(out) = run_capture("netstat", &["-ano", "-p", "tcp"]) else {
+        return;
+    };
+    let text = String::from_utf8_lossy(&out.stdout);
+    let suffix = format!(":{port}");
+    let mut killed: Vec<String> = Vec::new();
+    for line in text.lines() {
+        // Columns: Proto  LocalAddr  ForeignAddr  State  PID
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        if cols.len() >= 5
+            && cols[3].eq_ignore_ascii_case("LISTENING")
+            && cols[1].ends_with(suffix.as_str())
+        {
+            let pid = cols[4];
+            if pid != "0" && !killed.iter().any(|k| k == pid) {
+                let _ = run_capture("taskkill", &["/F", "/PID", pid]);
+                killed.push(pid.to_string());
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn stop_listener_on_port(_port: &str) {}
 
 /// On launch, start the local servers the config points at but that aren't
 /// already running (the app kills its servers on quit, so after a restart
