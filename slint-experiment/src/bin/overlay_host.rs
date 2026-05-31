@@ -1550,8 +1550,46 @@ fn main() -> Result<(), slint::PlatformError> {
     // KB palette — opened via the F4 global hotkey (registered below).
     // (The 💡 tips chip was removed; F4 is the sole entry point.)
     let palette: Rc<RefCell<Option<PaletteWindow>>> = Rc::new(RefCell::new(None));
-    // V3 — the Lightshot capture overlay (one at a time; lifecycle mirrors the palette).
+    // V3 — the Lightshot capture overlay. PERSISTENT + pre-stealthed so F8 shows
+    // it flash-free: WDA_EXCLUDEFROMCAPTURE keeps it off any screen-share from the
+    // first frame, WS_EX_TOOLWINDOW keeps it out of the taskbar. We realize the
+    // HWND once (tiny + off-screen), apply both, then hide; F8 just re-shows it
+    // (the affinity + ex-style persist across hide/show). Earlier the stealth was
+    // applied via grab_hwnd RIGHT AFTER show(), which fails (HWND not realized) —
+    // so the capture overlay used to be visible on screen-share + in the taskbar.
     let capture_overlay: Rc<RefCell<Option<CaptureOverlay>>> = Rc::new(RefCell::new(None));
+    match CaptureOverlay::new() {
+        Ok(co) => {
+            co.window().set_size(slint::PhysicalSize::new(1, 1));
+            co.window()
+                .set_position(slint::PhysicalPosition::new(-32000, -32000));
+            let _ = co.show();
+            let weak = co.as_weak();
+            Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
+                if let Some(w) = weak.upgrade() {
+                    match grab_hwnd(w.window()) {
+                        Ok(hwnd) => {
+                            let s = set_stealth(hwnd, true); // WDA_EXCLUDEFROMCAPTURE
+                            let t = slint_replay::win32::set_skip_taskbar(hwnd, true);
+                            eprintln!(
+                                "[overlay-host] capture pre-stealth: stealth_ok={} taskbar_ok={}",
+                                s.is_ok(),
+                                t.is_ok()
+                            );
+                        }
+                        Err(e) => {
+                            eprintln!("[overlay-host] capture pre-stealth: grab_hwnd FAILED: {e}")
+                        }
+                    }
+                    let _ = w.hide();
+                } else {
+                    eprintln!("[overlay-host] capture pre-stealth: weak upgrade failed");
+                }
+            });
+            *capture_overlay.borrow_mut() = Some(co);
+        }
+        Err(e) => eprintln!("[overlay-host] F8 capture overlay pre-create failed: {e}"),
+    }
 
     // ===== Global hotkeys (Phase D2 + B3 extra) =====
     //
@@ -3210,9 +3248,16 @@ fn fire_f8_vision_capture(
     // provider), so a stuck overlay can ALWAYS be cleared — even if Vision was
     // since switched to "off" in Settings. Escape hatch for a drag that lost its
     // pointer-up.
-    if let Some(w) = capture_overlay.borrow_mut().take() {
-        let _ = w.hide();
-        return;
+    {
+        let b = capture_overlay.borrow();
+        if let Some(win) = b.as_ref() {
+            if win.get_shown() {
+                win.set_shown(false);
+                let _ = win.hide();
+                diag!("[overlay-host] F8: capture overlay dismissed");
+                return;
+            }
+        }
     }
     let Some(ep) = cfg.read().vision_endpoint() else {
         diag!("[overlay-host] F8: vision provider is 'off' (Settings -> Vision) — skipping");
@@ -3244,32 +3289,24 @@ fn fire_f8_vision_capture(
     );
     let img = bgra_to_slint_image(&frozen.bgra, fw, fh);
 
-    let win = match CaptureOverlay::new() {
-        Ok(w) => w,
-        Err(e) => {
-            eprintln!("[overlay-host] F8: CaptureOverlay::new failed: {e}");
-            return;
-        }
+    // Reuse the PERSISTENT, pre-stealthed overlay (created at startup). Its
+    // WDA_EXCLUDEFROMCAPTURE + WS_EX_TOOLWINDOW persist across hide/show, so it
+    // shows flash-free: never visible on a screen-share, never in the taskbar.
+    let b = capture_overlay.borrow();
+    let Some(win) = b.as_ref() else {
+        eprintln!("[overlay-host] F8: capture overlay not initialised");
+        return;
     };
     win.set_frozen(img);
-    // Size + position the overlay over the captured monitor via Slint's OWN
-    // window API. CRITICAL: grab_hwnd() fails right after show() (the HWND isn't
-    // realized yet in this synchronous callback), so the old Win32 move_window
-    // never ran — the window stayed at its tiny default size and squished the
-    // full-res screenshot. Slint's set_size/set_position apply reliably.
-    // PHYSICAL units = monitor pixels (1:1 with the captured frame).
+    win.set_dragging(false); // clear any stale selection rect from a prior capture
+                             // PHYSICAL units = monitor pixels (1:1 with the captured frame). Geometry is
+                             // set on the still-hidden window, then show() lands it there (Slint's
+                             // set_size/set_position apply reliably).
     win.window()
         .set_size(slint::PhysicalSize::new(fw.max(1), fh.max(1)));
     win.window()
         .set_position(slint::PhysicalPosition::new(vx, vy));
     let _ = win.show();
-    // Stealth + topmost + keyboard focus are best-effort (geometry already set
-    // above; if grab_hwnd still fails the overlay is at least correctly sized).
-    if let Ok(hwnd) = grab_hwnd(win.window()) {
-        let _ = set_always_on_top(hwnd, true);
-        let _ = set_stealth(hwnd, true); // keep the frozen overlay out of screen-share
-        slint_replay::win32::focus_window(hwnd); // grab keyboard for Esc
-    }
     let scale = win.window().scale_factor().max(0.1);
     diag!("[overlay-host] F8 overlay {fw}x{fh} at ({vx},{vy}) scale={scale}");
 
@@ -3277,7 +3314,6 @@ fn fire_f8_vision_capture(
     let frozen_rc = Rc::new(frozen);
     {
         let weak_self = win.as_weak();
-        let slot = capture_overlay.clone();
         let frozen_c = frozen_rc.clone();
         let bridge_c = bridge.clone();
         let events_c = events.clone();
@@ -3285,11 +3321,12 @@ fn fire_f8_vision_capture(
         let h_c = rt_handle.clone();
         let tiles_c = tiles.clone();
         let wo_c = weak_overlay.clone();
+        let ep_c = ep.clone();
         win.on_region_selected(move |x1, y1, x2, y2| {
             if let Some(w) = weak_self.upgrade() {
+                w.set_shown(false);
                 let _ = w.hide();
             }
-            *slot.borrow_mut() = None;
             // logical px × scale = image px.
             let to_px = |v: f32| (v * scale).round().max(0.0) as u32;
             let (px1, py1) = (to_px(x1), to_px(y1));
@@ -3303,7 +3340,7 @@ fn fire_f8_vision_capture(
             );
             launch_vision_for_bgra(
                 cropped,
-                ep.clone(),
+                ep_c.clone(),
                 &bridge_c,
                 &events_c,
                 &rt_c,
@@ -3315,16 +3352,26 @@ fn fire_f8_vision_capture(
     }
     {
         let weak_self = win.as_weak();
-        let slot = capture_overlay.clone();
         win.on_cancelled(move || {
             if let Some(w) = weak_self.upgrade() {
+                w.set_shown(false);
                 let _ = w.hide();
             }
-            *slot.borrow_mut() = None;
         });
     }
 
-    *capture_overlay.borrow_mut() = Some(win);
+    win.set_shown(true);
+    // The persistent HWND exists, so grab_hwnd works synchronously here. WDA
+    // stealth was set at pre-create and PERSISTS across hide/show — but winit
+    // re-applies the window's ex-style on show(), dropping WS_EX_TOOLWINDOW, so
+    // the taskbar button reappears. Re-apply it now: synchronous + lands before
+    // the shell creates the button = flash-free. (The overlay is WDA-hidden from
+    // any screen-share regardless.)
+    if let Ok(hwnd) = grab_hwnd(win.window()) {
+        let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
+        let _ = set_always_on_top(hwnd, true);
+        slint_replay::win32::focus_window(hwnd);
+    }
 }
 
 /// Spawn a vision tile for a captured BGRA frame and stream the answer into it

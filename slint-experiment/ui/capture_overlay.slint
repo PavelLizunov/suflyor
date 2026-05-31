@@ -18,12 +18,17 @@ export component CaptureOverlay inherits Window {
     // there's no Slint-vs-Win32 fight over the window rect.
     in property <image> frozen;
 
+    // Rust-side flag: is the capture UI currently displayed? The overlay is
+    // persistent + pre-stealthed (so it shows flash-free), so visibility is
+    // tracked here rather than via an Option<window> in Rust.
+    in-out property <bool> shown: false;
+
     // Selection state in logical px.
     property <length> sx;
     property <length> sy;
     property <length> ex;
     property <length> ey;
-    property <bool> dragging: false;
+    in-out property <bool> dragging: false;
 
     // Normalised selection rect.
     property <length> rx: min(root.sx, root.ex);
