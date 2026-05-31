@@ -13,11 +13,10 @@ export component CaptureOverlay inherits Window {
     always-on-top: true;
     forward-focus: fs;
 
-    // Driven from Rust.
+    // Driven from Rust. Geometry (position + size) is owned by the Win32 host
+    // (move_window over the virtual desktop); this component just fills 100% so
+    // there's no Slint-vs-Win32 fight over the window rect.
     in property <image> frozen;
-    // Logical size of the view (physical virtual-desktop size / scale-factor).
-    in property <length> view-width: 1920px;
-    in property <length> view-height: 1080px;
 
     // Selection state in logical px.
     property <length> sx;
@@ -37,15 +36,13 @@ export component CaptureOverlay inherits Window {
     callback cancelled();
 
     background: #000000;
-    width: root.view-width;
-    height: root.view-height;
 
     // The frozen screenshot fills the window 1:1.
     Image {
         x: 0;
         y: 0;
-        width: root.view-width;
-        height: root.view-height;
+        width: 100%;
+        height: 100%;
         source: root.frozen;
         image-fit: fill;
     }
@@ -54,22 +51,22 @@ export component CaptureOverlay inherits Window {
     if !root.dragging: Rectangle {
         x: 0;
         y: 0;
-        width: root.view-width;
-        height: root.view-height;
+        width: root.width;
+        height: root.height;
         background: #00000055;
     }
     if root.dragging: Rectangle { // top
         x: 0;
         y: 0;
-        width: root.view-width;
+        width: root.width;
         height: root.ry;
         background: #00000088;
     }
     if root.dragging: Rectangle { // bottom
         x: 0;
         y: root.ry + root.rh;
-        width: root.view-width;
-        height: root.view-height - (root.ry + root.rh);
+        width: root.width;
+        height: root.height - (root.ry + root.rh);
         background: #00000088;
     }
     if root.dragging: Rectangle { // left
@@ -82,7 +79,7 @@ export component CaptureOverlay inherits Window {
     if root.dragging: Rectangle { // right
         x: root.rx + root.rw;
         y: root.ry;
-        width: root.view-width - (root.rx + root.rw);
+        width: root.width - (root.rx + root.rw);
         height: root.rh;
         background: #00000088;
     }

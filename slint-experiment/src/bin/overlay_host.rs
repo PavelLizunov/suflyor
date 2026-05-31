@@ -3218,20 +3218,18 @@ fn fire_f8_vision_capture(
     };
     win.set_frozen(img);
     let _ = win.show();
-    // Position to cover the entire virtual desktop, THEN read scale on the
-    // destination monitor (Per-Monitor-DPI-v2: a cross-monitor move fires
-    // WM_DPICHANGED, so reading scale before the move could be stale). The
-    // view-* logical size = physical / scale drives the Window width/height so
-    // the frozen Image maps 1:1; the crop callback reuses the same scale.
+    // Win32 OWNS the geometry: set the EXACT physical virtual-desktop rect
+    // (position + size atomically, as the FINAL op) so neither a Slint resize
+    // nor a DPI change can leave the overlay mispositioned — the frozen
+    // full-desktop image must align 1:1 with the real screen. The .slint fills
+    // 100%, so there's no width/height fight. `scale` is only for the crop.
     if let Ok(hwnd) = grab_hwnd(win.window()) {
-        let _ = slint_replay::win32::move_window_pos_only(hwnd, vx, vy);
+        let _ = slint_replay::win32::move_window(hwnd, vx, vy, fw as i32, fh as i32);
         let _ = set_always_on_top(hwnd, true);
         let _ = set_stealth(hwnd, true); // keep the frozen overlay out of screen-share
         slint_replay::win32::focus_window(hwnd); // grab keyboard for Esc
     }
     let scale = win.window().scale_factor().max(0.1);
-    win.set_view_width(fw as f32 / scale);
-    win.set_view_height(fh as f32 / scale);
 
     // Share the frozen frame into the region callback (UI thread only → Rc ok).
     let frozen_rc = Rc::new(frozen);
