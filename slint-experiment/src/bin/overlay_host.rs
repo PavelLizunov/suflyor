@@ -3195,18 +3195,39 @@ fn fire_f8_vision_capture(
         return;
     }
 
-    // Freeze the full virtual desktop (hide our windows for a clean shot).
+    // Freeze the monitor UNDER THE CURSOR. Single-monitor (not the whole
+    // virtual desktop) → one DPI/scale, so the frozen image maps 1:1 with no
+    // mixed-DPI compression or cross-monitor offset. The user picks which
+    // screen by where the cursor is when pressing F8.
+    let monitors = slint_replay::win32::enum_monitors();
+    let (cx, cy) = slint_replay::win32::cursor_pos();
+    let Some(mon) = monitors
+        .iter()
+        .find(|m| cx >= m.left && cx < m.right && cy >= m.top && cy < m.bottom)
+        .or_else(|| monitors.iter().find(|m| m.is_primary))
+        .or_else(|| monitors.first())
+        .copied()
+    else {
+        diag!("[overlay-host] F8: no monitor under cursor");
+        return;
+    };
+    let (mx, my, mw, mh) = (mon.left, mon.top, mon.width(), mon.height());
     let hidden = slint_replay::win32::hide_own_windows();
-    let frozen = slint_replay::capture::capture_virtual_desktop();
+    let frozen = slint_replay::win32::capture_rect_bgra(mx, my, mw, mh);
     slint_replay::win32::show_windows(&hidden);
-    let (frozen, vx, vy) = match frozen {
-        Ok(x) => x,
+    let frozen = match frozen {
+        Ok(bgra) => slint_replay::capture::CapturedBgra {
+            bgra,
+            width: mw as u32,
+            height: mh as u32,
+        },
         Err(e) => {
-            diag!("[overlay-host] F8: virtual capture failed: {e}");
+            diag!("[overlay-host] F8: monitor capture failed: {e}");
             return;
         }
     };
     let (fw, fh) = (frozen.width, frozen.height);
+    diag!("[overlay-host] F8 capture mon=({mx},{my}) {mw}x{mh}");
     let img = bgra_to_slint_image(&frozen.bgra, fw, fh);
 
     let win = match CaptureOverlay::new() {
@@ -3217,19 +3238,26 @@ fn fire_f8_vision_capture(
         }
     };
     win.set_frozen(img);
+    // Size + position the overlay over the captured monitor via Slint's OWN
+    // window API. CRITICAL: grab_hwnd() fails right after show() (the HWND isn't
+    // realized yet in this synchronous callback), so the old Win32 move_window
+    // never ran — the window stayed at its tiny default size and squished the
+    // full-res screenshot. Slint's set_size/set_position apply reliably.
+    // PHYSICAL units = monitor pixels (1:1 with the captured frame).
+    win.window()
+        .set_size(slint::PhysicalSize::new(mw.max(1) as u32, mh.max(1) as u32));
+    win.window()
+        .set_position(slint::PhysicalPosition::new(mx, my));
     let _ = win.show();
-    // Win32 OWNS the geometry: set the EXACT physical virtual-desktop rect
-    // (position + size atomically, as the FINAL op) so neither a Slint resize
-    // nor a DPI change can leave the overlay mispositioned — the frozen
-    // full-desktop image must align 1:1 with the real screen. The .slint fills
-    // 100%, so there's no width/height fight. `scale` is only for the crop.
+    // Stealth + topmost + keyboard focus are best-effort (geometry already set
+    // above; if grab_hwnd still fails the overlay is at least correctly sized).
     if let Ok(hwnd) = grab_hwnd(win.window()) {
-        let _ = slint_replay::win32::move_window(hwnd, vx, vy, fw as i32, fh as i32);
         let _ = set_always_on_top(hwnd, true);
         let _ = set_stealth(hwnd, true); // keep the frozen overlay out of screen-share
         slint_replay::win32::focus_window(hwnd); // grab keyboard for Esc
     }
     let scale = win.window().scale_factor().max(0.1);
+    diag!("[overlay-host] F8 overlay {mw}x{mh} at ({mx},{my}) scale={scale}");
 
     // Share the frozen frame into the region callback (UI thread only → Rc ok).
     let frozen_rc = Rc::new(frozen);
