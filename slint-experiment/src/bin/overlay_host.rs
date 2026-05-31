@@ -1507,6 +1507,13 @@ fn main() -> Result<(), slint::PlatformError> {
     let tiles_for_poll = tiles.clone();
     let cfg_for_poll = cfg.clone();
     let weak_overlay_poll = overlay.as_weak();
+    // V5 — auto-tiles carry a COMPLETE answer (not a stream); to give them the
+    // same follow-up / 🔄 / 🎤 as F9 we seed the conversation here, which needs
+    // the bridge (conversations map), events, runtime, and tokio handle.
+    let bridge_for_poll = bridge.clone();
+    let events_for_poll = events.clone();
+    let slint_rt_for_poll = slint_rt.clone();
+    let rt_handle_for_poll = rt_handle.clone();
     let spawn_poll_timer = Timer::default();
     spawn_poll_timer.start(TimerMode::Repeated, Duration::from_millis(50), move || {
         // Phase E6 v19 — process at most 1 spawn request per 50 ms
@@ -1644,6 +1651,99 @@ fn main() -> Result<(), slint::PlatformError> {
                     toggle_tile_maximize(hwnd, &t);
                 }
             });
+            // V5 — auto-tiles (auto-detector / F3 reask / F6 manual) carry a
+            // COMPLETE answer, not a stream, so seed the conversation manually
+            // so follow-up + 🔄 + 🎤 work exactly like F9. Only AI-answer kinds
+            // get a dialog — KB / snippet / translate / reload aren't
+            // conversational, and Vision goes through launch_vision_for_bgra.
+            let is_conversational = matches!(
+                req.kind,
+                TileKind::Ai
+                    | TileKind::Auto
+                    | TileKind::Manual
+                    | TileKind::System
+                    | TileKind::Mic
+                    | TileKind::Debrief
+            );
+            if is_conversational && !req.spec.answer.trim().is_empty() {
+                let convo_id = CONVO_SEQ.fetch_add(1, Ordering::Relaxed) as i32;
+                tile.set_convo_id(convo_id);
+                tile.set_followup_busy(false); // answer already complete
+                                               // Seed [system, user(question), assistant(answer)] the same way
+                                               // F9 builds history, so regenerate re-asks the same question and
+                                               // a follow-up carries full context.
+                let (meeting_context, response_language) = {
+                    let c = cfg_for_poll.read();
+                    (c.meeting_context.clone(), c.response_language.clone())
+                };
+                let question = req.spec.question.clone();
+                let mut messages = ai::build_request(
+                    &meeting_context,
+                    &response_language,
+                    &[],
+                    None,
+                    Some(&question),
+                );
+                messages.push(ai::ChatMessage {
+                    role: "assistant".into(),
+                    content: ai::MessageContent::Text(req.spec.answer.clone()),
+                });
+                {
+                    let mut convos = match bridge_for_poll.conversations.lock() {
+                        Ok(g) => g,
+                        Err(p) => p.into_inner(),
+                    };
+                    convos.insert(
+                        convo_id,
+                        ConvoState {
+                            messages,
+                            rendered: req.spec.answer.clone(),
+                        },
+                    );
+                }
+                {
+                    let weak_fu = tile.as_weak();
+                    let bridge_fu = bridge_for_poll.clone();
+                    let events_fu = events_for_poll.clone();
+                    let cfg_fu = cfg_for_poll.clone();
+                    let slint_rt_fu = slint_rt_for_poll.clone();
+                    let rt_handle_fu = rt_handle_for_poll.clone();
+                    tile.on_followup_submitted(move |q| {
+                        fire_followup_ask(
+                            (convo_id, q.to_string()),
+                            weak_fu.clone(),
+                            &bridge_fu,
+                            &events_fu,
+                            &cfg_fu,
+                            &slint_rt_fu,
+                            &rt_handle_fu,
+                            false,
+                        );
+                    });
+                }
+                tile.set_can_regenerate(true);
+                {
+                    let weak_re = tile.as_weak();
+                    let bridge_re = bridge_for_poll.clone();
+                    let events_re = events_for_poll.clone();
+                    let cfg_re = cfg_for_poll.clone();
+                    let slint_rt_re = slint_rt_for_poll.clone();
+                    let rt_handle_re = rt_handle_for_poll.clone();
+                    tile.on_regenerate_clicked(move || {
+                        fire_regenerate(
+                            convo_id,
+                            weak_re.clone(),
+                            &bridge_re,
+                            &events_re,
+                            &cfg_re,
+                            &slint_rt_re,
+                            &rt_handle_re,
+                            false,
+                        );
+                    });
+                }
+                wire_voice_followup(&tile, convo_id, false, &cfg_for_poll);
+            }
             // (monitor placement applied via apply_tile_hwnd_with_monitor.)
             let _ = tile.show();
             apply_tile_hwnd_with_monitor(&tile);
