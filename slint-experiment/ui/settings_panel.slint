@@ -178,6 +178,23 @@ export component SettingsWindow inherits Window {
     in-out property <bool> ai-prompt-cache: false;
     // Local AI provider (Phase 1): 0 = cloud bridge, 1 = local (Ollama/llama.cpp).
     in-out property <int> ai-provider-index: 0;
+    // V4 — vision (screenshot · F8) channel, resolved separately from the text model.
+    in-out property <int> vision-provider-index: 2; // 0=off 1=same 2=cloud 3=local
+    in-out property <string> vision-base-url-input;
+    in-out property <string> vision-bearer-input;
+    in-out property <string> vision-model-input;
+    in-out property <string> vision-local-base-url-input;
+    in-out property <string> vision-local-bearer-input;
+    in-out property <string> vision-local-model-input;
+    in-out property <string> vision-test-result;
+    callback vision-provider-changed(int);
+    callback vision-base-url-save(string);
+    callback vision-bearer-save(string);
+    callback vision-model-save(string);
+    callback vision-local-base-url-save(string);
+    callback vision-local-bearer-save(string);
+    callback vision-local-model-save(string);
+    callback vision-test-clicked();
     in-out property <string> ai-local-base-url-input: "";
     // Phase E10.1 — model dropdown populated from GET {base_url}/models so the
     // user picks a loaded model instead of typing its id.
@@ -1288,6 +1305,113 @@ export component SettingsWindow inherits Window {
                             font-size: 10px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
+                        }
+
+                        // ===================== VISION (screenshots · F8) =====================
+                        Rectangle { background: Theme.border; height: 2px; }
+                        Text {
+                            text: @tr("Vision (screenshots · F8)");
+                            font-size: 12px;
+                            font-weight: 700;
+                            color: Theme.text-primary;
+                        }
+                        Text {
+                            text: @tr("Where F8 screenshots are analysed. SEPARATE from the text model above — a local text model can keep answering while images go to a vision-capable model.");
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        ComboBox {
+                            model: [@tr("Off"), @tr("Same as text model above"), @tr("Cloud (Sonnet via bridge)"), @tr("Local (2nd vision server)")];
+                            current-index: root.vision-provider-index;
+                            selected => {
+                                root.vision-provider-index = self.current-index;
+                                root.vision-provider-changed(self.current-index);
+                            }
+                        }
+                        if root.vision-provider-index == 2 : VerticalLayout {
+                            spacing: 8px;
+                            Text {
+                                text: @tr("Screenshots are sent to the cloud. Leave a field blank to reuse the text bridge's value.");
+                                font-size: 10px;
+                                color: Theme.warning;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                LineEdit {
+                                    placeholder-text: @tr("vision base URL (blank = text bridge)");
+                                    text <=> root.vision-base-url-input;
+                                    horizontal-stretch: 1;
+                                }
+                                Button { text: @tr("Save"); clicked => { root.vision-base-url-save(root.vision-base-url-input); } }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                LineEdit {
+                                    placeholder-text: @tr("vision bearer (blank = text bridge)");
+                                    text <=> root.vision-bearer-input;
+                                    input-type: password;
+                                    horizontal-stretch: 1;
+                                }
+                                Button { text: @tr("Save"); clicked => { root.vision-bearer-save(root.vision-bearer-input); root.vision-bearer-input = ""; } }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                LineEdit {
+                                    placeholder-text: @tr("vision model (blank = claude-sonnet-4-6)");
+                                    text <=> root.vision-model-input;
+                                    horizontal-stretch: 1;
+                                }
+                                Button { text: @tr("Save"); clicked => { root.vision-model-save(root.vision-model-input); } }
+                            }
+                        }
+                        if root.vision-provider-index == 3 : VerticalLayout {
+                            spacing: 8px;
+                            Text {
+                                text: @tr("A 2nd local OpenAI-compatible server running a vision model (e.g. Qwen2-VL). Blank = reuse the text-local server.");
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                LineEdit {
+                                    placeholder-text: @tr("vision local URL — http://127.0.0.1:8082/v1");
+                                    text <=> root.vision-local-base-url-input;
+                                    horizontal-stretch: 1;
+                                }
+                                Button { text: @tr("Save"); clicked => { root.vision-local-base-url-save(root.vision-local-base-url-input); } }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                LineEdit {
+                                    placeholder-text: @tr("vision local model id");
+                                    text <=> root.vision-local-model-input;
+                                    horizontal-stretch: 1;
+                                }
+                                Button { text: @tr("Save"); clicked => { root.vision-local-model-save(root.vision-local-model-input); } }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                LineEdit {
+                                    placeholder-text: @tr("vision local bearer (optional)");
+                                    text <=> root.vision-local-bearer-input;
+                                    input-type: password;
+                                    horizontal-stretch: 1;
+                                }
+                                Button { text: @tr("Save"); clicked => { root.vision-local-bearer-save(root.vision-local-bearer-input); root.vision-local-bearer-input = ""; } }
+                            }
+                        }
+                        if root.vision-provider-index >= 2 : HorizontalLayout {
+                            spacing: 6px;
+                            Button { text: @tr("Test vision connection"); clicked => { root.vision-test-clicked(); } }
+                            if root.vision-test-result != "" : Text {
+                                text: root.vision-test-result;
+                                font-size: 11px;
+                                color: Theme.accent;
+                                vertical-alignment: center;
+                            }
                         }
                     }
                     if root.active-tab == 12 : VerticalLayout {

@@ -4578,6 +4578,121 @@ fn open_settings(
             }
         });
     }
+    // ===== V4 — vision (screenshot) channel: provider switch + field saves + test =====
+    {
+        let cfg_c = cfg.clone();
+        win.on_vision_provider_changed(move |idx| {
+            let provider = match idx {
+                0 => "off",
+                1 => "same",
+                3 => "local",
+                _ => "cloud",
+            };
+            let mut c = cfg_c.write();
+            c.vision_provider = provider.to_string();
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] vision_provider save failed: {e:#}");
+                return;
+            }
+            diag!("vision_provider -> {provider}");
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_vision_base_url_save(move |v| {
+            let mut c = cfg_c.write();
+            c.vision_base_url = v.trim().to_string();
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] vision_base_url save failed: {e:#}");
+            }
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_vision_bearer_save(move |v| {
+            let mut c = cfg_c.write();
+            c.vision_bearer = v.trim().to_string();
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] vision_bearer save failed: {e:#}");
+            }
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_vision_model_save(move |v| {
+            let mut c = cfg_c.write();
+            c.vision_model = v.trim().to_string();
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] vision_model save failed: {e:#}");
+            }
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_vision_local_base_url_save(move |v| {
+            let mut c = cfg_c.write();
+            c.vision_local_base_url = v.trim().to_string();
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] vision_local_base_url save failed: {e:#}");
+            }
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_vision_local_bearer_save(move |v| {
+            let mut c = cfg_c.write();
+            c.vision_local_bearer = v.trim().to_string();
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] vision_local_bearer save failed: {e:#}");
+            }
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_vision_local_model_save(move |v| {
+            let mut c = cfg_c.write();
+            c.vision_local_model = v.trim().to_string();
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] vision_local_model save failed: {e:#}");
+            }
+        });
+    }
+    {
+        // Vision connection test — resolve the vision endpoint, reuse the AI
+        // bridge tester. Off-thread so the HTTP round-trip can't freeze the UI.
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_vision_test_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            w.set_vision_test_result(SharedString::from("testing…"));
+            let Some(ep) = cfg_c.read().vision_endpoint() else {
+                w.set_vision_test_result(SharedString::from("[--] vision is off"));
+                return;
+            };
+            let weak_res = w.as_weak();
+            std::thread::spawn(move || {
+                let msg = match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(rt) => match rt.block_on(overlay_backend::ai::test_connection(
+                        ep.base_url,
+                        ep.bearer,
+                        ep.model,
+                    )) {
+                        Ok(s) => format!("[ok] {s}"),
+                        Err(e) => format!("[err] {e:#}").chars().take(90).collect(),
+                    },
+                    Err(e) => format!("[err] runtime: {e}"),
+                };
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = weak_res.upgrade() {
+                        w.set_vision_test_result(SharedString::from(msg));
+                    }
+                });
+            });
+        });
+    }
     {
         let cfg_c = cfg.clone();
         win.on_ai_local_model_selected(move |model| {
@@ -5820,6 +5935,19 @@ fn populate_token_status(win: &SettingsWindow, cfg: &overlay_backend::config::Sh
     // reflects the saved value on Settings re-open.
     win.set_tile_body_opacity(c.tile_body_opacity);
     win.set_ai_base_url_input(SharedString::from(c.ai_base_url.clone()));
+    // V4 — vision section: provider index + non-secret fields (bearers stay blank
+    // on screen; saving a blank field is a no-op the user controls).
+    win.set_vision_provider_index(match c.vision_provider.as_str() {
+        "off" => 0,
+        "same" => 1,
+        "local" => 3,
+        _ => 2,
+    });
+    win.set_vision_base_url_input(SharedString::from(c.vision_base_url.clone()));
+    win.set_vision_model_input(SharedString::from(c.vision_model.clone()));
+    win.set_vision_local_base_url_input(SharedString::from(c.vision_local_base_url.clone()));
+    win.set_vision_local_model_input(SharedString::from(c.vision_local_model.clone()));
+    win.set_vision_test_result(SharedString::from(""));
     win.set_ai_prompt_cache(c.ai_prompt_cache);
     win.set_ai_provider_index(i32::from(c.ai_provider == "local"));
     win.set_ai_local_base_url_input(SharedString::from(c.ai_local_base_url.clone()));

@@ -465,6 +465,52 @@ msgstr "Локально (Ollama / llama.cpp)"
 msgid "local URL — http://127.0.0.1:8080/v1 (llama.cpp) or :11434 (Ollama)"
 msgstr "локальный URL — http://127.0.0.1:8080/v1 (llama.cpp) или :11434 (Ollama)"
 
+# V4 — vision (screenshot) settings section.
+msgid "Vision (screenshots · F8)"
+msgstr "Vision (скриншоты · F8)"
+
+msgid "Where F8 screenshots are analysed. SEPARATE from the text model above — a local text model can keep answering while images go to a vision-capable model."
+msgstr "Где анализируются скриншоты F8. ОТДЕЛЬНО от текстовой модели выше — локальная текстовая модель продолжает отвечать, пока картинки идут в модель с поддержкой зрения."
+
+msgid "Off"
+msgstr "Выкл"
+
+msgid "Same as text model above"
+msgstr "Как у текстовой модели выше"
+
+msgid "Cloud (Sonnet via bridge)"
+msgstr "Облако (Sonnet через мост)"
+
+msgid "Local (2nd vision server)"
+msgstr "Локально (2-й vision-сервер)"
+
+msgid "Screenshots are sent to the cloud. Leave a field blank to reuse the text bridge's value."
+msgstr "Скриншоты отправляются в облако. Оставьте поле пустым, чтобы использовать значение текстового моста."
+
+msgid "vision base URL (blank = text bridge)"
+msgstr "base URL для vision (пусто = текстовый мост)"
+
+msgid "vision bearer (blank = text bridge)"
+msgstr "bearer для vision (пусто = текстовый мост)"
+
+msgid "vision model (blank = claude-sonnet-4-6)"
+msgstr "модель vision (пусто = claude-sonnet-4-6)"
+
+msgid "A 2nd local OpenAI-compatible server running a vision model (e.g. Qwen2-VL). Blank = reuse the text-local server."
+msgstr "2-й локальный OpenAI-совместимый сервер с vision-моделью (напр. Qwen2-VL). Пусто = использовать текстовый локальный сервер."
+
+msgid "vision local URL — http://127.0.0.1:8082/v1"
+msgstr "локальный URL для vision — http://127.0.0.1:8082/v1"
+
+msgid "vision local model id"
+msgstr "id локальной vision-модели"
+
+msgid "vision local bearer (optional)"
+msgstr "bearer локального vision (необязательно)"
+
+msgid "Test vision connection"
+msgstr "Проверить подключение vision"
+
 msgid "local model — e.g. qwen2.5:7b-instruct"
 msgstr "локальная модель — напр. qwen2.5:7b-instruct"
 
