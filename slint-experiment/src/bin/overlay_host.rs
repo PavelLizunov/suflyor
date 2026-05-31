@@ -4903,6 +4903,17 @@ fn open_settings(
                         });
                     }
                 };
+                // Re-install hardening: stop any servers we previously launched
+                // so a fresh `--mmproj` llama-server can bind :8080. Without this
+                // a stale vision-less server keeps the port and the new one
+                // silently fails to start (wait_ready still sees the old one and
+                // reports success). Fresh installs have nothing to drain.
+                {
+                    let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
+                    for mut child in s.local_ai_servers.drain(..) {
+                        let _ = child.kill();
+                    }
+                }
                 let opts = overlay_backend::local_ai::InstallOptions::default();
                 match overlay_backend::local_ai::install(&opts, &cancel, &on) {
                     Ok(res) => {

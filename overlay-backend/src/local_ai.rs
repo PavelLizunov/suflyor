@@ -28,6 +28,16 @@ const GEMMA_URL: &str =
 const GEMMA_FILE: &str = "gemma-4-E4B-it-Q4_K_M.gguf";
 const GEMMA_SIZE: u64 = 4_977_169_568;
 
+// Vision projector for Gemma 4 (multimodal). Loaded via llama-server `--mmproj`
+// so the SAME local model reads images — F8 screenshots stay fully local with no
+// cloud egress. Same HuggingFace repo as the model; F16 is the universally
+// compatible projector (BF16/F32 also exist; F16 is the smallest that runs
+// everywhere, ~945 MB).
+const MMPROJ_URL: &str =
+    "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/mmproj-F16.gguf";
+const MMPROJ_FILE: &str = "mmproj-F16.gguf";
+const MMPROJ_SIZE: u64 = 990_372_672;
+
 const WHISPER_URL: &str =
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin";
 const WHISPER_FILE: &str = "ggml-large-v3-turbo-q8_0.bin";
@@ -140,6 +150,16 @@ pub fn apply_result(cfg: &mut crate::config::Config, res: &LocalAiResult) {
     cfg.stt_whisper_url = WHISPER_BASE_URL.to_string();
     cfg.stt_whisper_model = WHISPER_MODEL_ID.to_string();
     cfg.stt_gigaam_dir = res.stt_gigaam_dir.clone();
+    // Gemma 4 ships a vision projector and the installer fetches it + launches
+    // llama-server with --mmproj, so the local model CAN read images. But as of
+    // llama.cpp build 9412 on Blackwell GPUs local vision is unreliable (~40% —
+    // intermittent empty output, an upstream flash-attn/vision bug that is
+    // precision-independent: F16 and F32 projectors score identically). So we
+    // mark the capability available but DON'T switch F8 to local by default —
+    // vision stays on the user's existing provider (cloud Sonnet by default =
+    // reliable). The user can opt into local vision in Settings → Vision once
+    // they accept the flakiness (or once llama.cpp patches Blackwell).
+    cfg.ai_local_vision = true;
 }
 
 /// Run the full install pipeline. BLOCKING — call from a worker thread. Reports
@@ -194,6 +214,28 @@ pub fn install(
             on(Progress::Step("Reusing existing Gemma model".to_string()));
         } else {
             curl_resumable(GEMMA_URL, &gemma_dest, GEMMA_SIZE, "Gemma", cancel, on)?;
+        }
+
+        // Vision projector (mmproj) — enables image reading on the same model so
+        // F8 screenshots can be analysed locally without any cloud egress.
+        let mmproj_dest = llama_dir.join(MMPROJ_FILE);
+        if reuse_if_available(
+            &mmproj_dest,
+            MMPROJ_SIZE,
+            &[home.join("llama.cpp").join(MMPROJ_FILE)],
+        ) {
+            on(Progress::Step(
+                "Reusing existing vision projector".to_string(),
+            ));
+        } else {
+            curl_resumable(
+                MMPROJ_URL,
+                &mmproj_dest,
+                MMPROJ_SIZE,
+                "Vision projector (mmproj)",
+                cancel,
+                on,
+            )?;
         }
     }
 
@@ -255,23 +297,30 @@ pub fn install(
         let exe = find_exe(&llama_dir, "llama-server.exe")
             .context("llama-server.exe not found after install")?;
         let gguf = llama_dir.join(GEMMA_FILE);
+        let gguf_s = gguf.to_string_lossy().into_owned();
+        let mmproj = llama_dir.join(MMPROJ_FILE);
+        let mmproj_s = mmproj.to_string_lossy().into_owned();
         let ngl = if use_gpu { "99" } else { "0" };
-        let child = launch_hidden(
-            &exe,
-            &[
-                "-m",
-                &gguf.to_string_lossy(),
-                "--host",
-                "127.0.0.1",
-                "--port",
-                LLAMA_PORT,
-                "-ngl",
-                ngl,
-                "-c",
-                "8192",
-                "--jinja",
-            ],
-        )?;
+        let mut args: Vec<&str> = vec![
+            "-m",
+            &gguf_s,
+            "--host",
+            "127.0.0.1",
+            "--port",
+            LLAMA_PORT,
+            "-ngl",
+            ngl,
+            "-c",
+            "8192",
+            "--jinja",
+        ];
+        // Gemma 4 is multimodal — load the projector so the same server reads
+        // images (F8 vision). Guarded so a projector-less install still starts.
+        if mmproj.exists() {
+            args.push("--mmproj");
+            args.push(&mmproj_s);
+        }
+        let child = launch_hidden(&exe, &args)?;
         servers.push(child);
     }
     if !opts.skip_whisper {
@@ -344,25 +393,32 @@ pub fn ensure_servers(root: &Path, want_llama: bool, want_whisper: bool) -> Vec<
     if want_llama && !is_reachable(&format!("{LLAMA_BASE_URL}/models")) {
         let llama_dir = root.join("llama.cpp");
         let gguf = llama_dir.join(GEMMA_FILE);
+        let mmproj = llama_dir.join(MMPROJ_FILE);
         if let Some(exe) = find_exe(&llama_dir, "llama-server.exe") {
             if gguf.exists() {
+                let gguf_s = gguf.to_string_lossy().into_owned();
+                let mmproj_s = mmproj.to_string_lossy().into_owned();
                 let ngl = if use_gpu { "99" } else { "0" };
-                if let Ok(child) = launch_hidden(
-                    &exe,
-                    &[
-                        "-m",
-                        &gguf.to_string_lossy(),
-                        "--host",
-                        "127.0.0.1",
-                        "--port",
-                        LLAMA_PORT,
-                        "-ngl",
-                        ngl,
-                        "-c",
-                        "8192",
-                        "--jinja",
-                    ],
-                ) {
+                let mut args: Vec<&str> = vec![
+                    "-m",
+                    &gguf_s,
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    LLAMA_PORT,
+                    "-ngl",
+                    ngl,
+                    "-c",
+                    "8192",
+                    "--jinja",
+                ];
+                // Load the vision projector if it's present so a restart keeps
+                // F8 local vision working (downloaded by the installer).
+                if mmproj.exists() {
+                    args.push("--mmproj");
+                    args.push(&mmproj_s);
+                }
+                if let Ok(child) = launch_hidden(&exe, &args) {
                     started.push(child);
                 }
             }
@@ -956,6 +1012,9 @@ mod tests {
         let mut cfg = crate::config::Config {
             groq_api_key: "gsk_secret".to_string(),
             ai_bearer: "bridge_secret".to_string(),
+            // pre-existing vision provider — apply_result must NOT override it
+            // (local vision is opt-in, never auto-switched on install).
+            vision_provider: "cloud".to_string(),
             ..Default::default()
         };
         let res = LocalAiResult {
@@ -975,5 +1034,9 @@ mod tests {
         // secrets preserved
         assert_eq!(cfg.groq_api_key, "gsk_secret");
         assert_eq!(cfg.ai_bearer, "bridge_secret");
+        // local model marked vision-capable (Gemma 4 + mmproj), but F8 is NOT
+        // auto-switched to local (unreliable on Blackwell) — vision stays cloud.
+        assert!(cfg.ai_local_vision);
+        assert_eq!(cfg.vision_provider, "cloud");
     }
 }

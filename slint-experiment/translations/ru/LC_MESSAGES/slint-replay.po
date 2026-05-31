@@ -223,6 +223,9 @@ msgstr "Глобальные хоткеи (работают везде, даже
 msgid "Ask AI now (streams the answer into a tile)"
 msgstr "Спросить AI сейчас (ответ стримится в тайл)"
 
+msgid "Screenshot → AI vision (drag a region; Esc cancels)"
+msgstr "Скриншот → Vision-AI (выделите область; Esc — отмена)"
+
 msgid "Re-ask the last question with fresh context"
 msgstr "Переспросить последний вопрос с обновлённым контекстом"
 
