@@ -447,11 +447,18 @@ impl RuntimeEvents for PttStreamSink {
             }
             ai::AiEvent::Error { message } => {
                 self.bridge.dec_ai_in_flight();
+                // SECURITY (review C1) — the raw error chain embeds the AI
+                // base_url (the LOCAL server's LAN IP:port), which would leak
+                // into the screen-shared tile. classify_ai_error maps it to a
+                // generic &'static str (no URL/IP). Same sanitiser the non-
+                // streaming path uses; this streaming path is reached by 🔄
+                // regenerate + push-to-talk asks.
+                let safe = classify_ai_error(&message);
                 let weak = self.tile.clone();
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(t) = weak.upgrade() {
                         t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&format!(
-                            "⚠ AI error: {message}"
+                            "⚠ AI error: {safe}"
                         )))));
                         t.set_source_label(SharedString::from("⚠ error"));
                         t.set_followup_busy(false);
@@ -685,12 +692,17 @@ impl OverlayBarBridge {
                 };
                 if let Some(stream) = captured {
                     let weak = stream.weak;
+                    // SECURITY (review C1) — sanitise: the raw error chain embeds
+                    // the LOCAL AI server's LAN IP:port, which would leak into the
+                    // screen-shared tile. This streaming path is reached by F9 +
+                    // voice follow-up (🎤). classify_ai_error → generic message.
+                    let safe = classify_ai_error(&message);
                     // Keep any prior thread; append the error below it so a
                     // follow-up failure doesn't wipe the conversation.
                     let body = if stream.prefix.is_empty() {
-                        format!("⚠ AI error: {message}")
+                        format!("⚠ AI error: {safe}")
                     } else {
-                        format!("{}\n\n⚠ AI error: {message}", stream.prefix)
+                        format!("{}\n\n⚠ AI error: {safe}", stream.prefix)
                     };
                     let _ = slint::invoke_from_event_loop(move || {
                         if let Some(tile) = weak.upgrade() {
@@ -1745,7 +1757,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 wire_voice_followup(&tile, convo_id, false, &cfg_for_poll);
             }
             // (monitor placement applied via apply_tile_hwnd_with_monitor.)
-            let _ = tile.show();
+            present_tile_window(&tile);
             apply_tile_hwnd_with_monitor(&tile);
             tiles_for_poll.borrow_mut().push(tile);
             refresh_open_tiles(&weak_overlay_poll, &tiles_for_poll);
@@ -2412,7 +2424,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 }
             });
 
-            let _ = tile.show();
+            present_tile_window(&tile);
             apply_tile_hwnd_with_monitor(&tile);
 
             // Capture a Weak handle the tokio task can post back to
@@ -3054,7 +3066,7 @@ fn fire_f9_ask(
     }
     // V5 — 🎤 voice follow-up (record → STT → ask via the text endpoint).
     wire_voice_followup(&tile, convo_id, false, cfg);
-    let _ = tile.show();
+    present_tile_window(&tile);
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
     tiles.borrow_mut().push(tile);
@@ -3407,7 +3419,7 @@ fn fire_ptt_ask(
     }
     // V5 — 🎤 voice follow-up (record → STT → ask via the text endpoint).
     wire_voice_followup(&tile, convo_id, false, cfg);
-    let _ = tile.show();
+    present_tile_window(&tile);
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
     let weak_for_title = tile.as_weak();
@@ -3490,7 +3502,14 @@ fn fire_ptt_ask(
                 return;
             }
             Err(e) => {
-                ptt_tile_error(weak_for_title.clone(), &format!("Ошибка STT: {e}"));
+                // SECURITY (review C1/nit) — a self-hosted STT backend's error
+                // can carry its endpoint URL; show a generic message (the tile
+                // is screen-shared). classify_ai_error covers timeout/refused/
+                // auth/etc. without echoing any URL.
+                ptt_tile_error(
+                    weak_for_title.clone(),
+                    &format!("Ошибка STT: {}", classify_ai_error(&format!("{e:#}"))),
+                );
                 return;
             }
         };
@@ -3845,7 +3864,7 @@ fn launch_vision_for_bgra(
     // V5 — 🎤 voice follow-up (record → STT → ask via the VISION endpoint, so
     // the spoken question stays about the screenshot).
     wire_voice_followup(&tile, convo_id, true, cfg);
-    let _ = tile.show();
+    present_tile_window(&tile);
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
     let weak_for_title = tile.as_weak();
@@ -4280,15 +4299,51 @@ fn global_scheme() -> i32 {
 /// winit realizes its native HWND (same 200 ms delay as tile placement).
 /// No-op when stealth is off. Used by windows that don't otherwise grab
 /// their HWND post-show (the F4 palette). (#111)
-fn apply_stealth_on_realize<W: slint::ComponentHandle + 'static>(win: &W) {
+/// Stealth-aware presentation for the auxiliary windows (F4 palette, Settings)
+/// that otherwise rely on winit's default centering. Mirrors
+/// `present_tile_window` + `apply_tile_hwnd_with_monitor` (review M1): when
+/// stealth is on, park the window OFF the virtual desktop BEFORE its first frame
+/// so it's never composited onto a real monitor, then — once winit realizes the
+/// HWND — apply WDA and move it to the centre of the target monitor, so the
+/// first on-screen frame is already excluded from capture (no flash on the
+/// stream). `decorate` runs each window's extra per-HWND setup (e.g. Settings'
+/// DWM transparency for rounded corners) right before WDA, in the same tick, and
+/// ALWAYS runs (stealth on or off) so non-stealth visuals are unchanged.
+fn present_window_stealth_aware<W, F>(win: &W, decorate: F)
+where
+    W: slint::ComponentHandle + 'static,
+    F: Fn(windows::Win32::Foundation::HWND) + 'static,
+{
+    // Capture the stealth decision at show-time: if true we parked off-screen
+    // and MUST move back on-screen in the realize tick (unconditionally, so a
+    // stealth toggle mid-realize can't strand the window off the desktop).
+    let parked = global_stealth();
+    if parked {
+        win.window()
+            .set_position(slint::PhysicalPosition::new(-32000, -32000));
+    }
+    let _ = win.show();
     let weak = win.as_weak();
     Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
-        if !global_stealth() {
+        let Some(w) = weak.upgrade() else { return };
+        let Ok(hwnd) = grab_hwnd(w.window()) else {
             return;
+        };
+        decorate(hwnd);
+        if global_stealth() {
+            let _ = set_stealth(hwnd, true);
         }
-        if let Some(w) = weak.upgrade() {
-            if let Ok(hwnd) = grab_hwnd(w.window()) {
-                let _ = set_stealth(hwnd, true);
+        if parked {
+            // WDA is applied (or stealth was toggled off) — safe to reveal.
+            // Centre on the picked monitor using the real HiDPI-aware size.
+            let (_x, _y, w_px, h_px) = get_window_rect(hwnd).unwrap_or((0, 0, 460, 360));
+            let monitors = enum_monitors();
+            if let Some(mon) = pick_monitor(&monitors) {
+                let cx = (mon.left + (mon.width() - w_px) / 2).max(mon.left + 8);
+                let cy = (mon.top + (mon.height() - h_px) / 2).max(mon.top + 8);
+                let _ = move_window_pos_only(hwnd, cx, cy);
+            } else {
+                let _ = move_window_pos_only(hwnd, 100, 100);
             }
         }
     });
@@ -4423,6 +4478,27 @@ fn wire_tile_drag(tile: &TileWindow) {
 
 /// Apply transparency + position tile on the appropriate monitor.
 ///
+/// Show a freshly-built tile WITHOUT a stealth capture-flash.
+///
+/// Bug: under stealth, every tile used to be `show()`n on-screen at winit's
+/// default position and only stealthed ~200 ms later (WDA_EXCLUDEFROMCAPTURE
+/// needs a realized HWND — see `apply_tile_hwnd_with_monitor`). For that gap the
+/// tile was fully capturable, so a screen-share saw a ~0.1 s flash of the tile.
+///
+/// Fix: when stealth is on, park the window OFF the virtual desktop BEFORE its
+/// first frame, so winit realizes the HWND off-screen and the tile is never
+/// composited onto a real monitor. `apply_tile_hwnd_with_monitor` then applies
+/// WDA *before* it moves the tile on-screen, so the first on-screen frame is
+/// already excluded from capture. Same pattern the persistent capture overlay
+/// uses. When stealth is off there's nothing to hide, so show normally.
+fn present_tile_window(tile: &TileWindow) {
+    if global_stealth() {
+        tile.window()
+            .set_position(slint::PhysicalPosition::new(-32000, -32000));
+    }
+    let _ = tile.show();
+}
+
 /// Phase E6 fix v2 (2026-05-27): previous "right-edge stack" math
 /// overflowed monitor.bottom after ~slot 2 (tile_h+12 × N > screen
 /// height) → user complaint "тайлы уходят за экран". Now uses a
@@ -4535,7 +4611,11 @@ fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
             // instead of overflowing).
             let _ = move_window_pos_only(hwnd, x_clamped, y_clamped);
         } else {
-            eprintln!("[overlay-host] tile placement: no monitor returned by pick_monitor — tile not moved");
+            // No monitor from pick_monitor (degenerate — no primary display).
+            // A stealth-parked tile would otherwise stay off the virtual desktop
+            // (permanently invisible), so bring it back to a safe on-screen spot.
+            let _ = move_window_pos_only(hwnd, 100, 100);
+            eprintln!("[overlay-host] tile placement: no monitor from pick_monitor — fallback to (100, 100)");
         }
     });
 }
@@ -4667,7 +4747,7 @@ fn open_palette(
                 }
             });
 
-            let _ = tile.show();
+            present_tile_window(&tile);
             apply_tile_hwnd_with_monitor(&tile);
             tiles_ref2.borrow_mut().push(tile);
             refresh_open_tiles(&weak_overlay2, &tiles_ref2);
@@ -4679,9 +4759,10 @@ fn open_palette(
         *palette_after.borrow_mut() = None;
     });
 
-    let _ = win.show();
-    // #111 — if stealth is on, exclude the palette from capture once realized.
-    apply_stealth_on_realize(&win);
+    // #111 + review M1 — exclude the palette from capture WITHOUT a flash:
+    // park off-screen before show, apply WDA, then reveal centred. No extra
+    // HWND decoration for the palette (it's an opaque window).
+    present_window_stealth_aware(&win, |_hwnd| {});
     *slot = Some(win);
 }
 
@@ -6463,25 +6544,15 @@ fn open_settings(
         }
     });
 
-    let _ = win.show();
-    // Phase E6 v26 — apply DWM per-pixel alpha so the frameless
-    // window's rounded corners composite over the desktop (otherwise
-    // the corners show black). make_transparent_tile = WS_EX_TOOLWINDOW
-    // + DWM blur-behind, NO click-through (settings needs clicks).
-    {
-        let weak = win.as_weak();
-        Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
-            if let Some(w) = weak.upgrade() {
-                if let Ok(hwnd) = grab_hwnd(w.window()) {
-                    let _ = make_transparent_tile(hwnd);
-                    // #111 — Settings window inherits stealth when on.
-                    if global_stealth() {
-                        let _ = set_stealth(hwnd, true);
-                    }
-                }
-            }
-        });
-    }
+    // Phase E6 v26 — apply DWM per-pixel alpha so the frameless window's rounded
+    // corners composite over the desktop (otherwise the corners show black).
+    // make_transparent_tile = WS_EX_TOOLWINDOW + DWM blur-behind, NO click-
+    // through (settings needs clicks). Review M1 — route through the stealth-
+    // aware presenter so Settings, like tiles, never flashes on a screen-share
+    // before WDA is applied; the DWM call is the `decorate` step (always runs).
+    present_window_stealth_aware(&win, |hwnd| {
+        let _ = make_transparent_tile(hwnd);
+    });
     *settings_slot = Some(win);
 }
 
