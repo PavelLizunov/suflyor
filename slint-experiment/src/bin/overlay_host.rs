@@ -101,6 +101,146 @@ fn bgra_to_slint_image(bgra: &[u8], w: u32, h: u32) -> slint::Image {
 /// feature. Each F9/PTT tile that supports follow-ups gets a unique id.
 static CONVO_SEQ: AtomicU64 = AtomicU64::new(0);
 
+/// V5 — voice follow-up: a tile's 🎤 button records + transcribes a question
+/// off the UI thread, then ships `(convo_id, use_vision, text)` here. A
+/// UI-thread drain (sibling to the PTT drain) routes it into the tile's
+/// conversation by convo_id. Process-global so `wire_voice_followup` reaches it
+/// without threading a sender through every tile-creation fn. Set once at start.
+static VFU_TX: std::sync::OnceLock<tokio_mpsc::UnboundedSender<(i32, bool, String)>> =
+    std::sync::OnceLock::new();
+
+/// V5 (review M2) — process-global single-microphone guard. Exactly ONE mic
+/// capture may run at a time across every recorder that opens the mic: PTT-mic,
+/// the per-tile 🎤 voice follow-up, and the Settings dictation toggle. They all
+/// open the same WASAPI capture endpoint; a second concurrent open yields
+/// garbage audio or an error (and a misleading "ничего не распознано"). PTT
+/// *system*-audio is a different device and is intentionally NOT gated here.
+///
+/// Contract: a recorder calls `try_acquire_mic()` on the UI thread before
+/// spawning its record thread; on `false` it bails with a generic "занят"
+/// message (no state change, no thread). The record thread MUST call
+/// `release_mic()` the instant `record_source_until_stop` returns — the mic is
+/// physically held until then, and releasing before transcription (which never
+/// touches the device) frees it for the next recorder immediately. One acquire
+/// pairs with exactly one release.
+static MIC_BUSY: AtomicBool = AtomicBool::new(false);
+
+fn try_acquire_mic() -> bool {
+    MIC_BUSY
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+}
+
+fn release_mic() {
+    MIC_BUSY.store(false, Ordering::Release);
+}
+
+/// V5 — wire the 🎤 voice button on a conversation tile. Toggle: first click
+/// records the mic, second click (⏹) stops + transcribes off-thread and ships
+/// the recognized text to the voice follow-up drain, which streams the answer
+/// into THIS tile (text endpoint when `use_vision` is false, vision endpoint —
+/// keeping the dialog about the screenshot — when true). Mirrors the Settings
+/// dictation toggle; reuses the PTT 30 s watchdog so a forgotten stop can't
+/// leak a recording thread.
+fn wire_voice_followup(
+    tile: &TileWindow,
+    convo_id: i32,
+    use_vision: bool,
+    cfg: &overlay_backend::config::SharedConfig,
+) {
+    let voice_stop: Rc<RefCell<Option<Arc<AtomicBool>>>> = Rc::new(RefCell::new(None));
+    let weak = tile.as_weak();
+    let cfg_c = cfg.clone();
+    tile.on_followup_voice_toggled(move || {
+        let Some(t) = weak.upgrade() else {
+            return;
+        };
+        // Toggle OFF — stop the in-flight recording; the thread finishes,
+        // transcribes, and ships the text to the drain.
+        if let Some(stop) = voice_stop.borrow_mut().take() {
+            // If the 30 s watchdog already fired, the record thread has already
+            // shipped its result — don't re-arm busy (it would hang forever).
+            if stop.swap(true, Ordering::AcqRel) {
+                t.set_voice_recording(false);
+                return;
+            }
+            t.set_voice_recording(false);
+            t.set_followup_busy(true);
+            t.set_source_label(SharedString::from("stt · расшифровка…"));
+            return;
+        }
+        // Toggle ON — snapshot STT config, then record on a thread.
+        let (
+            mic_dev,
+            stt_backend,
+            stt_is_local,
+            groq_key,
+            stt_language,
+            trigger_keywords,
+            meeting_context,
+        ) = {
+            let c = cfg_c.read();
+            (
+                c.mic_device.clone(),
+                c.stt_backend(),
+                c.stt_is_local(),
+                c.groq_api_key.clone(),
+                c.stt_language.clone(),
+                c.trigger_keywords.clone(),
+                c.meeting_context.clone(),
+            )
+        };
+        if !stt_is_local && groq_key.is_empty() {
+            // No STT key — generic message (never leak endpoint/secret).
+            t.set_source_label(SharedString::from("stt · ключ не задан (Settings → STT)"));
+            return;
+        }
+        let Some(tx) = VFU_TX.get().cloned() else {
+            return;
+        };
+        // M2 — only one mic capture at a time across all recorders.
+        if !try_acquire_mic() {
+            t.set_source_label(SharedString::from("stt · микрофон занят"));
+            return;
+        }
+        let stop = Arc::new(AtomicBool::new(false));
+        *voice_stop.borrow_mut() = Some(stop.clone());
+        spawn_ptt_watchdog(stop.clone());
+        t.set_voice_recording(true);
+        t.set_source_label(SharedString::from("🎤 запись… (нажми ⏹)"));
+        std::thread::spawn(move || {
+            let pcm = audio::record_source_until_stop(audio::AudioSource::Mic, mic_dev, None, stop)
+                .unwrap_or_else(|e| {
+                    eprintln!("[overlay-host] voice follow-up record failed: {e:#}");
+                    Vec::new()
+                });
+            // M2 — free the mic the instant recording ends (before STT, which
+            // doesn't touch the device) so the next recorder can start.
+            release_mic();
+            let text = if pcm.len() < 4800 {
+                String::new()
+            } else {
+                let whisper_prompt = stt::build_whisper_prompt(&trigger_keywords, &meeting_context);
+                match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(rt) => rt
+                        .block_on(stt::transcribe_once(
+                            &stt_backend,
+                            &pcm,
+                            stt_language.as_deref(),
+                            whisper_prompt.as_deref(),
+                        ))
+                        .unwrap_or_default(),
+                    Err(_) => String::new(),
+                }
+            };
+            let _ = tx.send((convo_id, use_vision, text));
+        });
+    });
+}
+
 /// Install `new_tile` as the active streaming tile, FIRST clearing the
 /// slot's previous occupant. The single `current_streaming` slot is shared
 /// across F9/PTT/follow-up; starting a new stream aborts the prior task,
@@ -1742,6 +1882,10 @@ fn main() -> Result<(), slint::PlatformError> {
     let ptt_state: Rc<RefCell<Option<PttRec>>> = Rc::new(RefCell::new(None));
     let (ptt_pcm_tx, mut ptt_pcm_rx) =
         tokio_mpsc::unbounded_channel::<(audio::AudioSource, Arc<AtomicBool>, Vec<i16>)>();
+    // V5 — voice follow-up channel: a tile 🎤 ships (convo_id, use_vision, text)
+    // here once recorded + transcribed; the drain below routes it to the tile.
+    let (vfu_tx, mut vfu_rx) = tokio_mpsc::unbounded_channel::<(i32, bool, String)>();
+    let _ = VFU_TX.set(vfu_tx);
 
     {
         let ptt_state = ptt_state.clone();
@@ -1751,6 +1895,10 @@ fn main() -> Result<(), slint::PlatformError> {
         overlay.on_ptt_mic_pressed(move || {
             if ptt_state.borrow().is_some() {
                 return; // one PTT at a time
+            }
+            // M2 — single-mic guard (shared with voice follow-up + dictation).
+            if !try_acquire_mic() {
+                return; // mic held by a tile voice follow-up / dictation
             }
             let stop = Arc::new(AtomicBool::new(false));
             *ptt_state.borrow_mut() = Some(PttRec {
@@ -1778,6 +1926,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     eprintln!("[overlay-host] PTT mic record failed: {e:#}");
                     Vec::new()
                 });
+                release_mic(); // M2 — free the mic before transcription
                 let _ = tx.send((audio::AudioSource::Mic, id, pcm));
             });
             eprintln!("[overlay-host] PTT mic — recording (hold)…");
@@ -1897,6 +2046,52 @@ fn main() -> Result<(), slint::PlatformError> {
                     &rth_p,
                     &tiles_p,
                     &weak,
+                );
+            }
+        });
+    }
+
+    // V5 — voice follow-up drain (sibling to the PTT drain): a tile's 🎤
+    // recorded + transcribed a question off-thread; route it into THAT tile's
+    // conversation by convo_id (text endpoint for F9/PTT tiles, vision for F8).
+    let vfu_timer = Timer::default();
+    {
+        let bridge_v = bridge.clone();
+        let events_v = events.clone();
+        let cfg_v = cfg.clone();
+        let rt_v = slint_rt.clone();
+        let rth_v = rt_handle.clone();
+        let tiles_v = tiles.clone();
+        vfu_timer.start(TimerMode::Repeated, Duration::from_millis(120), move || {
+            while let Ok((convo_id, use_vision, text)) = vfu_rx.try_recv() {
+                let weak = tiles_v
+                    .borrow()
+                    .iter()
+                    .find(|t| t.get_convo_id() == convo_id)
+                    .map(|t| t.as_weak());
+                let Some(weak) = weak else {
+                    continue; // tile already closed — drop the result
+                };
+                if text.trim().is_empty() {
+                    if let Some(t) = weak.upgrade() {
+                        t.set_voice_recording(false);
+                        t.set_followup_busy(false);
+                        t.set_source_label(SharedString::from("stt · ничего не распознано"));
+                    }
+                    continue;
+                }
+                if let Some(t) = weak.upgrade() {
+                    t.set_voice_recording(false);
+                }
+                fire_followup_ask(
+                    (convo_id, text),
+                    weak,
+                    &bridge_v,
+                    &events_v,
+                    &cfg_v,
+                    &rt_v,
+                    &rth_v,
+                    use_vision,
                 );
             }
         });
@@ -2734,6 +2929,31 @@ fn fire_f9_ask(
             );
         });
     }
+    // V5 — 🔄 regenerate, available on every answer tile (re-runs via the text
+    // endpoint for F9/PTT tiles, vision endpoint for F8 tiles).
+    tile.set_can_regenerate(true);
+    {
+        let weak_re = tile.as_weak();
+        let bridge_re = bridge.clone();
+        let events_re = events.clone();
+        let cfg_re = cfg.clone();
+        let slint_rt_re = slint_rt.clone();
+        let rt_handle_re = rt_handle.clone();
+        tile.on_regenerate_clicked(move || {
+            fire_regenerate(
+                convo_id,
+                weak_re.clone(),
+                &bridge_re,
+                &events_re,
+                &cfg_re,
+                &slint_rt_re,
+                &rt_handle_re,
+                false,
+            );
+        });
+    }
+    // V5 — 🎤 voice follow-up (record → STT → ask via the text endpoint).
+    wire_voice_followup(&tile, convo_id, false, cfg);
     let _ = tile.show();
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
@@ -3062,6 +3282,31 @@ fn fire_ptt_ask(
             );
         });
     }
+    // V5 — 🔄 regenerate, available on every answer tile (re-runs via the text
+    // endpoint for F9/PTT tiles, vision endpoint for F8 tiles).
+    tile.set_can_regenerate(true);
+    {
+        let weak_re = tile.as_weak();
+        let bridge_re = bridge.clone();
+        let events_re = events.clone();
+        let cfg_re = cfg.clone();
+        let slint_rt_re = slint_rt.clone();
+        let rt_handle_re = rt_handle.clone();
+        tile.on_regenerate_clicked(move || {
+            fire_regenerate(
+                convo_id,
+                weak_re.clone(),
+                &bridge_re,
+                &events_re,
+                &cfg_re,
+                &slint_rt_re,
+                &rt_handle_re,
+                false,
+            );
+        });
+    }
+    // V5 — 🎤 voice follow-up (record → STT → ask via the text endpoint).
+    wire_voice_followup(&tile, convo_id, false, cfg);
     let _ = tile.show();
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
@@ -3497,6 +3742,9 @@ fn launch_vision_for_bgra(
             );
         });
     }
+    // V5 — 🎤 voice follow-up (record → STT → ask via the VISION endpoint, so
+    // the spoken question stays about the screenshot).
+    wire_voice_followup(&tile, convo_id, true, cfg);
     let _ = tile.show();
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
@@ -3629,6 +3877,13 @@ fn fire_followup_ask(
             Some(c) => (c.messages.clone(), c.rendered.clone()),
             None => {
                 diag!("followup: no conversation for convo_id={convo_id}");
+                // M1 — clear busy so a follow-up fired before the first answer
+                // seeded the conversation can't wedge this tile's inputs dead
+                // (button/LineEdit are gated on followup-busy / voice-recording).
+                if let Some(t) = tile_weak.upgrade() {
+                    t.set_followup_busy(false);
+                    t.set_voice_recording(false);
+                }
                 return;
             }
         }
@@ -5900,6 +6155,11 @@ fn open_settings(
                 ));
                 return;
             }
+            // M2 — single-mic guard (shared with PTT-mic + voice follow-up).
+            if !try_acquire_mic() {
+                w.set_meeting_context_result(SharedString::from("[--] микрофон занят"));
+                return;
+            }
             let stop = Arc::new(AtomicBool::new(false));
             *dictate_stop.borrow_mut() = Some(stop.clone());
             spawn_ptt_watchdog(stop.clone());
@@ -5913,6 +6173,7 @@ fn open_settings(
                             eprintln!("[overlay-host] dictation record failed: {e:#}");
                             Vec::new()
                         });
+                release_mic(); // M2 — free the mic before transcription
                 let text = if pcm.len() < 4800 {
                     String::new()
                 } else {

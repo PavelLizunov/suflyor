@@ -56,6 +56,9 @@ export component TileWindow inherits Window {
     in-out property <int> convo-id: -1;
     // True while an answer is streaming — disables the follow-up input.
     in-out property <bool> followup-busy: false;
+    // V5 — true while the 🎤 voice follow-up is recording the mic (toggles the
+    // send-row glyph to ⏹). Driven from Rust (wire_voice_followup).
+    in-out property <bool> voice-recording: false;
     // V5 — show the 🔄 regenerate button (vision tiles: re-run the screenshot
     // query for a longer / different answer).
     in-out property <bool> can-regenerate: false;
@@ -75,6 +78,9 @@ export component TileWindow inherits Window {
     callback drag-moved();
     // Phase E6 v45 — user submitted a follow-up question (the text).
     callback followup-submitted(string);
+    // V5 — user toggled the 🎤 voice follow-up (start/stop mic recording);
+    // Rust records → transcribes → submits the recognized text as a follow-up.
+    callback followup-voice-toggled();
 
     // Guarded submit shared by the input's Enter + the send button. No-op
     // while busy or empty; clears the field after firing.
@@ -411,6 +417,14 @@ export component TileWindow inherits Window {
                     horizontal-stretch: 1;
                     accepted => {
                         root.do-submit();
+                    }
+                }
+                // V5 — ask the follow-up by voice (toggle: 🎤 start, ⏹ stop).
+                Button {
+                    text: root.voice-recording ? "⏹" : "🎤";
+                    enabled: !root.followup-busy || root.voice-recording;
+                    clicked => {
+                        root.followup-voice-toggled();
                     }
                 }
                 Button {
