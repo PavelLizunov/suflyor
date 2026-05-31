@@ -1961,6 +1961,31 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // ===== 📷 capture chip — same flow as the F8 hotkey (screenshot → vision) =====
+    {
+        let bridge_c = bridge.clone();
+        let events_c = events.clone();
+        let cfg_c = cfg.clone();
+        let slint_rt_c = slint_rt.clone();
+        let rt_c = rt_handle.clone();
+        let tiles_c = tiles.clone();
+        let weak_c = overlay.as_weak();
+        let cap_c = capture_overlay.clone();
+        overlay.on_capture_clicked(move || {
+            diag!("[overlay-host] 📷 capture chip — screenshot → vision");
+            fire_f8_vision_capture(
+                &bridge_c,
+                &events_c,
+                &cfg_c,
+                &slint_rt_c,
+                &rt_c,
+                &tiles_c,
+                &weak_c,
+                &cap_c,
+            );
+        });
+    }
+
     // ===== Spawn tile (Phase C: real AI ask via overlay_backend::ai) =====
     {
         let s = state.clone();

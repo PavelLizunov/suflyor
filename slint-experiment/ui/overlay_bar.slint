@@ -259,6 +259,7 @@ export component OverlayBarWindow inherits Window {
     callback timer-toggle-clicked();
     callback spawn-tile-clicked();
     callback close-all-tiles-clicked();
+    callback capture-clicked(); // 📷 screenshot -> vision (same as F8)
     callback stealth-toggle-clicked();
     callback aggressive-toggle-clicked();
     callback open-settings-clicked();
@@ -459,6 +460,11 @@ export component OverlayBarWindow inherits Window {
                 label: @tr("+ tile ({})", root.open-tiles);
                 accent: #f472b6;
                 clicked => { root.spawn-tile-clicked(); }
+            }
+            Chip {
+                label: "📷";
+                accent: #22d3ee;
+                clicked => { root.capture-clicked(); }
             }
             Chip {
                 label: "⚙";
