@@ -2106,8 +2106,12 @@ fn main() -> Result<(), slint::PlatformError> {
             // the cloud fields unconditionally, which silently failed for a
             // local-provider user (the cloud bridge wasn't even running).
             let ep = cfg_ref.read().ai_endpoint(false);
+            let is_local = ep.is_local;
             let (base_url, bearer, model) = (ep.base_url, ep.bearer, ep.model);
-            if base_url.is_empty() || bearer.is_empty() {
+            // Cloud needs a bearer; a LOCAL server (llama.cpp / Ollama) usually
+            // doesn't — so an empty LOCAL bearer must NOT block the ask. This is
+            // why "+ tile" wrongly said "AI не настроен" for a working local model.
+            if base_url.is_empty() || (!is_local && bearer.is_empty()) {
                 if let Some(t) = weak_for_ai.upgrade() {
                     let blocks: Vec<MarkdownBlock> = markdown::parse(
                         "**AI не настроен.** Откройте Настройки → AI и выберите провайдера (локальный сервер или облачный мост).",
