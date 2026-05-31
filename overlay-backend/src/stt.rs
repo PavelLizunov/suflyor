@@ -130,7 +130,10 @@ pub async fn test_connection_backend(backend: &SttBackendCfg) -> Result<String> 
             tokio::task::spawn_blocking(move || {
                 load_gigaam(&dir)
                     .map(|_m| "GigaAM model loaded OK".to_string())
-                    .map_err(|e| anyhow::anyhow!("GigaAM load failed: {e}"))
+                    .map_err(|e| {
+                        log::warn!("GigaAM test load failed: {e}");
+                        anyhow::anyhow!("GigaAM: модель не загрузилась (см. лог)")
+                    })
             })
             .await
             .map_err(|e| anyhow::anyhow!("GigaAM test join: {e}"))?
@@ -658,7 +661,12 @@ pub async fn transcribe_once(
                     .lock()
                     .unwrap_or_else(|p| p.into_inner());
                 if !matches!(&*guard, Some((cached_dir, _)) if *cached_dir == dir) {
-                    let m = load_gigaam(&dir).map_err(|e| anyhow::anyhow!("GigaAM load: {e}"))?;
+                    let m = load_gigaam(&dir).map_err(|e| {
+                        // Don't surface the model_dir path (it embeds the user's
+                        // Windows username) into a screen-capturable tile; log it.
+                        log::warn!("GigaAM load failed: {e}");
+                        anyhow::anyhow!("локальная STT-модель не загрузилась (см. лог)")
+                    })?;
                     *guard = Some((dir.clone(), m));
                 }
                 let model = match guard.as_mut() {

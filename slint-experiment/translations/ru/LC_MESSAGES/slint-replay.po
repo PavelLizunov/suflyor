@@ -511,6 +511,10 @@ msgstr "bearer локального vision (необязательно)"
 msgid "Test vision connection"
 msgstr "Проверить подключение vision"
 
+# === capture_overlay.slint (F8 region select) ===
+msgid "Drag to select a region · Esc / right-click to cancel"
+msgstr "Выделите область мышью · Esc / правый клик — отмена"
+
 msgid "local model — e.g. qwen2.5:7b-instruct"
 msgstr "локальная модель — напр. qwen2.5:7b-instruct"
 

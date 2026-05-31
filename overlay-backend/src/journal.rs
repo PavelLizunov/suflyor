@@ -172,8 +172,14 @@ impl Journal {
             .spawn(move || {
                 while let Some(line) = rx.blocking_recv() {
                     if let Err(e) = writeln!(file, "{line}") {
-                        log::warn!("journal write failed: {e}");
-                        break;
+                        // A single transient write error (disk full, AV lock,
+                        // network-drive hiccup) must NOT kill journaling for the
+                        // rest of the session: `break` here left the unbounded
+                        // sender open (silent data loss + the channel grows
+                        // forever under aggressive mode). Keep draining; at worst
+                        // we lose the one failed line and recover when disk does.
+                        log::warn!("journal write failed (continuing): {e}");
+                        continue;
                     }
                 }
                 let _ = file.flush();

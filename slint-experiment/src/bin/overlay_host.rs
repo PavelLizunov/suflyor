@@ -3213,16 +3213,18 @@ fn fire_f8_vision_capture(
     weak_overlay: &slint::Weak<OverlayBarWindow>,
     capture_overlay: &Rc<RefCell<Option<CaptureOverlay>>>,
 ) {
-    let Some(ep) = cfg.read().vision_endpoint() else {
-        diag!("[overlay-host] F8: vision provider is 'off' (Settings -> Vision) — skipping");
-        return;
-    };
-    // Second F8 while an overlay is up → dismiss it. Escape hatch if a selection
-    // got stuck (e.g. focus lost mid-drag so no pointer-up arrived).
+    // Second F8 while an overlay is up → dismiss it FIRST (before resolving the
+    // provider), so a stuck overlay can ALWAYS be cleared — even if Vision was
+    // since switched to "off" in Settings. Escape hatch for a drag that lost its
+    // pointer-up.
     if let Some(w) = capture_overlay.borrow_mut().take() {
         let _ = w.hide();
         return;
     }
+    let Some(ep) = cfg.read().vision_endpoint() else {
+        diag!("[overlay-host] F8: vision provider is 'off' (Settings -> Vision) — skipping");
+        return;
+    };
 
     // Freeze the WHOLE virtual desktop (ALL monitors) so the user can select on
     // either screen. The earlier "shrunk" bug was NOT DPI — it was the geometry

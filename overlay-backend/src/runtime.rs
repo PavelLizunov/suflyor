@@ -58,10 +58,15 @@ pub async fn run_post_meeting_debrief(
 ) {
     let (base_url, bearer, model, response_language, preferred_monitor, stealth) = {
         let c = cfg.read();
+        // Resolve the ACTIVE endpoint (local vs cloud) like every other ask path
+        // (reask / manual / F9). The old code read the cloud fields directly, so
+        // a local-provider user's debrief silently failed (empty cloud bearer) or
+        // billed a cloud Sonnet call. prep=true picks the structuring model.
+        let ep = c.ai_endpoint(true);
         (
-            c.ai_base_url.clone(),
-            c.ai_bearer.clone(),
-            c.prep_model.clone(),
+            ep.base_url,
+            ep.bearer,
+            ep.model,
             c.response_language.clone(),
             c.tile_monitor_name.clone(),
             c.stealth_enabled,
