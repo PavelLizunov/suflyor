@@ -1553,17 +1553,17 @@ fn main() -> Result<(), slint::PlatformError> {
     // V3 — the Lightshot capture overlay (one at a time; lifecycle mirrors the palette).
     let capture_overlay: Rc<RefCell<Option<CaptureOverlay>>> = Rc::new(RefCell::new(None));
 
-    // ===== Global hotkeys F3 / F4 / F7 (Phase D2 + B3 extra) =====
+    // ===== Global hotkeys (Phase D2 + B3 extra) =====
     //
     // global-hotkey 0.6 owns a single process-wide event receiver +
     // platform-specific manager. We register one hotkey per F-key,
     // then poll the receiver every 50 ms from a Slint Timer — fires
     // on UI thread so we can touch Rc-borrowed state without Send.
     //
-    // Mirrors the React/Tauri v0.1.1 binding table (Settings ▸ Hotkeys):
-    //   F3 — Ask the AI now (same flow as + tile chip)
-    //   F4 — Open KB palette
-    //   F7 — Bulk collapse/expand all tiles (stub — toggles a flag)
+    // Registered keys (see Settings ▸ Hotkeys):
+    //   F3 — re-ask the last question     F4 — KB palette (toggle)
+    //   F6 — manual tile from transcript  F8 — screenshot → vision
+    //   F9 — ask the AI now
     let hotkey_manager = match global_hotkey::GlobalHotKeyManager::new() {
         Ok(m) => Some(m),
         Err(e) => {
