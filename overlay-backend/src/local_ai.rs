@@ -30,10 +30,9 @@ const GEMMA_SIZE: u64 = 4_977_169_568;
 
 // Vision projector for Gemma 4 (multimodal). Loaded via llama-server `--mmproj`
 // so the SAME local model reads images — F8 screenshots stay fully local with no
-// cloud egress. Same HuggingFace repo as the model. We ship F32 (full
-// precision): F16, BF16 and F32 all score the same ~40% on local-vision
-// reliability (an upstream flash-attn/vision bug on Blackwell + llama.cpp 9412),
-// so precision is not the bottleneck — F32 is just the most numerically stable.
+// cloud egress. Same HuggingFace repo as the model. We ship F32 (full precision)
+// per user preference; F16/BF16 work too — precision isn't the bottleneck, local
+// F8 reads the screen reliably for the descriptive capture task (1024 tokens).
 const MMPROJ_URL: &str =
     "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/mmproj-F32.gguf";
 const MMPROJ_FILE: &str = "mmproj-F32.gguf";
@@ -151,16 +150,13 @@ pub fn apply_result(cfg: &mut crate::config::Config, res: &LocalAiResult) {
     cfg.stt_whisper_url = WHISPER_BASE_URL.to_string();
     cfg.stt_whisper_model = WHISPER_MODEL_ID.to_string();
     cfg.stt_gigaam_dir = res.stt_gigaam_dir.clone();
-    // Gemma 4 ships a vision projector and the installer fetches it + launches
-    // llama-server with --mmproj, so the local model CAN read images. But as of
-    // llama.cpp build 9412 on Blackwell GPUs local vision is unreliable (~40% —
-    // intermittent empty output, an upstream flash-attn/vision bug that is
-    // precision-independent: F16 and F32 projectors score identically). So we
-    // mark the capability available but DON'T switch F8 to local by default —
-    // vision stays on the user's existing provider (cloud Sonnet by default =
-    // reliable). The user can opt into local vision in Settings → Vision once
-    // they accept the flakiness (or once llama.cpp patches Blackwell).
+    // Gemma 4 is multimodal; the installer fetches the vision projector and
+    // launches llama-server with --mmproj, so F8 screenshots run fully locally on
+    // the SAME server as text — verified working for the real F8 task
+    // (descriptive prompt, 1024 tokens): the model reads the screen and answers
+    // well. So switch F8 vision to local too — fully local, no cloud egress.
     cfg.ai_local_vision = true;
+    cfg.vision_provider = "same".to_string();
 }
 
 /// Run the full install pipeline. BLOCKING — call from a worker thread. Reports
@@ -1050,8 +1046,8 @@ mod tests {
         let mut cfg = crate::config::Config {
             groq_api_key: "gsk_secret".to_string(),
             ai_bearer: "bridge_secret".to_string(),
-            // pre-existing vision provider — apply_result must NOT override it
-            // (local vision is opt-in, never auto-switched on install).
+            // a prior cloud setting — apply_result switches F8 to local on a
+            // local install (vision rides the same local server).
             vision_provider: "cloud".to_string(),
             ..Default::default()
         };
@@ -1072,9 +1068,9 @@ mod tests {
         // secrets preserved
         assert_eq!(cfg.groq_api_key, "gsk_secret");
         assert_eq!(cfg.ai_bearer, "bridge_secret");
-        // local model marked vision-capable (Gemma 4 + mmproj), but F8 is NOT
-        // auto-switched to local (unreliable on Blackwell) — vision stays cloud.
+        // installer enables fully-local F8 vision (Gemma 4 + mmproj on the same
+        // local server).
         assert!(cfg.ai_local_vision);
-        assert_eq!(cfg.vision_provider, "cloud");
+        assert_eq!(cfg.vision_provider, "same");
     }
 }
