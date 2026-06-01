@@ -659,3 +659,12 @@ msgstr "Groq STT (Whisper) — ключ и модель. Используетс�
 
 msgid "🎙 waiting for transcript... (mic/sys → STT)"
 msgstr "🎙 ожидаю транскрипт... (mic/sys → STT)"
+
+msgid "✏ Write a question for the assistant"
+msgstr "✏ Напишите вопрос ассистенту"
+
+msgid "Type your question…"
+msgstr "Введите вопрос…"
+
+msgid "Send"
+msgstr "Отправить"

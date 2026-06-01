@@ -66,6 +66,10 @@ export component TileWindow inherits Window {
     // the same question on the cloud model (deeper reasoning) when the local
     // answer was too weak — one-shot, without changing the default provider.
     in-out property <bool> can-escalate: false;
+    // V0.8.3 — 📋 copy the answer to the clipboard. `can-copy` shows the button
+    // (set on conversational tiles); `copied` briefly flips the glyph to ✅.
+    in-out property <bool> can-copy: false;
+    in-out property <bool> copied: false;
     // Bound to the follow-up LineEdit so do-submit() can read + clear it.
     in-out property <string> followup-text;
 
@@ -76,6 +80,8 @@ export component TileWindow inherits Window {
     callback regenerate-clicked();
     // V0.8.0 (Поток D) — re-run the same question on the smart cloud model.
     callback escalate-clicked();
+    // V0.8.3 — copy the answer text to the clipboard (Rust writes + flashes ✅).
+    callback copy-clicked();
     // Phase E6 v22 — manual cursor-delta drag. drag-start-requested
     // fires on pointer-down (records anchor), drag-moved fires on
     // each move while pressed (moves window by delta). Replaces the
@@ -188,6 +194,25 @@ export component TileWindow inherits Window {
                 // функционала развернуть, нужно отдельной кнопкой
                 // или даб-кликом". Win32 SetWindowPos resizes window
                 // 460x360 → 800x600 (toggle).
+                // V0.8.3 — 📋 copy the answer text to the clipboard (→ ✅ on
+                // success). Shown on conversational tiles (can-copy).
+                if root.can-copy: Rectangle {
+                    width: 30px;
+                    height: 28px;
+                    background: copy-touch.has-hover ? Theme.border-strong : Theme.border;
+                    border-radius: 4px;
+                    border-width: 1px;
+                    border-color: Theme.border-strong;
+                    copy-touch := TouchArea {
+                        clicked => { root.copy-clicked(); }
+                    }
+                    Text {
+                        text: root.copied ? "✅" : "📋";
+                        font-size: 12px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
                 // V5 — 🔄 regenerate (only on tiles that support it, e.g. F8
                 // vision). Re-runs the last request for a longer / different answer.
                 if root.can-regenerate: Rectangle {

@@ -11,6 +11,7 @@ import { TileWindow, MarkdownBlock } from "tile.slint";
 import { SettingsWindow } from "settings_panel.slint";
 import { PaletteWindow, PaletteResult } from "palette.slint";
 import { CaptureOverlay } from "capture_overlay.slint";
+import { TextAskWindow } from "text_ask.slint";
 // Re-export the design-token global so the Rust host can reach it
 // (`win.global::<Theme>().set_scheme(n)`) to switch colour schemes live
 // across every window instance — Theme is a PER-WINDOW global, so each
@@ -24,5 +25,6 @@ export {
     OverlayBarWindow, TileWindow, MarkdownBlock, SettingsWindow,
     PaletteWindow, PaletteResult,
     CaptureOverlay,
+    TextAskWindow,
     Theme,
 }

@@ -179,7 +179,11 @@ export component OverlayBarWindow inherits Window {
     // E10.2 — 1000 → 1080 after the "close all" chip landed, so the Settings
     // + quit chips never clip; the active-stack readout moved to the bottom
     // status row to keep the action row compact.
-    preferred-width: 1080px;
+    // V0.8.3 — 1080 → 1120 to absorb the new ✏ "Написать" chip's width and keep
+    // the un-armed RU worst case (wide "⚠ AI недоступен" status + close-all + 2
+    // open tiles) comfortably inside the fixed-width bar (single-row layout, so
+    // total content — not cluster placement — is what clips).
+    preferred-width: 1120px;
     preferred-height: 86px;
     min-width: 720px;
 
@@ -269,6 +273,8 @@ export component OverlayBarWindow inherits Window {
     callback ptt-sys-released();
     callback timer-toggle-clicked();
     callback spawn-tile-clicked();
+    // V0.8.3 — "Написать": open the typed-question input window.
+    callback text-ask-clicked();
     callback close-all-tiles-clicked();
     callback capture-clicked(); // 📷 screenshot -> vision (same as F8)
     callback stealth-toggle-clicked();
@@ -470,6 +476,13 @@ export component OverlayBarWindow inherits Window {
                 label: @tr("close all");
                 accent: #fb7185;
                 clicked => { root.close-all-tiles-clicked(); }
+            }
+            // V0.8.3 — ✏ Написать: type a question when speaking aloud isn't an
+            // option. Opens a small stealth-aware input window.
+            if !root.confirming : Chip {
+                label: "✏";
+                accent: #34d399;
+                clicked => { root.text-ask-clicked(); }
             }
             if !root.confirming : Chip {
                 label: @tr("+ tile ({})", root.open-tiles);

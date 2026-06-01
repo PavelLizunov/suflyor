@@ -1,0 +1,75 @@
+// V0.8.3 — "Написать": a small text-input window to type a question for the
+// assistant when speaking aloud isn't possible (noise / public place / silence).
+// Complements the voice flow, doesn't replace it.
+//
+// The Rust host (open_text_ask) creates it on demand, centres it on the primary
+// monitor, applies WDA stealth (so it never shows on a screen-share — same as
+// tiles/palette/Settings), and gives it keyboard focus. Enter or the "Send"
+// button routes the typed text through the SAME ask pipeline as F9
+// (fire_f9_ask with an explicit question) → a standard answer tile. Esc cancels.
+//
+// Solid background (Theme.bg-surface) — NOT a transparent/rounded card — to
+// avoid the documented Windows DWM "created-but-invisible" pitfall for new
+// frameless windows; present_window_stealth_aware doesn't wire DWM blur-behind.
+
+import { LineEdit, Button } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+export component TextAskWindow inherits Window {
+    no-frame: true;
+    always-on-top: true;
+    title: "overlay-mvp text ask (Slint)";
+    default-font-family: Theme.font-sans;
+    background: Theme.bg-surface;
+    preferred-width: 560px;
+    preferred-height: 112px;
+
+    in-out property <string> query;
+    // Emitted with the typed text when the user presses Enter / clicks Send.
+    callback submitted(string);
+    // Emitted on Esc — the host hides + drops the window.
+    callback cancelled();
+
+    forward-focus: input;
+
+    function fire() {
+        if (root.query != "") {
+            root.submitted(root.query);
+            root.query = "";
+        }
+    }
+
+    FocusScope {
+        // Esc cancels; everything else falls through to the focused LineEdit.
+        key-pressed(e) => {
+            if (e.text == Key.Escape) {
+                root.cancelled();
+                return accept;
+            }
+            return reject;
+        }
+        VerticalLayout {
+            padding: 14px;
+            spacing: 10px;
+            Text {
+                text: @tr("✏ Write a question for the assistant");
+                color: Theme.text-secondary;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                input := LineEdit {
+                    placeholder-text: @tr("Type your question…");
+                    text <=> root.query;
+                    accepted => { root.fire(); }
+                }
+                Button {
+                    text: @tr("Send");
+                    primary: true;
+                    clicked => { root.fire(); }
+                }
+            }
+        }
+    }
+}
