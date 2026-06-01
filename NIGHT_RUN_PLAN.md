@@ -67,9 +67,87 @@ for bugs+regression; do the planned startup-manual work. "Не задавай в
   live-verify decision (is the chip a mute or a level probe?), so NOT changed
   blind overnight. **Flagged for the user** — easy win once intent is confirmed.
 
-**Next:** gate passes → review-agent on the full diff → live smoke (Win32
-PrintWindow) → commit in groups (docs / scout-fixes / tests) → first-run startup
-manual (RU) → R9 re-audit → build + release decision.
+**Shipped this run (committed + pushed `8882cb6..cf29e5a`):**
+- `a6f540a` docs(hotkeys+guide): Settings Shift+F9 row + README 6-key table +
+  UPGRADING legacy banner + docs/GUIDE.md (RU first-run manual) + refresh i18n.
+- `349b3b3` fix(overlay): the 6 scout fixes (cost-cap / F3+F8 error visibility /
+  stop-freeze / pill recovery / copy refactor + vision-skip) + 10 copy unit tests.
+- `cf29e5a` chore: this log.
+All five gate layers green (clippy+test+fmt both crates · review-agent **GO** ·
+boot smoke: v0.8.3 boots, all 6 hotkeys incl Shift+F9 register, transparency +
+stealth wired, secrets masked `base_url=set ai_bearer=set groq_key=set`, no crash).
+
+**BATCH 4 (committed + pushed `4787c4e`, review-agent GO):** INVESTIGATE-1 — `FOLLOWUP_DIRECTIVE` no
+longer accumulates across a multi-turn thread (the user runs a LOCAL Gemma — the
+exact "weak model anchors on the wrong turn" case the regression agent warned of).
+`strip_followup_directives` cleans prior turns in `fire_followup_ask` (all) +
+`fire_regenerate` (all-but-last) + a unit test. The user-verified single-follow-up
+path is unchanged (no prior directives exist to strip on a 1st follow-up).
+
+**Release decision:** committing + pushing the fixes is in scope; **NOT cutting a
+v0.8.4 release autonomously**. The interactive UI paths (Settings ⌨ tab visual,
+stop-mid-stream finalize, multi-turn follow-up on local Gemma) need a ~60-sec live
+check that requires driving the UI — out of bounds without computer-use (standing
+rule). Version left at 0.8.3; the user builds + publishes v0.8.4 after the quick
+verify below.
+
+### ✅ To verify before releasing v0.8.4 (60 seconds)
+1. Settings → **⌨ Hotkeys**: the **Shift+F9** row shows (key column not clipped).
+2. Ask F9 → press **🧠**/Shift+F9 follow-up twice on a LOCAL tile → the 2nd
+   follow-up answers the 2nd question (not the 1st) — was the directive-accum bug.
+3. Start a session, F9, and **stop the session while it's still streaming** → the
+   tile shows "прервано" and its follow-up box is usable (not frozen).
+4. Cloud "+ tile" a couple times with a low `max_session_cost_usd` → the bar `$`
+   label climbs (was frozen / cap never tripped).
+
+### 📝 v0.8.4 release notes (RU, paste-ready — bump Cargo.toml + slint-installer.nsi to 0.8.4 first)
+**suflyor v0.8.4 — устойчивость и документация**
+- 🩹 Ночной прогон автотестов (5 агентов по всем флоу + 2 повторных аудита).
+- 💸 «+ тайл» в облаке теперь считается в лимит стоимости сессии (раньше тратил
+  деньги мимо счётчика — лимит не срабатывал).
+- 👀 F3 (переспросить) и F8 (Vision) при сбое AI показывают понятный тайл с
+  ошибкой, а не «молчат».
+- 🧊 Остановка сессии во время ответа больше не «замораживает» тайл — он
+  помечается «прервано», поле ввода остаётся активным.
+- 🧠 Многоходовые уточнения на локальной модели больше не путают, на какой
+  вопрос отвечать (директива не накапливается в истории).
+- ⌨ Полный список хоткеев: добавлен **Shift+F9** (эскалация в облако) в README и
+  в Настройки → ⌨ Hotkeys; новый **`docs/GUIDE.md`** — руководство пользователя.
+- ✅ Мелкие правки: цвет статус-пилюли восстанавливается после degraded→ok;
+  кнопка 🧠 не предлагается без облачного ключа; авто-старт не отключает сессию,
+  если вы успели включить её вручную; копирование диалога чище (без служебного
+  транскрипта / vision-промпта). +12 юнит-тестов на логику копирования.
+
+### 🚩 Flagged for the user (decisions I did NOT make blind)
+- **🎤 mic chip doesn't actually mute** (`mic_muted` is dead + its doc comment is
+  false). Privacy-relevant on a screen-share, but wiring it CHANGES capture
+  semantics (toggling 🎤 would stop transcribing your mic) — that's your UX call:
+  should the chip be a MUTE or a level-probe? Easy to wire once you decide.
+- **Bridge LAN IP is visible in the Settings AI-URL input** (the one shareable
+  surface showing it). Settings is stealth-able; mitigation = enable 🛡 before
+  opening Settings on a share (documented in GUIDE §7-8). Masking it is a UX call.
+- **#135 single-slot** (a new ask supersedes another tile's in-flight stream) +
+  **F8 mixed-DPI crop** — both need a live multi-tile / multi-monitor check.
+
+**2nd (holistic) re-audit — verdict LOW risk.** A fresh agent re-checked the
+session/audio lifecycle + whether the 4 committed batches COMPOSE. No CRITICAL/
+MAJOR; confirmed: "+ tile" `set_cost_label` doesn't fight `cost:update`; M2
+stop-finalize doesn't fold partials / doesn't break the sole-writer invariant;
+`strip_followup_directives` ↔ M2 don't interact badly; `session_gen` guard holds
+on both auto-tile success+failure; mic acquire/release pairs on all 3 GUARDED
+consumers; restart/double-start/stop→start all sound. NEW findings:
+- **BATCH 5 (gating):** **N-1** auto-start-on-launch could toggle a manually
+  started session OFF (1.9s window) → now guarded on `!timer_active`. **M-2**
+  the 🧠/Shift+F9 escalate button was offered to local-only users with no cloud
+  bearer (fails every time) → now also gated on a non-empty `ai_bearer`.
+- **Deferred (logged):** **M-1** mic-health PROBES (mic-chip / Settings mic-test /
+  readiness check — 3 sites) bypass the single-mic guard → rare garbage audio if
+  you mic-test AND PTT at once. The safe fix needs new "mic busy" status states
+  across 3 sites + exact release pairing (a miss = stuck mic) — too invasive to
+  do blind without a live mic test; left for an interactive pass. **M-3** a
+  theoretical stop→F9 microsecond race in the M2 slot-take (NOT reachable by the
+  manual single-user flow — no code auto-fires F9; would only matter if an
+  automated F9 is ever added, then gate the take on session-generation).
 
 **Decisions (this run):**
 - **28 orphan .po entries** — deleting dead translations is cosmetic and risks a
