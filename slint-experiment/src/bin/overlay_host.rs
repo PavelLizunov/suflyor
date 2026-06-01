@@ -234,6 +234,12 @@ fn user_question_for_copy(raw: &str) -> String {
     if raw.trim_start().starts_with("Транскрипт последних реплик") {
         return String::new();
     }
+    // A vision tile's first user turn is the canned screenshot prompt, not text
+    // the user typed — drop it so a multi-turn vision copy doesn't render
+    // "🧑 Что на этом скриншоте?…" as if the user had asked it.
+    if raw.trim() == vision::DEFAULT_VISION_PROMPT {
+        return String::new();
+    }
     raw.trim().to_string()
 }
 
@@ -252,11 +258,18 @@ fn convo_copy_text(bridge: &OverlayBarBridge, convo_id: i32) -> String {
         .conversations
         .lock()
         .unwrap_or_else(|p| p.into_inner());
-    let Some(c) = convos.get(&convo_id) else {
-        return String::new();
-    };
-    let turns: Vec<(&str, String)> = c
-        .messages
+    match convos.get(&convo_id) {
+        Some(c) => format_convo_copy(&c.messages, &c.rendered),
+        None => String::new(),
+    }
+}
+
+/// Pure formatter behind [`convo_copy_text`] — split out (no bridge / no lock)
+/// so the adaptive single-vs-thread logic and the user-turn cleaning are
+/// unit-testable. `rendered` is the mid-stream fallback (used when there is no
+/// recorded assistant turn yet, or when every turn cleans to empty).
+fn format_convo_copy(messages: &[ai::ChatMessage], rendered: &str) -> String {
+    let turns: Vec<(&str, String)> = messages
         .iter()
         .filter(|m| m.role != "system")
         .filter_map(|m| {
@@ -265,7 +278,7 @@ fn convo_copy_text(bridge: &OverlayBarBridge, convo_id: i32) -> String {
         })
         .collect();
     if turns.is_empty() {
-        return c.rendered.clone();
+        return rendered.to_string();
     }
     let assistant_turns = turns.iter().filter(|(r, _)| *r == "assistant").count();
     if assistant_turns <= 1 {
@@ -276,7 +289,7 @@ fn convo_copy_text(bridge: &OverlayBarBridge, convo_id: i32) -> String {
             .rev()
             .find(|(r, _)| *r == "assistant")
             .map(|(_, t)| t.clone())
-            .unwrap_or_else(|| c.rendered.clone());
+            .unwrap_or_else(|| rendered.to_string());
     }
     let mut out = String::new();
     for (role, text) in &turns {
@@ -301,7 +314,7 @@ fn convo_copy_text(bridge: &OverlayBarBridge, convo_id: i32) -> String {
         out.push_str(display.trim());
     }
     if out.is_empty() {
-        return c.rendered.clone();
+        return rendered.to_string();
     }
     out
 }
@@ -1066,6 +1079,38 @@ impl SlintUiBridge for OverlayBarBridge {
         // (an aborted stream emits no Done/Error to decrement it).
         if channel == "session:stopped" {
             self.reset_ai_in_flight();
+            // M2 — finalize a tile that was still streaming when the session
+            // stopped. stop_session aborts the ai_task, so NO Done/Error ever
+            // arrives to take the slot or re-enable the tile: the tile would
+            // freeze forever on its partial answer with a disabled follow-up,
+            // until some LATER F9 happened to supersede the slot. Take the slot
+            // here and mark the tile interrupted, preserving whatever streamed
+            // so far. We deliberately do NOT fold the partial answer into the
+            // conversation — a later follow-up should build on the last COMPLETE
+            // turn, not a truncated one (and a never-completed first answer keeps
+            // no convo entry, so its follow-up bails cleanly).
+            let interrupted = {
+                let mut slot = match self.current_streaming.lock() {
+                    Ok(g) => g,
+                    Err(p) => p.into_inner(),
+                };
+                slot.take()
+            };
+            if let Some(stream) = interrupted {
+                let body = format!("{}{}", stream.prefix, stream.accumulated);
+                let weak = stream.weak;
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(tile) = weak.upgrade() {
+                        if !body.is_empty() {
+                            tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&body))));
+                        }
+                        tile.set_source_label(SharedString::from(
+                            "ai · прервано (сессия остановлена)",
+                        ));
+                        tile.set_followup_busy(false);
+                    }
+                });
+            }
         }
         let weak = self.overlay_weak.clone();
         let _ = slint::invoke_from_event_loop(move || {
@@ -1111,6 +1156,14 @@ impl SlintUiBridge for OverlayBarBridge {
                             o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x4b, 0x4b));
                         } else if any_degraded {
                             o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0xb4, 0x4b));
+                        } else {
+                            // All-clear during a session → restore the green
+                            // recording pill. A degraded→ok episode only ever set
+                            // the COLOR (never the AI_DOWN_MARK text), so the
+                            // text-recovery branch below can't restore it and the
+                            // pill would otherwise stay amber until the next
+                            // session start/stop.
+                            o.set_status_color(slint::Color::from_rgb_u8(0x2a, 0xc7, 0x60));
                         }
                     }
                     // V0.8.0 (Поток A) — surface AI-down in the bar TEXT, not just
@@ -2864,6 +2917,8 @@ fn main() -> Result<(), slint::PlatformError> {
 
             let question_for_task = question.clone();
             let heading_for_task = heading.clone();
+            let slint_rt_cost = slint_rt_c.clone();
+            let weak_overlay_cost = weak.clone();
             rt.spawn(async move {
                 let messages = vec![ai::ChatMessage {
                     role: "user".to_string(),
@@ -2885,8 +2940,14 @@ fn main() -> Result<(), slint::PlatformError> {
                     };
                     match result {
                         Ok((response, usage)) => {
-                            let cost_micro =
-                                ai::cost_microcents(&model, usage.input, usage.output);
+                            // Local inference is free — don't bill it (mirrors
+                            // every other ask path; otherwise a local "+ tile"
+                            // would inflate the meter at cloud Sonnet pricing).
+                            let cost_micro = if is_local {
+                                0
+                            } else {
+                                ai::cost_microcents(&model, usage.input, usage.output)
+                            };
                             let cost_usd = cost_micro as f64 / 100_000_000.0;
                             let md = format!("# {heading_for_task}\n\n{response}\n");
                             let blocks: Vec<MarkdownBlock> = markdown::parse(&md)
@@ -2902,6 +2963,24 @@ fn main() -> Result<(), slint::PlatformError> {
                                 "ai · {} · ${:.4}",
                                 model, cost_usd
                             )));
+                            // Bill the session like F6/F9 so the cost cap can see
+                            // "+ tile" spend. This was a silent hole: cloud
+                            // "+ tile" clicks never accumulated into the session
+                            // meter, so max_session_cost_usd never tripped and the
+                            // bar $ label stayed frozen. Refresh it to the new
+                            // session total (matches the cost:update consumer).
+                            let session_total = {
+                                let mut st =
+                                    slint_replay::runtime_state::lock(&slint_rt_cost);
+                                st.session_cost_microcents =
+                                    st.session_cost_microcents.saturating_add(cost_micro);
+                                (st.session_cost_microcents as f64) / 100_000_000.0
+                            };
+                            if let Some(ov) = weak_overlay_cost.upgrade() {
+                                ov.set_cost_label(SharedString::from(format!(
+                                    "${session_total:.3}"
+                                )));
+                            }
                         }
                         Err(e) => {
                             // Privacy: classify the error rather than dump
@@ -4471,14 +4550,17 @@ fn launch_vision_for_bgra(
         {
             Ok(Ok(u)) => u,
             Ok(Err(e)) => {
-                ptt_tile_error(
-                    weak_for_title.clone(),
-                    &format!("Не удалось обработать кадр: {e}"),
-                );
+                // Detail to the local log only; the tile message stays generic
+                // for consistency with classify_ai_error (the encode error is
+                // local image data, but this is the one streaming path that
+                // didn't route through a sanitizer).
+                diag!("[overlay-host] F8 encode failed: {e}");
+                ptt_tile_error(weak_for_title.clone(), "Не удалось обработать кадр экрана.");
                 return;
             }
             Err(e) => {
-                ptt_tile_error(weak_for_title.clone(), &format!("Сбой кодирования: {e}"));
+                diag!("[overlay-host] F8 encode task failed: {e}");
+                ptt_tile_error(weak_for_title.clone(), "Сбой кодирования кадра.");
                 return;
             }
         };
@@ -7445,5 +7527,128 @@ fn populate_token_status(win: &SettingsWindow, cfg: &overlay_backend::config::Sh
     fetch_models(win.as_weak(), cfg.clone(), ModelTarget::Cloud);
     if is_local {
         fetch_models(win.as_weak(), cfg.clone(), ModelTarget::Local);
+    }
+}
+
+#[cfg(test)]
+mod copy_tests {
+    //! Locks the 📋-copy text derivation — the exact area the user hit live:
+    //! copy pulling in the raw Mic/System transcript, and follow-ups being
+    //! re-answered as the original question. Pure: no bridge, no UI, no network.
+    use super::*;
+
+    fn msg(role: &str, text: &str) -> ai::ChatMessage {
+        ai::ChatMessage {
+            role: role.to_string(),
+            content: ai::MessageContent::Text(text.to_string()),
+        }
+    }
+    fn parts_msg(role: &str, texts: &[&str]) -> ai::ChatMessage {
+        ai::ChatMessage {
+            role: role.to_string(),
+            content: ai::MessageContent::Parts(
+                texts
+                    .iter()
+                    .map(|t| ai::ContentPart::Text {
+                        text: (*t).to_string(),
+                    })
+                    .collect(),
+            ),
+        }
+    }
+
+    #[test]
+    fn message_text_text_and_parts() {
+        assert_eq!(
+            message_text(&ai::MessageContent::Text("plain".into())),
+            "plain"
+        );
+        // Parts: text parts are joined (image parts, when present, contribute
+        // nothing — exercised here with two text parts).
+        let m = parts_msg("user", &["hello", "world"]);
+        assert_eq!(message_text(&m.content), "hello\nworld");
+    }
+
+    #[test]
+    fn copy_question_strips_transcript_wrapper() {
+        let raw = "Транскрипт последних реплик:\n[СОБЕСЕДНИК] arc raiders?\n\n\
+                   Помоги ответить: что такое arc raiders";
+        assert_eq!(user_question_for_copy(raw), "что такое arc raiders");
+    }
+
+    #[test]
+    fn copy_question_drops_transcript_only_ask() {
+        let raw = "Транскрипт последних реплик:\n[СОБЕСЕДНИК] что-то сказал";
+        assert_eq!(user_question_for_copy(raw), "");
+    }
+
+    #[test]
+    fn copy_question_strips_followup_directive() {
+        let raw = format!("{FOLLOWUP_DIRECTIVE}а что дальше?");
+        assert_eq!(user_question_for_copy(&raw), "а что дальше?");
+    }
+
+    #[test]
+    fn copy_question_drops_canned_vision_prompt() {
+        assert_eq!(user_question_for_copy(vision::DEFAULT_VISION_PROMPT), "");
+    }
+
+    #[test]
+    fn copy_question_passes_plain_text_trimmed() {
+        assert_eq!(user_question_for_copy("  привет  "), "привет");
+    }
+
+    #[test]
+    fn single_turn_copies_only_the_answer() {
+        let msgs = vec![
+            msg("system", "ты ассистент"),
+            msg("user", "Помоги ответить: что такое Rust"),
+            msg("assistant", "Rust — системный язык."),
+        ];
+        assert_eq!(
+            format_convo_copy(&msgs, "RENDERED"),
+            "Rust — системный язык."
+        );
+    }
+
+    #[test]
+    fn multi_turn_copies_labelled_thread_without_transcript() {
+        let msgs = vec![
+            msg("system", "ты ассистент"),
+            msg(
+                "user",
+                "Транскрипт последних реплик:\n[СОБЕСЕДНИК] x\n\nПомоги ответить: вопрос 1",
+            ),
+            msg("assistant", "ответ 1"),
+            msg("user", &format!("{FOLLOWUP_DIRECTIVE}вопрос 2")),
+            msg("assistant", "ответ 2"),
+        ];
+        let out = format_convo_copy(&msgs, "RENDERED");
+        assert_eq!(
+            out,
+            "🧑 вопрос 1\n\n🤖 ответ 1\n\n🧑 вопрос 2\n\n🤖 ответ 2"
+        );
+        // The raw Mic/System transcript must never reach the clipboard.
+        assert!(!out.contains("СОБЕСЕДНИК"));
+    }
+
+    #[test]
+    fn multi_turn_vision_skips_canned_prompt() {
+        let msgs = vec![
+            parts_msg("user", &[vision::DEFAULT_VISION_PROMPT]),
+            msg("assistant", "на экране код"),
+            msg("user", &format!("{FOLLOWUP_DIRECTIVE}а на каком языке?")),
+            msg("assistant", "на Rust"),
+        ];
+        let out = format_convo_copy(&msgs, "RENDERED");
+        assert_eq!(
+            out,
+            "🤖 на экране код\n\n🧑 а на каком языке?\n\n🤖 на Rust"
+        );
+    }
+
+    #[test]
+    fn empty_conversation_falls_back_to_rendered() {
+        assert_eq!(format_convo_copy(&[], "RENDERED"), "RENDERED");
     }
 }

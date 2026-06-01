@@ -629,32 +629,52 @@ pub async fn reask_last(
         });
     }
     let t0 = std::time::Instant::now();
-    let (answer, usage) =
-        match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512).await {
-            Ok(t) => {
-                // Bump health on success — atomic store, no rt lock.
-                inputs
-                    .health
-                    .last_ai_ok_ms
-                    .store(crate::journal::now_unix_ms() as u64, Ordering::Relaxed);
-                t
+    let (answer, usage) = match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512)
+        .await
+    {
+        Ok(t) => {
+            // Bump health on success — atomic store, no rt lock.
+            inputs
+                .health
+                .last_ai_ok_ms
+                .store(crate::journal::now_unix_ms() as u64, Ordering::Relaxed);
+            t
+        }
+        Err(e) => {
+            log::warn!("reask_last AI failed: {e:#}");
+            if let Some(j) = inputs.journal.as_ref() {
+                j.write(&JournalEvent::Error {
+                    unix_ms: crate::journal::now_unix_ms(),
+                    module: "reask",
+                    message: &format!("{e:#}"),
+                });
             }
-            Err(e) => {
-                log::warn!("reask_last AI failed: {e:#}");
-                if let Some(j) = inputs.journal.as_ref() {
-                    j.write(&JournalEvent::Error {
-                        unix_ms: crate::journal::now_unix_ms(),
-                        module: "reask",
-                        message: &format!("{e:#}"),
-                    });
-                }
-                events.emit(
-                    "tile:error",
-                    serde_json::json!({ "message": format!("Reask AI error: {}", e) }),
+            // Spawn a GENERIC visible error tile so F3 is never silent
+            // (mirrors the F6 manual_spawn path below). The `tile:error`
+            // event had NO UI consumer in the Slint binary, so F3 looked
+            // dead when the AI was down. The message carries NO `{e}` chain:
+            // a reqwest error can embed the base_url / LAN IP, which must
+            // never reach a screen-shared tile. Full detail stays in the
+            // journal + log.
+            let _ = events.spawn_tile_full(
+                    TileSpec {
+                        question: format!("🔁 reask: {last_q}"),
+                        answer: "Не удалось получить ответ от AI. Проверьте, что выбранный провайдер запущен (Настройки → AI)."
+                            .into(),
+                        source: "reask".into(),
+                        is_translation: false,
+                        highlights: vec![],
+                    },
+                    match preferred_monitor.as_deref() {
+                        Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
+                        _ => MonitorHint::Auto,
+                    },
+                    stealth,
+                    TileKind::Ai,
                 );
-                return None;
-            }
-        };
+            return None;
+        }
+    };
     // Local inference is free — don't bill it at the cloud fallback rate
     // (cost_microcents maps an unknown local model id to Sonnet pricing).
     let micro = if is_local {
