@@ -3069,6 +3069,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let cfg_for_settings = cfg.clone();
         let overlay_weak = overlay.as_weak();
         let text_ask_for_settings = text_ask.clone();
+        let palette_for_settings = palette.clone();
         overlay.on_open_settings_clicked(move || {
             open_settings(
                 &s,
@@ -3077,6 +3078,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 &cfg_for_settings,
                 &overlay_weak,
                 &text_ask_for_settings,
+                &palette_for_settings,
             );
         });
     }
@@ -5846,6 +5848,10 @@ fn open_settings(
     // V0.8.3 (M1) — so the Settings-tab stealth toggle can also flip the
     // "✏ Написать" input window if it happens to be open.
     text_ask_ref: &Rc<RefCell<Option<TextAskWindow>>>,
+    // Stealth-leak fix — the Settings-tab stealth toggle must also flip the F4
+    // KB palette (the bar-chip toggle already does). Without it the palette
+    // stayed visible to screen-capture when stealth was enabled from Settings.
+    palette_ref: &Rc<RefCell<Option<PaletteWindow>>>,
 ) {
     // Light up the bar's ⚙ chip while Settings is open (user: "значок
     // настроек не загорается когда настройки открыты"). Cleared in the
@@ -5991,6 +5997,7 @@ fn open_settings(
     let self_weak_stealth = win.as_weak();
     let cfg_st = cfg.clone();
     let text_ask_st = text_ask_ref.clone();
+    let palette_st = palette_ref.clone();
     win.on_stealth_changed(move |on| {
         if let Ok(mut st) = s3.lock() {
             st.stealth = on;
@@ -6025,6 +6032,15 @@ fn open_settings(
         // the typed question can't linger on a screen-share after stealth-on.
         if let Some(t) = text_ask_st.borrow().as_ref() {
             if let Ok(hwnd) = grab_hwnd(t.window()) {
+                let _ = set_stealth(hwnd, on);
+            }
+        }
+        // Stealth-leak fix — flip the F4 KB palette too (mirrors the bar-chip
+        // toggle at on_stealth_toggle_clicked). Without this, enabling stealth
+        // from the Settings tab left an OPEN palette visible to screen-capture
+        // (the KB search box + results), while the bar showed stealth as ON.
+        if let Some(p) = palette_st.borrow().as_ref() {
+            if let Ok(hwnd) = grab_hwnd(p.window()) {
                 let _ = set_stealth(hwnd, on);
             }
         }
