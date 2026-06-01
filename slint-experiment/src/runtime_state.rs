@@ -113,6 +113,13 @@ pub struct SlintRuntime {
     /// AI call if it changed, so a call that outlives its session can't
     /// spawn a stray tile or bill its cost onto the next session.
     pub session_gen: u64,
+
+    /// V0.8.0 (Поток A) — unix-ms of the last AI-error notice tile spawned by
+    /// the auto-tile path. Debounce: during a sustained AI outage the detector
+    /// fires once per transcript line, so without this the user would get one
+    /// error tile per line. We spawn at most one error tile per
+    /// `AI_ERROR_TILE_DEBOUNCE_MS`. Zero = none spawned yet.
+    pub last_ai_error_tile_ms: u64,
 }
 
 /// Convenience alias matching src-tauri's `SharedRuntime`.

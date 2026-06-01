@@ -838,9 +838,10 @@ impl SlintUiBridge for OverlayBarBridge {
                     let st = |k: &str| -> Option<&str> {
                         payload.get(k).and_then(serde_json::Value::as_str)
                     };
+                    let ai_down = matches!(st("ai"), Some("down"));
                     let any_down = matches!(st("audio"), Some("down"))
                         || matches!(st("stt"), Some("down"))
-                        || matches!(st("ai"), Some("down"));
+                        || ai_down;
                     let any_degraded = matches!(st("audio"), Some("degraded"))
                         || matches!(st("stt"), Some("degraded"))
                         || matches!(st("ai"), Some("degraded"));
@@ -848,6 +849,27 @@ impl SlintUiBridge for OverlayBarBridge {
                         o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x4b, 0x4b));
                     } else if any_degraded {
                         o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0xb4, 0x4b));
+                    }
+                    // V0.8.0 (Поток A) — surface AI-down in the bar TEXT, not just
+                    // color, so the user knows WHY auto-tiles stopped (the
+                    // reported pain). The marker is set/cleared only by this arm,
+                    // so we restore the session pill on recovery without
+                    // clobbering session:started/stopped's own text.
+                    const AI_DOWN_MARK: &str = "⚠ AI недоступен";
+                    let cur = o.get_status_text();
+                    if ai_down {
+                        if cur != AI_DOWN_MARK {
+                            o.set_status_text(SharedString::from(AI_DOWN_MARK));
+                        }
+                    } else if cur == AI_DOWN_MARK {
+                        // Recovered — restore the session pill we overwrote.
+                        if o.get_timer_active() {
+                            o.set_status_text(SharedString::from("recording"));
+                            o.set_status_color(slint::Color::from_rgb_u8(0x2a, 0xc7, 0x60));
+                        } else {
+                            o.set_status_text(SharedString::from("idle"));
+                            o.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
+                        }
                     }
                     // ok / idle leaves the prior color alone
                     // (set by session:started / session:stopped).

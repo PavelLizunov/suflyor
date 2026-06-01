@@ -147,6 +147,10 @@ pub enum TileKind {
     /// Mic-side ask (🎤 chip / PTT on user mic). Maps to
     /// `tile::TileKind::Mic` (teal chrome). Added Phase B2 port #5.
     Mic,
+    /// V0.8.0 (Поток A) — a failure notice tile (e.g. "AI недоступен"), spawned
+    /// when an auto-tile AI call fails so the user isn't left wondering why
+    /// auto-tiles silently stopped. NOT conversational (no follow-up / 🔄 / 🎤).
+    Error,
 }
 
 impl TileKind {
@@ -166,6 +170,7 @@ impl TileKind {
             Self::Auto => "auto",
             Self::System => "system",
             Self::Mic => "mic",
+            Self::Error => "error",
         }
     }
 }
@@ -288,6 +293,7 @@ mod tests {
             TileKind::Auto,
             TileKind::System,
             TileKind::Mic,
+            TileKind::Error,
         ];
         let tags: HashSet<_> = all.iter().map(|k| k.as_journal_tag()).collect();
         assert_eq!(tags.len(), all.len(), "duplicate journal tag in TileKind");

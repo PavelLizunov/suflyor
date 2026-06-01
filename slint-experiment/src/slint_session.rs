@@ -73,6 +73,11 @@ pub fn start_session(
         s.health.last_audio_frame_ms.store(0, Ordering::Relaxed);
         s.health.last_stt_ok_ms.store(0, Ordering::Relaxed);
         s.health.last_ai_ok_ms.store(0, Ordering::Relaxed);
+        // V0.8.0 (Поток A) — also clear the AI-error marker + the error-tile
+        // debounce, else a session that ended on an AI failure would open the
+        // NEXT session already showing "AI недоступен" (stale err >= ok=0).
+        s.health.last_ai_err_ms.store(0, Ordering::Relaxed);
+        s.last_ai_error_tile_ms = 0;
         s.speech_window.clear();
         s.meeting_ending_emitted = false;
         s.recent_question_prefixes.clear();
@@ -353,6 +358,11 @@ const MAX_TILES_PER_MIN_AGGRESSIVE: usize = 10;
 const QA_CACHE_TTL_SECS: u64 = 600;
 /// QA cache hard cap before half-eviction (matches src-tauri).
 const QA_CACHE_MAX_ENTRIES: usize = 256;
+/// V0.8.0 (Поток A) — min interval between auto-tile AI-error notice tiles.
+/// During a sustained outage the detector fires per transcript line; we spawn
+/// at most one "⚠ AI недоступен" tile per this window so the user is informed
+/// once, not spammed. 20s balances "noticed promptly" vs "not nagging".
+const AI_ERROR_TILE_DEBOUNCE_MS: u64 = 20_000;
 
 /// Phase E4 — Slint-side auto-tile detector + AI ask pipeline.
 ///
@@ -636,25 +646,70 @@ async fn maybe_spawn_auto_tile(
     });
 
     let t0 = Instant::now();
-    let (answer, usage) =
-        match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512).await {
-            Ok((t, u)) => {
-                lock(&rt)
-                    .health
-                    .last_ai_ok_ms
-                    .store(now_unix_ms() as u64, Ordering::Relaxed);
-                (t.trim().to_string(), u)
+    let (answer, usage) = match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512)
+        .await
+    {
+        Ok((t, u)) => {
+            lock(&rt)
+                .health
+                .last_ai_ok_ms
+                .store(now_unix_ms() as u64, Ordering::Relaxed);
+            (t.trim().to_string(), u)
+        }
+        Err(e) => {
+            // V0.8.0 (Поток A) — the auto-tile AI call failed. Previously
+            // this returned SILENTLY (log + journal only), so the user saw
+            // auto-tiles simply stop with no explanation ("почему тайлы
+            // перестали появляться"). Now we (1) mark AI down so the bar
+            // flips to "AI недоступен" within one 2s health tick, and
+            // (2) spawn ONE debounced, sanitized error tile.
+            let chain = format!("{e:#}");
+            log_warn(&format!("auto-tile AI failed: {chain}"));
+            journal.write(&JournalEvent::Error {
+                unix_ms: now_unix_ms(),
+                module: "auto_tile_ai",
+                message: &chain,
+            });
+            // Mark AI down immediately (snapshot returns "down" while this
+            // err is newer than the last ok; auto-clears on next success).
+            lock(&rt)
+                .health
+                .last_ai_err_ms
+                .store(now_unix_ms() as u64, Ordering::Relaxed);
+            // Debounce: at most one error tile per AI_ERROR_TILE_DEBOUNCE_MS,
+            // so a sustained outage (detector fires per line) doesn't spam.
+            let now = now_unix_ms() as u64;
+            let should_notify = {
+                let mut s = lock(&rt);
+                if now.saturating_sub(s.last_ai_error_tile_ms) >= AI_ERROR_TILE_DEBOUNCE_MS {
+                    s.last_ai_error_tile_ms = now;
+                    true
+                } else {
+                    false
+                }
+            };
+            if should_notify {
+                // Generic message — NEVER the raw chain (it carries the local
+                // server's LAN IP / base_url; the tile is screen-shared).
+                let reason = crate::app_state::classify_ai_error(&chain);
+                let _ = events.spawn_tile_full(
+                        TileSpec {
+                            question: "⚠ AI недоступен".into(),
+                            answer: format!(
+                                "**Не получаю ответ от AI:** {reason}\n\nАвто-подсказки приостановлены, пока AI не ответит. Проверьте локальный AI-сервер или AI-мост (Настройки → AI). Можно перезапустить приложение кнопкой ⟳ на панели."
+                            ),
+                            source: "ai_error".into(),
+                            is_translation: false,
+                            highlights: vec!["⚠ AI".into()],
+                        },
+                        MonitorHint::Auto,
+                        stealth,
+                        TileKind::Error,
+                    );
             }
-            Err(e) => {
-                log_warn(&format!("auto-tile AI failed: {e:#}"));
-                journal.write(&JournalEvent::Error {
-                    unix_ms: now_unix_ms(),
-                    module: "auto_tile_ai",
-                    message: &format!("{e:#}"),
-                });
-                return;
-            }
-        };
+            return;
+        }
+    };
     let latency_ms = t0.elapsed().as_millis() as u64;
 
     // E9 — if the session was stopped/restarted during this (up to
