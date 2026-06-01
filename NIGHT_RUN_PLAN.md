@@ -125,6 +125,12 @@ verify below.
   кнопка 🧠 не предлагается без облачного ключа; авто-старт не отключает сессию,
   если вы успели включить её вручную; копирование диалога чище (без служебного
   транскрипта / vision-промпта). +12 юнит-тестов на логику копирования.
+- 🛡 **Надёжность и безопасность (ночной deep-scan):** убран краш при размещении
+  тайла на **портретном мониторе (1200px)** / при высоком DPI (`i32::clamp`
+  паниковал); конфиг с **BOM** (Notepad «UTF-8 with BOM» / PowerShell) больше не
+  сбрасывает настройки молча; mic-тест в 3 местах не конфликтует с активной
+  записью; **F4-палитра теперь скрывается при включении стелса из Настроек**
+  (раньше оставалась видимой на шеринге — реальная утечка захвата экрана).
 
 ### 🚩 Flagged for the user (decisions I did NOT make blind)
 - **🎤 mic chip doesn't actually mute** (`mic_muted` is dead + its doc comment is
@@ -178,6 +184,20 @@ fixed:
   now `try_acquire_mic()`/`release_mic()` (release proven paired on every path by
   the review-agent — no stuck-mic) and report "mic busy". This closes the
   previously-deferred mic-probe gap entirely.
+
+**4th (security) scout — stealth completeness → BATCH 7 (LEAK FOUND + fixed).**
+Narrow read-only audit of the one question that matters most for the user's
+screen-shared interviews: can ANY window be visible to capture while stealth is
+ON? Verified clean: new tiles/palette/Settings/text-ask are born stealthed under
+the global flag; toggle/restart/F8-freeze are leak-free; no show-before-WDA flash.
+**One real leak:** the **Settings-tab** stealth toggle (`on_stealth_changed`)
+flipped the bar/tiles/Settings/text-ask but NOT the **F4 KB palette** —
+`open_settings` was never handed the `palette` Rc. So enabling stealth from
+Settings while a palette was open left the KB search box + results **visible to
+Teams/Meet/OBS** (the bar-chip toggle was unaffected — same bug class as the
+fixed #111, just not mirrored). Fixed: threaded `palette` into `open_settings` +
+flip it in `on_stealth_changed` (mirrors the bar-chip + text-ask blocks exactly —
+can only ADD coverage, never reduce). Gated + boot-smoked.
 
 **Decisions (this run):**
 - **28 orphan .po entries** — deleting dead translations is cosmetic and risks a
