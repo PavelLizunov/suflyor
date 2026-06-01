@@ -199,6 +199,20 @@ fixed #111, just not mirrored). Fixed: threaded `palette` into `open_settings` +
 flip it in `on_stealth_changed` (mirrors the bar-chip + text-ask blocks exactly —
 can only ADD coverage, never reduce). Gated + boot-smoked.
 
+---
+
+## ✅ RUN COMPLETE @ `918ab29` (8 fix-commits · 12 bugs · 14 tests)
+Final whole-run verification: composite clippy `-D warnings` (both crates) + **172
+backend + 20 + 12 slint** tests green · `cargo build --release` clean (58s) ·
+release-binary boot smoke clean (v0.8.3, all 6 hotkeys incl Shift+F9, transparency
++ `stealth_ok=true`, secrets masked, bar on primary, no crash). **6 scout + 4
+review agents — all GO / LOW risk.** Tree clean; pushed `8882cb6..918ab29`. The
+only thing between here and a v0.8.4 release is the ~60-sec human live-verify
+(checklist above) — out of reach without computer-use. Recommended future
+hardening (NOT done blind): replace per-window stealth enumeration with one
+`EnumWindows`-over-own-PID sweep so no future window type can be forgotten (this
+leak class has now appeared twice — #111 + the Settings-tab palette).
+
 **Decisions (this run):**
 - **28 orphan .po entries** — deleting dead translations is cosmetic and risks a
   fat-finger over 28 line-pairs; ZERO user-facing effect (unused msgids just sit
