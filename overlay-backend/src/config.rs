@@ -331,8 +331,17 @@ impl Config {
         }
     }
 
-    /// Add a new profile capturing the current `meeting_context` and make it
-    /// active. Rejects a blank or duplicate name; returns the new index on success.
+    /// Add a new BLANK profile and make it active, clearing the live
+    /// `meeting_context` so the editor starts empty. Rejects a blank or
+    /// duplicate name; returns the new index on success.
+    ///
+    /// NOTE: a new profile deliberately does NOT inherit the previously-active
+    /// profile's context. Before, it cloned `self.meeting_context` (which held
+    /// the active profile's text), so creating "FOOT" while "ninitux" was
+    /// active silently copied ninitux's description into FOOT — surprising and
+    /// reported as a bug. Clearing `meeting_context` also keeps it in sync with
+    /// the new (empty) active profile, so the next AI call doesn't use the old
+    /// profile's context while a fresh profile is "active".
     pub fn add_profile(&mut self, name: &str) -> Option<usize> {
         let name = name.trim();
         if name.is_empty() || self.context_profiles.iter().any(|p| p.name == name) {
@@ -340,9 +349,10 @@ impl Config {
         }
         self.context_profiles.push(ContextProfile {
             name: name.to_string(),
-            context: self.meeting_context.clone(),
+            context: String::new(),
         });
         self.active_profile = Some(name.to_string());
+        self.meeting_context = String::new();
         Some(self.context_profiles.len() - 1)
     }
 
@@ -2850,18 +2860,24 @@ mod tests {
     #[test]
     fn profile_lifecycle_add_select_rename_delete() {
         let mut c = Config::defaults();
-        c.meeting_context = "ctx A".into();
-        // add() captures the current meeting_context + makes it active
+        c.meeting_context = "stale".into();
+        // add() creates a BLANK profile, makes it active, and clears the live
+        // context (does NOT clone the previous meeting_context).
         assert_eq!(c.add_profile("A"), Some(0));
         assert_eq!(c.active_profile.as_deref(), Some("A"));
+        assert_eq!(c.context_profiles[0].context, "");
+        assert_eq!(c.meeting_context, "");
+        // fill A's context the normal way: type + save into the active profile
+        c.save_active_context("ctx A");
         assert_eq!(c.context_profiles[0].context, "ctx A");
         // blank + duplicate names are rejected
         assert!(c.add_profile("  ").is_none());
         assert!(c.add_profile("A").is_none());
-        // a second profile captures the then-current context
-        c.meeting_context = "ctx B".into();
+        // a second profile is ALSO blank + active, regardless of current context
         assert_eq!(c.add_profile("B"), Some(1));
         assert_eq!(c.active_profile_index(), Some(1));
+        assert_eq!(c.context_profiles[1].context, "");
+        assert_eq!(c.meeting_context, "");
         // selecting loads that profile's context into the live field
         c.select_profile(0);
         assert_eq!(c.meeting_context, "ctx A");
@@ -2879,10 +2895,30 @@ mod tests {
         c.delete_active_profile();
         assert_eq!(c.context_profiles.len(), 1);
         assert_eq!(c.active_profile.as_deref(), Some("B"));
-        assert_eq!(c.meeting_context, "ctx B");
-        // deleting the last profile clears the active selection
+        assert_eq!(c.meeting_context, ""); // B was created blank
+                                           // deleting the last profile clears the active selection
         c.delete_active_profile();
         assert!(c.context_profiles.is_empty());
         assert!(c.active_profile.is_none());
+    }
+
+    // Regression for the user-reported bug: a new profile must NOT inherit the
+    // active profile's context. Creating "FOOT" while "ninitux" was active had
+    // silently copied ninitux's description into FOOT.
+    #[test]
+    fn add_profile_does_not_clone_active_profile_context() {
+        let mut c = Config::defaults();
+        assert_eq!(c.add_profile("ninitux"), Some(0));
+        c.save_active_context("ninitux description");
+        assert_eq!(c.context_profiles[0].context, "ninitux description");
+        assert_eq!(c.meeting_context, "ninitux description");
+        // add FOOT while ninitux is active and its context is live
+        assert_eq!(c.add_profile("FOOT"), Some(1));
+        assert_eq!(c.active_profile.as_deref(), Some("FOOT"));
+        // FOOT must be EMPTY, and the live context cleared — not a clone
+        assert_eq!(c.context_profiles[1].context, "");
+        assert_eq!(c.meeting_context, "");
+        // ninitux is left untouched
+        assert_eq!(c.context_profiles[0].context, "ninitux description");
     }
 }
