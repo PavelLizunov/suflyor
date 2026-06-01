@@ -670,6 +670,17 @@ async fn maybe_spawn_auto_tile(
                 module: "auto_tile_ai",
                 message: &chain,
             });
+            // v0.8.2 (M1 fix) — mirror the success path's session_gen guard
+            // (the `if … != session_gen` check below). If the session was
+            // stopped/restarted DURING this (up to ~9-min, with retries)
+            // failing call, do NOT poison the NEXT session: skip marking AI
+            // down (would flip the new session's bar to "AI недоступен" until
+            // its first success) and skip spawning a stray error tile into it.
+            // The log + journal above stay unconditional (local diagnostics).
+            if lock(&rt).session_gen != session_gen {
+                log_info("auto-tile: session changed during failed AI call — not surfacing error");
+                return;
+            }
             // Mark AI down immediately (snapshot returns "down" while this
             // err is newer than the last ok; auto-clears on next success).
             lock(&rt)
@@ -841,6 +852,11 @@ pub fn stop_session(rt: SharedSlintRuntime) -> Vec<TranscriptLine> {
     s.health.last_audio_frame_ms.store(0, Ordering::Relaxed);
     s.health.last_stt_ok_ms.store(0, Ordering::Relaxed);
     s.health.last_ai_ok_ms.store(0, Ordering::Relaxed);
+    // v0.8.2 (N2) — symmetry with start_session (which resets all five): also
+    // clear the AI-error marker + error-tile debounce on stop so health reads
+    // clean between sessions (defense-in-depth alongside the M1 gen-guard).
+    s.health.last_ai_err_ms.store(0, Ordering::Relaxed);
+    s.last_ai_error_tile_ms = 0;
     let snapshot: Vec<TranscriptLine> = s.transcript.iter().cloned().collect();
     s.transcript.clear();
     if let Some(j) = s.journal.take() {
