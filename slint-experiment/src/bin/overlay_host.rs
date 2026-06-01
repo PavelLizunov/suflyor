@@ -2732,6 +2732,19 @@ fn get_sys_active(state: &slint_replay::app_state::SharedState) -> bool {
 
 /// Apply transparent-overlay HWND flags to the overlay bar.
 fn apply_overlay_hwnd(overlay: &OverlayBarWindow) {
+    // Поток C (stealth bar-flash fix) — when stealth is on, park the bar OFF the
+    // virtual desktop synchronously NOW (this fn runs before overlay.run(), which
+    // composites the window). Without this the bar was shown at winit's default
+    // position and only stealthed ~200 ms later by the timer below, so a screen-
+    // share saw a flash of the bar on every cold start — and would on every
+    // emergency restart (Поток B). The timer applies WDA *before* the pin moves
+    // the bar on-screen, so the first on-screen frame is already capture-excluded.
+    // Mirrors present_tile_window for tiles.
+    if global_stealth() {
+        overlay
+            .window()
+            .set_position(slint::PhysicalPosition::new(-32000, -32000));
+    }
     let weak = overlay.as_weak();
     Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
         let Some(o) = weak.upgrade() else { return };
@@ -2752,21 +2765,25 @@ fn apply_overlay_hwnd(overlay: &OverlayBarWindow) {
                 // X) or straddle two displays. Centre it near the top of
                 // primary. One-shot at launch — the user can still drag it
                 // afterward (the logo is a drag handle).
-                if let Some(primary) = enum_monitors().into_iter().find(|m| m.is_primary) {
-                    match get_window_rect(hwnd) {
-                        Ok((_, _, bar_w, _)) => {
-                            let x = primary.left + ((primary.width() - bar_w) / 2).max(0);
-                            let y = primary.top + 24;
-                            match move_window_pos_only(hwnd, x, y) {
-                                Ok(()) => {
-                                    eprintln!("[overlay-host] bar pinned to primary at ({x}, {y})")
-                                }
-                                Err(e) => eprintln!("[overlay-host] bar pin failed: {e}"),
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("[overlay-host] bar pin: get_window_rect failed: {e}")
-                        }
+                // Поток C — the pin MUST always land the bar on-screen: under
+                // stealth we parked it at (-32000) above, so any path that skips
+                // the move would strand the bar off the desktop (the bar is the
+                // whole control surface — the user would be locked out). Compute
+                // the target with safe fallbacks (primary monitor → its origin →
+                // (60, 24)) and ALWAYS move.
+                let primary = enum_monitors().into_iter().find(|m| m.is_primary);
+                let bar_w = get_window_rect(hwnd).map(|(_, _, w, _)| w).unwrap_or(0);
+                let (x, y) = match primary {
+                    Some(p) => (p.left + ((p.width() - bar_w) / 2).max(0), p.top + 24),
+                    None => (60, 24),
+                };
+                match move_window_pos_only(hwnd, x, y) {
+                    Ok(()) => eprintln!("[overlay-host] bar pinned at ({x}, {y})"),
+                    Err(e) => {
+                        // Last resort: even the pin failed — try a hard (60,24) so
+                        // a stealth-parked bar can't stay invisible at (-32000).
+                        eprintln!("[overlay-host] bar pin failed: {e}; retry at (60,24)");
+                        let _ = move_window_pos_only(hwnd, 60, 24);
                     }
                 }
             }
