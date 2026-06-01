@@ -77,6 +77,14 @@ All five gate layers green (clippy+test+fmt both crates · review-agent **GO** �
 boot smoke: v0.8.3 boots, all 6 hotkeys incl Shift+F9 register, transparency +
 stealth wired, secrets masked `base_url=set ai_bearer=set groq_key=set`, no crash).
 
+**FINAL verification (whole run):** `cargo build --release` clean (1m09s) + a boot
+smoke on the actual **release** binary — identical healthy startup (v0.8.3, 6
+hotkeys, transparency+stealth, bar on primary, secrets masked, no crash). Working
+tree clean, `8882cb6..db97627` pushed. **STATUS: run complete + fully gated.** The
+only thing between here and a v0.8.4 release is the ~60s human live-verify above
+(can't be driven without computer-use). 183 backend + 32 slint(bin) unit assertions
+pass; 5 scout + 3 review/re-audit agents all GO/LOW.
+
 **BATCH 4 (committed + pushed `4787c4e`, review-agent GO):** INVESTIGATE-1 — `FOLLOWUP_DIRECTIVE` no
 longer accumulates across a multi-turn thread (the user runs a LOCAL Gemma — the
 exact "weak model anchors on the wrong turn" case the regression agent warned of).
