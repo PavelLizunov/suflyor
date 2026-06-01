@@ -25,9 +25,9 @@ use slint_replay::runtime_state::{shared_runtime, SharedSlintRuntime};
 use slint_replay::slint_events::{SlintEvents, SlintUiBridge};
 use slint_replay::slint_session;
 use slint_replay::win32::{
-    drag_begin, drag_update, enum_monitors, get_window_rect, grab_hwnd, make_transparent_overlay,
-    make_transparent_tile, move_window_pos_only, pick_monitor, set_always_on_top, set_skip_taskbar,
-    set_stealth, work_area_for_window,
+    drag_begin, drag_update, enum_monitors, focus_window, get_window_rect, grab_hwnd,
+    make_transparent_overlay, make_transparent_tile, move_window_pos_only, pick_monitor,
+    set_always_on_top, set_skip_taskbar, set_stealth, work_area_for_window,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -61,7 +61,7 @@ mod ui {
 
 use ui::{
     CaptureOverlay, MarkdownBlock, OverlayBarWindow, PaletteResult, PaletteWindow, SettingsWindow,
-    TileWindow,
+    TextAskWindow, TileWindow,
 };
 
 type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
@@ -191,6 +191,152 @@ fn release_mic() {
 /// keeping the dialog about the screenshot — when true). Mirrors the Settings
 /// dictation toggle; reuses the PTT 30 s watchdog so a forgotten stop can't
 /// leak a recording thread.
+/// Plain text of one chat message — the `Text` body, or for a vision turn the
+/// concatenated text Part(s) only (NEVER the base64 image).
+fn message_text(content: &ai::MessageContent) -> String {
+    match content {
+        ai::MessageContent::Text(t) => t.clone(),
+        ai::MessageContent::Parts(parts) => parts
+            .iter()
+            .filter_map(|p| match p {
+                ai::ContentPart::Text { text } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+    }
+}
+
+/// Strip the `build_request` wrapper from a user turn for the 📋 copy, leaving
+/// the actual question. The F9/auto ask bundles the live transcript as AI
+/// context ("Транскрипт последних реплик…\n\nПомоги ответить: <q>"), so the real
+/// question is the bit after "Помоги ответить:" — without that we'd copy the
+/// raw Mic/System transcript lines into the chat copy. A transcript-only F9 ask
+/// (no explicit question) → empty, so the noisy transcript is dropped; a typed
+/// follow-up is already clean and passes through unchanged.
+/// V0.8.3 — prepended to a follow-up's user message sent to the model. The
+/// conversation's system prompt frames the assistant as "answer the last
+/// question FROM THE TRANSCRIPT", so a bare follow-up was treated as transcript
+/// noise and the model re-answered the original (user saw Sonnet reply "Два" to
+/// "what is arc raider"). This marker makes the follow-up an explicit DIRECT
+/// question. The UI + 📋 copy still show the clean question (it's stripped in
+/// user_question_for_copy); the journal logs the raw question.
+const FOLLOWUP_DIRECTIVE: &str =
+    "Это прямой вопрос пользователя к тебе (НЕ из транскрипта, НЕ предыдущий вопрос). \
+     Ответь именно на него: ";
+
+fn user_question_for_copy(raw: &str) -> String {
+    let raw = raw.strip_prefix(FOLLOWUP_DIRECTIVE).unwrap_or(raw);
+    const MARK: &str = "Помоги ответить:";
+    if let Some(i) = raw.rfind(MARK) {
+        return raw[i + MARK.len()..].trim().to_string();
+    }
+    if raw.trim_start().starts_with("Транскрипт последних реплик") {
+        return String::new();
+    }
+    raw.trim().to_string()
+}
+
+/// V0.8.3 — text for the 📋 copy button. Adaptive so it fits both uses:
+///
+/// - a single Q→A tile → just the answer (clean paste — the "screenshot →
+///   answer → paste it" case);
+/// - a multi-turn dialog (a branch) → the WHOLE thread, every question +
+///   answer, labelled 🧑 / 🤖 — so a conversation isn't truncated to its last
+///   reply (user: "копируется только последнее сообщение, а не весь чат").
+///
+/// System prompts are skipped; vision turns contribute their text only. Empty
+/// if the tile has no (or an unknown / not-yet-seeded) conversation.
+fn convo_copy_text(bridge: &OverlayBarBridge, convo_id: i32) -> String {
+    let convos = bridge
+        .conversations
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let Some(c) = convos.get(&convo_id) else {
+        return String::new();
+    };
+    let turns: Vec<(&str, String)> = c
+        .messages
+        .iter()
+        .filter(|m| m.role != "system")
+        .filter_map(|m| {
+            let t = message_text(&m.content).trim().to_string();
+            (!t.is_empty()).then_some((m.role.as_str(), t))
+        })
+        .collect();
+    if turns.is_empty() {
+        return c.rendered.clone();
+    }
+    let assistant_turns = turns.iter().filter(|(r, _)| *r == "assistant").count();
+    if assistant_turns <= 1 {
+        // Single answer: copy just it (or the rendered body if, mid-stream, no
+        // assistant turn is recorded yet).
+        return turns
+            .iter()
+            .rev()
+            .find(|(r, _)| *r == "assistant")
+            .map(|(_, t)| t.clone())
+            .unwrap_or_else(|| c.rendered.clone());
+    }
+    let mut out = String::new();
+    for (role, text) in &turns {
+        // User turns carry the build_request wrapper (transcript + "Помоги
+        // ответить:") — copy only the real question, never the Mic/System dump.
+        let display = if *role == "assistant" {
+            (*text).clone()
+        } else {
+            user_question_for_copy(text)
+        };
+        if display.trim().is_empty() {
+            continue;
+        }
+        if !out.is_empty() {
+            out.push_str("\n\n");
+        }
+        out.push_str(if *role == "assistant" {
+            "🤖 "
+        } else {
+            "🧑 "
+        });
+        out.push_str(display.trim());
+    }
+    if out.is_empty() {
+        return c.rendered.clone();
+    }
+    out
+}
+
+/// V0.8.3 — wire a tile's 📋 copy button: write the answer text to the Windows
+/// clipboard and flash the ✅ feedback glyph for ~1.5 s. Called for every
+/// conversational tile (those with a `convo_id`). Copy is purely local — no
+/// network egress — so it stays safe under screen-share / stealth.
+fn wire_copy(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayBarBridge>) {
+    tile.set_can_copy(true);
+    let weak = tile.as_weak();
+    let bridge_c = bridge.clone();
+    tile.on_copy_clicked(move || {
+        let text = convo_copy_text(&bridge_c, convo_id);
+        if text.is_empty() {
+            return;
+        }
+        match clipboard_win::set_clipboard_string(&text) {
+            Ok(()) => {
+                let Some(t) = weak.upgrade() else {
+                    return;
+                };
+                t.set_copied(true);
+                let w = t.as_weak();
+                Timer::single_shot(Duration::from_millis(1500), move || {
+                    if let Some(t) = w.upgrade() {
+                        t.set_copied(false);
+                    }
+                });
+            }
+            Err(e) => eprintln!("[overlay-host] clipboard copy failed: {e}"),
+        }
+    });
+}
+
 fn wire_voice_followup(
     tile: &TileWindow,
     convo_id: i32,
@@ -1931,6 +2077,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     });
                 }
                 wire_voice_followup(&tile, convo_id, live.clone(), &cfg_for_poll);
+                wire_copy(&tile, convo_id, &bridge_for_poll);
                 wire_escalate(
                     &tile,
                     convo_id,
@@ -1988,6 +2135,8 @@ fn main() -> Result<(), slint::PlatformError> {
     // KB palette — opened via the F4 global hotkey (registered below).
     // (The 💡 tips chip was removed; F4 is the sole entry point.)
     let palette: Rc<RefCell<Option<PaletteWindow>>> = Rc::new(RefCell::new(None));
+    // V0.8.3 — "Написать" text-input window, created on demand like the palette.
+    let text_ask: Rc<RefCell<Option<TextAskWindow>>> = Rc::new(RefCell::new(None));
     // V3 — the Lightshot capture overlay. PERSISTENT + pre-stealthed so F8 shows
     // it flash-free: WDA_EXCLUDEFROMCAPTURE keeps it off any screen-share from the
     // first frame, WS_EX_TOOLWINDOW keeps it out of the taskbar. We realize the
@@ -2155,6 +2304,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         &hp_tiles,
                         &hp_weak_overlay,
                         AskRoute::Text,
+                        None,
                     );
                 } else if event.id == sf9_id {
                     // V0.8.0 (Поток D) — Shift+F9 escalates ONE ask to the smart
@@ -2171,6 +2321,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         &hp_tiles,
                         &hp_weak_overlay,
                         AskRoute::Cloud,
+                        None,
                     );
                 } else if event.id == f8_id {
                     // V3 — F8 screenshot → Lightshot region select → vision.
@@ -2427,6 +2578,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let weak = overlay.as_weak();
         let palette_for_stealth = palette.clone();
         let settings_for_stealth = settings.clone();
+        let text_ask_for_stealth = text_ask.clone();
         let cfg_stealth = cfg.clone();
         overlay.on_stealth_toggle_clicked(move || {
             let new_stealth = {
@@ -2467,6 +2619,14 @@ fn main() -> Result<(), slint::PlatformError> {
             // so toggling stealth while they're up hides them immediately.
             if let Some(p) = palette_for_stealth.borrow().as_ref() {
                 if let Ok(hwnd) = grab_hwnd(p.window()) {
+                    let _ = set_stealth(hwnd, new_stealth);
+                }
+            }
+            // V0.8.3 (M1) — also flip the "✏ Написать" input window if it's open,
+            // so toggling stealth ON while the user is mid-typing instantly hides
+            // the typed question from a screen-share (was the one stealth hole).
+            if let Some(t) = text_ask_for_stealth.borrow().as_ref() {
+                if let Ok(hwnd) = grab_hwnd(t.window()) {
                     let _ = set_stealth(hwnd, new_stealth);
                 }
             }
@@ -2531,6 +2691,30 @@ fn main() -> Result<(), slint::PlatformError> {
                 &tiles_c,
                 &weak_c,
                 &cap_c,
+            );
+        });
+    }
+
+    // ===== "Написать" — typed-question input window (V0.8.3) =====
+    {
+        let slot = text_ask.clone();
+        let bridge_c = bridge.clone();
+        let events_c = events.clone();
+        let cfg_c = cfg.clone();
+        let slint_rt_c = slint_rt.clone();
+        let rt = rt_handle.clone();
+        let tiles_c = tiles.clone();
+        let weak_ov = overlay.as_weak();
+        overlay.on_text_ask_clicked(move || {
+            open_text_ask(
+                &slot,
+                &bridge_c,
+                &events_c,
+                &cfg_c,
+                &slint_rt_c,
+                &rt,
+                &tiles_c,
+                &weak_ov,
             );
         });
     }
@@ -2754,6 +2938,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let tiles_ref = tiles.clone();
         let cfg_for_settings = cfg.clone();
         let overlay_weak = overlay.as_weak();
+        let text_ask_for_settings = text_ask.clone();
         overlay.on_open_settings_clicked(move || {
             open_settings(
                 &s,
@@ -2761,6 +2946,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 &tiles_ref,
                 &cfg_for_settings,
                 &overlay_weak,
+                &text_ask_for_settings,
             );
         });
     }
@@ -3282,7 +3468,13 @@ fn fire_f9_ask(
     // escalation to the smart cloud model. (Vision isn't used here — F8 has its
     // own path.)
     route: AskRoute,
+    // V0.8.3 — Some(text) = a typed "✏ Написать" question: answer it DIRECTLY
+    // (no live-transcript / screenshot context). None = a normal F9/Shift+F9 ask
+    // built from the transcript. Lets the text-input window reuse this whole
+    // tile-create + stream + cost + journal + follow-up pipeline.
+    typed_question: Option<String>,
 ) {
+    let is_text = typed_question.is_some();
     // ===== 1. Sync placeholder tile creation =====
     let tile = match TileWindow::new() {
         Ok(t) => t,
@@ -3296,13 +3488,21 @@ fn fire_f9_ask(
     // spawn tiles (previously stuck at #0).
     let seq = TILE_DISPLAY_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
     tile.set_sequence(seq as i32);
-    tile.set_tile_title(SharedString::from("F9 ask · live"));
+    tile.set_tile_title(SharedString::from(if is_text {
+        "✏ текст · live"
+    } else {
+        "F9 ask · live"
+    }));
     tile.set_source_label(SharedString::from("ai · asking…"));
     // Phase E6 v12 — purple trigger badge for manual F9 ask so user
     // sees which tile came from a hotkey vs auto-detector. V0.8.0 (Поток D):
     // a CLOUD-escalated ask (Shift+F9) gets a distinct 🧠 cloud badge so the
     // user sees THIS answer came from the cloud model (egress is visible).
-    if route == AskRoute::Cloud {
+    // V0.8.3 — a typed "✏ Написать" ask gets its own green badge.
+    if is_text {
+        tile.set_trigger_label(SharedString::from("✏ Написать"));
+        tile.set_trigger_color(slint::Color::from_rgb_u8(0x34, 0xd3, 0x99));
+    } else if route == AskRoute::Cloud {
         tile.set_trigger_label(SharedString::from("🧠 cloud (Shift+F9)"));
         tile.set_trigger_color(slint::Color::from_rgb_u8(0x38, 0xbd, 0xf8));
     } else {
@@ -3410,6 +3610,7 @@ fn fire_f9_ask(
     }
     // V5 — 🎤 voice follow-up. Reads the live route (sticky-cloud aware).
     wire_voice_followup(&tile, convo_id, live.clone(), cfg);
+    wire_copy(&tile, convo_id, bridge);
     // V0.8.0 (Поток D) — 🧠 escalate to cloud (only shown if the answer is local).
     // V0.8.1 — also flips `live` to Cloud so the rest of the dialog stays cloud.
     wire_escalate(
@@ -3496,13 +3697,19 @@ fn fire_f9_ask(
         screenshot
     };
 
-    let messages = ai::build_request(
-        &meeting_context,
-        &response_language,
-        &transcript_lines,
-        screenshot.as_deref(),
-        None,
-    );
+    // V0.8.3 — a typed "✏ Написать" question is answered DIRECTLY (the typed
+    // text IS the question; no live-transcript / screenshot noise). A normal F9
+    // ask is built from the live transcript as before.
+    let messages = match typed_question.as_deref() {
+        Some(q) => ai::build_request(&meeting_context, &response_language, &[], None, Some(q)),
+        None => ai::build_request(
+            &meeting_context,
+            &response_language,
+            &transcript_lines,
+            screenshot.as_deref(),
+            None,
+        ),
+    };
 
     // Phase E6 v45 — record the sent messages in the streaming slot so
     // AiEvent::Done can fold this turn into the tile's conversation for
@@ -3544,7 +3751,7 @@ fn fire_f9_ask(
     if let Some(j) = journal_for_request.as_ref() {
         j.write(&journal::JournalEvent::AiRequest {
             unix_ms: journal::now_unix_ms(),
-            purpose: "live_ask",
+            purpose: if is_text { "text_ask" } else { "live_ask" },
             model: &model,
             system_prompt: &sys_full,
             user_prompt: &usr_full,
@@ -3774,6 +3981,7 @@ fn fire_ptt_ask(
     }
     // V5 — 🎤 voice follow-up. Reads the live route (sticky-cloud aware).
     wire_voice_followup(&tile, convo_id, live.clone(), cfg);
+    wire_copy(&tile, convo_id, bridge);
     // V0.8.0 (Поток D) — 🧠 escalate to cloud; V0.8.1 — flips `live` to Cloud.
     wire_escalate(
         &tile, convo_id, &live, bridge, events, cfg, slint_rt, rt_handle,
@@ -4224,6 +4432,7 @@ fn launch_vision_for_bgra(
     // the spoken question stays about the screenshot). Vision tiles aren't
     // escalatable (wire_escalate isn't called), so this route stays Vision.
     wire_voice_followup(&tile, convo_id, live_route(AskRoute::Vision), cfg);
+    wire_copy(&tile, convo_id, bridge);
     present_tile_window(&tile);
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
@@ -4410,11 +4619,15 @@ fn fire_followup_ask(
         }
     };
 
-    // New request = full history + this user turn.
+    // New request = full history + this user turn. V0.8.3 — wrap the question as
+    // an explicit DIRECT question (FOLLOWUP_DIRECTIVE) so the transcript-framed
+    // system prompt doesn't make the model ignore it / re-answer the original.
+    // Only the model sees the wrapper — the prefix below + the journal use the
+    // clean question, and copy strips the marker.
     let mut messages = history;
     messages.push(ai::ChatMessage {
         role: "user".into(),
-        content: ai::MessageContent::Text(question.clone()),
+        content: ai::MessageContent::Text(format!("{FOLLOWUP_DIRECTIVE}{question}")),
     });
 
     // Visible thread = prior thread + the new question header; the streamed
@@ -4523,8 +4736,10 @@ fn fire_followup_ask(
 /// V5 — regenerate: re-run the last request (dropping the trailing assistant
 /// turn) and replace the tile's answer. For vision tiles (`use_vision`) the
 /// screenshot is still in the stored history, so a short first answer can be
-/// expanded with one click. Uses a per-tile PttStreamSink (independent of the
-/// shared streaming slot) which re-seeds the conversation on done.
+/// expanded with one click. V0.8.3: routes through the shared `current_streaming`
+/// slot + generation gating (same path as fire_followup_ask) so handle_ai_event
+/// is the SOLE conversation-writer — fixes the escalate→follow-up corruption
+/// where a detached PttStreamSink left divergent, ungated state.
 #[allow(clippy::too_many_arguments)]
 fn fire_regenerate(
     convo_id: i32,
@@ -4574,6 +4789,36 @@ fn fire_regenerate(
         t.set_source_label(SharedString::from("ai · перегенерация…"));
         t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks("⏳ …"))));
     }
+    // V0.8.3 (escalate→followup bug) — route the regenerate through the SAME
+    // `current_streaming` slot + generation gating as fire_followup_ask (was a
+    // detached, ungated PttStreamSink). `prefix = ""` because a regenerate
+    // REPLACES the tile body with the fresh answer (matches the old display),
+    // but now `handle_ai_event` is the SOLE writer of conversations[convo_id]:
+    // the generation is bumped (so an in-flight stream is superseded/gated) and
+    // the task is abortable. Before this, 🧠-escalate (which calls here) left the
+    // conversation in a divergent, ungated state, so the 2nd follow-up after an
+    // escalation re-sent stale history and re-emitted the escalation answer
+    // verbatim.
+    let generation = install_streaming_tile(
+        bridge,
+        StreamingTile {
+            weak: tile_weak,
+            accumulated: String::new(),
+            prefix: String::new(),
+            convo_id,
+            request_messages: messages.clone(),
+        },
+    );
+    let (journal_for_loop, health_for_stream) = {
+        let s = slint_replay::runtime_state::lock(slint_rt);
+        (s.journal.clone(), s.health.clone())
+    };
+    {
+        let mut s = slint_replay::runtime_state::lock(slint_rt);
+        if let Some(h) = s.ai_task.take() {
+            h.abort();
+        }
+    }
     let sys_full = messages
         .first()
         .and_then(|m| match &m.content {
@@ -4581,10 +4826,26 @@ fn fire_regenerate(
             _ => None,
         })
         .unwrap_or_default();
-    let (journal_for_loop, health_for_stream) = {
-        let s = slint_replay::runtime_state::lock(slint_rt);
-        (s.journal.clone(), s.health.clone())
-    };
+    // The re-asked question = the last user turn in the (assistant-trimmed)
+    // history. Journal the request so it pairs with the AiResponse (parity with
+    // F9/follow-up; regenerate previously left an orphan response).
+    let usr_full = messages
+        .iter()
+        .rev()
+        .find(|m| m.role == "user")
+        .map(|m| message_text(&m.content))
+        .unwrap_or_default();
+    if let Some(j) = journal_for_loop.as_ref() {
+        j.write(&journal::JournalEvent::AiRequest {
+            unix_ms: journal::now_unix_ms(),
+            purpose: "regenerate",
+            model: &model,
+            system_prompt: &sys_full,
+            user_prompt: &usr_full,
+            attached_screenshot: route.attaches_screenshot(),
+            input_tokens_est: ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4,
+        });
+    }
     let rt_for_cost = slint_rt.clone();
     let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
         let micro = if is_local { 0 } else { micro };
@@ -4592,22 +4853,16 @@ fn fire_regenerate(
         s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
         (s.session_cost_microcents as f64) / 100_000_000.0
     });
-    let sink: Arc<dyn RuntimeEvents> = Arc::new(PttStreamSink::new(
-        bridge.clone(),
-        events.clone(),
-        tile_weak,
-        convo_id,
-        messages.clone(),
-    ));
     let t0 = std::time::Instant::now();
-    rt_handle.spawn(async move {
+    let events_for_task = gated_events(bridge, events.clone(), generation);
+    let task = rt_handle.spawn(async move {
         let ai_rx = ai::stream_chat(base_url, bearer, model.clone(), messages, max_tokens);
         overlay_backend::runtime::ask_stream_loop(
-            sink,
+            events_for_task,
             ai_rx,
             model,
             sys_full,
-            String::new(),
+            usr_full,
             journal_for_loop,
             health_for_stream,
             t0,
@@ -4615,6 +4870,7 @@ fn fire_regenerate(
         )
         .await;
     });
+    slint_replay::runtime_state::lock(slint_rt).ai_task = Some(task);
     diag!("regenerate sent (convo_id={convo_id}, route={route:?})");
 }
 
@@ -4845,6 +5101,91 @@ fn apply_scheme_settings(w: &SettingsWindow, scheme: i32) {
 }
 fn apply_scheme_palette(w: &PaletteWindow, scheme: i32) {
     w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
+}
+fn apply_scheme_text_ask(w: &TextAskWindow, scheme: i32) {
+    w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
+}
+
+/// V0.8.3 — "Написать": open (or re-focus) the small text-input window. On
+/// submit it routes the typed text through `fire_f9_ask(.., Some(text))`, so the
+/// whole tile-create + stream + cost + journal + follow-up pipeline is reused →
+/// the answer lands in a standard tile. Stealth (WDA) + on-screen placement come
+/// from `present_window_stealth_aware`; the decorate closure also grabs keyboard
+/// focus so the user can type immediately. Esc (or submit) hides + drops it.
+#[allow(clippy::too_many_arguments)]
+fn open_text_ask(
+    slot_ref: &Rc<RefCell<Option<TextAskWindow>>>,
+    bridge: &Arc<OverlayBarBridge>,
+    events: &Arc<dyn RuntimeEvents>,
+    cfg: &overlay_backend::config::SharedConfig,
+    slint_rt: &SharedSlintRuntime,
+    rt_handle: &tokio::runtime::Handle,
+    tiles: &TileWindows,
+    weak_overlay: &slint::Weak<OverlayBarWindow>,
+) {
+    {
+        let slot = slot_ref.borrow();
+        if let Some(existing) = slot.as_ref() {
+            let _ = existing.show();
+            if let Ok(hwnd) = grab_hwnd(existing.window()) {
+                focus_window(hwnd);
+            }
+            return;
+        }
+    }
+    let win = match TextAskWindow::new() {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln!("[overlay-host] TextAskWindow::new failed: {e}");
+            return;
+        }
+    };
+    apply_scheme_text_ask(&win, global_scheme());
+    {
+        let weak = win.as_weak();
+        let slot = slot_ref.clone();
+        let bridge_c = bridge.clone();
+        let events_c = events.clone();
+        let cfg_c = cfg.clone();
+        let rt_c = slint_rt.clone();
+        let rth = rt_handle.clone();
+        let tiles_c = tiles.clone();
+        let wov = weak_overlay.clone();
+        win.on_submitted(move |q| {
+            let q = q.trim().to_string();
+            if !q.is_empty() {
+                fire_f9_ask(
+                    &bridge_c,
+                    &events_c,
+                    &cfg_c,
+                    &rt_c,
+                    &rth,
+                    &tiles_c,
+                    &wov,
+                    AskRoute::Text,
+                    Some(q),
+                );
+            }
+            if let Some(w) = weak.upgrade() {
+                let _ = w.hide();
+            }
+            *slot.borrow_mut() = None;
+        });
+    }
+    {
+        let weak = win.as_weak();
+        let slot = slot_ref.clone();
+        win.on_cancelled(move || {
+            if let Some(w) = weak.upgrade() {
+                let _ = w.hide();
+            }
+            *slot.borrow_mut() = None;
+        });
+    }
+    present_window_stealth_aware(&win, |hwnd| {
+        focus_window(hwnd);
+    });
+    *slot_ref.borrow_mut() = Some(win);
 }
 
 /// Wire the chrome-row drag callbacks on a tile so the user can move
@@ -5343,6 +5684,9 @@ fn open_settings(
     tiles_ref: &TileWindows,
     cfg: &overlay_backend::config::SharedConfig,
     overlay_weak: &slint::Weak<OverlayBarWindow>,
+    // V0.8.3 (M1) — so the Settings-tab stealth toggle can also flip the
+    // "✏ Написать" input window if it happens to be open.
+    text_ask_ref: &Rc<RefCell<Option<TextAskWindow>>>,
 ) {
     // Light up the bar's ⚙ chip while Settings is open (user: "значок
     // настроек не загорается когда настройки открыты"). Cleared in the
@@ -5477,6 +5821,7 @@ fn open_settings(
     let overlay_for_stealth = overlay_weak.clone();
     let self_weak_stealth = win.as_weak();
     let cfg_st = cfg.clone();
+    let text_ask_st = text_ask_ref.clone();
     win.on_stealth_changed(move |on| {
         if let Ok(mut st) = s3.lock() {
             st.stealth = on;
@@ -5504,6 +5849,13 @@ fn open_settings(
         }
         if let Some(sw) = self_weak_stealth.upgrade() {
             if let Ok(hwnd) = grab_hwnd(sw.window()) {
+                let _ = set_stealth(hwnd, on);
+            }
+        }
+        // V0.8.3 (M1) — flip the "✏ Написать" input window too if it's open, so
+        // the typed question can't linger on a screen-share after stealth-on.
+        if let Some(t) = text_ask_st.borrow().as_ref() {
+            if let Ok(hwnd) = grab_hwnd(t.window()) {
                 let _ = set_stealth(hwnd, on);
             }
         }
