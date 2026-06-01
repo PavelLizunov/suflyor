@@ -1,5 +1,91 @@
 # Autonomous work plan
 
+## 🌙 Autonomous run — v0.8.3 hardening + first-run manual (2026-06-02 00:56 → ~06:00)
+
+User asleep, explicit 4-6h mandate: check every usage scenario incl. edge/weird
+cases for bugs; all hotkeys documented; all translation in place; all errors
+surface correctly; health-check/doctor present (add if missing); recent доработки
+for bugs+regression; do the planned startup-manual work. "Не задавай вопросы,
+выбирай по решениям что считаешь нужным." (R6 honoured — no asks.)
+
+**Done log (newest at top):**
+- 01:3x — **hotkey-doc agent** reported. Key gap: **Shift+F9 (cloud escalate)**
+  was registered but undocumented EVERYWHERE; **F8 (vision)** was in Settings but
+  not the README. Applied: README hotkey table rewritten to the canonical 6-key
+  list (F9 / Shift+F9 / F8 / F3 / F4 / F6, reordered to match Settings); Settings
+  ⌨ tab gained the Shift+F9 row (+ key col 40→72px, desc word-wrap for long RU);
+  `slint-replay.po` got the Shift+F9 RU pair; `UPGRADING.md` got a "historical —
+  F1/F2/F7/F10/F11/Ctrl+Alt+W are dead" banner. README version 0.4.1→0.8.3.
+- 01:3x — **i18n agent** reported (byte-exact): 169/170 `@tr` msgids matched,
+  0 mismatches, 0 hardcoded-Cyrillic. ONE real miss: bare `@tr("refresh")`
+  (model-list refresh) → added `refresh`/`обновить`. 28 orphan po entries (dead
+  features) flagged → cosmetic, deferred (see Decisions). ~40 Rust-side RU tile/
+  status labels render RU even in EN mode → design-convention per CLAUDE.md, NOT
+  refactoring 40 strings blind (see Decisions).
+- 00:56 — v0.8.3 committed (`cebc603` UI, `6e4c163` overlay-host, `8882cb6`
+  version) + pushed. Locks the verified copy + text-ask + regenerate-state-fix +
+  follow-up-frame-fix.
+- 00:58 — armed `autonomous_active` (deadline 06:00). Launched 5 parallel scout
+  agents: every-flow+edge-cases · v0.8.x regression · i18n-completeness ·
+  error+sanitization sweep · hotkey enumeration+doc.
+
+- 02:1x — **all 5 scout agents reported.** Triaged ~25 findings across them.
+  **Fixes applied (gating now):**
+  - **M1** (`+ tile` never billed → cloud spend escaped `max_session_cost_usd`):
+    bill the session + refresh the bar $ label, zero for local. Real money.
+  - **error-M1** (F3 reask: silent failure + raw `{e}` in `tile:error` w/ no UI
+    consumer → latent IP leak the day a toast wires it): now spawns a generic
+    visible error tile (mirrors F6), no `{e}`.
+  - **error-m3** (F8 encode raw `{e}` into a screen-shared tile): generic + log.
+  - **M2** (stop-session mid-stream froze the tile forever — aborted ai_task
+    emits no Done/Error): `session:stopped` now clears `current_streaming` +
+    finalizes the tile "прервано" + re-enables follow-up, preserving partial text.
+  - **LOW-3** (degraded→ok stranded the bar pill amber): all-clear restores green.
+  - **LOW-2 + refactor**: extracted pure `format_convo_copy` (testable, no bridge)
+    and made `user_question_for_copy` drop the canned vision prompt (multi-turn
+    vision copy no longer shows "🧑 Что на этом скриншоте?").
+  - **GAP**: +10 unit tests locking the copy/strip logic (transcript-strip,
+    directive-strip, vision-skip, single-vs-thread) — the exact area of the
+    user's live bugs.
+
+**Deferred (logged, NOT done blind — risk/needs-live/needs-user):**
+- **M3 / INVESTIGATE-2** (#135 single-slot: a new ask supersedes another tile's
+  in-flight stream) — design change, needs live multi-tile verify.
+- **INVESTIGATE-1** (FOLLOWUP_DIRECTIVE persists in stored history, re-sent on
+  later turns) — user already verified 1-level follow-up works; the fix touches
+  that verified path + can't be live-verified overnight. Tests + fix = interactive.
+- **N1** (conversations never pruned; F8 base64 kept in-process) — memory hygiene
+  only (never screen-shared), touches many close-handler sites → interactive.
+- **N5** (voice follow-up uses stale route if you escalate mid-record) — edge; the
+  fix needs the VFU-drain path traced. **N6** (F8 per-monitor DPI) — mixed-DPI only,
+  needs live multi-monitor. **error-m4** (bridge IP visible in Settings URL input,
+  stealth-able) — UX masking decision. **LOW-1** (journal logs the directive) —
+  journal-only cosmetic.
+- **M4 (🎤 chip doesn't mute; `mic_muted` is dead + its comment is false)** —
+  PRIVACY-relevant for a screen-shared tool, but wiring it CHANGES capture
+  semantics (toggling 🎤 would stop transcribing your mic). That's a UX-intent +
+  live-verify decision (is the chip a mute or a level probe?), so NOT changed
+  blind overnight. **Flagged for the user** — easy win once intent is confirmed.
+
+**Next:** gate passes → review-agent on the full diff → live smoke (Win32
+PrintWindow) → commit in groups (docs / scout-fixes / tests) → first-run startup
+manual (RU) → R9 re-audit → build + release decision.
+
+**Decisions (this run):**
+- **28 orphan .po entries** — deleting dead translations is cosmetic and risks a
+  fat-finger over 28 line-pairs; ZERO user-facing effect (unused msgids just sit
+  there). Deferred to an interactive cleanup pass, not done blind overnight.
+- **~40 Rust-side hardcoded-RU labels (EN-mode shows RU chrome)** — CLAUDE.md
+  states Rust-set dynamic labels are raw-by-convention. Moving 40 of them into
+  `@tr()` is a real feature ("make EN fully usable"), not a bug-fix, and needs
+  a live EN-mode visual pass. Logged for the user, not refactored autonomously.
+
+**Plan:** 3 agents report → triage + fix CRITICAL/MAJOR → commit · finish first-
+run manual · ONE batched build+gate (clippy/test/fmt both crates) covering the
+settings_panel + code fixes · R9 re-audit · build + release when fully verified.
+
+---
+
 ## 🛡️ Slint-era overnight run — bug scout + slint-surface-audit (2026-05-30 → 31)
 
 User asleep: "проверем скаут багов и их исправления, затем 132, и slint-surface-audit — посторайся сделать как можно больше." All verification is build/clippy/test + review/scout agents (NO computer-use, per the user's standing instruction). These are code-quality/security fixes; batched for ONE verified release when the user is back (no marathon).
