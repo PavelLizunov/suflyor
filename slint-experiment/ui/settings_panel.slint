@@ -613,6 +613,7 @@ export component SettingsWindow inherits Window {
                         Rectangle { background: Theme.border; height: 1px; }
                         for entry in [
                             ["F9",  @tr("Ask AI now (streams the answer into a tile)")],
+                            ["Shift+F9", @tr("Ask AI escalated to the smart cloud model (one-shot; tile shows a 🧠 badge)")],
                             ["F8",  @tr("Screenshot → AI vision (drag a region; Esc cancels)")],
                             ["F3",  @tr("Re-ask the last question with fresh context")],
                             ["F4",  @tr("Knowledge-base palette (open / close)")],
@@ -625,12 +626,13 @@ export component SettingsWindow inherits Window {
                                 font-size: 11px;
                                 font-weight: 700;
                                 color: Theme.accent;
-                                width: 40px;
+                                width: 72px;
                             }
                             Text {
                                 text: entry[1];
                                 font-size: 11px;
                                 color: Theme.text-secondary;
+                                wrap: word-wrap;
                             }
                         }
                     }

@@ -1,5 +1,13 @@
 # Upgrading
 
+> **⚠ Историческая справка.** Этот файл — журнал миграций ещё со времён
+> старой сборки на Tauri/React/WebView2 (до Phase 7). Всё, что здесь сказано
+> про **хоткеи**, элементы интерфейса или «команды», описывает СТАРУЮ сборку
+> и может не существовать в текущем нативном приложении на Rust + Slint
+> (например, упоминаемые ниже F1/F2/F7/F10/F11/Ctrl+Alt+W в текущей сборке
+> **не зарегистрированы**). Актуальные хоткеи — в таблице «Хоткеи» в `README.md`
+> и в окне **Настройки → ⌨ Hotkeys**. Текущее состояние — `docs/state-and-plan.md`.
+
 This is a personal-use Windows app — no config migration tool, but
 your `%APPDATA%\overlay-mvp\config.json` is **forward compatible** via
 serde defaults. Old configs gain new fields at their default values
