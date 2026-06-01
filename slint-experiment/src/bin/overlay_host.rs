@@ -1609,7 +1609,30 @@ fn main() -> Result<(), slint::PlatformError> {
             rt_mic.spawn_blocking(move || {
                 let started_label = mic_device.clone().unwrap_or_else(|| "default".into());
                 eprintln!("[overlay-host] mic test 3s — device={started_label}");
+                // M-1: don't open a 2nd WASAPI capture if PTT / voice follow-up /
+                // dictation already hold the mic (both get garbage). Clear the
+                // in-flight flag + show "busy" instead of recording.
+                if !try_acquire_mic() {
+                    eprintln!("[overlay-host] mic test skipped — mic busy");
+                    let s_busy = s_for_status.clone();
+                    let weak_busy = weak_for_status.clone();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        {
+                            let mut st = match s_busy.lock() {
+                                Ok(g) => g,
+                                Err(p) => p.into_inner(),
+                            };
+                            st.mic_probe_in_flight = false;
+                        }
+                        if let Some(o) = weak_busy.upgrade() {
+                            o.set_status_text(SharedString::from("mic busy"));
+                            o.set_status_color(slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24));
+                        }
+                    });
+                    return;
+                }
                 let result = audio::record_mic_blocking(PROBE_DURATION_MS, mic_device);
+                release_mic();
                 let peak_dbfs = match result {
                     Ok(samples) if samples.is_empty() => None,
                     Ok(samples) => {
@@ -5467,9 +5490,17 @@ fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
 
             // Hard clamp so a tile can never land off-screen even if
             // monitor enum returned weird coordinates (portrait
-            // secondary at negative x).
-            let x_clamped = x.clamp(mon.left + 8, mon.right - real_w - 8);
-            let y_clamped = y.clamp(mon.top + 8, mon.bottom - real_h - 8);
+            // secondary at negative x). The max bound is `.max()`'d with the
+            // min so a tile WIDER/TALLER than the monitor (possible on the
+            // 1200px portrait secondary, or under heavy DPI) can't make
+            // max < min and panic `i32::clamp` — it just pins to the top-left
+            // margin instead of crashing.
+            let x_min = mon.left + 8;
+            let x_max = (mon.right - real_w - 8).max(x_min);
+            let y_min = mon.top + 8;
+            let y_max = (mon.bottom - real_h - 8).max(y_min);
+            let x_clamped = x.clamp(x_min, x_max);
+            let y_clamped = y.clamp(y_min, y_max);
 
             eprintln!(
                 "[overlay-host] tile placement: monitor=({},{},{},{}) real_size=({},{}) slot={} cycle={} row={} col={} pos=({},{})",
@@ -5905,22 +5936,32 @@ fn open_settings(
             let weak_for_result = w.as_weak();
             // Blocking WASAPI record off the UI thread; post result back.
             std::thread::spawn(move || {
-                let result = overlay_backend::audio::record_mic_blocking(3000, device);
-                let msg = match result {
-                    Ok(samples) if samples.is_empty() => "no audio captured".to_string(),
-                    Ok(samples) => {
-                        // RMS energy + a -45 dBFS speech threshold (silent room
-                        // is < -55 dBFS). Shared helper with the diagnostics tab
-                        // — User: "я могу ничего не говорить, но всё равно OK"
-                        // was the old peak==0 check passing on any tiny noise.
-                        let dbfs = overlay_backend::audio::rms_dbfs(&samples);
-                        if dbfs < -45.0 {
-                            format!("[!] too quiet ({dbfs:.0} dBFS) — say something / check mic")
-                        } else {
-                            format!("[ok] heard you ({dbfs:.0} dBFS RMS)")
+                // M-1: take the single-mic guard so this test can't collide with
+                // PTT / voice follow-up / dictation (a 2nd WASAPI open garbles
+                // both). Report busy instead of recording.
+                let msg = if !try_acquire_mic() {
+                    "[!] mic busy — close PTT / dictation and retry".to_string()
+                } else {
+                    let result = overlay_backend::audio::record_mic_blocking(3000, device);
+                    release_mic();
+                    match result {
+                        Ok(samples) if samples.is_empty() => "no audio captured".to_string(),
+                        Ok(samples) => {
+                            // RMS energy + a -45 dBFS speech threshold (silent room
+                            // is < -55 dBFS). Shared helper with the diagnostics tab
+                            // — User: "я могу ничего не говорить, но всё равно OK"
+                            // was the old peak==0 check passing on any tiny noise.
+                            let dbfs = overlay_backend::audio::rms_dbfs(&samples);
+                            if dbfs < -45.0 {
+                                format!(
+                                    "[!] too quiet ({dbfs:.0} dBFS) — say something / check mic"
+                                )
+                            } else {
+                                format!("[ok] heard you ({dbfs:.0} dBFS RMS)")
+                            }
                         }
+                        Err(e) => format!("error: {e}"),
                     }
-                    Err(e) => format!("error: {e}"),
                 };
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak_for_result.upgrade() {
@@ -6744,8 +6785,18 @@ fn open_settings(
                 // 2. Microphone — record 3s. "Готов" if the capture path works
                 // (device opens + samples flow); a quiet result is fine (you
                 // just didn't speak) — only a device error fails.
-                let (mic_level, mic_msg): (i32, String) =
-                    match overlay_backend::audio::record_mic_blocking(3000, mic_device) {
+                // M-1: guard the diagnostics mic probe with the single-mic lock
+                // too, so "Проверить всё" during an active session reports busy
+                // instead of fighting PTT/voice/dictation for the device.
+                let (mic_level, mic_msg): (i32, String) = if !try_acquire_mic() {
+                    (
+                        4,
+                        "[!] mic busy — close PTT / dictation and retry".to_string(),
+                    )
+                } else {
+                    let r = overlay_backend::audio::record_mic_blocking(3000, mic_device);
+                    release_mic();
+                    match r {
                         Ok(s) if s.is_empty() => (4, "[!] no audio captured".to_string()),
                         Ok(s) => {
                             let dbfs = overlay_backend::audio::rms_dbfs(&s);
@@ -6756,7 +6807,8 @@ fn open_settings(
                             }
                         }
                         Err(e) => (4, format!("[err] {e}").chars().take(80).collect()),
-                    };
+                    }
+                };
                 let weak_m = weak_res.clone();
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak_m.upgrade() {

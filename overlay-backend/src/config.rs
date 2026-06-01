@@ -1947,8 +1947,13 @@ pub fn config_path() -> Result<PathBuf> {
 
 pub fn load() -> Config {
     let mut cfg = match config_path().and_then(|p| {
-        let bytes = std::fs::read(&p).context("read config")?;
-        let cfg: Config = serde_json::from_slice(&bytes).context("parse config")?;
+        let raw = std::fs::read(&p).context("read config")?;
+        // Tolerate a UTF-8 BOM: Notepad's "UTF-8 with BOM" (and a PowerShell
+        // JSON round-trip) prepend EF BB BF, which serde_json::from_slice
+        // rejects — we'd then silently fall back to defaults and wipe the
+        // user's hand-edited config (profiles / devices / keys). Strip it first.
+        let bytes = raw.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(&raw);
+        let cfg: Config = serde_json::from_slice(bytes).context("parse config")?;
         Ok(cfg)
     }) {
         Ok(cfg) => cfg,
@@ -2315,6 +2320,24 @@ mod tests {
         assert!(!cfg.stealth_enabled);
         assert!(cfg.context_profiles.is_empty());
         assert!(cfg.active_profile.is_none());
+    }
+
+    #[test]
+    fn config_with_utf8_bom_is_stripped_not_reset() {
+        // Notepad "UTF-8 with BOM" / a PowerShell JSON round-trip prepend
+        // EF BB BF. load() must strip it and parse, NOT fall back to defaults
+        // (which would silently wipe the user's hand-edited config).
+        let json = br#"{"response_language":"en"}"#;
+        let mut with_bom = vec![0xEF_u8, 0xBB, 0xBF];
+        with_bom.extend_from_slice(json);
+        // Raw BOM bytes WOULD fail to parse (this is the bug being guarded).
+        assert!(serde_json::from_slice::<Config>(&with_bom).is_err());
+        // The load() path strips the BOM first, so it parses to the real value.
+        let bytes = with_bom
+            .strip_prefix(&[0xEF, 0xBB, 0xBF])
+            .unwrap_or(&with_bom);
+        let cfg: Config = serde_json::from_slice(bytes).expect("BOM-stripped parses");
+        assert_eq!(cfg.response_language, "en");
     }
 
     #[test]
