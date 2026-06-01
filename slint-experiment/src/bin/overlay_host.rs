@@ -139,6 +139,17 @@ impl AskRoute {
     }
 }
 
+/// V0.8.1 — a per-tile MUTABLE route, shared by a tile's continuation surfaces
+/// (text follow-up, 🔄 regenerate, 🎤 voice). They read it at CLICK time (not at
+/// wire time), so when the 🧠 escalate button flips it to Cloud the rest of that
+/// tile's conversation stays in the cloud — matching the sticky-cloud behaviour
+/// Shift+F9 already has. UI-thread-only, so a Cell (no lock) is sufficient.
+type LiveRoute = Rc<std::cell::Cell<AskRoute>>;
+
+fn live_route(initial: AskRoute) -> LiveRoute {
+    Rc::new(std::cell::Cell::new(initial))
+}
+
 /// V5 — voice follow-up: a tile's 🎤 button records + transcribes a question
 /// off the UI thread, then ships `(convo_id, use_vision, text)` here. A
 /// UI-thread drain (sibling to the PTT drain) routes it into the tile's
@@ -183,7 +194,7 @@ fn release_mic() {
 fn wire_voice_followup(
     tile: &TileWindow,
     convo_id: i32,
-    route: AskRoute,
+    route: LiveRoute,
     cfg: &overlay_backend::config::SharedConfig,
 ) {
     let voice_stop: Rc<RefCell<Option<Arc<AtomicBool>>>> = Rc::new(RefCell::new(None));
@@ -246,6 +257,10 @@ fn wire_voice_followup(
         spawn_ptt_watchdog(stop.clone());
         t.set_voice_recording(true);
         t.set_source_label(SharedString::from("🎤 запись… (нажми ⏹)"));
+        // V0.8.1 — snapshot the LIVE route NOW (UI thread, click time) into a
+        // plain Copy value; the worker thread can't hold the !Send Rc<Cell>. So
+        // a 🎤 follow-up after 🧠-escalation correctly routes to Cloud.
+        let route_now = route.get();
         std::thread::spawn(move || {
             let pcm = audio::record_source_until_stop(audio::AudioSource::Mic, mic_dev, None, stop)
                 .unwrap_or_else(|e| {
@@ -274,7 +289,7 @@ fn wire_voice_followup(
                     Err(_) => String::new(),
                 }
             };
-            let _ = tx.send((convo_id, route, text));
+            let _ = tx.send((convo_id, route_now, text));
         });
     });
 }
@@ -284,10 +299,16 @@ fn wire_voice_followup(
 /// cloud escalation is pointless); clicking re-runs the SAME question on the
 /// cloud bridge via `fire_regenerate(.., Cloud)`, replacing the answer in place.
 /// One-shot — does not change the persistent provider.
+///
+/// V0.8.1 — also flips the tile's shared `route` cell to Cloud, so the rest of
+/// the conversation (text follow-up / 🔄 / 🎤) stays in the cloud after one
+/// escalation — sticky-cloud, matching Shift+F9. (The user noticed continuing
+/// the dialog fell back to the local model.)
 #[allow(clippy::too_many_arguments)]
 fn wire_escalate(
     tile: &TileWindow,
     convo_id: i32,
+    route: &LiveRoute,
     bridge: &Arc<OverlayBarBridge>,
     events: &Arc<dyn RuntimeEvents>,
     cfg: &overlay_backend::config::SharedConfig,
@@ -301,12 +322,15 @@ fn wire_escalate(
     }
     tile.set_can_escalate(true);
     let weak = tile.as_weak();
+    let route_c = route.clone();
     let bridge_c = bridge.clone();
     let events_c = events.clone();
     let cfg_c = cfg.clone();
     let slint_rt_c = slint_rt.clone();
     let rt_handle_c = rt_handle.clone();
     tile.on_escalate_clicked(move || {
+        // V0.8.1 — make the WHOLE conversation sticky-cloud from here on.
+        route_c.set(AskRoute::Cloud);
         // Mark the tile as cloud-escalated (review NIT-1) so it's visible the
         // answer now came off-box — parity with the Shift+F9 🧠 badge. Egress is
         // a conscious action (the user clicked 🧠); this just makes it legible.
@@ -1846,6 +1870,8 @@ fn main() -> Result<(), slint::PlatformError> {
                         },
                     );
                 }
+                // V0.8.1 — per-tile live route (sticky-cloud after 🧠).
+                let live = live_route(AskRoute::Text);
                 {
                     let weak_fu = tile.as_weak();
                     let bridge_fu = bridge_for_poll.clone();
@@ -1853,6 +1879,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     let cfg_fu = cfg_for_poll.clone();
                     let slint_rt_fu = slint_rt_for_poll.clone();
                     let rt_handle_fu = rt_handle_for_poll.clone();
+                    let live_fu = live.clone();
                     tile.on_followup_submitted(move |q| {
                         fire_followup_ask(
                             (convo_id, q.to_string()),
@@ -1862,7 +1889,7 @@ fn main() -> Result<(), slint::PlatformError> {
                             &cfg_fu,
                             &slint_rt_fu,
                             &rt_handle_fu,
-                            AskRoute::Text,
+                            live_fu.get(),
                         );
                     });
                 }
@@ -1874,6 +1901,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     let cfg_re = cfg_for_poll.clone();
                     let slint_rt_re = slint_rt_for_poll.clone();
                     let rt_handle_re = rt_handle_for_poll.clone();
+                    let live_re = live.clone();
                     tile.on_regenerate_clicked(move || {
                         fire_regenerate(
                             convo_id,
@@ -1883,14 +1911,15 @@ fn main() -> Result<(), slint::PlatformError> {
                             &cfg_re,
                             &slint_rt_re,
                             &rt_handle_re,
-                            AskRoute::Text,
+                            live_re.get(),
                         );
                     });
                 }
-                wire_voice_followup(&tile, convo_id, AskRoute::Text, &cfg_for_poll);
+                wire_voice_followup(&tile, convo_id, live.clone(), &cfg_for_poll);
                 wire_escalate(
                     &tile,
                     convo_id,
+                    &live,
                     &bridge_for_poll,
                     &events_for_poll,
                     &cfg_for_poll,
@@ -3306,6 +3335,10 @@ fn fire_f9_ask(
             toggle_tile_maximize(hwnd, &t);
         }
     });
+    // V0.8.1 — shared per-tile live route (Text/Cloud). Shift+F9 seeds Cloud;
+    // 🧠-escalate flips it to Cloud; the continuation surfaces below read it at
+    // click time so the conversation stays sticky-cloud after one escalation.
+    let live = live_route(route);
     // Phase E6 v45 — continue-dialog: a follow-up question reuses this
     // tile's conversation + streams the reply below the thread.
     {
@@ -3315,9 +3348,10 @@ fn fire_f9_ask(
         let cfg_fu = cfg.clone();
         let slint_rt_fu = slint_rt.clone();
         let rt_handle_fu = rt_handle.clone();
+        let live_fu = live.clone();
         tile.on_followup_submitted(move |q| {
-            // V0.8.0 (Поток D) — a Shift+F9 (Cloud) ask keeps its follow-ups on
-            // the cloud model; a normal F9 stays Text.
+            // V0.8.1 — read the LIVE route at click time (Cloud after 🧠 or
+            // Shift+F9, else Text).
             fire_followup_ask(
                 (convo_id, q.to_string()),
                 weak_fu.clone(),
@@ -3326,7 +3360,7 @@ fn fire_f9_ask(
                 &cfg_fu,
                 &slint_rt_fu,
                 &rt_handle_fu,
-                route,
+                live_fu.get(),
             );
         });
     }
@@ -3340,6 +3374,7 @@ fn fire_f9_ask(
         let cfg_re = cfg.clone();
         let slint_rt_re = slint_rt.clone();
         let rt_handle_re = rt_handle.clone();
+        let live_re = live.clone();
         tile.on_regenerate_clicked(move || {
             fire_regenerate(
                 convo_id,
@@ -3349,14 +3384,17 @@ fn fire_f9_ask(
                 &cfg_re,
                 &slint_rt_re,
                 &rt_handle_re,
-                route,
+                live_re.get(),
             );
         });
     }
-    // V5 — 🎤 voice follow-up. Inherits the ask route (Cloud for Shift+F9).
-    wire_voice_followup(&tile, convo_id, route, cfg);
+    // V5 — 🎤 voice follow-up. Reads the live route (sticky-cloud aware).
+    wire_voice_followup(&tile, convo_id, live.clone(), cfg);
     // V0.8.0 (Поток D) — 🧠 escalate to cloud (only shown if the answer is local).
-    wire_escalate(&tile, convo_id, bridge, events, cfg, slint_rt, rt_handle);
+    // V0.8.1 — also flips `live` to Cloud so the rest of the dialog stays cloud.
+    wire_escalate(
+        &tile, convo_id, &live, bridge, events, cfg, slint_rt, rt_handle,
+    );
     present_tile_window(&tile);
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
@@ -3666,6 +3704,8 @@ fn fire_ptt_ask(
             toggle_tile_maximize(hwnd, &t);
         }
     });
+    // V0.8.1 — per-tile live route (sticky-cloud after 🧠). PTT starts Text.
+    let live = live_route(AskRoute::Text);
     // Phase E6 v45 — continue-dialog follow-ups on PTT answer tiles.
     {
         let weak_fu = tile.as_weak();
@@ -3674,6 +3714,7 @@ fn fire_ptt_ask(
         let cfg_fu = cfg.clone();
         let slint_rt_fu = slint_rt.clone();
         let rt_handle_fu = rt_handle.clone();
+        let live_fu = live.clone();
         tile.on_followup_submitted(move |q| {
             fire_followup_ask(
                 (convo_id, q.to_string()),
@@ -3683,7 +3724,7 @@ fn fire_ptt_ask(
                 &cfg_fu,
                 &slint_rt_fu,
                 &rt_handle_fu,
-                AskRoute::Text,
+                live_fu.get(),
             );
         });
     }
@@ -3697,6 +3738,7 @@ fn fire_ptt_ask(
         let cfg_re = cfg.clone();
         let slint_rt_re = slint_rt.clone();
         let rt_handle_re = rt_handle.clone();
+        let live_re = live.clone();
         tile.on_regenerate_clicked(move || {
             fire_regenerate(
                 convo_id,
@@ -3706,14 +3748,16 @@ fn fire_ptt_ask(
                 &cfg_re,
                 &slint_rt_re,
                 &rt_handle_re,
-                AskRoute::Text,
+                live_re.get(),
             );
         });
     }
-    // V5 — 🎤 voice follow-up (record → STT → ask via the text endpoint).
-    wire_voice_followup(&tile, convo_id, AskRoute::Text, cfg);
-    // V0.8.0 (Поток D) — 🧠 escalate to cloud (only shown if the answer is local).
-    wire_escalate(&tile, convo_id, bridge, events, cfg, slint_rt, rt_handle);
+    // V5 — 🎤 voice follow-up. Reads the live route (sticky-cloud aware).
+    wire_voice_followup(&tile, convo_id, live.clone(), cfg);
+    // V0.8.0 (Поток D) — 🧠 escalate to cloud; V0.8.1 — flips `live` to Cloud.
+    wire_escalate(
+        &tile, convo_id, &live, bridge, events, cfg, slint_rt, rt_handle,
+    );
     present_tile_window(&tile);
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
@@ -4157,8 +4201,9 @@ fn launch_vision_for_bgra(
         });
     }
     // V5 — 🎤 voice follow-up (record → STT → ask via the VISION endpoint, so
-    // the spoken question stays about the screenshot).
-    wire_voice_followup(&tile, convo_id, AskRoute::Vision, cfg);
+    // the spoken question stays about the screenshot). Vision tiles aren't
+    // escalatable (wire_escalate isn't called), so this route stays Vision.
+    wire_voice_followup(&tile, convo_id, live_route(AskRoute::Vision), cfg);
     present_tile_window(&tile);
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
