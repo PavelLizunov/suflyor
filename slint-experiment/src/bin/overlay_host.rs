@@ -243,6 +243,28 @@ fn user_question_for_copy(raw: &str) -> String {
     raw.trim().to_string()
 }
 
+/// Remove the [`FOLLOWUP_DIRECTIVE`] wrapper from the given user turns. Used when
+/// building a follow-up / regenerate request so that only the CURRENT question
+/// carries the directive. The wrapper is stored verbatim in `conversations`
+/// (`handle_ai_event` Done folds `request_messages`), so without this a 3-turn
+/// thread would send the model TWO "this is THE direct question" instructions on
+/// two different historical turns — and a weak local model then anchors on the
+/// wrong one. Non-user turns are left untouched.
+fn strip_followup_directives(messages: &mut [ai::ChatMessage]) {
+    for m in messages.iter_mut() {
+        if m.role != "user" {
+            continue;
+        }
+        let cleaned = match &m.content {
+            ai::MessageContent::Text(t) => t.strip_prefix(FOLLOWUP_DIRECTIVE).map(str::to_string),
+            _ => None,
+        };
+        if let Some(c) = cleaned {
+            m.content = ai::MessageContent::Text(c);
+        }
+    }
+}
+
 /// V0.8.3 — text for the 📋 copy button. Adaptive so it fits both uses:
 ///
 /// - a single Q→A tile → just the answer (clean paste — the "screenshot →
@@ -4707,6 +4729,11 @@ fn fire_followup_ask(
     // Only the model sees the wrapper — the prefix below + the journal use the
     // clean question, and copy strips the marker.
     let mut messages = history;
+    // Strip any FOLLOWUP_DIRECTIVE left on PRIOR user turns before wrapping this
+    // one — the directive is stored in history, so a multi-turn thread would
+    // otherwise carry several of them and confuse a weak local model. Only the
+    // turn pushed just below should carry it.
+    strip_followup_directives(&mut messages);
     messages.push(ai::ChatMessage {
         role: "user".into(),
         content: ai::MessageContent::Text(format!("{FOLLOWUP_DIRECTIVE}{question}")),
@@ -4852,6 +4879,14 @@ fn fire_regenerate(
     }
     if messages.is_empty() {
         return;
+    }
+    // Clean stale FOLLOWUP_DIRECTIVE wrappers off the PRIOR turns (all but the
+    // last — the turn being re-asked keeps whatever framing it had: a follow-up
+    // stays a direct question, an original F9 ask stays unwrapped). Mirrors
+    // fire_followup_ask so a regenerate doesn't re-accumulate directives.
+    if messages.len() > 1 {
+        let n = messages.len() - 1;
+        strip_followup_directives(&mut messages[..n]);
     }
     let (base_url, bearer, model, is_local, max_tokens) = {
         let c = cfg.read();
@@ -7650,5 +7685,51 @@ mod copy_tests {
     #[test]
     fn empty_conversation_falls_back_to_rendered() {
         assert_eq!(format_convo_copy(&[], "RENDERED"), "RENDERED");
+    }
+
+    #[test]
+    fn strip_directives_cleans_user_turns_only() {
+        let mut msgs = vec![
+            msg("system", &format!("{FOLLOWUP_DIRECTIVE}sys")),
+            msg("user", &format!("{FOLLOWUP_DIRECTIVE}вопрос")),
+            msg("assistant", &format!("{FOLLOWUP_DIRECTIVE}ответ")),
+            msg("user", "уже чистый"),
+        ];
+        strip_followup_directives(&mut msgs);
+        // system + assistant turns are untouched (only user turns get cleaned).
+        assert_eq!(
+            message_text(&msgs[0].content),
+            format!("{FOLLOWUP_DIRECTIVE}sys")
+        );
+        assert_eq!(
+            message_text(&msgs[2].content),
+            format!("{FOLLOWUP_DIRECTIVE}ответ")
+        );
+        // user turns are stripped; an already-clean one is unchanged.
+        assert_eq!(message_text(&msgs[1].content), "вопрос");
+        assert_eq!(message_text(&msgs[3].content), "уже чистый");
+    }
+
+    #[test]
+    fn strip_all_but_last_preserves_reasked_turn() {
+        // Mirrors fire_regenerate's `&mut messages[..len-1]`: prior turns are
+        // cleaned, but the last (re-asked) turn keeps whatever framing it had.
+        let mut msgs = vec![
+            msg("user", &format!("{FOLLOWUP_DIRECTIVE}старый вопрос")),
+            msg("assistant", "старый ответ"),
+            msg(
+                "user",
+                &format!("{FOLLOWUP_DIRECTIVE}перезапрашиваемый вопрос"),
+            ),
+        ];
+        let n = msgs.len() - 1;
+        strip_followup_directives(&mut msgs[..n]);
+        // Prior user turn is cleaned…
+        assert_eq!(message_text(&msgs[0].content), "старый вопрос");
+        // …but the last (re-asked) turn keeps its direct-question framing.
+        assert_eq!(
+            message_text(&msgs[2].content),
+            format!("{FOLLOWUP_DIRECTIVE}перезапрашиваемый вопрос")
+        );
     }
 }
