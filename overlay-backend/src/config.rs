@@ -526,6 +526,30 @@ impl Config {
         }
     }
 
+    /// V0.8.0 (Поток D) — one-shot CLOUD escalation endpoint. Always the cloud
+    /// bridge with the SMART model (`prep_model`, default Sonnet), IGNORING
+    /// `ai_provider`. Used when the user escalates a single hard question (a
+    /// Shift+F9 ask, a per-tile "↑ ask the smart model", or a 🧠 follow-up)
+    /// without flipping the persistent provider — so the default stays local
+    /// (free, private) and there is no "forgot to switch back" trap.
+    ///
+    /// NOTE this gives a STRONGER model (deeper reasoning), NOT live web access —
+    /// the cloud model still has a training cutoff. Live "2026 facts" would need
+    /// a separate web-search / tool-use feature (out of scope here).
+    ///
+    /// `is_local` is forced false so callers bill it + allow screenshots as for
+    /// any cloud call. The bridge fields are always present in config (even when
+    /// the active provider is local), so this is safe regardless of provider.
+    #[must_use]
+    pub fn ai_endpoint_cloud(&self) -> AiEndpoint {
+        AiEndpoint {
+            base_url: self.ai_base_url.clone(),
+            bearer: self.ai_bearer.clone(),
+            model: self.prep_model.clone(),
+            is_local: false,
+        }
+    }
+
     /// Resolve the SEPARATE vision endpoint, or `None` when vision is "off".
     /// "same" reuses the text endpoint; "cloud"/"local" use the `vision_*` /
     /// `vision_local_*` fields but fall back to the corresponding text fields
@@ -2408,6 +2432,35 @@ mod tests {
         );
         d.ai_local_prep_model = "qwen2.5:14b".into();
         assert_eq!(d.ai_endpoint(true).model, "qwen2.5:14b");
+    }
+
+    // V0.8.0 (Поток D) — ai_endpoint_cloud() always resolves to the cloud
+    // bridge + the smart prep_model, even when the active provider is local.
+    #[test]
+    fn ai_endpoint_cloud_always_uses_cloud_bridge_and_prep_model() {
+        let mut d = Config::defaults();
+        // Active provider is LOCAL (default-local user, the escalation scenario).
+        d.ai_provider = "local".into();
+        d.ai_local_base_url = "http://127.0.0.1:8080/v1".into();
+        d.ai_local_model = "gemma-4-E4B".into();
+        // Cloud bridge fields are still set (they always are in config).
+        d.ai_base_url = "http://bridge/v1".into();
+        d.ai_bearer = "secret".into();
+        d.prep_model = "claude-sonnet-4-6".into();
+
+        // Normal resolve honours the local provider...
+        assert!(d.ai_endpoint(false).is_local);
+        assert_eq!(d.ai_endpoint(false).base_url, "http://127.0.0.1:8080/v1");
+
+        // ...but the cloud-escalation resolver IGNORES it: cloud bridge + smart.
+        let cloud = d.ai_endpoint_cloud();
+        assert!(!cloud.is_local, "escalation must bill + allow screenshots");
+        assert_eq!(cloud.base_url, "http://bridge/v1");
+        assert_eq!(cloud.bearer, "secret");
+        assert_eq!(
+            cloud.model, "claude-sonnet-4-6",
+            "escalation uses the smart prep_model, not the fast ai_model"
+        );
     }
 
     #[test]

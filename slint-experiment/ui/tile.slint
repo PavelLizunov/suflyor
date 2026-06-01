@@ -62,6 +62,10 @@ export component TileWindow inherits Window {
     // V5 — show the 🔄 regenerate button (vision tiles: re-run the screenshot
     // query for a longer / different answer).
     in-out property <bool> can-regenerate: false;
+    // V0.8.0 (Поток D) — show the 🧠 "ask the smart cloud model" button. Re-runs
+    // the same question on the cloud model (deeper reasoning) when the local
+    // answer was too weak — one-shot, without changing the default provider.
+    in-out property <bool> can-escalate: false;
     // Bound to the follow-up LineEdit so do-submit() can read + clear it.
     in-out property <string> followup-text;
 
@@ -70,6 +74,8 @@ export component TileWindow inherits Window {
     callback maximize-clicked();
     // V5 — re-run the last request and replace the answer (item 4).
     callback regenerate-clicked();
+    // V0.8.0 (Поток D) — re-run the same question on the smart cloud model.
+    callback escalate-clicked();
     // Phase E6 v22 — manual cursor-delta drag. drag-start-requested
     // fires on pointer-down (records anchor), drag-moved fires on
     // each move while pressed (moves window by delta). Replaces the
@@ -196,6 +202,25 @@ export component TileWindow inherits Window {
                     }
                     Text {
                         text: "🔄";
+                        font-size: 12px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                // V0.8.0 (Поток D) — 🧠 escalate this answer to the smart cloud
+                // model (one-shot). Shown when the answer came from local AI.
+                if root.can-escalate: Rectangle {
+                    width: 30px;
+                    height: 28px;
+                    background: esc-touch.has-hover ? Theme.border-strong : Theme.border;
+                    border-radius: 4px;
+                    border-width: 1px;
+                    border-color: Theme.border-strong;
+                    esc-touch := TouchArea {
+                        clicked => { if (!root.followup-busy) { root.escalate-clicked(); } }
+                    }
+                    Text {
+                        text: "🧠";
                         font-size: 12px;
                         horizontal-alignment: center;
                         vertical-alignment: center;

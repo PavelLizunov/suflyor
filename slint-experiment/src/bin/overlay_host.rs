@@ -101,12 +101,50 @@ fn bgra_to_slint_image(bgra: &[u8], w: u32, h: u32) -> slint::Image {
 /// feature. Each F9/PTT tile that supports follow-ups gets a unique id.
 static CONVO_SEQ: AtomicU64 = AtomicU64::new(0);
 
+/// V0.8.0 (Поток D) — which AI endpoint an ask/follow-up/regenerate routes to.
+/// Replaces the old `use_vision: bool` so the three routes are explicit and the
+/// compiler enforces exhaustive handling (no silent bool transposition across
+/// the ~9 call sites of the central ask fns).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AskRoute {
+    /// Default text model (local or cloud per `ai_provider`).
+    Text,
+    /// Vision endpoint — the stored conversation carries the screenshot (F8).
+    Vision,
+    /// One-shot CLOUD escalation: the smart `prep_model` on the cloud bridge,
+    /// IGNORING `ai_provider`. For a single hard question without flipping the
+    /// persistent provider. Stronger reasoning, NOT live web.
+    Cloud,
+}
+
+impl AskRoute {
+    /// Resolve the endpoint for this route from config.
+    fn endpoint(self, c: &overlay_backend::config::Config) -> overlay_backend::config::AiEndpoint {
+        match self {
+            AskRoute::Text => c.ai_endpoint(false),
+            AskRoute::Vision => c.vision_endpoint().unwrap_or_else(|| c.ai_endpoint(false)),
+            AskRoute::Cloud => c.ai_endpoint_cloud(),
+        }
+    }
+    /// Max output tokens for this route (vision is capped tighter).
+    fn max_tokens(self) -> u32 {
+        match self {
+            AskRoute::Vision => vision::VISION_MAX_TOKENS,
+            AskRoute::Text | AskRoute::Cloud => AI_STREAM_MAX_TOKENS,
+        }
+    }
+    /// True when the request carries a screenshot (journal flag).
+    fn attaches_screenshot(self) -> bool {
+        matches!(self, AskRoute::Vision)
+    }
+}
+
 /// V5 — voice follow-up: a tile's 🎤 button records + transcribes a question
 /// off the UI thread, then ships `(convo_id, use_vision, text)` here. A
 /// UI-thread drain (sibling to the PTT drain) routes it into the tile's
 /// conversation by convo_id. Process-global so `wire_voice_followup` reaches it
 /// without threading a sender through every tile-creation fn. Set once at start.
-static VFU_TX: std::sync::OnceLock<tokio_mpsc::UnboundedSender<(i32, bool, String)>> =
+static VFU_TX: std::sync::OnceLock<tokio_mpsc::UnboundedSender<(i32, AskRoute, String)>> =
     std::sync::OnceLock::new();
 
 /// V5 (review M2) — process-global single-microphone guard. Exactly ONE mic
@@ -145,7 +183,7 @@ fn release_mic() {
 fn wire_voice_followup(
     tile: &TileWindow,
     convo_id: i32,
-    use_vision: bool,
+    route: AskRoute,
     cfg: &overlay_backend::config::SharedConfig,
 ) {
     let voice_stop: Rc<RefCell<Option<Arc<AtomicBool>>>> = Rc::new(RefCell::new(None));
@@ -236,8 +274,56 @@ fn wire_voice_followup(
                     Err(_) => String::new(),
                 }
             };
-            let _ = tx.send((convo_id, use_vision, text));
+            let _ = tx.send((convo_id, route, text));
         });
+    });
+}
+
+/// V0.8.0 (Поток D, item B) — wire the per-tile 🧠 "ask the smart cloud model"
+/// button. Shown ONLY when this tile's answer came from the LOCAL model (cloud→
+/// cloud escalation is pointless); clicking re-runs the SAME question on the
+/// cloud bridge via `fire_regenerate(.., Cloud)`, replacing the answer in place.
+/// One-shot — does not change the persistent provider.
+#[allow(clippy::too_many_arguments)]
+fn wire_escalate(
+    tile: &TileWindow,
+    convo_id: i32,
+    bridge: &Arc<OverlayBarBridge>,
+    events: &Arc<dyn RuntimeEvents>,
+    cfg: &overlay_backend::config::SharedConfig,
+    slint_rt: &SharedSlintRuntime,
+    rt_handle: &tokio::runtime::Handle,
+) {
+    // Only offer escalation when the live answer endpoint is local — otherwise
+    // the answer is already from the cloud and 🧠 would be a no-op upgrade.
+    if !cfg.read().ai_endpoint(false).is_local {
+        return;
+    }
+    tile.set_can_escalate(true);
+    let weak = tile.as_weak();
+    let bridge_c = bridge.clone();
+    let events_c = events.clone();
+    let cfg_c = cfg.clone();
+    let slint_rt_c = slint_rt.clone();
+    let rt_handle_c = rt_handle.clone();
+    tile.on_escalate_clicked(move || {
+        // Mark the tile as cloud-escalated (review NIT-1) so it's visible the
+        // answer now came off-box — parity with the Shift+F9 🧠 badge. Egress is
+        // a conscious action (the user clicked 🧠); this just makes it legible.
+        if let Some(t) = weak.upgrade() {
+            t.set_trigger_label(SharedString::from("🧠 cloud (escalated)"));
+            t.set_trigger_color(slint::Color::from_rgb_u8(0x38, 0xbd, 0xf8));
+        }
+        fire_regenerate(
+            convo_id,
+            weak.clone(),
+            &bridge_c,
+            &events_c,
+            &cfg_c,
+            &slint_rt_c,
+            &rt_handle_c,
+            AskRoute::Cloud,
+        );
     });
 }
 
@@ -1776,7 +1862,7 @@ fn main() -> Result<(), slint::PlatformError> {
                             &cfg_fu,
                             &slint_rt_fu,
                             &rt_handle_fu,
-                            false,
+                            AskRoute::Text,
                         );
                     });
                 }
@@ -1797,11 +1883,20 @@ fn main() -> Result<(), slint::PlatformError> {
                             &cfg_re,
                             &slint_rt_re,
                             &rt_handle_re,
-                            false,
+                            AskRoute::Text,
                         );
                     });
                 }
-                wire_voice_followup(&tile, convo_id, false, &cfg_for_poll);
+                wire_voice_followup(&tile, convo_id, AskRoute::Text, &cfg_for_poll);
+                wire_escalate(
+                    &tile,
+                    convo_id,
+                    &bridge_for_poll,
+                    &events_for_poll,
+                    &cfg_for_poll,
+                    &slint_rt_for_poll,
+                    &rt_handle_for_poll,
+                );
             }
             // (monitor placement applied via apply_tile_hwnd_with_monitor.)
             present_tile_window(&tile);
@@ -1917,6 +2012,12 @@ fn main() -> Result<(), slint::PlatformError> {
     // ask_stream_loop). Matches src-tauri/React-side semantic where F9
     // is the "ask AI with full transcript context" hotkey.
     let f9_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F9);
+    // V0.8.0 (Поток D) — Shift+F9 = one-shot escalate the ask to the smart cloud
+    // model (deeper reasoning) without flipping the persistent provider.
+    let sf9_hotkey = global_hotkey::hotkey::HotKey::new(
+        Some(global_hotkey::hotkey::Modifiers::SHIFT),
+        global_hotkey::hotkey::Code::F9,
+    );
     // V2 — F8 screenshot → vision (captures the monitor under the cursor and
     // streams a vision model's reading into a tile, via the SEPARATE vision
     // endpoint so text can stay local).
@@ -1925,6 +2026,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let f4_id = f4_hotkey.id();
     let f6_id = f6_hotkey.id();
     let f9_id = f9_hotkey.id();
+    let sf9_id = sf9_hotkey.id();
     let f8_id = f8_hotkey.id();
     if let Some(m) = hotkey_manager.as_ref() {
         for (label, hk) in [
@@ -1933,6 +2035,7 @@ fn main() -> Result<(), slint::PlatformError> {
             ("F6", f6_hotkey),
             ("F8", f8_hotkey),
             ("F9", f9_hotkey),
+            ("Shift+F9", sf9_hotkey),
         ] {
             match m.register(hk) {
                 Ok(()) => eprintln!("[overlay-host] {label} hotkey registered"),
@@ -2007,6 +2110,23 @@ fn main() -> Result<(), slint::PlatformError> {
                         &hp_rt_handle,
                         &hp_tiles,
                         &hp_weak_overlay,
+                        AskRoute::Text,
+                    );
+                } else if event.id == sf9_id {
+                    // V0.8.0 (Поток D) — Shift+F9 escalates ONE ask to the smart
+                    // cloud model (deeper reasoning), without flipping the
+                    // persistent provider. Egress is intentional + visible (the
+                    // tile shows a 🧠 cloud badge).
+                    eprintln!("[overlay-host] Shift+F9 — one-shot CLOUD escalation");
+                    fire_f9_ask(
+                        &hp_bridge,
+                        &hp_events,
+                        &hp_cfg,
+                        &hp_rt,
+                        &hp_rt_handle,
+                        &hp_tiles,
+                        &hp_weak_overlay,
+                        AskRoute::Cloud,
                     );
                 } else if event.id == f8_id {
                     // V3 — F8 screenshot → Lightshot region select → vision.
@@ -2041,9 +2161,9 @@ fn main() -> Result<(), slint::PlatformError> {
     let ptt_state: Rc<RefCell<Option<PttRec>>> = Rc::new(RefCell::new(None));
     let (ptt_pcm_tx, mut ptt_pcm_rx) =
         tokio_mpsc::unbounded_channel::<(audio::AudioSource, Arc<AtomicBool>, Vec<i16>)>();
-    // V5 — voice follow-up channel: a tile 🎤 ships (convo_id, use_vision, text)
+    // V5 — voice follow-up channel: a tile 🎤 ships (convo_id, route, text)
     // here once recorded + transcribed; the drain below routes it to the tile.
-    let (vfu_tx, mut vfu_rx) = tokio_mpsc::unbounded_channel::<(i32, bool, String)>();
+    let (vfu_tx, mut vfu_rx) = tokio_mpsc::unbounded_channel::<(i32, AskRoute, String)>();
     let _ = VFU_TX.set(vfu_tx);
 
     {
@@ -2222,7 +2342,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let rth_v = rt_handle.clone();
         let tiles_v = tiles.clone();
         vfu_timer.start(TimerMode::Repeated, Duration::from_millis(120), move || {
-            while let Ok((convo_id, use_vision, text)) = vfu_rx.try_recv() {
+            while let Ok((convo_id, route, text)) = vfu_rx.try_recv() {
                 let weak = tiles_v
                     .borrow()
                     .iter()
@@ -2250,7 +2370,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     &cfg_v,
                     &rt_v,
                     &rth_v,
-                    use_vision,
+                    route,
                 );
             }
         });
@@ -3100,6 +3220,7 @@ fn fire_f6_manual_spawn(
 ///   chip, not a gate).
 /// - last_screenshot is CONSUMED (taken) on F9 so it ships once.
 /// - In-flight ai_task aborted BEFORE the new spawn.
+#[allow(clippy::too_many_arguments)]
 fn fire_f9_ask(
     bridge: &Arc<OverlayBarBridge>,
     events: &Arc<dyn RuntimeEvents>,
@@ -3108,6 +3229,10 @@ fn fire_f9_ask(
     rt_handle: &tokio::runtime::Handle,
     tiles: &TileWindows,
     weak_overlay: &slint::Weak<OverlayBarWindow>,
+    // V0.8.0 (Поток D) — Text for a normal F9, Cloud for a Shift+F9 one-shot
+    // escalation to the smart cloud model. (Vision isn't used here — F8 has its
+    // own path.)
+    route: AskRoute,
 ) {
     // ===== 1. Sync placeholder tile creation =====
     let tile = match TileWindow::new() {
@@ -3125,9 +3250,16 @@ fn fire_f9_ask(
     tile.set_tile_title(SharedString::from("F9 ask · live"));
     tile.set_source_label(SharedString::from("ai · asking…"));
     // Phase E6 v12 — purple trigger badge for manual F9 ask so user
-    // sees which tile came from a hotkey vs auto-detector.
-    tile.set_trigger_label(SharedString::from("✋ F9 manual ask"));
-    tile.set_trigger_color(slint::Color::from_rgb_u8(0xa7, 0x8b, 0xfa));
+    // sees which tile came from a hotkey vs auto-detector. V0.8.0 (Поток D):
+    // a CLOUD-escalated ask (Shift+F9) gets a distinct 🧠 cloud badge so the
+    // user sees THIS answer came from the cloud model (egress is visible).
+    if route == AskRoute::Cloud {
+        tile.set_trigger_label(SharedString::from("🧠 cloud (Shift+F9)"));
+        tile.set_trigger_color(slint::Color::from_rgb_u8(0x38, 0xbd, 0xf8));
+    } else {
+        tile.set_trigger_label(SharedString::from("✋ F9 manual ask"));
+        tile.set_trigger_color(slint::Color::from_rgb_u8(0xa7, 0x8b, 0xfa));
+    }
     // Phase E6 v45 — this tile carries a conversation, so it shows the
     // continue-dialog input. busy=true until the first answer completes.
     let convo_id = CONVO_SEQ.fetch_add(1, Ordering::Relaxed) as i32;
@@ -3184,6 +3316,8 @@ fn fire_f9_ask(
         let slint_rt_fu = slint_rt.clone();
         let rt_handle_fu = rt_handle.clone();
         tile.on_followup_submitted(move |q| {
+            // V0.8.0 (Поток D) — a Shift+F9 (Cloud) ask keeps its follow-ups on
+            // the cloud model; a normal F9 stays Text.
             fire_followup_ask(
                 (convo_id, q.to_string()),
                 weak_fu.clone(),
@@ -3192,7 +3326,7 @@ fn fire_f9_ask(
                 &cfg_fu,
                 &slint_rt_fu,
                 &rt_handle_fu,
-                false,
+                route,
             );
         });
     }
@@ -3215,12 +3349,14 @@ fn fire_f9_ask(
                 &cfg_re,
                 &slint_rt_re,
                 &rt_handle_re,
-                false,
+                route,
             );
         });
     }
-    // V5 — 🎤 voice follow-up (record → STT → ask via the text endpoint).
-    wire_voice_followup(&tile, convo_id, false, cfg);
+    // V5 — 🎤 voice follow-up. Inherits the ask route (Cloud for Shift+F9).
+    wire_voice_followup(&tile, convo_id, route, cfg);
+    // V0.8.0 (Поток D) — 🧠 escalate to cloud (only shown if the answer is local).
+    wire_escalate(&tile, convo_id, bridge, events, cfg, slint_rt, rt_handle);
     present_tile_window(&tile);
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
@@ -3253,7 +3389,9 @@ fn fire_f9_ask(
         local_vision,
     ) = {
         let c = cfg.read();
-        let ep = c.ai_endpoint(false);
+        // V0.8.0 (Поток D) — route picks the endpoint: normal F9 = Text (local
+        // or cloud per provider), Shift+F9 = Cloud (smart model, one-shot).
+        let ep = route.endpoint(&c);
         (
             ep.base_url,
             ep.bearer,
@@ -3545,7 +3683,7 @@ fn fire_ptt_ask(
                 &cfg_fu,
                 &slint_rt_fu,
                 &rt_handle_fu,
-                false,
+                AskRoute::Text,
             );
         });
     }
@@ -3568,12 +3706,14 @@ fn fire_ptt_ask(
                 &cfg_re,
                 &slint_rt_re,
                 &rt_handle_re,
-                false,
+                AskRoute::Text,
             );
         });
     }
     // V5 — 🎤 voice follow-up (record → STT → ask via the text endpoint).
-    wire_voice_followup(&tile, convo_id, false, cfg);
+    wire_voice_followup(&tile, convo_id, AskRoute::Text, cfg);
+    // V0.8.0 (Поток D) — 🧠 escalate to cloud (only shown if the answer is local).
+    wire_escalate(&tile, convo_id, bridge, events, cfg, slint_rt, rt_handle);
     present_tile_window(&tile);
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
@@ -3989,7 +4129,7 @@ fn launch_vision_for_bgra(
                 &cfg_fu,
                 &slint_rt_fu,
                 &rt_handle_fu,
-                true,
+                AskRoute::Vision,
             );
         });
     }
@@ -4012,13 +4152,13 @@ fn launch_vision_for_bgra(
                 &cfg_re,
                 &slint_rt_re,
                 &rt_handle_re,
-                true,
+                AskRoute::Vision,
             );
         });
     }
     // V5 — 🎤 voice follow-up (record → STT → ask via the VISION endpoint, so
     // the spoken question stays about the screenshot).
-    wire_voice_followup(&tile, convo_id, true, cfg);
+    wire_voice_followup(&tile, convo_id, AskRoute::Vision, cfg);
     present_tile_window(&tile);
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
@@ -4128,10 +4268,10 @@ fn fire_followup_ask(
     cfg: &overlay_backend::config::SharedConfig,
     slint_rt: &SharedSlintRuntime,
     rt_handle: &tokio::runtime::Handle,
-    // V5 — when true the follow-up routes to the VISION endpoint (the stored
-    // conversation already carries the screenshot), so a vision tile keeps the
-    // dialog about the image rather than falling back to the text model.
-    use_vision: bool,
+    // V0.8.0 (Поток D) — which endpoint to route to: Text (default), Vision
+    // (F8 tile keeps the dialog about the screenshot), or Cloud (one-shot smart
+    // escalation). Was the V5 `use_vision: bool`.
+    route: AskRoute,
 ) {
     let (convo_id, question) = turn;
     let question = question.trim().to_string();
@@ -4197,17 +4337,14 @@ fn fire_followup_ask(
     // spawn the stream (mirrors fire_f9_ask's tail).
     let (base_url, bearer, model, is_local, max_tokens) = {
         let c = cfg.read();
-        let ep = if use_vision {
-            c.vision_endpoint().unwrap_or_else(|| c.ai_endpoint(false))
-        } else {
-            c.ai_endpoint(false)
-        };
-        let mt = if use_vision {
-            vision::VISION_MAX_TOKENS
-        } else {
-            AI_STREAM_MAX_TOKENS
-        };
-        (ep.base_url, ep.bearer, ep.model, ep.is_local, mt)
+        let ep = route.endpoint(&c);
+        (
+            ep.base_url,
+            ep.bearer,
+            ep.model,
+            ep.is_local,
+            route.max_tokens(),
+        )
     };
     let (journal_for_loop, health_for_stream) = {
         let s = slint_replay::runtime_state::lock(slint_rt);
@@ -4237,7 +4374,7 @@ fn fire_followup_ask(
             model: &model,
             system_prompt: &sys_full,
             user_prompt: &usr_full,
-            attached_screenshot: use_vision,
+            attached_screenshot: route.attaches_screenshot(),
             input_tokens_est: ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4,
         });
     }
@@ -4287,7 +4424,7 @@ fn fire_regenerate(
     cfg: &overlay_backend::config::SharedConfig,
     slint_rt: &SharedSlintRuntime,
     rt_handle: &tokio::runtime::Handle,
-    use_vision: bool,
+    route: AskRoute,
 ) {
     let mut messages = {
         let convos = match bridge.conversations.lock() {
@@ -4311,17 +4448,14 @@ fn fire_regenerate(
     }
     let (base_url, bearer, model, is_local, max_tokens) = {
         let c = cfg.read();
-        let ep = if use_vision {
-            c.vision_endpoint().unwrap_or_else(|| c.ai_endpoint(false))
-        } else {
-            c.ai_endpoint(false)
-        };
-        let mt = if use_vision {
-            vision::VISION_MAX_TOKENS
-        } else {
-            AI_STREAM_MAX_TOKENS
-        };
-        (ep.base_url, ep.bearer, ep.model, ep.is_local, mt)
+        let ep = route.endpoint(&c);
+        (
+            ep.base_url,
+            ep.bearer,
+            ep.model,
+            ep.is_local,
+            route.max_tokens(),
+        )
     };
     if let Some(t) = tile_weak.upgrade() {
         t.set_followup_busy(true);
@@ -4369,7 +4503,7 @@ fn fire_regenerate(
         )
         .await;
     });
-    diag!("regenerate sent (convo_id={convo_id}, use_vision={use_vision})");
+    diag!("regenerate sent (convo_id={convo_id}, route={route:?})");
 }
 
 /// Atomic counter for tile-slot index — increments per spawn so
