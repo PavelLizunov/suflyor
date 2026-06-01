@@ -5277,10 +5277,11 @@ dependencies = [
 
 [[package]]
 name = "slint-replay"
-version = "0.8.2"
+version = "0.8.3"
 dependencies = [
  "anyhow",
  "base64",
+ "clipboard-win",
  "dirs",
  "global-hotkey",
  "i-slint-backend-selector",

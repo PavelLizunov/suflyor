@@ -3,7 +3,7 @@
 # the sibling overlay-backend crate for audio/STT/AI/journal/KB/config.
 [package]
 name = "slint-replay"
-version = "0.8.2"
+version = "0.8.3"
 edition = "2021"
 description = "suflyor — AI-interview overlay (Slint UI + orchestration)"
 publish = false
@@ -113,6 +113,12 @@ rfd = { version = "0.15", default-features = false }
 # enabled windows `Win32_Graphics_Gdi` feature.
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 base64 = "0.22"
+
+# V0.8.3 — 📋 copy a tile's answer to the Windows clipboard. clipboard-win is
+# already in the dependency tree (winit pulls it transitively), so declaring it
+# directly adds no new third-party crate — it just lets the copy button call
+# `set_clipboard_string`. Windows-only, which matches this app.
+clipboard-win = "5"
 
 # overlay-backend — the shared no-UI crate (audio, STT, AI, journal,
 # KB, screenshot, config, runtime + health.rs). This binary is its
