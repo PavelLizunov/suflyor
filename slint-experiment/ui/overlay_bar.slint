@@ -249,6 +249,15 @@ export component OverlayBarWindow inherits Window {
     in-out property <bool> quit-armed: false;
     // V0.8.0 (Поток B) — emergency-restart inline confirm, same two-step UX.
     in-out property <bool> restart-armed: false;
+    // v0.8.2 (M1 fix) — true while EITHER inline confirm (quit / restart) is
+    // showing. The confirm expands the action row inline, so we hide the
+    // secondary right-cluster chips (close-all / + tile / 📷 / ⚙) while it's
+    // up, keeping the row inside the fixed 1080px bar. Before this, RU
+    // "Перезапустить? Да Нет" + the "close all" chip + the wide "⚠ AI
+    // недоступен" status pushed "Нет" (cancel) off the right edge — exactly in
+    // the restart-while-AI-down flow the feature exists for. The un-armed bar
+    // is pixel-identical to before (chips only hide during the ≤4s confirm).
+    property <bool> confirming: root.quit-armed || root.restart-armed;
 
     // ===== Callbacks =====
     callback mic-toggle-clicked();
@@ -457,22 +466,22 @@ export component OverlayBarWindow inherits Window {
             // Close-all appears once tiles have been spawned so the user can
             // dismiss a screenful in one click (#110); resets the counter,
             // which also hides this chip again.
-            if root.open-tiles > 0 : Chip {
+            if root.open-tiles > 0 && !root.confirming : Chip {
                 label: @tr("close all");
                 accent: #fb7185;
                 clicked => { root.close-all-tiles-clicked(); }
             }
-            Chip {
+            if !root.confirming : Chip {
                 label: @tr("+ tile ({})", root.open-tiles);
                 accent: #f472b6;
                 clicked => { root.spawn-tile-clicked(); }
             }
-            Chip {
+            if !root.confirming : Chip {
                 label: "📷";
                 accent: #22d3ee;
                 clicked => { root.capture-clicked(); }
             }
-            Chip {
+            if !root.confirming : Chip {
                 label: "⚙";
                 active: root.settings-open;
                 accent: Theme.text-muted;
