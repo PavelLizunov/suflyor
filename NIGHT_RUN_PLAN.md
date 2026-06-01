@@ -157,6 +157,28 @@ consumers; restart/double-start/stop→start all sound. NEW findings:
   manual single-user flow — no code auto-fires F9; would only matter if an
   automated F9 is ever added, then gate the take on session-generation).
 
+**3rd (deep) scout — algorithmic / geometry modules → BATCH 6 (review-agent GO).**
+Read-only adversarial pass over kb / markdown / audio-DSP / update / stt / capture
+(all verified CLEAN against malformed/adversarial input — strong signal). Found +
+fixed:
+- 🟥 **CLAMP-PANIC (real crash on the user's hardware):** tile placement used
+  `i32::clamp(min, max)`, which PANICS when `min > max`. The bounds come from the
+  tile's physical size vs the monitor, so a tile wider/taller than the screen —
+  reachable on the **1200px portrait secondary** or under heavy DPI — crashed the
+  whole app. (clippy can't see `.clamp()` panics, so the deny-panic lint missed
+  it.) Fixed: `max = (…).max(min)` → pins to the margin instead of panicking.
+- 🟧 **BOM config silent-reset:** `serde_json::from_slice` rejects a UTF-8 BOM, so
+  a `config.json` saved by Notepad "UTF-8 with BOM" (or a PowerShell round-trip —
+  exactly what the security note warns against) silently fell back to defaults,
+  wiping the user's profiles/devices/keys. Strip a leading `EF BB BF` first.
+  +regression test (now 172 backend tests).
+- 🟧 **mic-probe single-mic guard (3 sites):** the bar mic-chip probe, Settings
+  mic-test, and Diagnostics "Проверить всё" opened a WASAPI capture WITHOUT the
+  guard → garbage if you probe while PTT/voice/dictation hold the mic. All three
+  now `try_acquire_mic()`/`release_mic()` (release proven paired on every path by
+  the review-agent — no stuck-mic) and report "mic busy". This closes the
+  previously-deferred mic-probe gap entirely.
+
 **Decisions (this run):**
 - **28 orphan .po entries** — deleting dead translations is cosmetic and risks a
   fat-finger over 28 line-pairs; ZERO user-facing effect (unused msgids just sit
