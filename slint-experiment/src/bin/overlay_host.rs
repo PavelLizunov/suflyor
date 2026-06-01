@@ -955,10 +955,17 @@ impl SlintUiBridge for OverlayBarBridge {
                     let any_degraded = matches!(st("audio"), Some("degraded"))
                         || matches!(st("stt"), Some("degraded"))
                         || matches!(st("ai"), Some("degraded"));
-                    if any_down {
-                        o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x4b, 0x4b));
-                    } else if any_degraded {
-                        o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0xb4, 0x4b));
+                    // v0.8.2 (C1 fix, cont.) — gate the down/degraded COLOR on an
+                    // active session too (mirrors the TEXT guard below). Else a
+                    // stale post-stop {ai:down} tick (queued before the emitter was
+                    // aborted) repaints the idle bar red until the next
+                    // session:started, leaving "idle" text inside a red pill.
+                    if o.get_timer_active() {
+                        if any_down {
+                            o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x4b, 0x4b));
+                        } else if any_degraded {
+                            o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0xb4, 0x4b));
+                        }
                     }
                     // V0.8.0 (Поток A) — surface AI-down in the bar TEXT, not just
                     // color, so the user knows WHY auto-tiles stopped (the
@@ -967,7 +974,15 @@ impl SlintUiBridge for OverlayBarBridge {
                     // clobbering session:started/stopped's own text.
                     const AI_DOWN_MARK: &str = "⚠ AI недоступен";
                     let cur = o.get_status_text();
-                    if ai_down {
+                    // v0.8.2 (C1 fix) — only SET the mark while a session is
+                    // active (timer_active). Without this guard a stale
+                    // health:update{ai:down} that the aborted emitter queued just
+                    // before stop_session could land AFTER session:stopped set
+                    // "idle"; with the emitter now dead nothing would ever clear
+                    // it, stranding the bar on "⚠ AI недоступен" over an idle
+                    // session — exactly when the user stops to go fix the bridge.
+                    // The clear branch stays unguarded so it can still tidy up.
+                    if ai_down && o.get_timer_active() {
                         if cur != AI_DOWN_MARK {
                             o.set_status_text(SharedString::from(AI_DOWN_MARK));
                         }
@@ -2812,6 +2827,9 @@ fn main() -> Result<(), slint::PlatformError> {
         overlay.on_quit_clicked(move || {
             let Some(o) = weak.upgrade() else { return };
             o.set_quit_armed(true);
+            // v0.8.2 (m1) — quit + restart confirms are mutually exclusive so
+            // two inline "…? Yes No" prompts never share the fixed-width bar.
+            o.set_restart_armed(false);
             diag!("quit armed (awaiting confirm)");
             let disarm = o.as_weak();
             Timer::single_shot(Duration::from_secs(4), move || {
@@ -2848,6 +2866,8 @@ fn main() -> Result<(), slint::PlatformError> {
         overlay.on_restart_clicked(move || {
             let Some(o) = weak.upgrade() else { return };
             o.set_restart_armed(true);
+            // v0.8.2 (m1) — mutually exclusive with the quit confirm (above).
+            o.set_quit_armed(false);
             diag!("restart armed (awaiting confirm)");
             let disarm = o.as_weak();
             Timer::single_shot(Duration::from_secs(4), move || {
@@ -4299,6 +4319,48 @@ fn launch_vision_for_bgra(
     });
 }
 
+/// v0.8.2 (MAJOR-2) — sticky-cloud cost-cap warning. After a 🧠 / Shift+F9
+/// escalation a tile's `live` route stays `Cloud`, so EVERY subsequent text
+/// follow-up + 🔄 regenerate + 🎤 voice follow-up is now a BILLABLE cloud call.
+/// `fire_f9_ask` already emits `cost:cap-hit` when over budget, but the
+/// continuation paths did not — so the per-session cap was silently ignored
+/// mid-conversation (the regression sticky-cloud introduced). This emits the
+/// SAME non-blocking warning (warn only — never block a continuation the user
+/// is mid-thread on). No-op for local ($0) calls, when no cap is set, or before
+/// any spend has accrued.
+fn warn_if_over_cost_cap(
+    events: &Arc<dyn RuntimeEvents>,
+    cfg: &overlay_backend::config::SharedConfig,
+    slint_rt: &SharedSlintRuntime,
+    is_local: bool,
+    source: &str,
+) {
+    if is_local {
+        return;
+    }
+    let cap_usd = cfg.read().max_session_cost_usd;
+    if cap_usd <= 0.0 {
+        return;
+    }
+    let current_micro = slint_replay::runtime_state::lock(slint_rt).session_cost_microcents;
+    if current_micro == 0 {
+        return;
+    }
+    let usd = (current_micro as f64) / 100_000_000.0;
+    if usd >= cap_usd {
+        events.emit(
+            "cost:cap-hit",
+            serde_json::json!({
+                "reason": format!(
+                    "over budget: ${usd:.4} spent ≥ ${cap_usd:.2} (Settings → Max cost per session)"
+                ),
+                "source": source,
+                "blocking": false,
+            }),
+        );
+    }
+}
+
 /// Phase E6 v45 — continue the dialog inside a tile. Reads the tile's
 /// stored conversation (seeded when the previous answer completed),
 /// appends the new user question, and streams the reply BELOW the
@@ -4391,6 +4453,9 @@ fn fire_followup_ask(
             route.max_tokens(),
         )
     };
+    // v0.8.2 (MAJOR-2) — a sticky-cloud follow-up is billable; warn if the
+    // session cost cap is already exceeded (mirrors fire_f9_ask).
+    warn_if_over_cost_cap(events, cfg, slint_rt, is_local, "followup_ask");
     let (journal_for_loop, health_for_stream) = {
         let s = slint_replay::runtime_state::lock(slint_rt);
         (s.journal.clone(), s.health.clone())
@@ -4502,6 +4567,8 @@ fn fire_regenerate(
             route.max_tokens(),
         )
     };
+    // v0.8.2 (MAJOR-2) — a sticky-cloud regenerate is billable; warn over cap.
+    warn_if_over_cost_cap(events, cfg, slint_rt, is_local, "regenerate");
     if let Some(t) = tile_weak.upgrade() {
         t.set_followup_busy(true);
         t.set_source_label(SharedString::from("ai · перегенерация…"));
