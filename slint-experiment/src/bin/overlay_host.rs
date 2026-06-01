@@ -977,6 +977,31 @@ fn main() -> Result<(), slint::PlatformError> {
     // release build that has no console.
     slint_replay::logging::init();
 
+    // V0.8.0 (Поток B) — single-instance guard for the emergency-restart (⟳)
+    // flow. A `--relaunch` child was spawned by a quitting parent; it must wait
+    // for the parent to release the named mutex (i.e. fully exit + free the
+    // global hotkeys) before it registers its own hotkeys and shows a bar.
+    // Otherwise two bars run at once — and under stealth the 2nd could flash on
+    // the screen-share before WDA. A normal launch acquires immediately; if a
+    // DIFFERENT instance is already alive (user double-clicked the exe), we bail
+    // so we never run a competing bar.
+    let is_relaunch = std::env::args().any(|a| a == "--relaunch");
+    // Relaunch: give the parent up to 8s to exit. Normal: try-once (0ms).
+    let wait_ms = if is_relaunch { 8_000 } else { 0 };
+    let _singleton = match slint_replay::win32::acquire_singleton(wait_ms) {
+        Ok(g) => {
+            if is_relaunch {
+                eprintln!("[overlay-host] relaunch: parent exited, singleton acquired");
+            }
+            Some(g)
+        }
+        Err(e) => {
+            // Another instance holds the bar. Don't run a second one.
+            eprintln!("[overlay-host] another instance is already running ({e}); exiting.");
+            return Ok(());
+        }
+    };
+
     // Phase 6 — MCP server enablement hint.
     //
     // The mcp feature on i-slint-backend-selector auto-starts an HTTP MCP
@@ -2663,6 +2688,52 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // V0.8.0 (Поток B) — emergency restart (⟳). Two-step confirm like Quit
+    // (restarting clears the current session transcript, so a stray click
+    // shouldn't trigger it). On confirm: spawn the relaunch child, then quit so
+    // teardown kills the (possibly hung) local-AI servers; the child waits on
+    // the singleton mutex for us to exit, then comes up fresh — restoring the
+    // SAME persisted settings incl. stealth (flash-free thanks to Поток C).
+    {
+        let weak = overlay.as_weak();
+        overlay.on_restart_clicked(move || {
+            let Some(o) = weak.upgrade() else { return };
+            o.set_restart_armed(true);
+            diag!("restart armed (awaiting confirm)");
+            let disarm = o.as_weak();
+            Timer::single_shot(Duration::from_secs(4), move || {
+                if let Some(o) = disarm.upgrade() {
+                    if o.get_restart_armed() {
+                        o.set_restart_armed(false);
+                        diag!("restart auto-disarmed (timeout)");
+                    }
+                }
+            });
+        });
+    }
+    {
+        let weak = overlay.as_weak();
+        overlay.on_restart_confirm(move || {
+            if let Some(o) = weak.upgrade() {
+                o.set_restart_armed(false);
+            }
+            diag!("restart confirmed — spawning relaunch child");
+            if spawn_relaunch() {
+                let _ = slint::quit_event_loop();
+            } else {
+                eprintln!("[overlay-host] restart aborted (could not spawn child); staying up");
+            }
+        });
+    }
+    {
+        let weak = overlay.as_weak();
+        overlay.on_restart_cancel(move || {
+            if let Some(o) = weak.upgrade() {
+                o.set_restart_armed(false);
+            }
+        });
+    }
+
     // Smoke convenience: SLINT_OVERLAY_AUTO_TILE=1 spawns one tile
     // after 500 ms so screenshot scripts can verify markdown rendering
     // without driving the UI. Removable Phase 6 cleanup.
@@ -2753,6 +2824,51 @@ fn get_sys_active(state: &slint_replay::app_state::SharedState) -> bool {
 }
 
 /// Apply transparent-overlay HWND flags to the overlay bar.
+/// V0.8.0 (Поток B) — spawn a fresh copy of ourselves (with `--relaunch`) and
+/// quit the current event loop so the post-`run()` teardown runs (kills the
+/// possibly-hung local-AI servers; the child's `ensure_servers` then starts
+/// fresh ones — this is what recovers a hung local model). The child blocks on
+/// the singleton mutex until WE fully exit, so the two bars never overlap.
+///
+/// All persisted settings (incl. `stealth_enabled`) live in config.json, which
+/// the child reloads — so the new instance comes up with the SAME stealth state
+/// (and, thanks to Поток C, comes up flash-free under stealth). Returns true if
+/// the child spawned (so the caller proceeds to quit); false if we couldn't
+/// find/launch our own exe (then we must NOT quit — that would just close the
+/// app with nothing to replace it).
+fn spawn_relaunch() -> bool {
+    let exe = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("[overlay-host] relaunch: current_exe failed: {e}; staying up");
+            return false;
+        }
+    };
+    // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP so the child is fully
+    // independent of this (exiting) process and its console/group.
+    use std::os::windows::process::CommandExt;
+    const DETACHED_PROCESS: u32 = 0x0000_0008;
+    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+    match std::process::Command::new(&exe)
+        .arg("--relaunch")
+        .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+        .spawn()
+    {
+        Ok(child) => {
+            eprintln!(
+                "[overlay-host] relaunch: spawned child pid={} from {:?}",
+                child.id(),
+                exe
+            );
+            true
+        }
+        Err(e) => {
+            eprintln!("[overlay-host] relaunch: spawn failed: {e}; staying up");
+            false
+        }
+    }
+}
+
 fn apply_overlay_hwnd(overlay: &OverlayBarWindow) {
     // Поток C (stealth bar-flash fix) — when stealth is on, park the bar OFF the
     // virtual desktop synchronously NOW (this fn runs before overlay.run(), which

@@ -58,6 +58,10 @@ msgstr "Да"
 msgid "No"
 msgstr "Нет"
 
+# V0.8.0 (Поток B) — two-step emergency-restart confirm (⟳ arms "Restart? Yes/No").
+msgid "Restart?"
+msgstr "Перезапустить?"
+
 # === tile.slint ===
 
 msgid "#{}  {}"

@@ -79,6 +79,9 @@ windows = { version = "0.62", features = [
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
+    # V0.8.0 (Поток B) — named mutex for the single-instance guard so the
+    # emergency-restart child waits for the parent to exit before it shows a bar.
+    "Win32_System_Threading",
 ] }
 
 # Phase 0.5 MCP spike: per docs.rs/i-slint-backend-testing 1.16, the

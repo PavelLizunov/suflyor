@@ -247,6 +247,8 @@ export component OverlayBarWindow inherits Window {
     // stray click can't kill the app. User: "крестик моментально всё
     // закрывает без предупреждения".
     in-out property <bool> quit-armed: false;
+    // V0.8.0 (Поток B) — emergency-restart inline confirm, same two-step UX.
+    in-out property <bool> restart-armed: false;
 
     // ===== Callbacks =====
     callback mic-toggle-clicked();
@@ -264,6 +266,10 @@ export component OverlayBarWindow inherits Window {
     callback aggressive-toggle-clicked();
     callback open-settings-clicked();
     callback quit-clicked();   // X pressed → Rust arms the inline confirm
+    // V0.8.0 (Поток B) — emergency restart (⟳). Two-step like Quit.
+    callback restart-clicked();
+    callback restart-confirm();
+    callback restart-cancel();
     callback quit-confirm();   // "Yes" → really quit the app
     callback quit-cancel();    // "No" → disarm the confirm
     // Phase E6 v22 — manual cursor-delta drag (replaces modal
@@ -471,6 +477,38 @@ export component OverlayBarWindow inherits Window {
                 active: root.settings-open;
                 accent: Theme.text-muted;
                 clicked => { root.open-settings-clicked(); }
+            }
+            // V0.8.0 (Поток B) — emergency restart, two-step like Quit. Use it
+            // when the app/local AI gets stuck; settings (incl. stealth) survive.
+            // Label is the recycle EMOJI 🔄 (color-emoji font), NOT the text
+            // glyph ⟳ (U+27F3) — the latter renders as a missing-glyph box on
+            // the Slint+skia text-font fallback (same class as ✕, why Quit uses
+            // ASCII "X"). 🔄 renders fine (proven by tile.slint's regen button).
+            if !root.restart-armed : Chip {
+                label: "🔄";
+                accent: #38bdf8;
+                clicked => { root.restart-clicked(); }
+            }
+            if root.restart-armed : HorizontalLayout {
+                spacing: 4px;
+                Text {
+                    text: @tr("Restart?");
+                    font-size: 11px;
+                    font-weight: 600;
+                    color: Theme.text-primary;
+                    vertical-alignment: center;
+                }
+                Chip {
+                    label: @tr("Yes");
+                    active: true;
+                    accent: #38bdf8;
+                    clicked => { root.restart-confirm(); }
+                }
+                Chip {
+                    label: @tr("No");
+                    accent: Theme.accent;
+                    clicked => { root.restart-cancel(); }
+                }
             }
             // Quit — two-step. Idle: a single ASCII "X" (Unicode ✕ renders
             // as a missing-glyph box on the Slint+skia fallback). Armed:
