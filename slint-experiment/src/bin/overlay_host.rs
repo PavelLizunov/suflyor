@@ -496,10 +496,16 @@ fn wire_escalate(
     slint_rt: &SharedSlintRuntime,
     rt_handle: &tokio::runtime::Handle,
 ) {
-    // Only offer escalation when the live answer endpoint is local — otherwise
-    // the answer is already from the cloud and 🧠 would be a no-op upgrade.
-    if !cfg.read().ai_endpoint(false).is_local {
-        return;
+    // Only offer escalation when the live answer endpoint is local (otherwise the
+    // answer is already cloud and 🧠 is a no-op upgrade) AND a cloud bearer is
+    // configured: escalation routes to the cloud bridge (`ai_endpoint_cloud`), so
+    // for a local-only user who never set `ai_bearer` the button would fail with a
+    // generic error every time — don't offer a dead affordance to that cohort.
+    {
+        let c = cfg.read();
+        if !c.ai_endpoint(false).is_local || c.ai_bearer.trim().is_empty() {
+            return;
+        }
     }
     tile.set_can_escalate(true);
     let weak = tile.as_weak();
@@ -3229,6 +3235,11 @@ fn main() -> Result<(), slint::PlatformError> {
         let weak = overlay.as_weak();
         Timer::single_shot(Duration::from_millis(1900), move || {
             if let Some(o) = weak.upgrade() {
+                // Guard against the user manually starting the session inside the
+                // 1.9s window — without this the auto-start would toggle it OFF.
+                if o.get_timer_active() {
+                    return;
+                }
                 eprintln!("[overlay-host] auto-starting session on startup");
                 o.invoke_timer_toggle_clicked();
             }
@@ -7689,7 +7700,7 @@ mod copy_tests {
 
     #[test]
     fn strip_directives_cleans_user_turns_only() {
-        let mut msgs = vec![
+        let mut msgs = [
             msg("system", &format!("{FOLLOWUP_DIRECTIVE}sys")),
             msg("user", &format!("{FOLLOWUP_DIRECTIVE}вопрос")),
             msg("assistant", &format!("{FOLLOWUP_DIRECTIVE}ответ")),
@@ -7714,7 +7725,7 @@ mod copy_tests {
     fn strip_all_but_last_preserves_reasked_turn() {
         // Mirrors fire_regenerate's `&mut messages[..len-1]`: prior turns are
         // cleaned, but the last (re-asked) turn keeps whatever framing it had.
-        let mut msgs = vec![
+        let mut msgs = [
             msg("user", &format!("{FOLLOWUP_DIRECTIVE}старый вопрос")),
             msg("assistant", "старый ответ"),
             msg(
