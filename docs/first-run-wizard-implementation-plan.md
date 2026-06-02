@@ -11,7 +11,16 @@ Diagnostics tab (#131/#133).
 
 ---
 
-## STATUS (commit `ee62f7f`, pushed to master)
+## ✅ COMPLETE (commit `832a64b`, pushed to master)
+The whole plan (STEP 3–10) shipped in `832a64b`. Live-verified end-to-end via
+computer-use + `CopyFromScreen`: wizard renders SOLID (RISK 1 disproven), step
+counter + RU ok, AI check ran live (HTTP 200), Next/Skip work, **stealth parity
+round-trip** (wizard vanishes from `CopyFromScreen` when stealth on, reappears
+off), summary **secret-free** (no LAN IP — the review-agent's BLOCKER fix + a
+skip-refill fix both verified in the exact skip-AI scenario). The everything
+below is kept as the historical implementation record.
+
+## STATUS (original — at commit `ee62f7f`)
 **DONE + committed/pushed:**
 - `slint-experiment/ui/wizard.slint` — the full 7-step `WizardWindow` UI. Compiles
   clean under `clippy -D warnings`. (Window shell mirrors `text_ask.slint`.)
