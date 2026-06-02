@@ -293,9 +293,14 @@ pub fn install(
         on(Progress::Step("Starting llama-server :8080".to_string()));
         let exe = find_exe(&llama_dir, "llama-server.exe")
             .context("llama-server.exe not found after install")?;
-        // Free :8080 from any stale/projector-less server (incl. one orphaned by
-        // a previous app run) so the fresh --mmproj server can actually bind.
-        stop_listener_on_port(LLAMA_PORT);
+        // Free :8080 of OUR stale/projector-less server so the fresh --mmproj
+        // server can bind. Owner-aware: if a DIFFERENT app holds :8080, fail with
+        // a clear conflict instead of killing it (audit P0.1).
+        if !stop_listener_on_port(LLAMA_PORT, &opts.root) {
+            bail!(
+                "port :8080 is in use by another application — close it (or stop that server) and retry the local-AI install"
+            );
+        }
         std::thread::sleep(Duration::from_millis(800));
         let gguf = llama_dir.join(GEMMA_FILE);
         let gguf_s = gguf.to_string_lossy().into_owned();
@@ -350,7 +355,11 @@ pub fn install(
     let mut on_gpu = false;
     if !opts.skip_llama {
         on(Progress::Step("Waiting for the model to load".to_string()));
-        wait_ready(&format!("{LLAMA_BASE_URL}/models"), 120);
+        // P0.2: fail the install if the model never loads or can't generate —
+        // don't report success on a wedged server.
+        wait_ready(&format!("{LLAMA_BASE_URL}/models"), 120)
+            .context("llama-server did not become ready")?;
+        verify_llama_ready().context("llama-server failed its readiness smoke")?;
         if use_gpu {
             on_gpu = verify_gpu_offload(24);
             let verdict = if on_gpu {
@@ -362,6 +371,12 @@ pub fn install(
         } else {
             on(Progress::Gpu("CPU".to_string()));
         }
+    }
+    if !opts.skip_whisper {
+        // P0.2: whisper had no strict readiness check after launch.
+        on(Progress::Step("Waiting for whisper-server".to_string()));
+        wait_ready(&format!("{WHISPER_BASE_URL}/models"), 60)
+            .context("whisper-server did not become ready")?;
     }
 
     Ok(LocalAiResult {
@@ -381,20 +396,51 @@ fn is_reachable(url: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Best-effort: kill whatever process is LISTENING on `port` so a fresh server
-/// can bind it. Critical before (re)launching llama-server with `--mmproj`: a
-/// stale projector-less server (e.g. orphaned by a previous app run that was
-/// force-killed, so it was never reaped) keeps the port, the new server fails to
-/// bind, and `wait_ready` still sees the old one answer — so the install reports
-/// success while F8 vision returns HTTP 500. Parses `netstat -ano`.
+/// Resolve the full exe path of a PID via PowerShell (always present on PATH;
+/// `wmic` is deprecated). None when the process is gone or we can't read it
+/// (e.g. an elevated/other-user process — in which case we conservatively treat
+/// it as NOT ours and never kill it).
 #[cfg(windows)]
-fn stop_listener_on_port(port: &str) {
+fn exe_path_for_pid(pid: &str) -> Option<String> {
+    let out = run_capture(
+        "powershell",
+        &[
+            "-NoProfile",
+            "-Command",
+            &format!("(Get-Process -Id {pid} -ErrorAction SilentlyContinue).Path"),
+        ],
+    )
+    .ok()?;
+    let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if p.is_empty() {
+        None
+    } else {
+        Some(p)
+    }
+}
+
+/// Free `port` of OUR orphaned server so a fresh one can bind. OWNER-AWARE
+/// (audit P0.1): only a LISTENING process whose exe lives under `root` (our
+/// install dir, e.g. `…\suflyor-local-ai`) is killed — a stranger's process on
+/// the port is left ALIVE and logged. Returns `true` when the port is free of
+/// any non-ours listener (so the caller may bind), `false` when a stranger holds
+/// it (so the caller surfaces a port-conflict instead of stealing the port).
+///
+/// Why this matters: a stale projector-less llama-server orphaned by a
+/// force-killed previous run keeps :8080; the new `--mmproj` server can't bind,
+/// `wait_ready` still sees the old one answer, and F8 vision returns HTTP 500.
+/// We must replace OUR orphan but never an unrelated app's server. Parses
+/// `netstat -ano`.
+#[cfg(windows)]
+fn stop_listener_on_port(port: &str, root: &Path) -> bool {
     let Ok(out) = run_capture("netstat", &["-ano", "-p", "tcp"]) else {
-        return;
+        return true; // can't enumerate — best-effort; let the bind attempt decide
     };
     let text = String::from_utf8_lossy(&out.stdout);
     let suffix = format!(":{port}");
+    let root_lc = root.to_string_lossy().to_lowercase();
     let mut killed: Vec<String> = Vec::new();
+    let mut free_of_strangers = true;
     for line in text.lines() {
         // Columns: Proto  LocalAddr  ForeignAddr  State  PID
         let cols: Vec<&str> = line.split_whitespace().collect();
@@ -403,16 +449,31 @@ fn stop_listener_on_port(port: &str) {
             && cols[1].ends_with(suffix.as_str())
         {
             let pid = cols[4];
-            if pid != "0" && !killed.iter().any(|k| k == pid) {
-                let _ = run_capture("taskkill", &["/F", "/PID", pid]);
-                killed.push(pid.to_string());
+            if pid == "0" || killed.iter().any(|k| k == pid) {
+                continue;
+            }
+            match exe_path_for_pid(pid).map(|p| p.to_lowercase()) {
+                Some(p) if !root_lc.is_empty() && p.starts_with(&root_lc) => {
+                    let _ = run_capture("taskkill", &["/F", "/PID", pid]);
+                    killed.push(pid.to_string());
+                }
+                other => {
+                    log::warn!(
+                        "port {port}: PID {pid} (exe {}) is not under our install dir — leaving it alive",
+                        other.as_deref().unwrap_or("<unknown>")
+                    );
+                    free_of_strangers = false;
+                }
             }
         }
     }
+    free_of_strangers
 }
 
 #[cfg(not(windows))]
-fn stop_listener_on_port(_port: &str) {}
+fn stop_listener_on_port(_port: &str, _root: &Path) -> bool {
+    true
+}
 
 /// On launch, start the local servers the config points at but that aren't
 /// already running (the app kills its servers on quit, so after a restart
@@ -424,6 +485,13 @@ fn stop_listener_on_port(_port: &str) {}
 pub fn ensure_servers(root: &Path, want_llama: bool, want_whisper: bool) -> Vec<Child> {
     let mut started = Vec::new();
     let use_gpu = detect_nvidia();
+    // NOTE: deliberately launch-only — do NOT kill+relaunch a server that is
+    // already answering. Live smoke showed that relaunching the (warm) server on
+    // startup defeats the model warm-up (the warm-up then hits a cold-loading
+    // server → HTTP 503) — and an orphan launched WITH --mmproj already has the
+    // projector, so the relaunch is usually needless. The rare projector-less
+    // orphan (old install force-killed) is accepted; install()'s owner-aware
+    // stop_listener_on_port still frees :8080 for a fresh install.
     if want_llama && !is_reachable(&format!("{LLAMA_BASE_URL}/models")) {
         let llama_dir = root.join("llama.cpp");
         let gguf = llama_dir.join(GEMMA_FILE);
@@ -791,17 +859,56 @@ fn verify_gpu_offload(tries: u32) -> bool {
 }
 
 /// Poll an OpenAI-style `/models` endpoint until it answers (server ready) or
-/// the budget runs out. Best-effort — never errors.
-fn wait_ready(url: &str, max_secs: u64) {
+/// the budget runs out. Errors when the server never became reachable within
+/// the budget — audit P0.2: install used to report success even when the model
+/// never loaded.
+fn wait_ready(url: &str, max_secs: u64) -> Result<()> {
     let deadline = max_secs / 2;
     for _ in 0..deadline {
         if let Ok(out) = run_capture("curl.exe", &["-s", "-o", "NUL", "--max-time", "2", url]) {
             if out.status.success() {
-                return;
+                return Ok(());
             }
         }
         std::thread::sleep(Duration::from_secs(2));
     }
+    bail!("server at {url} did not become ready within {max_secs}s")
+}
+
+/// Beyond reachability: verify the llama server lists a model AND can actually
+/// generate. A reachable `/models` alone isn't enough — a wedged or broken
+/// model still answers `/models` but fails real requests. Audit P0.2.
+fn verify_llama_ready() -> Result<()> {
+    let models = run_capture(
+        "curl.exe",
+        &["-s", "--max-time", "5", &format!("{LLAMA_BASE_URL}/models")],
+    )
+    .context("query llama /models")?;
+    if !String::from_utf8_lossy(&models.stdout).contains("\"data\"") {
+        bail!("llama /models did not return a model list");
+    }
+    // 1-token completion proves the model actually generates (llama.cpp server
+    // accepts /chat/completions without a model field — uses the loaded one).
+    let smoke = run_capture(
+        "curl.exe",
+        &[
+            "-s",
+            "--max-time",
+            "30",
+            "-X",
+            "POST",
+            &format!("{LLAMA_BASE_URL}/chat/completions"),
+            "-H",
+            "Content-Type: application/json",
+            "-d",
+            r#"{"messages":[{"role":"user","content":"hi"}],"max_tokens":1}"#,
+        ],
+    )
+    .context("llama smoke completion")?;
+    if !String::from_utf8_lossy(&smoke.stdout).contains("choices") {
+        bail!("llama smoke completion failed (server answered /models but did not generate)");
+    }
+    Ok(())
 }
 
 // ---- process + fs helpers --------------------------------------------------
