@@ -341,6 +341,36 @@ fn format_convo_copy(messages: &[ai::ChatMessage], rendered: &str) -> String {
     out
 }
 
+/// P1.2 — outcome of registering the global hotkeys at startup, captured ONCE so
+/// the Diagnostics tab can surface a per-key conflict (not just an eprintln!).
+/// Set in the registration loop; read by [`hotkey_diag_row`].
+struct HotkeyDiag {
+    /// Space-separated keys that registered, e.g. "F1 F3 F4 F6 F8 F9 Shift+F9".
+    registered: String,
+    /// Comma-separated keys whose `register()` failed (conflict / already taken).
+    /// Empty when every key registered.
+    failed: String,
+    /// True when the hotkey MANAGER itself couldn't be created (nothing tried).
+    manager_missing: bool,
+}
+
+static HOTKEY_DIAG: std::sync::OnceLock<HotkeyDiag> = std::sync::OnceLock::new();
+
+/// Render the captured hotkey-registration outcome (P1.2) into a (level, detail,
+/// failed) triple for the Diagnostics tab. level 0=all registered, 4=a key
+/// failed (conflict), 3=manager unavailable / not yet captured. `failed` is the
+/// raw key list so the .slint composes the translated "conflict:" wording.
+fn hotkey_diag_row() -> (i32, String, String) {
+    match HOTKEY_DIAG.get() {
+        None => (3, String::new(), String::new()),
+        // Manager failed to init → level 4 (error) but EMPTY failed list, so the
+        // UI/report render "unavailable", not a misleading "conflict: all".
+        Some(d) if d.manager_missing => (4, String::new(), String::new()),
+        Some(d) if d.failed.is_empty() => (0, d.registered.clone(), String::new()),
+        Some(d) => (4, d.registered.clone(), d.failed.clone()),
+    }
+}
+
 /// V0.8.3 — wire a tile's 📋 copy button: write the answer text to the Windows
 /// clipboard and flash the ✅ feedback glyph for ~1.5 s. Called for every
 /// conversational tile (those with a `convo_id`). Copy is purely local — no
@@ -2393,21 +2423,38 @@ fn main() -> Result<(), slint::PlatformError> {
     let sf9_id = sf9_hotkey.id();
     let f8_id = f8_hotkey.id();
     let f1_id = f1_hotkey.id();
-    if let Some(m) = hotkey_manager.as_ref() {
-        for (label, hk) in [
-            ("F3", f3_hotkey),
-            ("F4", f4_hotkey),
-            ("F6", f6_hotkey),
-            ("F8", f8_hotkey),
-            ("F9", f9_hotkey),
-            ("Shift+F9", sf9_hotkey),
-            ("F1", f1_hotkey),
-        ] {
-            match m.register(hk) {
-                Ok(()) => eprintln!("[overlay-host] {label} hotkey registered"),
-                Err(e) => eprintln!("[overlay-host] {label} register failed: {e}"),
+    {
+        // P1.2 — capture per-key registration so the Diagnostics tab can name a
+        // conflicting key instead of a blanket "hotkeys disabled" (audit P1.2).
+        let mut registered: Vec<&str> = Vec::new();
+        let mut failed: Vec<&str> = Vec::new();
+        if let Some(m) = hotkey_manager.as_ref() {
+            for (label, hk) in [
+                ("F3", f3_hotkey),
+                ("F4", f4_hotkey),
+                ("F6", f6_hotkey),
+                ("F8", f8_hotkey),
+                ("F9", f9_hotkey),
+                ("Shift+F9", sf9_hotkey),
+                ("F1", f1_hotkey),
+            ] {
+                match m.register(hk) {
+                    Ok(()) => {
+                        eprintln!("[overlay-host] {label} hotkey registered");
+                        registered.push(label);
+                    }
+                    Err(e) => {
+                        eprintln!("[overlay-host] {label} register failed: {e}");
+                        failed.push(label);
+                    }
+                }
             }
         }
+        let _ = HOTKEY_DIAG.set(HotkeyDiag {
+            registered: registered.join(" "),
+            failed: failed.join(", "),
+            manager_missing: hotkey_manager.is_none(),
+        });
     }
 
     let hotkey_poll = Timer::default();
@@ -5238,27 +5285,27 @@ fn global_scheme() -> i32 {
 /// their HWND post-show (the F4 palette). (#111)
 /// Stealth-aware presentation for the auxiliary windows (F4 palette, Settings)
 /// that otherwise rely on winit's default centering. Mirrors
-/// `present_tile_window` + `apply_tile_hwnd_with_monitor` (review M1): when
-/// stealth is on, park the window OFF the virtual desktop BEFORE its first frame
-/// so it's never composited onto a real monitor, then — once winit realizes the
-/// HWND — apply WDA and move it to the centre of the target monitor, so the
-/// first on-screen frame is already excluded from capture (no flash on the
-/// stream). `decorate` runs each window's extra per-HWND setup (e.g. Settings'
-/// DWM transparency for rounded corners) right before WDA, in the same tick, and
-/// ALWAYS runs (stealth on or off) so non-stealth visuals are unchanged.
+/// `present_tile_window` + `apply_tile_hwnd_with_monitor` (review M1): park the
+/// window OFF the virtual desktop BEFORE its first frame so it's never composited
+/// onto a real monitor, then — once winit realizes the HWND — run `decorate`
+/// (e.g. Settings' DWM transparency for rounded corners), apply WDA when stealth
+/// is on, and move it to the centre of the target monitor. The first ON-SCREEN
+/// frame is therefore already fully painted + decorated (+ stealth-excluded).
+/// NOTE: parking is now UNCONDITIONAL (was stealth-only). A non-stealth window
+/// used to be shown immediately and only decorated ~1-2 frames later, which the
+/// user saw as a bare outline / black rounded corners flashing before the content
+/// composited. Parking always closes that gap for stealth-off windows too.
 fn present_window_stealth_aware<W, F>(win: &W, decorate: F)
 where
     W: slint::ComponentHandle + 'static,
     F: Fn(windows::Win32::Foundation::HWND) + 'static,
 {
-    // Capture the stealth decision at show-time: if true we parked off-screen
-    // and MUST move back on-screen in the realize tick (unconditionally, so a
-    // stealth toggle mid-realize can't strand the window off the desktop).
-    let parked = global_stealth();
-    if parked {
-        win.window()
-            .set_position(slint::PhysicalPosition::new(-32000, -32000));
-    }
+    // Park off-screen BEFORE the first frame (always — see fn doc). The reveal
+    // tick decorates + (under stealth) WDAs, then moves it on-screen, so the
+    // first visible frame is complete. Unconditional so a stealth toggle
+    // mid-realize can't strand the window off the desktop either.
+    win.window()
+        .set_position(slint::PhysicalPosition::new(-32000, -32000));
     let _ = win.show();
     // V0.8.4 — reveal as soon as the HWND realizes (~1-2 frames) instead of a
     // fixed 200ms blind wait, so on-demand windows (Settings/help/palette/wizard/
@@ -5274,18 +5321,17 @@ where
         if global_stealth() {
             let _ = set_stealth(hwnd, true);
         }
-        if parked {
-            // WDA is applied (or stealth was toggled off) — safe to reveal.
-            // Centre on the picked monitor using the real HiDPI-aware size.
-            let (_x, _y, w_px, h_px) = get_window_rect(hwnd).unwrap_or((0, 0, 460, 360));
-            let monitors = enum_monitors();
-            if let Some(mon) = pick_monitor(&monitors) {
-                let cx = (mon.left + (mon.width() - w_px) / 2).max(mon.left + 8);
-                let cy = (mon.top + (mon.height() - h_px) / 2).max(mon.top + 8);
-                let _ = move_window_pos_only(hwnd, cx, cy);
-            } else {
-                let _ = move_window_pos_only(hwnd, 100, 100);
-            }
+        // The off-screen frame is now painted + decorated (+ WDA under stealth):
+        // reveal it centered on the picked monitor using the real HiDPI-aware
+        // size, so the first ON-SCREEN frame is already complete (no flash).
+        let (_x, _y, w_px, h_px) = get_window_rect(hwnd).unwrap_or((0, 0, 460, 360));
+        let monitors = enum_monitors();
+        if let Some(mon) = pick_monitor(&monitors) {
+            let cx = (mon.left + (mon.width() - w_px) / 2).max(mon.left + 8);
+            let cy = (mon.top + (mon.height() - h_px) / 2).max(mon.top + 8);
+            let _ = move_window_pos_only(hwnd, cx, cy);
+        } else {
+            let _ = move_window_pos_only(hwnd, 100, 100);
         }
         true
     });
@@ -7463,6 +7509,30 @@ fn open_settings(
         });
     }
 
+    // P1.1 — "Copy report": redacted diagnostics → clipboard with a brief
+    // "copied" confirmation. build_diag_report masks the LAN bridge IP and
+    // carries no bearer / API key / transcript / profile text.
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_diagnostics_copy_report_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            let report = build_diag_report(&cfg_c);
+            match clipboard_win::set_clipboard_string(&report) {
+                Ok(()) => {
+                    w.set_diag_copied(true);
+                    let wk = w.as_weak();
+                    Timer::single_shot(Duration::from_millis(1800), move || {
+                        if let Some(w) = wk.upgrade() {
+                            w.set_diag_copied(false);
+                        }
+                    });
+                }
+                Err(e) => eprintln!("[overlay-host] diag report copy failed: {e}"),
+            }
+        });
+    }
+
     // #131 — diagnostics "Проверить всё": live-ping the ACTIVE AI endpoint
     // (resolved via ai_endpoint — NOT the raw cloud fields) + the active STT
     // backend, in ONE off-thread runtime, and write both rows back. Mic / sys
@@ -8298,7 +8368,109 @@ fn populate_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::config::Sha
     win.set_diag_mic_detail(SharedString::from(r.mic.detail));
     win.set_diag_sys_level(3);
     win.set_diag_sys_detail(SharedString::from(r.sys.detail));
+    // P1.1 — Vision (F8): 0=ready (configured), 3=neutral "off" (intentional).
+    win.set_diag_vision_level(if r.vision.configured { 0 } else { 3 });
+    win.set_diag_vision_detail(SharedString::from(r.vision.detail));
+    // P1.2 — global-hotkey registration outcome (per-key conflict surfacing).
+    let (hk_level, hk_registered, hk_failed) = hotkey_diag_row();
+    win.set_diag_hotkeys_level(hk_level);
+    win.set_diag_hotkeys_detail(SharedString::from(hk_registered));
+    win.set_diag_hotkeys_failed(SharedString::from(hk_failed));
     win.set_diag_stealth_on(r.stealth_on);
+}
+
+/// True if `s` is exactly a dotted IPv4 literal (four 0–255 octets). Used to mask
+/// the LAN bridge address out of the copyable diagnostics report.
+fn is_ipv4(s: &str) -> bool {
+    let mut parts = 0;
+    for p in s.split('.') {
+        parts += 1;
+        if parts > 4 || p.is_empty() || p.len() > 3 || p.parse::<u8>().is_err() {
+            return false;
+        }
+    }
+    parts == 4
+}
+
+/// Replace any IPv4 literal (e.g. the private bridge 192.168.x.y) with "<ip>" so
+/// a copied diagnostics report is safe to paste into a support thread. Ports and
+/// paths are kept ("http://192.168.0.142:18902/v1" → "http://<ip>:18902/v1").
+/// UTF-8 safe (operates on chars); only ASCII digit/dot runs are inspected.
+fn redact_ipv4(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut run = String::new();
+    for ch in s.chars() {
+        if ch.is_ascii_digit() || ch == '.' {
+            run.push(ch);
+        } else {
+            if is_ipv4(&run) {
+                out.push_str("<ip>");
+            } else {
+                out.push_str(&run);
+            }
+            run.clear();
+            out.push(ch);
+        }
+    }
+    if is_ipv4(&run) {
+        out.push_str("<ip>");
+    } else {
+        out.push_str(&run);
+    }
+    out
+}
+
+/// P1.1 — build a REDACTED plain-text diagnostics report for the clipboard.
+/// Carries subsystem status + NEUTRAL details only: never a bearer / API key /
+/// transcript / profile text / screenshot, and every IPv4 is masked. Safe to
+/// paste into a support thread.
+fn build_diag_report(cfg: &overlay_backend::config::SharedConfig) -> String {
+    let c = cfg.read();
+    let r = c.readiness();
+    let st = |configured: bool| {
+        if configured {
+            "ready"
+        } else {
+            "not configured"
+        }
+    };
+    let dev = |d: &str| {
+        if d.is_empty() {
+            "default".to_string()
+        } else {
+            d.to_string()
+        }
+    };
+    let (hk_level, hk_registered, hk_failed) = hotkey_diag_row();
+    let hk_line = if hk_level == 0 {
+        format!("ok ({hk_registered})")
+    } else if !hk_failed.is_empty() {
+        format!("CONFLICT: {hk_failed} (ok: {hk_registered})")
+    } else {
+        "unavailable".to_string()
+    };
+    let report = format!(
+        "suflyor diagnostics (v{})\n\
+         AI: {} — {}\n\
+         STT: {} — {}\n\
+         Vision: {} — {}\n\
+         Microphone: {}\n\
+         System audio: {}\n\
+         Hotkeys: {}\n\
+         Stealth: {}\n",
+        env!("CARGO_PKG_VERSION"),
+        st(r.ai.configured),
+        r.ai.detail,
+        st(r.stt.configured),
+        r.stt.detail,
+        if r.vision.configured { "ready" } else { "off" },
+        r.vision.detail,
+        dev(&r.mic.detail),
+        dev(&r.sys.detail),
+        hk_line,
+        if r.stealth_on { "on" } else { "off" },
+    );
+    redact_ipv4(&report)
 }
 
 /// Populate the Settings window's token-status display properties
@@ -8439,6 +8611,35 @@ mod copy_tests {
         let raw = "Транскрипт последних реплик:\n[СОБЕСЕДНИК] arc raiders?\n\n\
                    Помоги ответить: что такое arc raiders";
         assert_eq!(user_question_for_copy(raw), "что такое arc raiders");
+    }
+
+    // P1.1 — lock the "Copy report" redaction contract (its security boundary):
+    // the LAN bridge IP must be masked, while ports / paths / non-IP tokens
+    // survive so the report stays useful and safe to paste into a support thread.
+    #[test]
+    fn redact_ipv4_masks_lan_ip_keeps_port_and_path() {
+        assert_eq!(
+            redact_ipv4("http://192.168.0.142:18902/v1"),
+            "http://<ip>:18902/v1"
+        );
+        assert_eq!(redact_ipv4("local 127.0.0.1 ok"), "local <ip> ok");
+        // No IPv4 → untouched (model id, app version).
+        assert_eq!(redact_ipv4("claude-sonnet-4-6"), "claude-sonnet-4-6");
+        assert_eq!(
+            redact_ipv4("suflyor diagnostics (v1.16.1)"),
+            "suflyor diagnostics (v1.16.1)"
+        );
+    }
+
+    #[test]
+    fn is_ipv4_accepts_valid_rejects_ports_and_versions() {
+        assert!(is_ipv4("10.0.0.1"));
+        assert!(is_ipv4("255.255.255.255"));
+        assert!(!is_ipv4("18902")); // a bare port
+        assert!(!is_ipv4("1.16.1")); // 3 octets (a version)
+        assert!(!is_ipv4("1.2.3.4.5")); // 5 octets
+        assert!(!is_ipv4("256.1.1.1")); // octet > 255
+        assert!(!is_ipv4("")); // empty
     }
 
     #[test]

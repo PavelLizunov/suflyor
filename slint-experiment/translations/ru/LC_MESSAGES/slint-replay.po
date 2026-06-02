@@ -298,6 +298,27 @@ msgstr "«Проверить всё» пингует AI + STT, пишет мик
 msgid "No signal"
 msgstr "Нет сигнала"
 
+msgid "Vision (F8)"
+msgstr "Зрение (F8)"
+
+msgid "Global hotkeys"
+msgstr "Глобальные хоткеи"
+
+msgid "conflict: {}"
+msgstr "конфликт: {}"
+
+msgid "hotkey system unavailable"
+msgstr "система хоткеев недоступна"
+
+msgid "registering…"
+msgstr "регистрация…"
+
+msgid "Copy report"
+msgstr "Копировать отчёт"
+
+msgid "copied"
+msgstr "скопировано"
+
 msgid "Toggle hotkey-hint popover"
 msgstr "Показать/скрыть подсказку по хоткеям"
 

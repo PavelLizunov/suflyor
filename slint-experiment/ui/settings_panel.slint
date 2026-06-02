@@ -291,7 +291,21 @@ export component SettingsWindow inherits Window {
     in-out property <int> diag-sys-level: 3;
     in-out property <string> diag-sys-detail: "";
     in-out property <bool> diag-stealth-on: false;
+    // P1.1 — Vision (F8) channel readiness. level 0=ready, 3=off/neutral.
+    in-out property <int> diag-vision-level: 3;
+    in-out property <string> diag-vision-detail: "";
+    // P1.2 — global-hotkey registration. level 0=all registered, 4=a key failed
+    // (conflict); detail names the failed key(s), never a blanket "disabled".
+    in-out property <int> diag-hotkeys-level: 3;
+    in-out property <string> diag-hotkeys-detail: "";
+    // Failed hotkey names (data only; the "conflict:" wording is composed +
+    // translated in the row so no English leaks from Rust).
+    in-out property <string> diag-hotkeys-failed: "";
+    // Transient confirmation flag for the redacted diagnostic-report copy
+    // (bool so the "copied" word is translated in-UI, no Rust-built string).
+    in-out property <bool> diag-copied: false;
     callback diagnostics-check-all-clicked();
+    callback diagnostics-copy-report-clicked();
     // Phase E6 v29 — meeting-context editor (Profile+context tab).
     in-out property <string> meeting-context-input: "";
     in-out property <string> meeting-context-result: "";
@@ -655,8 +669,11 @@ export component SettingsWindow inherits Window {
                         for row in [
                             { label: @tr("AI (answers)"), level: root.diag-ai-level, detail: root.diag-ai-detail },
                             { label: @tr("Speech recognition (STT)"), level: root.diag-stt-level, detail: root.diag-stt-detail },
+                            { label: @tr("Vision (F8)"), level: root.diag-vision-level, detail: root.diag-vision-detail == "" ? @tr("off") : root.diag-vision-detail },
                             { label: @tr("Microphone"), level: root.diag-mic-level, detail: root.diag-mic-detail == "" ? @tr("default") : root.diag-mic-detail },
                             { label: @tr("System audio"), level: root.diag-sys-level, detail: root.diag-sys-detail == "" ? @tr("default") : root.diag-sys-detail },
+                            // Detail precedence is load-bearing: registering (level 3) → conflict (failed non-empty) → ok list → unavailable. Keep `failed` checked BEFORE `detail` so a conflict is never hidden behind the registered list.
+                            { label: @tr("Global hotkeys"), level: root.diag-hotkeys-level, detail: root.diag-hotkeys-level == 3 ? @tr("registering…") : (root.diag-hotkeys-failed != "" ? @tr("conflict: {}", root.diag-hotkeys-failed) : (root.diag-hotkeys-detail != "" ? root.diag-hotkeys-detail : @tr("hotkey system unavailable"))) },
                             { label: @tr("Stealth"), level: 3, detail: root.diag-stealth-on ? @tr("on — verify with a screen-share preview") : @tr("off") },
                         ] : HorizontalLayout {
                             padding: 4px;
@@ -694,9 +711,21 @@ export component SettingsWindow inherits Window {
                         Rectangle { height: 4px; }
                         HorizontalLayout {
                             alignment: start;
+                            spacing: 8px;
                             Button {
                                 text: @tr("Check all");
                                 clicked => { root.diagnostics-check-all-clicked(); }
+                            }
+                            Button {
+                                text: @tr("Copy report");
+                                clicked => { root.diagnostics-copy-report-clicked(); }
+                            }
+                            Text {
+                                text: root.diag-copied ? @tr("copied") : "";
+                                font-size: 11px;
+                                font-weight: 700;
+                                color: Theme.success;
+                                vertical-alignment: center;
                             }
                         }
                         Text {

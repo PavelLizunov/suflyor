@@ -513,6 +513,10 @@ pub struct ReadinessReport {
     pub stt: ReadinessItem,
     pub mic: ReadinessItem,
     pub sys: ReadinessItem,
+    /// Separate vision channel (F8 screenshots). `configured` is false when the
+    /// provider is "off" (feature intentionally disabled) — the UI renders that
+    /// as a neutral "off", not an error.
+    pub vision: ReadinessItem,
     pub stealth_on: bool,
 }
 
@@ -667,6 +671,22 @@ impl Config {
             _ => String::new(),
         };
 
+        // Vision (F8) — resolve the SEPARATE vision channel. "off" → not
+        // configured (intentional). detail carries provider + url + model only,
+        // never a bearer (mirrors the AI line).
+        let (vision_configured, vision_detail) = match self.vision_endpoint() {
+            Some(ep) => {
+                let ok = !ep.base_url.trim().is_empty() && !ep.model.trim().is_empty();
+                let d = if ok {
+                    format!("{} · {} · {}", self.vision_provider, ep.base_url, ep.model)
+                } else {
+                    String::new()
+                };
+                (ok, d)
+            }
+            None => (false, String::new()),
+        };
+
         ReadinessReport {
             ai: ReadinessItem {
                 configured: ai_configured,
@@ -683,6 +703,10 @@ impl Config {
             sys: ReadinessItem {
                 configured: true,
                 detail: device_detail(&self.system_audio_device),
+            },
+            vision: ReadinessItem {
+                configured: vision_configured,
+                detail: vision_detail,
             },
             stealth_on: self.stealth_enabled,
         }
@@ -2367,6 +2391,30 @@ mod tests {
         assert!(!c3.readiness().stt.configured);
         c3.stt_gigaam_dir = r"C:\m\gigaam".into();
         assert!(c3.readiness().stt.detail.contains("gigaam"));
+
+        // Vision (F8): "off" → unconfigured; "same" → reuses the text endpoint;
+        // detail carries provider + url + model but never a secret.
+        let mut cv = Config::defaults();
+        cv.vision_provider = "off".into();
+        assert!(
+            !cv.readiness().vision.configured,
+            "vision=off must be unconfigured"
+        );
+        cv.vision_provider = "same".into();
+        cv.ai_provider = "cloud".into();
+        cv.ai_base_url = "http://bridge/v1".into();
+        cv.ai_bearer = "SECRET-bearer".into();
+        cv.ai_model = "claude-haiku".into();
+        let rv = cv.readiness();
+        assert!(rv.vision.configured, "vision=same reuses the text endpoint");
+        assert!(
+            rv.vision.detail.contains("same") && rv.vision.detail.contains("http://bridge/v1"),
+            "vision detail shows provider + url"
+        );
+        assert!(
+            !rv.vision.detail.contains("SECRET"),
+            "no bearer in vision detail"
+        );
 
         // Stealth bool passes through.
         let mut c4 = Config::defaults();
