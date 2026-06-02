@@ -108,15 +108,21 @@ fn apply_transparency(hwnd: HWND, click_through: bool) -> Result<(), Box<dyn std
     // re-applies WS_EX_TRANSPARENT later we'll see it diverge.
     let after = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
     let transparent_bit = WS_EX_TRANSPARENT.0 as isize;
-    eprintln!(
-        "[overlay-host] apply_transparency: click_through={} before=0x{:x} target=0x{:x} after=0x{:x} \
-         transparent_bit_after={}",
-        click_through,
-        before,
-        target,
-        after,
-        (after & transparent_bit) != 0,
-    );
+    // Diagnostic only — gate behind debug builds so normal (release) window
+    // creation isn't spammed with this per-window line (it also bypasses the
+    // timestamped file log). cfg! keeps it compiled, so `after`/`transparent_bit`
+    // stay "used"; the format work is just skipped at runtime in release.
+    if cfg!(debug_assertions) {
+        eprintln!(
+            "[overlay-host] apply_transparency: click_through={} before=0x{:x} target=0x{:x} after=0x{:x} \
+             transparent_bit_after={}",
+            click_through,
+            before,
+            target,
+            after,
+            (after & transparent_bit) != 0,
+        );
+    }
 
     // V0.8.4 — kill the ghost caption buttons. Slint's `no-frame: true` leaves
     // WS_CAPTION | WS_SYSMENU | WS_MAXIMIZEBOX | WS_MINIMIZEBOX on the HWND; once
@@ -392,42 +398,48 @@ pub fn capture_rect_bgra(
         }
         let old = SelectObject(mem, HGDIOBJ(bmp.0));
         let blt = BitBlt(mem, 0, 0, w, h, Some(screen), x, y, SRCCOPY);
-        let mut buf = vec![0u8; buf_len];
-        let mut bi = BITMAPINFO {
-            bmiHeader: BITMAPINFOHEADER {
-                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                biWidth: w,
-                biHeight: -h, // negative => top-down rows
-                biPlanes: 1,
-                biBitCount: 32,
-                biCompression: BI_RGB.0,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
         // Deselect the bitmap from the DC BEFORE reading its bits: GetDIBits
         // requires the bitmap NOT be selected into any DC (documented contract).
         SelectObject(mem, old);
-        let lines = GetDIBits(
-            mem,
-            bmp,
-            0,
-            h as u32,
-            Some(buf.as_mut_ptr().cast::<c_void>()),
-            &mut bi,
-            DIB_RGB_COLORS,
-        );
+        // Skip the large (full-virtual-desktop) GetDIBits copy + buffer alloc
+        // entirely when BitBlt failed — but still run the GDI cleanup below on
+        // every path.
+        let result: Result<Vec<u8>, Box<dyn std::error::Error>> = if blt.is_err() {
+            Err("BitBlt failed".into())
+        } else {
+            let mut buf = vec![0u8; buf_len];
+            let mut bi = BITMAPINFO {
+                bmiHeader: BITMAPINFOHEADER {
+                    biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                    biWidth: w,
+                    biHeight: -h, // negative => top-down rows
+                    biPlanes: 1,
+                    biBitCount: 32,
+                    biCompression: BI_RGB.0,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let lines = GetDIBits(
+                mem,
+                bmp,
+                0,
+                h as u32,
+                Some(buf.as_mut_ptr().cast::<c_void>()),
+                &mut bi,
+                DIB_RGB_COLORS,
+            );
+            if lines == 0 {
+                Err("GetDIBits returned 0 scanlines".into())
+            } else {
+                Ok(buf)
+            }
+        };
         // Free the remaining GDI objects on all paths.
         let _ = DeleteObject(HGDIOBJ(bmp.0));
         let _ = DeleteDC(mem);
         let _ = ReleaseDC(None, screen);
-        if blt.is_err() {
-            return Err("BitBlt failed".into());
-        }
-        if lines == 0 {
-            return Err("GetDIBits returned 0 scanlines".into());
-        }
-        Ok(buf)
+        result
     }
 }
 
@@ -462,6 +474,16 @@ pub fn hide_own_windows() -> Vec<(isize, bool)> {
     HIDDEN.with(|h| h.borrow_mut().clear());
     unsafe {
         let _ = EnumWindows(Some(cb), LPARAM(0));
+    }
+    // Force a DWM compositor flush so the windows we just hid are gone from the
+    // next composited frame BEFORE the caller's GDI BitBlt reads the screen.
+    // Without it, on a busy frame the just-hidden bar/tiles could still be
+    // captured into the (possibly cloud) vision screenshot — GDI BitBlt ignores
+    // WDA_EXCLUDEFROMCAPTURE, so this hide-then-flush is the only thing keeping
+    // our own overlay out of the outbound image.
+    {
+        use windows::Win32::Graphics::Dwm::DwmFlush;
+        let _ = unsafe { DwmFlush() };
     }
     HIDDEN.with(|h| h.borrow().clone())
 }

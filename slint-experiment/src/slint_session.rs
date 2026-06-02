@@ -575,7 +575,12 @@ async fn maybe_spawn_auto_tile(
 
     log_info(&format!("auto-tile triggered: {trigger:?}"));
 
-    // ===== Cost-cap warn (non-blocking) =====
+    // ===== Cost cap — BLOCK the auto-tile cloud spend once over budget =====
+    // Local inference is free (cost stays 0), so this only ever trips on the
+    // cloud bridge. Auto-tiles are the "spend without an explicit keypress"
+    // path, so honour the user's cap here by returning after the chip — manual
+    // F9/F6 asks still proceed (that path deliberately only warns). Audit #18:
+    // the cap previously warned but proceeded, so it never actually capped.
     let current_micro = lock(&rt).session_cost_microcents;
     if cap_usd > 0.0 {
         let current_usd = (current_micro as f64) / 100_000_000.0;
@@ -587,9 +592,10 @@ async fn maybe_spawn_auto_tile(
                         "over budget: ${current_usd:.4} spent ≥ ${cap_usd:.2} (Settings → Max cost per session)"
                     ),
                     "source": "auto_tile",
-                    "blocking": false,
+                    "blocking": true,
                 }),
             );
+            return;
         }
     }
 
@@ -859,7 +865,29 @@ pub fn stop_session(rt: SharedSlintRuntime) -> Vec<TranscriptLine> {
     s.last_ai_error_tile_ms = 0;
     let snapshot: Vec<TranscriptLine> = s.transcript.iter().cloned().collect();
     s.transcript.clear();
+    // Write the SessionSummary roll-up + SessionStop marker before closing, so
+    // the journal has the "how did this session go" one-liner on disk (audit:
+    // these were defined + counted but never emitted on the shipping stack).
     if let Some(j) = s.journal.take() {
+        if let Some(c) = j.snapshot_counters() {
+            let now = overlay_backend::journal::now_unix_ms();
+            j.write(&overlay_backend::journal::JournalEvent::SessionSummary {
+                unix_ms: now,
+                duration_ms: now.saturating_sub(c.start_unix_ms),
+                transcript_lines: c.transcript_mic + c.transcript_system,
+                transcript_mic: c.transcript_mic,
+                transcript_system: c.transcript_system,
+                detector_triggered: c.detector_triggered,
+                detector_skipped: c.detector_skipped,
+                ai_requests_total: c.ai_requests_total,
+                ai_responses_ok: c.ai_responses_ok,
+                ai_errors: c.ai_errors,
+                tiles_spawned: c.tiles_spawned,
+                rate_limited: c.rate_limited,
+                total_cost_microcents: c.total_cost_microcents,
+            });
+            j.write(&overlay_backend::journal::JournalEvent::SessionStop { unix_ms: now });
+        }
         drop(j);
     }
     snapshot

@@ -388,16 +388,19 @@ fn wire_voice_followup(
         // Toggle OFF — stop the in-flight recording; the thread finishes,
         // transcribes, and ships the text to the drain.
         if let Some(stop) = voice_stop.borrow_mut().take() {
-            // If the 30 s watchdog already fired, the record thread has already
-            // shipped its result — don't re-arm busy (it would hang forever).
-            if stop.swap(true, Ordering::AcqRel) {
+            // Normal toggle-OFF: we set the stop flag; the record thread finishes,
+            // transcribes, and ships the text to the drain.
+            if !stop.swap(true, Ordering::AcqRel) {
                 t.set_voice_recording(false);
+                t.set_followup_busy(true);
+                t.set_source_label(SharedString::from("stt · расшифровка…"));
                 return;
             }
-            t.set_voice_recording(false);
-            t.set_followup_busy(true);
-            t.set_source_label(SharedString::from("stt · расшифровка…"));
-            return;
+            // The 30 s watchdog already fired (stop was already true): the prior
+            // recording has ended + shipped, so this is NOT a real toggle-off —
+            // fall through to start a FRESH recording instead of swallowing the
+            // click (audit #23: the first 🎤 click after a watchdog timeout was
+            // a dead-click that the user had to repeat).
         }
         // Toggle ON — snapshot STT config, then record on a thread.
         let (
@@ -5485,6 +5488,10 @@ fn open_text_ask(
         });
     }
     present_window_stealth_aware(&win, |hwnd| {
+        // Keep these transient overlay windows out of the taskbar + Alt-Tab,
+        // like the bar/tiles — otherwise under stealth they leak an existence
+        // entry while open (content is WDA-hidden, but the window button isn't).
+        let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
         focus_window(hwnd);
     });
     *slot_ref.borrow_mut() = Some(win);
@@ -5558,6 +5565,10 @@ fn open_help(
         });
     }
     present_window_stealth_aware(&win, |hwnd| {
+        // Keep these transient overlay windows out of the taskbar + Alt-Tab,
+        // like the bar/tiles — otherwise under stealth they leak an existence
+        // entry while open (content is WDA-hidden, but the window button isn't).
+        let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
         focus_window(hwnd);
     });
     *slot_ref.borrow_mut() = Some(win);
@@ -5999,6 +6010,10 @@ fn open_wizard(
         });
     }
     present_window_stealth_aware(&win, |hwnd| {
+        // Keep these transient overlay windows out of the taskbar + Alt-Tab,
+        // like the bar/tiles — otherwise under stealth they leak an existence
+        // entry while open (content is WDA-hidden, but the window button isn't).
+        let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
         focus_window(hwnd);
     });
     *slot_ref.borrow_mut() = Some(win);
@@ -6328,7 +6343,11 @@ fn open_palette(
     // #111 + review M1 — exclude the palette from capture WITHOUT a flash:
     // park off-screen before show, apply WDA, then reveal centred. No extra
     // HWND decoration for the palette (it's an opaque window).
-    present_window_stealth_aware(&win, |_hwnd| {});
+    present_window_stealth_aware(&win, |hwnd| {
+        // Keep the palette out of the taskbar/Alt-Tab too (stealth existence
+        // leak — same as help/text-ask/wizard above).
+        let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
+    });
     *slot = Some(win);
 }
 
@@ -8236,7 +8255,15 @@ fn refresh_profiles(win: &SettingsWindow, c: &overlay_backend::config::Config) {
         .map(|p| SharedString::from(p.name.as_str()))
         .collect();
     win.set_profile_names(ModelRc::new(VecModel::from(names)));
-    win.set_active_profile_index(c.active_profile_index().map_or(-1, |i| i as i32));
+    // Default to the first profile (0) when profiles exist but none is marked
+    // active (e.g. after deleting the active one): otherwise the ComboBox bound
+    // to -1 shows blank AND Rename/Delete stay disabled though selectable
+    // profiles exist (audit #28). -1 only when there are no profiles at all.
+    win.set_active_profile_index(match c.active_profile_index() {
+        Some(i) => i as i32,
+        None if !c.context_profiles.is_empty() => 0,
+        None => -1,
+    });
     win.set_meeting_context_input(SharedString::from(c.meeting_context.as_str()));
 }
 
