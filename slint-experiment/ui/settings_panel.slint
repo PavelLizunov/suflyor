@@ -233,6 +233,7 @@ export component SettingsWindow inherits Window {
 
     callback always-on-top-changed(bool);
     callback stealth-changed(bool);
+    callback open-wizard-clicked();
     callback close-clicked();
     callback tab-selected(int);
     // Phase E6 v25 — frameless window drag (cursor-delta, wired in Rust).
@@ -763,6 +764,20 @@ export component SettingsWindow inherits Window {
                                 selected => {
                                     root.color-scheme-selected(self.current-index);
                                 }
+                            }
+                        }
+                        // First-run setup wizard — relaunchable any time.
+                        Text {
+                            text: @tr("Re-run the guided first-time setup.");
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            Button {
+                                text: @tr("🪄 Run setup wizard");
+                                clicked => { root.open-wizard-clicked(); }
                             }
                         }
                     }

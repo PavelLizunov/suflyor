@@ -674,3 +674,96 @@ msgstr "Введите вопрос…"
 
 msgid "Send"
 msgstr "Отправить"
+
+msgid "Setup wizard"
+msgstr "Мастер настройки"
+
+msgid "🪄 Run setup wizard"
+msgstr "🪄 Запустить мастер настройки"
+
+msgid "Re-run the guided first-time setup."
+msgstr "Повторно пройти мастер первичной настройки."
+
+msgid "Step {} of 7"
+msgstr "Шаг {} из 7"
+
+msgid "Choose how overlay-mvp runs"
+msgstr "Выберите режим работы overlay-mvp"
+
+msgid "Cloud — Groq STT + Claude bridge (fast start, needs keys + internet)"
+msgstr "Cloud — Groq STT + мост Claude (быстрый старт, нужны ключи и интернет)"
+
+msgid "Fully local — local AI + local STT (nothing leaves the machine, needs models)"
+msgstr "Полностью локально — локальный AI + локальный STT (ничего не уходит наружу, нужны модели)"
+
+msgid "Mixed — e.g. local STT + cloud AI (configure manually)"
+msgstr "Смешанно — например локальный STT + облачный AI (настроить вручную)"
+
+msgid "Now: cloud recognition + cloud answers."
+msgstr "Сейчас: облачное распознавание + облачные ответы."
+
+msgid "Now: local recognition + local answers. Audio stays on this machine."
+msgstr "Сейчас: локальное распознавание + локальные ответы. Аудио не покидает этот компьютер."
+
+msgid "Now: mixed. Tune providers in Settings."
+msgstr "Сейчас: смешанно. Настройте провайдеров в Settings."
+
+msgid "AI"
+msgstr "AI"
+
+msgid "Configure the AI provider in Settings; here we just confirm it answers."
+msgstr "Настройте AI-провайдера в Settings; здесь только проверяем, что он отвечает."
+
+msgid "Test AI"
+msgstr "Проверить AI"
+
+msgid "Configure STT in Settings; here we confirm it connects."
+msgstr "Настройте STT в Settings; здесь проверяем подключение."
+
+msgid "Test STT"
+msgstr "Проверить STT"
+
+msgid "Records 3 seconds. Speak during the test to see your level."
+msgstr "Запишет 3 секунды. Говорите во время теста, чтобы увидеть уровень."
+
+msgid "Record test"
+msgstr "Записать тест"
+
+msgid "Needed to hear the other side. Plays a short test tone and checks loopback."
+msgstr "Нужно, чтобы слышать собеседника. Проигрывает короткий тон и проверяет loopback."
+
+msgid "Check system audio"
+msgstr "Проверить системный звук"
+
+msgid "Overlay & stealth"
+msgstr "Overlay и stealth"
+
+msgid "Hide overlay from screen capture"
+msgstr "Скрывать overlay от захвата экрана"
+
+msgid "Press Print Screen or open a screen-share preview — the overlay should vanish from the capture but stay on your screen. We can't verify stealth automatically."
+msgstr "Нажмите Print Screen или откройте предпросмотр screen-share — overlay должен исчезнуть из захвата, но остаться на вашем экране. Автоматически проверить stealth нельзя."
+
+msgid "Done"
+msgstr "Готово"
+
+msgid "Start working"
+msgstr "Начать работу"
+
+msgid "Open diagnostics"
+msgstr "Открыть диагностику"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Needs attention"
+msgstr "Требует внимания"
+
+msgid "Back"
+msgstr "Назад"
+
+msgid "Skip"
+msgstr "Пропустить"
+
+msgid "Next"
+msgstr "Далее"

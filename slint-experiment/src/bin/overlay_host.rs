@@ -61,7 +61,7 @@ mod ui {
 
 use ui::{
     CaptureOverlay, MarkdownBlock, OverlayBarWindow, PaletteResult, PaletteWindow, SettingsWindow,
-    TextAskWindow, TileWindow,
+    TextAskWindow, TileWindow, WizardWindow,
 };
 
 type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
@@ -1391,6 +1391,13 @@ fn main() -> Result<(), slint::PlatformError> {
     };
     let rt_handle = tokio_rt.handle().clone();
 
+    // First-run detection — capture BEFORE config::shared() (load() may create
+    // the file). Absent config.json == this is the user's first launch → we
+    // auto-open the setup wizard once the overlay is up (see below, pre-run()).
+    let first_run = overlay_backend::config::config_path()
+        .map(|p| !p.exists())
+        .unwrap_or(false);
+
     // Phase C — load config once at startup. SharedConfig (Arc<RwLock>)
     // because Settings tab will eventually mutate it.
     let cfg = config::shared();
@@ -2241,6 +2248,8 @@ fn main() -> Result<(), slint::PlatformError> {
     let palette: Rc<RefCell<Option<PaletteWindow>>> = Rc::new(RefCell::new(None));
     // V0.8.3 — "Написать" text-input window, created on demand like the palette.
     let text_ask: Rc<RefCell<Option<TextAskWindow>>> = Rc::new(RefCell::new(None));
+    // First-run setup wizard, created on demand like text_ask / palette.
+    let wizard: Rc<RefCell<Option<WizardWindow>>> = Rc::new(RefCell::new(None));
     // V3 — the Lightshot capture overlay. PERSISTENT + pre-stealthed so F8 shows
     // it flash-free: WDA_EXCLUDEFROMCAPTURE keeps it off any screen-share from the
     // first frame, WS_EX_TOOLWINDOW keeps it out of the taskbar. We realize the
@@ -2683,6 +2692,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let palette_for_stealth = palette.clone();
         let settings_for_stealth = settings.clone();
         let text_ask_for_stealth = text_ask.clone();
+        let wizard_for_stealth = wizard.clone();
         let cfg_stealth = cfg.clone();
         overlay.on_stealth_toggle_clicked(move || {
             let new_stealth = {
@@ -2739,6 +2749,15 @@ fn main() -> Result<(), slint::PlatformError> {
                 if let Ok(hwnd) = grab_hwnd(sw.window()) {
                     let _ = set_stealth(hwnd, new_stealth);
                 }
+            }
+            // V0.8.4 — flip the first-run wizard window too if it's open, so
+            // toggling stealth from the bar hides it from capture immediately
+            // (and the wizard's in-window Switch reflects the new state).
+            if let Some(wz) = wizard_for_stealth.borrow().as_ref() {
+                if let Ok(hwnd) = grab_hwnd(wz.window()) {
+                    let _ = set_stealth(hwnd, new_stealth);
+                }
+                wz.set_stealth_on(new_stealth);
             }
         });
     }
@@ -3070,6 +3089,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let overlay_weak = overlay.as_weak();
         let text_ask_for_settings = text_ask.clone();
         let palette_for_settings = palette.clone();
+        let wizard_for_settings = wizard.clone();
         overlay.on_open_settings_clicked(move || {
             open_settings(
                 &s,
@@ -3079,6 +3099,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 &overlay_weak,
                 &text_ask_for_settings,
                 &palette_for_settings,
+                &wizard_for_settings,
             );
         });
     }
@@ -3268,6 +3289,25 @@ fn main() -> Result<(), slint::PlatformError> {
                 eprintln!("[overlay-host] auto-starting session on startup");
                 o.invoke_timer_toggle_clicked();
             }
+        });
+    }
+
+    // V0.8.4 — first launch (no config.json): auto-open the guided setup wizard
+    // a beat after the bar is up, so the bar has pinned + realized first. The
+    // wizard is created stealth-aware (centred on the picked monitor). Step 1's
+    // mode pick writes config.json, so this branch will not fire again next run.
+    if first_run {
+        eprintln!("[overlay-host] first run detected — auto-opening setup wizard");
+        let wz = wizard.clone();
+        let cfg_w = cfg.clone();
+        let st = settings.clone();
+        let state_w = state.clone();
+        let tiles_w = tiles.clone();
+        let ow = overlay.as_weak();
+        let pal = palette.clone();
+        let ta = text_ask.clone();
+        Timer::single_shot(Duration::from_millis(2200), move || {
+            open_wizard(&wz, &cfg_w, &state_w, &tiles_w, &ow, &pal, &ta, &st);
         });
     }
 
@@ -5341,6 +5381,423 @@ fn open_text_ask(
     *slot_ref.borrow_mut() = Some(win);
 }
 
+fn apply_scheme_wizard(w: &WizardWindow, scheme: i32) {
+    w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
+}
+
+/// Refill the step-7 summary rows. Renders ONLY secret-free values: the live
+/// check detail a step already painted ([ok]/[err], secret-free, same as the
+/// Diagnostics tab) or a status WORD from `readiness().configured`. NEVER the
+/// `ReadinessItem.detail` — for cloud AI it embeds the bridge LAN IP
+/// (`ai_base_url`), which must not reach this screen-shareable summary panel
+/// (security invariant). Called whenever step 7 is reached — via Next OR Skip —
+/// so a fully-skipped run still shows a populated summary.
+fn refill_wizard_summary(w: &WizardWindow, cfg: &overlay_backend::config::SharedConfig) {
+    let r = cfg.read().readiness();
+    let pick = |live: SharedString, configured: bool| -> SharedString {
+        if !live.is_empty() {
+            live
+        } else if configured {
+            SharedString::from("configured")
+        } else {
+            SharedString::from("—")
+        }
+    };
+    w.set_summary_ai(pick(w.get_ai_detail(), r.ai.configured));
+    w.set_summary_stt(pick(w.get_stt_detail(), r.stt.configured));
+    w.set_summary_mic(pick(w.get_mic_detail(), r.mic.configured));
+    w.set_summary_sys(pick(w.get_sys_detail(), r.sys.configured));
+}
+
+/// Wire all 7 wizard steps. Each per-step check REUSES the Diagnostics backend
+/// fns (see `on_diagnostics_check_all_clicked`) on a throwaway thread, reporting
+/// a level int (-1 checking · 0 ok · 4 needs-attention) + a secret-free detail.
+/// An error NEVER blocks Next. Every closure is panic-free (no unwrap/expect).
+#[allow(clippy::too_many_arguments)]
+fn wire_wizard_steps(
+    win: &WizardWindow,
+    cfg: &overlay_backend::config::SharedConfig,
+    state: &slint_replay::app_state::SharedState,
+    tiles: &TileWindows,
+    overlay_weak: &slint::Weak<OverlayBarWindow>,
+    palette_ref: &Rc<RefCell<Option<PaletteWindow>>>,
+    text_ask_ref: &Rc<RefCell<Option<TextAskWindow>>>,
+    settings_ref: &Rc<RefCell<Option<SettingsWindow>>>,
+) {
+    // nav-next: advance + auto-run the NEW step's check; refill summary at step 7.
+    {
+        let weak = win.as_weak();
+        let cfg_c = cfg.clone();
+        win.on_nav_next(move || {
+            let Some(w) = weak.upgrade() else { return };
+            let n = (w.get_step() + 1).min(6);
+            w.set_step(n);
+            match n {
+                1 => w.invoke_ai_test_clicked(),
+                2 => w.invoke_stt_test_clicked(),
+                3 => w.invoke_mic_test_clicked(),
+                4 => w.invoke_sys_test_clicked(),
+                6 => refill_wizard_summary(&w, &cfg_c),
+                _ => {}
+            }
+        });
+    }
+    {
+        let weak = win.as_weak();
+        win.on_nav_back(move || {
+            if let Some(w) = weak.upgrade() {
+                w.set_step((w.get_step() - 1).max(0));
+            }
+        });
+    }
+    {
+        let weak = win.as_weak();
+        let cfg_c = cfg.clone();
+        win.on_nav_skip(move || {
+            if let Some(w) = weak.upgrade() {
+                w.set_step((w.get_step() + 1).min(6));
+                // Refill the summary if Skip lands on step 7 too — otherwise a
+                // fully-skipped run shows blank rows (caught in live testing).
+                if w.get_step() == 6 {
+                    refill_wizard_summary(&w, &cfg_c);
+                }
+            }
+        });
+    }
+
+    // Step 1: mode → write provider fields + save (this CREATES config.json).
+    {
+        let cfg_c = cfg.clone();
+        win.on_mode_selected(move |m| {
+            let mut c = cfg_c.write();
+            match m {
+                0 => {
+                    c.ai_provider = "cloud".into();
+                    c.stt_provider = "cloud".into();
+                    c.vision_provider = "cloud".into();
+                }
+                1 => {
+                    c.ai_provider = "local".into();
+                    c.stt_provider = "whisper".into();
+                    c.vision_provider = "local".into();
+                }
+                _ => {} // Mixed: leave provider fields as-is.
+            }
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] wizard mode save failed: {e:#}");
+            }
+        });
+    }
+
+    // Step 2: AI — REUSE ai::test_connection via the RESOLVER (security: never
+    // the raw ai_base_url — ai_endpoint(false) picks local vs cloud).
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_ai_test_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            w.set_ai_level(-1);
+            w.set_ai_detail(SharedString::from(""));
+            let (base, bearer, model) = {
+                let c = cfg_c.read();
+                let e = c.ai_endpoint(false);
+                (e.base_url, e.bearer, e.model)
+            };
+            let wr = w.as_weak();
+            std::thread::spawn(move || {
+                let (lvl, msg): (i32, String) = match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(rt) => {
+                        match rt.block_on(overlay_backend::ai::test_connection(base, bearer, model))
+                        {
+                            Ok(s) => (0, format!("[ok] {s}")),
+                            Err(e) => (4, format!("[err] {e:#}").chars().take(80).collect()),
+                        }
+                    }
+                    Err(e) => (4, format!("[err] runtime: {e}")),
+                };
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = wr.upgrade() {
+                        w.set_ai_level(lvl);
+                        w.set_ai_detail(SharedString::from(msg));
+                    }
+                });
+            });
+        });
+    }
+
+    // Step 3: STT — REUSE stt::test_connection_backend.
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_stt_test_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            w.set_stt_level(-1);
+            w.set_stt_detail(SharedString::from(""));
+            let backend = cfg_c.read().stt_backend();
+            let wr = w.as_weak();
+            std::thread::spawn(move || {
+                let (lvl, msg): (i32, String) = match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(rt) => {
+                        match rt.block_on(overlay_backend::stt::test_connection_backend(&backend)) {
+                            Ok(s) => (0, format!("[ok] {s}")),
+                            Err(e) => (4, format!("[err] {e:#}").chars().take(80).collect()),
+                        }
+                    }
+                    Err(e) => (4, format!("[err] runtime: {e}")),
+                };
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = wr.upgrade() {
+                        w.set_stt_level(lvl);
+                        w.set_stt_detail(SharedString::from(msg));
+                    }
+                });
+            });
+        });
+    }
+
+    // Step 4: mic — REUSE record_mic_blocking + rms_dbfs WITH the single-mic
+    // guard (so a wizard probe during an active session reports busy, not a
+    // device fight). 3s blocking record on a throwaway thread.
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_mic_test_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            w.set_mic_level(-1);
+            w.set_mic_detail(SharedString::from("recording 3s…"));
+            let dev = cfg_c.read().mic_device.clone();
+            let wr = w.as_weak();
+            std::thread::spawn(move || {
+                let (lvl, msg): (i32, String) = if !try_acquire_mic() {
+                    (
+                        4,
+                        "[!] mic busy — close PTT / dictation and retry".to_string(),
+                    )
+                } else {
+                    let r = overlay_backend::audio::record_mic_blocking(3000, dev);
+                    release_mic();
+                    match r {
+                        Ok(s) if s.is_empty() => (4, "[!] no audio captured".to_string()),
+                        Ok(s) => {
+                            let d = overlay_backend::audio::rms_dbfs(&s);
+                            if d >= -45.0 {
+                                (0, format!("[ok] heard you ({d:.0} dBFS)"))
+                            } else {
+                                (0, format!("[ok] capture works · quiet ({d:.0} dBFS)"))
+                            }
+                        }
+                        Err(e) => (4, format!("[err] {e}").chars().take(80).collect()),
+                    }
+                };
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = wr.upgrade() {
+                        w.set_mic_level(lvl);
+                        w.set_mic_detail(SharedString::from(msg));
+                    }
+                });
+            });
+        });
+    }
+
+    // Step 5: system audio — REUSE play_tone_and_capture (the diag sys-phase
+    // self-test: play a tone through the default output, hear it on loopback).
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_sys_test_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            w.set_sys_level(-1);
+            w.set_sys_detail(SharedString::from(""));
+            let dev = cfg_c.read().system_audio_device.clone();
+            let wr = w.as_weak();
+            std::thread::spawn(move || {
+                let (lvl, msg): (i32, String) =
+                    match overlay_backend::audio::play_tone_and_capture(dev) {
+                        Ok(s) => {
+                            let d = overlay_backend::audio::rms_dbfs(&s);
+                            if d > -60.0 {
+                                (
+                                    0,
+                                    format!("[ok] loopback heard the test tone ({d:.0} dBFS)"),
+                                )
+                            } else {
+                                (
+                                    4,
+                                    "[!] test tone not captured — output device ≠ loopback source?"
+                                        .to_string(),
+                                )
+                            }
+                        }
+                        Err(e) => (4, format!("[err] {e}").chars().take(80).collect()),
+                    };
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = wr.upgrade() {
+                        w.set_sys_level(lvl);
+                        w.set_sys_detail(SharedString::from(msg));
+                    }
+                });
+            });
+        });
+    }
+
+    // Steps 2/6: "Install local AI" / "Open diagnostics" — open Settings (the
+    // installer button + the 🩺 Diagnostics tab both live there).
+    {
+        let ow = overlay_weak.clone();
+        win.on_install_local_clicked(move || {
+            if let Some(o) = ow.upgrade() {
+                o.invoke_open_settings_clicked();
+            }
+        });
+    }
+    {
+        let ow = overlay_weak.clone();
+        win.on_open_diagnostics(move || {
+            if let Some(o) = ow.upgrade() {
+                o.invoke_open_settings_clicked();
+            }
+        });
+    }
+
+    // Step 6: stealth — the SAME global stealth path as on_stealth_toggle_clicked,
+    // PLUS the wizard window itself. The switch lives in the wizard, so a toggle
+    // from here must also hide the wizard from capture (STEP-7's external toggles
+    // can't cover a toggle that originates inside the wizard).
+    {
+        let weak = win.as_weak();
+        let state_c = state.clone();
+        let tiles_c = tiles.clone();
+        let ow = overlay_weak.clone();
+        let pal = palette_ref.clone();
+        let ta = text_ask_ref.clone();
+        let set = settings_ref.clone();
+        let cfg_c = cfg.clone();
+        win.on_stealth_toggled(move |on| {
+            {
+                let mut st = match state_c.lock() {
+                    Ok(g) => g,
+                    Err(p) => p.into_inner(),
+                };
+                st.stealth = on;
+            }
+            set_global_stealth(on);
+            {
+                let mut c = cfg_c.write();
+                c.stealth_enabled = on;
+                let _ = config::save(&c);
+            }
+            if let Some(w) = weak.upgrade() {
+                if let Ok(h) = grab_hwnd(w.window()) {
+                    let _ = set_stealth(h, on);
+                }
+            }
+            if let Some(o) = ow.upgrade() {
+                o.set_stealth_active(on);
+                if let Ok(h) = grab_hwnd(o.window()) {
+                    let _ = set_stealth(h, on);
+                    let _ = set_skip_taskbar(h, on);
+                }
+            }
+            for t in tiles_c.borrow().iter() {
+                if let Ok(h) = grab_hwnd(t.window()) {
+                    let _ = set_stealth(h, on);
+                }
+            }
+            if let Some(p) = pal.borrow().as_ref() {
+                if let Ok(h) = grab_hwnd(p.window()) {
+                    let _ = set_stealth(h, on);
+                }
+            }
+            if let Some(t) = ta.borrow().as_ref() {
+                if let Ok(h) = grab_hwnd(t.window()) {
+                    let _ = set_stealth(h, on);
+                }
+            }
+            if let Some(sw) = set.borrow().as_ref() {
+                sw.set_stealth_toggle(on);
+                if let Ok(h) = grab_hwnd(sw.window()) {
+                    let _ = set_stealth(h, on);
+                }
+            }
+        });
+    }
+}
+
+/// V0.8.4 — first-run guided setup. Created on demand like `open_text_ask`:
+/// centred + WDA-stealthed via `present_window_stealth_aware`, keyboard-focused.
+/// Re-opening while it's up just re-focuses the existing window.
+#[allow(clippy::too_many_arguments)]
+fn open_wizard(
+    slot_ref: &Rc<RefCell<Option<WizardWindow>>>,
+    cfg: &overlay_backend::config::SharedConfig,
+    state: &slint_replay::app_state::SharedState,
+    tiles: &TileWindows,
+    overlay_weak: &slint::Weak<OverlayBarWindow>,
+    palette_ref: &Rc<RefCell<Option<PaletteWindow>>>,
+    text_ask_ref: &Rc<RefCell<Option<TextAskWindow>>>,
+    settings_ref: &Rc<RefCell<Option<SettingsWindow>>>,
+) {
+    {
+        let slot = slot_ref.borrow();
+        if let Some(existing) = slot.as_ref() {
+            let _ = existing.show();
+            if let Ok(hwnd) = grab_hwnd(existing.window()) {
+                focus_window(hwnd);
+            }
+            return;
+        }
+    }
+    let win = match WizardWindow::new() {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln!("[overlay-host] WizardWindow::new failed: {e}");
+            return;
+        }
+    };
+    apply_scheme_wizard(&win, global_scheme());
+    win.set_stealth_on(global_stealth());
+    wire_wizard_steps(
+        &win,
+        cfg,
+        state,
+        tiles,
+        overlay_weak,
+        palette_ref,
+        text_ask_ref,
+        settings_ref,
+    );
+    {
+        let weak = win.as_weak();
+        let slot = slot_ref.clone();
+        win.on_finished(move || {
+            if let Some(w) = weak.upgrade() {
+                let _ = w.hide();
+            }
+            *slot.borrow_mut() = None;
+        });
+    }
+    {
+        let weak = win.as_weak();
+        let slot = slot_ref.clone();
+        win.on_cancelled(move || {
+            if let Some(w) = weak.upgrade() {
+                let _ = w.hide();
+            }
+            *slot.borrow_mut() = None;
+        });
+    }
+    present_window_stealth_aware(&win, |hwnd| {
+        focus_window(hwnd);
+    });
+    *slot_ref.borrow_mut() = Some(win);
+}
+
 /// Wire the chrome-row drag callbacks on a tile so the user can move
 /// it by pressing+dragging the title area. Phase E6 v22 — manual
 /// cursor-delta drag (drag_begin on down, drag_update on move-while-
@@ -5839,6 +6296,7 @@ fn fetch_models(
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn open_settings(
     state: &slint_replay::app_state::SharedState,
     settings_ref: &Rc<RefCell<Option<SettingsWindow>>>,
@@ -5852,6 +6310,10 @@ fn open_settings(
     // KB palette (the bar-chip toggle already does). Without it the palette
     // stayed visible to screen-capture when stealth was enabled from Settings.
     palette_ref: &Rc<RefCell<Option<PaletteWindow>>>,
+    // V0.8.4 — so the Settings → Interface "🪄 Run setup wizard" button can
+    // (re)open the first-run wizard, and the Settings-tab stealth toggle can
+    // flip the wizard window too if it happens to be open.
+    wizard_ref: &Rc<RefCell<Option<WizardWindow>>>,
 ) {
     // Light up the bar's ⚙ chip while Settings is open (user: "значок
     // настроек не загорается когда настройки открыты"). Cleared in the
@@ -5998,6 +6460,7 @@ fn open_settings(
     let cfg_st = cfg.clone();
     let text_ask_st = text_ask_ref.clone();
     let palette_st = palette_ref.clone();
+    let wizard_st = wizard_ref.clone();
     win.on_stealth_changed(move |on| {
         if let Ok(mut st) = s3.lock() {
             st.stealth = on;
@@ -6044,7 +6507,33 @@ fn open_settings(
                 let _ = set_stealth(hwnd, on);
             }
         }
+        // V0.8.4 — flip the first-run wizard window too if it's open, so the
+        // Settings-tab stealth toggle hides it from capture like every other
+        // surface (the wizard is screen-shareable until WDA is applied) and its
+        // in-window Switch stays in sync.
+        if let Some(wz) = wizard_st.borrow().as_ref() {
+            if let Ok(hwnd) = grab_hwnd(wz.window()) {
+                let _ = set_stealth(hwnd, on);
+            }
+            wz.set_stealth_on(on);
+        }
     });
+
+    // V0.8.4 — Settings → Interface "🪄 Run setup wizard" button. Re-opens the
+    // guided first-run wizard on demand (it is also auto-shown on first launch).
+    {
+        let wz = wizard_ref.clone();
+        let cfg_w = cfg.clone();
+        let st = settings_ref.clone();
+        let state_w = state.clone();
+        let tiles_w = tiles_ref.clone();
+        let ow = overlay_weak.clone();
+        let pal = palette_ref.clone();
+        let ta = text_ask_ref.clone();
+        win.on_open_wizard_clicked(move || {
+            open_wizard(&wz, &cfg_w, &state_w, &tiles_w, &ow, &pal, &ta, &st);
+        });
+    }
 
     // Phase E6 — token + AI bridge config save wires.
     {
