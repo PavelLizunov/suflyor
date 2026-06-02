@@ -42,11 +42,14 @@ audit P2 items; #135 single-slot; Fica-1 window-bug grounded investigation
   per-feature review on each + a final R9 cross-cutting re-audit, all CLEAN. ~7h to
   deadline. Continuing with SAFE value-preserving Этап-1 SIZE-token migration only (zero
   visual change BY CONSTRUCTION — token value === the literal; this is NOT the per-theme
-  colour work, which changes appearance and needs the user's §8 matrix). Extending
-  Metrics across the colour-clean, lower-risk surfaces (text_ask/palette/wizard, then
-  more), each value-audited + build-verified + banked. Leaving the highest-risk
-  bar/tile/capture + the 84 KB settings split + all colour migration for the supervised
-  redesign. See "Morning review" below.
+  colour work, which changes appearance and needs the user's §8 matrix). Extended
+  Metrics to text_ask/palette/wizard (batch 2, banked 76460d2) — size tokens now span
+  5/9 shipped surfaces. The SAFE size vein is now exhausted: the only remaining size
+  candidates are the highest-risk bar/tile + the 84 KB settings (split-first, Этап 3),
+  left for the supervised redesign along with ALL colour migration (per-theme visual
+  change → §8 matrix). Deliverables complete; now MONITORING until the user's review —
+  I will NOT touch the sensitive surfaces autonomously to fill time (quality + no-
+  marathons over churn). See "Morning review" below.
 
 ### Morning review (start here)
 Everything below shipped while you slept. origin/master @ 82c9c3f; every item is
