@@ -211,10 +211,29 @@ export component WizardWindow inherits Window {
                 if root.step == 6: VerticalLayout {
                     spacing: 8px;
                     Text { text: @tr("Done"); font-size: 18px; font-weight: 700; color: Theme.text-primary; }
-                    Text { text: "AI            " + root.summary-ai; color: Theme.text-secondary; font-family: Theme.font-mono; }
-                    Text { text: "STT           " + root.summary-stt; color: Theme.text-secondary; font-family: Theme.font-mono; }
-                    Text { text: "Microphone    " + root.summary-mic; color: Theme.text-secondary; font-family: Theme.font-mono; }
-                    Text { text: "System audio  " + root.summary-sys; color: Theme.text-secondary; font-family: Theme.font-mono; }
+                    // 2-column rows so labels translate (RU) AND stay aligned.
+                    // AI/STT are universal acronyms (left literal); Microphone /
+                    // System audio reuse the existing step-title msgids.
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Text { text: "AI"; width: 130px; color: Theme.text-secondary; font-family: Theme.font-mono; }
+                        Text { text: root.summary-ai; horizontal-stretch: 1; color: Theme.text-secondary; font-family: Theme.font-mono; }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Text { text: "STT"; width: 130px; color: Theme.text-secondary; font-family: Theme.font-mono; }
+                        Text { text: root.summary-stt; horizontal-stretch: 1; color: Theme.text-secondary; font-family: Theme.font-mono; }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Text { text: @tr("Microphone"); width: 130px; color: Theme.text-secondary; font-family: Theme.font-mono; }
+                        Text { text: root.summary-mic; horizontal-stretch: 1; color: Theme.text-secondary; font-family: Theme.font-mono; }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Text { text: @tr("System audio"); width: 130px; color: Theme.text-secondary; font-family: Theme.font-mono; }
+                        Text { text: root.summary-sys; horizontal-stretch: 1; color: Theme.text-secondary; font-family: Theme.font-mono; }
+                    }
                     HorizontalLayout {
                         spacing: 8px;
                         Button { text: @tr("Start working"); primary: true; clicked => { root.finished(); } }
