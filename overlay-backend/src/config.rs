@@ -2185,6 +2185,7 @@ pub fn shared() -> SharedConfig {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
 
     /// #125 — server-only import copies the AI/STT server fields and KEEPS

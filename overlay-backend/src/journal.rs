@@ -396,6 +396,7 @@ fn unix_to_ymdhms(secs: u64) -> (i32, u32, u32, u32, u32, u32) {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
 
     #[test]
@@ -995,6 +996,7 @@ pub fn append_bookmark(question: &str, answer: &str) -> Result<PathBuf> {
 
 #[cfg(test)]
 mod bookmark_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
 
     #[test]

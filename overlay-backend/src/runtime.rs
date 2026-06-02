@@ -1126,6 +1126,7 @@ pub async fn ask_stream_loop(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
     use crate::events::Noop;
 

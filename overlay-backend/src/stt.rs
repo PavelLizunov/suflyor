@@ -1058,6 +1058,7 @@ fn encode_wav_pcm_i16_mono_16k(pcm: &[i16]) -> Result<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
 
     #[test]

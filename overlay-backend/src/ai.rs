@@ -745,6 +745,7 @@ pub fn build_request(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
 
     // ── Regression: P0 bug — UTF-8 split across network chunks must NOT panic ──
