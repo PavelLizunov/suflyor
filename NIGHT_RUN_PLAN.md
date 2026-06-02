@@ -1,5 +1,60 @@
 # Autonomous work plan
 
+## 🌙 Autonomous run — translation + v0.8.9 + design scaffold + memory (2026-06-02 23:22 → ~08:22)
+
+Mandate (user asleep, full delegation): 4 tracks over ~9h, every decision mine
+(user reviews afterwards), Stop-hook armed (deadline 08:22). Releases
+pre-authorised — cut small, fully-gated versions as I go. R1-R10 in force; R6 =
+no asks, decide + log here.
+
+### Backlog (priority-ordered)
+1. Translation (#3 game-translate + #4 phonetics) -> v0.9.0
+   - 1a TRANSLATE_VISION_PROMPT (vision.rs) + Shift+F8 region-translate hotkey
+   - 1b capture_overlay mode toggle Describe / Translate
+   - 1c phonetics config toggle (OFF by default) + Settings checkbox + prompt append
+2. v0.8.9 P1 — P1.7 server-settings export + import preview; heavier diag rows
+   (disk / local-server reachability / config-write + journal-dir); P1.3 legacy
+   field removal via config_version migration
+3. Design scaffold (Etap 0-1) — reference-screenshot harness + token-layer
+   extraction, ZERO visual change (commits, no release)
+4. Memory foundation — Phase 1 crash-recovery (detect unfinished session, no
+   SQLite) + JSONL->catalog schema groundwork (commits/docs)
+
+Secondary (R10 / if the four drain): overlay-backend [lints.clippy] enforcement;
+audit P2 items; #135 single-slot; Fica-1 window-bug grounded investigation
+(repro-blocked — investigate + propose, never fix blind).
+
+### Decisions (this run)
+- Translation target language: RU for v1 (read ui_language in a later pass).
+- Mode selection: BOTH per the spec — a Describe/Translate toggle on the capture
+  overlay (discoverable) AND Shift+F8 as a fast translate-capture.
+- Phonetics: OFF by default behind a toggle; IPA only on non-trivial words.
+- Release cadence: fewer well-gated versions (user disliked the 29-release
+  marathon), not micro-releases.
+
+### In progress
+- Track 1 → v0.9.0: ALL GATES GREEN — review-agent verdict = ship-able (0
+  BLOCKER/HIGH/MEDIUM; it byte-verified i18n, confirmed prompt reaches model, no
+  lock-across-await, toggle hit-test, no hotkey collision, describe-path
+  unchanged). Added the review's LOW (translate copy-skip test). Installer
+  building; then commit groups + push + gh release v0.9.0. NEXT: Track 2 (v0.8.9
+  P1: P1.7 import preview + diag rows + legacy removal).
+
+### Done log (newest at top)
+- 23:5x — Track 1 (translation #3+#4) IMPLEMENTED + gated (clippy both crates +
+  177 backend tests incl translate_prompt + slint clippy compiled the .slint).
+  Shift+F8 translate-capture; capture_overlay Describe/Translate toggle;
+  TRANSLATE_VISION_PROMPT threaded F8->launch_vision_for_bgra->send (was hardcoded
+  DEFAULT — fixed before it shipped); vision_phonetics config + Settings checkbox;
+  copy-skip for translate prompt; 3 ru.po strings. cargo check exit 0.
+- 23:22 — armed autonomous marker (deadline 08:22); built this run's backlog;
+  added TRANSLATE_VISION_PROMPT + translate_prompt(phonetics) to vision.rs.
+
+### Findings
+- (none yet)
+
+---
+
 ## 🌙 Autonomous run — v0.8.3 hardening + first-run manual (2026-06-02 00:56 → ~06:00)
 
 User asleep, explicit 4-6h mandate: check every usage scenario incl. edge/weird
