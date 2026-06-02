@@ -2158,6 +2158,10 @@ pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
     next.vision_local_base_url = imported.vision_local_base_url;
     next.vision_local_bearer = imported.vision_local_bearer;
     next.vision_local_model = imported.vision_local_model;
+    // NOTE: vision_phonetics is deliberately NOT transferred — it's a per-user
+    // OUTPUT preference (append IPA to a translation), not a server endpoint, so it
+    // stays machine-local like response_language / stt_language / ui_language. Do not
+    // add it here: an import would then overwrite the local user's phonetics choice.
     // STT provider + per-backend server settings.
     next.stt_provider = imported.stt_provider;
     next.groq_api_key = imported.groq_api_key;
