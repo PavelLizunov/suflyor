@@ -767,3 +767,66 @@ msgstr "Пропустить"
 
 msgid "Next"
 msgstr "Далее"
+
+msgid "Help"
+msgstr "Справка"
+
+msgid "Help — icons, hotkeys & gestures"
+msgstr "Справка — иконки, хоткеи и жесты"
+
+msgid "Bar icons"
+msgstr "Иконки бара"
+
+msgid "Drag to move the bar; shows the live state"
+msgstr "Перетащить = двигать бар; показывает состояние"
+
+msgid "Toggle continuous mic capture (your voice)"
+msgstr "Постоянный захват микрофона (твой голос)"
+
+msgid "Toggle continuous system-audio capture (the other side)"
+msgstr "Постоянный захват системного звука (собеседник)"
+
+msgid "Hold to record your voice → AI answer (swipe up to lock)"
+msgstr "Удержание = запись голоса → ответ AI (свайп вверх = лок)"
+
+msgid "Hold to capture system audio → AI answer (swipe up to lock)"
+msgstr "Удержание = запись системного звука → ответ AI (свайп вверх = лок)"
+
+msgid "Start / stop the live session (transcript + auto-tips)"
+msgstr "Старт/стоп живой сессии (распознавание + авто-подсказки)"
+
+msgid "Session cost (cloud only; local is free)"
+msgstr "Стоимость сессии (только cloud; локально бесплатно)"
+
+msgid "Stealth: hide the overlay from screen capture / share"
+msgstr "Stealth: скрыть overlay от захвата/шеринга экрана"
+
+msgid "Aggressive auto-tiles (answer more often)"
+msgstr "Агрессивные авто-тайлы (отвечать чаще)"
+
+msgid "Write a question as text"
+msgstr "Написать вопрос текстом"
+
+msgid "New tile from the last line / a manual question"
+msgstr "Новый тайл из последней строки / ручной вопрос"
+
+msgid "Screenshot a region → AI vision answer"
+msgstr "Скриншот области → ответ vision-AI"
+
+msgid "This help (also F1)"
+msgstr "Эта справка (также F1)"
+
+msgid "Restart the overlay (two-step; settings survive)"
+msgstr "Перезапуск overlay (в 2 шага; настройки сохраняются)"
+
+msgid "Quit (two-step)"
+msgstr "Выход (в 2 шага)"
+
+msgid "This help"
+msgstr "Эта справка"
+
+msgid "Record gestures"
+msgstr "Жесты записи"
+
+msgid "Hold a record button to record, release to send. While holding, swipe up to LOCK (hands-free) — releasing keeps recording; click ⏹ to stop + send. Works on the bar (🎤/🔊) and on a tile's 🎤."
+msgstr "Удержание кнопки записи = запись, отпустил = отправка. Во время удержания свайп вверх = ЛОК (хендс-фри) — отпускание не останавливает; клик ⏹ = стоп + отправка. Работает на баре (🎤/🔊) и в тайле (🎤)."

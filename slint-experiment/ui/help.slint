@@ -1,0 +1,194 @@
+// V0.8.4 — 🆘 Help (F1): a read-only reference listing the bar icons, the global
+// hotkeys, and the record gestures. Opened by F1 (toggle) or the bar's 🆘 chip
+// via `open_help`; mirrors text_ask / wizard (frameless, SOLID Theme.bg-surface
+// to dodge the documented Windows-DWM "created-but-invisible" pitfall for new
+// frameless windows, stealth-aware, Esc / "X" to close). Strings are @tr; the
+// hotkey rows REUSE the exact msgids already in the Settings ⌨ Hotkeys tab, so
+// they need no new translations. ASCII "X" for close (✕ U+2715 renders as a
+// missing-glyph box on the Slint+skia text fallback — same as the bar Quit).
+
+import { Button, ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+export component HelpWindow inherits Window {
+    no-frame: true;
+    always-on-top: true;
+    title: @tr("Help");
+    default-font-family: Theme.font-sans;
+    background: Theme.bg-surface;
+    preferred-width: 580px;
+    preferred-height: 660px;
+
+    callback cancelled();
+    // Frameless drag (cursor-delta, same as Settings) — the header is the handle.
+    callback drag-start-requested();
+    callback drag-moved();
+    forward-focus: scope;
+
+    scope := FocusScope {
+        key-pressed(e) => {
+            if (e.text == Key.Escape) {
+                root.cancelled();
+                return accept;
+            }
+            return reject;
+        }
+        // Brand watermark — faint vector logo behind the content (5% opacity),
+        // centred, same as Settings. Everything above is transparent so it shows
+        // through. colorize adapts it to dark + light schemes.
+        Image {
+            source: @image-url("../assets/icon.svg");
+            colorize: Theme.is-light ? Theme.text-primary : #ffffff;
+            opacity: 0.05;
+            width: 300px;
+            height: 300px;
+            image-fit: contain;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+        }
+        VerticalLayout {
+            padding: 16px;
+            spacing: 10px;
+
+            // ---- Header (doubles as the window drag handle, like Settings) ----
+            HorizontalLayout {
+                spacing: 8px;
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 28px;
+                    // Drag handle fills the header; the title is drawn on top (a
+                    // Text isn't interactive, so pointer events fall through here).
+                    TouchArea {
+                        mouse-cursor: grab;
+                        pointer-event(ev) => {
+                            if (ev.button == PointerEventButton.left
+                                && ev.kind == PointerEventKind.down) {
+                                root.drag-start-requested();
+                            }
+                        }
+                        moved => {
+                            if (self.pressed) {
+                                root.drag-moved();
+                            }
+                        }
+                    }
+                    Text {
+                        text: "🆘 " + @tr("Help — icons, hotkeys & gestures");
+                        font-size: 15px;
+                        font-weight: 700;
+                        color: Theme.text-primary;
+                        vertical-alignment: center;
+                    }
+                }
+                Button {
+                    text: "X";
+                    clicked => {
+                        root.cancelled();
+                    }
+                }
+            }
+
+            ScrollView {
+                VerticalLayout {
+                    spacing: 3px;
+
+                    // ---- Bar icons ----
+                    Text {
+                        text: @tr("Bar icons");
+                        font-weight: 700;
+                        font-size: 12px;
+                        color: Theme.accent;
+                    }
+                    for row in [
+                        ["::", @tr("Drag to move the bar; shows the live state")],
+                        ["🎤", @tr("Toggle continuous mic capture (your voice)")],
+                        ["🔊", @tr("Toggle continuous system-audio capture (the other side)")],
+                        ["🎤 " + @tr("ask"), @tr("Hold to record your voice → AI answer (swipe up to lock)")],
+                        ["🔊 " + @tr("grab"), @tr("Hold to capture system audio → AI answer (swipe up to lock)")],
+                        ["▶", @tr("Start / stop the live session (transcript + auto-tips)")],
+                        ["$0.000", @tr("Session cost (cloud only; local is free)")],
+                        ["🎯", @tr("Stealth: hide the overlay from screen capture / share")],
+                        ["🔥", @tr("Aggressive auto-tiles (answer more often)")],
+                        ["✏", @tr("Write a question as text")],
+                        ["+", @tr("New tile from the last line / a manual question")],
+                        ["📷", @tr("Screenshot a region → AI vision answer")],
+                        ["⚙", @tr("Settings")],
+                        ["🆘", @tr("This help (also F1)")],
+                        ["🔄", @tr("Restart the overlay (two-step; settings survive)")],
+                        ["X", @tr("Quit (two-step)")],
+                    ] : HorizontalLayout {
+                        padding: 3px;
+                        spacing: 12px;
+                        Text {
+                            text: row[0];
+                            font-family: Theme.font-mono;
+                            font-size: 12px;
+                            color: Theme.text-primary;
+                            width: 86px;
+                        }
+                        Text {
+                            text: row[1];
+                            font-size: 12px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                            horizontal-stretch: 1;
+                        }
+                    }
+
+                    Rectangle { height: 8px; }
+
+                    // ---- Hotkeys (msgids reused from Settings → ⌨ Hotkeys) ----
+                    Text {
+                        text: @tr("Hotkeys");
+                        font-weight: 700;
+                        font-size: 12px;
+                        color: Theme.accent;
+                    }
+                    for row in [
+                        ["F1", @tr("This help")],
+                        ["F9", @tr("Ask AI now (streams the answer into a tile)")],
+                        ["Shift+F9", @tr("Ask AI escalated to the smart cloud model (one-shot; tile shows a 🧠 badge)")],
+                        ["F8", @tr("Screenshot → AI vision (drag a region; Esc cancels)")],
+                        ["F3", @tr("Re-ask the last question with fresh context")],
+                        ["F4", @tr("Knowledge-base palette (open / close)")],
+                        ["F6", @tr("Manual tile from the last transcript line")],
+                    ] : HorizontalLayout {
+                        padding: 3px;
+                        spacing: 12px;
+                        Text {
+                            text: row[0];
+                            font-family: Theme.font-mono;
+                            font-size: 12px;
+                            font-weight: 700;
+                            color: Theme.accent;
+                            width: 86px;
+                        }
+                        Text {
+                            text: row[1];
+                            font-size: 12px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                            horizontal-stretch: 1;
+                        }
+                    }
+
+                    Rectangle { height: 8px; }
+
+                    // ---- Record gestures ----
+                    Text {
+                        text: @tr("Record gestures");
+                        font-weight: 700;
+                        font-size: 12px;
+                        color: Theme.accent;
+                    }
+                    Text {
+                        text: @tr("Hold a record button to record, release to send. While holding, swipe up to LOCK (hands-free) — releasing keeps recording; click ⏹ to stop + send. Works on the bar (🎤/🔊) and on a tile's 🎤.");
+                        font-size: 11px;
+                        color: Theme.text-secondary;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+    }
+}

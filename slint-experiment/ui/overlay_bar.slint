@@ -306,6 +306,7 @@ export component OverlayBarWindow inherits Window {
     // is open (Rust flips this on open / close). User: "значок настроек
     // не загорается когда настройки открыты".
     in-out property <bool> settings-open: false;
+    in-out property <bool> help-open: false;
     // Phase E6 v45 — X quit is two-step: first press arms an inline
     // "Quit? Yes/No" confirm (Rust auto-disarms after a few seconds) so a
     // stray click can't kill the app. User: "крестик моментально всё
@@ -340,6 +341,7 @@ export component OverlayBarWindow inherits Window {
     callback stealth-toggle-clicked();
     callback aggressive-toggle-clicked();
     callback open-settings-clicked();
+    callback help-clicked();   // 🆘 chip / F1 → open the help window
     callback quit-clicked();   // X pressed → Rust arms the inline confirm
     // V0.8.0 (Поток B) — emergency restart (⟳). Two-step like Quit.
     callback restart-clicked();
@@ -559,6 +561,14 @@ export component OverlayBarWindow inherits Window {
                 active: root.settings-open;
                 accent: Theme.text-muted;
                 clicked => { root.open-settings-clicked(); }
+            }
+            // V0.8.4 — 🆘 help (icons + hotkeys + gestures); also F1. Lights up
+            // while the help window is open (same as the ⚙ chip for Settings).
+            if !root.confirming : Chip {
+                label: "🆘";
+                active: root.help-open;
+                accent: #60a5fa;
+                clicked => { root.help-clicked(); }
             }
             // V0.8.0 (Поток B) — emergency restart, two-step like Quit. Use it
             // when the app/local AI gets stuck; settings (incl. stealth) survive.

@@ -60,8 +60,8 @@ mod ui {
 }
 
 use ui::{
-    CaptureOverlay, MarkdownBlock, OverlayBarWindow, PaletteResult, PaletteWindow, SettingsWindow,
-    TextAskWindow, TileWindow, WizardWindow,
+    CaptureOverlay, HelpWindow, MarkdownBlock, OverlayBarWindow, PaletteResult, PaletteWindow,
+    SettingsWindow, TextAskWindow, TileWindow, WizardWindow,
 };
 
 type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
@@ -1303,8 +1303,15 @@ const STATUS_REVERT_SECS: u64 = 5;
 /// responsiveness/CPU trade-off for desktop hotkeys.
 const HOTKEY_POLL_MS: u64 = 50;
 /// Delay after window.show() before grabbing the HWND. winit realizes
-/// the native window lazily; calling earlier returns NotSupported.
+/// the native window lazily; calling earlier returns NotSupported. Used as the
+/// conservative FALLBACK delay (the fast attempt below covers the common case)
+/// and by the F8 capture-overlay pre-create.
 const HWND_GRAB_DELAY_MS: u64 = 200;
+/// V0.8.4 — fast first reveal attempt (~2 frames). winit usually realizes the
+/// HWND within 1-2 frames, so grabbing at ~33ms lets on-demand windows pop
+/// nearly instantly instead of waiting the full 200ms; if the HWND isn't ready
+/// yet, present_window_stealth_aware falls back to HWND_GRAB_DELAY_MS.
+const HWND_REVEAL_FAST_MS: u64 = 33;
 /// SLINT_OVERLAY_AUTO_TILE auto-spawn delay (smoke-test convenience).
 const AUTO_TILE_DELAY_MS: u64 = 500;
 /// Periodic session-timer chip update interval.
@@ -2294,6 +2301,8 @@ fn main() -> Result<(), slint::PlatformError> {
     let text_ask: Rc<RefCell<Option<TextAskWindow>>> = Rc::new(RefCell::new(None));
     // First-run setup wizard, created on demand like text_ask / palette.
     let wizard: Rc<RefCell<Option<WizardWindow>>> = Rc::new(RefCell::new(None));
+    // 🆘 Help window (F1 / 🆘 chip), created on demand.
+    let help: Rc<RefCell<Option<HelpWindow>>> = Rc::new(RefCell::new(None));
     // V3 — the Lightshot capture overlay. PERSISTENT + pre-stealthed so F8 shows
     // it flash-free: WDA_EXCLUDEFROMCAPTURE keeps it off any screen-share from the
     // first frame, WS_EX_TOOLWINDOW keeps it out of the taskbar. We realize the
@@ -2372,12 +2381,15 @@ fn main() -> Result<(), slint::PlatformError> {
     // streams a vision model's reading into a tile, via the SEPARATE vision
     // endpoint so text can stay local).
     let f8_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F8);
+    // V0.8.4 — F1 opens the 🆘 help (toggle, like F4).
+    let f1_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F1);
     let f3_id = f3_hotkey.id();
     let f4_id = f4_hotkey.id();
     let f6_id = f6_hotkey.id();
     let f9_id = f9_hotkey.id();
     let sf9_id = sf9_hotkey.id();
     let f8_id = f8_hotkey.id();
+    let f1_id = f1_hotkey.id();
     if let Some(m) = hotkey_manager.as_ref() {
         for (label, hk) in [
             ("F3", f3_hotkey),
@@ -2386,6 +2398,7 @@ fn main() -> Result<(), slint::PlatformError> {
             ("F8", f8_hotkey),
             ("F9", f9_hotkey),
             ("Shift+F9", sf9_hotkey),
+            ("F1", f1_hotkey),
         ] {
             match m.register(hk) {
                 Ok(()) => eprintln!("[overlay-host] {label} hotkey registered"),
@@ -2396,6 +2409,7 @@ fn main() -> Result<(), slint::PlatformError> {
 
     let hotkey_poll = Timer::default();
     let hp_palette = palette.clone();
+    let hp_help = help.clone();
     let hp_capture_overlay = capture_overlay.clone();
     let hp_tiles = tiles.clone();
     let hp_state = state.clone();
@@ -2431,6 +2445,23 @@ fn main() -> Result<(), slint::PlatformError> {
                     } else {
                         eprintln!("[overlay-host] F4 pressed — opening palette");
                         open_palette(&hp_palette, &hp_tiles, &hp_state, &hp_weak_overlay);
+                    }
+                } else if event.id == f1_id {
+                    // V0.8.4 — F1 toggles the 🆘 help (focus-independent, like F4;
+                    // a hotkey-spawned always-on-top window has no keyboard focus,
+                    // so Esc inside it wouldn't fire reliably as the only closer).
+                    let help_open = hp_help.borrow().is_some();
+                    if help_open {
+                        eprintln!("[overlay-host] F1 pressed — closing help (toggle)");
+                        if let Some(h) = hp_help.borrow_mut().take() {
+                            let _ = h.hide();
+                        }
+                        if let Some(o) = hp_weak_overlay.upgrade() {
+                            o.set_help_open(false);
+                        }
+                    } else {
+                        eprintln!("[overlay-host] F1 pressed — opening help");
+                        open_help(&hp_help, &hp_weak_overlay);
                     }
                 } else if event.id == f3_id {
                     // Phase E3 slice 3 — F3 reask via overlay-backend's
@@ -3121,6 +3152,15 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                 });
             });
+        });
+    }
+
+    // ===== 🆘 Help (F1 / 🆘 chip) =====
+    {
+        let help_ref = help.clone();
+        let ow = overlay.as_weak();
+        overlay.on_help_clicked(move || {
+            open_help(&help_ref, &ow);
         });
     }
 
@@ -5217,11 +5257,15 @@ where
             .set_position(slint::PhysicalPosition::new(-32000, -32000));
     }
     let _ = win.show();
-    let weak = win.as_weak();
-    Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
-        let Some(w) = weak.upgrade() else { return };
+    // V0.8.4 — reveal as soon as the HWND realizes (~1-2 frames) instead of a
+    // fixed 200ms blind wait, so on-demand windows (Settings/help/palette/wizard/
+    // tiles) pop nearly instantly. A fast attempt covers the common case; if the
+    // HWND isn't grabbable yet, ONE conservative fallback at the old delay keeps a
+    // slow first-realize safe (no window stranded off-screen). Stealth-safe: in
+    // BOTH paths WDA is applied BEFORE a parked window is moved on-screen.
+    let do_reveal: Rc<dyn Fn(&W) -> bool> = Rc::new(move |w: &W| -> bool {
         let Ok(hwnd) = grab_hwnd(w.window()) else {
-            return;
+            return false;
         };
         decorate(hwnd);
         if global_stealth() {
@@ -5240,6 +5284,27 @@ where
                 let _ = move_window_pos_only(hwnd, 100, 100);
             }
         }
+        true
+    });
+    let weak = win.as_weak();
+    Timer::single_shot(Duration::from_millis(HWND_REVEAL_FAST_MS), move || {
+        let Some(w) = weak.upgrade() else { return };
+        let revealed = {
+            let f = &*do_reveal;
+            f(&w)
+        };
+        if revealed {
+            return;
+        }
+        // HWND not realized within the fast window — one conservative retry.
+        let weak2 = w.as_weak();
+        let do_reveal2 = do_reveal.clone();
+        Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
+            if let Some(w) = weak2.upgrade() {
+                let f = &*do_reveal2;
+                let _ = f(&w);
+            }
+        });
     });
 }
 
@@ -5427,6 +5492,75 @@ fn open_text_ask(
 
 fn apply_scheme_wizard(w: &WizardWindow, scheme: i32) {
     w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
+}
+
+/// V0.8.4 — 🆘 Help (F1 / 🆘 chip): a read-only reference window (bar icons,
+/// hotkeys, record gestures). Created on demand like open_text_ask —
+/// scheme-themed, stealth-aware, Esc / "X" to close. Re-opening re-focuses it.
+fn open_help(
+    slot_ref: &Rc<RefCell<Option<HelpWindow>>>,
+    overlay_weak: &slint::Weak<OverlayBarWindow>,
+) {
+    {
+        let slot = slot_ref.borrow();
+        if let Some(existing) = slot.as_ref() {
+            let _ = existing.show();
+            if let Ok(hwnd) = grab_hwnd(existing.window()) {
+                focus_window(hwnd);
+            }
+            return;
+        }
+    }
+    let win = match HelpWindow::new() {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln!("[overlay-host] HelpWindow::new failed: {e}");
+            return;
+        }
+    };
+    win.global::<ui::Theme>()
+        .set_scheme(clamp_scheme(global_scheme()));
+    // Light up the bar's 🆘 chip while help is open (same as ⚙ for Settings).
+    if let Some(o) = overlay_weak.upgrade() {
+        o.set_help_open(true);
+    }
+    {
+        let weak = win.as_weak();
+        let slot = slot_ref.clone();
+        let ow = overlay_weak.clone();
+        win.on_cancelled(move || {
+            if let Some(w) = weak.upgrade() {
+                let _ = w.hide();
+            }
+            *slot.borrow_mut() = None;
+            if let Some(o) = ow.upgrade() {
+                o.set_help_open(false);
+            }
+        });
+    }
+    // Frameless drag (cursor-delta, same as Settings) — the header is the handle.
+    {
+        let weak = win.as_weak();
+        win.on_drag_start_requested(move || {
+            if let Some(w) = weak.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(w.window()) {
+                    drag_begin(hwnd);
+                }
+            }
+        });
+        let weak_move = win.as_weak();
+        win.on_drag_moved(move || {
+            if let Some(w) = weak_move.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(w.window()) {
+                    drag_update(hwnd);
+                }
+            }
+        });
+    }
+    present_window_stealth_aware(&win, |hwnd| {
+        focus_window(hwnd);
+    });
+    *slot_ref.borrow_mut() = Some(win);
 }
 
 /// Refill the step-7 summary rows. Renders ONLY secret-free values: the live
@@ -6437,25 +6571,40 @@ fn open_settings(
     // WASAPI capture endpoints + select the saved device. User: "Audio
     // не подгружает реальные микрофоны".
     {
-        let devices = overlay_backend::audio::list_devices()
-            .map(|d| d.inputs)
-            .unwrap_or_default();
+        // V0.8.4 — WASAPI device enumeration (cold COM + a per-endpoint
+        // friendly-name RPC to the audio service) was ~30-300ms of SYNCHRONOUS
+        // pre-show stall on the UI thread, which made the gear feel laggy. Show a
+        // placeholder now and fill the dropdown when enumeration returns from a
+        // worker thread (mirrors the mic-test / fetch_models off-thread pattern).
+        win.set_mic_devices(ModelRc::new(VecModel::from(vec![SharedString::from(
+            "(loading devices…)",
+        )])));
+        win.set_mic_device_index(0);
         let saved = cfg.read().mic_device.clone();
-        let model: Vec<SharedString> = if devices.is_empty() {
-            vec![SharedString::from("(no capture devices found)")]
-        } else {
-            devices
-                .iter()
-                .map(|d| SharedString::from(d.as_str()))
-                .collect()
-        };
-        // Find the saved device's index (default 0 = system default).
-        let sel = saved
-            .as_deref()
-            .and_then(|name| devices.iter().position(|d| d == name))
-            .unwrap_or(0);
-        win.set_mic_devices(ModelRc::new(VecModel::from(model)));
-        win.set_mic_device_index(sel as i32);
+        let weak = win.as_weak();
+        std::thread::spawn(move || {
+            let devices = overlay_backend::audio::list_devices()
+                .map(|d| d.inputs)
+                .unwrap_or_default();
+            let _ = slint::invoke_from_event_loop(move || {
+                let Some(w) = weak.upgrade() else { return };
+                let model: Vec<SharedString> = if devices.is_empty() {
+                    vec![SharedString::from("(no capture devices found)")]
+                } else {
+                    devices
+                        .iter()
+                        .map(|d| SharedString::from(d.as_str()))
+                        .collect()
+                };
+                // Find the saved device's index (default 0 = system default).
+                let sel = saved
+                    .as_deref()
+                    .and_then(|name| devices.iter().position(|d| d == name))
+                    .unwrap_or(0);
+                w.set_mic_devices(ModelRc::new(VecModel::from(model)));
+                w.set_mic_device_index(sel as i32);
+            });
+        });
     }
     {
         let cfg_c = cfg.clone();
