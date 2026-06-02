@@ -9,6 +9,7 @@
 
 import { Button, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { Metrics } from "metrics.slint";
 
 export component HelpWindow inherits Window {
     no-frame: true;
@@ -47,15 +48,15 @@ export component HelpWindow inherits Window {
             y: (parent.height - self.height) / 2;
         }
         VerticalLayout {
-            padding: 16px;
-            spacing: 10px;
+            padding: Metrics.space-lg;   // was 16px
+            spacing: 10px;               // no exact token (between space-sm=8 and space-md=12)
 
             // ---- Header (doubles as the window drag handle, like Settings) ----
             HorizontalLayout {
-                spacing: 8px;
+                spacing: Metrics.space-sm;   // was 8px
                 Rectangle {
                     horizontal-stretch: 1;
-                    height: 28px;
+                    height: Metrics.control-lg;   // was 28px
                     // Drag handle fills the header; the icon + grip + title are
                     // drawn on top. Neither a Text nor a (non-Touch) layout
                     // captures pointer events, so the drag falls through here.
@@ -121,7 +122,7 @@ export component HelpWindow inherits Window {
                     Text {
                         text: @tr("Bar icons");
                         font-weight: 700;
-                        font-size: 12px;
+                        font-size: Metrics.font-body;   // was 12px
                         color: Theme.accent;
                     }
                     for row in [
@@ -142,31 +143,31 @@ export component HelpWindow inherits Window {
                         ["🔄", @tr("Restart the overlay (two-step; settings survive)")],
                         ["X", @tr("Quit (two-step)")],
                     ] : HorizontalLayout {
-                        padding: 3px;
-                        spacing: 12px;
+                        padding: 3px;                // small inset; no exact token (space-xs=4)
+                        spacing: Metrics.space-md;   // was 12px
                         Text {
                             text: row[0];
                             font-family: Theme.font-mono;
-                            font-size: 12px;
+                            font-size: Metrics.font-body;   // was 12px
                             color: Theme.text-primary;
                             width: 86px;
                         }
                         Text {
                             text: row[1];
-                            font-size: 12px;
+                            font-size: Metrics.font-body;   // was 12px
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                             horizontal-stretch: 1;
                         }
                     }
 
-                    Rectangle { height: 8px; }
+                    Rectangle { height: Metrics.space-sm; }   // was 8px (section spacer)
 
                     // ---- Hotkeys (msgids reused from Settings → ⌨ Hotkeys) ----
                     Text {
                         text: @tr("Hotkeys");
                         font-weight: 700;
-                        font-size: 12px;
+                        font-size: Metrics.font-body;   // was 12px
                         color: Theme.accent;
                     }
                     for row in [
@@ -178,37 +179,37 @@ export component HelpWindow inherits Window {
                         ["F4", @tr("Knowledge-base palette (open / close)")],
                         ["F6", @tr("Manual tile from the last transcript line")],
                     ] : HorizontalLayout {
-                        padding: 3px;
-                        spacing: 12px;
+                        padding: 3px;                // small inset; no exact token (space-xs=4)
+                        spacing: Metrics.space-md;   // was 12px
                         Text {
                             text: row[0];
                             font-family: Theme.font-mono;
-                            font-size: 12px;
+                            font-size: Metrics.font-body;   // was 12px
                             font-weight: 700;
                             color: Theme.accent;
                             width: 86px;
                         }
                         Text {
                             text: row[1];
-                            font-size: 12px;
+                            font-size: Metrics.font-body;   // was 12px
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                             horizontal-stretch: 1;
                         }
                     }
 
-                    Rectangle { height: 8px; }
+                    Rectangle { height: Metrics.space-sm; }   // was 8px (section spacer)
 
                     // ---- Record gestures ----
                     Text {
                         text: @tr("Record gestures");
                         font-weight: 700;
-                        font-size: 12px;
+                        font-size: Metrics.font-body;   // was 12px
                         color: Theme.accent;
                     }
                     Text {
                         text: @tr("Hold a record button to record, release to send. While holding, swipe up to LOCK (hands-free) — releasing keeps recording; click ⏹ to stop + send. Works on the bar (🎤/🔊) and on a tile's 🎤.");
-                        font-size: 11px;
+                        font-size: Metrics.font-label;   // was 11px
                         color: Theme.text-secondary;
                         wrap: word-wrap;
                     }
@@ -223,7 +224,7 @@ export component HelpWindow inherits Window {
             width: parent.width;
             height: parent.height;
             background: transparent;
-            border-width: 1px;
+            border-width: Metrics.border-thin;   // was 1px
             border-color: Theme.border;
         }
     }

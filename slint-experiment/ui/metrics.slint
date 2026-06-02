@@ -1,0 +1,84 @@
+// Size / spacing / typography design tokens — the dimensional sibling of
+// theme.slint (which owns COLOUR). Together they form the Track-3 design
+// system: Theme = "what colour", Metrics = "how big / how far apart / how
+// long". Centralising the recurring numbers here means a future redesign can
+// retune density, corner-rounding or motion in ONE place instead of chasing
+// ~hundreds of raw `12px` / `8px` literals across every .slint surface.
+//
+// IMPORTANT — these values were HARVESTED from the literals already in the UI
+// (overlay_bar / tile / settings_panel / palette / help / recover_offer /
+// wizard / replay / text_ask / capture_overlay), choosing the value that
+// actually RECURS most for each role. The point of Этап 1 is a zero-visual-
+// change refactor: a component that swaps a literal for the matching token
+// must render byte-identically, so each token below equals the real number it
+// stands in for. A trailing comment records the source value + where it recurs.
+//
+// Tokens marked GUESSED / RESERVED have no current literal to harvest (motion-
+// normal, disabled-opacity, space-xl): they are sensible defaults seeded for
+// future surfaces, NOT in use by any component yet. Tokens not yet consumed
+// are fine — this is scaffold; consume them surface-by-surface with a visual
+// check (per §6 risk matrix + §8 verification matrix).
+//
+// Like Theme, Metrics is a PER-WINDOW global: it carries no live state, so no
+// Rust wiring is needed (unlike Theme.scheme, which the host pokes per window).
+export global Metrics {
+    // ---- Spacing ----
+    // Gaps between siblings + container padding. The 4 / 8 / 12 / 16 scale is
+    // overwhelmingly what the UI already uses; xl is reserved (design-doc
+    // canonical step) for future breathing room — no current literal harvests
+    // to 24px (the largest in use today is the wizard's 20px page padding).
+    out property <length> space-xs: 4px;   // dozens of `spacing: 4px` (tile body, bar groups, settings rows)
+    out property <length> space-sm: 8px;   // the dominant gap — every surface (`spacing: 8px`, `padding-left: 8px`)
+    out property <length> space-md: 12px;  // section gaps + window padding (palette/replay/help row spacing, recover spacing)
+    out property <length> space-lg: 16px;  // standard frameless-window padding (help/recover/settings/markdown `padding: 16px`)
+    out property <length> space-xl: 24px;  // RESERVED — design-doc canonical; no current literal (largest used = 20px wizard)
+
+    // ---- Radius ----
+    // Three rounding steps. Controls (chips, pills) round at 10; window /
+    // panel cards round at 12. (Small 4px button + code-block rounding is
+    // below the control step and stays a literal where used — out of scope
+    // for these two surfaces tonight.)
+    out property <length> radius-control: 10px;  // chips/pills — bar Chip/LiveChip/RecordBtn + palette recent chip `border-radius: 10px`
+    out property <length> radius-panel: 12px;    // panel/card wrapper — bar + palette + replay chips + settings card `border-radius: 12px`
+    out property <length> radius-window: 12px;   // frameless window card outer radius (same step as panel today)
+
+    // ---- Control size ----
+    // Fixed heights keep "same element = same height" (§4 Геометрия). Bar
+    // chips are 22; small inline pills 20; header / button-cluster rows 28.
+    out property <length> control-sm: 20px;       // small pill height — tile source pill, palette recent chip, trigger badge `height: 20px`
+    out property <length> control-md: 22px;       // bar chip height — Chip/LiveChip/RecordBtn/status pill + replay chip `height: 22px`
+    out property <length> control-lg: 28px;       // header / icon-button row height — tile chrome buttons + help header `height: 28px`
+    out property <length> icon-button-size: 30px; // square icon-button width — tile copy/regen/escalate/close `width: 30px`
+
+    // ---- Typography (SIZES only) ----
+    // The font FAMILY stays in Theme.font-sans / Theme.font-mono; these are the
+    // recurring point sizes by role. body 12 + label 11 are the two workhorses;
+    // caption 10 for meta; heading 18 for the few real titles (§4: «крупный
+    // заголовок только там, где он действительно нужен»). 13/14/15px one-offs
+    // (H3, sub-headers) have no token and stay literals.
+    out property <length> font-caption: 10px;  // meta/secondary — source labels, hints, counts (`font-size: 10px`)
+    out property <length> font-label: 11px;    // chip/label text — bar chips, settings rows, hotkey rows (`font-size: 11px`)
+    out property <length> font-body: 12px;     // body copy — tile paragraphs, help descriptions, list bodies (`font-size: 12px`)
+    out property <length> font-heading: 18px;  // headings — wizard step titles, replay/tile H1 (`font-size: 18px`)
+
+    // ---- Border ----
+    out property <length> border-thin: 1px;   // the universal hairline — every `border-width: 1px` + 1px dividers
+    out property <length> border-focus: 2px;  // emphasis/focus stroke — capture-overlay selection rect `border-width: 2px`
+
+    // ---- Motion ----
+    // Animation durations. fast (120ms) is harvested from the bar's record-chip
+    // + settings colour fades; normal (200ms) is GUESSED (design-doc canonical
+    // — no 200ms literal exists; the only other duration in use is settings'
+    // 140ms nav/slide). Retune when a surface adopts it.
+    out property <duration> motion-fast: 120ms;   // `animate ... { duration: 120ms; }` — overlay_bar record chip, settings
+    out property <duration> motion-normal: 200ms; // GUESSED — design-doc canonical; closest real literal is 140ms (settings nav)
+
+    // ---- Opacity ----
+    // surface (0.92) is the translucent bar/tile fill alpha; muted (0.05) the
+    // brand-watermark wash. disabled (0.5) is GUESSED — no disabled-dim literal
+    // exists yet (std-widgets handle their own disabled tint); seeded for a
+    // future custom disabled state.
+    out property <float> surface-opacity: 0.92;   // bar + tile `Theme.bg-surface.with-alpha(0.92)`
+    out property <float> muted-opacity: 0.05;     // watermark `opacity: 0.05` (help + settings brand logo)
+    out property <float> disabled-opacity: 0.5;   // GUESSED — no current literal; sensible dim for a future disabled control
+}

@@ -20,6 +20,12 @@ import { RecoverOfferWindow } from "recover_offer.slint";
 // across every window instance — Theme is a PER-WINDOW global, so each
 // window must be set individually.
 import { Theme } from "theme.slint";
+// Re-export the dimensional-token global (sizes / spacing / typography /
+// motion / opacity) alongside Theme. Like Theme it is per-window and stateless,
+// so no Rust wiring is required; this re-export is what makes `Metrics`
+// reachable from every component's `import { Metrics } from "metrics.slint";`
+// and keeps the single-compilation-root contract intact.
+import { Metrics } from "metrics.slint";
 
 export {
     MainWindow, FilterChip, ReplayEvent,
@@ -33,4 +39,5 @@ export {
     HelpWindow,
     RecoverOfferWindow,
     Theme,
+    Metrics,
 }

@@ -33,18 +33,32 @@ audit P2 items; #135 single-slot; Fica-1 window-bug grounded investigation
   marathon), not micro-releases.
 
 ### In progress
-- Track 4 (memory Phase-1 crash-recovery) IMPLEMENTED (subagent) + REVIEWED clear
-  (no BLOCKER/HIGH/MEDIUM; all 8 invariants upheld — stealth via present_window_
-  stealth_aware, bounded no-panic JSONL read, serde back-compat both ways, no RwLock
-  deadlock, secret-free logs incl the start_session error path). Fixed the 1 LOW
-  (↩ U+21A9 title glyph = tofu class like ⟳/✕ -> dropped it; slint+po in lockstep).
-  196 backend tests + slint green; clippy both crates clean; fmt clean. NOW: rebuild
-  (glyph fix) + boot-smoke with a seeded unfinished JSONL (offer fires + no crash)
-  -> commit BANK (no release). THEN Track 3 (design token extraction).
+- WRAP-UP. All 4 tracks done + fully gated; R9 cross-cutting re-audit CLEAN. Committing
+  Track 3 (design scaffold) BANK, plus a 1-line config.rs comment for re-audit L1
+  (documents vision_phonetics' intentional server-transfer exclusion), then push.
+  v0.9.1 is the night's only RELEASE (P1.7 + P1.3); Track 4 + Track 3 are banked
+  foundation commits (no release, per no-marathons). ~7h to deadline 08:22 — after
+  wrap-up I hold for the user's morning review; no risky churn to fill time.
 - Dropped the marginal "diag rows" sub-item from v0.9.1 (P1.3 has no user-visible
   change alone; bundling with P1.7 which has real value).
 
 ### Done log (newest at top)
+- 01:1x — Track 3 (design scaffold Etap 0-1) VERIFIED, pending commit: metrics.slint
+  Metrics global (full §3.1 size taxonomy) + value-preserving application to
+  help.slint + recover_offer.slint + the Etap 0 capture harness. My value-audit
+  PASSED (every token === the literal it replaced; ZERO color changes; no high/med-
+  risk surface). Release build exit 0; harness boot-smoke clean (bar pinned 40,24,
+  F4 palette + F1 help open at sane geometry, no crash, clean teardown). BONUS: the
+  recover-offer fired on the user's REAL pre-sleep session — Track 4 works end-to-end
+  on real data (the user will see the recovery offer on wake). R9 cross-cutting re-audit CLEAN
+  (no BLOCKER/HIGH/MEDIUM; security + interaction + config-schema all verified) —
+  committing Track 3 BANK (no release).
+- 01:0x — Track 4 (memory Phase-1 crash recovery) BANKED: commit 1151ee6 (feat) +
+  pushed (NO release — foundation groundwork). find_unfinished_session + stealth-aware
+  offer window + recovered_from_session_id link + context seed via the existing
+  save_active_context/atomic save. 5/5 gate layers green; independent review
+  ship-able (1 LOW title-glyph fixed); boot-smoke confirmed the offer fires on a
+  seeded crash file with secret-free logging. Visual of the window = morning review.
 - 00:4x — **v0.9.1 RELEASED** (master, installer digest sha256:fb544369…, 11.16 MB).
   P1.7 server-settings transfer + P1.3 cleanup. Commits cb19f55 (feat) + b251efc
   (release); pushed b251efc; gh release live; digest verified (fail-closed updater
@@ -86,6 +100,18 @@ audit P2 items; #135 single-slot; Fica-1 window-bug grounded investigation
   compound only in a pathological crash->recover->crash loop within 12h (normal
   recovered sessions end clean -> not re-detected; newest-only scan). The
   RECOVERY_CONTEXT_HEADER delimiter is already in place to strip-on-reseed in Phase 2.
+- R9 cross-cutting re-audit (3 night items together) CLEAN: no BLOCKER/HIGH/MEDIUM. A
+  security sweep traced every new log line (no secret/LAN-IP leak); B confirmed the 3
+  features touch DISJOINT state (recovery writes meeting_context only; P1.7 writes the
+  28 server fields only; recovered_from_session_id is journal-only, not Config) with no
+  lock hazard (single event-loop thread; config::save doesn't re-lock); C config schema
+  is backward-compatible (no deny_unknown_fields; old config.json loads, P1.3-removed
+  keys ignored); D no new unwrap/expect/panic outside tests. L1 (optional, ADDRESSED):
+  vision_phonetics is intentionally machine-local in server-transfer (output pref like
+  response_language) — added a clarifying comment to prevent a future mis-fix. N1: the
+  Etap-0 harness blits live framebuffers (inherent to any screenshot tool; cold-boot
+  default; never reads config). L2: two PRE-EXISTING duplicate msgids (off/checking…),
+  not tonight's, out of scope.
 
 ---
 
