@@ -101,6 +101,22 @@ component RecordBtn inherits Rectangle {
     callback pressed();
     callback released();
 
+    // V0.8.4 — Telegram-style swipe-up-to-lock. Default flow is unchanged:
+    // hold to record (pressed), release to send (released). NEW: while holding,
+    // drag up past `lock-dy` → hands-free "locked" recording — releasing the
+    // button no longer stops it (the chip becomes a STOP button: the dot turns
+    // into a square; a fresh click stops + sends, reusing `released()`). Recording
+    // is "record-until-released" in Rust, so locking just defers the released()
+    // call — no Rust change needed. `press-y` is the pointer y at press; the
+    // TouchArea grabs the pointer on press so `moved` keeps firing past the bounds.
+    in-out property <bool> locked: false;
+    property <length> press-y;
+    property <bool> swallow-up: false;
+    // Threshold kept small: the bar is pinned at the TOP of the screen, so the
+    // cursor clamps at the screen edge ~43px above the chip — a larger threshold
+    // would be unreachable without first moving the bar down.
+    property <length> lock-dy: 24px;
+
     accessible-role: button;
     accessible-label: label;
 
@@ -112,15 +128,24 @@ component RecordBtn inherits Rectangle {
     horizontal-stretch: 0;
     animate background, border-color { duration: 120ms; }
 
+    // Reset the lock whenever recording ends from any cause (release, stop-click,
+    // watchdog timeout) so the chip never gets stuck in the locked/stop look.
+    changed recording => {
+        if (!self.recording) {
+            self.locked = false;
+        }
+    }
+
     HorizontalLayout {
         padding-left: 7px;
         padding-right: 8px;
         spacing: 5px;
-        // Record dot: filled red while recording, hollow accent ring idle.
+        // Record dot: filled red while recording; a SQUARE (border-radius 0)
+        // once locked to read as a "stop" affordance; hollow accent ring idle.
         Rectangle {
             width: 8px;
             height: 8px;
-            border-radius: 4px;
+            border-radius: root.locked ? 0px : 4px;
             y: (parent.height - self.height) / 2;
             background: root.recording ? Theme.danger : transparent;
             border-width: root.recording ? 0px : 1px;
@@ -132,13 +157,48 @@ component RecordBtn inherits Rectangle {
             color: root.recording ? Theme.danger : Theme.text-secondary;
             vertical-alignment: center;
         }
+        // Hint: "↑" while held (swipe up to lock); "⏹" once locked (click to stop).
+        Text {
+            text: root.locked ? "⏹" : (root.recording ? "↑" : "");
+            font-size: 10px;
+            color: Theme.danger;
+            vertical-alignment: center;
+        }
     }
     TouchArea {
         mouse-cursor: pointer;
         pointer-event(ev) => {
             if (ev.button == PointerEventButton.left) {
-                if (ev.kind == PointerEventKind.down) { root.pressed(); }
-                if (ev.kind == PointerEventKind.up) { root.released(); }
+                if (ev.kind == PointerEventKind.down) {
+                    if (root.locked) {
+                        // Fresh click while locked = STOP (same as a release).
+                        root.locked = false;
+                        root.swallow-up = true;
+                        root.released();
+                    } else {
+                        root.press-y = self.mouse-y;
+                        root.swallow-up = false;
+                        root.pressed();
+                    }
+                }
+                if (ev.kind == PointerEventKind.up) {
+                    if (root.swallow-up) {
+                        root.swallow-up = false;
+                    } else if (!root.locked) {
+                        root.released();
+                    }
+                    // locked && !swallow-up = the release that follows a lock →
+                    // keep recording hands-free (do nothing).
+                }
+            }
+        }
+        moved => {
+            // Gate on `recording` so a chip whose recording never started (e.g.
+            // the mic was busy → on_ptt_*_pressed bailed) can't show a locked /
+            // stop look without actually recording.
+            if (self.pressed && root.recording && !root.locked
+                && root.press-y - self.mouse-y > root.lock-dy) {
+                root.locked = true;
             }
         }
     }
