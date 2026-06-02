@@ -180,6 +180,8 @@ export component SettingsWindow inherits Window {
     in-out property <int> ai-provider-index: 0;
     // V4 — vision (screenshot · F8) channel, resolved separately from the text model.
     in-out property <int> vision-provider-index: 2; // 0=off 1=same 2=cloud 3=local
+    // Feature #4 — IPA phonetics in F8 translate-mode output (OFF by default).
+    in-out property <bool> vision-phonetics: false;
     in-out property <string> vision-base-url-input;
     in-out property <string> vision-bearer-input;
     in-out property <string> vision-model-input;
@@ -188,6 +190,7 @@ export component SettingsWindow inherits Window {
     in-out property <string> vision-local-model-input;
     in-out property <string> vision-test-result;
     callback vision-provider-changed(int);
+    callback vision-phonetics-changed(bool);
     callback vision-base-url-save(string);
     callback vision-bearer-save(string);
     callback vision-model-save(string);
@@ -1457,6 +1460,15 @@ export component SettingsWindow inherits Window {
                                 font-size: 11px;
                                 color: Theme.accent;
                                 vertical-alignment: center;
+                            }
+                        }
+                        // Feature #4 — phonetics in TRANSLATE mode (F8 toggle / Shift+F8).
+                        // Shown whenever vision is enabled (any provider).
+                        if root.vision-provider-index >= 1 : DarkCheck {
+                            text: @tr("Phonetics in F8 translate mode (IPA, e.g. schedule [ˈʃedjuːl])");
+                            checked <=> root.vision-phonetics;
+                            toggled(v) => {
+                                root.vision-phonetics-changed(v);
                             }
                         }
                     }

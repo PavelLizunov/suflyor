@@ -113,6 +113,13 @@ pub struct Config {
     #[serde(default)]
     pub vision_local_model: String,
 
+    /// Feature #4 — append an IPA transcription to each non-trivial word in the
+    /// F8 TRANSLATE-mode output (e.g. schedule [ˈʃedjuːl]). OFF by default: it's a
+    /// power feature and keeps short subtitles clean. Only affects translate-mode
+    /// captures, never the normal describe prompt.
+    #[serde(default)]
+    pub vision_phonetics: bool,
+
     /// Language tag (ISO 639-1) the assistant should ALWAYS respond in.
     /// Injected into the system prompt at runtime.
     pub response_language: String, // e.g. "ru"
@@ -444,6 +451,7 @@ impl Config {
             vision_local_base_url: String::new(),
             vision_local_bearer: String::new(),
             vision_local_model: String::new(),
+            vision_phonetics: false,
             response_language: "ru".into(),
             groq_api_key: String::new(),
             stt_language: Some("ru".into()),

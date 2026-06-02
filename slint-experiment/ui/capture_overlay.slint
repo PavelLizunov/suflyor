@@ -30,6 +30,11 @@ export component CaptureOverlay inherits Window {
     property <length> ey;
     in-out property <bool> dragging: false;
 
+    // Feature #3 — capture intent: false = describe (default), true = translate
+    // (output ONLY the translation, no screen description). Seeded by the host
+    // (F8 = describe, Shift+F8 = translate); flippable via the on-overlay toggle.
+    in-out property <bool> translate-mode: false;
+
     // Normalised selection rect.
     property <length> rx: min(root.sx, root.ex);
     property <length> ry: min(root.sy, root.ey);
@@ -170,6 +175,32 @@ export component CaptureOverlay inherits Window {
             if (root.dragging) {
                 root.ex = self.mouse-x;
                 root.ey = self.mouse-y;
+            }
+        }
+    }
+
+    // Feature #3 — Describe/Translate mode toggle. Declared AFTER the drag
+    // TouchArea so its own TouchArea sits on top and a click flips the mode
+    // instead of starting a selection. Absolutely positioned under the hint pill.
+    Rectangle {
+        x: 12px;
+        y: 46px;
+        width: modehint.preferred-width + 24px;
+        height: 26px;
+        background: root.translate-mode ? #0e7490ee : #111827dd;
+        border-radius: 6px;
+        border-width: 1px;
+        border-color: #22d3ee;
+        modehint := Text {
+            text: root.translate-mode ? @tr("🌐 Translate — tap to Describe") : @tr("📖 Describe — tap to Translate");
+            color: #e8e8ec;
+            font-size: 12px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        TouchArea {
+            clicked => {
+                root.translate-mode = !root.translate-mode;
             }
         }
     }

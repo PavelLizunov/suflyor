@@ -237,7 +237,9 @@ fn user_question_for_copy(raw: &str) -> String {
     // A vision tile's first user turn is the canned screenshot prompt, not text
     // the user typed — drop it so a multi-turn vision copy doesn't render
     // "🧑 Что на этом скриншоте?…" as if the user had asked it.
-    if raw.trim() == vision::DEFAULT_VISION_PROMPT {
+    if raw.trim() == vision::DEFAULT_VISION_PROMPT
+        || raw.trim().starts_with(vision::TRANSLATE_VISION_PROMPT)
+    {
         return String::new();
     }
     raw.trim().to_string()
@@ -2414,6 +2416,12 @@ fn main() -> Result<(), slint::PlatformError> {
     // streams a vision model's reading into a tile, via the SEPARATE vision
     // endpoint so text can stay local).
     let f8_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F8);
+    // Feature #3 — Shift+F8 = the SAME region capture but in TRANSLATE mode
+    // (output only the translation, no screen description). For games/subtitles.
+    let sf8_hotkey = global_hotkey::hotkey::HotKey::new(
+        Some(global_hotkey::hotkey::Modifiers::SHIFT),
+        global_hotkey::hotkey::Code::F8,
+    );
     // V0.8.4 — F1 opens the 🆘 help (toggle, like F4).
     let f1_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F1);
     let f3_id = f3_hotkey.id();
@@ -2422,6 +2430,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let f9_id = f9_hotkey.id();
     let sf9_id = sf9_hotkey.id();
     let f8_id = f8_hotkey.id();
+    let sf8_id = sf8_hotkey.id();
     let f1_id = f1_hotkey.id();
     {
         // P1.2 — capture per-key registration so the Diagnostics tab can name a
@@ -2434,6 +2443,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 ("F4", f4_hotkey),
                 ("F6", f6_hotkey),
                 ("F8", f8_hotkey),
+                ("Shift+F8", sf8_hotkey),
                 ("F9", f9_hotkey),
                 ("Shift+F9", sf9_hotkey),
                 ("F1", f1_hotkey),
@@ -2562,7 +2572,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         None,
                     );
                 } else if event.id == f8_id {
-                    // V3 — F8 screenshot → Lightshot region select → vision.
+                    // V3 — F8 screenshot → Lightshot region select → vision (describe).
                     diag!("[overlay-host] F8 pressed — capture overlay");
                     fire_f8_vision_capture(
                         &hp_bridge,
@@ -2573,6 +2583,21 @@ fn main() -> Result<(), slint::PlatformError> {
                         &hp_tiles,
                         &hp_weak_overlay,
                         &hp_capture_overlay,
+                        false,
+                    );
+                } else if event.id == sf8_id {
+                    // Feature #3 — Shift+F8: same region capture, TRANSLATE mode.
+                    diag!("[overlay-host] Shift+F8 pressed — translate capture");
+                    fire_f8_vision_capture(
+                        &hp_bridge,
+                        &hp_events,
+                        &hp_cfg,
+                        &hp_rt,
+                        &hp_rt_handle,
+                        &hp_tiles,
+                        &hp_weak_overlay,
+                        &hp_capture_overlay,
+                        true,
                     );
                 }
             }
@@ -2939,6 +2964,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 &tiles_c,
                 &weak_c,
                 &cap_c,
+                false,
             );
         });
     }
@@ -4487,6 +4513,7 @@ fn fire_f8_vision_capture(
     tiles: &TileWindows,
     weak_overlay: &slint::Weak<OverlayBarWindow>,
     capture_overlay: &Rc<RefCell<Option<CaptureOverlay>>>,
+    translate: bool,
 ) {
     // Second F8 while an overlay is up → dismiss it FIRST (before resolving the
     // provider), so a stuck overlay can ALWAYS be cleared — even if Vision was
@@ -4543,9 +4570,12 @@ fn fire_f8_vision_capture(
     };
     win.set_frozen(img);
     win.set_dragging(false); // clear any stale selection rect from a prior capture
-                             // PHYSICAL units = monitor pixels (1:1 with the captured frame). Geometry is
-                             // set on the still-hidden window, then show() lands it there (Slint's
-                             // set_size/set_position apply reliably).
+                             // Feature #3 — seed the capture overlay's mode (Shift+F8 → translate). The
+                             // user can still flip the on-overlay Describe/Translate toggle before drag.
+    win.set_translate_mode(translate);
+    // PHYSICAL units = monitor pixels (1:1 with the captured frame). Geometry is
+    // set on the still-hidden window, then show() lands it there (Slint's
+    // set_size/set_position apply reliably).
     win.window()
         .set_size(slint::PhysicalSize::new(fw.max(1), fh.max(1)));
     win.window()
@@ -4568,10 +4598,16 @@ fn fire_f8_vision_capture(
         let ep_c = ep.clone();
         let cfg_c = cfg.clone();
         win.on_region_selected(move |x1, y1, x2, y2| {
-            if let Some(w) = weak_self.upgrade() {
+            // Read the overlay's mode BEFORE hiding it (Shift+F8 seeds it; the
+            // on-overlay Describe/Translate toggle can override before drag).
+            let translate = if let Some(w) = weak_self.upgrade() {
+                let t = w.get_translate_mode();
                 w.set_shown(false);
                 let _ = w.hide();
-            }
+                t
+            } else {
+                false
+            };
             // logical px × scale = image px.
             let to_px = |v: f32| (v * scale).round().max(0.0) as u32;
             let (px1, py1) = (to_px(x1), to_px(y1));
@@ -4586,6 +4622,7 @@ fn fire_f8_vision_capture(
             launch_vision_for_bgra(
                 cropped,
                 ep_c.clone(),
+                translate,
                 &bridge_c,
                 &events_c,
                 &cfg_c,
@@ -4628,6 +4665,7 @@ fn fire_f8_vision_capture(
 fn launch_vision_for_bgra(
     shot: slint_replay::capture::CapturedBgra,
     ep: overlay_backend::config::AiEndpoint,
+    translate: bool,
     bridge: &Arc<OverlayBarBridge>,
     events: &Arc<dyn RuntimeEvents>,
     cfg: &overlay_backend::config::SharedConfig,
@@ -4650,16 +4688,32 @@ fn launch_vision_for_bgra(
     // done; follow-ups then route to the VISION endpoint (use_vision = true).
     let convo_id = CONVO_SEQ.fetch_add(1, Ordering::Relaxed) as i32;
     tile.set_sequence(seq as i32);
-    tile.set_tile_title(SharedString::from("📷 Скриншот"));
-    tile.set_source_label(SharedString::from("vision · анализ…"));
-    tile.set_trigger_label(SharedString::from("📷 F8 vision"));
+    tile.set_tile_title(SharedString::from(if translate {
+        "🌐 Перевод"
+    } else {
+        "📷 Скриншот"
+    }));
+    tile.set_source_label(SharedString::from(if translate {
+        "vision · перевод…"
+    } else {
+        "vision · анализ…"
+    }));
+    tile.set_trigger_label(SharedString::from(if translate {
+        "🌐 Shift+F8 перевод"
+    } else {
+        "📷 F8 vision"
+    }));
     tile.set_trigger_color(slint::Color::from_rgb_u8(0x22, 0xd3, 0xee)); // cyan
     tile.set_convo_id(convo_id);
     tile.set_followup_busy(true);
     wire_tile_drag(&tile);
     tile.set_blocks(ModelRc::new(VecModel::from(vec![MarkdownBlock {
         kind: markdown::kind::PARAGRAPH,
-        text: SharedString::from("⏳ Распознаю экран…"),
+        text: SharedString::from(if translate {
+            "⏳ Перевожу…"
+        } else {
+            "⏳ Распознаю экран…"
+        }),
         lang: SharedString::from(""),
     }])));
     let weak_close = tile.as_weak();
@@ -4754,6 +4808,14 @@ fn launch_vision_for_bgra(
     // ===== 4. Snapshot what the streaming task needs =====
     let model = ep.model.clone();
     let is_local = ep.is_local;
+    // Feature #3/#4 — describe vs translate prompt (translate appends the IPA
+    // phonetics suffix when the user enabled it). Computed sync (UI thread) so the
+    // async task below just sends the finished string.
+    let prompt = if translate {
+        vision::translate_prompt(cfg.read().vision_phonetics)
+    } else {
+        vision::DEFAULT_VISION_PROMPT.to_string()
+    };
     let (journal_for_loop, health_for_stream) = {
         let s = slint_replay::runtime_state::lock(slint_rt);
         (s.journal.clone(), s.health.clone())
@@ -4796,8 +4858,8 @@ fn launch_vision_for_bgra(
                 return;
             }
         };
-        let messages = vision::build_vision_request(&data_url, vision::DEFAULT_VISION_PROMPT);
-        let usr_full = vision::DEFAULT_VISION_PROMPT.to_string();
+        let messages = vision::build_vision_request(&data_url, &prompt);
+        let usr_full = prompt;
         let sys_full = String::new();
         // Dedicated per-tile sink (convo_id = -1 → no conversation fold) so a
         // vision answer streams independently of any live text answer.
@@ -6997,6 +7059,18 @@ fn open_settings(
     }
     {
         let cfg_c = cfg.clone();
+        win.on_vision_phonetics_changed(move |on| {
+            let mut c = cfg_c.write();
+            c.vision_phonetics = on;
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] vision_phonetics save failed: {e:#}");
+                return;
+            }
+            diag!("vision_phonetics -> {on}");
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
         win.on_vision_base_url_save(move |v| {
             let mut c = cfg_c.write();
             c.vision_base_url = v.trim().to_string();
@@ -8535,6 +8609,7 @@ fn populate_token_status(win: &SettingsWindow, cfg: &overlay_backend::config::Sh
     win.set_ai_local_models(seed_one(&c.ai_local_model));
     win.set_ai_local_model_index(0);
     win.set_ai_local_vision(c.ai_local_vision);
+    win.set_vision_phonetics(c.vision_phonetics);
     win.set_ai_local_thinking(c.ai_local_thinking);
     // Phase E10 — STT provider selector + local-engine fields.
     win.set_stt_provider_index(match c.stt_provider.as_str() {
@@ -8657,6 +8732,15 @@ mod copy_tests {
     #[test]
     fn copy_question_drops_canned_vision_prompt() {
         assert_eq!(user_question_for_copy(vision::DEFAULT_VISION_PROMPT), "");
+    }
+
+    #[test]
+    fn copy_question_drops_translate_vision_prompt() {
+        // Feature #3 — a translate tile's first turn is the canned translate
+        // prompt, not user-typed text → drop it (both phonetics states; the ON
+        // variant is base+suffix, so starts_with the base still matches).
+        assert_eq!(user_question_for_copy(vision::TRANSLATE_VISION_PROMPT), "");
+        assert_eq!(user_question_for_copy(&vision::translate_prompt(true)), "");
     }
 
     #[test]

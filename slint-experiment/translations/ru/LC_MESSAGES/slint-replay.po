@@ -310,6 +310,15 @@ msgstr "конфликт: {}"
 msgid "hotkey system unavailable"
 msgstr "система хоткеев недоступна"
 
+msgid "📖 Describe — tap to Translate"
+msgstr "📖 Описание — нажми для Перевода"
+
+msgid "🌐 Translate — tap to Describe"
+msgstr "🌐 Перевод — нажми для Описания"
+
+msgid "Phonetics in F8 translate mode (IPA, e.g. schedule [ˈʃedjuːl])"
+msgstr "Фонетика в режиме перевода F8 (МФА, напр. schedule [ˈʃedjuːl])"
+
 msgid "registering…"
 msgstr "регистрация…"
 
