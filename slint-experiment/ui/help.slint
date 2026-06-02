@@ -56,8 +56,9 @@ export component HelpWindow inherits Window {
                 Rectangle {
                     horizontal-stretch: 1;
                     height: 28px;
-                    // Drag handle fills the header; the title is drawn on top (a
-                    // Text isn't interactive, so pointer events fall through here).
+                    // Drag handle fills the header; the icon + grip + title are
+                    // drawn on top. Neither a Text nor a (non-Touch) layout
+                    // captures pointer events, so the drag falls through here.
                     TouchArea {
                         mouse-cursor: grab;
                         pointer-event(ev) => {
@@ -72,12 +73,33 @@ export component HelpWindow inherits Window {
                             }
                         }
                     }
-                    Text {
-                        text: "🆘 " + @tr("Help — icons, hotkeys & gestures");
-                        font-size: 15px;
-                        font-weight: 700;
-                        color: Theme.text-primary;
-                        vertical-alignment: center;
+                    // App icon + ":: " accent grip + label — the same header
+                    // chrome as Settings, so 🆘 reads as a real, draggable window.
+                    HorizontalLayout {
+                        spacing: 7px;
+                        alignment: start;
+                        Image {
+                            source: @image-url("../assets/icon.svg");
+                            colorize: Theme.accent;
+                            width: 22px;
+                            height: 22px;
+                            image-fit: contain;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: "::";
+                            font-size: 14px;
+                            font-weight: 700;
+                            color: Theme.accent;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: @tr("Help — icons, hotkeys & gestures");
+                            font-size: 15px;
+                            font-weight: 700;
+                            color: Theme.text-primary;
+                            vertical-alignment: center;
+                        }
                     }
                 }
                 Button {
@@ -87,6 +109,9 @@ export component HelpWindow inherits Window {
                     }
                 }
             }
+
+            // Under-header divider — same as Settings.
+            Rectangle { background: Theme.border; height: 1px; }
 
             ScrollView {
                 VerticalLayout {
@@ -189,6 +214,17 @@ export component HelpWindow inherits Window {
                     }
                 }
             }
+        }
+
+        // ---- Square 1px frame, matching Settings' bordered card (обводка) ----
+        // A bare Rectangle captures no pointer events, so the X button, the
+        // scrollbar and the drag handle all keep working underneath it.
+        Rectangle {
+            width: parent.width;
+            height: parent.height;
+            background: transparent;
+            border-width: 1px;
+            border-color: Theme.border;
         }
     }
 }
