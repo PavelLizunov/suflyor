@@ -7,9 +7,23 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+/// Current on-disk config schema version. Bumped only on a BREAKING layout
+/// change (a field renamed/removed/re-typed in a way serde defaults can't
+/// paper over). [`load`] stamps any older/unstamped file up to this number and
+/// is the single place a number-keyed migration would run. Additive fields do
+/// NOT need a bump — `#[serde(default)]` already loads old files.
+const CURRENT_CONFIG_VERSION: u32 = 1;
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Config {
+    /// On-disk schema version (see [`CURRENT_CONFIG_VERSION`]). 0 = a file
+    /// written before versioning existed; [`load`] stamps it to the current
+    /// number on first read. Serialized first so it's visible at the top of
+    /// config.json.
+    #[serde(default)]
+    pub config_version: u32,
+
     /// Pre-meeting context (system prompt prefix), free-form.
     /// e.g. "Это собеседование на Senior SRE position. Мой опыт: 7 лет K8s..."
     pub meeting_context: String,
@@ -405,6 +419,7 @@ impl Config {
 impl Config {
     pub fn defaults() -> Self {
         Self {
+            config_version: CURRENT_CONFIG_VERSION,
             meeting_context: String::new(),
             context_profiles: vec![],
             active_profile: None,
@@ -1954,23 +1969,74 @@ pub fn config_path() -> Result<PathBuf> {
 /// export imports identically (audit: import_* used to reject what load() took).
 fn parse_config_bytes(raw: &[u8]) -> Result<Config> {
     let bytes = raw.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(raw);
-    serde_json::from_slice(bytes).context("parse config")
+    serde_json::from_slice(bytes).map_err(|e| {
+        // SECURITY: do NOT surface serde_json's Display — on an `invalid type` /
+        // trailing-garbage error it echoes the offending TOKEN verbatim, and
+        // config.json interleaves live secrets (ai_bearer / groq_api_key /
+        // ai_base_url) with the numeric/bool fields. Keep only the secret-free
+        // location so a bad hand-edit is still locatable. Shared by load() AND
+        // the import paths, so every parse error is sanitised at the root.
+        anyhow::anyhow!(
+            "config JSON is not valid (line {}, column {})",
+            e.line(),
+            e.column()
+        )
+    })
+}
+
+/// P1.4 — best-effort preserve an unparseable config.json before [`load`] falls
+/// back to defaults. A corrupt file, a bad hand-edit, or a truncated write from
+/// an old pre-atomic-save build must never silently destroy the user's live
+/// keys / profiles / devices: we RENAME the bytes aside to
+/// `config.json.broken-<unix_secs>` (off the load path but recoverable) and only
+/// then continue with defaults. All failures are logged and swallowed — load()
+/// must still return so the app can start.
+fn preserve_corrupt_config(path: &std::path::Path) {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let backup = path.with_extension(format!("json.broken-{ts}"));
+    match std::fs::rename(path, &backup) {
+        Ok(()) => log::warn!("preserved corrupt config as {}", backup.display()),
+        Err(e) => log::warn!("could not preserve corrupt config ({e})"),
+    }
 }
 
 pub fn load() -> Config {
-    let mut cfg = match config_path().and_then(|p| {
-        let raw = std::fs::read(&p).context("read config")?;
-        parse_config_bytes(&raw)
-    }) {
-        Ok(cfg) => cfg,
+    let path = match config_path() {
+        Ok(p) => p,
         Err(e) => {
-            log::warn!("config load failed ({e}), using defaults");
+            log::warn!("config dir unavailable ({e}), using defaults");
+            return Config::defaults();
+        }
+    };
+    let mut cfg = match std::fs::read(&path) {
+        Ok(raw) => match parse_config_bytes(&raw) {
+            Ok(cfg) => cfg,
+            Err(_) => {
+                // The file exists but won't parse. Preserve it (P1.4) instead of
+                // letting the next save() overwrite the user's keys / profiles.
+                // SECURITY: the error is intentionally dropped, not logged — even
+                // post-sanitisation we keep the corrupt-path log (emitted by
+                // preserve_corrupt_config) as the only breadcrumb, so no config
+                // byte can ever reach the log on this secrets-bearing file.
+                preserve_corrupt_config(&path);
+                log::warn!("config parse failed; preserved a copy, using defaults");
+                Config::defaults()
+            }
+        },
+        // Fresh install — no config yet. Expected, so don't cry wolf.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Config::defaults(),
+        Err(e) => {
+            log::warn!("config read failed ({e}), using defaults");
             Config::defaults()
         }
     };
+    let mut dirty = false;
     // NB: we deliberately do NOT re-seed default snippets when the list is
     // empty. A fresh install already gets them via Config::defaults() on the
-    // Err arm above; re-seeding on every empty list clobbered a user who had
+    // error arms above; re-seeding on every empty list clobbered a user who had
     // intentionally deleted all their snippets (and rewrote config.json on
     // every launch). To restore the canned set, use Settings → reset. (#134)
     // Migrate a pre-profiles config: if the user already has a meeting_context
@@ -1983,8 +2049,20 @@ pub fn load() -> Config {
             context: cfg.meeting_context.clone(),
         });
         cfg.active_profile = Some(DEFAULT_PROFILE_NAME.to_string());
-        let _ = save(&cfg);
         log::info!("migrated meeting_context into a default profile");
+        dirty = true;
+    }
+    // P1.3 — schema-versioning anchor. Stamp the file with the current schema
+    // version so a FUTURE release can detect an older layout (config_version <
+    // CURRENT) and run a one-time, number-keyed migration right here. Every
+    // field today is additive (serde fills missing ones from defaults), so the
+    // only action now is to stamp; the hook exists for the first breaking change.
+    if cfg.config_version < CURRENT_CONFIG_VERSION {
+        cfg.config_version = CURRENT_CONFIG_VERSION;
+        dirty = true;
+    }
+    if dirty {
+        let _ = save(&cfg);
     }
     cfg
 }
@@ -2001,6 +2079,18 @@ pub fn save(cfg: &Config) -> Result<()> {
     // std::fs::rename overwrites the destination (MoveFileEx replace-existing).
     let tmp = path.with_extension("json.tmp");
     std::fs::write(&tmp, &bytes).context("write config (tmp)")?;
+    // Keep ONE generation of the previous on-disk config as config.json.bak
+    // before we replace it. Atomic-save already guarantees we never see a torn
+    // file; the .bak adds a manual escape hatch when a future *valid* write
+    // stores something the user wants to undo (a bad import, a fat-fingered
+    // settings change). Best-effort: a missing source (first-ever save) or a
+    // copy error must not fail the real save.
+    if path.exists() {
+        let bak = path.with_extension("json.bak");
+        if let Err(e) = std::fs::copy(&path, &bak) {
+            log::debug!("config .bak snapshot skipped ({e})");
+        }
+    }
     std::fs::rename(&tmp, &path).context("replace config")?;
     Ok(())
 }
@@ -2335,6 +2425,79 @@ mod tests {
         assert!(!cfg.stealth_enabled);
         assert!(cfg.context_profiles.is_empty());
         assert!(cfg.active_profile.is_none());
+    }
+
+    #[test]
+    fn config_defaults_stamp_current_schema_version() {
+        // A fresh install (the Err/NotFound arms of load() use Config::defaults)
+        // must carry the current schema version, so it never looks "older than
+        // itself" to the load()-time migration stamp.
+        assert_eq!(Config::defaults().config_version, CURRENT_CONFIG_VERSION);
+    }
+
+    #[test]
+    fn config_pre_versioning_json_reads_as_zero() {
+        // A file written before versioning has no config_version key. serde must
+        // fill the u32 Default (0) — that's the sentinel load() keys on to stamp
+        // the file up to CURRENT (and, in future, run number-keyed migrations).
+        let cfg: Config = serde_json::from_str(r#"{"ai_model":"x"}"#).unwrap();
+        assert_eq!(cfg.config_version, 0);
+        assert!(cfg.config_version < CURRENT_CONFIG_VERSION);
+    }
+
+    #[test]
+    fn preserve_corrupt_config_renames_aside_keeping_bytes() {
+        // P1.4: an unparseable config.json must be moved to a recoverable
+        // `*.broken-<ts>` sibling — never silently dropped — so a corruption
+        // event can't destroy the user's live keys / profiles.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        let garbage = b"{ this is not valid json @@@";
+        std::fs::write(&path, garbage).unwrap();
+
+        preserve_corrupt_config(&path);
+
+        // Original gone (moved off the load path).
+        assert!(!path.exists(), "corrupt config.json should be renamed away");
+        // Exactly one recoverable sibling, holding the original bytes verbatim.
+        let mut broken: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.starts_with("config.json.broken-"))
+            .collect();
+        assert_eq!(
+            broken.len(),
+            1,
+            "expected one .broken- backup, got {broken:?}"
+        );
+        let backup = dir.path().join(broken.remove(0));
+        assert_eq!(std::fs::read(&backup).unwrap(), garbage);
+    }
+
+    #[test]
+    fn parse_error_never_echoes_the_offending_token() {
+        // SECURITY regression guard (review BLOCKER): config.json holds live
+        // secrets, and serde_json's Display echoes the offending TOKEN verbatim on
+        // an `invalid type` error. parse_config_bytes must surface ONLY a
+        // secret-free location, never the value at the failing position.
+        let secret = "sk-LIVE-SECRET-DO-NOT-LOG-9f3a";
+        // String where a u32 is expected → serde's raw Display would quote it.
+        let json = format!("{{\"config_version\":\"{secret}\"}}");
+        let err = parse_config_bytes(json.as_bytes()).unwrap_err();
+        let msg = format!("{err:#}"); // anyhow alternate = full chain
+        assert!(
+            !msg.contains(secret),
+            "parse error leaked the secret token: {msg}"
+        );
+        assert!(
+            !msg.contains("invalid type"),
+            "serde Display leaked through the wrapper: {msg}"
+        );
+        assert!(
+            msg.contains("line") && msg.contains("column"),
+            "sanitised error should still carry a location: {msg}"
+        );
     }
 
     #[test]
