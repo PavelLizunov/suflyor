@@ -33,12 +33,55 @@ audit P2 items; #135 single-slot; Fica-1 window-bug grounded investigation
   marathon), not micro-releases.
 
 ### In progress
-- WRAP-UP. All 4 tracks done + fully gated; R9 cross-cutting re-audit CLEAN. Committing
-  Track 3 (design scaffold) BANK, plus a 1-line config.rs comment for re-audit L1
-  (documents vision_phonetics' intentional server-transfer exclusion), then push.
-  v0.9.1 is the night's only RELEASE (P1.7 + P1.3); Track 4 + Track 3 are banked
-  foundation commits (no release, per no-marathons). ~7h to deadline 08:22 — after
-  wrap-up I hold for the user's morning review; no risky churn to fill time.
+- MANDATE COMPLETE (all 4 tracks). origin/master @ 82c9c3f, tree clean except the 2
+  intentionally-uncommitted docs (feature-requests.md = partner's list; implementation-
+  review-v0.8.8 = agent artifact). Night ships: v0.9.0 (Track 1, prior session) +
+  v0.9.1 RELEASED (Track 2: P1.7 server-settings transfer + P1.3 cleanup) + Track 4
+  memory crash-recovery BANKED (1151ee6) + Track 3 design scaffold Etap 0-1 BANKED
+  (0aececc) + L1 re-audit follow-up (82c9c3f). Every item 5-layer gated; an independent
+  per-feature review on each + a final R9 cross-cutting re-audit, all CLEAN. ~7h to
+  deadline. Continuing with SAFE-only activity (the design scaffold's remaining surfaces
+  are Medium+ risk per §6 and need the user's visual matrix — NOT autonomous); holding
+  for the morning review rather than manufacturing risky/visual churn (no-marathons).
+  See "Morning review" below.
+
+### Morning review (start here)
+Everything below shipped while you slept. origin/master @ 82c9c3f; every item is
+5-layer gated + independently reviewed; nothing is half-done.
+
+**What shipped**
+1. v0.9.1 RELEASED (installer + GitHub release, asset digest verified) — server-settings
+   transfer between PCs (P1.7): "Export server settings" + a two-step REDACTED import
+   preview (bridge host masked, keys shown as set/— only, local GigaAM dir kept) + the
+   P1.3 dead-field cleanup. Commits cb19f55 + b251efc.
+2. Track 4 — memory crash recovery (BANKED 1151ee6, no release): on launch, if the
+   previous session ended without a clean stop (<12h), an offer proposes carrying its
+   context forward. It ALREADY detects your real pre-sleep session — you'll see the
+   offer on first launch (Recover seeds context + links the new session; Dismiss leaves
+   the old journal untouched).
+3. Track 3 — design scaffold Etap 0-1 (BANKED 0aececc, no release): new ui/metrics.slint
+   (size/spacing/typography token global — the dimensional sibling of theme.slint),
+   applied value-preservingly to help + recover_offer (ZERO visual change), plus an
+   Etap-0 reference-shot harness (scripts/capture-reference-shots.ps1).
+
+**Please eyeball (visual checks I could not do autonomously)**
+- The recover-offer window (appears on launch): title, last-Q&A/lines layout,
+  Recover/Dismiss buttons — on Light Frost + one dark theme.
+- help + recover_offer after the token swap: should look IDENTICAL to before (the swap
+  is value-preserving — a sanity glance, not a change).
+- Real Etap-0 baselines: turn stealth OFF, then run
+  `pwsh -File scripts/capture-reference-shots.ps1` (under stealth the shots are blank —
+  WDA excludes the overlay windows from screen capture).
+
+**Continuing the redesign (your "большая работа")**
+- Etap 1 proceeds surface-by-surface (replay = Low risk; settings/palette/text-ask/
+  wizard = Medium; bar/tile = High; capture = Critical) — each needs your visual matrix
+  (§6/§8/§10 of docs/slint-design-system-and-safe-redesign-plan.md). The Metrics global
+  already holds the full taxonomy, so migrating a surface is now a mechanical
+  value-preserving swap + a glance.
+- Intentionally left for supervised work (NOT done tonight): #135 single-slot streams
+  (needs live multi-tile verify), the Fica-1 window bug (repro-blocked — investigate,
+  never fix blind), memory Phase 2 (SQLite/archive — Phase 1 recovery shipped tonight).
 - Dropped the marginal "diag rows" sub-item from v0.9.1 (P1.3 has no user-visible
   change alone; bundling with P1.7 which has real value).
 
