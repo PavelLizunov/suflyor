@@ -31,9 +31,10 @@ use windows::Win32::Graphics::Gdi::{CreateRectRgn, DeleteObject};
 use windows::Win32::UI::Controls::MARGINS;
 use windows::Win32::UI::WindowsAndMessaging::{
     GetWindowLongPtrW, SetWindowDisplayAffinity, SetWindowLongPtrW, SetWindowPos, ShowWindow,
-    GWL_EXSTYLE, HWND_NOTOPMOST, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SW_HIDE,
-    SW_SHOWNOACTIVATE, WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
-    WS_EX_TRANSPARENT,
+    GWL_EXSTYLE, GWL_STYLE, HWND_NOTOPMOST, HWND_TOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE, SW_SHOWNOACTIVATE, WDA_EXCLUDEFROMCAPTURE,
+    WDA_NONE, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_MAXIMIZEBOX, WS_MINIMIZEBOX,
+    WS_SYSMENU,
 };
 
 /// Extract a raw Win32 HWND from any Slint window. Requires the
@@ -116,6 +117,36 @@ fn apply_transparency(hwnd: HWND, click_through: bool) -> Result<(), Box<dyn std
         after,
         (after & transparent_bit) != 0,
     );
+
+    // V0.8.4 — kill the ghost caption buttons. Slint's `no-frame: true` leaves
+    // WS_CAPTION | WS_SYSMENU | WS_MAXIMIZEBOX | WS_MINIMIZEBOX on the HWND; once
+    // we extend the DWM frame into the client area (below), DWM paints the
+    // caption's close/min/max glyphs faintly in the top-right corner — the
+    // "еле заметный крестик" the user kept reporting on the bar (and it was on
+    // tiles too). Clearing the sys-menu + min/max bits drops those non-client
+    // buttons while leaving WS_CAPTION/WS_THICKFRAME, so the DWM frame extension
+    // is unchanged. Verified live: the × disappears, transparency + rounded
+    // corners stay intact. Alt+F4 also goes away — fine, every overlay window
+    // has its own close affordance (the bar's X chip, the tile's X button).
+    unsafe {
+        let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+        let no_buttons = style
+            & !(WS_SYSMENU.0 as isize | WS_MAXIMIZEBOX.0 as isize | WS_MINIMIZEBOX.0 as isize);
+        if no_buttons != style {
+            SetWindowLongPtrW(hwnd, GWL_STYLE, no_buttons);
+            // SWP_FRAMECHANGED forces a non-client recompute so the removed
+            // buttons stop being drawn immediately (not on the next frame).
+            let _ = SetWindowPos(
+                hwnd,
+                None,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+            );
+        }
+    }
 
     let margins = MARGINS {
         cxLeftWidth: -1,
