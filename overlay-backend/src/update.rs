@@ -133,31 +133,37 @@ fn is_trusted_download(url: &str) -> bool {
         || url.starts_with("https://release-assets.githubusercontent.com/")
 }
 
-/// Best-effort: re-query the latest release and return the expected SHA-256
-/// (lowercase hex) for the asset at `url`, from GitHub's API `digest` field
-/// ("sha256:…"). None when the API exposes no digest (older releases) — the
-/// caller then relies on the size + PE-magic checks. Verifying against the API
-/// digest closes the "truncated / CDN-tampered download executed" gap; it does
-/// NOT defend a fully compromised GitHub release (that needs Authenticode + a
-/// code-signing cert, which this project does not have).
-async fn expected_sha256_for(client: &reqwest::Client, url: &str) -> Option<String> {
+/// Re-query the latest release and return the expected SHA-256 (lowercase hex)
+/// for the asset at `url`, from GitHub's API `digest` field ("sha256:…").
+///
+/// Returns `Ok(Some(hex))` when a digest is present, `Ok(None)` when the asset
+/// is found but carries no digest (older releases), and `Err` when the metadata
+/// fetch itself failed. The caller (P1.6) MUST distinguish these: a transient
+/// fetch error means "retry", while a genuinely-absent digest means "this
+/// release can't be verified". Verifying against the API digest closes the
+/// "truncated / CDN-tampered download executed" gap; it does NOT defend a fully
+/// compromised GitHub release (that needs Authenticode + a code-signing cert,
+/// which this project does not have).
+async fn expected_sha256_for(client: &reqwest::Client, url: &str) -> Result<Option<String>> {
     let api = format!("https://api.github.com/repos/{REPO}/releases/latest");
     let rel: GhRelease = client
         .get(&api)
         .send()
         .await
-        .ok()?
+        .context("GET releases/latest (for digest)")?
         .error_for_status()
-        .ok()?
+        .context("releases/latest (for digest) returned an error status")?
         .json()
         .await
-        .ok()?;
-    let asset = rel.assets.iter().find(|a| a.browser_download_url == url)?;
-    asset
+        .context("parse releases/latest JSON (for digest)")?;
+    let Some(asset) = rel.assets.iter().find(|a| a.browser_download_url == url) else {
+        return Ok(None);
+    };
+    Ok(asset
         .digest
-        .as_deref()?
-        .strip_prefix("sha256:")
-        .map(|h| h.to_lowercase())
+        .as_deref()
+        .and_then(|d| d.strip_prefix("sha256:"))
+        .map(|h| h.to_lowercase()))
 }
 
 /// Download the installer to `%TEMP%\suflyor-update\` and return its path.
@@ -192,11 +198,16 @@ pub async fn download_installer(url: &str) -> Result<PathBuf> {
     if bytes.len() < 2 || &bytes[..2] != b"MZ" {
         bail!("downloaded installer is not a Windows executable (bad header)");
     }
-    // Verify SHA-256 against GitHub's API digest when present. Defends a
-    // truncated download and a CDN-path tamper that doesn't also forge the
-    // api.github.com response; full account-compromise still needs Authenticode.
+    // Verify SHA-256 against GitHub's API digest. Policy (audit P1.6): FAIL-CLOSED
+    // — without a verified hash we refuse to run an installer that will overwrite
+    // the running binary. This repo's releases DO carry an API digest (GitHub
+    // computes it server-side), so the normal path always verifies; the fallback
+    // bails point the user at the GitHub releases page for a manual install,
+    // which the Updates tab keeps the app open to perform. A transient metadata
+    // fetch error is distinguished from a genuinely-absent digest so a network
+    // blip reads as "retry" rather than "this release is unverifiable".
     match expected_sha256_for(&client, url).await {
-        Some(expected) => {
+        Ok(Some(expected)) => {
             let mut hasher = Sha256::new();
             hasher.update(&bytes);
             let got: String = hasher
@@ -211,11 +222,12 @@ pub async fn download_installer(url: &str) -> Result<PathBuf> {
             }
             log::info!("update: installer sha256 verified");
         }
-        None => {
-            log::warn!(
-                "update: release metadata has no sha256 digest — size + PE header checked only"
-            )
-        }
+        Ok(None) => bail!(
+            "this release has no SHA-256 digest to verify the installer — refusing to auto-install for safety; please update manually from the GitHub releases page"
+        ),
+        Err(e) => bail!(
+            "could not fetch the release digest to verify the installer ({e}) — refusing to auto-install; check your connection and retry, or update manually from the releases page"
+        ),
     }
     let dir = std::env::temp_dir().join("suflyor-update");
     std::fs::create_dir_all(&dir).context("create temp update dir")?;

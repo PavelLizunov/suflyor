@@ -27,6 +27,11 @@ const GEMMA_URL: &str =
     "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf";
 const GEMMA_FILE: &str = "gemma-4-E4B-it-Q4_K_M.gguf";
 const GEMMA_SIZE: u64 = 4_977_169_568;
+// Pinned SHA-256 = the HuggingFace LFS object id of the exact file above
+// (cross-checked at pin time: the API-reported LFS size equals GEMMA_SIZE).
+// Hardcoded so a tampered API/CDN response can't supply a matching hash for
+// swapped bytes (P1.5).
+const GEMMA_SHA256: &str = "519b9793ed6ce0ff530f1b7c96e848e08e49e7af4d57bb97f76215963a54146d";
 
 // Vision projector for Gemma 4 (multimodal). Loaded via llama-server `--mmproj`
 // so the SAME local model reads images — F8 screenshots stay fully local with no
@@ -37,16 +42,19 @@ const MMPROJ_URL: &str =
     "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/mmproj-F32.gguf";
 const MMPROJ_FILE: &str = "mmproj-F32.gguf";
 const MMPROJ_SIZE: u64 = 1_912_464_192;
+const MMPROJ_SHA256: &str = "343cdea7775835ebdd1caa6c42ec3ec3e711d082835c72253d4e87c4b7e303d0";
 
 const WHISPER_URL: &str =
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin";
 const WHISPER_FILE: &str = "ggml-large-v3-turbo-q8_0.bin";
 const WHISPER_SIZE: u64 = 874_188_075;
+const WHISPER_SHA256: &str = "317eb69c11673c9de1e1f0d459b253999804ec71ac4c23c17ecf5fbe24e259a1";
 const WHISPER_MODEL_ID: &str = "whisper-large-v3-turbo";
 
 const GIGAAM_MODEL_URL: &str =
     "https://huggingface.co/istupakov/gigaam-v3-onnx/resolve/main/v3_e2e_ctc.int8.onnx";
 const GIGAAM_MODEL_SIZE: u64 = 224_893_347;
+const GIGAAM_SHA256: &str = "2e3fcb7a7b66030336fd10c2fcfb033bd1dc7e1bf238fe5cfd83b1d0cfc9d28e";
 const GIGAAM_VOCAB_URL: &str =
     "https://huggingface.co/istupakov/gigaam-v3-onnx/resolve/main/v3_e2e_ctc_vocab.txt";
 
@@ -176,6 +184,39 @@ pub fn install(
     let gigaam_dir = opts.root.join("gigaam-v3");
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
 
+    // P1.5 — fail fast on insufficient disk BEFORE pulling gigabytes. Count only
+    // what we'd actually fetch: a model already complete at its dest is skipped
+    // (mirrors reuse_if_available's dest check), and the server binaries add a
+    // flat allowance only when not already installed.
+    {
+        let mut need: u64 = 0;
+        if !opts.skip_llama {
+            if file_len(&llama_dir.join(GEMMA_FILE)) < GEMMA_SIZE {
+                need += GEMMA_SIZE;
+            }
+            if file_len(&llama_dir.join(MMPROJ_FILE)) < MMPROJ_SIZE {
+                need += MMPROJ_SIZE;
+            }
+            if find_exe(&llama_dir, "llama-server.exe").is_none() {
+                need += LLAMA_BINARIES_ALLOWANCE;
+            }
+        }
+        if !opts.skip_whisper {
+            if file_len(&whisper_dir.join(WHISPER_FILE)) < WHISPER_SIZE {
+                need += WHISPER_SIZE;
+            }
+            if find_exe(&whisper_dir, "whisper-server.exe").is_none()
+                && find_exe(&whisper_dir, "server.exe").is_none()
+            {
+                need += WHISPER_BINARIES_ALLOWANCE;
+            }
+        }
+        if !opts.skip_gigaam && file_len(&gigaam_dir.join("model.int8.onnx")) < GIGAAM_MODEL_SIZE {
+            need += GIGAAM_MODEL_SIZE;
+        }
+        ensure_disk_space(&opts.root, need, on)?;
+    }
+
     let use_gpu = detect_nvidia() && !opts.force_cpu;
     let mut cuda_version: Option<String> = None;
 
@@ -212,6 +253,7 @@ pub fn install(
         } else {
             curl_resumable(GEMMA_URL, &gemma_dest, GEMMA_SIZE, "Gemma", cancel, on)?;
         }
+        verify_sha256(&gemma_dest, GEMMA_SHA256, "Gemma model")?;
 
         // Vision projector (mmproj) — enables image reading on the same model so
         // F8 screenshots can be analysed locally without any cloud egress.
@@ -234,6 +276,7 @@ pub fn install(
                 on,
             )?;
         }
+        verify_sha256(&mmproj_dest, MMPROJ_SHA256, "Vision projector")?;
     }
 
     // ---- whisper.cpp + Whisper-turbo --------------------------------------
@@ -265,6 +308,7 @@ pub fn install(
                 on,
             )?;
         }
+        verify_sha256(&whisper_dest, WHISPER_SHA256, "Whisper model")?;
     }
 
     // ---- GigaAM-v3 (in-process; no server) --------------------------------
@@ -284,6 +328,7 @@ pub fn install(
                 on,
             )?;
         }
+        verify_sha256(&giga_dest, GIGAAM_SHA256, "GigaAM model")?;
         curl_small(GIGAAM_VOCAB_URL, &gigaam_dir.join("vocab.txt"))?;
     }
 
@@ -953,6 +998,99 @@ fn reuse_if_available(dest: &Path, expected: u64, candidates: &[PathBuf]) -> boo
         }
     }
     false
+}
+
+const GIB: u64 = 1_073_741_824;
+/// Flat disk allowance for the llama.cpp build zip + cudart + their extraction
+/// (exact size isn't known until the GitHub API call). Whisper's cuBLAS zip
+/// bundles its runtime so it needs a little less.
+const LLAMA_BINARIES_ALLOWANCE: u64 = 1_500_000_000;
+const WHISPER_BINARIES_ALLOWANCE: u64 = 1_000_000_000;
+
+/// P1.5 — verify a downloaded OR reused model against its pinned SHA-256 (the
+/// HuggingFace LFS object id). On mismatch the file is DELETED — so a re-run
+/// re-downloads instead of re-accepting the same bad bytes — and the install
+/// fails. A present-but-correct file (reuse) passes without re-downloading.
+fn verify_sha256(path: &Path, expected_hex: &str, label: &str) -> Result<()> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    let mut file =
+        std::fs::File::open(path).with_context(|| format!("open {} to verify", path.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 1 << 16];
+    loop {
+        let n = file.read(&mut buf).context("read model to verify")?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    let got: String = hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    if !got.eq_ignore_ascii_case(expected_hex) {
+        let _ = std::fs::remove_file(path);
+        bail!(
+            "{label} failed its SHA-256 integrity check — the file was corrupt or tampered and has been removed; retry the local-AI install"
+        );
+    }
+    log::info!("{label} sha256 verified");
+    Ok(())
+}
+
+/// Best-effort free bytes on the volume backing `path`. Shells out (consistent
+/// with this module's nvidia-smi / netstat / curl calls) to PowerShell for a
+/// culture-invariant integer — fsutil / dir print localized grouped numbers that
+/// break parsing on a non-English Windows. None when the query fails, so the
+/// caller skips the pre-check rather than blocking a possibly-valid install.
+fn free_bytes_on_volume(path: &Path) -> Option<u64> {
+    let root = path.ancestors().last().unwrap_or(path);
+    let script = format!(
+        "[System.IO.DriveInfo]::new([string]'{}').AvailableFreeSpace",
+        root.to_string_lossy()
+    );
+    let out = run_capture(
+        "powershell",
+        &["-NoProfile", "-NonInteractive", "-Command", &script],
+    )
+    .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&out.stdout)
+        .trim()
+        .parse::<u64>()
+        .ok()
+}
+
+/// P1.5 — bail before downloading if the volume can't hold `need` bytes (+10%
+/// headroom for extraction temp + slack). Reports the expected vs available
+/// figures via `on`. A failed free-space query is non-fatal (the per-download
+/// completion check still guards a truly full disk).
+fn ensure_disk_space(root: &Path, need: u64, on: &dyn Fn(Progress)) -> Result<()> {
+    if need == 0 {
+        return Ok(());
+    }
+    let want = need.saturating_add(need / 10);
+    let Some(free) = free_bytes_on_volume(root) else {
+        return Ok(());
+    };
+    on(Progress::Step(format!(
+        "Disk check: ~{} GB required, {} GB free",
+        want.div_ceil(GIB),
+        free / GIB
+    )));
+    if free < want {
+        bail!(
+            "not enough free disk space — the local AI needs about {} GB on the drive holding {}, but only {} GB is free; free up space and retry",
+            want.div_ceil(GIB),
+            root.display(),
+            free / GIB
+        );
+    }
+    Ok(())
 }
 
 fn find_exe(dir: &Path, name: &str) -> Option<PathBuf> {
