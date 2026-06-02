@@ -8178,16 +8178,30 @@ fn open_settings(
                     Err(e) => Err(anyhow::anyhow!("runtime: {e}")),
                 };
                 match res {
-                    Ok(path) => {
-                        // Launch the installer, then quit so it can overwrite
-                        // the running binary (its first page is interactive,
-                        // so the app is gone before it reaches the File step).
-                        diag!("update: launching installer, quitting app");
-                        let _ = overlay_backend::update::run_installer(&path);
-                        let _ = slint::invoke_from_event_loop(|| {
-                            let _ = slint::quit_event_loop();
-                        });
-                    }
+                    Ok(path) => match overlay_backend::update::run_installer(&path) {
+                        Ok(()) => {
+                            // Installer launched — quit so it can overwrite the
+                            // running binary (its first page is interactive, so
+                            // the app is gone before it reaches the File step).
+                            diag!("update: installer launched, quitting app");
+                            let _ = slint::invoke_from_event_loop(|| {
+                                let _ = slint::quit_event_loop();
+                            });
+                        }
+                        Err(e) => {
+                            // P0.3: the installer failed to spawn (blocked exe /
+                            // deleted file). Do NOT quit — stay open + show why.
+                            diag!("update: installer spawn FAILED: {e:#}");
+                            let _ = slint::invoke_from_event_loop(move || {
+                                if let Some(w) = weak2.upgrade() {
+                                    w.set_update_checking(false);
+                                    w.set_update_status(SharedString::from(
+                                        "Не удалось запустить установщик — приложение оставлено открытым (см. лог)",
+                                    ));
+                                }
+                            });
+                        }
+                    },
                     Err(e) => {
                         let _ = slint::invoke_from_event_loop(move || {
                             if let Some(w) = weak2.upgrade() {
