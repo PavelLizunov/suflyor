@@ -5478,7 +5478,15 @@ fn wire_wizard_steps(
                 }
                 1 => {
                     c.ai_provider = "local".into();
-                    c.stt_provider = "whisper".into();
+                    // Prefer GigaAM when it's configured (its model dir is set) —
+                    // it's the stronger local STT and avoids defaulting to a
+                    // whisper-server the user may not be running. Same "configured"
+                    // test the diagnostics readiness() uses. Fall back to whisper.
+                    c.stt_provider = if c.stt_gigaam_dir.trim().is_empty() {
+                        "whisper".into()
+                    } else {
+                        "gigaam".into()
+                    };
                     c.vision_provider = "local".into();
                 }
                 _ => {} // Mixed: leave provider fields as-is.
@@ -5646,21 +5654,41 @@ fn wire_wizard_steps(
         });
     }
 
-    // Steps 2/6: "Install local AI" / "Open diagnostics" — open Settings (the
-    // installer button + the 🩺 Diagnostics tab both live there).
+    // Steps 2/6: "Install local AI" / "Open diagnostics" — dismiss the wizard
+    // first (it's always-on-top, so otherwise the re-shown Settings opens BEHIND
+    // it and looks like nothing happened), then open Settings on the right tab.
     {
+        let weak = win.as_weak();
         let ow = overlay_weak.clone();
+        let set = settings_ref.clone();
         win.on_install_local_clicked(move || {
+            if let Some(w) = weak.upgrade() {
+                w.invoke_cancelled();
+            }
             if let Some(o) = ow.upgrade() {
                 o.invoke_open_settings_clicked();
+            }
+            // 🧠 AI bridge tab (index 11) — the local-AI installer lives there.
+            if let Some(sw) = set.borrow().as_ref() {
+                sw.set_active_tab(11);
             }
         });
     }
     {
+        let weak = win.as_weak();
         let ow = overlay_weak.clone();
+        let set = settings_ref.clone();
         win.on_open_diagnostics(move || {
+            if let Some(w) = weak.upgrade() {
+                w.invoke_cancelled();
+            }
             if let Some(o) = ow.upgrade() {
                 o.invoke_open_settings_clicked();
+            }
+            // 🩺 Diagnostics tab (index 13) + auto-run the readiness check.
+            if let Some(sw) = set.borrow().as_ref() {
+                sw.set_active_tab(13);
+                sw.invoke_diagnostics_check_all_clicked();
             }
         });
     }
