@@ -186,14 +186,6 @@ pub struct Config {
     #[serde(default = "default_post_meeting_debrief_enabled")]
     pub post_meeting_debrief_enabled: bool,
 
-    /// v0.0.98: arbitrary CSS injected into the overlay window at
-    /// mount time. Lets power users theme the overlay (color
-    /// overrides, font tweaks, chip styling) without recompiling.
-    /// Capped at 8 KB on the frontend so a typo doesn't blow up
-    /// localStorage / IPC. Default empty.
-    #[serde(default)]
-    pub custom_css: String,
-
     /// v0.0.73: when true, `quit_app` exports the most recent session's
     /// JSONL journal to a Markdown file on the user's Desktop right
     /// before exiting. Filename: `suflyor-session-YYYY-MM-DD-HHmm.md`.
@@ -256,20 +248,12 @@ pub struct Config {
     #[serde(default)]
     pub auto_tile_every_line: bool,
 
-    /// Hotkeys (cross-platform syntax, e.g. "F9", "CmdOrCtrl+Shift+A").
-    pub hotkey_ask: String,
-    pub hotkey_screenshot: String,
-    pub hotkey_toggle_visibility: String,
-    pub hotkey_pause_audio: String,
-
-    /// How the manual-ask buttons (🎤 mic / 🔊 system) behave:
-    /// - "click": single click → take last 5 lines, ask AI (current default)
-    /// - "hold":  press-and-hold → records only what's said while held →
-    ///   transcript window for that duration → ask AI
-    ///
-    /// Hold-mode shows a pulsing red indicator while recording.
-    pub manual_ask_mode: String,
-
+    // NOTE: the legacy `hotkey_*` (F9/F10/F11/F12) and `manual_ask_mode` and
+    // `custom_css` fields were REMOVED (P1.3). They were dead config that never
+    // matched runtime behaviour — the app uses FIXED hotkeys (F1/F3/F4/F6/F8/F9/
+    // Shift+F8/Shift+F9), push-to-talk is hard-wired, and there is no CSS surface
+    // in the Slint build. `#[serde(default)]` on the struct means old config.json
+    // files carrying these keys still load fine (serde ignores the unknown keys).
     /// UI language for Settings + Overlay + Tile chrome strings (NOT
     /// AI response language — that's `response_language` above). v0.0.42.
     /// Supported: "ru" (default, current primary), "en". Anything else
@@ -466,17 +450,11 @@ impl Config {
             stealth_enabled: false, // OFF by default — easier to debug & not every use case needs stealth
             trigger_keywords: default_trigger_keywords(),
             auto_tiles_enabled: true,
-            hotkey_ask: "F9".into(),
-            hotkey_screenshot: "F10".into(),
-            hotkey_toggle_visibility: "F11".into(),
-            hotkey_pause_audio: "F12".into(),
-            manual_ask_mode: "hold".into(), // push-to-talk by default
             ui_language: default_ui_language(),
             color_scheme: 0,
             tile_font_size: default_tile_font_size(),
             snippets: default_snippets(),
             post_meeting_debrief_enabled: default_post_meeting_debrief_enabled(),
-            custom_css: String::new(),
             auto_export_on_quit: false,
             max_session_cost_usd: default_max_session_cost_usd(),
             detector_skip_mic: default_detector_skip_mic(),
@@ -2242,7 +2220,6 @@ mod tests {
         current.ui_language = "en".into();
         current.color_scheme = 3;
         current.tile_font_size = 19;
-        current.hotkey_ask = "F11".into();
         current.snippets = vec![Snippet {
             key: "loc".into(),
             title: "Local snippet".into(),
@@ -2290,7 +2267,6 @@ mod tests {
         imported.mic_device = Some("Imported Mic (ignore)".into());
         imported.ui_language = "ru".into();
         imported.color_scheme = 0;
-        imported.hotkey_ask = "F2".into();
         imported.snippets = vec![Snippet {
             key: "imp".into(),
             title: "Imported snippet (ignore)".into(),
@@ -2344,7 +2320,6 @@ mod tests {
         assert_eq!(merged.ui_language, "en");
         assert_eq!(merged.color_scheme, 3);
         assert_eq!(merged.tile_font_size, 19);
-        assert_eq!(merged.hotkey_ask, "F11");
         assert_eq!(merged.snippets.len(), 1);
         assert_eq!(merged.snippets[0].key, "loc");
     }
@@ -2924,26 +2899,6 @@ mod tests {
             assert!(
                 kws.contains(required),
                 "default trigger_keywords missing core term '{required}'"
-            );
-        }
-    }
-
-    /// Hotkey defaults must be parseable by tauri-plugin-global-shortcut
-    /// (smoke-check via the string format — F-keys and CmdOrCtrl combos).
-    #[test]
-    fn default_hotkeys_have_sensible_format() {
-        let d = Config::defaults();
-        for hk in [
-            &d.hotkey_ask,
-            &d.hotkey_screenshot,
-            &d.hotkey_toggle_visibility,
-            &d.hotkey_pause_audio,
-        ] {
-            assert!(!hk.is_empty(), "hotkey must not be empty");
-            // Either a function key or a modifier+key combo
-            assert!(
-                hk.starts_with('F') || hk.contains('+') || hk.len() <= 4,
-                "hotkey '{hk}' doesn't look like F-key or modifier combo"
             );
         }
     }
