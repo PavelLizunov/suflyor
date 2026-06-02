@@ -1485,6 +1485,50 @@ fn main() -> Result<(), slint::PlatformError> {
     // time, so this must run before any transcription. Falls back to CPU when no
     // GPU / DirectML runtime is available.
     overlay_backend::stt::configure_gigaam_accelerator(cfg.read().stt_gigaam_gpu);
+
+    // V0.8.4 — warm up LOCAL models shortly after boot so the user's FIRST real
+    // request isn't penalised by cold-start (GigaAM lazy-loads its model on the
+    // first transcribe; an llama-server's first inference fills caches). Fire-and-
+    // forget on the tokio runtime after a short delay (lets an auto-started local
+    // server finish booting first). Cloud is skipped — no cold-start + it would
+    // spend API quota. Best-effort: any error is just logged (the real request
+    // then loads the model the normal way). Reuses the diagnostics pings.
+    {
+        let cfg_w = cfg.clone();
+        rt_handle.spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(2500)).await;
+            let (ai_local, ai_ep, stt_local, stt_backend) = {
+                let c = cfg_w.read();
+                (
+                    c.ai_provider == "local",
+                    c.ai_endpoint(false),
+                    c.stt_provider == "gigaam" || c.stt_provider == "whisper",
+                    c.stt_backend(),
+                )
+            };
+            if ai_local {
+                let t = std::time::Instant::now();
+                match overlay_backend::ai::test_connection(
+                    ai_ep.base_url,
+                    ai_ep.bearer,
+                    ai_ep.model,
+                )
+                .await
+                {
+                    Ok(_) => diag!("local AI warmed in {:?}", t.elapsed()),
+                    Err(e) => diag!("local AI warm-up skipped: {e}"),
+                }
+            }
+            if stt_local {
+                let t = std::time::Instant::now();
+                match overlay_backend::stt::test_connection_backend(&stt_backend).await {
+                    Ok(_) => diag!("local STT warmed in {:?}", t.elapsed()),
+                    Err(e) => diag!("local STT warm-up skipped: {e}"),
+                }
+            }
+        });
+    }
+
     // E10.5 — auto-start the local AI servers the config points at but that
     // aren't already running (after a restart following an in-app install the
     // app's own servers are gone — it kills them on quit). Off the UI thread;
