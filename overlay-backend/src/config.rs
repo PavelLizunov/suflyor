@@ -2186,6 +2186,227 @@ pub fn import_server_settings_from(path: &std::path::Path, current: &Config) -> 
     Ok(next)
 }
 
+// ---------------------------------------------------------------------------
+// P1.7 — server-settings EXPORT (server fields only) + import PREVIEW.
+// ---------------------------------------------------------------------------
+
+/// P1.7 — export ONLY the AI/STT/vision SERVER fields to a user-picked path.
+/// Built from [`Config::defaults`] (so meeting_context, context_profiles,
+/// snippets, audio devices, monitor pin, trigger keywords, UI/theme, etc. are
+/// blank/default) with exactly the fields [`merge_server_settings`] copies
+/// overlaid from `cfg`. Pretty JSON, human-editable.
+///
+/// SECURITY: this file DOES contain the server creds (`ai_bearer`,
+/// `groq_api_key`, the vision/local bearers) and the private `ai_base_url` —
+/// that is intentional (the whole point is transferring a server setup to
+/// another PC). It must NOT contain `meeting_context`, `context_profiles`,
+/// `snippets`, audio devices, or any other machine-local field — the caller is
+/// responsible for warning the user the file holds secrets.
+pub fn export_server_settings_to(path: &std::path::Path, cfg: &Config) -> Result<()> {
+    // `merge_server_settings(current, imported)` copies the server fields of
+    // `imported` onto a clone of `current`. Feed defaults as `current` and the
+    // live config as `imported` → a Config whose ONLY non-default fields are the
+    // server ones. Single source of truth for "what is a server field".
+    let server_only = merge_server_settings(&Config::defaults(), cfg.clone());
+    let bytes = serde_json::to_vec_pretty(&server_only).context("serialize server settings")?;
+    std::fs::write(path, bytes).context("write server-settings export")?;
+    Ok(())
+}
+
+/// One AI/STT/vision endpoint group in a redacted import preview. Carries
+/// NEUTRAL fields only — provider tag, base URL, model — plus key PRESENCE as a
+/// bool. NEVER the secret VALUE of a bearer / API key. Both the `*_old` and
+/// `*_new` sides are populated so the UI can render an "old -> new" diff.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PreviewGroup {
+    /// Human-readable group label, already English (UI translates via @tr on
+    /// the fixed label it pairs this data with; this string is data only and is
+    /// not itself shown untranslated — kept for tests / logging).
+    pub label: String,
+    pub provider_old: String,
+    pub provider_new: String,
+    /// Base URL. May be a private LAN IP — shown because it already appears in
+    /// the Settings URL fields. See [`mask_host`] for the copyable/loggable form.
+    pub base_url_old: String,
+    pub base_url_new: String,
+    pub model_old: String,
+    pub model_new: String,
+    /// Whether this group HAS a credential (bearer / API key). PRESENCE only —
+    /// the value is never carried. `false` for groups with no credential field
+    /// (e.g. local AI when no bearer is set), which the UI renders as "—".
+    pub key_present_old: bool,
+    pub key_present_new: bool,
+    /// True when this group exposes a credential field at all (so the UI can
+    /// distinguish "no key field here" from "key field, currently empty").
+    pub has_key_field: bool,
+}
+
+impl PreviewGroup {
+    /// True when any visible field differs old -> new (drives a "changed" marker).
+    #[must_use]
+    pub fn changed(&self) -> bool {
+        self.provider_old != self.provider_new
+            || self.base_url_old != self.base_url_new
+            || self.model_old != self.model_new
+            || self.key_present_old != self.key_present_new
+    }
+}
+
+/// Redacted, human-readable diff of what a server-settings import WOULD change,
+/// produced by [`preview_server_settings`]. Contains NO secret value anywhere —
+/// only provider tags, base URLs, models, and key-presence booleans, plus the
+/// machine-local model paths flagged for review. The UI shows this and requires
+/// an explicit Apply before any merge happens.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ServerSettingsPreview {
+    /// Cloud AI endpoint (`ai_*`).
+    pub cloud_ai: PreviewGroup,
+    /// Local AI endpoint (`ai_local_*`).
+    pub local_ai: PreviewGroup,
+    /// Vision channel (`vision_*` / `vision_local_*`, by provider).
+    pub vision: PreviewGroup,
+    /// STT — Groq cloud key + per-backend (`groq_api_key`, whisper server).
+    pub stt: PreviewGroup,
+    /// Machine-local GigaAM model dir on THIS PC (kept, not imported). Shown so
+    /// the user knows the imported file's path was ignored. May be empty.
+    pub gigaam_dir_current: String,
+    /// The GigaAM dir the imported file CARRIED (informational only — NOT
+    /// applied by the default Apply). May be empty.
+    pub gigaam_dir_incoming: String,
+}
+
+/// Mask the host of a URL for a COPYABLE / loggable string, keeping the scheme,
+/// port and path so it's still recognisable without leaking the private LAN IP
+/// or hostname. `http://192.168.0.142:18902/v1` -> `http://***:18902/v1`. Empty
+/// input -> empty output. Best-effort: anything it can't parse is returned with
+/// the authority blanked rather than echoed.
+#[must_use]
+pub fn mask_host(url: &str) -> String {
+    let url = url.trim();
+    if url.is_empty() {
+        return String::new();
+    }
+    // Split off scheme:// if present.
+    let (scheme, rest) = match url.find("://") {
+        Some(i) => (&url[..i + 3], &url[i + 3..]),
+        None => ("", url),
+    };
+    // authority is up to the first '/', the remainder is the path.
+    let (authority, path) = match rest.find('/') {
+        Some(i) => (&rest[..i], &rest[i..]),
+        None => (rest, ""),
+    };
+    // Keep the :port suffix of the authority if any, blank the host.
+    let port = authority.rfind(':').map(|i| &authority[i..]).unwrap_or("");
+    format!("{scheme}***{port}{path}")
+}
+
+/// P1.7 — PURE, REDACTED preview of a server-settings import. For each endpoint
+/// group (cloud AI, local AI, vision, STT) it reports provider / base_url /
+/// model old->new and key PRESENCE (bool) old->new — NEVER a secret value — plus
+/// the machine-local GigaAM model path (kept from THIS PC, not imported). No IO;
+/// trivially testable. The UI renders this and requires an explicit Apply.
+///
+/// SECURITY: by construction this NEVER reads `*_bearer` / `groq_api_key` VALUES
+/// into any output field — only `!value.trim().is_empty()` booleans. The redaction
+/// guard test asserts no secret value appears in any produced string.
+#[must_use]
+pub fn preview_server_settings(current: &Config, imported: &Config) -> ServerSettingsPreview {
+    let present = |s: &str| !s.trim().is_empty();
+    ServerSettingsPreview {
+        cloud_ai: PreviewGroup {
+            label: "Cloud AI".into(),
+            provider_old: current.ai_provider.clone(),
+            provider_new: imported.ai_provider.clone(),
+            base_url_old: current.ai_base_url.clone(),
+            base_url_new: imported.ai_base_url.clone(),
+            model_old: current.ai_model.clone(),
+            model_new: imported.ai_model.clone(),
+            key_present_old: present(&current.ai_bearer),
+            key_present_new: present(&imported.ai_bearer),
+            has_key_field: true,
+        },
+        local_ai: PreviewGroup {
+            label: "Local AI".into(),
+            provider_old: current.ai_provider.clone(),
+            provider_new: imported.ai_provider.clone(),
+            base_url_old: current.ai_local_base_url.clone(),
+            base_url_new: imported.ai_local_base_url.clone(),
+            model_old: current.ai_local_model.clone(),
+            model_new: imported.ai_local_model.clone(),
+            key_present_old: present(&current.ai_local_bearer),
+            key_present_new: present(&imported.ai_local_bearer),
+            has_key_field: true,
+        },
+        vision: PreviewGroup {
+            label: "Vision".into(),
+            provider_old: current.vision_provider.clone(),
+            provider_new: imported.vision_provider.clone(),
+            // Show the cloud vision URL/model by default; the local vision
+            // fields fall back to it in vision_endpoint(), and showing both
+            // would crowd the preview. The provider line tells the user which
+            // one is active.
+            base_url_old: current.vision_base_url.clone(),
+            base_url_new: imported.vision_base_url.clone(),
+            model_old: current.vision_model.clone(),
+            model_new: imported.vision_model.clone(),
+            key_present_old: present(&current.vision_bearer)
+                || present(&current.vision_local_bearer),
+            key_present_new: present(&imported.vision_bearer)
+                || present(&imported.vision_local_bearer),
+            has_key_field: true,
+        },
+        stt: PreviewGroup {
+            label: "STT".into(),
+            provider_old: current.stt_provider.clone(),
+            provider_new: imported.stt_provider.clone(),
+            // For STT the "base URL" that matters for a server transfer is the
+            // local whisper server; Groq cloud has no user URL. Show whisper.
+            base_url_old: current.stt_whisper_url.clone(),
+            base_url_new: imported.stt_whisper_url.clone(),
+            model_old: current.stt_model.clone(),
+            model_new: imported.stt_model.clone(),
+            // STT credentials: Groq API key OR the local whisper bearer.
+            key_present_old: present(&current.groq_api_key) || present(&current.stt_whisper_bearer),
+            key_present_new: present(&imported.groq_api_key)
+                || present(&imported.stt_whisper_bearer),
+            has_key_field: true,
+        },
+        gigaam_dir_current: current.stt_gigaam_dir.clone(),
+        gigaam_dir_incoming: imported.stt_gigaam_dir.clone(),
+    }
+}
+
+/// P1.7 — read + parse a picked file and build a REDACTED import preview
+/// against `current`, returning the preview AND the parsed `Config` (so the
+/// caller can stash it and apply on confirm — no save happens here). Reuses the
+/// BOM-tolerant, value-free [`parse_config_bytes`], so a malformed file yields a
+/// secret-free error. Mirrors [`import_server_settings_from`] but stops BEFORE
+/// merging/persisting.
+pub fn preview_server_settings_from(
+    path: &std::path::Path,
+    current: &Config,
+) -> Result<(ServerSettingsPreview, Config)> {
+    let bytes = std::fs::read(path).context("read server settings file")?;
+    let imported: Config = parse_config_bytes(&bytes).context("parse server settings JSON")?;
+    let preview = preview_server_settings(current, &imported);
+    Ok((preview, imported))
+}
+
+/// P1.7 — apply a server-settings import the way the UI's "Apply" does:
+/// [`merge_server_settings`] (all server fields) EXCEPT the machine-local
+/// `stt_gigaam_dir`, which is kept from `current` because a GigaAM model
+/// directory is a path on THIS PC and the imported value almost never exists
+/// here (silently clobbering it would break local STT). Pure (no IO); the UI
+/// wrapper persists via [`save`] and re-applies live state.
+#[must_use]
+pub fn apply_server_settings(current: &Config, imported: Config) -> Config {
+    let mut next = merge_server_settings(current, imported);
+    // Keep the machine-local GigaAM model path from THIS PC.
+    next.stt_gigaam_dir = current.stt_gigaam_dir.clone();
+    next
+}
+
 /// Global, thread-safe handle.
 pub type SharedConfig = Arc<RwLock<Config>>;
 
@@ -2322,6 +2543,219 @@ mod tests {
         assert_eq!(merged.tile_font_size, 19);
         assert_eq!(merged.snippets.len(), 1);
         assert_eq!(merged.snippets[0].key, "loc");
+    }
+
+    /// P1.7 helper — a config whose EVERY secret-bearing field holds a unique,
+    /// recognisable token, so the redaction guard can assert none of them ever
+    /// reach a preview string. Also distinctive non-secret server fields.
+    fn imported_with_secret_tokens() -> Config {
+        let mut c = Config::defaults();
+        c.ai_provider = "local".into();
+        c.ai_base_url = "http://192.168.7.7:18902/v1".into();
+        c.ai_bearer = "SECRET-AI-BEARER-zzz".into();
+        c.ai_model = "claude-haiku-4-5".into();
+        c.prep_model = "claude-sonnet-4-6".into();
+        c.ai_local_base_url = "http://127.0.0.1:8080/v1".into();
+        c.ai_local_bearer = "SECRET-LOCAL-BEARER-zzz".into();
+        c.ai_local_model = "gemma-4-E4B".into();
+        c.vision_provider = "cloud".into();
+        c.vision_base_url = "http://192.168.7.8:18903/v1".into();
+        c.vision_bearer = "SECRET-VISION-BEARER-zzz".into();
+        c.vision_model = "claude-opus-4-7".into();
+        c.vision_local_bearer = "SECRET-VISION-LOCAL-BEARER-zzz".into();
+        c.stt_provider = "gigaam".into();
+        c.groq_api_key = "gsk_SECRET_GROQ_zzz".into();
+        c.stt_model = "whisper-large-v3-turbo".into();
+        c.stt_whisper_url = "http://127.0.0.1:8081/v1".into();
+        c.stt_whisper_bearer = "SECRET-WHISPER-BEARER-zzz".into();
+        c.stt_gigaam_dir = r"D:\OTHER-PC\gigaam".into();
+        c
+    }
+
+    /// P1.7 — `export_server_settings_to` writes ONLY the AI/STT/vision server
+    /// fields (incl. the creds — intentional for a PC->PC transfer) and NONE of
+    /// the machine-local fields (meeting_context, profiles, snippets, devices,
+    /// monitor pin, trigger keywords, UI/theme). Round-trips through serde.
+    #[test]
+    fn export_server_settings_writes_servers_only_no_locals() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("server-settings.json");
+
+        // A config with BOTH distinctive servers AND distinctive locals.
+        let mut cfg = imported_with_secret_tokens();
+        cfg.meeting_context = "PRIVATE meeting ctx".into();
+        cfg.context_profiles = vec![ContextProfile {
+            name: "prof".into(),
+            context: "ctx".into(),
+        }];
+        cfg.active_profile = Some("prof".into());
+        cfg.mic_device = Some("My Mic".into());
+        cfg.system_audio_device = Some("My Loopback".into());
+        cfg.tile_monitor_name = Some("My Monitor".into());
+        cfg.trigger_keywords = "mykw".into();
+        cfg.ui_language = "en".into();
+        cfg.color_scheme = 3;
+        cfg.snippets = vec![Snippet {
+            key: "s".into(),
+            title: "secret snippet".into(),
+            body: "body".into(),
+        }];
+
+        export_server_settings_to(&path, &cfg).unwrap();
+        let raw = std::fs::read(&path).unwrap();
+        let out: Config = serde_json::from_slice(&raw).unwrap();
+
+        // Server fields present (incl. creds — intentional).
+        assert_eq!(out.ai_provider, "local");
+        assert_eq!(out.ai_base_url, "http://192.168.7.7:18902/v1");
+        assert_eq!(out.ai_bearer, "SECRET-AI-BEARER-zzz");
+        assert_eq!(out.groq_api_key, "gsk_SECRET_GROQ_zzz");
+        assert_eq!(out.vision_bearer, "SECRET-VISION-BEARER-zzz");
+        assert_eq!(out.stt_whisper_url, "http://127.0.0.1:8081/v1");
+        // Machine-local fields are BLANK (came from defaults, not from cfg).
+        assert_eq!(out.meeting_context, "");
+        assert!(out.context_profiles.is_empty());
+        assert!(out.active_profile.is_none());
+        assert!(out.mic_device.is_none());
+        assert!(out.system_audio_device.is_none());
+        assert!(out.tile_monitor_name.is_none());
+        // trigger_keywords / snippets default to the canned set, NOT the user's
+        // custom values — the point is they don't carry the user's locals.
+        assert_ne!(out.trigger_keywords, "mykw");
+        assert!(out.snippets.iter().all(|s| s.key != "s"));
+        assert_eq!(out.ui_language, default_ui_language());
+        assert_eq!(out.color_scheme, 0);
+
+        // Belt-and-braces: the user's private locals must not appear anywhere in
+        // the raw bytes (the snippet/profile/context strings, mic name).
+        let text = String::from_utf8_lossy(&raw);
+        for needle in [
+            "PRIVATE meeting ctx",
+            "secret snippet",
+            "My Mic",
+            "My Loopback",
+            "My Monitor",
+            "mykw",
+        ] {
+            assert!(
+                !text.contains(needle),
+                "server-settings export leaked a local field: {needle}"
+            );
+        }
+    }
+
+    /// P1.7 — the preview reports provider / url / model / key-PRESENCE old->new
+    /// for every group, flags the machine-local GigaAM path, and (the headline
+    /// security invariant) NEVER includes a secret VALUE in ANY produced string.
+    #[test]
+    fn preview_server_settings_is_redacted_and_diffs() {
+        // `current` = this PC: cloud, has a bearer + groq key, a LOCAL gigaam dir.
+        let mut current = Config::defaults();
+        current.ai_provider = "cloud".into();
+        current.ai_base_url = "http://OLD-bridge/v1".into();
+        current.ai_bearer = "OLD-SECRET-BEARER".into();
+        current.ai_model = "claude-haiku-OLD".into();
+        current.groq_api_key = "OLD-SECRET-GROQ".into();
+        current.stt_provider = "cloud".into();
+        current.stt_gigaam_dir = r"C:\THIS-PC\gigaam".into();
+
+        let imported = imported_with_secret_tokens();
+        let p = preview_server_settings(&current, &imported);
+
+        // --- group diffs (neutral values flow through; presence is a bool) ---
+        assert_eq!(p.cloud_ai.provider_old, "cloud");
+        assert_eq!(p.cloud_ai.provider_new, "local");
+        assert_eq!(p.cloud_ai.base_url_old, "http://OLD-bridge/v1");
+        assert_eq!(p.cloud_ai.base_url_new, "http://192.168.7.7:18902/v1");
+        assert_eq!(p.cloud_ai.model_old, "claude-haiku-OLD");
+        assert_eq!(p.cloud_ai.model_new, "claude-haiku-4-5");
+        assert!(p.cloud_ai.key_present_old && p.cloud_ai.key_present_new);
+        assert!(p.cloud_ai.changed());
+
+        // Local AI: current has no local bearer (defaults), imported does.
+        assert!(!p.local_ai.key_present_old);
+        assert!(p.local_ai.key_present_new);
+        assert_eq!(p.local_ai.model_new, "gemma-4-E4B");
+
+        // Vision: imported has a cloud vision bearer → present_new true.
+        assert!(p.vision.key_present_new);
+        assert_eq!(p.vision.provider_new, "cloud");
+
+        // STT: groq key present both sides; provider cloud -> gigaam.
+        assert!(p.stt.key_present_old && p.stt.key_present_new);
+        assert_eq!(p.stt.provider_old, "cloud");
+        assert_eq!(p.stt.provider_new, "gigaam");
+
+        // Machine-local GigaAM dir: current kept, incoming surfaced (informational).
+        assert_eq!(p.gigaam_dir_current, r"C:\THIS-PC\gigaam");
+        assert_eq!(p.gigaam_dir_incoming, r"D:\OTHER-PC\gigaam");
+
+        // --- THE redaction guard: no secret VALUE in ANY preview string ---
+        // Collect every string field the preview produces and assert none of the
+        // known secret tokens (from both `current` and `imported`) appears.
+        let groups = [&p.cloud_ai, &p.local_ai, &p.vision, &p.stt];
+        let mut all = String::new();
+        for g in groups {
+            all.push_str(&g.label);
+            all.push_str(&g.provider_old);
+            all.push_str(&g.provider_new);
+            all.push_str(&g.base_url_old);
+            all.push_str(&g.base_url_new);
+            all.push_str(&g.model_old);
+            all.push_str(&g.model_new);
+        }
+        all.push_str(&p.gigaam_dir_current);
+        all.push_str(&p.gigaam_dir_incoming);
+        for secret in [
+            "OLD-SECRET-BEARER",
+            "OLD-SECRET-GROQ",
+            "SECRET-AI-BEARER-zzz",
+            "SECRET-LOCAL-BEARER-zzz",
+            "SECRET-VISION-BEARER-zzz",
+            "SECRET-VISION-LOCAL-BEARER-zzz",
+            "gsk_SECRET_GROQ_zzz",
+            "SECRET-WHISPER-BEARER-zzz",
+        ] {
+            assert!(
+                !all.contains(secret),
+                "preview leaked a secret value: {secret}"
+            );
+        }
+    }
+
+    /// P1.7 — `mask_host` blanks the host (private LAN IP) for copyable/loggable
+    /// text but keeps scheme + port + path, and never echoes the host.
+    #[test]
+    fn mask_host_blanks_host_keeps_scheme_port_path() {
+        assert_eq!(
+            mask_host("http://192.168.0.142:18902/v1"),
+            "http://***:18902/v1"
+        );
+        assert!(!mask_host("http://192.168.0.142:18902/v1").contains("192.168"));
+        assert_eq!(mask_host("https://bridge.internal/api"), "https://***/api");
+        assert_eq!(mask_host("http://127.0.0.1:8080/v1"), "http://***:8080/v1");
+        assert_eq!(mask_host(""), "");
+        // No scheme, host only.
+        assert_eq!(mask_host("10.0.0.5:9000"), "***:9000");
+    }
+
+    /// P1.7 — the default Apply imports every server field EXCEPT the
+    /// machine-local `stt_gigaam_dir`, which is kept from THIS PC.
+    #[test]
+    fn apply_server_settings_keeps_local_gigaam_dir() {
+        let mut current = Config::defaults();
+        current.stt_gigaam_dir = r"C:\THIS-PC\gigaam".into();
+        current.ai_bearer = "OLD".into();
+
+        let imported = imported_with_secret_tokens(); // has D:\OTHER-PC\gigaam
+
+        let next = apply_server_settings(&current, imported);
+        // Server fields imported…
+        assert_eq!(next.ai_provider, "local");
+        assert_eq!(next.ai_bearer, "SECRET-AI-BEARER-zzz");
+        assert_eq!(next.groq_api_key, "gsk_SECRET_GROQ_zzz");
+        // …but the machine-local GigaAM path is KEPT from this PC.
+        assert_eq!(next.stt_gigaam_dir, r"C:\THIS-PC\gigaam");
     }
 
     /// #131 — config-only readiness reflects the ACTIVE providers and never

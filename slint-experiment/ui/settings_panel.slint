@@ -281,6 +281,23 @@ export component SettingsWindow inherits Window {
     callback import-profile-clicked();
     // #125 — server-ONLY import (AI/STT servers; keeps local prefs).
     callback import-server-settings-clicked();
+    // P1.7 — server-ONLY export (server fields only, incl. creds — for PC->PC
+    // transfer); and a REDACTED import PREVIEW gated behind an explicit Apply.
+    callback export-server-settings-clicked();
+    callback apply-server-settings-clicked();
+    callback cancel-server-settings-clicked();
+    // True once a picked file has been parsed into a preview: reveals the
+    // redacted diff + Apply/Cancel below the import button.
+    in-out property <bool> server-preview-ready: false;
+    // Redacted, data-only preview lines (provider/url/model old->new + key
+    // PRESENCE as "set"/"—"); composed in Rust like the diagnostics detail
+    // strings. NEVER carries a secret value (see preview_server_settings).
+    in-out property <string> server-preview-cloud: "";
+    in-out property <string> server-preview-local: "";
+    in-out property <string> server-preview-vision: "";
+    in-out property <string> server-preview-stt: "";
+    // Machine-local GigaAM model path note (old/incoming); kept from THIS PC.
+    in-out property <string> server-preview-gigaam: "";
     // #131 — diagnostics / readiness panel. Config-readiness levels are pushed
     // from Rust (Config::readiness); "Проверить всё" layers live AI/STT pings.
     // level: -1 checking · 0 ok · 2 not-configured · 3 info · 4 live-error.
@@ -880,19 +897,86 @@ export component SettingsWindow inherits Window {
                                 clicked => { root.import-profile-clicked(); }
                             }
                         }
-                        // #125 — server-only transfer: copies just AI/STT
+                        // #125 / P1.7 — server-only transfer: copies just AI/STT
                         // servers, keeps local profiles/devices/UI/snippets.
+                        // Import shows a redacted preview before applying.
                         Text {
-                            text: @tr("Server import copies ONLY AI/STT providers, URLs, models and keys — local UI, profiles, devices and snippets stay unchanged. Use it to carry your server setup to another PC.");
+                            text: @tr("Server transfer copies ONLY AI/STT providers, URLs, models and keys — local UI, profiles, devices and snippets stay unchanged. Use it to carry your server setup to another PC. Export writes those server fields (INCLUDING keys) to a .json; import shows a preview and asks you to confirm before applying.");
                             font-size: 10px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         HorizontalLayout {
+                            spacing: 6px;
                             alignment: start;
+                            Button {
+                                text: @tr("Export server settings…");
+                                clicked => { root.export-server-settings-clicked(); }
+                            }
                             Button {
                                 text: @tr("Import server settings…");
                                 clicked => { root.import-server-settings-clicked(); }
+                            }
+                        }
+                        // P1.7 — redacted import preview + explicit Apply gate.
+                        if root.server-preview-ready : Rectangle {
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            background: #ffffff08;
+                            VerticalLayout {
+                                padding: 8px;
+                                spacing: 4px;
+                                Text {
+                                    text: @tr("Review changes before applying (keys shown as set/— only, never the value):");
+                                    font-size: 11px;
+                                    font-weight: 700;
+                                    color: Theme.text-primary;
+                                    wrap: word-wrap;
+                                }
+                                Text {
+                                    text: root.server-preview-cloud;
+                                    font-size: 11px;
+                                    color: Theme.text-primary;
+                                    wrap: word-wrap;
+                                }
+                                Text {
+                                    text: root.server-preview-local;
+                                    font-size: 11px;
+                                    color: Theme.text-primary;
+                                    wrap: word-wrap;
+                                }
+                                Text {
+                                    text: root.server-preview-vision;
+                                    font-size: 11px;
+                                    color: Theme.text-primary;
+                                    wrap: word-wrap;
+                                }
+                                Text {
+                                    text: root.server-preview-stt;
+                                    font-size: 11px;
+                                    color: Theme.text-primary;
+                                    wrap: word-wrap;
+                                }
+                                Text {
+                                    text: root.server-preview-gigaam;
+                                    font-size: 10px;
+                                    color: Theme.warning;
+                                    wrap: word-wrap;
+                                }
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    alignment: start;
+                                    Button {
+                                        text: @tr("Apply server settings");
+                                        primary: true;
+                                        clicked => { root.apply-server-settings-clicked(); }
+                                    }
+                                    Button {
+                                        text: @tr("Cancel");
+                                        clicked => { root.cancel-server-settings-clicked(); }
+                                    }
+                                }
                             }
                         }
                         if root.profile-io-result != "" : Text {

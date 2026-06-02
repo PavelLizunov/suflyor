@@ -386,13 +386,22 @@ msgstr "Экспорт настроек (с ключами)…"
 msgid "Import settings…"
 msgstr "Импорт настроек…"
 
-# === #125 server-only settings import ===
+# === #125 / P1.7 server-only settings transfer (export + import preview) ===
 
-msgid "Server import copies ONLY AI/STT providers, URLs, models and keys — local UI, profiles, devices and snippets stay unchanged. Use it to carry your server setup to another PC."
-msgstr "Импорт сервера копирует ТОЛЬКО AI/STT-провайдеров, URL, модели и ключи — локальные UI, профили, устройства и сниппеты не меняются. Используйте, чтобы перенести серверную настройку на другой ПК."
+msgid "Server transfer copies ONLY AI/STT providers, URLs, models and keys — local UI, profiles, devices and snippets stay unchanged. Use it to carry your server setup to another PC. Export writes those server fields (INCLUDING keys) to a .json; import shows a preview and asks you to confirm before applying."
+msgstr "Перенос сервера копирует ТОЛЬКО AI/STT-провайдеров, URL, модели и ключи — локальные UI, профили, устройства и сниппеты не меняются. Используйте, чтобы перенести серверную настройку на другой ПК. Экспорт пишет эти серверные поля (ВКЛЮЧАЯ ключи) в .json; импорт показывает предпросмотр и просит подтвердить перед применением."
+
+msgid "Export server settings…"
+msgstr "Экспортировать серверные настройки…"
 
 msgid "Import server settings…"
 msgstr "Импортировать серверные настройки…"
+
+msgid "Review changes before applying (keys shown as set/— only, never the value):"
+msgstr "Проверьте изменения перед применением (ключи показаны только как set/—, без значения):"
+
+msgid "Apply server settings"
+msgstr "Применить серверные настройки"
 
 # --- Tab 5: Stats ---
 
