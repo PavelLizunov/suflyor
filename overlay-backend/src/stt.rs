@@ -132,7 +132,7 @@ pub async fn test_connection_backend(backend: &SttBackendCfg) -> Result<String> 
                     .map(|_m| "GigaAM model loaded OK".to_string())
                     .map_err(|e| {
                         log::warn!("GigaAM test load failed: {e}");
-                        anyhow::anyhow!("GigaAM: модель не загрузилась (см. лог)")
+                        anyhow::anyhow!("GigaAM: model failed to load (see log)")
                     })
             })
             .await
@@ -361,6 +361,7 @@ pub fn spawn(
                         // In-process GigaAM — run inference on a blocking thread.
                         let model = model.clone();
                         let samples = to_send.samples;
+                        let sem = stt_semaphore.clone();
                         log::info!(
                             "STT submitting {:?}: {} samples ({:.1}s, gigaam)",
                             src,
@@ -368,6 +369,15 @@ pub fn spawn(
                             dur_sec
                         );
                         tokio::spawn(async move {
+                            // Bound queued GigaAM tasks the same way the HTTP path
+                            // is bounded: the model mutex serialises execution, but
+                            // without a permit the queued tasks (each holding up to
+                            // ~800KB of samples) could pile up unbounded if
+                            // inference runs slower than the flush rate.
+                            let _permit = match sem.acquire_owned().await {
+                                Ok(p) => p,
+                                Err(_) => return, // semaphore closed, shutting down
+                            };
                             let joined = tokio::task::spawn_blocking(move || {
                                 gigaam_transcribe(&model, &samples)
                             })
@@ -654,8 +664,13 @@ pub async fn transcribe_once(
             tokio::task::spawn_blocking(move || {
                 let f32s: Vec<f32> = pcm.iter().map(|&s| f32::from(s) / 32768.0).collect();
                 // Reuse the cached model when the dir matches; otherwise load
-                // (and replace any stale entry). Held across transcribe — fine
-                // since GigaAM serialises through `&mut self` anyway.
+                // (and replace any stale entry). The guard is intentionally held
+                // across transcribe(): GigaAM needs `&mut self`, so this is a
+                // deliberate single-flight — two concurrent ad-hoc callers (e.g.
+                // a tile mic follow-up while a PTT blob is still transcribing)
+                // serialise on this process-global cache mutex for the full
+                // inference. The live session pipeline uses a SEPARATE model
+                // handle, so contention here is rare by design.
                 let mut guard = GIGAAM_CACHE
                     .get_or_init(|| Mutex::new(None))
                     .lock()
@@ -665,7 +680,7 @@ pub async fn transcribe_once(
                         // Don't surface the model_dir path (it embeds the user's
                         // Windows username) into a screen-capturable tile; log it.
                         log::warn!("GigaAM load failed: {e}");
-                        anyhow::anyhow!("локальная STT-модель не загрузилась (см. лог)")
+                        anyhow::anyhow!("local STT model failed to load (see log)")
                     })?;
                     *guard = Some((dir.clone(), m));
                 }

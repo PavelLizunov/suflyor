@@ -7,9 +7,7 @@
 //! prompt + the image-message shape, and reuses [`crate::ai::stream_chat`] for
 //! all HTTP / SSE / retry / cost / secret-safe error handling.
 
-use crate::ai::{stream_chat, AiEvent, ChatMessage, ContentPart, ImageUrl, MessageContent};
-use crate::config::AiEndpoint;
-use tokio::sync::mpsc;
+use crate::ai::{ChatMessage, ContentPart, ImageUrl, MessageContent};
 
 /// Max tokens for a vision answer. A capture usually asks a single question
 /// (read / solve / explain), so a moderate budget keeps latency + cost down.
@@ -46,28 +44,10 @@ pub fn build_vision_request(image_data_url: &str, prompt: &str) -> Vec<ChatMessa
     }]
 }
 
-/// Stream a vision answer for a captured image through `ep`. Thin wrapper over
-/// [`crate::ai::stream_chat`] (reuses the pooled client, SSE parsing, retry, and
-/// the secret-safe error handling). Cost is the caller's concern: zero it when
-/// `ep.is_local`, exactly like the text path.
-///
-/// `image_data_url` must be a complete data URI, e.g.
-/// `"data:image/jpeg;base64,…"`.
-#[must_use]
-pub fn stream_vision(
-    ep: AiEndpoint,
-    image_data_url: String,
-    prompt: String,
-) -> mpsc::Receiver<AiEvent> {
-    let messages = build_vision_request(&image_data_url, &prompt);
-    stream_chat(
-        ep.base_url,
-        ep.bearer,
-        ep.model,
-        messages,
-        VISION_MAX_TOKENS,
-    )
-}
+// NOTE: the live F8 capture path calls crate::ai::stream_chat directly with
+// build_vision_request() + VISION_MAX_TOKENS and applies the is_local cost
+// zeroing itself, so a separate stream_vision() wrapper here was dead code
+// (audit) and was removed — keeping a single vision-streaming entry point.
 
 #[cfg(test)]
 mod tests {

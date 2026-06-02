@@ -516,11 +516,20 @@ pub async fn complete_with_usage(
 /// HTTP 4xx (except 429) = permanent: auth, quota, bad model name, oversized
 /// request — retry won't fix any of these. Everything else is transient.
 fn is_permanent_ai_error(msg: &str) -> bool {
-    msg.contains("HTTP 400")
-        || msg.contains("HTTP 401")
-        || msg.contains("HTTP 403")
-        || msg.contains("HTTP 404")
-        || msg.contains("HTTP 413")
+    // Parse the numeric status after "HTTP " (errors are built as
+    // anyhow!("HTTP {status}")) and treat any 4xx except 429 as permanent —
+    // catches unlisted 4xx (e.g. 422) and avoids misreading a transient body
+    // that merely contains an "HTTP 404" substring.
+    if let Some(rest) = msg.split("HTTP ").nth(1) {
+        let code: u16 = rest
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .collect::<String>()
+            .parse()
+            .unwrap_or(0);
+        return (400..500).contains(&code) && code != 429;
+    }
+    false
 }
 
 /// Single attempt — no retry. Extracted so the retry wrapper above can

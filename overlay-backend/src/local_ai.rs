@@ -619,6 +619,18 @@ fn pick_whisper(assets: &[GhAsset], force_cpu: bool) -> Result<(String, u64)> {
 
 // ---- downloads + extraction (curl.exe + tar.exe) ---------------------------
 
+/// Allow-list for release-asset downloads (mirrors update::is_trusted_download).
+/// GitHub serves release zips from github.com (302 → the *.githubusercontent
+/// hosts). Defends against a tampered GitHub-API response pointing the download
+/// elsewhere. ggml-org release zips are unsigned, so Authenticode isn't an
+/// option — this host pin is the available mitigation (audit: only the updater
+/// had it before).
+fn is_trusted_release_url(url: &str) -> bool {
+    url.starts_with("https://github.com/")
+        || url.starts_with("https://objects.githubusercontent.com/")
+        || url.starts_with("https://release-assets.githubusercontent.com/")
+}
+
 fn download_and_extract(
     url: &str,
     size: u64,
@@ -627,6 +639,9 @@ fn download_and_extract(
     cancel: &AtomicBool,
     on: &dyn Fn(Progress),
 ) -> Result<()> {
+    if !is_trusted_release_url(url) {
+        bail!("refusing to download server binary from untrusted URL");
+    }
     let name = url.rsplit('/').next().unwrap_or("download.zip");
     let zip = dest_dir.join(name);
     // Download the zip with LIVE byte progress + cancel support (was a silent
@@ -737,6 +752,13 @@ fn curl_small(url: &str, out: &Path) -> Result<()> {
     )?;
     if !status.success() || file_len(out) == 0 {
         bail!("download failed: {}", out.display());
+    }
+    // Guard against a CDN/HTTP error page written to disk (curl isn't run with
+    // -f, so a 200-with-error-body can land here): a real model/vocab artifact
+    // never begins with '<'. Cheap content sanity check — no exact size pin.
+    if std::fs::read(out).ok().and_then(|b| b.first().copied()) == Some(b'<') {
+        let _ = std::fs::remove_file(out);
+        bail!("download looks like an HTML error page: {}", out.display());
     }
     Ok(())
 }

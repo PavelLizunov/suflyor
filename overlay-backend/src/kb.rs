@@ -237,12 +237,20 @@ pub fn reference_for(query: &str, max_entries: usize, max_chars: usize) -> Optio
         if count >= max_entries {
             break;
         }
-        // Match the canonical key (as a whole word) OR any curated alias
-        // (substring, so multi-word + mis-spelled STT variants match too).
+        // Match the canonical key (as a whole word) OR any curated alias.
+        // Token-bounded (was a raw `q.contains` substring, which could fire an
+        // alias inside an unrelated longer word — e.g. "java" in "javascript",
+        // injecting a wrong KB block into the grounding prompt). Require every
+        // word of the alias to appear as a whole token; multi-word aliases
+        // ("стар рокс") need all parts present. Keep the >=4-char noise floor.
         let matched = tokens.contains(e.key.as_str())
-            || e.aliases
-                .iter()
-                .any(|a| a.chars().count() >= 4 && q.contains(a.as_str()));
+            || e.aliases.iter().any(|a| {
+                if a.chars().count() < 4 {
+                    return false;
+                }
+                let subs: Vec<&str> = a.split_whitespace().collect();
+                !subs.is_empty() && subs.iter().all(|w| tokens.contains(w))
+            });
         if matched {
             let block = format!("### {}\n{}\n\n", e.heading, e.body);
             if out.len() + block.len() > max_chars {

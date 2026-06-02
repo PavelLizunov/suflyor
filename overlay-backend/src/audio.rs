@@ -102,6 +102,19 @@ fn enumerate(dir: &Direction) -> Result<Vec<String>> {
             }
         }
     }
+    // Warn on duplicate friendly names: find_device_by_name matches on friendly
+    // name only, so two identically-named endpoints (e.g. two identical USB
+    // headsets) resolve to whichever WASAPI enumerates first — not stable across
+    // replug/reboot, and presents as silent "wrong device" / "silent capture".
+    // Log it so the ambiguous case is at least diagnosable.
+    let mut seen = std::collections::HashSet::new();
+    for name in &v {
+        if !seen.insert(name.as_str()) {
+            log::warn!(
+                "audio: duplicate {dir:?} endpoint name {name:?} — selection by name is ambiguous"
+            );
+        }
+    }
     Ok(v)
 }
 

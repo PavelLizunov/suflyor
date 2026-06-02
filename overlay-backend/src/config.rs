@@ -1941,20 +1941,26 @@ fn default_snippets() -> Vec<Snippet> {
 pub fn config_path() -> Result<PathBuf> {
     let base = dirs::config_dir().context("no config dir")?;
     let dir = base.join("overlay-mvp");
-    std::fs::create_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir)
+        .with_context(|| format!("create config dir {}", dir.display()))?;
     Ok(dir.join("config.json"))
+}
+
+/// Parse config bytes, tolerating a leading UTF-8 BOM. Notepad's "UTF-8 with
+/// BOM" and PowerShell JSON round-trips prepend EF BB BF, which
+/// serde_json::from_slice rejects; without stripping it we'd fall back to
+/// defaults and silently wipe the user's hand-edited config (profiles /
+/// devices / keys). Shared by load() AND both import paths so a BOM-prefixed
+/// export imports identically (audit: import_* used to reject what load() took).
+fn parse_config_bytes(raw: &[u8]) -> Result<Config> {
+    let bytes = raw.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(raw);
+    serde_json::from_slice(bytes).context("parse config")
 }
 
 pub fn load() -> Config {
     let mut cfg = match config_path().and_then(|p| {
         let raw = std::fs::read(&p).context("read config")?;
-        // Tolerate a UTF-8 BOM: Notepad's "UTF-8 with BOM" (and a PowerShell
-        // JSON round-trip) prepend EF BB BF, which serde_json::from_slice
-        // rejects — we'd then silently fall back to defaults and wipe the
-        // user's hand-edited config (profiles / devices / keys). Strip it first.
-        let bytes = raw.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(&raw);
-        let cfg: Config = serde_json::from_slice(bytes).context("parse config")?;
-        Ok(cfg)
+        parse_config_bytes(&raw)
     }) {
         Ok(cfg) => cfg,
         Err(e) => {
@@ -1986,7 +1992,16 @@ pub fn load() -> Config {
 pub fn save(cfg: &Config) -> Result<()> {
     let path = config_path()?;
     let bytes = serde_json::to_vec_pretty(cfg)?;
-    std::fs::write(&path, bytes).context("write config")?;
+    // Atomic write: stream into a sibling temp file, then rename over the
+    // target. A rename within the same directory is atomic on NTFS, so a crash
+    // / power loss / full disk mid-write leaves either the OLD complete config
+    // or the NEW complete one on disk — never a truncated file that the next
+    // load() would fail to parse and silently replace with Config::defaults()
+    // (wiping the user's live keys / profiles / devices / hotkeys). On Windows
+    // std::fs::rename overwrites the destination (MoveFileEx replace-existing).
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, &bytes).context("write config (tmp)")?;
+    std::fs::rename(&tmp, &path).context("replace config")?;
     Ok(())
 }
 
@@ -2006,7 +2021,7 @@ pub fn export_to(path: &std::path::Path, cfg: &Config) -> Result<()> {
 /// Returns the imported Config so the caller can re-apply live state.
 pub fn import_from(path: &std::path::Path) -> Result<Config> {
     let bytes = std::fs::read(path).context("read import file")?;
-    let cfg: Config = serde_json::from_slice(&bytes).context("parse import JSON")?;
+    let cfg: Config = parse_config_bytes(&bytes).context("parse import JSON")?;
     save(&cfg).context("persist imported config")?;
     Ok(cfg)
 }
@@ -2065,7 +2080,7 @@ pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
 /// [`import_from`], which replaces the whole config.
 pub fn import_server_settings_from(path: &std::path::Path, current: &Config) -> Result<Config> {
     let bytes = std::fs::read(path).context("read server settings import file")?;
-    let imported: Config = serde_json::from_slice(&bytes).context("parse server settings JSON")?;
+    let imported: Config = parse_config_bytes(&bytes).context("parse server settings JSON")?;
     let next = merge_server_settings(current, imported);
     save(&next).context("persist imported server settings")?;
     Ok(next)

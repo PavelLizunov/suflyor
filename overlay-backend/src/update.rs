@@ -14,6 +14,7 @@
 
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
 /// `owner/repo` of the official release channel.
@@ -46,6 +47,9 @@ struct GhRelease {
 struct GhAsset {
     name: String,
     browser_download_url: String,
+    /// GitHub API asset digest, e.g. "sha256:abcd…". Absent on older releases.
+    #[serde(default)]
+    digest: Option<String>,
 }
 
 /// Parse a dotted version into `(major, minor, patch, release_rank)`,
@@ -129,6 +133,33 @@ fn is_trusted_download(url: &str) -> bool {
         || url.starts_with("https://release-assets.githubusercontent.com/")
 }
 
+/// Best-effort: re-query the latest release and return the expected SHA-256
+/// (lowercase hex) for the asset at `url`, from GitHub's API `digest` field
+/// ("sha256:…"). None when the API exposes no digest (older releases) — the
+/// caller then relies on the size + PE-magic checks. Verifying against the API
+/// digest closes the "truncated / CDN-tampered download executed" gap; it does
+/// NOT defend a fully compromised GitHub release (that needs Authenticode + a
+/// code-signing cert, which this project does not have).
+async fn expected_sha256_for(client: &reqwest::Client, url: &str) -> Option<String> {
+    let api = format!("https://api.github.com/repos/{REPO}/releases/latest");
+    let rel: GhRelease = client
+        .get(&api)
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+    let asset = rel.assets.iter().find(|a| a.browser_download_url == url)?;
+    asset
+        .digest
+        .as_deref()?
+        .strip_prefix("sha256:")
+        .map(|h| h.to_lowercase())
+}
+
 /// Download the installer to `%TEMP%\suflyor-update\` and return its path.
 /// Refuses any non-GitHub URL.
 pub async fn download_installer(url: &str) -> Result<PathBuf> {
@@ -155,6 +186,36 @@ pub async fn download_installer(url: &str) -> Result<PathBuf> {
             "downloaded installer is implausibly small ({} bytes)",
             bytes.len()
         );
+    }
+    // Reject anything that isn't a Windows PE binary (an HTML error page or a
+    // truncated blob that slipped past the size floor).
+    if bytes.len() < 2 || &bytes[..2] != b"MZ" {
+        bail!("downloaded installer is not a Windows executable (bad header)");
+    }
+    // Verify SHA-256 against GitHub's API digest when present. Defends a
+    // truncated download and a CDN-path tamper that doesn't also forge the
+    // api.github.com response; full account-compromise still needs Authenticode.
+    match expected_sha256_for(&client, url).await {
+        Some(expected) => {
+            let mut hasher = Sha256::new();
+            hasher.update(&bytes);
+            let got: String = hasher
+                .finalize()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect();
+            if got != expected {
+                bail!(
+                    "installer SHA-256 mismatch — refusing to run (expected {expected}, got {got})"
+                );
+            }
+            log::info!("update: installer sha256 verified");
+        }
+        None => {
+            log::warn!(
+                "update: release metadata has no sha256 digest — size + PE header checked only"
+            )
+        }
     }
     let dir = std::env::temp_dir().join("suflyor-update");
     std::fs::create_dir_all(&dir).context("create temp update dir")?;
@@ -206,10 +267,12 @@ mod tests {
             GhAsset {
                 name: "release-notes.txt".to_string(),
                 browser_download_url: "https://x/notes.txt".to_string(),
+                digest: None,
             },
             GhAsset {
                 name: INSTALLER_ASSET.to_string(),
                 browser_download_url: canonical.to_string(),
+                digest: None,
             },
         ];
         assert_eq!(pick_installer_url(&assets), canonical);
@@ -220,6 +283,7 @@ mod tests {
         let stray = vec![GhAsset {
             name: "totally-not-the-installer.exe".to_string(),
             browser_download_url: "https://github.com/x/stray.exe".to_string(),
+            digest: None,
         }];
         assert_eq!(pick_installer_url(&stray), "");
 

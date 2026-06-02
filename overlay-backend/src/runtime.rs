@@ -456,15 +456,14 @@ pub fn detect_trigger(text: &str, keyword_list: &str) -> Option<Trigger> {
         .filter(|s| !s.is_empty())
         .collect();
     for kw in keyword_list.split_whitespace() {
-        if kw.bytes().all(|b| !b.is_ascii_uppercase()) {
-            if tokens.contains(kw) {
-                return Some(Trigger::Keyword(kw.to_string(), trimmed.to_string()));
-            }
-        } else {
-            let kw_lower = kw.to_lowercase();
-            if tokens.contains(kw_lower.as_str()) {
-                return Some(Trigger::Keyword(kw.to_string(), trimmed.to_string()));
-            }
+        // Lowercase every keyword for comparison (tokens are already
+        // lowercased). The old `is_ascii_uppercase` fast-path compared an
+        // uppercase-Cyrillic keyword verbatim against lowercased tokens, so a
+        // capitalized Russian keyword could never match; to_lowercase covers
+        // ASCII + Unicode.
+        let kw_lower = kw.to_lowercase();
+        if tokens.contains(kw_lower.as_str()) {
+            return Some(Trigger::Keyword(kw.to_string(), trimmed.to_string()));
         }
     }
 
@@ -659,8 +658,12 @@ pub async fn reask_last(
             let _ = events.spawn_tile_full(
                     TileSpec {
                         question: format!("🔁 reask: {last_q}"),
-                        answer: "Не удалось получить ответ от AI. Проверьте, что выбранный провайдер запущен (Настройки → AI)."
-                            .into(),
+                        answer: if response_language == "ru" {
+                            "Не удалось получить ответ от AI. Проверьте, что выбранный провайдер запущен (Настройки → AI)."
+                        } else {
+                            "Couldn't get a response from AI. Check that the selected provider is running (Settings → AI)."
+                        }
+                        .into(),
                         source: "reask".into(),
                         is_translation: false,
                         highlights: vec![],
@@ -833,8 +836,12 @@ pub async fn manual_spawn_tile(
         let _ = events.spawn_tile_full(
             TileSpec {
                 question: "✋ Ручной запрос (F6)".into(),
-                answer: "Транскрипт пустой — нечего спрашивать. Запустите сессию (захват аудио), дождитесь реплик и снова нажмите F6."
-                    .into(),
+                answer: if response_language == "ru" {
+                    "Транскрипт пустой — нечего спрашивать. Запустите сессию (захват аудио), дождитесь реплик и снова нажмите F6."
+                } else {
+                    "Transcript is empty — nothing to ask. Start a session (audio capture), wait for lines, then press F6 again."
+                }
+                .into(),
                 source: "manual_spawn".into(),
                 is_translation: false,
                 highlights: vec![],
@@ -912,8 +919,12 @@ pub async fn manual_spawn_tile(
             let _ = events.spawn_tile_full(
                     TileSpec {
                         question: format!("✋ {}", line.text),
-                        answer: "Не удалось получить ответ от AI. Проверьте, что выбранный провайдер запущен (Настройки → AI)."
-                            .into(),
+                        answer: if response_language == "ru" {
+                            "Не удалось получить ответ от AI. Проверьте, что выбранный провайдер запущен (Настройки → AI)."
+                        } else {
+                            "Couldn't get a response from AI. Check that the selected provider is running (Settings → AI)."
+                        }
+                        .into(),
                         source: "manual_spawn".into(),
                         is_translation: false,
                         highlights: vec![],
@@ -1054,7 +1065,16 @@ pub async fn ask_stream_loop(
                     .store(crate::journal::now_unix_ms() as u64, Ordering::Relaxed);
                 accumulated.push_str(text);
             }
-            ai::AiEvent::Done { reason } => finish = reason.clone(),
+            ai::AiEvent::Done { reason } => {
+                finish = reason.clone();
+                // Bump health on completion too, not only per-Delta: a
+                // successful but EMPTY-answer stream (zero deltas then Done)
+                // otherwise never clears a prior "AI down" state — matching the
+                // non-streaming paths, which bump on Ok regardless of content.
+                health
+                    .last_ai_ok_ms
+                    .store(crate::journal::now_unix_ms() as u64, Ordering::Relaxed);
+            }
             ai::AiEvent::Error { message } => {
                 if let Some(j) = journal.as_ref() {
                     j.write(&JournalEvent::Error {
