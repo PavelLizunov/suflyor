@@ -1,0 +1,236 @@
+// WizardWindow — first-run guided setup (7 steps). Created on demand by the Rust
+// host (open_wizard), centred + WDA-stealthed via present_window_stealth_aware,
+// keyboard-focused. Solid background (Theme.bg-surface) — NOT a transparent /
+// rounded card — to dodge the documented Windows-DWM "created-but-invisible"
+// pitfall for new frameless windows (see text_ask.slint:11-13). One step panel
+// visible at a time, driven by `step`. Per-step checks reuse the existing
+// Diagnostics backend fns; an error warns (level 4) but never blocks Next.
+import { Button, Switch } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+export component WizardWindow inherits Window {
+    no-frame: true;
+    always-on-top: true;
+    title: @tr("Setup wizard");
+    default-font-family: Theme.font-sans;
+    background: Theme.bg-surface;
+    preferred-width: 640px;
+    preferred-height: 480px;
+
+    in-out property <int> step: 0;
+    in-out property <int> mode: 0;
+    in-out property <int> ai-level: 3;    in-out property <string> ai-detail;
+    in-out property <int> stt-level: 3;   in-out property <string> stt-detail;
+    in-out property <int> mic-level: 3;   in-out property <string> mic-detail;
+    in-out property <int> sys-level: 3;   in-out property <string> sys-detail;
+    in-out property <bool> stealth-on;
+    in-out property <string> summary-ai;
+    in-out property <string> summary-stt;
+    in-out property <string> summary-mic;
+    in-out property <string> summary-sys;
+
+    callback mode-selected(int);
+    callback ai-test-clicked();
+    callback stt-test-clicked();
+    callback mic-test-clicked();
+    callback sys-test-clicked();
+    callback install-local-clicked();
+    callback stealth-toggled(bool);
+    callback open-diagnostics();
+    callback nav-back();
+    callback nav-next();
+    callback nav-skip();
+    callback finished();
+    callback cancelled();
+
+    // Maps a diagnostics level int → text + colour, identical convention to the
+    // Diagnostics tab (-1 checking · 0 ok · 2 not-configured · 4 needs-attention).
+    function level-text(lvl: int) -> string {
+        if (lvl == -1) { return @tr("checking…"); }
+        if (lvl == 0) { return @tr("OK"); }
+        if (lvl == 2) { return @tr("Not configured"); }
+        if (lvl == 4) { return @tr("Needs attention"); }
+        return "—";
+    }
+    function level-color(lvl: int) -> color {
+        if (lvl == 0) { return Theme.success; }
+        if (lvl == 4) { return Theme.warning; }
+        return Theme.text-secondary;
+    }
+
+    forward-focus: scope;
+    scope := FocusScope {
+        key-pressed(e) => {
+            if (e.text == Key.Escape) {
+                root.cancelled();
+                return accept;
+            }
+            return reject;
+        }
+        VerticalLayout {
+            padding: 20px;
+            spacing: 14px;
+
+            // ---- Header (step counter) ----
+            Text {
+                text: @tr("Step {} of 7", root.step + 1);
+                color: Theme.text-secondary;
+                font-size: 12px;
+                font-weight: 600;
+            }
+
+            // ---- Step body (exactly one panel visible) ----
+            Rectangle {
+                vertical-stretch: 1;
+
+                // Step 1 — mode
+                if root.step == 0: VerticalLayout {
+                    spacing: 10px;
+                    Text {
+                        text: @tr("Choose how overlay-mvp runs");
+                        font-size: 18px;
+                        font-weight: 700;
+                        color: Theme.text-primary;
+                    }
+                    Button {
+                        text: @tr("Cloud — Groq STT + Claude bridge (fast start, needs keys + internet)");
+                        clicked => { root.mode = 0; root.mode-selected(0); }
+                    }
+                    Button {
+                        text: @tr("Fully local — local AI + local STT (nothing leaves the machine, needs models)");
+                        clicked => { root.mode = 1; root.mode-selected(1); }
+                    }
+                    Button {
+                        text: @tr("Mixed — e.g. local STT + cloud AI (configure manually)");
+                        clicked => { root.mode = 2; root.mode-selected(2); }
+                    }
+                    Text {
+                        text: root.mode == 0 ? @tr("Now: cloud recognition + cloud answers.")
+                            : root.mode == 1 ? @tr("Now: local recognition + local answers. Audio stays on this machine.")
+                            : @tr("Now: mixed. Tune providers in Settings.");
+                        color: Theme.text-secondary;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+                }
+
+                // Step 2 — AI
+                if root.step == 1: VerticalLayout {
+                    spacing: 10px;
+                    Text { text: @tr("AI"); font-size: 18px; font-weight: 700; color: Theme.text-primary; }
+                    Text {
+                        text: @tr("Configure the AI provider in Settings; here we just confirm it answers.");
+                        color: Theme.text-secondary;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Button { text: @tr("Test AI"); clicked => { root.ai-test-clicked(); } }
+                        Button { text: @tr("Install local AI"); clicked => { root.install-local-clicked(); } }
+                    }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        Text { text: root.level-text(root.ai-level); color: root.level-color(root.ai-level); font-weight: 700; }
+                        Text { text: root.ai-detail; color: Theme.text-secondary; }
+                    }
+                }
+
+                // Step 3 — STT
+                if root.step == 2: VerticalLayout {
+                    spacing: 10px;
+                    Text { text: @tr("Speech recognition (STT)"); font-size: 18px; font-weight: 700; color: Theme.text-primary; }
+                    Text {
+                        text: @tr("Configure STT in Settings; here we confirm it connects.");
+                        color: Theme.text-secondary;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+                    Button { text: @tr("Test STT"); clicked => { root.stt-test-clicked(); } }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        Text { text: root.level-text(root.stt-level); color: root.level-color(root.stt-level); font-weight: 700; }
+                        Text { text: root.stt-detail; color: Theme.text-secondary; }
+                    }
+                }
+
+                // Step 4 — microphone
+                if root.step == 3: VerticalLayout {
+                    spacing: 10px;
+                    Text { text: @tr("Microphone"); font-size: 18px; font-weight: 700; color: Theme.text-primary; }
+                    Text {
+                        text: @tr("Records 3 seconds. Speak during the test to see your level.");
+                        color: Theme.text-secondary;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+                    Button { text: @tr("Record test"); clicked => { root.mic-test-clicked(); } }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        Text { text: root.level-text(root.mic-level); color: root.level-color(root.mic-level); font-weight: 700; }
+                        Text { text: root.mic-detail; color: Theme.text-secondary; }
+                    }
+                }
+
+                // Step 5 — system audio
+                if root.step == 4: VerticalLayout {
+                    spacing: 10px;
+                    Text { text: @tr("System audio"); font-size: 18px; font-weight: 700; color: Theme.text-primary; }
+                    Text {
+                        text: @tr("Needed to hear the other side. Plays a short test tone and checks loopback.");
+                        color: Theme.text-secondary;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+                    Button { text: @tr("Check system audio"); clicked => { root.sys-test-clicked(); } }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        Text { text: root.level-text(root.sys-level); color: root.level-color(root.sys-level); font-weight: 700; }
+                        Text { text: root.sys-detail; color: Theme.text-secondary; }
+                    }
+                }
+
+                // Step 6 — overlay + stealth
+                if root.step == 5: VerticalLayout {
+                    spacing: 10px;
+                    Text { text: @tr("Overlay & stealth"); font-size: 18px; font-weight: 700; color: Theme.text-primary; }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Text { text: @tr("Hide overlay from screen capture"); color: Theme.text-primary; vertical-alignment: center; }
+                        Switch { checked <=> root.stealth-on; toggled => { root.stealth-toggled(self.checked); } }
+                    }
+                    Text {
+                        text: @tr("Press Print Screen or open a screen-share preview — the overlay should vanish from the capture but stay on your screen. We can't verify stealth automatically.");
+                        color: Theme.text-secondary;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+                }
+
+                // Step 7 — summary
+                if root.step == 6: VerticalLayout {
+                    spacing: 8px;
+                    Text { text: @tr("Done"); font-size: 18px; font-weight: 700; color: Theme.text-primary; }
+                    Text { text: "AI            " + root.summary-ai; color: Theme.text-secondary; font-family: Theme.font-mono; }
+                    Text { text: "STT           " + root.summary-stt; color: Theme.text-secondary; font-family: Theme.font-mono; }
+                    Text { text: "Microphone    " + root.summary-mic; color: Theme.text-secondary; font-family: Theme.font-mono; }
+                    Text { text: "System audio  " + root.summary-sys; color: Theme.text-secondary; font-family: Theme.font-mono; }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Button { text: @tr("Start working"); primary: true; clicked => { root.finished(); } }
+                        Button { text: @tr("Open diagnostics"); clicked => { root.open-diagnostics(); } }
+                    }
+                }
+            }
+
+            // ---- Nav row (Back / Skip / Next) — always enabled; an error never blocks ----
+            HorizontalLayout {
+                spacing: 8px;
+                Button { text: @tr("Back"); enabled: root.step > 0; clicked => { root.nav-back(); } }
+                Rectangle { horizontal-stretch: 1; }
+                Button { text: @tr("Skip"); visible: root.step < 6; clicked => { root.nav-skip(); } }
+                Button { text: @tr("Next"); primary: true; visible: root.step < 6; clicked => { root.nav-next(); } }
+            }
+        }
+    }
+}
