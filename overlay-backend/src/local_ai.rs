@@ -247,6 +247,7 @@ pub fn install(
         if reuse_if_available(
             &gemma_dest,
             GEMMA_SIZE,
+            GEMMA_SHA256,
             &[home.join("llama.cpp").join(GEMMA_FILE)],
         ) {
             on(Progress::Step("Reusing existing Gemma model".to_string()));
@@ -261,6 +262,7 @@ pub fn install(
         if reuse_if_available(
             &mmproj_dest,
             MMPROJ_SIZE,
+            MMPROJ_SHA256,
             &[home.join("llama.cpp").join(MMPROJ_FILE)],
         ) {
             on(Progress::Step(
@@ -295,6 +297,7 @@ pub fn install(
         if reuse_if_available(
             &whisper_dest,
             WHISPER_SIZE,
+            WHISPER_SHA256,
             &[home.join("whisper.cpp").join(WHISPER_FILE)],
         ) {
             on(Progress::Step("Reusing existing Whisper model".to_string()));
@@ -318,7 +321,7 @@ pub fn install(
         std::fs::create_dir_all(&gigaam_dir)?;
         // transcribe_rs loads exactly `model.int8.onnx` + `vocab.txt`.
         let giga_dest = gigaam_dir.join("model.int8.onnx");
-        if !reuse_if_available(&giga_dest, GIGAAM_MODEL_SIZE, &[]) {
+        if !reuse_if_available(&giga_dest, GIGAAM_MODEL_SIZE, GIGAAM_SHA256, &[]) {
             curl_resumable(
                 GIGAAM_MODEL_URL,
                 &giga_dest,
@@ -985,12 +988,31 @@ fn bail_if_cancelled(cancel: &AtomicBool) -> Result<()> {
 /// the same volume; falls back to a byte copy). Returns true if `dest` now has
 /// the full file, so the caller can skip the download — lets the installer
 /// reuse a model the user already has elsewhere instead of re-fetching it.
-fn reuse_if_available(dest: &Path, expected: u64, candidates: &[PathBuf]) -> bool {
+///
+/// A candidate is adopted ONLY when its SHA-256 matches `expected_sha256` (P1.5
+/// regression fix): matching by size alone would hard-link a wrong-but-right-
+/// sized file into `dest`, which then fails the post-download verify, gets
+/// deleted, and is re-adopted from the same candidate on the NEXT run — a
+/// permanent, retry-proof install dead-end. Hashing the candidate first means a
+/// bad one is skipped and the installer falls through to a fresh download. A
+/// bad `dest` (adopted on size at the top) is still caught + deleted by the
+/// caller's `verify_sha256`, so a re-run re-downloads it.
+fn reuse_if_available(
+    dest: &Path,
+    expected: u64,
+    expected_sha256: &str,
+    candidates: &[PathBuf],
+) -> bool {
     if file_len(dest) >= expected {
         return true;
     }
     for cand in candidates {
-        if cand.as_path() != dest && file_len(cand) >= expected {
+        if cand.as_path() != dest
+            && file_len(cand) >= expected
+            && sha256_hex_of(cand)
+                .map(|h| h.eq_ignore_ascii_case(expected_sha256))
+                .unwrap_or(false)
+        {
             let _ = std::fs::remove_file(dest);
             if std::fs::hard_link(cand, dest).is_ok() || std::fs::copy(cand, dest).is_ok() {
                 return file_len(dest) >= expected;
@@ -1007,29 +1029,39 @@ const GIB: u64 = 1_073_741_824;
 const LLAMA_BINARIES_ALLOWANCE: u64 = 1_500_000_000;
 const WHISPER_BINARIES_ALLOWANCE: u64 = 1_000_000_000;
 
-/// P1.5 — verify a downloaded OR reused model against its pinned SHA-256 (the
-/// HuggingFace LFS object id). On mismatch the file is DELETED — so a re-run
-/// re-downloads instead of re-accepting the same bad bytes — and the install
-/// fails. A present-but-correct file (reuse) passes without re-downloading.
-fn verify_sha256(path: &Path, expected_hex: &str, label: &str) -> Result<()> {
+/// Stream a file through SHA-256, returning lowercase hex. None on an open/read
+/// error (the caller decides whether that's fatal). Shared by `verify_sha256`
+/// (the post-download gate) and `reuse_if_available` (the candidate check).
+fn sha256_hex_of(path: &Path) -> Option<String> {
     use sha2::{Digest, Sha256};
     use std::io::Read;
-    let mut file =
-        std::fs::File::open(path).with_context(|| format!("open {} to verify", path.display()))?;
+    let mut file = std::fs::File::open(path).ok()?;
     let mut hasher = Sha256::new();
     let mut buf = [0u8; 1 << 16];
     loop {
-        let n = file.read(&mut buf).context("read model to verify")?;
+        let n = file.read(&mut buf).ok()?;
         if n == 0 {
             break;
         }
         hasher.update(&buf[..n]);
     }
-    let got: String = hasher
-        .finalize()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
+    Some(
+        hasher
+            .finalize()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect(),
+    )
+}
+
+/// P1.5 — verify a downloaded OR size-reused model against its pinned SHA-256
+/// (the HuggingFace LFS object id). On mismatch the file at `path` is DELETED and
+/// the install fails. `reuse_if_available` independently hash-verifies a reuse
+/// CANDIDATE before adopting it, so a wrong candidate is never linked in here —
+/// together they guarantee a re-run either re-downloads or fails cleanly, and
+/// never silently accepts bad bytes.
+fn verify_sha256(path: &Path, expected_hex: &str, label: &str) -> Result<()> {
+    let got = sha256_hex_of(path).with_context(|| format!("open {} to verify", path.display()))?;
     if !got.eq_ignore_ascii_case(expected_hex) {
         let _ = std::fs::remove_file(path);
         bail!(
