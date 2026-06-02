@@ -51,11 +51,24 @@ export component TextAskWindow inherits Window {
         VerticalLayout {
             padding: 14px;
             spacing: 10px;
-            Text {
-                text: @tr("✏ Write a question for the assistant");
-                color: Theme.text-secondary;
-                font-size: 12px;
-                font-weight: 600;
+            HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    text: @tr("✏ Write a question for the assistant");
+                    color: Theme.text-secondary;
+                    font-size: 12px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+                // V0.8.4 — explicit close. The window previously closed only on
+                // Esc, which wasn't discoverable. ASCII "X" (not ✕ U+2715, which
+                // renders as a missing-glyph box on the Slint+skia text fallback —
+                // same reason the bar's Quit + the tile close use "X"). = Esc.
+                Button {
+                    text: "X";
+                    clicked => { root.cancelled(); }
+                }
             }
             HorizontalLayout {
                 spacing: 8px;

@@ -469,12 +469,70 @@ export component TileWindow inherits Window {
                         root.do-submit();
                     }
                 }
-                // V5 — ask the follow-up by voice (toggle: 🎤 start, ⏹ stop).
-                Button {
-                    text: root.voice-recording ? "⏹" : "🎤";
-                    enabled: !root.followup-busy || root.voice-recording;
-                    clicked => {
-                        root.followup-voice-toggled();
+                // V0.8.4 — voice follow-up with the SAME Telegram-style swipe-up-to-
+                // lock gesture as the bar's record chips: hold 🎤 to record, release
+                // to send; drag up past 24px → hands-free (releasing keeps recording;
+                // click ⏹ to stop + send). Drives the existing toggle at press (start)
+                // / stop; the release-stop is gated on voice-recording so a mic-busy
+                // tap can't spuriously start a recording on release. Border colour
+                // marks state: grey idle · amber holding · red locked.
+                voicebtn := Rectangle {
+                    property <bool> v-locked: false;
+                    property <length> v-press-y;
+                    property <bool> v-swallow: false;
+                    property <bool> v-rec: root.voice-recording;
+                    width: 36px;
+                    border-radius: 6px;
+                    border-width: 1px;
+                    border-color: voicebtn.v-locked ? Theme.danger
+                        : (root.voice-recording ? Theme.warning : Theme.border);
+                    changed v-rec => {
+                        if (!voicebtn.v-rec) {
+                            voicebtn.v-locked = false;
+                        }
+                    }
+                    Text {
+                        // 🎤 idle · ↑ while holding (hint: swipe up to lock) · ⏹
+                        // once locked (click to stop) — parity with the bar chip.
+                        text: voicebtn.v-locked ? "⏹" : (root.voice-recording ? "↑" : "🎤");
+                        font-size: 13px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    vtouch := TouchArea {
+                        mouse-cursor: pointer;
+                        enabled: !root.followup-busy || root.voice-recording;
+                        pointer-event(ev) => {
+                            if (ev.button == PointerEventButton.left) {
+                                if (ev.kind == PointerEventKind.down) {
+                                    if (voicebtn.v-locked) {
+                                        // Fresh click while locked = stop + send.
+                                        voicebtn.v-locked = false;
+                                        voicebtn.v-swallow = true;
+                                        root.followup-voice-toggled();
+                                    } else {
+                                        voicebtn.v-press-y = self.mouse-y;
+                                        voicebtn.v-swallow = false;
+                                        root.followup-voice-toggled();
+                                    }
+                                }
+                                if (ev.kind == PointerEventKind.up) {
+                                    if (voicebtn.v-swallow) {
+                                        voicebtn.v-swallow = false;
+                                    } else if (!voicebtn.v-locked && root.voice-recording) {
+                                        root.followup-voice-toggled();
+                                    }
+                                    // locked && !swallow = the release after a lock →
+                                    // keep recording hands-free (do nothing).
+                                }
+                            }
+                        }
+                        moved => {
+                            if (self.pressed && root.voice-recording && !voicebtn.v-locked
+                                && voicebtn.v-press-y - self.mouse-y > 24px) {
+                                voicebtn.v-locked = true;
+                            }
+                        }
                     }
                 }
                 Button {
