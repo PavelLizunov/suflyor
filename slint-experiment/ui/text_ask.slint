@@ -14,6 +14,7 @@
 
 import { LineEdit, Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { Metrics } from "metrics.slint";
 
 export component TextAskWindow inherits Window {
     no-frame: true;
@@ -52,11 +53,11 @@ export component TextAskWindow inherits Window {
             padding: 14px;
             spacing: 10px;
             HorizontalLayout {
-                spacing: 8px;
+                spacing: Metrics.space-sm;   // was 8px
                 Text {
                     text: @tr("✏ Write a question for the assistant");
                     color: Theme.text-secondary;
-                    font-size: 12px;
+                    font-size: Metrics.font-body;   // was 12px
                     font-weight: 600;
                     vertical-alignment: center;
                     horizontal-stretch: 1;
@@ -71,7 +72,7 @@ export component TextAskWindow inherits Window {
                 }
             }
             HorizontalLayout {
-                spacing: 8px;
+                spacing: Metrics.space-sm;   // was 8px
                 input := LineEdit {
                     placeholder-text: @tr("Type your question…");
                     text <=> root.query;

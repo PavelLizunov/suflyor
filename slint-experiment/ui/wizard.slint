@@ -7,6 +7,7 @@
 // Diagnostics backend fns; an error warns (level 4) but never blocks Next.
 import { Button, Switch } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { Metrics } from "metrics.slint";
 
 export component WizardWindow inherits Window {
     no-frame: true;
@@ -75,7 +76,7 @@ export component WizardWindow inherits Window {
             Text {
                 text: @tr("Step {} of 7", root.step + 1);
                 color: Theme.text-secondary;
-                font-size: 12px;
+                font-size: Metrics.font-body;   // was 12px
                 font-weight: 600;
             }
 
@@ -88,7 +89,7 @@ export component WizardWindow inherits Window {
                     spacing: 10px;
                     Text {
                         text: @tr("Choose how overlay-mvp runs");
-                        font-size: 18px;
+                        font-size: Metrics.font-heading;   // was 18px
                         font-weight: 700;
                         color: Theme.text-primary;
                     }
@@ -109,7 +110,7 @@ export component WizardWindow inherits Window {
                             : root.mode == 1 ? @tr("Now: local recognition + local answers. Audio stays on this machine.")
                             : @tr("Now: mixed. Tune providers in Settings.");
                         color: Theme.text-secondary;
-                        font-size: 12px;
+                        font-size: Metrics.font-body;   // was 12px
                         wrap: word-wrap;
                     }
                 }
@@ -117,15 +118,15 @@ export component WizardWindow inherits Window {
                 // Step 2 — AI
                 if root.step == 1: VerticalLayout {
                     spacing: 10px;
-                    Text { text: @tr("AI"); font-size: 18px; font-weight: 700; color: Theme.text-primary; }
+                    Text { text: @tr("AI"); font-size: Metrics.font-heading; font-weight: 700; color: Theme.text-primary; }   // was 18px
                     Text {
                         text: @tr("Configure the AI provider in Settings; here we just confirm it answers.");
                         color: Theme.text-secondary;
-                        font-size: 12px;
+                        font-size: Metrics.font-body;   // was 12px
                         wrap: word-wrap;
                     }
                     HorizontalLayout {
-                        spacing: 8px;
+                        spacing: Metrics.space-sm;   // was 8px
                         Button { text: @tr("Test AI"); clicked => { root.ai-test-clicked(); } }
                         Button { text: @tr("Install local AI"); clicked => { root.install-local-clicked(); } }
                     }
@@ -139,11 +140,11 @@ export component WizardWindow inherits Window {
                 // Step 3 — STT
                 if root.step == 2: VerticalLayout {
                     spacing: 10px;
-                    Text { text: @tr("Speech recognition (STT)"); font-size: 18px; font-weight: 700; color: Theme.text-primary; }
+                    Text { text: @tr("Speech recognition (STT)"); font-size: Metrics.font-heading; font-weight: 700; color: Theme.text-primary; }   // was 18px
                     Text {
                         text: @tr("Configure STT in Settings; here we confirm it connects.");
                         color: Theme.text-secondary;
-                        font-size: 12px;
+                        font-size: Metrics.font-body;   // was 12px
                         wrap: word-wrap;
                     }
                     Button { text: @tr("Test STT"); clicked => { root.stt-test-clicked(); } }
@@ -157,11 +158,11 @@ export component WizardWindow inherits Window {
                 // Step 4 — microphone
                 if root.step == 3: VerticalLayout {
                     spacing: 10px;
-                    Text { text: @tr("Microphone"); font-size: 18px; font-weight: 700; color: Theme.text-primary; }
+                    Text { text: @tr("Microphone"); font-size: Metrics.font-heading; font-weight: 700; color: Theme.text-primary; }   // was 18px
                     Text {
                         text: @tr("Records 3 seconds. Speak during the test to see your level.");
                         color: Theme.text-secondary;
-                        font-size: 12px;
+                        font-size: Metrics.font-body;   // was 12px
                         wrap: word-wrap;
                     }
                     Button { text: @tr("Record test"); clicked => { root.mic-test-clicked(); } }
@@ -175,11 +176,11 @@ export component WizardWindow inherits Window {
                 // Step 5 — system audio
                 if root.step == 4: VerticalLayout {
                     spacing: 10px;
-                    Text { text: @tr("System audio"); font-size: 18px; font-weight: 700; color: Theme.text-primary; }
+                    Text { text: @tr("System audio"); font-size: Metrics.font-heading; font-weight: 700; color: Theme.text-primary; }   // was 18px
                     Text {
                         text: @tr("Needed to hear the other side. Plays a short test tone and checks loopback.");
                         color: Theme.text-secondary;
-                        font-size: 12px;
+                        font-size: Metrics.font-body;   // was 12px
                         wrap: word-wrap;
                     }
                     Button { text: @tr("Check system audio"); clicked => { root.sys-test-clicked(); } }
@@ -193,49 +194,49 @@ export component WizardWindow inherits Window {
                 // Step 6 — overlay + stealth
                 if root.step == 5: VerticalLayout {
                     spacing: 10px;
-                    Text { text: @tr("Overlay & stealth"); font-size: 18px; font-weight: 700; color: Theme.text-primary; }
+                    Text { text: @tr("Overlay & stealth"); font-size: Metrics.font-heading; font-weight: 700; color: Theme.text-primary; }   // was 18px
                     HorizontalLayout {
-                        spacing: 8px;
+                        spacing: Metrics.space-sm;   // was 8px
                         Text { text: @tr("Hide overlay from screen capture"); color: Theme.text-primary; vertical-alignment: center; }
                         Switch { checked <=> root.stealth-on; toggled => { root.stealth-toggled(self.checked); } }
                     }
                     Text {
                         text: @tr("Press Print Screen or open a screen-share preview — the overlay should vanish from the capture but stay on your screen. We can't verify stealth automatically.");
                         color: Theme.text-secondary;
-                        font-size: 12px;
+                        font-size: Metrics.font-body;   // was 12px
                         wrap: word-wrap;
                     }
                 }
 
                 // Step 7 — summary
                 if root.step == 6: VerticalLayout {
-                    spacing: 8px;
-                    Text { text: @tr("Done"); font-size: 18px; font-weight: 700; color: Theme.text-primary; }
+                    spacing: Metrics.space-sm;   // was 8px
+                    Text { text: @tr("Done"); font-size: Metrics.font-heading; font-weight: 700; color: Theme.text-primary; }   // was 18px
                     // 2-column rows so labels translate (RU) AND stay aligned.
                     // AI/STT are universal acronyms (left literal); Microphone /
                     // System audio reuse the existing step-title msgids.
                     HorizontalLayout {
-                        spacing: 8px;
+                        spacing: Metrics.space-sm;   // was 8px
                         Text { text: "AI"; width: 130px; color: Theme.text-secondary; font-family: Theme.font-mono; }
                         Text { text: root.summary-ai; horizontal-stretch: 1; color: Theme.text-secondary; font-family: Theme.font-mono; }
                     }
                     HorizontalLayout {
-                        spacing: 8px;
+                        spacing: Metrics.space-sm;   // was 8px
                         Text { text: "STT"; width: 130px; color: Theme.text-secondary; font-family: Theme.font-mono; }
                         Text { text: root.summary-stt; horizontal-stretch: 1; color: Theme.text-secondary; font-family: Theme.font-mono; }
                     }
                     HorizontalLayout {
-                        spacing: 8px;
+                        spacing: Metrics.space-sm;   // was 8px
                         Text { text: @tr("Microphone"); width: 130px; color: Theme.text-secondary; font-family: Theme.font-mono; }
                         Text { text: root.summary-mic; horizontal-stretch: 1; color: Theme.text-secondary; font-family: Theme.font-mono; }
                     }
                     HorizontalLayout {
-                        spacing: 8px;
+                        spacing: Metrics.space-sm;   // was 8px
                         Text { text: @tr("System audio"); width: 130px; color: Theme.text-secondary; font-family: Theme.font-mono; }
                         Text { text: root.summary-sys; horizontal-stretch: 1; color: Theme.text-secondary; font-family: Theme.font-mono; }
                     }
                     HorizontalLayout {
-                        spacing: 8px;
+                        spacing: Metrics.space-sm;   // was 8px
                         Button { text: @tr("Start working"); primary: true; clicked => { root.finished(); } }
                         Button { text: @tr("Open diagnostics"); clicked => { root.open-diagnostics(); } }
                     }
@@ -244,7 +245,7 @@ export component WizardWindow inherits Window {
 
             // ---- Nav row (Back / Skip / Next) — always enabled; an error never blocks ----
             HorizontalLayout {
-                spacing: 8px;
+                spacing: Metrics.space-sm;   // was 8px
                 Button { text: @tr("Back"); enabled: root.step > 0; clicked => { root.nav-back(); } }
                 Rectangle { horizontal-stretch: 1; }
                 Button { text: @tr("Skip"); visible: root.step < 6; clicked => { root.nav-skip(); } }

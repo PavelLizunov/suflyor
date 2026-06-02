@@ -40,10 +40,13 @@ audit P2 items; #135 single-slot; Fica-1 window-bug grounded investigation
   memory crash-recovery BANKED (1151ee6) + Track 3 design scaffold Etap 0-1 BANKED
   (0aececc) + L1 re-audit follow-up (82c9c3f). Every item 5-layer gated; an independent
   per-feature review on each + a final R9 cross-cutting re-audit, all CLEAN. ~7h to
-  deadline. Continuing with SAFE-only activity (the design scaffold's remaining surfaces
-  are Medium+ risk per §6 and need the user's visual matrix — NOT autonomous); holding
-  for the morning review rather than manufacturing risky/visual churn (no-marathons).
-  See "Morning review" below.
+  deadline. Continuing with SAFE value-preserving Этап-1 SIZE-token migration only (zero
+  visual change BY CONSTRUCTION — token value === the literal; this is NOT the per-theme
+  colour work, which changes appearance and needs the user's §8 matrix). Extending
+  Metrics across the colour-clean, lower-risk surfaces (text_ask/palette/wizard, then
+  more), each value-audited + build-verified + banked. Leaving the highest-risk
+  bar/tile/capture + the 84 KB settings split + all colour migration for the supervised
+  redesign. See "Morning review" below.
 
 ### Morning review (start here)
 Everything below shipped while you slept. origin/master @ 82c9c3f; every item is
@@ -86,6 +89,12 @@ Everything below shipped while you slept. origin/master @ 82c9c3f; every item is
   change alone; bundling with P1.7 which has real value).
 
 ### Done log (newest at top)
+- 02:0x — Track 3 Этап-1 batch 2: value-preserving SIZE-token migration of text_ask +
+  palette + wizard (43 swaps, every one token===literal; diff-audited — only size lines
+  + the Metrics import changed, ZERO colour/text/layout). Metrics now spans 5 surfaces
+  (help, recover_offer, text_ask, palette, wizard). Build exit 0; adoption map refreshed.
+  Banked (no release). Remaining size candidates (tile/settings/bar) + ALL colour
+  migration left for the supervised redesign (see docs/design-system-adoption-map.md).
 - 01:1x — Track 3 (design scaffold Etap 0-1) VERIFIED, pending commit: metrics.slint
   Metrics global (full §3.1 size taxonomy) + value-preserving application to
   help.slint + recover_offer.slint + the Etap 0 capture harness. My value-audit

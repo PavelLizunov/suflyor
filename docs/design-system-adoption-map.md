@@ -19,10 +19,10 @@ LEGITIMATE fixed-colour exceptions, so glance per-line before migrating).
 | Surface | §6 risk | `Theme.` | `Metrics.` | raw hex | State |
 |---|---|---|---|---|---|
 | recover_offer | Low | 11 | 12 | 0 | **fully on tokens** (Track 3) |
-| wizard | Medium | 33 | 0 | 0 | colour clean; sizes pending |
-| text_ask | Medium | 4 | 0 | 0 | colour clean; sizes pending |
+| wizard | Medium | 33 | 23 | 0 | colour clean; **sizes done** (batch 2) |
+| text_ask | Medium | 4 | 3 | 0 | colour clean; **sizes done** (batch 2) |
 | help | Low | 19 | 16 | 1 | sizes done (Track 3); 1 stray hex |
-| palette | Medium | 15 | 0 | 1 | colour ~done; sizes pending |
+| palette | Medium | 15 | 17 | 1 | colour ~done; **sizes done** (batch 2) |
 | tile | High | 38 | 0 | 3 | colour ~done; sizes pending |
 | settings_panel | Medium | 111 | 0 | 6 | colour ~done; sizes pending; **84 KB → split first (Этап 3)** |
 | overlay_bar | High | 35 | 0 | 15 | heavy Theme use BUT 15 raw-colour exceptions to review |
@@ -38,7 +38,7 @@ LEGITIMATE fixed-colour exceptions, so glance per-line before migrating).
   a theme switch (e.g. stays dark in Light Frost). `capture_overlay`'s raw colours are most
   likely by-design (a fullscreen selection overlay should look the same in every theme);
   verify before touching.
-- **Size-token (`Metrics`) adoption just started** (help + recover_offer). Extending it is
+- **Size-token (`Metrics`) adoption now spans 5 surfaces** (help, recover_offer, text_ask, palette, wizard). Extending it is
   **value-preserving (zero visual change)** and can proceed surface-by-surface; the
   `Metrics` global already holds the full taxonomy, so a migration is a mechanical
   equal-value swap + a glance.
@@ -46,8 +46,9 @@ LEGITIMATE fixed-colour exceptions, so glance per-line before migrating).
   (High risk → run the §8 visual matrix per change).
 
 ## Suggested order (low risk first, per plan §7 Этап 4)
-- **Sizes** (value-preserving, the kind of change that is safe to make and confirm with a
-  build + a glance): `palette → tile → settings → overlay_bar`.
+- **Sizes** (value-preserving, safe to make + confirm with a build + a glance): done for
+  help / recover_offer / text_ask / palette / wizard; remaining `tile → settings (split
+  first, Этап 3) → overlay_bar`.
 - **Colours** (per-theme visual change — needs the §8 matrix on Light Frost + a dark
   theme): `replay` (worst) → `overlay_bar` exceptions → `capture_overlay` only if its
   fixed colours are judged wrong.
