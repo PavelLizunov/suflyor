@@ -51,6 +51,34 @@ pub fn start_session(
     cfg: SharedConfig,
     rt: SharedSlintRuntime,
 ) -> Result<()> {
+    start_session_inner(events, cfg, rt, None)
+}
+
+/// Memory Phase 1 (crash recovery) entry point. Identical to
+/// [`start_session`] except the new session's `SessionStart` event records
+/// `recovered_from` (the unfinished session's `session_id`) so the two
+/// journals are linked on disk. The recovered context itself is seeded by
+/// the caller into `cfg.meeting_context` BEFORE this call (so STT's whisper
+/// prompt + every AI ask pick it up via the live config), which is why this
+/// function takes no transcript payload — only the link id.
+///
+/// # Errors
+/// Same as [`start_session`].
+pub fn start_session_with_recovery(
+    events: Arc<dyn RuntimeEvents>,
+    cfg: SharedConfig,
+    rt: SharedSlintRuntime,
+    recovered_from: String,
+) -> Result<()> {
+    start_session_inner(events, cfg, rt, Some(recovered_from))
+}
+
+fn start_session_inner(
+    events: Arc<dyn RuntimeEvents>,
+    cfg: SharedConfig,
+    rt: SharedSlintRuntime,
+    recovered_from: Option<String>,
+) -> Result<()> {
     // ===== 1. Stop any prior session + reset state =====
     {
         let mut s = lock(&rt);
@@ -168,6 +196,7 @@ pub fn start_session(
             prep_model: &c.prep_model,
             stt_language: c.stt_language.as_deref(),
             response_language: &c.response_language,
+            recovered_from_session_id: recovered_from.as_deref(),
         });
     }
     lock(&rt).journal = Some(journal.clone());

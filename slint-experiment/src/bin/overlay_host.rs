@@ -61,7 +61,7 @@ mod ui {
 
 use ui::{
     CaptureOverlay, HelpWindow, MarkdownBlock, OverlayBarWindow, PaletteResult, PaletteWindow,
-    SettingsWindow, TextAskWindow, TileWindow, WizardWindow,
+    RecoverOfferWindow, SettingsWindow, TextAskWindow, TileWindow, WizardWindow,
 };
 
 type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
@@ -2338,6 +2338,9 @@ fn main() -> Result<(), slint::PlatformError> {
     let wizard: Rc<RefCell<Option<WizardWindow>>> = Rc::new(RefCell::new(None));
     // 🆘 Help window (F1 / 🆘 chip), created on demand.
     let help: Rc<RefCell<Option<HelpWindow>>> = Rc::new(RefCell::new(None));
+    // Memory Phase 1 — crash-recovery offer, shown once a beat after startup if
+    // the newest journal looks unfinished (see the delayed-open below).
+    let recover_offer: Rc<RefCell<Option<RecoverOfferWindow>>> = Rc::new(RefCell::new(None));
     // V3 — the Lightshot capture overlay. PERSISTENT + pre-stealthed so F8 shows
     // it flash-free: WDA_EXCLUDEFROMCAPTURE keeps it off any screen-share from the
     // first frame, WS_EX_TOOLWINDOW keeps it out of the taskbar. We realize the
@@ -3468,6 +3471,42 @@ fn main() -> Result<(), slint::PlatformError> {
         let ta = text_ask.clone();
         Timer::single_shot(Duration::from_millis(2200), move || {
             open_wizard(&wz, &cfg_w, &state_w, &tiles_w, &ow, &pal, &ta, &st);
+        });
+    }
+
+    // Memory Phase 1 — crash-recovery offer. A beat after the bar is up (same
+    // delayed-open as the wizard, so the bar pins/realizes first), check the
+    // newest journal: if the previous run ended WITHOUT a clean stop, offer to
+    // carry its context forward. Skipped on first run (no prior sessions, and
+    // we never want two startup windows fighting). The detection is a single
+    // bounded file read on the UI thread inside the timer — cheap; nothing is
+    // shown when it returns None.
+    if !first_run {
+        let ro = recover_offer.clone();
+        let cfg_r = cfg.clone();
+        let events_r = events.clone();
+        let rt_r = slint_rt.clone();
+        let rth_r = rt_handle.clone();
+        let state_r = state.clone();
+        let ow_r = overlay.as_weak();
+        Timer::single_shot(Duration::from_millis(2200), move || {
+            match journal::find_unfinished_session_in_default_dir() {
+                Some(unfinished) => {
+                    // Log the LINK id + counts only — never transcript/answer text.
+                    eprintln!(
+                        "[overlay-host] unfinished session detected ({}): {} line(s), qa={} — offering recovery",
+                        unfinished.session_id,
+                        unfinished.last_lines.len(),
+                        unfinished.last_qa.is_some(),
+                    );
+                    open_recover_offer(
+                        &ro, unfinished, &cfg_r, &events_r, &rt_r, &rth_r, &state_r, &ow_r,
+                    );
+                }
+                None => {
+                    eprintln!("[overlay-host] no unfinished session to recover");
+                }
+            }
         });
     }
 
@@ -5676,6 +5715,216 @@ fn open_help(
         // Keep these transient overlay windows out of the taskbar + Alt-Tab,
         // like the bar/tiles — otherwise under stealth they leak an existence
         // entry while open (content is WDA-hidden, but the window button isn't).
+        let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
+        focus_window(hwnd);
+    });
+    *slot_ref.borrow_mut() = Some(win);
+}
+
+/// Marker that brackets the recovered-context block prepended to
+/// `cfg.meeting_context` by [`seed_recovery_context`]. A stable, greppable
+/// delimiter so a future "clear recovered context" affordance can find +
+/// strip exactly this block without touching the user's own prose.
+const RECOVERY_CONTEXT_HEADER: &str = "=== Контекст из прошлой сессии ===";
+
+/// Memory Phase 1 — seed the LIVE meeting context with what we recovered from
+/// the unfinished session, so STT's whisper prompt + every AI ask pick it up
+/// (they all read `cfg.meeting_context`). We PREPEND a clearly-delimited block
+/// and keep the user's existing context intact below it. Persisted via
+/// `config::save` + mirrored into the active profile (same path the Profile
+/// editor uses) so it survives a restart and the picker never drifts.
+///
+/// Returns the new total `meeting_context` char count (for the journal /
+/// diagnostics). Does NOT touch tiles, mic, screenshots, or any in-flight
+/// state — per the spec, only the textual context is carried.
+fn seed_recovery_context(
+    cfg: &overlay_backend::config::SharedConfig,
+    recovered: &overlay_backend::journal::UnfinishedSession,
+) -> usize {
+    // Compose the recovered block from secret-free user content only.
+    let mut block = String::new();
+    block.push_str(RECOVERY_CONTEXT_HEADER);
+    block.push('\n');
+    if let Some((q, a)) = &recovered.last_qa {
+        block.push_str("Последний вопрос: ");
+        block.push_str(q.trim());
+        block.push('\n');
+        block.push_str("Последний ответ: ");
+        block.push_str(a.trim());
+        block.push('\n');
+    }
+    if !recovered.last_lines.is_empty() {
+        block.push_str("Недавние реплики:\n");
+        for line in &recovered.last_lines {
+            block.push_str("- ");
+            block.push_str(line.trim());
+            block.push('\n');
+        }
+    }
+    if let Some(s) = &recovered.summary {
+        block.push_str("Итог прошлой сессии: ");
+        block.push_str(s.trim());
+        block.push('\n');
+    }
+    block.push_str("=== Конец контекста из прошлой сессии ===");
+
+    let mut c = cfg.write();
+    let combined = if c.meeting_context.trim().is_empty() {
+        block
+    } else {
+        format!("{block}\n\n{}", c.meeting_context)
+    };
+    // save_active_context updates meeting_context AND mirrors into the active
+    // profile, matching the Profile editor's persistence path.
+    c.save_active_context(&combined);
+    let chars = c.meeting_context.chars().count();
+    if let Err(e) = overlay_backend::config::save(&c) {
+        // Non-fatal: the in-memory seed already applies to this session; we
+        // just couldn't persist it. NEVER log context text (user content).
+        eprintln!("[overlay-host] recovery context persist failed (non-fatal): {e:#}");
+    }
+    chars
+}
+
+/// Memory Phase 1 — the crash-recovery offer. Mirrors `open_text_ask`:
+/// scheme-themed, stealth-aware, parked-before-shown, ASCII-X / Esc / Dismiss
+/// to close. Built ON DEMAND from a detected [`UnfinishedSession`] (only when
+/// `find_unfinished_session` returned `Some`). The window shows the recovered
+/// last Q&A + a couple transcript lines (the user's OWN content — fine in
+/// THEIR window, which is WDA-stealthed so it never reaches a screen-share).
+///
+/// Recover: seed `cfg.meeting_context` with the recovered text, then start a
+/// session whose `SessionStart` records `recovered_from_session_id` (the link
+/// on disk). Dismiss / Esc / X: just close (the old journal stays on disk;
+/// pruning is the journal's job). Per the spec we DO NOT auto-recover tiles,
+/// streaming, mic, screenshot payloads, or in-flight network state.
+#[allow(clippy::too_many_arguments)]
+fn open_recover_offer(
+    slot_ref: &Rc<RefCell<Option<RecoverOfferWindow>>>,
+    recovered: overlay_backend::journal::UnfinishedSession,
+    cfg: &overlay_backend::config::SharedConfig,
+    events: &Arc<dyn RuntimeEvents>,
+    slint_rt: &SharedSlintRuntime,
+    rt_handle: &tokio::runtime::Handle,
+    state: &slint_replay::app_state::SharedState,
+    overlay_weak: &slint::Weak<OverlayBarWindow>,
+) {
+    // Single-instance: if it's somehow already open, just refocus it.
+    {
+        let slot = slot_ref.borrow();
+        if let Some(existing) = slot.as_ref() {
+            let _ = existing.show();
+            if let Ok(hwnd) = grab_hwnd(existing.window()) {
+                focus_window(hwnd);
+            }
+            return;
+        }
+    }
+    let win = match RecoverOfferWindow::new() {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln!("[overlay-host] RecoverOfferWindow::new failed: {e}");
+            return;
+        }
+    };
+    win.global::<ui::Theme>()
+        .set_scheme(clamp_scheme(global_scheme()));
+
+    // Populate the (secret-free) recovered content.
+    if let Some((q, a)) = &recovered.last_qa {
+        win.set_has_qa(true);
+        win.set_last_question(SharedString::from(q.as_str()));
+        win.set_last_answer(SharedString::from(a.as_str()));
+    } else {
+        win.set_has_qa(false);
+    }
+    win.set_transcript_preview(SharedString::from(recovered.last_lines.join("\n")));
+
+    // Dismiss / Esc / X — close + drop, nothing else (old JSONL stays on disk).
+    {
+        let weak = win.as_weak();
+        let slot = slot_ref.clone();
+        win.on_dismissed(move || {
+            if let Some(w) = weak.upgrade() {
+                let _ = w.hide();
+            }
+            *slot.borrow_mut() = None;
+        });
+    }
+
+    // Recover — seed context, then start a session linked to the recovered one.
+    {
+        let weak = win.as_weak();
+        let slot = slot_ref.clone();
+        let cfg_c = cfg.clone();
+        let events_c = events.clone();
+        let rt_c = slint_rt.clone();
+        let rth = rt_handle.clone();
+        let state_c = state.clone();
+        let ow = overlay_weak.clone();
+        let session_id = recovered.session_id.clone();
+        let recovered_for_seed = recovered.clone();
+        win.on_recover_accepted(move || {
+            // 1) Seed the live + persisted meeting context (secret-free).
+            let chars = seed_recovery_context(&cfg_c, &recovered_for_seed);
+            eprintln!(
+                "[overlay-host] recovery accepted; context seeded ({chars} chars) — starting linked session"
+            );
+
+            // 2) Close the offer window.
+            if let Some(w) = weak.upgrade() {
+                let _ = w.hide();
+            }
+            *slot.borrow_mut() = None;
+
+            // 3) Flip the bar's session timer ON (mirror the timer-toggle
+            //    "start" branch) so the UI reflects the running session.
+            {
+                let mut st = match state_c.lock() {
+                    Ok(g) => g,
+                    Err(p) => p.into_inner(),
+                };
+                st.timer_active = true;
+                st.session_secs = 0;
+            }
+            if let Some(o) = ow.upgrade() {
+                o.set_timer_active(true);
+            }
+
+            // 4) Start the session linked to the recovered one. On failure,
+            //    revert the timer UI exactly like the timer-toggle path.
+            let events_s = events_c.clone();
+            let cfg_s = cfg_c.clone();
+            let rt_s = rt_c.clone();
+            let state_revert = state_c.clone();
+            let ow_revert = ow.clone();
+            let link_id = session_id.clone();
+            rth.spawn(async move {
+                if let Err(e) = slint_session::start_session_with_recovery(
+                    events_s, cfg_s, rt_s, link_id,
+                ) {
+                    eprintln!("[overlay-host] recovery start_session failed: {e:#}");
+                    let _ = slint::invoke_from_event_loop(move || {
+                        {
+                            let mut st = match state_revert.lock() {
+                                Ok(g) => g,
+                                Err(p) => p.into_inner(),
+                            };
+                            st.timer_active = false;
+                            st.session_secs = 0;
+                        }
+                        if let Some(o) = ow_revert.upgrade() {
+                            o.set_timer_active(false);
+                            o.set_status_text(SharedString::from("start failed"));
+                            o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x4b, 0x4b));
+                        }
+                    });
+                }
+            });
+        });
+    }
+
+    present_window_stealth_aware(&win, |hwnd| {
         let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
         focus_window(hwnd);
     });

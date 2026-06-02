@@ -33,18 +33,22 @@ audit P2 items; #135 single-slot; Fica-1 window-bug grounded investigation
   marathon), not micro-releases.
 
 ### In progress
-- Track 2b — P1.7 (server-settings transfer) SHIPPING. Review-agent CLEAR: no
-  BLOCKER/HIGH/MEDIUM; security invariant verified (no secret value in any preview
-  string; mask_host blanks the LAN host; export = server-fields+creds, never
-  user-private locals). Its one LOW was a FALSE POSITIVE (see Findings). Boot-smoke
-  CLEAN (8 hotkeys incl Shift+F8, stealth ok, installer 11,158,791 B). Commit A
-  (feat P1.7, cb19f55) LANDED via the gate. NOW: Commit B (release v0.9.1) + push +
-  gh release + verify digest. THEN Track 4 (memory Phase-1 recovery, spec in
-  docs/memory-phase1-recovery-spec.md) then Track 3 (design scaffold) via subagents.
+- Track 4 (memory Phase-1 crash-recovery) IMPLEMENTED (subagent) + REVIEWED clear
+  (no BLOCKER/HIGH/MEDIUM; all 8 invariants upheld — stealth via present_window_
+  stealth_aware, bounded no-panic JSONL read, serde back-compat both ways, no RwLock
+  deadlock, secret-free logs incl the start_session error path). Fixed the 1 LOW
+  (↩ U+21A9 title glyph = tofu class like ⟳/✕ -> dropped it; slint+po in lockstep).
+  196 backend tests + slint green; clippy both crates clean; fmt clean. NOW: rebuild
+  (glyph fix) + boot-smoke with a seeded unfinished JSONL (offer fires + no crash)
+  -> commit BANK (no release). THEN Track 3 (design token extraction).
 - Dropped the marginal "diag rows" sub-item from v0.9.1 (P1.3 has no user-visible
   change alone; bundling with P1.7 which has real value).
 
 ### Done log (newest at top)
+- 00:4x — **v0.9.1 RELEASED** (master, installer digest sha256:fb544369…, 11.16 MB).
+  P1.7 server-settings transfer + P1.3 cleanup. Commits cb19f55 (feat) + b251efc
+  (release); pushed b251efc; gh release live; digest verified (fail-closed updater
+  OK). All 5 gate layers green; review CLEAR.
 - 00:3x — Track 2 P1.7 review CLEAR (no BLOCKER/HIGH/MEDIUM; its 1 LOW = false
   positive). Commit A `cb19f55` (feat server-settings transfer) landed through the
   git-gate (fmt+clippy both crates). Releasing v0.9.1 next (Commit B + push + gh).
@@ -75,6 +79,13 @@ audit P2 items; #135 single-slot; Fica-1 window-bug grounded investigation
   http://192.168.0.142:18902/v1), so unreachable. Export file also carries harmless
   canned defaults (default_snippets/trigger_keywords) for non-server fields — by
   design, import ignores them via merge_server_settings; documented in the doc comment.
+- Track 4 review: 1 LOW FIXED (↩ in the recover-offer title was bare text-glyph tofu,
+  same class as ⟳/✕ — dropped the glyph). 2 NITs recorded, NOT fixed (scope): N1 —
+  meeting_context_chars logs bytes (.len) vs the seed's char count (pre-existing
+  cosmetic diagnostic mismatch, slint_session.rs:194). N2 — recovered-context can
+  compound only in a pathological crash->recover->crash loop within 12h (normal
+  recovered sessions end clean -> not re-detected; newest-only scan). The
+  RECOVERY_CONTEXT_HEADER delimiter is already in place to strip-on-reseed in Phase 2.
 
 ---
 

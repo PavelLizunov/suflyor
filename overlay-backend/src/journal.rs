@@ -34,6 +34,16 @@ pub enum JournalEvent<'a> {
         prep_model: &'a str,
         stt_language: Option<&'a str>,
         response_language: &'a str,
+        /// Memory Phase 1 (crash recovery): when this session was started by
+        /// the user accepting the "recover previous session" offer, this is
+        /// the `session_id` (file stem) of the unfinished session whose
+        /// context was carried in. Absent on a normal cold start.
+        ///
+        /// `default` so an OLD journal line (written before this field
+        /// existed) still deserializes to `None`; `skip_serializing_if` so a
+        /// normal start serializes byte-identically to before (no extra key).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        recovered_from_session_id: Option<&'a str>,
     },
     SessionStop {
         unix_ms: u128,
@@ -277,6 +287,255 @@ fn bump_counters(c: &mut SessionCounters, event: &JournalEvent<'_>) {
 pub fn sessions_dir() -> Result<PathBuf> {
     let base = dirs::config_dir().context("no config dir")?;
     Ok(base.join("overlay-mvp").join("sessions"))
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Memory — Phase 1: crash recovery (detection only; pure + side-effect-free)
+//
+// On launch we scan the newest session journal. If it has a `SessionStart`
+// but NO `SessionStop` and NO terminal `SessionSummary`, the previous run
+// ended without a clean close (crash / force-kill / power loss). We surface
+// its last context so the user can carry it forward instead of starting cold.
+//
+// This module READS ONLY. It opens no writer, deletes nothing, and never
+// panics: every line is parsed independently and an unparseable / truncated
+// line (common when a crash cuts the final write mid-flush) is skipped.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// How many trailing transcript lines to carry into the recovery offer.
+const RECOVERY_LAST_LINES: usize = 8;
+
+/// Sessions whose `SessionStart` is older than this are considered stale —
+/// we do not surface a recovery offer for them (a day-old crash is noise,
+/// not something the user wants to resume).
+const RECOVERY_MAX_AGE_MS: u64 = 12 * 60 * 60 * 1000; // 12h
+
+/// Hard cap on the journal size we will read for recovery detection. A
+/// healthy session is a few hundred KB; this guards against reading a
+/// pathologically large file synchronously on the UI-adjacent startup path.
+const RECOVERY_MAX_READ_BYTES: u64 = 16 * 1024 * 1024; // 16 MB
+
+/// A previous session that ended WITHOUT a clean stop, with just enough
+/// context to offer the user a "carry this forward" recovery.
+///
+/// All fields are redaction-friendly: no secrets / keys / endpoints ever
+/// flow here. Transcript lines + the last Q&A are the user's OWN meeting
+/// content, which is acceptable to show in THEIR recovery UI (the offer
+/// window is WDA-stealthed like every other window so it never leaks onto a
+/// screen-share).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnfinishedSession {
+    /// Stable id = the journal file stem (e.g. `2026-06-02_15-30-12_abc123`).
+    pub session_id: String,
+    /// Absolute path of the unfinished journal file.
+    pub path: PathBuf,
+    /// `SessionStart.unix_ms` (when the crashed session began).
+    pub started_unix_ms: u64,
+    /// Up to [`RECOVERY_LAST_LINES`] most-recent transcript lines, oldest
+    /// first, each prefixed with a source marker (🎤 mic / 🔊 system).
+    pub last_lines: Vec<String>,
+    /// The last COMPLETED question→answer pair, if any (an `AiRequest`
+    /// followed by its `AiResponse`). `.0` is the user prompt, `.1` the
+    /// answer text.
+    pub last_qa: Option<(String, String)>,
+    /// A local session summary line, if the journal happened to record one
+    /// (Phase 1 keeps this as a short human string; cloud/LLM summaries are
+    /// out of scope).
+    pub summary: Option<String>,
+}
+
+/// Resolve the REAL journal directory and return the newest unfinished
+/// session, if any. Thin wrapper so callers (overlay_host startup) need not
+/// know where journals live. Returns `None` when the directory is missing /
+/// unreadable or when nothing qualifies.
+#[must_use]
+pub fn find_unfinished_session_in_default_dir() -> Option<UnfinishedSession> {
+    let dir = sessions_dir().ok()?;
+    find_unfinished_session(&dir)
+}
+
+/// Core detection (pure / testable). Enumerate `*.jsonl` in `journal_dir`,
+/// pick the NEWEST by mtime, and — if it looks unfinished and is recent —
+/// extract its recovery context. See the module banner for the rules.
+///
+/// Never panics: I/O errors and malformed lines are tolerated and yield
+/// `None` / skipped lines respectively.
+#[must_use]
+pub fn find_unfinished_session(journal_dir: &Path) -> Option<UnfinishedSession> {
+    let newest = newest_jsonl(journal_dir)?;
+    parse_unfinished(&newest)
+}
+
+/// Newest `*.jsonl` path in `dir` by mtime, or `None` if the dir can't be
+/// read or holds no journals. (Mirrors the enumeration in
+/// `prune_old_sessions_with_size_cap`, but read-only and newest-only.)
+fn newest_jsonl(dir: &Path) -> Option<PathBuf> {
+    let mut best: Option<(SystemTime, PathBuf)> = None;
+    for e in std::fs::read_dir(dir).ok()? {
+        let Ok(e) = e else { continue };
+        let path = e.path();
+        if path.extension().and_then(|x| x.to_str()) != Some("jsonl") {
+            continue;
+        }
+        let Ok(meta) = e.metadata() else { continue };
+        let Ok(mtime) = meta.modified() else { continue };
+        match &best {
+            Some((best_mtime, _)) if *best_mtime >= mtime => {}
+            _ => best = Some((mtime, path)),
+        }
+    }
+    best.map(|(_, p)| p)
+}
+
+/// Parse a single journal file and decide whether it is an unfinished
+/// session, extracting recovery context if so. Read-only; tolerant of
+/// truncated/garbage lines. Factored out from [`find_unfinished_session`]
+/// so tests can feed an exact path.
+fn parse_unfinished(path: &Path) -> Option<UnfinishedSession> {
+    // Bound the read so a pathological file can't stall startup. A genuinely
+    // huge journal is itself suspicious; skipping recovery for it is safe.
+    if let Ok(meta) = std::fs::metadata(path) {
+        if meta.len() > RECOVERY_MAX_READ_BYTES {
+            return None;
+        }
+    }
+    let content = std::fs::read_to_string(path).ok()?;
+
+    let mut started_unix_ms: Option<u64> = None;
+    let mut has_start = false;
+    let mut has_stop = false;
+    let mut has_summary = false;
+    let mut summary: Option<String> = None;
+    let mut last_lines: std::collections::VecDeque<String> = std::collections::VecDeque::new();
+    // Track the last seen question (AiRequest.user_prompt) so the FOLLOWING
+    // AiResponse pairs with it into the last completed Q&A.
+    let mut pending_question: Option<String> = None;
+    let mut last_qa: Option<(String, String)> = None;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        // Skip unparseable / half-written trailing lines (a crash often
+        // truncates the final write). Never propagate the error.
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(trimmed) else {
+            continue;
+        };
+        let kind = v
+            .get("kind")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
+        match kind {
+            "session_start" => {
+                has_start = true;
+                if started_unix_ms.is_none() {
+                    started_unix_ms = v.get("unix_ms").and_then(json_u64);
+                }
+            }
+            "session_stop" => has_stop = true,
+            "session_summary" => {
+                has_summary = true;
+                // Keep a terse human summary if one is embedded (some events
+                // carry a `summary`/`text` string); the counts variant has
+                // neither, which is fine — `summary` simply stays None.
+                if let Some(s) = v
+                    .get("summary")
+                    .or_else(|| v.get("text"))
+                    .and_then(serde_json::Value::as_str)
+                {
+                    if !s.trim().is_empty() {
+                        summary = Some(s.trim().to_string());
+                    }
+                }
+            }
+            "transcript_line" => {
+                let text = v
+                    .get("text")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("");
+                if !text.trim().is_empty() {
+                    let src = v
+                        .get("source")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("");
+                    let marker = match src {
+                        "mic" => "🎤 ",
+                        "system" => "🔊 ",
+                        _ => "",
+                    };
+                    last_lines.push_back(format!("{marker}{}", text.trim()));
+                    while last_lines.len() > RECOVERY_LAST_LINES {
+                        last_lines.pop_front();
+                    }
+                }
+            }
+            "ai_request" => {
+                if let Some(q) = v.get("user_prompt").and_then(serde_json::Value::as_str) {
+                    if !q.trim().is_empty() {
+                        pending_question = Some(q.trim().to_string());
+                    }
+                }
+            }
+            "ai_response" => {
+                if let Some(ans) = v.get("text").and_then(serde_json::Value::as_str) {
+                    if !ans.trim().is_empty() {
+                        // Pair the answer with the most recent question. If we
+                        // somehow saw a response with no preceding request, fall
+                        // back to an empty question rather than dropping it.
+                        let q = pending_question.take().unwrap_or_default();
+                        last_qa = Some((q, ans.trim().to_string()));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Unfinished iff a start was seen and NO clean terminator exists.
+    if !has_start || has_stop || has_summary {
+        return None;
+    }
+
+    // Skip stale sessions — a start that's too old isn't worth nagging about.
+    let started = started_unix_ms?;
+    let now = now_unix_ms() as u64;
+    if now.saturating_sub(started) > RECOVERY_MAX_AGE_MS {
+        return None;
+    }
+
+    let session_id = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_string();
+
+    Some(UnfinishedSession {
+        session_id,
+        path: path.to_path_buf(),
+        started_unix_ms: started,
+        last_lines: last_lines.into_iter().collect(),
+        last_qa,
+        summary,
+    })
+}
+
+/// Read a u64 from a JSON value that may be encoded as an integer or, for
+/// the `unix_ms` fields (serialized from `u128`), as a number that exceeds
+/// `i64`/`u64` range only in theory. Falls back through f64 for safety.
+fn json_u64(v: &serde_json::Value) -> Option<u64> {
+    if let Some(n) = v.as_u64() {
+        return Some(n);
+    }
+    // u128 millis fit u64 until year 584 million, so this branch is just
+    // defensive against a float-encoded value; clamp negatives to None.
+    v.as_f64().and_then(|f| {
+        if f.is_finite() && f >= 0.0 {
+            Some(f as u64)
+        } else {
+            None
+        }
+    })
 }
 
 /// Keep at most `keep` newest `*.jsonl` files in `dir`; delete older ones.
@@ -777,6 +1036,7 @@ mod tests {
                 prep_model: "sonnet",
                 stt_language: None,
                 response_language: "ru",
+                recovered_from_session_id: None,
             },
         );
         bump_counters(&mut c, &JournalEvent::SessionStop { unix_ms: 0 });
@@ -947,6 +1207,334 @@ mod tests {
         assert!(s.contains(r#""kind":"session_summary""#));
         assert!(s.contains(r#""total_cost_microcents":12500"#));
         assert!(s.contains(r#""duration_ms":5000"#));
+    }
+
+    // ── Deliverable B: recovered_from_session_id back-compat ──
+
+    #[test]
+    fn session_start_normal_serializes_without_recovery_field() {
+        // A cold start (recovered_from_session_id = None) must serialize
+        // byte-for-byte as before: the key is SKIPPED, so an old reader sees
+        // the exact same shape it always did.
+        let ev = JournalEvent::SessionStart {
+            unix_ms: 1700,
+            meeting_context_chars: 42,
+            ai_model: "haiku",
+            prep_model: "sonnet",
+            stt_language: Some("ru"),
+            response_language: "ru",
+            recovered_from_session_id: None,
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        assert!(s.contains(r#""kind":"session_start""#));
+        assert!(
+            !s.contains("recovered_from_session_id"),
+            "None must be skipped so a normal start is unchanged: {s}"
+        );
+    }
+
+    #[test]
+    fn session_start_recovered_serializes_with_recovery_field() {
+        let ev = JournalEvent::SessionStart {
+            unix_ms: 1700,
+            meeting_context_chars: 42,
+            ai_model: "haiku",
+            prep_model: "sonnet",
+            stt_language: None,
+            response_language: "ru",
+            recovered_from_session_id: Some("2026-06-02_15-30-12_abc123"),
+        };
+        let s = serde_json::to_string(&ev).unwrap();
+        assert!(s.contains(r#""recovered_from_session_id":"2026-06-02_15-30-12_abc123""#));
+    }
+
+    /// Owned mirror of the `SessionStart` payload to prove the `#[serde(default)]`
+    /// semantics: an OLD line (no `recovered_from_session_id` key) deserializes
+    /// to `None`, and a new line round-trips the id. Mirroring (rather than
+    /// deriving `Deserialize` on the borrowed `JournalEvent<'a>`) keeps the
+    /// write-side enum zero-copy while still exercising the exact serde attrs.
+    #[derive(serde::Deserialize)]
+    struct SessionStartOwned {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        recovered_from_session_id: Option<String>,
+    }
+
+    #[test]
+    fn old_session_start_line_deserializes_to_none() {
+        // An OLD on-disk line written before the field existed.
+        let old = r#"{"kind":"session_start","unix_ms":1700,"meeting_context_chars":42,"ai_model":"haiku","prep_model":"sonnet","stt_language":null,"response_language":"ru"}"#;
+        let parsed: SessionStartOwned = serde_json::from_str(old).unwrap();
+        assert_eq!(parsed.recovered_from_session_id, None);
+    }
+
+    #[test]
+    fn new_session_start_line_deserializes_id() {
+        let new = r#"{"kind":"session_start","unix_ms":1700,"meeting_context_chars":42,"ai_model":"haiku","prep_model":"sonnet","stt_language":null,"response_language":"ru","recovered_from_session_id":"sess-xyz"}"#;
+        let parsed: SessionStartOwned = serde_json::from_str(new).unwrap();
+        assert_eq!(
+            parsed.recovered_from_session_id.as_deref(),
+            Some("sess-xyz")
+        );
+    }
+
+    // ── Deliverable A: find_unfinished_session ──
+    //
+    // Each test writes synthetic JSONL into a fresh temp dir, then drives the
+    // pure detector. We set mtimes implicitly via write order + tiny sleeps
+    // where "newest" matters, mirroring the existing prune tests.
+
+    /// Build a JSONL `session_start` line `age_ms` milliseconds in the past.
+    fn start_line(age_ms: u64) -> String {
+        let started = (now_unix_ms() as u64).saturating_sub(age_ms);
+        format!(
+            r#"{{"kind":"session_start","unix_ms":{started},"meeting_context_chars":0,"ai_model":"haiku","prep_model":"sonnet","stt_language":null,"response_language":"ru"}}"#
+        )
+    }
+
+    fn transcript_line(source: &str, text: &str) -> String {
+        format!(r#"{{"kind":"transcript_line","unix_ms":1,"source":"{source}","text":"{text}"}}"#)
+    }
+
+    fn ai_request_line(user_prompt: &str) -> String {
+        format!(
+            r#"{{"kind":"ai_request","unix_ms":1,"purpose":"auto_tile","model":"haiku","system_prompt":"sys","user_prompt":"{user_prompt}","attached_screenshot":false,"input_tokens_est":1}}"#
+        )
+    }
+
+    fn ai_response_line(text: &str) -> String {
+        format!(
+            r#"{{"kind":"ai_response","unix_ms":1,"purpose":"auto_tile","model":"haiku","latency_ms":1,"finish_reason":"stop","text":"{text}","output_tokens_est":1,"cost_microcents":1}}"#
+        )
+    }
+
+    fn write_jsonl(dir: &Path, name: &str, lines: &[String]) -> PathBuf {
+        let p = dir.join(name);
+        std::fs::write(&p, format!("{}\n", lines.join("\n"))).unwrap();
+        p
+    }
+
+    fn fresh_dir(tag: &str) -> PathBuf {
+        let tmp = std::env::temp_dir().join(format!("overlay-recover-{tag}-{}", now_unix_ms()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        tmp
+    }
+
+    #[test]
+    fn graceful_stop_returns_none() {
+        let dir = fresh_dir("graceful");
+        write_jsonl(
+            &dir,
+            "s.jsonl",
+            &[
+                start_line(60_000),
+                transcript_line("system", "hello"),
+                r#"{"kind":"session_stop","unix_ms":2}"#.to_string(),
+            ],
+        );
+        assert!(find_unfinished_session(&dir).is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn graceful_summary_returns_none() {
+        // A terminal SessionSummary also marks a clean close (it's emitted
+        // just before SessionStop on the graceful path).
+        let dir = fresh_dir("summary");
+        write_jsonl(
+            &dir,
+            "s.jsonl",
+            &[
+                start_line(60_000),
+                transcript_line("mic", "hi"),
+                r#"{"kind":"session_summary","unix_ms":2,"duration_ms":1,"transcript_lines":1,"transcript_mic":1,"transcript_system":0,"detector_triggered":0,"detector_skipped":0,"ai_requests_total":0,"ai_responses_ok":0,"ai_errors":0,"tiles_spawned":0,"rate_limited":0,"total_cost_microcents":0}"#.to_string(),
+            ],
+        );
+        assert!(find_unfinished_session(&dir).is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn crash_returns_some_with_last_lines_and_qa() {
+        let dir = fresh_dir("crash");
+        write_jsonl(
+            &dir,
+            "crashed.jsonl",
+            &[
+                start_line(120_000),
+                transcript_line("system", "what is your experience"),
+                ai_request_line("what is your experience"),
+                ai_response_line("seven years of kubernetes"),
+                transcript_line("mic", "let me explain my background"),
+                // NO session_stop / session_summary → unfinished.
+            ],
+        );
+        let got = find_unfinished_session(&dir).expect("should detect unfinished session");
+        assert_eq!(got.session_id, "crashed");
+        assert_eq!(got.path, dir.join("crashed.jsonl"));
+        // last_qa pairs the request prompt with the following response text.
+        assert_eq!(
+            got.last_qa,
+            Some((
+                "what is your experience".to_string(),
+                "seven years of kubernetes".to_string()
+            ))
+        );
+        // last_lines preserves order + source markers, newest last.
+        assert_eq!(got.last_lines.len(), 2);
+        assert_eq!(got.last_lines[0], "🔊 what is your experience");
+        assert_eq!(got.last_lines[1], "🎤 let me explain my background");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn truncated_tail_parses_rest_no_panic() {
+        // The final line is a half-written JSON object (crash mid-flush). The
+        // detector must parse everything before it and skip the garbage tail.
+        let dir = fresh_dir("trunc");
+        let p = dir.join("t.jsonl");
+        let body = format!(
+            "{}\n{}\n{}\n{}\n{{\"kind\":\"transcript_line\",\"unix_ms\":1,\"sou",
+            start_line(30_000),
+            transcript_line("system", "tell me about a hard outage"),
+            ai_request_line("tell me about a hard outage"),
+            ai_response_line("the time the etcd quorum was lost"),
+        );
+        std::fs::write(&p, body).unwrap();
+        let got = find_unfinished_session(&dir).expect("rest parses despite truncated tail");
+        assert_eq!(
+            got.last_qa,
+            Some((
+                "tell me about a hard outage".to_string(),
+                "the time the etcd quorum was lost".to_string()
+            ))
+        );
+        // Only the ONE complete transcript line survives; the truncated tail
+        // is skipped, not panicked on.
+        assert_eq!(got.last_lines.len(), 1);
+        assert_eq!(got.last_lines[0], "🔊 tell me about a hard outage");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn stale_unfinished_returns_none() {
+        // Unfinished, but the start is older than the 12h cutoff → no nag.
+        let dir = fresh_dir("stale");
+        write_jsonl(
+            &dir,
+            "old.jsonl",
+            &[
+                start_line(RECOVERY_MAX_AGE_MS + 60_000),
+                transcript_line("system", "ancient line"),
+            ],
+        );
+        assert!(find_unfinished_session(&dir).is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn empty_dir_returns_none() {
+        let dir = fresh_dir("empty");
+        assert!(find_unfinished_session(&dir).is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn missing_dir_returns_none_no_panic() {
+        let dir = std::env::temp_dir().join(format!("overlay-recover-missing-{}", now_unix_ms()));
+        // Deliberately do NOT create it.
+        assert!(find_unfinished_session(&dir).is_none());
+    }
+
+    #[test]
+    fn only_start_no_lines_returns_some_with_empty_context() {
+        // A crash right after start: unfinished, recent, but no transcript /
+        // Q&A yet. Sensible result: Some with empty last_lines + None last_qa.
+        let dir = fresh_dir("startonly");
+        write_jsonl(&dir, "s.jsonl", &[start_line(5_000)]);
+        let got = find_unfinished_session(&dir).expect("start-only is still unfinished");
+        assert!(got.last_lines.is_empty());
+        assert_eq!(got.last_qa, None);
+        assert_eq!(got.summary, None);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn no_start_at_all_returns_none() {
+        // A file with lines but no SessionStart is not a recoverable session.
+        let dir = fresh_dir("nostart");
+        write_jsonl(
+            &dir,
+            "s.jsonl",
+            &[transcript_line("system", "orphan line without a start")],
+        );
+        assert!(find_unfinished_session(&dir).is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn newest_file_is_chosen() {
+        // Two journals: an OLDER crashed one and a NEWER cleanly-stopped one.
+        // Only the NEWEST is inspected → clean stop → None (we must NOT fall
+        // back to the older crashed file).
+        let dir = fresh_dir("newest");
+        write_jsonl(
+            &dir,
+            "old_crash.jsonl",
+            &[start_line(120_000), transcript_line("system", "old crash")],
+        );
+        std::thread::sleep(std::time::Duration::from_millis(25));
+        write_jsonl(
+            &dir,
+            "new_clean.jsonl",
+            &[
+                start_line(60_000),
+                transcript_line("system", "new clean"),
+                r#"{"kind":"session_stop","unix_ms":2}"#.to_string(),
+            ],
+        );
+        assert!(
+            find_unfinished_session(&dir).is_none(),
+            "newest is clean; must not recover the older crashed file"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn last_qa_uses_the_most_recent_pair() {
+        // Two completed Q&As; last_qa must reflect the SECOND one.
+        let dir = fresh_dir("lastqa");
+        write_jsonl(
+            &dir,
+            "s.jsonl",
+            &[
+                start_line(30_000),
+                ai_request_line("first question"),
+                ai_response_line("first answer"),
+                ai_request_line("second question"),
+                ai_response_line("second answer"),
+            ],
+        );
+        let got = find_unfinished_session(&dir).expect("unfinished");
+        assert_eq!(
+            got.last_qa,
+            Some(("second question".to_string(), "second answer".to_string()))
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn last_lines_capped_at_recovery_limit() {
+        let dir = fresh_dir("cap");
+        let mut lines = vec![start_line(30_000)];
+        for i in 0..(RECOVERY_LAST_LINES + 5) {
+            lines.push(transcript_line("system", &format!("line {i}")));
+        }
+        write_jsonl(&dir, "s.jsonl", &lines);
+        let got = find_unfinished_session(&dir).expect("unfinished");
+        assert_eq!(got.last_lines.len(), RECOVERY_LAST_LINES);
+        // Oldest evicted: first surviving line is "line 5".
+        assert_eq!(got.last_lines[0], "🔊 line 5");
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
 

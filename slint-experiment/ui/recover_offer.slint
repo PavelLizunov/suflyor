@@ -1,0 +1,158 @@
+// Memory — Phase 1 (crash recovery): a small startup offer to carry the
+// PREVIOUS (crashed / force-killed / power-lost) session's context into the
+// new one, instead of starting cold mid-interview.
+//
+// The Rust host (open_recover_offer) creates it on demand a beat after the
+// bar is up — the same delayed-open pattern as the first-run wizard — only
+// when journal::find_unfinished_session(..) found an unfinished session. It
+// is centred + WDA-stealthed (so it never shows on a screen-share, exactly
+// like tiles / palette / Settings / the text-ask window) and the content is
+// the user's OWN last Q&A + a couple transcript lines, handed in at
+// construction (this window reads no config / secrets itself).
+//
+// Recover routes to a session start that seeds the recovered context; Dismiss
+// just closes (the old journal stays on disk — pruning is the journal's job).
+//
+// Solid background (Theme.bg-surface) — NOT a transparent/rounded card — to
+// avoid the documented Windows DWM "created-but-invisible" pitfall for new
+// frameless windows; present_window_stealth_aware does not wire DWM
+// blur-behind.
+
+import { Button, ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+export component RecoverOfferWindow inherits Window {
+    no-frame: true;
+    always-on-top: true;
+    title: "overlay-mvp recover session (Slint)";
+    default-font-family: Theme.font-sans;
+    background: Theme.bg-surface;
+    preferred-width: 520px;
+    preferred-height: 360px;
+    max-width: 600px;
+
+    // Filled by the Rust host at construction (all secret-free user content).
+    in property <string> last-question;
+    in property <string> last-answer;
+    // A couple of recent transcript lines, already source-marked + joined
+    // with newlines by the host.
+    in property <string> transcript-preview;
+    // True when there is a last Q&A to show (host decides; controls layout).
+    in property <bool> has-qa;
+
+    // Emitted when the user accepts — the host seeds context + starts a
+    // session linked to the recovered one.
+    callback recover-accepted();
+    // Emitted on Dismiss / Esc — the host just closes the window.
+    callback dismissed();
+
+    FocusScope {
+        // Esc dismisses; everything else falls through.
+        key-pressed(e) => {
+            if (e.text == Key.Escape) {
+                root.dismissed();
+                return accept;
+            }
+            return reject;
+        }
+
+        VerticalLayout {
+            padding: 16px;
+            spacing: 12px;
+
+            // Header row: title + explicit close (ASCII "X" — ✕ U+2715 is a
+            // missing-glyph box on the Slint+skia fallback, same as the bar's
+            // Quit + the tile close).
+            HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    text: @tr("Restore the previous session?");
+                    color: Theme.text-primary;
+                    font-size: 15px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+                Button {
+                    text: "X";
+                    clicked => { root.dismissed(); }
+                }
+            }
+
+            Text {
+                text: @tr("The last session ended without closing. Carry its context into a new one?");
+                color: Theme.text-secondary;
+                font-size: 12px;
+                wrap: word-wrap;
+            }
+
+            // Recovered content — scrollable so a long answer can't push the
+            // buttons off the window.
+            ScrollView {
+                vertical-stretch: 1;
+                VerticalLayout {
+                    spacing: 8px;
+
+                    Text {
+                        visible: root.has-qa;
+                        text: @tr("Last question:");
+                        color: Theme.text-secondary;
+                        font-size: 11px;
+                        font-weight: 600;
+                    }
+                    Text {
+                        visible: root.has-qa;
+                        text: root.last-question;
+                        color: Theme.text-primary;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        visible: root.has-qa;
+                        text: @tr("Last answer:");
+                        color: Theme.text-secondary;
+                        font-size: 11px;
+                        font-weight: 600;
+                    }
+                    Text {
+                        visible: root.has-qa;
+                        text: root.last-answer;
+                        color: Theme.text-primary;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+
+                    Text {
+                        visible: root.transcript-preview != "";
+                        text: @tr("Recent lines:");
+                        color: Theme.text-secondary;
+                        font-size: 11px;
+                        font-weight: 600;
+                    }
+                    Text {
+                        visible: root.transcript-preview != "";
+                        text: root.transcript-preview;
+                        color: Theme.text-primary;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+
+            // Action row.
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: end;
+                Button {
+                    text: @tr("Dismiss");
+                    clicked => { root.dismissed(); }
+                }
+                Button {
+                    text: @tr("Recover");
+                    primary: true;
+                    clicked => { root.recover-accepted(); }
+                }
+            }
+        }
+    }
+}

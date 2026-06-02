@@ -869,3 +869,26 @@ msgstr "Жесты записи"
 
 msgid "Hold a record button to record, release to send. While holding, swipe up to LOCK (hands-free) — releasing keeps recording; click ⏹ to stop + send. Works on the bar (🎤/🔊) and on a tile's 🎤."
 msgstr "Удержание кнопки записи = запись, отпустил = отправка. Во время удержания свайп вверх = ЛОК (хендс-фри) — отпускание не останавливает; клик ⏹ = стоп + отправка. Работает на баре (🎤/🔊) и в тайле (🎤)."
+
+# === recover_offer.slint (Memory Phase 1 — crash recovery) ===
+
+msgid "Restore the previous session?"
+msgstr "Восстановить прошлую сессию?"
+
+msgid "The last session ended without closing. Carry its context into a new one?"
+msgstr "Прошлая сессия завершилась без закрытия. Перенести её контекст в новую?"
+
+msgid "Last question:"
+msgstr "Последний вопрос:"
+
+msgid "Last answer:"
+msgstr "Последний ответ:"
+
+msgid "Recent lines:"
+msgstr "Недавние реплики:"
+
+msgid "Dismiss"
+msgstr "Закрыть"
+
+msgid "Recover"
+msgstr "Восстановить"
