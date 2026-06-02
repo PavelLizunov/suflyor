@@ -33,14 +33,28 @@ audit P2 items; #135 single-slot; Fica-1 window-bug grounded investigation
   marathon), not micro-releases.
 
 ### In progress
-- Track 1 → v0.9.0: ALL GATES GREEN — review-agent verdict = ship-able (0
-  BLOCKER/HIGH/MEDIUM; it byte-verified i18n, confirmed prompt reaches model, no
-  lock-across-await, toggle hit-test, no hotkey collision, describe-path
-  unchanged). Added the review's LOW (translate copy-skip test). Installer
-  building; then commit groups + push + gh release v0.9.0. NEXT: Track 2 (v0.8.9
-  P1: P1.7 import preview + diag rows + legacy removal).
+- Track 2b — P1.7 (server-settings transfer) SHIPPING. Review-agent CLEAR: no
+  BLOCKER/HIGH/MEDIUM; security invariant verified (no secret value in any preview
+  string; mask_host blanks the LAN host; export = server-fields+creds, never
+  user-private locals). Its one LOW was a FALSE POSITIVE (see Findings). Boot-smoke
+  CLEAN (8 hotkeys incl Shift+F8, stealth ok, installer 11,158,791 B). Commit A
+  (feat P1.7, cb19f55) LANDED via the gate. NOW: Commit B (release v0.9.1) + push +
+  gh release + verify digest. THEN Track 4 (memory Phase-1 recovery, spec in
+  docs/memory-phase1-recovery-spec.md) then Track 3 (design scaffold) via subagents.
+- Dropped the marginal "diag rows" sub-item from v0.9.1 (P1.3 has no user-visible
+  change alone; bundling with P1.7 which has real value).
 
 ### Done log (newest at top)
+- 00:3x — Track 2 P1.7 review CLEAR (no BLOCKER/HIGH/MEDIUM; its 1 LOW = false
+  positive). Commit A `cb19f55` (feat server-settings transfer) landed through the
+  git-gate (fmt+clippy both crates). Releasing v0.9.1 next (Commit B + push + gh).
+- 00:0x — P1.3 (legacy-field removal) COMMITTED 8cc1614 (banked, rides v0.9.1).
+  6 dead config fields gone (hotkey_*/manual_ask_mode/custom_css); load-safe via
+  serde(default); clippy both crates + 176 tests green; cross-crate compile via
+  the commit hook (slint bin links the trimmed Config).
+- 23:46 — Track 1 SHIPPED: v0.9.0 released (master, installer digest
+  sha256:2e0918aa). F8 translate mode (#3) + IPA phonetics (#4). Commits 13200f6
+  (feat) + 98a5ab4 (release). All 5 gate layers green; review ship-able.
 - 23:5x — Track 1 (translation #3+#4) IMPLEMENTED + gated (clippy both crates +
   177 backend tests incl translate_prompt + slint clippy compiled the .slint).
   Shift+F8 translate-capture; capture_overlay Describe/Translate toggle;
@@ -51,7 +65,16 @@ audit P2 items; #135 single-slot; Fica-1 window-bug grounded investigation
   added TRANSLATE_VISION_PROMPT + translate_prompt(phonetics) to vision.rs.
 
 ### Findings
-- (none yet)
+- v0.9.1 review LOW was a FALSE POSITIVE: reviewer flagged @tr("Cancel") as having
+  no ru msgid, but `msgid "Cancel"/"Отмена"` exists at slint-replay.po:622 and
+  build.rs sets DefaultTranslationContext::None, so that one global entry covers
+  every @tr("Cancel"). Both the new preview Cancel and the pre-existing one render
+  RU. No .po edit / rebuild needed; the boot-smoked installer is the release asset.
+- 2 review NITs declined (correctly): mask_host mangles a bracketed IPv6 host with
+  NO port — but the product only ever emits IPv4:port (default ai_base_url is
+  http://192.168.0.142:18902/v1), so unreachable. Export file also carries harmless
+  canned defaults (default_snippets/trigger_keywords) for non-server fields — by
+  design, import ignores them via merge_server_settings; documented in the doc comment.
 
 ---
 
