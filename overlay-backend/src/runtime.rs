@@ -1039,14 +1039,22 @@ pub type CostApplyFn = Box<dyn FnOnce(u64) -> f64 + Send>;
 /// 1. Each `ai:event` emit fires AS the AiEvent arrives (no batching).
 /// 2. `cost:update` fires AFTER the session_cost mutation.
 /// 3. `JournalEvent::AiResponse.text` is the FULL accumulated answer.
-/// 4. Health `last_ai_ok_ms` bumped on each Delta (atomic store, no lock).
+/// 4. Health `last_ai_ok_ms` bumped on each Delta (atomic store, no lock);
+///    AiEvent::Error bumps `last_ai_err_ms` so the bar flips to "AI down".
 /// 5. AiEvent::Error path writes JournalEvent::Error AND still emits
 ///    the `ai:event` payload so the React side sees the error chip.
+///
+/// `is_local` zeroes the JOURNALED cost for a local model (the live meter is
+/// already zeroed by the caller's `cost_apply` closure, but `cost_microcents`
+/// maps an unknown local model id to Sonnet pricing, so without this the
+/// markdown export + debrief tally would persist a phantom cost). Mirrors the
+/// non-streaming paths (`reask_last`, `manual_spawn_tile`). Cloud is unchanged.
 #[allow(clippy::too_many_arguments)]
 pub async fn ask_stream_loop(
     events: Arc<dyn RuntimeEvents>,
     mut ai_rx: tokio::sync::mpsc::Receiver<ai::AiEvent>,
     model: String,
+    is_local: bool,
     sys_full: String,
     usr_full: String,
     journal: Option<Journal>,
@@ -1083,6 +1091,14 @@ pub async fn ask_stream_loop(
                         message,
                     });
                 }
+                // Mark AI down so HealthSignals flips the bar to "AI
+                // недоступен" within one health tick. The non-streaming
+                // auto-tile path (slint_session.rs) already does this; the
+                // Delta/Done arms bump last_ai_ok_ms (which clears it on the
+                // next success), so the err store mirrors that exactly.
+                health
+                    .last_ai_err_ms
+                    .store(crate::journal::now_unix_ms() as u64, Ordering::Relaxed);
             }
             _ => {}
         }
@@ -1103,6 +1119,12 @@ pub async fn ask_stream_loop(
     let input_tokens = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
     let output_tokens = (accumulated.chars().count() as u64) / 4;
     let micro = ai::cost_microcents(&model, input_tokens, output_tokens);
+    // Local inference is free — zero the JOURNALED cost (mirrors reask_last /
+    // manual_spawn_tile). `cost_microcents` maps an unknown local model id to
+    // Sonnet pricing, so a non-zeroed `micro` would persist a phantom cost into
+    // the markdown export + debrief tally. The live meter is zeroed separately
+    // by the caller's `cost_apply` closure; cloud is unchanged.
+    let micro = if is_local { 0 } else { micro };
     // Shim-provided closure: lock rt, add micro to session_cost,
     // return new total in USD. Single call, FnOnce, no re-entry.
     let total_usd = cost_apply(micro);
@@ -1350,6 +1372,7 @@ mod tests {
             sink,
             rx,
             "claude-haiku-4-5".into(),
+            false, // cloud — bill normally
             "sys".into(),
             "usr".into(),
             None,
@@ -1374,9 +1397,11 @@ mod tests {
 
     /// `ask_stream_loop` with immediate Error → cost_apply still
     /// fires (output_tokens=0 → micro≈0) so the cost:update emit
-    /// remains parity-correct on the error path too.
+    /// remains parity-correct on the error path too. FIX #9: the Error
+    /// arm must also bump `health.last_ai_err_ms` (was 0) so HealthSignals
+    /// flips the bar to "AI down" — mirrors the non-streaming auto-tile path.
     #[tokio::test]
-    async fn ask_stream_loop_error_path_still_calls_cost_apply_once() {
+    async fn ask_stream_loop_error_path_calls_cost_apply_once_and_marks_ai_down() {
         use std::sync::Mutex as StdMutex;
         let (tx, rx) = tokio::sync::mpsc::channel::<ai::AiEvent>(2);
         let feeder = tokio::spawn(async move {
@@ -1393,12 +1418,82 @@ mod tests {
             0.0
         });
         let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
+        let health = Arc::new(HealthSignals::default());
+        assert_eq!(
+            health.last_ai_err_ms.load(Ordering::Relaxed),
+            0,
+            "precondition: no AI error recorded yet"
+        );
         ask_stream_loop(
             sink,
             rx,
             "claude-haiku-4-5".into(),
+            false,
             "sys".into(),
             "usr".into(),
+            None,
+            health.clone(),
+            std::time::Instant::now(),
+            cost_apply,
+        )
+        .await;
+        feeder.await.unwrap();
+        assert_eq!(*calls.lock().unwrap(), 1);
+        assert!(
+            health.last_ai_err_ms.load(Ordering::Relaxed) > 0,
+            "FIX #9: streaming Error arm must bump last_ai_err_ms so the bar flips to AI down"
+        );
+    }
+
+    /// FIX #4 — a LOCAL streamed answer must journal a ZERO cost, not the
+    /// Sonnet-fallback price. `ask_stream_loop` hands the SAME `micro` to both
+    /// `cost_apply` AND `JournalEvent::AiResponse`, so capturing the cost_apply
+    /// arg proves the journaled value too. An unknown local model id maps to
+    /// Sonnet pricing in `cost_microcents`, so WITHOUT the `is_local` gate this
+    /// non-empty answer would carry a phantom > 0 cost. With `is_local=true` it
+    /// must be exactly 0. (The non-`is_local` arm is covered by the cloud test
+    /// above, which asserts a non-zero estimate for the same shape of input.)
+    #[tokio::test]
+    async fn ask_stream_loop_local_journals_zero_cost() {
+        use std::sync::Mutex as StdMutex;
+
+        // Sanity: the model id we use really does fall back to a non-zero
+        // (Sonnet) price, so a zero result can only come from the is_local gate.
+        let phantom = ai::cost_microcents("my-local-gemma-3-it", 1000, 1000);
+        assert!(
+            phantom > 0,
+            "precondition: an unknown local model id must fall back to a non-zero price"
+        );
+
+        let (tx, rx) = tokio::sync::mpsc::channel::<ai::AiEvent>(8);
+        let feeder = tokio::spawn(async move {
+            tx.send(ai::AiEvent::Delta {
+                text: "a fairly long local answer with many tokens".into(),
+            })
+            .await
+            .unwrap();
+            tx.send(ai::AiEvent::Done {
+                reason: "stop".into(),
+            })
+            .await
+            .unwrap();
+        });
+
+        let billed = Arc::new(StdMutex::new(Vec::<u64>::new()));
+        let billed_clone = billed.clone();
+        let cost_apply: CostApplyFn = Box::new(move |micro| {
+            billed_clone.lock().unwrap().push(micro);
+            0.0
+        });
+
+        let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
+        ask_stream_loop(
+            sink,
+            rx,
+            "my-local-gemma-3-it".into(),
+            true, // local — must NOT bill / journal a cost
+            "sys prompt".into(),
+            "usr prompt".into(),
             None,
             Arc::new(HealthSignals::default()),
             std::time::Instant::now(),
@@ -1406,7 +1501,13 @@ mod tests {
         )
         .await;
         feeder.await.unwrap();
-        assert_eq!(*calls.lock().unwrap(), 1);
+
+        let billed = billed.lock().unwrap();
+        assert_eq!(billed.len(), 1, "cost_apply called exactly once");
+        assert_eq!(
+            billed[0], 0,
+            "FIX #4: local answer must journal/bill 0, not the Sonnet-fallback price ({phantom} µ¢)"
+        );
     }
 
     /// Manual spawn with empty transcript → spawns a feedback tile +
