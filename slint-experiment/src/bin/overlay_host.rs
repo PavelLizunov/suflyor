@@ -161,6 +161,21 @@ use vision_capture::*;
 mod tile_controller;
 use tile_controller::*;
 
+// Leaf modules carved out of `tile_controller.rs` (it had grown into a mini-
+// monolith — docs/overlay-host-current-review.md §"tile_controller.rs стал
+// новым мини-монолитом", plan §5.10). `tile_window` holds the tile
+// presentation / HiDPI placement / maximize / drag win32 glue + the per-spawn
+// slot counters; `tile_copy` holds the 📋-copy / conversation-format helpers +
+// the follow-up directive + their unit tests. `tile_controller` reaches the
+// moved items (and they reach the `OverlayBarBridge` / `conversations_evict_
+// keys` that stay in `tile_controller`) through these crate-root globs.
+#[path = "overlay_host/tile_window.rs"]
+mod tile_window;
+use tile_window::*;
+#[path = "overlay_host/tile_copy.rs"]
+mod tile_copy;
+use tile_copy::*;
+
 // Phase 7b of the modularization (docs/overlay-host-modularization-plan.md
 // §5.8/§5.9) — the FINAL phase: the Settings window controller. `open_settings`
 // (the entire ~1800-line fn with every inline tab handler + the stealth/scheme/
