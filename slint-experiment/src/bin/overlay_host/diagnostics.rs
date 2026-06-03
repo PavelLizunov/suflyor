@@ -180,6 +180,167 @@ pub(crate) fn build_diag_report(cfg: &overlay_backend::config::SharedConfig) -> 
     redact_ipv4(&redact_urls(&report))
 }
 
+/// P0 — the Diagnostics tab owns its two button callbacks. Settings only WIRES
+/// this (see `settings_controller.rs`). Moved VERBATIM from `open_settings`:
+/// the redacted "Copy report" clipboard write and the "Проверить всё" live
+/// AI+STT ping / 3 s mic sample (single-mic guarded) / system-audio self-test.
+pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::config::SharedConfig) {
+    // P1.1 — "Copy report": redacted diagnostics → clipboard with a brief
+    // "copied" confirmation. build_diag_report masks the LAN bridge IP and
+    // carries no bearer / API key / transcript / profile text.
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_diagnostics_copy_report_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            let report = build_diag_report(&cfg_c);
+            match clipboard_win::set_clipboard_string(&report) {
+                Ok(()) => {
+                    w.set_diag_copied(true);
+                    let wk = w.as_weak();
+                    Timer::single_shot(Duration::from_millis(1800), move || {
+                        if let Some(w) = wk.upgrade() {
+                            w.set_diag_copied(false);
+                        }
+                    });
+                }
+                Err(e) => eprintln!("[overlay-host] diag report copy failed: {e}"),
+            }
+        });
+    }
+
+    // #131 — diagnostics "Проверить всё": live-ping the ACTIVE AI endpoint
+    // (resolved via ai_endpoint — NOT the raw cloud fields) + the active STT
+    // backend, in ONE off-thread runtime, and write both rows back. Mic / sys
+    // / stealth rows stay config-readiness (their live checks live on Audio).
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_diagnostics_check_all_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            w.set_diag_ai_level(-1);
+            w.set_diag_ai_detail(SharedString::from(""));
+            w.set_diag_stt_level(-1);
+            w.set_diag_stt_detail(SharedString::from(""));
+            w.set_diag_mic_level(-1);
+            w.set_diag_sys_level(-1);
+            let (ai_base, ai_bearer, ai_model, stt_backend, mic_device, sys_device) = {
+                let c = cfg_c.read();
+                let ep = c.ai_endpoint(false);
+                (
+                    ep.base_url,
+                    ep.bearer,
+                    ep.model,
+                    c.stt_backend(),
+                    c.mic_device.clone(),
+                    c.system_audio_device.clone(),
+                )
+            };
+            let weak_res = w.as_weak();
+            std::thread::spawn(move || {
+                // 1. AI + STT live pings (async, on a throwaway runtime).
+                let (ai_level, ai_msg, stt_level, stt_msg): (i32, String, i32, String) =
+                    match tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                    {
+                        Ok(rt) => {
+                            let (al, am): (i32, String) = match rt.block_on(
+                                overlay_backend::ai::test_connection(ai_base, ai_bearer, ai_model),
+                            ) {
+                                Ok(s) => (0, format!("[ok] {s}")),
+                                Err(e) => (4, format!("[err] {e:#}").chars().take(80).collect()),
+                            };
+                            let (sl, sm): (i32, String) = match rt.block_on(
+                                overlay_backend::stt::test_connection_backend(&stt_backend),
+                            ) {
+                                Ok(s) => (0, format!("[ok] {s}")),
+                                Err(e) => (4, format!("[err] {e:#}").chars().take(80).collect()),
+                            };
+                            (al, am, sl, sm)
+                        }
+                        Err(e) => {
+                            let m = format!("[err] runtime: {e}");
+                            (4, m.clone(), 4, m)
+                        }
+                    };
+                let weak_a = weak_res.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = weak_a.upgrade() {
+                        w.set_diag_ai_level(ai_level);
+                        w.set_diag_ai_detail(SharedString::from(ai_msg));
+                        w.set_diag_stt_level(stt_level);
+                        w.set_diag_stt_detail(SharedString::from(stt_msg));
+                    }
+                });
+                // 2. Microphone — record 3s. "Готов" if the capture path works
+                // (device opens + samples flow); a quiet result is fine (you
+                // just didn't speak) — only a device error fails.
+                // M-1: guard the diagnostics mic probe with the single-mic lock
+                // too, so "Проверить всё" during an active session reports busy
+                // instead of fighting PTT/voice/dictation for the device.
+                let (mic_level, mic_msg): (i32, String) = if !try_acquire_mic() {
+                    (
+                        4,
+                        "[!] mic busy — close PTT / dictation and retry".to_string(),
+                    )
+                } else {
+                    let r = overlay_backend::audio::record_mic_blocking(3000, mic_device);
+                    release_mic();
+                    match r {
+                        Ok(s) if s.is_empty() => (4, "[!] no audio captured".to_string()),
+                        Ok(s) => {
+                            let dbfs = overlay_backend::audio::rms_dbfs(&s);
+                            if dbfs >= -45.0 {
+                                (0, format!("[ok] heard you ({dbfs:.0} dBFS)"))
+                            } else {
+                                (0, format!("[ok] capture works · quiet ({dbfs:.0} dBFS)"))
+                            }
+                        }
+                        Err(e) => (4, format!("[err] {e}").chars().take(80).collect()),
+                    }
+                };
+                let weak_m = weak_res.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = weak_m.upgrade() {
+                        w.set_diag_mic_level(mic_level);
+                        w.set_diag_mic_detail(SharedString::from(mic_msg));
+                    }
+                });
+                // 3. System audio — SELF-TEST: play a short test tone through the
+                // default output while capturing the loopback. If the loopback
+                // hears our own tone, the output→loopback path works — the user
+                // doesn't have to play anything.
+                let (sys_level, sys_msg): (i32, String) =
+                    match overlay_backend::audio::play_tone_and_capture(sys_device) {
+                        Ok(s) => {
+                            let dbfs = overlay_backend::audio::rms_dbfs(&s);
+                            if dbfs > -60.0 {
+                                (
+                                    0,
+                                    format!("[ok] loopback heard the test tone ({dbfs:.0} dBFS)"),
+                                )
+                            } else {
+                                (
+                                    4,
+                                    "[!] test tone not captured — output device ≠ loopback source?"
+                                        .to_string(),
+                                )
+                            }
+                        }
+                        Err(e) => (4, format!("[err] {e}").chars().take(80).collect()),
+                    };
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = weak_res.upgrade() {
+                        w.set_diag_sys_level(sys_level);
+                        w.set_diag_sys_detail(SharedString::from(sys_msg));
+                    }
+                });
+            });
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     //! Locks the "Copy report" redaction contract (its security boundary, §9 —
