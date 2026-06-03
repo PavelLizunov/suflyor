@@ -45,6 +45,159 @@
 //! intentional for the extraction; the imports get narrowed in a later pass.
 use super::*;
 
+// ============================================================================
+// Follow-up reframe — root cause of the escalate→follow-up bug.
+// ============================================================================
+// The stored conversation carries the F9 "answer the last question FROM THE
+// TRANSCRIPT" frame in the system prompt AND the first transcript user turn, so a
+// follow-up keeps getting answered as the ORIGINAL question. v1 of this fix only
+// reframed the system + demoted the transcript turn but KEPT the multi-turn array
+// — and a live test (journal-confirmed) showed the model STILL re-answered the
+// original even with a neutral system + the new question last. So the model (or
+// the LAN bridge) anchors on the multi-turn DIALOG itself, not just the wording.
+//
+// v2 — COLLAPSE: for a TEXT dialog, fold the prior turns into labelled REFERENCE
+// context inside ONE system message and send the new question as the SINGLE user
+// turn. With no prior "conversation" in the array there is nothing for the model
+// to continue, so the latest question is unambiguously THE task. A VISION dialog
+// (image in a `Parts` turn) is left multi-turn + unchanged (collapsing would drop
+// the screenshot; the reported bug is the text F9/escalate path). SEND-TIME only:
+// the STORED history stays original, so copy/display are unaffected and the
+// reframe is recomputed fresh each turn. If a single-user-turn send STILL returns
+// the prior topic, the fault is the bridge ignoring the user turn (not the client).
+
+/// Neutral system prompt for a follow-up / re-ask SEND. The new question is sent
+/// as a SINGLE user turn; `prior_context` (the folded prior dialog) is reference
+/// only. Keeps the user's background + format/language rules.
+fn followup_system_prompt(
+    response_language: &str,
+    meeting_context: &str,
+    prior_context: &str,
+) -> String {
+    let lang = match response_language {
+        "ru" => {
+            "Отвечай ИСКЛЮЧИТЕЛЬНО на русском (английский только для названий \
+             технологий/команд)."
+        }
+        "en" => "Respond exclusively in English.",
+        _ => "Отвечай на языке вопроса пользователя.",
+    };
+    let ctx_block = if meeting_context.trim().is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\n\nБэкграунд пользователя (фон для уровня детализации — НЕ ограничивай \
+             ответ этой темой):\n{}",
+            meeting_context.trim()
+        )
+    };
+    let prior_block = if prior_context.trim().is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\n\n=== Контекст прошлого диалога (СПРАВКА, НЕ задание) ===\n{}\n\
+             === Конец контекста ===",
+            prior_context.trim()
+        )
+    };
+    format!(
+        "Ты — техничный AI-ассистент. Ответь ПРЯМО и по сути на ВОПРОС ПОЛЬЗОВАТЕЛЯ \
+         (он придёт отдельным сообщением «user»). Контекст прошлого диалога ниже — \
+         это ТОЛЬКО справка: опирайся на него, если новый вопрос явно его \
+         продолжает; если новый вопрос про ДРУГОЕ — отвечай на него и НЕ возвращайся \
+         к прошлой теме.{ctx_block}\n\n\
+         === Формат ===\n\
+         - БЕЗ преамбулы, сразу по сути.\n\
+         - Маркдаун: **жирное** для важного, `code` для команд, списки.\n\
+         - Конкретные команды/числа, не общие фразы.\n\
+         - {lang}{prior_block}"
+    )
+}
+
+/// Strip the F9 transcript scaffolding from a prior user turn so, folded into the
+/// reference context, it reads as a plain past question — not a live "answer the
+/// transcript" instruction.
+fn strip_transcript_scaffold(s: &str) -> String {
+    let mut out = s.to_string();
+    // Drop the "answer the last transcript question" trailer.
+    if let Some(p) = out.find("На основе последнего вопроса в транскрипте")
+    {
+        out.truncate(p);
+    }
+    // Unwrap the "Помоги ответить: <q>" prefix → keep <q>.
+    if let Some(p) = out.find("Помоги ответить:") {
+        out = out[p + "Помоги ответить:".len()..].to_string();
+    }
+    // Drop the transcript header line.
+    out = out.replace("Транскрипт последних реплик (внизу — самые свежие):", "");
+    out.trim().to_string()
+}
+
+/// Build the SEND messages for a follow-up / re-ask (v2 — collapse; see the
+/// section above). TEXT dialog → `[system(neutral + prior dialog as reference),
+/// user(new question)]` (a single user turn). VISION dialog (any `Parts` turn) →
+/// the original multi-turn history, unchanged. Pure → unit-tested.
+fn reframe_for_send(
+    history: &[ai::ChatMessage],
+    response_language: &str,
+    meeting_context: &str,
+) -> Vec<ai::ChatMessage> {
+    let Some(last_user) = history.iter().rposition(|m| m.role == "user") else {
+        return history.to_vec();
+    };
+    // Vision: keep the multi-turn array (the screenshot lives in a Parts turn).
+    if history
+        .iter()
+        .any(|m| matches!(&m.content, ai::MessageContent::Parts(_)))
+    {
+        return history.to_vec();
+    }
+    let question = match &history[last_user].content {
+        ai::MessageContent::Text(t) => t.clone(),
+        _ => String::new(),
+    };
+    // Fold every prior turn (skip the F9 system) into labelled reference context.
+    let mut prior = String::new();
+    for (i, m) in history.iter().enumerate() {
+        if i == last_user {
+            break;
+        }
+        match m.role.as_str() {
+            "user" => {
+                let q = strip_transcript_scaffold(&message_text(&m.content));
+                if !q.is_empty() {
+                    prior.push_str("Пользователь ранее спросил: ");
+                    prior.push_str(&q);
+                    prior.push('\n');
+                }
+            }
+            "assistant" => {
+                let a = message_text(&m.content);
+                if !a.trim().is_empty() {
+                    prior.push_str("Ты ответил: ");
+                    prior.push_str(a.trim());
+                    prior.push('\n');
+                }
+            }
+            _ => {}
+        }
+    }
+    vec![
+        ai::ChatMessage {
+            role: "system".into(),
+            content: ai::MessageContent::Text(followup_system_prompt(
+                response_language,
+                meeting_context,
+                &prior,
+            )),
+        },
+        ai::ChatMessage {
+            role: "user".into(),
+            content: ai::MessageContent::Text(question),
+        },
+    ]
+}
+
 /// V0.8.0 (Поток D) — which AI endpoint an ask/follow-up/regenerate routes to.
 /// Replaces the old `use_vision: bool` so the three routes are explicit and the
 /// compiler enforces exhaustive handling (no silent bool transposition across
@@ -1261,14 +1414,18 @@ pub(crate) fn fire_followup_ask(
     // Only the model sees the wrapper — the prefix below + the journal use the
     // clean question, and copy strips the marker.
     let mut messages = history;
-    // Strip any FOLLOWUP_DIRECTIVE left on PRIOR user turns before wrapping this
-    // one — the directive is stored in history, so a multi-turn thread would
-    // otherwise carry several of them and confuse a weak local model. Only the
-    // turn pushed just below should carry it.
+    // Clean any legacy FOLLOWUP_DIRECTIVE wrappers older builds left on prior
+    // turns (the directive is no longer added — `reframe_for_send` below is what
+    // redirects the model now).
     strip_followup_directives(&mut messages);
+    // Append the new question BARE. The old verbose FOLLOWUP_DIRECTIVE wrapper
+    // made the model META-reply ("это продолжение? звучит как 'Д.'"); the
+    // send-time reframe (neutral system + demoted transcript turns) is the real
+    // redirect, so the user turn stays clean (and so does the STORED history +
+    // the copied transcript).
     messages.push(ai::ChatMessage {
         role: "user".into(),
-        content: ai::MessageContent::Text(format!("{FOLLOWUP_DIRECTIVE}{question}")),
+        content: ai::MessageContent::Text(question.clone()),
     });
 
     // Visible thread = prior thread + the new question header; the streamed
@@ -1296,7 +1453,7 @@ pub(crate) fn fire_followup_ask(
 
     // Snapshot config + journal/health, abort any in-flight task, then
     // spawn the stream (mirrors fire_f9_ask's tail).
-    let (base_url, bearer, model, is_local, max_tokens) = {
+    let (base_url, bearer, model, is_local, max_tokens, response_language, meeting_context) = {
         let c = cfg.read();
         let ep = route.endpoint(&c);
         (
@@ -1305,8 +1462,15 @@ pub(crate) fn fire_followup_ask(
             ep.model,
             ep.is_local,
             route.max_tokens(),
+            c.response_language.clone(),
+            c.meeting_context.clone(),
         )
     };
+    // THE FIX — send a reframed copy (neutral continuation system + demoted
+    // transcript turns) so the model answers THIS question, not the original
+    // transcript question. The STORED history (request_messages installed above)
+    // stays original — the reframe is recomputed fresh on every turn.
+    let send_messages = reframe_for_send(&messages, &response_language, &meeting_context);
     // v0.8.2 (MAJOR-2) — a sticky-cloud follow-up is billable; warn if the
     // session cost cap is already exceeded (mirrors fire_f9_ask).
     warn_if_over_cost_cap(events, cfg, slint_rt, is_local, "followup_ask");
@@ -1320,7 +1484,7 @@ pub(crate) fn fire_followup_ask(
             h.abort();
         }
     }
-    let sys_full = messages
+    let sys_full = send_messages
         .first()
         .and_then(|m| match &m.content {
             ai::MessageContent::Text(t) => Some(t.clone()),
@@ -1353,7 +1517,7 @@ pub(crate) fn fire_followup_ask(
     let t0 = std::time::Instant::now();
     let events_for_task = gated_events(bridge, events.clone(), generation);
     let task = rt_handle.spawn(async move {
-        let ai_rx = ai::stream_chat(base_url, bearer, model.clone(), messages, max_tokens);
+        let ai_rx = ai::stream_chat(base_url, bearer, model.clone(), send_messages, max_tokens);
         overlay_backend::runtime::ask_stream_loop(
             events_for_task,
             ai_rx,
@@ -1421,7 +1585,7 @@ pub(crate) fn fire_regenerate(
         let n = messages.len() - 1;
         strip_followup_directives(&mut messages[..n]);
     }
-    let (base_url, bearer, model, is_local, max_tokens) = {
+    let (base_url, bearer, model, is_local, max_tokens, response_language, meeting_context) = {
         let c = cfg.read();
         let ep = route.endpoint(&c);
         (
@@ -1430,7 +1594,19 @@ pub(crate) fn fire_regenerate(
             ep.model,
             ep.is_local,
             route.max_tokens(),
+            c.response_language.clone(),
+            c.meeting_context.clone(),
         )
+    };
+    // Re-asking a FOLLOW-UP turn (≥2 user turns) inherits the same transcript
+    // anchors as fire_followup_ask → reframe at send time so the model answers
+    // THAT turn, not the original. A plain 🧠/🔄 of the ORIGINAL answer (1 user
+    // turn) keeps the rich F9 system so the cloud re-answer has full meeting
+    // context. Send-time only — the STORED history stays original.
+    let send_messages = if messages.iter().filter(|m| m.role == "user").count() >= 2 {
+        reframe_for_send(&messages, &response_language, &meeting_context)
+    } else {
+        messages.clone()
     };
     // v0.8.2 (MAJOR-2) — a sticky-cloud regenerate is billable; warn over cap.
     warn_if_over_cost_cap(events, cfg, slint_rt, is_local, "regenerate");
@@ -1469,7 +1645,7 @@ pub(crate) fn fire_regenerate(
             h.abort();
         }
     }
-    let sys_full = messages
+    let sys_full = send_messages
         .first()
         .and_then(|m| match &m.content {
             ai::MessageContent::Text(t) => Some(t.clone()),
@@ -1506,7 +1682,7 @@ pub(crate) fn fire_regenerate(
     let t0 = std::time::Instant::now();
     let events_for_task = gated_events(bridge, events.clone(), generation);
     let task = rt_handle.spawn(async move {
-        let ai_rx = ai::stream_chat(base_url, bearer, model.clone(), messages, max_tokens);
+        let ai_rx = ai::stream_chat(base_url, bearer, model.clone(), send_messages, max_tokens);
         overlay_backend::runtime::ask_stream_loop(
             events_for_task,
             ai_rx,
@@ -1523,4 +1699,117 @@ pub(crate) fn fire_regenerate(
     });
     slint_replay::runtime_state::lock(slint_rt).ai_task = Some(task);
     diag!("regenerate sent (convo_id={convo_id}, route={route:?})");
+}
+
+#[cfg(test)]
+mod tests {
+    //! The escalate→follow-up fix (v2 — collapse). A multi-turn array let the
+    //! model (or the LAN bridge) keep answering the ORIGINAL topic even with a
+    //! neutral system + the new question last (live, journal-confirmed). So a TEXT
+    //! follow-up is COLLAPSED to `[system(neutral + prior dialog as reference),
+    //! user(new question)]` — one user turn, no prior "conversation" to continue.
+    //! Vision dialogs stay multi-turn. Pure: no UI, no network.
+    use super::*;
+
+    fn msg(role: &str, text: &str) -> ai::ChatMessage {
+        ai::ChatMessage {
+            role: role.into(),
+            content: ai::MessageContent::Text(text.into()),
+        }
+    }
+    fn text_of(m: &ai::ChatMessage) -> String {
+        match &m.content {
+            ai::MessageContent::Text(t) => t.clone(),
+            _ => String::new(),
+        }
+    }
+
+    // A text follow-up collapses to EXACTLY [system(+prior context), user(new q)]:
+    // the new question is the single user turn, the prior Q&A is reference context,
+    // and the F9 transcript framing is gone.
+    #[test]
+    fn reframe_collapses_text_followup_to_single_user_turn_with_context() {
+        let history = vec![
+            msg("system", "Ты — техничный AI-ассистент … из транскрипта."),
+            msg("user", "Помоги ответить: что такое ChatGPT"),
+            msg("assistant", "ChatGPT — это большая языковая модель."),
+            msg("user", "1+1?"),
+        ];
+        let out = reframe_for_send(&history, "ru", "");
+        // Collapsed to exactly system + one user turn.
+        assert_eq!(
+            out.len(),
+            2,
+            "expected [system, user], got {} msgs",
+            out.len()
+        );
+        assert_eq!(out[0].role, "system");
+        assert_eq!(out[1].role, "user");
+        // The single user turn IS the new question.
+        assert_eq!(text_of(&out[1]), "1+1?");
+        // F9 transcript framing gone; the prior Q + A folded in as reference.
+        assert!(!text_of(&out[0]).contains("из транскрипта"));
+        assert!(
+            text_of(&out[0]).contains("что такое ChatGPT"),
+            "prior question not in context"
+        );
+        assert!(
+            text_of(&out[0]).contains("большая языковая модель"),
+            "prior answer not in context"
+        );
+        assert!(
+            text_of(&out[0]).contains("СПРАВКА"),
+            "context not labelled as reference"
+        );
+    }
+
+    // A vision dialog (image in a Parts turn) is left multi-turn + unchanged so the
+    // screenshot is not dropped.
+    #[test]
+    fn reframe_leaves_vision_dialog_multiturn() {
+        let history = vec![
+            msg("system", "vision sys"),
+            ai::ChatMessage {
+                role: "user".into(),
+                content: ai::MessageContent::Parts(vec![]),
+            },
+            msg("assistant", "screenshot reading"),
+            msg("user", "и что дальше?"),
+        ];
+        let out = reframe_for_send(&history, "ru", "");
+        assert_eq!(
+            out.len(),
+            history.len(),
+            "vision dialog must stay multi-turn"
+        );
+    }
+
+    // strip_transcript_scaffold unwraps "Помоги ответить:" + drops the transcript
+    // header + the "answer the transcript" trailer → a plain past question.
+    #[test]
+    fn strip_transcript_scaffold_yields_plain_question() {
+        assert_eq!(
+            strip_transcript_scaffold("Помоги ответить: что такое DNS"),
+            "что такое DNS"
+        );
+        let framed = "Транскрипт последних реплик (внизу — самые свежие):\n\
+                      [Mic] что такое DNS\n\
+                      На основе последнего вопроса в транскрипте предложи краткий ответ.";
+        let s = strip_transcript_scaffold(framed);
+        assert!(s.contains("что такое DNS"));
+        assert!(!s.contains("Транскрипт последних реплик"));
+        assert!(!s.contains("предложи краткий ответ"));
+    }
+
+    // The neutral system carries language + meeting-context + the folded prior.
+    #[test]
+    fn followup_system_prompt_carries_language_context_and_prior() {
+        let s = followup_system_prompt("ru", "Senior SRE", "Пользователь ранее спросил: X");
+        assert!(s.contains("русском"));
+        assert!(s.contains("Senior SRE"));
+        assert!(s.contains("Пользователь ранее спросил: X"));
+        assert!(followup_system_prompt("en", "", "").contains("English"));
+        // Empty meeting-context → no background block.
+        assert!(!followup_system_prompt("ru", "", "").contains("Бэкграунд"));
+    }
 }
