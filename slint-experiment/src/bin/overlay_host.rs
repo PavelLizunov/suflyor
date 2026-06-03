@@ -3481,7 +3481,17 @@ fn main() -> Result<(), slint::PlatformError> {
     // we never want two startup windows fighting). The detection is a single
     // bounded file read on the UI thread inside the timer — cheap; nothing is
     // shown when it returns None.
-    if !first_run {
+    //
+    // GATED OFF by default (opt-in: SLINT_OVERLAY_RECOVERY) pending the
+    // auto-start-sequencing fix. Regression sweep 2026-06-03 found 3 HIGH defects:
+    // the 2200ms scan races the 1900ms auto-start and latches onto the just-
+    // started LIVE session (false "recover previous session" on every launch), it
+    // shadows any genuinely-crashed prior journal (newest-by-mtime), and a clean
+    // Quit/restart/updater exit never writes SessionStop so it also looks like a
+    // crash. Re-enable once (a) the scan runs BEFORE auto-start / excludes the
+    // current session, (b) clean exits write SessionStop, and (c) accepting
+    // recovery does not double-start. The detection (journal.rs) is sound + tested.
+    if !first_run && std::env::var("SLINT_OVERLAY_RECOVERY").is_ok() {
         let ro = recover_offer.clone();
         let cfg_r = cfg.clone();
         let events_r = events.clone();
@@ -5721,27 +5731,26 @@ fn open_help(
     *slot_ref.borrow_mut() = Some(win);
 }
 
-/// Marker that brackets the recovered-context block prepended to
+/// Opening marker that brackets the recovered-context block prepended to
 /// `cfg.meeting_context` by [`seed_recovery_context`]. A stable, greppable
-/// delimiter so a future "clear recovered context" affordance can find +
-/// strip exactly this block without touching the user's own prose.
+/// delimiter so [`strip_recovery_block`] can find + remove exactly this block
+/// on reseed (and a future "clear recovered context" affordance could too)
+/// without touching the user's own prose.
 const RECOVERY_CONTEXT_HEADER: &str = "=== Контекст из прошлой сессии ===";
 
-/// Memory Phase 1 — seed the LIVE meeting context with what we recovered from
-/// the unfinished session, so STT's whisper prompt + every AI ask pick it up
-/// (they all read `cfg.meeting_context`). We PREPEND a clearly-delimited block
-/// and keep the user's existing context intact below it. Persisted via
-/// `config::save` + mirrored into the active profile (same path the Profile
-/// editor uses) so it survives a restart and the picker never drifts.
-///
-/// Returns the new total `meeting_context` char count (for the journal /
-/// diagnostics). Does NOT touch tiles, mic, screenshots, or any in-flight
-/// state — per the spec, only the textual context is carried.
-fn seed_recovery_context(
-    cfg: &overlay_backend::config::SharedConfig,
-    recovered: &overlay_backend::journal::UnfinishedSession,
-) -> usize {
-    // Compose the recovered block from secret-free user content only.
+/// Closing marker paired with [`RECOVERY_CONTEXT_HEADER`]. Kept as its own
+/// const (not an inline literal) so [`strip_recovery_block`] can locate the
+/// exact end of a previously-seeded block — the two together define the
+/// strip-on-reseed contract.
+const RECOVERY_CONTEXT_FOOTER: &str = "=== Конец контекста из прошлой сессии ===";
+
+/// Build the secret-free recovered-context block (header … footer) from an
+/// [`UnfinishedSession`]. Split out of [`seed_recovery_context`] so the
+/// composition is unit-testable without any config / disk side effects. Only
+/// user content (last Q&A, recent lines, local summary) goes in — never
+/// secrets — matching the secret-free-logging boundary the rest of recovery
+/// keeps.
+fn build_recovery_block(recovered: &overlay_backend::journal::UnfinishedSession) -> String {
     let mut block = String::new();
     block.push_str(RECOVERY_CONTEXT_HEADER);
     block.push('\n');
@@ -5766,14 +5775,85 @@ fn seed_recovery_context(
         block.push_str(s.trim());
         block.push('\n');
     }
-    block.push_str("=== Конец контекста из прошлой сессии ===");
+    block.push_str(RECOVERY_CONTEXT_FOOTER);
+    block
+}
 
-    let mut c = cfg.write();
-    let combined = if c.meeting_context.trim().is_empty() {
+/// Strip-on-reseed guard (NIGHT_RUN_PLAN Phase 2). Remove every previously-
+/// seeded recovery block (each a `HEADER … FOOTER` span) from `context`,
+/// returning the surrounding user prose. Without this, each crash→recover
+/// cycle would prepend ANOTHER block: `meeting_context` would grow without
+/// bound and the live AI system prompt (which reads it) would accrete ever-
+/// older "last question / answer" blocks.
+///
+/// - No header → returns `context` unchanged (the first-seed path, byte-for-byte).
+/// - Header with no matching footer → stops there; never guesses where a
+///   half-written block ends, leaving the remainder untouched.
+/// - One or more blocks → removes each header..=footer span AND the blank-line
+///   separator the seed inserts, so the user's own prose is neither duplicated
+///   nor pushed further down on every reseed. (Loops so a config that already
+///   stacked blocks under the pre-guard behaviour is collapsed to clean prose.)
+fn strip_recovery_block(context: &str) -> String {
+    let is_newline = |c: char| c == '\n' || c == '\r';
+    let mut out = context.to_string();
+    while let Some(start) = out.find(RECOVERY_CONTEXT_HEADER) {
+        let after_header = start + RECOVERY_CONTEXT_HEADER.len();
+        let Some(rel_footer) = out[after_header..].find(RECOVERY_CONTEXT_FOOTER) else {
+            break;
+        };
+        let end = after_header + rel_footer + RECOVERY_CONTEXT_FOOTER.len();
+        // Prose on either side of the block. Trim only the line breaks abutting
+        // the block (the seed writes "block\n\nprose"; a leftover blank line
+        // must not accumulate across reseeds) — the prose itself is preserved.
+        let before = out[..start].trim_end_matches(is_newline);
+        let after = out[end..].trim_start_matches(is_newline);
+        let next = match (before.is_empty(), after.is_empty()) {
+            (true, _) => after.to_string(),
+            (_, true) => before.to_string(),
+            (false, false) => format!("{before}\n\n{after}"),
+        };
+        out = next;
+    }
+    out
+}
+
+/// Pure core of [`seed_recovery_context`]: strip any prior recovery block(s)
+/// out of `existing_context`, then prepend a fresh one built from `recovered`.
+/// Returns the new combined context. Side-effect-free (no config lock, no
+/// disk) so the "exactly one block after reseed" invariant is unit-testable.
+fn compose_recovery_context(
+    existing_context: &str,
+    recovered: &overlay_backend::journal::UnfinishedSession,
+) -> String {
+    let block = build_recovery_block(recovered);
+    let existing = strip_recovery_block(existing_context);
+    if existing.trim().is_empty() {
         block
     } else {
-        format!("{block}\n\n{}", c.meeting_context)
-    };
+        format!("{block}\n\n{existing}")
+    }
+}
+
+/// Memory Phase 1 — seed the LIVE meeting context with what we recovered from
+/// the unfinished session, so STT's whisper prompt + every AI ask pick it up
+/// (they all read `cfg.meeting_context`). We PREPEND a clearly-delimited block
+/// and keep the user's existing context intact below it. Before prepending we
+/// STRIP any block a PRIOR recovery left (see [`strip_recovery_block`]) so a
+/// crash→recover→crash loop can't stack stale blocks. Persisted via
+/// `config::save` + mirrored into the active profile (same path the Profile
+/// editor uses) so it survives a restart and the picker never drifts; because
+/// `save_active_context` rewrites BOTH the live field and the active profile's
+/// copy with the recomposed text, the strip cleans the profile mirror too.
+///
+/// Returns the new total `meeting_context` char count (for the journal /
+/// diagnostics). Does NOT touch tiles, mic, screenshots, or any in-flight
+/// state — per the spec, only the textual context is carried.
+fn seed_recovery_context(
+    cfg: &overlay_backend::config::SharedConfig,
+    recovered: &overlay_backend::journal::UnfinishedSession,
+) -> usize {
+    let mut c = cfg.write();
+    let combined = compose_recovery_context(&c.meeting_context, recovered);
     // save_active_context updates meeting_context AND mirrors into the active
     // profile, matching the Profile editor's persistence path.
     c.save_active_context(&combined);
@@ -9232,5 +9312,129 @@ mod copy_tests {
             message_text(&msgs[2].content),
             format!("{FOLLOWUP_DIRECTIVE}перезапрашиваемый вопрос")
         );
+    }
+}
+
+#[cfg(test)]
+mod recovery_seed_tests {
+    //! Locks the strip-on-reseed guard (NIGHT_RUN_PLAN Phase 2): repeated
+    //! crash→recover cycles must NOT stack recovery blocks in
+    //! `meeting_context` (otherwise the live AI system prompt accretes ever-
+    //! older Q&A). Pure string composition — no config, no disk, no UI.
+    use super::*;
+
+    fn recovered() -> overlay_backend::journal::UnfinishedSession {
+        overlay_backend::journal::UnfinishedSession {
+            session_id: "2026-06-03_10-00-00_test".to_string(),
+            path: std::path::PathBuf::from("ignored.jsonl"),
+            started_unix_ms: 0,
+            last_lines: vec!["🎤 привет".to_string(), "🔊 как дела".to_string()],
+            last_qa: Some((
+                "что такое actor model".to_string(),
+                "модель акторов — это…".to_string(),
+            )),
+            summary: Some("обсудили конкуренцию".to_string()),
+        }
+    }
+
+    fn header_count(s: &str) -> usize {
+        s.matches(RECOVERY_CONTEXT_HEADER).count()
+    }
+    fn footer_count(s: &str) -> usize {
+        s.matches(RECOVERY_CONTEXT_FOOTER).count()
+    }
+
+    // (1) Seeding twice yields EXACTLY ONE recovery block, not two — the core
+    // regression this guard fixes — and stays at one across many crash cycles.
+    #[test]
+    fn reseeding_yields_exactly_one_block() {
+        let rec = recovered();
+        let once = compose_recovery_context("", &rec);
+        assert_eq!(header_count(&once), 1);
+        assert_eq!(footer_count(&once), 1);
+
+        let twice = compose_recovery_context(&once, &rec);
+        assert_eq!(header_count(&twice), 1, "reseed must not stack a 2nd block");
+        assert_eq!(footer_count(&twice), 1);
+
+        let mut ctx = twice;
+        for _ in 0..5 {
+            ctx = compose_recovery_context(&ctx, &rec);
+            assert_eq!(header_count(&ctx), 1);
+            assert_eq!(footer_count(&ctx), 1);
+        }
+    }
+
+    // (2) The user's own prose below the block survives reseeding verbatim
+    // (internal blank line included) and is never duplicated.
+    #[test]
+    fn reseeding_preserves_user_prose_verbatim() {
+        let rec = recovered();
+        let prose = "Меня зовут Нини.\n\nГотовлюсь к собеседованию на Rust.";
+        let once = compose_recovery_context(prose, &rec);
+        assert!(once.ends_with(prose), "first seed must keep prose intact");
+        assert!(once.starts_with(RECOVERY_CONTEXT_HEADER));
+
+        let twice = compose_recovery_context(&once, &rec);
+        assert_eq!(header_count(&twice), 1);
+        assert!(twice.ends_with(prose), "reseed must keep prose verbatim");
+        // Prose appears exactly once — not duplicated by the strip + prepend.
+        assert_eq!(twice.matches("Меня зовут Нини.").count(), 1);
+    }
+
+    // (3) Seeding with NO prior block behaves exactly as before the guard:
+    // empty/blank context → the block alone; non-empty prose → "block\n\nprose"
+    // byte-for-byte the legacy format.
+    #[test]
+    fn seeding_with_no_prior_block_matches_legacy() {
+        let rec = recovered();
+        let block = build_recovery_block(&rec);
+
+        assert_eq!(compose_recovery_context("", &rec), block);
+        assert_eq!(compose_recovery_context("   \n  ", &rec), block); // blank-only
+
+        let prose = "Контекст собеседования: backend, Rust, async.";
+        assert_eq!(
+            compose_recovery_context(prose, &rec),
+            format!("{block}\n\n{prose}")
+        );
+    }
+
+    // strip_recovery_block edge cases, isolated from the prepend step.
+    #[test]
+    fn strip_no_block_is_identity() {
+        let plain = "просто мои заметки\nбез всякого блока";
+        assert_eq!(strip_recovery_block(plain), plain);
+        assert_eq!(strip_recovery_block(""), "");
+    }
+
+    #[test]
+    fn strip_collapses_leftover_blank_lines() {
+        let block = build_recovery_block(&recovered());
+        // Extra blank lines between footer and prose (the "leftover trailing
+        // blank line" case) are collapsed, not preserved.
+        let messy = format!("{block}\n\n\n\nмои заметки");
+        assert_eq!(strip_recovery_block(&messy), "мои заметки");
+    }
+
+    #[test]
+    fn strip_collapses_stacked_blocks_from_pre_guard_config() {
+        let rec = recovered();
+        let block = build_recovery_block(&rec);
+        // A config that accumulated 3 blocks before this guard existed.
+        let stacked = format!("{block}\n\n{block}\n\n{block}\n\nхвост");
+        assert_eq!(strip_recovery_block(&stacked), "хвост");
+        // …and a fresh compose over it leaves exactly one block + the prose.
+        let composed = compose_recovery_context(&stacked, &rec);
+        assert_eq!(header_count(&composed), 1);
+        assert!(composed.ends_with("хвост"));
+    }
+
+    #[test]
+    fn strip_keeps_text_when_footer_missing() {
+        // Defensive: a header with no closing footer is left untouched (we
+        // never guess where a half-written block ends).
+        let half = format!("{RECOVERY_CONTEXT_HEADER}\nоборванный блок без футера");
+        assert_eq!(strip_recovery_block(&half), half);
     }
 }

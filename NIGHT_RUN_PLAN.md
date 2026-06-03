@@ -60,11 +60,14 @@ Everything below shipped while you slept. origin/master @ 82c9c3f; every item is
    transfer between PCs (P1.7): "Export server settings" + a two-step REDACTED import
    preview (bridge host masked, keys shown as set/— only, local GigaAM dir kept) + the
    P1.3 dead-field cleanup. Commits cb19f55 + b251efc.
-2. Track 4 — memory crash recovery (BANKED 1151ee6, no release): on launch, if the
-   previous session ended without a clean stop (<12h), an offer proposes carrying its
-   context forward. It ALREADY detects your real pre-sleep session — you'll see the
-   offer on first launch (Recover seeds context + links the new session; Dismiss leaves
-   the old journal untouched).
+2. Track 4 — memory crash recovery (BANKED 1151ee6, no release): **DISABLED 2026-06-03
+   after the regression sweep found it broken** — the 2200ms recovery scan races the
+   1900ms default auto-start and latches onto the just-started LIVE session (false
+   "recover" on every launch), shadows real crashes, and clean exits never write
+   SessionStop. The offer now needs opt-in env SLINT_OVERLAY_RECOVERY. Detection
+   (journal.rs) is sound; the startup-sequencing + clean-exit fix is the proper re-do.
+   (CORRECTION: the recovery window I saw in the harness run was this FALSE-fire on the
+   auto-started session, not a real recovery — my earlier claim here was wrong.)
 3. Track 3 — design scaffold Etap 0-1 (BANKED 0aececc, no release): new ui/metrics.slint
    (size/spacing/typography token global — the dimensional sibling of theme.slint),
    applied value-preservingly to help + recover_offer (ZERO visual change), plus an
@@ -92,6 +95,18 @@ Everything below shipped while you slept. origin/master @ 82c9c3f; every item is
   change alone; bundling with P1.7 which has real value).
 
 ### Done log (newest at top)
+- 0x:xx — Regression sweep (user-requested /workflows, 9 read-only dimensions +
+  adversarial verify, 30 agents): 9 confirmed of 21. 3 HIGH all in Track 4 recovery
+  (false-fires on the auto-started live session every launch; clean exits don't write
+  SessionStop; recover-accept double-starts). 5 MED (#4 local stream phantom cost in
+  journal; #5 recover-offer + #6 help windows not re-stealthed on toggle-after-show;
+  #7 diag "Copy report" masks only IPv4 not DNS/IPv6 host; #8 conversations map
+  unbounded) + 1 LOW (#9 stream AI error doesn't flip bar health). Released v0.9.1
+  unaffected by the HIGHs (Track 4 unreleased); #4/#6/#7/#8/#9 are pre-existing/in-
+  release. FIRST ACTION: disabled the recovery offer (opt-in SLINT_OVERLAY_RECOVERY)
+  — safe rollback per methodology, resolves 3 HIGH + #5. Now fixing #4/#6/#7/#8/#9
+  gated; recovery proper re-do (scan-before-auto-start + clean-exit SessionStop) with
+  live verification.
 - 02:0x — Track 3 Этап-1 batch 2: value-preserving SIZE-token migration of text_ask +
   palette + wizard (43 swaps, every one token===literal; diff-audited — only size lines
   + the Metrics import changed, ZERO colour/text/layout). Metrics now spans 5 surfaces
