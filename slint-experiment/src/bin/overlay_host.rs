@@ -101,6 +101,26 @@ fn bgra_to_slint_image(bgra: &[u8], w: u32, h: u32) -> slint::Image {
 /// feature. Each F9/PTT tile that supports follow-ups gets a unique id.
 static CONVO_SEQ: AtomicU64 = AtomicU64::new(0);
 
+/// FIX #8 — hard cap on the per-tile `conversations` map (a ConvoState holds
+/// the full chat history plus rendered markdown). The map is pruned on tile
+/// close and at the MAX_LIVE_TILES eviction, so in normal use it tracks roughly
+/// the live tiles only; this cap is a backstop against any path that drops a
+/// tile without a reachable convo_id. Mirrors `qa_cache`'s bounded eviction
+/// (256, half-evicted when full). Because `convo_id` is monotonic (CONVO_SEQ),
+/// the LOWEST ids are the OLDEST, so evicting those first naturally keeps the
+/// currently-open tiles' state.
+const CONVERSATIONS_MAX_ENTRIES: usize = 256;
+
+/// FIX #8 — given the current conversation keys, pick the oldest half to evict
+/// (lowest `convo_id` = oldest, since the ids are monotonic). Pure + testable;
+/// mirrors `qa_cache`'s `take(MAX/2)` half-eviction. Returns the ids to remove.
+fn conversations_evict_keys(keys: &[i32], max: usize) -> Vec<i32> {
+    let mut ids = keys.to_vec();
+    ids.sort_unstable();
+    ids.truncate(max / 2);
+    ids
+}
+
 /// V0.8.0 (Поток D) — which AI endpoint an ask/follow-up/regenerate routes to.
 /// Replaces the old `use_vision: bool` so the three routes are explicit and the
 /// compiler enforces exhaustive handling (no silent bool transposition across
@@ -747,12 +767,8 @@ impl RuntimeEvents for PttStreamSink {
                         role: "assistant".into(),
                         content: ai::MessageContent::Text(final_body.clone()),
                     });
-                    let mut convos = self
-                        .bridge
-                        .conversations
-                        .lock()
-                        .unwrap_or_else(|p| p.into_inner());
-                    convos.insert(
+                    // FIX #8 — bounded insert (caps + half-evicts the map).
+                    self.bridge.store_conversation(
                         self.convo_id,
                         ConvoState {
                             messages,
@@ -915,6 +931,41 @@ struct SpawnTileRequest {
 }
 
 impl OverlayBarBridge {
+    /// FIX #8 — store a tile's conversation, keeping the map bounded. When at
+    /// the cap, evict the oldest half by `convo_id` (monotonic → lowest = oldest)
+    /// BEFORE inserting, mirroring `qa_cache`'s half-eviction. The eviction is a
+    /// backstop only — the primary prune is `drop_conversation` on tile close /
+    /// MAX_LIVE_TILES eviction, so an open tile (which has one of the highest
+    /// ids) is never the one dropped here.
+    fn store_conversation(&self, convo_id: i32, state: ConvoState) {
+        let mut convos = match self.conversations.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        if convos.len() >= CONVERSATIONS_MAX_ENTRIES && !convos.contains_key(&convo_id) {
+            let keys: Vec<i32> = convos.keys().copied().collect();
+            for id in conversations_evict_keys(&keys, CONVERSATIONS_MAX_ENTRIES) {
+                convos.remove(&id);
+            }
+        }
+        convos.insert(convo_id, state);
+    }
+
+    /// FIX #8 — drop a tile's conversation when the tile is closed or evicted.
+    /// No-op for a non-conversational tile (`convo_id < 0`, the tile.slint
+    /// default) or one that never had an answer folded in. Keeps the map from
+    /// growing one entry per completed answer for the life of the session.
+    fn drop_conversation(&self, convo_id: i32) {
+        if convo_id < 0 {
+            return;
+        }
+        let mut convos = match self.conversations.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        convos.remove(&convo_id);
+    }
+
     /// Handle `ai:event` separately because it needs to look up the
     /// `current_streaming` slot (per-call mutable state) before
     /// scheduling the UI mutation. Mutex is released BEFORE the
@@ -984,11 +1035,8 @@ impl OverlayBarBridge {
                             role: "assistant".into(),
                             content: ai::MessageContent::Text(stream.accumulated.clone()),
                         });
-                        let mut convos = match self.conversations.lock() {
-                            Ok(g) => g,
-                            Err(p) => p.into_inner(),
-                        };
-                        convos.insert(
+                        // FIX #8 — bounded insert (caps + half-evicts the map).
+                        self.store_conversation(
                             stream.convo_id,
                             ConvoState {
                                 messages,
@@ -2068,6 +2116,9 @@ fn main() -> Result<(), slint::PlatformError> {
             // the native window when the Strong refcount hits 0.
             while tiles_for_poll.borrow().len() >= MAX_LIVE_TILES {
                 let dropped = tiles_for_poll.borrow_mut().remove(0);
+                // FIX #8 — prune this tile's conversation too (no-op if it had
+                // none), so the map doesn't outlive the force-evicted tile.
+                bridge_for_poll.drop_conversation(dropped.get_convo_id());
                 let _ = dropped.hide();
                 eprintln!(
                     "[overlay-host] live tile cap hit (>= {MAX_LIVE_TILES}) — dropping oldest"
@@ -2134,9 +2185,12 @@ fn main() -> Result<(), slint::PlatformError> {
             // меня зависла основная панель".
             let vec_for_close = tiles_for_poll.clone();
             let weak_overlay_close = weak_overlay_poll.clone();
+            let bridge_for_close = bridge_for_poll.clone();
             tile.on_close_clicked(move || {
                 eprintln!("[overlay-host] tile (poll/F3) close_clicked fired");
                 if let Some(t) = weak_tile.upgrade() {
+                    // FIX #8 — prune this tile's conversation (no-op if none).
+                    bridge_for_close.drop_conversation(t.get_convo_id());
                     let close_hwnd = grab_hwnd(t.window()).ok();
                     let _ = t.hide();
                     if let Some(target) = close_hwnd {
@@ -2215,19 +2269,14 @@ fn main() -> Result<(), slint::PlatformError> {
                     role: "assistant".into(),
                     content: ai::MessageContent::Text(req.spec.answer.clone()),
                 });
-                {
-                    let mut convos = match bridge_for_poll.conversations.lock() {
-                        Ok(g) => g,
-                        Err(p) => p.into_inner(),
-                    };
-                    convos.insert(
-                        convo_id,
-                        ConvoState {
-                            messages,
-                            rendered: req.spec.answer.clone(),
-                        },
-                    );
-                }
+                // FIX #8 — bounded insert (caps + half-evicts the map).
+                bridge_for_poll.store_conversation(
+                    convo_id,
+                    ConvoState {
+                        messages,
+                        rendered: req.spec.answer.clone(),
+                    },
+                );
                 // V0.8.1 — per-tile live route (sticky-cloud after 🧠).
                 let live = live_route(AskRoute::Text);
                 {
@@ -2846,6 +2895,12 @@ fn main() -> Result<(), slint::PlatformError> {
         let settings_for_stealth = settings.clone();
         let text_ask_for_stealth = text_ask.clone();
         let wizard_for_stealth = wizard.clone();
+        // FIX #6 — the 🆘 help + crash-recovery-offer windows were NOT re-stealthed
+        // when stealth is toggled ON while they're open (only overlay / tiles /
+        // palette / text_ask / settings / wizard were). Clone them so the handler
+        // can flip their HWND too, mirroring the palette/text_ask blocks below.
+        let help_for_stealth = help.clone();
+        let recover_offer_for_stealth = recover_offer.clone();
         let cfg_stealth = cfg.clone();
         overlay.on_stealth_toggle_clicked(move || {
             let new_stealth = {
@@ -2897,6 +2952,19 @@ fn main() -> Result<(), slint::PlatformError> {
                     let _ = set_stealth(hwnd, new_stealth);
                 }
             }
+            // FIX #6 — flip the 🆘 help + crash-recovery-offer windows too if
+            // they're open, so toggling stealth ON while either is up hides it
+            // from capture immediately (same grab_hwnd + set_stealth pattern).
+            if let Some(h) = help_for_stealth.borrow().as_ref() {
+                if let Ok(hwnd) = grab_hwnd(h.window()) {
+                    let _ = set_stealth(hwnd, new_stealth);
+                }
+            }
+            if let Some(ro) = recover_offer_for_stealth.borrow().as_ref() {
+                if let Ok(hwnd) = grab_hwnd(ro.window()) {
+                    let _ = set_stealth(hwnd, new_stealth);
+                }
+            }
             if let Some(sw) = settings_for_stealth.borrow().as_ref() {
                 sw.set_stealth_toggle(new_stealth);
                 if let Ok(hwnd) = grab_hwnd(sw.window()) {
@@ -2924,11 +2992,15 @@ fn main() -> Result<(), slint::PlatformError> {
         let tiles_ref = tiles.clone();
         let s = state.clone();
         let weak = overlay.as_weak();
+        // FIX #8 — prune each closed tile's conversation too (no-op for the
+        // non-conversational ones), so bulk-close doesn't orphan ConvoState.
+        let bridge_for_close_all = bridge.clone();
         overlay.on_close_all_tiles_clicked(move || {
             let n = {
                 let mut v = tiles_ref.borrow_mut();
                 let count = v.len();
                 for t in v.iter() {
+                    bridge_for_close_all.drop_conversation(t.get_convo_id());
                     let _ = t.hide();
                 }
                 v.clear();
@@ -3253,6 +3325,10 @@ fn main() -> Result<(), slint::PlatformError> {
         let text_ask_for_settings = text_ask.clone();
         let palette_for_settings = palette.clone();
         let wizard_for_settings = wizard.clone();
+        // FIX #6 — forward help + recover_offer so the Settings-tab stealth
+        // toggle (and its nested "Run setup wizard") can re-stealth them too.
+        let help_for_settings = help.clone();
+        let recover_offer_for_settings = recover_offer.clone();
         overlay.on_open_settings_clicked(move || {
             open_settings(
                 &s,
@@ -3263,6 +3339,8 @@ fn main() -> Result<(), slint::PlatformError> {
                 &text_ask_for_settings,
                 &palette_for_settings,
                 &wizard_for_settings,
+                &help_for_settings,
+                &recover_offer_for_settings,
             );
         });
     }
@@ -3469,8 +3547,14 @@ fn main() -> Result<(), slint::PlatformError> {
         let ow = overlay.as_weak();
         let pal = palette.clone();
         let ta = text_ask.clone();
+        // FIX #6 — forward help + recover_offer so the wizard's stealth toggle
+        // re-stealths them too.
+        let help_w = help.clone();
+        let recover_w = recover_offer.clone();
         Timer::single_shot(Duration::from_millis(2200), move || {
-            open_wizard(&wz, &cfg_w, &state_w, &tiles_w, &ow, &pal, &ta, &st);
+            open_wizard(
+                &wz, &cfg_w, &state_w, &tiles_w, &ow, &pal, &ta, &st, &help_w, &recover_w,
+            );
         });
     }
 
@@ -3910,9 +3994,12 @@ fn fire_f9_ask(
     let weak_close = tile.as_weak();
     let vec_for_close = tiles.clone();
     let weak_overlay_close = weak_overlay.clone();
+    let bridge_for_close = bridge.clone();
     tile.on_close_clicked(move || {
         eprintln!("[overlay-host] tile (F9) close_clicked fired");
         if let Some(t) = weak_close.upgrade() {
+            // FIX #8 — prune this tile's conversation (no-op if none).
+            bridge_for_close.drop_conversation(t.get_convo_id());
             let close_hwnd = grab_hwnd(t.window()).ok();
             let _ = t.hide();
             if let Some(target) = close_hwnd {
@@ -4184,6 +4271,7 @@ fn fire_f9_ask(
             events_for_task,
             ai_rx,
             model,
+            is_local,
             sys_full,
             usr_full,
             journal_for_loop,
@@ -4289,8 +4377,11 @@ fn fire_ptt_ask(
     let weak_close = tile.as_weak();
     let vec_for_close = tiles.clone();
     let weak_overlay_close = weak_overlay.clone();
+    let bridge_for_close = bridge.clone();
     tile.on_close_clicked(move || {
         if let Some(t) = weak_close.upgrade() {
+            // FIX #8 — prune this tile's conversation (no-op if none).
+            bridge_for_close.drop_conversation(t.get_convo_id());
             let close_hwnd = grab_hwnd(t.window()).ok();
             let _ = t.hide();
             if let Some(target) = close_hwnd {
@@ -4537,6 +4628,7 @@ fn fire_ptt_ask(
             sink,
             ai_rx,
             model,
+            is_local,
             sys_full,
             usr_full,
             journal_for_loop,
@@ -4768,8 +4860,11 @@ fn launch_vision_for_bgra(
     let weak_close = tile.as_weak();
     let vec_for_close = tiles.clone();
     let weak_overlay_close = weak_overlay.clone();
+    let bridge_for_close = bridge.clone();
     tile.on_close_clicked(move || {
         if let Some(t) = weak_close.upgrade() {
+            // FIX #8 — prune this tile's conversation (no-op if none).
+            bridge_for_close.drop_conversation(t.get_convo_id());
             let close_hwnd = grab_hwnd(t.window()).ok();
             let _ = t.hide();
             if let Some(target) = close_hwnd {
@@ -4942,6 +5037,7 @@ fn launch_vision_for_bgra(
             sink,
             ai_rx,
             model,
+            is_local,
             sys_full,
             usr_full,
             journal_for_loop,
@@ -5147,6 +5243,7 @@ fn fire_followup_ask(
             events_for_task,
             ai_rx,
             model,
+            is_local,
             sys_full,
             usr_full,
             journal_for_loop,
@@ -5299,6 +5396,7 @@ fn fire_regenerate(
             events_for_task,
             ai_rx,
             model,
+            is_local,
             sys_full,
             usr_full,
             journal_for_loop,
@@ -6054,6 +6152,10 @@ fn wire_wizard_steps(
     palette_ref: &Rc<RefCell<Option<PaletteWindow>>>,
     text_ask_ref: &Rc<RefCell<Option<TextAskWindow>>>,
     settings_ref: &Rc<RefCell<Option<SettingsWindow>>>,
+    // FIX #6 — so the wizard's in-window stealth toggle also re-stealths the
+    // 🆘 help + crash-recovery-offer windows if either is open.
+    help_ref: &Rc<RefCell<Option<HelpWindow>>>,
+    recover_offer_ref: &Rc<RefCell<Option<RecoverOfferWindow>>>,
 ) {
     // nav-next: advance + auto-run the NEW step's check; refill summary at step 7.
     {
@@ -6336,6 +6438,9 @@ fn wire_wizard_steps(
         let pal = palette_ref.clone();
         let ta = text_ask_ref.clone();
         let set = settings_ref.clone();
+        // FIX #6 — flip 🆘 help + crash-recovery-offer too if open.
+        let help_c = help_ref.clone();
+        let recover_c = recover_offer_ref.clone();
         let cfg_c = cfg.clone();
         win.on_stealth_toggled(move |on| {
             {
@@ -6378,6 +6483,17 @@ fn wire_wizard_steps(
                     let _ = set_stealth(h, on);
                 }
             }
+            // FIX #6 — 🆘 help + crash-recovery-offer windows.
+            if let Some(h) = help_c.borrow().as_ref() {
+                if let Ok(hwnd) = grab_hwnd(h.window()) {
+                    let _ = set_stealth(hwnd, on);
+                }
+            }
+            if let Some(ro) = recover_c.borrow().as_ref() {
+                if let Ok(hwnd) = grab_hwnd(ro.window()) {
+                    let _ = set_stealth(hwnd, on);
+                }
+            }
             if let Some(sw) = set.borrow().as_ref() {
                 sw.set_stealth_toggle(on);
                 if let Ok(h) = grab_hwnd(sw.window()) {
@@ -6401,6 +6517,10 @@ fn open_wizard(
     palette_ref: &Rc<RefCell<Option<PaletteWindow>>>,
     text_ask_ref: &Rc<RefCell<Option<TextAskWindow>>>,
     settings_ref: &Rc<RefCell<Option<SettingsWindow>>>,
+    // FIX #6 — forwarded to wire_wizard_steps so the wizard's stealth toggle
+    // can re-stealth the 🆘 help + crash-recovery-offer windows too.
+    help_ref: &Rc<RefCell<Option<HelpWindow>>>,
+    recover_offer_ref: &Rc<RefCell<Option<RecoverOfferWindow>>>,
 ) {
     {
         let slot = slot_ref.borrow();
@@ -6430,6 +6550,8 @@ fn open_wizard(
         palette_ref,
         text_ask_ref,
         settings_ref,
+        help_ref,
+        recover_offer_ref,
     );
     {
         let weak = win.as_weak();
@@ -6981,6 +7103,11 @@ fn open_settings(
     // (re)open the first-run wizard, and the Settings-tab stealth toggle can
     // flip the wizard window too if it happens to be open.
     wizard_ref: &Rc<RefCell<Option<WizardWindow>>>,
+    // FIX #6 — so the Settings-tab stealth toggle re-stealths the 🆘 help +
+    // crash-recovery-offer windows too, and so the nested "Run setup wizard"
+    // can forward them to open_wizard.
+    help_ref: &Rc<RefCell<Option<HelpWindow>>>,
+    recover_offer_ref: &Rc<RefCell<Option<RecoverOfferWindow>>>,
 ) {
     // Light up the bar's ⚙ chip while Settings is open (user: "значок
     // настроек не загорается когда настройки открыты"). Cleared in the
@@ -7143,6 +7270,9 @@ fn open_settings(
     let text_ask_st = text_ask_ref.clone();
     let palette_st = palette_ref.clone();
     let wizard_st = wizard_ref.clone();
+    // FIX #6 — flip 🆘 help + crash-recovery-offer too if open.
+    let help_st = help_ref.clone();
+    let recover_st = recover_offer_ref.clone();
     win.on_stealth_changed(move |on| {
         if let Ok(mut st) = s3.lock() {
             st.stealth = on;
@@ -7189,6 +7319,19 @@ fn open_settings(
                 let _ = set_stealth(hwnd, on);
             }
         }
+        // FIX #6 — flip the 🆘 help + crash-recovery-offer windows too if open,
+        // so the Settings-tab stealth toggle hides them from capture like every
+        // other surface (mirrors the palette/text_ask blocks above).
+        if let Some(h) = help_st.borrow().as_ref() {
+            if let Ok(hwnd) = grab_hwnd(h.window()) {
+                let _ = set_stealth(hwnd, on);
+            }
+        }
+        if let Some(ro) = recover_st.borrow().as_ref() {
+            if let Ok(hwnd) = grab_hwnd(ro.window()) {
+                let _ = set_stealth(hwnd, on);
+            }
+        }
         // V0.8.4 — flip the first-run wizard window too if it's open, so the
         // Settings-tab stealth toggle hides it from capture like every other
         // surface (the wizard is screen-shareable until WDA is applied) and its
@@ -7212,8 +7355,14 @@ fn open_settings(
         let ow = overlay_weak.clone();
         let pal = palette_ref.clone();
         let ta = text_ask_ref.clone();
+        // FIX #6 — forward help + recover_offer so the wizard opened from here
+        // also re-stealths them on its in-window stealth toggle.
+        let help_w = help_ref.clone();
+        let recover_w = recover_offer_ref.clone();
         win.on_open_wizard_clicked(move || {
-            open_wizard(&wz, &cfg_w, &state_w, &tiles_w, &ow, &pal, &ta, &st);
+            open_wizard(
+                &wz, &cfg_w, &state_w, &tiles_w, &ow, &pal, &ta, &st, &help_w, &recover_w,
+            );
         });
     }
 
@@ -8965,10 +9114,39 @@ fn redact_ipv4(s: &str) -> String {
     out
 }
 
+/// Mask the HOST of every `http(s)://…` URL in `s`, keeping scheme/port/path,
+/// via the same `mask_host` the Settings preview uses. Unlike `redact_ipv4`
+/// this also masks a DNS host (Tailscale / mDNS / FQDN) or an IPv6 literal —
+/// the readiness() detail strings embed the raw RESOLVED base_url, and the
+/// copied report is advertised "safe to paste into a support thread", so a
+/// `http://bridge.tailnet.ts.net:18902/v1` must not land verbatim. A URL token
+/// runs from `http` until the first ASCII whitespace (or end). UTF-8 safe.
+fn redact_urls(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    // Take the EARLIEST of either scheme each iteration (not http-then-https):
+    // a report with `https://b … http://a` must mask `https://b` first, else
+    // the text before the (later) http match would echo it verbatim.
+    while let Some(pos) = [rest.find("http://"), rest.find("https://")]
+        .into_iter()
+        .flatten()
+        .min()
+    {
+        out.push_str(&rest[..pos]);
+        let tail = &rest[pos..];
+        // URL ends at the first whitespace — base_url has no spaces.
+        let end = tail.find(char::is_whitespace).unwrap_or(tail.len());
+        out.push_str(&overlay_backend::config::mask_host(&tail[..end]));
+        rest = &tail[end..];
+    }
+    out.push_str(rest);
+    out
+}
+
 /// P1.1 — build a REDACTED plain-text diagnostics report for the clipboard.
 /// Carries subsystem status + NEUTRAL details only: never a bearer / API key /
-/// transcript / profile text / screenshot, and every IPv4 is masked. Safe to
-/// paste into a support thread.
+/// transcript / profile text / screenshot, and the host of any base_url is
+/// masked (IPv4, IPv6 AND DNS). Safe to paste into a support thread.
 fn build_diag_report(cfg: &overlay_backend::config::SharedConfig) -> String {
     let c = cfg.read();
     let r = c.readiness();
@@ -9015,7 +9193,11 @@ fn build_diag_report(cfg: &overlay_backend::config::SharedConfig) -> String {
         hk_line,
         if r.stealth_on { "on" } else { "off" },
     );
-    redact_ipv4(&report)
+    // Mask the host of any base_url FIRST (IPv4 / IPv6 / DNS), keeping
+    // scheme/port/path; then redact_ipv4 as a backstop for any bare IPv4 that
+    // wasn't part of a URL. redact_ipv4 alone matched ONLY dotted-IPv4, so a
+    // DNS / IPv6 bridge host used to leak verbatim into the copied report.
+    redact_ipv4(&redact_urls(&report))
 }
 
 /// Populate the Settings window's token-status display properties
@@ -9174,6 +9356,83 @@ mod copy_tests {
         assert_eq!(
             redact_ipv4("suflyor diagnostics (v1.16.1)"),
             "suflyor diagnostics (v1.16.1)"
+        );
+    }
+
+    #[test]
+    fn redact_urls_masks_dns_ipv6_and_ipv4_hosts_keeping_scheme_port_path() {
+        // FIX #7 — a DNS bridge host (Tailscale / mDNS / FQDN) must be masked,
+        // not echoed verbatim, while scheme + port + path are kept.
+        assert_eq!(
+            redact_urls("AI: ready — local llama @ http://bridge.tailnet.ts.net:18902/v1"),
+            "AI: ready — local llama @ http://***:18902/v1"
+        );
+        // IPv6 literal host is masked too (redact_ipv4 never matched these).
+        assert_eq!(
+            redact_urls("STT: http://[2001:db8::1]:9000/v1 ok"),
+            "STT: http://***:9000/v1 ok"
+        );
+        // Plain IPv4 in a URL — host blanked, port/path kept.
+        assert_eq!(
+            redact_urls("http://192.168.0.142:18902/v1"),
+            "http://***:18902/v1"
+        );
+        // https + a DNS host appearing BEFORE an http URL: the earliest match
+        // must be masked first so the leading text can't echo it verbatim.
+        assert_eq!(
+            redact_urls("a https://api.example.com/v1 b http://10.0.0.5:1234/v1 c"),
+            "a https://***/v1 b http://***:1234/v1 c"
+        );
+        // No URL → untouched.
+        assert_eq!(redact_urls("Hotkeys: ok (F9, F4)"), "Hotkeys: ok (F9, F4)");
+    }
+
+    #[test]
+    fn redact_urls_masks_dns_host_in_a_report_shaped_string() {
+        // FIX #7 — `build_diag_report` composes its lines from readiness()
+        // details that embed the raw resolved base_url, then applies this
+        // redact_urls pass before the clipboard copy. Asserting the pass on a
+        // string shaped like that report keeps the test hermetic (the real
+        // `build_diag_report` reads a SharedConfig, which loads live secrets).
+        let report = "suflyor diagnostics (v1.16.1)\n\
+             AI: ready — local · http://bridge.tailnet.ts.net:18902/v1 · my-local-gemma\n\
+             STT: ready — groq cloud\n\
+             Hotkeys: ok (F9, F4)\n";
+        let masked = redact_urls(report);
+        assert!(
+            !masked.contains("bridge.tailnet.ts.net"),
+            "FIX #7: DNS base_url host leaked into copied report:\n{masked}"
+        );
+        assert!(
+            masked.contains("http://***:18902/v1"),
+            "masked URL should keep scheme/port/path:\n{masked}"
+        );
+        // Non-URL lines are untouched.
+        assert!(masked.contains("suflyor diagnostics (v1.16.1)"));
+        assert!(masked.contains("STT: ready — groq cloud"));
+    }
+
+    #[test]
+    fn conversations_evict_keys_drops_oldest_half_keeps_newest() {
+        // FIX #8 — at the cap, the lowest-id half (oldest tiles) is evicted,
+        // and the highest ids (newest / currently-open tiles) are kept.
+        let keys: Vec<i32> = (0..256).collect();
+        let evicted = conversations_evict_keys(&keys, 256);
+        assert_eq!(evicted.len(), 128, "evicts exactly half the cap");
+        assert_eq!(evicted.first(), Some(&0), "oldest id is evicted");
+        assert_eq!(evicted.last(), Some(&127), "eviction stops at the midpoint");
+        assert!(
+            !evicted.contains(&255),
+            "the newest id (an open tile) is never evicted"
+        );
+        // Unsorted input is handled (HashMap key order is arbitrary).
+        let shuffled = [50, 3, 200, 7, 99];
+        let mut e = conversations_evict_keys(&shuffled, 4); // max/2 = 2 → drop 2 lowest
+        e.sort_unstable();
+        assert_eq!(
+            e,
+            vec![3, 7],
+            "drops the two lowest ids regardless of order"
         );
     }
 
