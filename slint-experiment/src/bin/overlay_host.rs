@@ -175,6 +175,20 @@ use tile_window::*;
 #[path = "overlay_host/tile_copy.rs"]
 mod tile_copy;
 use tile_copy::*;
+// Wave 2 of the `tile_controller.rs` split (plan §5.10): the ASK-INITIATION
+// side — the route model (`AskRoute`/`LiveRoute`/`live_route`), the ask
+// entrypoints (`fire_f3_reask`/`fire_f6_manual_spawn`/`fire_f9_ask`/
+// `fire_ptt_ask`), the follow-up/escalate flow (`fire_followup_ask`/
+// `fire_regenerate`/`wire_escalate`/`wire_voice_followup` + its `VFU_TX` drain),
+// the PTT helpers (`spawn_ptt_watchdog`/`ptt_tile_error`), and the cost/
+// transcript helpers (`warn_if_over_cost_cap`/`cost_cap_reason`/
+// `select_recent_labeled`). `main`'s hotkey DISPATCH + bar-chip wiring resolve
+// these via `use tile_ask::*;`. The STREAM-WRITE side (`OverlayBarBridge` +
+// `handle_ai_event`, `install_streaming_tile`/`gated_events`, `PttStreamSink`)
+// stays in `tile_controller.rs`; the moved code reaches it through the glob.
+#[path = "overlay_host/tile_ask.rs"]
+mod tile_ask;
+use tile_ask::*;
 
 // Phase 7b of the modularization (docs/overlay-host-modularization-plan.md
 // §5.8/§5.9) — the FINAL phase: the Settings window controller. `open_settings`
