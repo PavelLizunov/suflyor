@@ -87,6 +87,18 @@ use window_lifecycle::*;
 mod diagnostics;
 use diagnostics::*;
 
+// Phase 3 of the modularization (docs/overlay-host-modularization-plan.md §5.3):
+// the one-time global-hotkey REGISTRATION + the hotkey-registration diagnostics
+// state live in their own file alongside the binary. `use hotkeys::*;` re-exports
+// the moved `HotkeyDiag`, `hotkey_diag_row` (read by diagnostics.rs via its own
+// glob), and the extracted `register_hotkeys` / `RegisteredHotkeys` so the inline
+// block formerly in `main` is now one call. The hotkey EVENT-DISPATCH timer stays
+// in `main` (it captures a dozen Rc-borrowed slots + closures) and matches on the
+// ids `register_hotkeys` hands back.
+#[path = "overlay_host/hotkeys.rs"]
+mod hotkeys;
+use hotkeys::*;
+
 pub(crate) type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
 
 /// Parse markdown source into the Slint `MarkdownBlock` rows a tile body
@@ -384,36 +396,6 @@ fn format_convo_copy(messages: &[ai::ChatMessage], rendered: &str) -> String {
         return rendered.to_string();
     }
     out
-}
-
-/// P1.2 — outcome of registering the global hotkeys at startup, captured ONCE so
-/// the Diagnostics tab can surface a per-key conflict (not just an eprintln!).
-/// Set in the registration loop; read by [`hotkey_diag_row`].
-struct HotkeyDiag {
-    /// Space-separated keys that registered, e.g. "F1 F3 F4 F6 F8 F9 Shift+F9".
-    registered: String,
-    /// Comma-separated keys whose `register()` failed (conflict / already taken).
-    /// Empty when every key registered.
-    failed: String,
-    /// True when the hotkey MANAGER itself couldn't be created (nothing tried).
-    manager_missing: bool,
-}
-
-static HOTKEY_DIAG: std::sync::OnceLock<HotkeyDiag> = std::sync::OnceLock::new();
-
-/// Render the captured hotkey-registration outcome (P1.2) into a (level, detail,
-/// failed) triple for the Diagnostics tab. level 0=all registered, 4=a key
-/// failed (conflict), 3=manager unavailable / not yet captured. `failed` is the
-/// raw key list so the .slint composes the translated "conflict:" wording.
-pub(crate) fn hotkey_diag_row() -> (i32, String, String) {
-    match HOTKEY_DIAG.get() {
-        None => (3, String::new(), String::new()),
-        // Manager failed to init → level 4 (error) but EMPTY failed list, so the
-        // UI/report render "unavailable", not a misleading "conflict: all".
-        Some(d) if d.manager_missing => (4, String::new(), String::new()),
-        Some(d) if d.failed.is_empty() => (0, d.registered.clone(), String::new()),
-        Some(d) => (4, d.registered.clone(), d.failed.clone()),
-    }
 }
 
 /// V0.8.3 — wire a tile's 📋 copy button: write the answer text to the Windows
@@ -2472,91 +2454,27 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // ===== Global hotkeys (Phase D2 + B3 extra) =====
     //
-    // global-hotkey 0.6 owns a single process-wide event receiver +
-    // platform-specific manager. We register one hotkey per F-key,
-    // then poll the receiver every 50 ms from a Slint Timer — fires
-    // on UI thread so we can touch Rc-borrowed state without Send.
-    //
-    // Registered keys (see Settings ▸ Hotkeys):
-    //   F3 — re-ask the last question     F4 — KB palette (toggle)
-    //   F6 — manual tile from transcript  F8 — screenshot → vision
-    //   F9 — ask the AI now
-    let hotkey_manager = match global_hotkey::GlobalHotKeyManager::new() {
-        Ok(m) => Some(m),
-        Err(e) => {
-            eprintln!("[overlay-host] GlobalHotKeyManager init failed: {e}. Hotkeys disabled.");
-            None
-        }
-    };
-    let f3_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F3);
-    let f4_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F4);
-    // Phase E3 slice 3 — F6 manual spawn from last transcript line
-    // (bypasses auto-detector). Matches src-tauri hotkey table.
-    let f6_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F6);
-    // Phase E3 slice 2 — F9 ask (live AI streaming via overlay-backend's
-    // ask_stream_loop). Matches src-tauri/React-side semantic where F9
-    // is the "ask AI with full transcript context" hotkey.
-    let f9_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F9);
-    // V0.8.0 (Поток D) — Shift+F9 = one-shot escalate the ask to the smart cloud
-    // model (deeper reasoning) without flipping the persistent provider.
-    let sf9_hotkey = global_hotkey::hotkey::HotKey::new(
-        Some(global_hotkey::hotkey::Modifiers::SHIFT),
-        global_hotkey::hotkey::Code::F9,
-    );
-    // V2 — F8 screenshot → vision (captures the monitor under the cursor and
-    // streams a vision model's reading into a tile, via the SEPARATE vision
-    // endpoint so text can stay local).
-    let f8_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F8);
-    // Feature #3 — Shift+F8 = the SAME region capture but in TRANSLATE mode
-    // (output only the translation, no screen description). For games/subtitles.
-    let sf8_hotkey = global_hotkey::hotkey::HotKey::new(
-        Some(global_hotkey::hotkey::Modifiers::SHIFT),
-        global_hotkey::hotkey::Code::F8,
-    );
-    // V0.8.4 — F1 opens the 🆘 help (toggle, like F4).
-    let f1_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F1);
-    let f3_id = f3_hotkey.id();
-    let f4_id = f4_hotkey.id();
-    let f6_id = f6_hotkey.id();
-    let f9_id = f9_hotkey.id();
-    let sf9_id = sf9_hotkey.id();
-    let f8_id = f8_hotkey.id();
-    let sf8_id = sf8_hotkey.id();
-    let f1_id = f1_hotkey.id();
-    {
-        // P1.2 — capture per-key registration so the Diagnostics tab can name a
-        // conflicting key instead of a blanket "hotkeys disabled" (audit P1.2).
-        let mut registered: Vec<&str> = Vec::new();
-        let mut failed: Vec<&str> = Vec::new();
-        if let Some(m) = hotkey_manager.as_ref() {
-            for (label, hk) in [
-                ("F3", f3_hotkey),
-                ("F4", f4_hotkey),
-                ("F6", f6_hotkey),
-                ("F8", f8_hotkey),
-                ("Shift+F8", sf8_hotkey),
-                ("F9", f9_hotkey),
-                ("Shift+F9", sf9_hotkey),
-                ("F1", f1_hotkey),
-            ] {
-                match m.register(hk) {
-                    Ok(()) => {
-                        eprintln!("[overlay-host] {label} hotkey registered");
-                        registered.push(label);
-                    }
-                    Err(e) => {
-                        eprintln!("[overlay-host] {label} register failed: {e}");
-                        failed.push(label);
-                    }
-                }
-            }
-        }
-        let _ = HOTKEY_DIAG.set(HotkeyDiag {
-            registered: registered.join(" "),
-            failed: failed.join(", "),
-            manager_missing: hotkey_manager.is_none(),
-        });
-    }
+    // Registration (manager + F3/F4/F6/F8/Shift+F8/F9/Shift+F9/F1, the per-key
+    // log lines, and the Diagnostics-tab outcome) moved verbatim into
+    // `hotkeys::register_hotkeys` (Phase 3, docs/overlay-host-modularization-plan
+    // .md §5.3). `hotkey_manager` MUST stay bound here for the rest of `main` —
+    // dropping the `GlobalHotKeyManager` unregisters every hotkey. The returned
+    // ids are rebound to the same local names the dispatch loop below matches on,
+    // so that loop is unchanged.
+    // `_hotkey_manager`: bound (not `_`) so it lives to the end of `main` — its
+    // Drop unregisters every hotkey. Leading underscore silences the unused warn
+    // without changing the drop point (it was read inside the moved block before).
+    let RegisteredHotkeys {
+        manager: _hotkey_manager,
+        f1_id,
+        f3_id,
+        f4_id,
+        f6_id,
+        f8_id,
+        sf8_id,
+        f9_id,
+        sf9_id,
+    } = register_hotkeys();
 
     let hotkey_poll = Timer::default();
     let hp_palette = palette.clone();
