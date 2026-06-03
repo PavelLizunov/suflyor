@@ -64,7 +64,18 @@ use ui::{
     RecoverOfferWindow, SettingsWindow, TextAskWindow, TileWindow, WizardWindow,
 };
 
-type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
+// Phase 1 of the modularization (docs/overlay-host-modularization-plan.md §5.1):
+// window lifecycle + stealth/theme registry lives in its own file alongside the
+// binary. `use window_lifecycle::*;` re-exports the moved globals/getters/setters
+// (`set_global_stealth`/`global_stealth`/`set_global_scheme`/…),
+// `present_window_stealth_aware`, the `apply_scheme_*` helpers, `refresh_open_tiles`,
+// `clamp_scheme`, and the new `WindowRegistry` so existing call sites resolve
+// unchanged.
+#[path = "overlay_host/window_lifecycle.rs"]
+mod window_lifecycle;
+use window_lifecycle::*;
+
+pub(crate) type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
 
 /// Parse markdown source into the Slint `MarkdownBlock` rows a tile body
 /// renders. Shared by the streaming Delta/Error paths + follow-ups.
@@ -2390,6 +2401,22 @@ fn main() -> Result<(), slint::PlatformError> {
     // Memory Phase 1 — crash-recovery offer, shown once a beat after startup if
     // the newest journal looks unfinished (see the delayed-open below).
     let recover_offer: Rc<RefCell<Option<RecoverOfferWindow>>> = Rc::new(RefCell::new(None));
+    // Phase 1 (modularization §5.1): the ONE registry of on-demand overlay
+    // windows whose stealth + theme must stay in lock-step. Built once here from
+    // the slots above; cloned (cheap — all Rc) into every stealth/theme handler
+    // so a single `registry.apply_stealth(on)` / `registry.apply_scheme(scheme)`
+    // covers ALL open windows (incl. 🆘 Help + the recover-offer) instead of
+    // three hand-maintained loops that each enumerated a different subset. The
+    // bar + the persistent pre-stealthed capture overlay stay outside it.
+    let registry = WindowRegistry {
+        tiles: tiles.clone(),
+        settings: settings.clone(),
+        palette: palette.clone(),
+        text_ask: text_ask.clone(),
+        wizard: wizard.clone(),
+        help: help.clone(),
+        recover_offer: recover_offer.clone(),
+    };
     // V3 — the Lightshot capture overlay. PERSISTENT + pre-stealthed so F8 shows
     // it flash-free: WDA_EXCLUDEFROMCAPTURE keeps it off any screen-share from the
     // first frame, WS_EX_TOOLWINDOW keeps it out of the taskbar. We realize the
@@ -2889,18 +2916,12 @@ fn main() -> Result<(), slint::PlatformError> {
     // ===== Stealth toggle on overlay bar =====
     {
         let s = state.clone();
-        let tiles_ref = tiles.clone();
         let weak = overlay.as_weak();
-        let palette_for_stealth = palette.clone();
-        let settings_for_stealth = settings.clone();
-        let text_ask_for_stealth = text_ask.clone();
-        let wizard_for_stealth = wizard.clone();
-        // FIX #6 — the 🆘 help + crash-recovery-offer windows were NOT re-stealthed
-        // when stealth is toggled ON while they're open (only overlay / tiles /
-        // palette / text_ask / settings / wizard were). Clone them so the handler
-        // can flip their HWND too, mirroring the palette/text_ask blocks below.
-        let help_for_stealth = help.clone();
-        let recover_offer_for_stealth = recover_offer.clone();
+        // Phase 1 (§5.1) — ONE registry clone replaces the seven hand-written
+        // per-window clones + loops below. `registry.apply_stealth(on)` now
+        // covers tiles / palette / text_ask / wizard / Settings AND (the FIX #6
+        // windows) 🆘 help + the crash-recovery-offer, so none can be forgotten.
+        let registry_stealth = registry.clone();
         let cfg_stealth = cfg.clone();
         overlay.on_stealth_toggle_clicked(move || {
             let new_stealth = {
@@ -2921,65 +2942,18 @@ fn main() -> Result<(), slint::PlatformError> {
                 c.stealth_enabled = new_stealth;
                 let _ = config::save(&c);
             }
-            // Apply to overlay + light the bar 🎯 chip.
+            // Apply to overlay + light the bar 🎯 chip. The bar stays inline (NOT
+            // in the registry): it also drops its taskbar button under stealth so
+            // a screen-share viewer doesn't spot the app in the taskbar.
             if let Some(o) = weak.upgrade() {
                 o.set_stealth_active(new_stealth);
                 if let Ok(hwnd) = grab_hwnd(o.window()) {
                     let _ = set_stealth(hwnd, new_stealth);
-                    // Stealth also removes the taskbar button so a screen-share
-                    // viewer doesn't spot the app in the taskbar.
                     let _ = set_skip_taskbar(hwnd, new_stealth);
                 }
             }
-            // Apply to all tiles
-            for t in tiles_ref.borrow().iter() {
-                if let Ok(hwnd) = grab_hwnd(t.window()) {
-                    let _ = set_stealth(hwnd, new_stealth);
-                }
-            }
-            // #111 — flip the F4 palette + Settings windows if they're open,
-            // so toggling stealth while they're up hides them immediately.
-            if let Some(p) = palette_for_stealth.borrow().as_ref() {
-                if let Ok(hwnd) = grab_hwnd(p.window()) {
-                    let _ = set_stealth(hwnd, new_stealth);
-                }
-            }
-            // V0.8.3 (M1) — also flip the "✏ Написать" input window if it's open,
-            // so toggling stealth ON while the user is mid-typing instantly hides
-            // the typed question from a screen-share (was the one stealth hole).
-            if let Some(t) = text_ask_for_stealth.borrow().as_ref() {
-                if let Ok(hwnd) = grab_hwnd(t.window()) {
-                    let _ = set_stealth(hwnd, new_stealth);
-                }
-            }
-            // FIX #6 — flip the 🆘 help + crash-recovery-offer windows too if
-            // they're open, so toggling stealth ON while either is up hides it
-            // from capture immediately (same grab_hwnd + set_stealth pattern).
-            if let Some(h) = help_for_stealth.borrow().as_ref() {
-                if let Ok(hwnd) = grab_hwnd(h.window()) {
-                    let _ = set_stealth(hwnd, new_stealth);
-                }
-            }
-            if let Some(ro) = recover_offer_for_stealth.borrow().as_ref() {
-                if let Ok(hwnd) = grab_hwnd(ro.window()) {
-                    let _ = set_stealth(hwnd, new_stealth);
-                }
-            }
-            if let Some(sw) = settings_for_stealth.borrow().as_ref() {
-                sw.set_stealth_toggle(new_stealth);
-                if let Ok(hwnd) = grab_hwnd(sw.window()) {
-                    let _ = set_stealth(hwnd, new_stealth);
-                }
-            }
-            // V0.8.4 — flip the first-run wizard window too if it's open, so
-            // toggling stealth from the bar hides it from capture immediately
-            // (and the wizard's in-window Switch reflects the new state).
-            if let Some(wz) = wizard_for_stealth.borrow().as_ref() {
-                if let Ok(hwnd) = grab_hwnd(wz.window()) {
-                    let _ = set_stealth(hwnd, new_stealth);
-                }
-                wz.set_stealth_on(new_stealth);
-            }
+            // Every other open window through the single registry path.
+            registry_stealth.apply_stealth(new_stealth);
         });
     }
 
@@ -2995,6 +2969,8 @@ fn main() -> Result<(), slint::PlatformError> {
         // FIX #8 — prune each closed tile's conversation too (no-op for the
         // non-conversational ones), so bulk-close doesn't orphan ConvoState.
         let bridge_for_close_all = bridge.clone();
+        // Phase 1 (§5.1) — refresh the bar's open-tile chip through the registry.
+        let registry_close_all = registry.clone();
         overlay.on_close_all_tiles_clicked(move || {
             let n = {
                 let mut v = tiles_ref.borrow_mut();
@@ -3012,9 +2988,9 @@ fn main() -> Result<(), slint::PlatformError> {
             }
             if let Some(o) = weak.upgrade() {
                 o.set_tiles_spawned(0);
+                // #B1 — vec was just cleared; sync the live open-tile count to 0.
+                registry_close_all.refresh_tiles_chip(&o);
             }
-            // #B1 — vec was just cleared; sync the live open-tile count to 0.
-            refresh_open_tiles(&weak, &tiles_ref);
         });
     }
 
@@ -3322,13 +3298,9 @@ fn main() -> Result<(), slint::PlatformError> {
         let tiles_ref = tiles.clone();
         let cfg_for_settings = cfg.clone();
         let overlay_weak = overlay.as_weak();
-        let text_ask_for_settings = text_ask.clone();
-        let palette_for_settings = palette.clone();
-        let wizard_for_settings = wizard.clone();
-        // FIX #6 — forward help + recover_offer so the Settings-tab stealth
-        // toggle (and its nested "Run setup wizard") can re-stealth them too.
-        let help_for_settings = help.clone();
-        let recover_offer_for_settings = recover_offer.clone();
+        // Phase 1 (§5.1) — the Settings-tab stealth toggle + scheme switch (and
+        // its nested "Run setup wizard") reach every open window via this registry.
+        let registry_settings = registry.clone();
         overlay.on_open_settings_clicked(move || {
             open_settings(
                 &s,
@@ -3336,11 +3308,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 &tiles_ref,
                 &cfg_for_settings,
                 &overlay_weak,
-                &text_ask_for_settings,
-                &palette_for_settings,
-                &wizard_for_settings,
-                &help_for_settings,
-                &recover_offer_for_settings,
+                &registry_settings,
             );
         });
     }
@@ -3543,18 +3511,12 @@ fn main() -> Result<(), slint::PlatformError> {
         let cfg_w = cfg.clone();
         let st = settings.clone();
         let state_w = state.clone();
-        let tiles_w = tiles.clone();
         let ow = overlay.as_weak();
-        let pal = palette.clone();
-        let ta = text_ask.clone();
-        // FIX #6 — forward help + recover_offer so the wizard's stealth toggle
-        // re-stealths them too.
-        let help_w = help.clone();
-        let recover_w = recover_offer.clone();
+        // Phase 1 (§5.1) — the wizard's stealth toggle re-stealths every open
+        // window through this registry clone (no per-window forwarding).
+        let registry_w = registry.clone();
         Timer::single_shot(Duration::from_millis(2200), move || {
-            open_wizard(
-                &wz, &cfg_w, &state_w, &tiles_w, &ow, &pal, &ta, &st, &help_w, &recover_w,
-            );
+            open_wizard(&wz, &cfg_w, &state_w, &ow, &st, &registry_w);
         });
     }
 
@@ -5420,152 +5382,6 @@ static TILE_SLOT_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::At
 /// session. Reset only at process restart.
 static TILE_DISPLAY_SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
-/// Phase E6 v36 — process-global tile body opacity (f32 bits).
-///
-/// Bug fix: tile transparency from Settings only applied to tiles that
-/// already existed when the slider moved; every NEW tile (F9 ask, F3
-/// reask, KB-palette activate, auto-spawn) was created at the default
-/// 1.0 and ignored the saved `config.tile_body_opacity`. User report:
-/// "Прозрачность из настроек ... работает только на уже вызванные
-/// тайлы как только вызову новый все сбрасывается".
-///
-/// Root cause: only the spawn-poll Timer read `cfg.tile_body_opacity`;
-/// the other spawn paths never did. Fix: a single process-global value
-/// that EVERY spawn path picks up via `apply_tile_hwnd_with_monitor`
-/// (the one helper they all call). Seeded from config at startup,
-/// updated live by the Settings slider handler. Stored as raw f32 bits
-/// in an AtomicU32 so it stays lock-free.
-static TILE_BODY_OPACITY_BITS: std::sync::atomic::AtomicU32 =
-    std::sync::atomic::AtomicU32::new(0x3F80_0000); // 1.0_f32
-
-/// Store the current global tile body opacity (clamped 0.5..=1.0).
-fn set_global_tile_opacity(value: f32) {
-    let clamped = value.clamp(0.5, 1.0);
-    TILE_BODY_OPACITY_BITS.store(clamped.to_bits(), std::sync::atomic::Ordering::Relaxed);
-}
-
-/// Read the current global tile body opacity (defaults to 1.0).
-fn global_tile_opacity() -> f32 {
-    f32::from_bits(TILE_BODY_OPACITY_BITS.load(std::sync::atomic::Ordering::Relaxed))
-}
-
-/// #111 — process-global stealth (WDA_EXCLUDEFROMCAPTURE) state.
-///
-/// The stealth toggle only ever flipped the bar + already-open tiles, so any
-/// window created WHILE stealth was on (the F4 KB palette, the Settings
-/// window, freshly-spawned tiles) never received the capture-exclusion flag
-/// and leaked the overlay into screen-share / recording. Mirror of
-/// `global_tile_opacity`: one lock-free flag every window-realize path
-/// consults so new windows inherit stealth. Flipped by both stealth toggles.
-static STEALTH_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-/// Store the current global stealth state.
-fn set_global_stealth(on: bool) {
-    STEALTH_ON.store(on, std::sync::atomic::Ordering::Relaxed);
-}
-
-/// Read the current global stealth state (defaults to off).
-fn global_stealth() -> bool {
-    STEALTH_ON.load(std::sync::atomic::Ordering::Relaxed)
-}
-
-/// Process-global colour scheme (0=Glacier..3=Light Frost), mirror of
-/// `global_stealth`: tiles are spawned from 5 scattered sites and are
-/// ephemeral, so rather than thread the value through every call site we
-/// keep one lock-free copy that each tile-realize path consults. The
-/// Settings scheme handler updates it (so future tiles inherit the choice)
-/// AND walks the live tile list to re-skin existing ones. Seeded from
-/// config at startup.
-static COLOR_SCHEME: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
-
-/// Store the current global colour scheme (clamped 0..=3).
-fn set_global_scheme(scheme: i32) {
-    COLOR_SCHEME.store(clamp_scheme(scheme), std::sync::atomic::Ordering::Relaxed);
-}
-
-/// Read the current global colour scheme (defaults to 0=Glacier).
-fn global_scheme() -> i32 {
-    COLOR_SCHEME.load(std::sync::atomic::Ordering::Relaxed)
-}
-
-/// Apply the current global stealth flag to a freshly-shown window once
-/// winit realizes its native HWND (same 200 ms delay as tile placement).
-/// No-op when stealth is off. Used by windows that don't otherwise grab
-/// their HWND post-show (the F4 palette). (#111)
-/// Stealth-aware presentation for the auxiliary windows (F4 palette, Settings)
-/// that otherwise rely on winit's default centering. Mirrors
-/// `present_tile_window` + `apply_tile_hwnd_with_monitor` (review M1): park the
-/// window OFF the virtual desktop BEFORE its first frame so it's never composited
-/// onto a real monitor, then — once winit realizes the HWND — run `decorate`
-/// (e.g. Settings' DWM transparency for rounded corners), apply WDA when stealth
-/// is on, and move it to the centre of the target monitor. The first ON-SCREEN
-/// frame is therefore already fully painted + decorated (+ stealth-excluded).
-/// NOTE: parking is now UNCONDITIONAL (was stealth-only). A non-stealth window
-/// used to be shown immediately and only decorated ~1-2 frames later, which the
-/// user saw as a bare outline / black rounded corners flashing before the content
-/// composited. Parking always closes that gap for stealth-off windows too.
-fn present_window_stealth_aware<W, F>(win: &W, decorate: F)
-where
-    W: slint::ComponentHandle + 'static,
-    F: Fn(windows::Win32::Foundation::HWND) + 'static,
-{
-    // Park off-screen BEFORE the first frame (always — see fn doc). The reveal
-    // tick decorates + (under stealth) WDAs, then moves it on-screen, so the
-    // first visible frame is complete. Unconditional so a stealth toggle
-    // mid-realize can't strand the window off the desktop either.
-    win.window()
-        .set_position(slint::PhysicalPosition::new(-32000, -32000));
-    let _ = win.show();
-    // V0.8.4 — reveal as soon as the HWND realizes (~1-2 frames) instead of a
-    // fixed 200ms blind wait, so on-demand windows (Settings/help/palette/wizard/
-    // tiles) pop nearly instantly. A fast attempt covers the common case; if the
-    // HWND isn't grabbable yet, ONE conservative fallback at the old delay keeps a
-    // slow first-realize safe (no window stranded off-screen). Stealth-safe: in
-    // BOTH paths WDA is applied BEFORE a parked window is moved on-screen.
-    let do_reveal: Rc<dyn Fn(&W) -> bool> = Rc::new(move |w: &W| -> bool {
-        let Ok(hwnd) = grab_hwnd(w.window()) else {
-            return false;
-        };
-        decorate(hwnd);
-        if global_stealth() {
-            let _ = set_stealth(hwnd, true);
-        }
-        // The off-screen frame is now painted + decorated (+ WDA under stealth):
-        // reveal it centered on the picked monitor using the real HiDPI-aware
-        // size, so the first ON-SCREEN frame is already complete (no flash).
-        let (_x, _y, w_px, h_px) = get_window_rect(hwnd).unwrap_or((0, 0, 460, 360));
-        let monitors = enum_monitors();
-        if let Some(mon) = pick_monitor(&monitors) {
-            let cx = (mon.left + (mon.width() - w_px) / 2).max(mon.left + 8);
-            let cy = (mon.top + (mon.height() - h_px) / 2).max(mon.top + 8);
-            let _ = move_window_pos_only(hwnd, cx, cy);
-        } else {
-            let _ = move_window_pos_only(hwnd, 100, 100);
-        }
-        true
-    });
-    let weak = win.as_weak();
-    Timer::single_shot(Duration::from_millis(HWND_REVEAL_FAST_MS), move || {
-        let Some(w) = weak.upgrade() else { return };
-        let revealed = {
-            let f = &*do_reveal;
-            f(&w)
-        };
-        if revealed {
-            return;
-        }
-        // HWND not realized within the fast window — one conservative retry.
-        let weak2 = w.as_weak();
-        let do_reveal2 = do_reveal.clone();
-        Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
-            if let Some(w) = weak2.upgrade() {
-                let f = &*do_reveal2;
-                let _ = f(&w);
-            }
-        });
-    });
-}
-
 /// Phase E6 v17 — maximize toggle helper. User: "нет функционала
 /// развернуть, нужно отдельной кнопкой или даб-кликом". Maximized
 /// tile is 800×600 (~1.7× default); restored back to 460×360. Uses
@@ -5619,51 +5435,6 @@ fn toggle_tile_maximize(hwnd: windows::Win32::Foundation::HWND, tile: &TileWindo
         }
     }
     diag!("tile maximized -> {new} (logical {w}x{h}, phys {pw}x{ph})");
-}
-
-/// #B1 — push the LIVE open-tile count to the bar's `open-tiles` property so
-/// the "+ tile (N)" label and the "close all" chip reflect reality. Call this
-/// after EVERY `tiles.push(...)` and EVERY close-handler `tiles.retain(...)`
-/// (and in the close-all handler). Distinct from `tiles_spawned`, which is a
-/// monotonic display counter for the per-tile #N badge and must not change.
-fn refresh_open_tiles(weak: &slint::Weak<OverlayBarWindow>, tiles: &TileWindows) {
-    if let Some(o) = weak.upgrade() {
-        o.set_open_tiles(tiles.borrow().len() as i32);
-    }
-}
-
-/// Clamp a persisted `color_scheme` to the 4 schemes `theme.slint` defines
-/// (0=Glacier, 1=Graphite, 2=Obsidian, 3=Light Frost). A corrupt/out-of-range
-/// value falls back to Glacier rather than rendering an all-default (black)
-/// theme.
-fn clamp_scheme(n: i32) -> i32 {
-    if (0..=3).contains(&n) {
-        n
-    } else {
-        0
-    }
-}
-
-// `Theme` is a Slint GLOBAL, but globals are scoped to each window-component
-// INSTANCE — every window (bar, settings, each tile, palette) owns its own
-// copy. So switching the scheme means setting it on EVERY live window, and
-// every freshly-created window must be seeded at construction. These tiny
-// per-type helpers centralise the `global::<Theme>().set_scheme(..)` call so
-// the clamp + access pattern lives in one place.
-fn apply_scheme_bar(w: &OverlayBarWindow, scheme: i32) {
-    w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
-}
-fn apply_scheme_tile(w: &TileWindow, scheme: i32) {
-    w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
-}
-fn apply_scheme_settings(w: &SettingsWindow, scheme: i32) {
-    w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
-}
-fn apply_scheme_palette(w: &PaletteWindow, scheme: i32) {
-    w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
-}
-fn apply_scheme_text_ask(w: &TextAskWindow, scheme: i32) {
-    w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
 }
 
 /// V0.8.3 — "Написать": open (or re-focus) the small text-input window. On
@@ -5750,10 +5521,6 @@ fn open_text_ask(
         focus_window(hwnd);
     });
     *slot_ref.borrow_mut() = Some(win);
-}
-
-fn apply_scheme_wizard(w: &WizardWindow, scheme: i32) {
-    w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
 }
 
 /// V0.8.4 — 🆘 Help (F1 / 🆘 chip): a read-only reference window (bar icons,
@@ -6147,15 +5914,14 @@ fn wire_wizard_steps(
     win: &WizardWindow,
     cfg: &overlay_backend::config::SharedConfig,
     state: &slint_replay::app_state::SharedState,
-    tiles: &TileWindows,
     overlay_weak: &slint::Weak<OverlayBarWindow>,
-    palette_ref: &Rc<RefCell<Option<PaletteWindow>>>,
-    text_ask_ref: &Rc<RefCell<Option<TextAskWindow>>>,
     settings_ref: &Rc<RefCell<Option<SettingsWindow>>>,
-    // FIX #6 — so the wizard's in-window stealth toggle also re-stealths the
-    // 🆘 help + crash-recovery-offer windows if either is open.
-    help_ref: &Rc<RefCell<Option<HelpWindow>>>,
-    recover_offer_ref: &Rc<RefCell<Option<RecoverOfferWindow>>>,
+    // Phase 1 (§5.1) — the wizard's in-window stealth toggle now re-stealths
+    // EVERY open window (tiles / palette / text_ask / Settings / 🆘 help /
+    // recover-offer) through `registry.apply_stealth`, replacing the previous
+    // per-window clones + loop (palette_ref / text_ask_ref / help_ref /
+    // recover_offer_ref / tiles are all reached via the registry now).
+    registry: &WindowRegistry,
 ) {
     // nav-next: advance + auto-run the NEW step's check; refill summary at step 7.
     {
@@ -6427,21 +6193,14 @@ fn wire_wizard_steps(
     }
 
     // Step 6: stealth — the SAME global stealth path as on_stealth_toggle_clicked,
-    // PLUS the wizard window itself. The switch lives in the wizard, so a toggle
-    // from here must also hide the wizard from capture (STEP-7's external toggles
-    // can't cover a toggle that originates inside the wizard).
+    // routed through the shared `WindowRegistry` so the wizard toggle covers every
+    // open window (incl. the wizard itself, which is in the registry). The bar is
+    // driven inline (it also drops its taskbar button under stealth).
     {
-        let weak = win.as_weak();
-        let state_c = state.clone();
-        let tiles_c = tiles.clone();
         let ow = overlay_weak.clone();
-        let pal = palette_ref.clone();
-        let ta = text_ask_ref.clone();
-        let set = settings_ref.clone();
-        // FIX #6 — flip 🆘 help + crash-recovery-offer too if open.
-        let help_c = help_ref.clone();
-        let recover_c = recover_offer_ref.clone();
+        let registry_c = registry.clone();
         let cfg_c = cfg.clone();
+        let state_c = state.clone();
         win.on_stealth_toggled(move |on| {
             {
                 let mut st = match state_c.lock() {
@@ -6456,11 +6215,6 @@ fn wire_wizard_steps(
                 c.stealth_enabled = on;
                 let _ = config::save(&c);
             }
-            if let Some(w) = weak.upgrade() {
-                if let Ok(h) = grab_hwnd(w.window()) {
-                    let _ = set_stealth(h, on);
-                }
-            }
             if let Some(o) = ow.upgrade() {
                 o.set_stealth_active(on);
                 if let Ok(h) = grab_hwnd(o.window()) {
@@ -6468,38 +6222,8 @@ fn wire_wizard_steps(
                     let _ = set_skip_taskbar(h, on);
                 }
             }
-            for t in tiles_c.borrow().iter() {
-                if let Ok(h) = grab_hwnd(t.window()) {
-                    let _ = set_stealth(h, on);
-                }
-            }
-            if let Some(p) = pal.borrow().as_ref() {
-                if let Ok(h) = grab_hwnd(p.window()) {
-                    let _ = set_stealth(h, on);
-                }
-            }
-            if let Some(t) = ta.borrow().as_ref() {
-                if let Ok(h) = grab_hwnd(t.window()) {
-                    let _ = set_stealth(h, on);
-                }
-            }
-            // FIX #6 — 🆘 help + crash-recovery-offer windows.
-            if let Some(h) = help_c.borrow().as_ref() {
-                if let Ok(hwnd) = grab_hwnd(h.window()) {
-                    let _ = set_stealth(hwnd, on);
-                }
-            }
-            if let Some(ro) = recover_c.borrow().as_ref() {
-                if let Ok(hwnd) = grab_hwnd(ro.window()) {
-                    let _ = set_stealth(hwnd, on);
-                }
-            }
-            if let Some(sw) = set.borrow().as_ref() {
-                sw.set_stealth_toggle(on);
-                if let Ok(h) = grab_hwnd(sw.window()) {
-                    let _ = set_stealth(h, on);
-                }
-            }
+            // All other open windows (incl. this wizard) via the single path.
+            registry_c.apply_stealth(on);
         });
     }
 }
@@ -6512,15 +6236,12 @@ fn open_wizard(
     slot_ref: &Rc<RefCell<Option<WizardWindow>>>,
     cfg: &overlay_backend::config::SharedConfig,
     state: &slint_replay::app_state::SharedState,
-    tiles: &TileWindows,
     overlay_weak: &slint::Weak<OverlayBarWindow>,
-    palette_ref: &Rc<RefCell<Option<PaletteWindow>>>,
-    text_ask_ref: &Rc<RefCell<Option<TextAskWindow>>>,
     settings_ref: &Rc<RefCell<Option<SettingsWindow>>>,
-    // FIX #6 — forwarded to wire_wizard_steps so the wizard's stealth toggle
-    // can re-stealth the 🆘 help + crash-recovery-offer windows too.
-    help_ref: &Rc<RefCell<Option<HelpWindow>>>,
-    recover_offer_ref: &Rc<RefCell<Option<RecoverOfferWindow>>>,
+    // Phase 1 (§5.1) — forwarded to wire_wizard_steps so the wizard's stealth
+    // toggle re-stealths every open window through the shared registry (tiles /
+    // palette / text_ask / 🆘 help / recover-offer are all reached via it).
+    registry: &WindowRegistry,
 ) {
     {
         let slot = slot_ref.borrow();
@@ -6541,18 +6262,7 @@ fn open_wizard(
     };
     apply_scheme_wizard(&win, global_scheme());
     win.set_stealth_on(global_stealth());
-    wire_wizard_steps(
-        &win,
-        cfg,
-        state,
-        tiles,
-        overlay_weak,
-        palette_ref,
-        text_ask_ref,
-        settings_ref,
-        help_ref,
-        recover_offer_ref,
-    );
+    wire_wizard_steps(&win, cfg, state, overlay_weak, settings_ref, registry);
     {
         let weak = win.as_weak();
         let slot = slot_ref.clone();
@@ -7092,22 +6802,11 @@ fn open_settings(
     tiles_ref: &TileWindows,
     cfg: &overlay_backend::config::SharedConfig,
     overlay_weak: &slint::Weak<OverlayBarWindow>,
-    // V0.8.3 (M1) — so the Settings-tab stealth toggle can also flip the
-    // "✏ Написать" input window if it happens to be open.
-    text_ask_ref: &Rc<RefCell<Option<TextAskWindow>>>,
-    // Stealth-leak fix — the Settings-tab stealth toggle must also flip the F4
-    // KB palette (the bar-chip toggle already does). Without it the palette
-    // stayed visible to screen-capture when stealth was enabled from Settings.
-    palette_ref: &Rc<RefCell<Option<PaletteWindow>>>,
-    // V0.8.4 — so the Settings → Interface "🪄 Run setup wizard" button can
-    // (re)open the first-run wizard, and the Settings-tab stealth toggle can
-    // flip the wizard window too if it happens to be open.
-    wizard_ref: &Rc<RefCell<Option<WizardWindow>>>,
-    // FIX #6 — so the Settings-tab stealth toggle re-stealths the 🆘 help +
-    // crash-recovery-offer windows too, and so the nested "Run setup wizard"
-    // can forward them to open_wizard.
-    help_ref: &Rc<RefCell<Option<HelpWindow>>>,
-    recover_offer_ref: &Rc<RefCell<Option<RecoverOfferWindow>>>,
+    // Phase 1 (§5.1) — the Settings-tab stealth toggle + colour-scheme switch
+    // now reach every open window through this registry (text_ask / palette /
+    // wizard / 🆘 help / recover-offer included), and the nested "Run setup
+    // wizard" button forwards the same registry to `open_wizard`.
+    registry: &WindowRegistry,
 ) {
     // Light up the bar's ⚙ chip while Settings is open (user: "значок
     // настроек не загорается когда настройки открыты"). Cleared in the
@@ -7263,16 +6962,14 @@ fn open_settings(
     });
 
     let s3 = state.clone();
-    let tiles_ref3 = tiles_ref.clone();
     let overlay_for_stealth = overlay_weak.clone();
-    let self_weak_stealth = win.as_weak();
     let cfg_st = cfg.clone();
-    let text_ask_st = text_ask_ref.clone();
-    let palette_st = palette_ref.clone();
-    let wizard_st = wizard_ref.clone();
-    // FIX #6 — flip 🆘 help + crash-recovery-offer too if open.
-    let help_st = help_ref.clone();
-    let recover_st = recover_offer_ref.clone();
+    // Phase 1 (§5.1) — ONE registry clone replaces the per-window stealth loops
+    // (tiles / this Settings window / text_ask / palette / 🆘 help / recover-offer
+    // / wizard). Note: unlike the bar + wizard handlers, the Settings-tab toggle
+    // does NOT drop the bar's taskbar button — that behaviour is preserved by
+    // driving the bar inline here without `set_skip_taskbar`.
+    let registry_stealth = registry.clone();
     win.on_stealth_changed(move |on| {
         if let Ok(mut st) = s3.lock() {
             st.stealth = on;
@@ -7285,84 +6982,32 @@ fn open_settings(
             c.stealth_enabled = on;
             let _ = config::save(&c);
         }
-        for t in tiles_ref3.borrow().iter() {
-            if let Ok(hwnd) = grab_hwnd(t.window()) {
-                let _ = set_stealth(hwnd, on);
-            }
-        }
-        // #111 — also flip the overlay bar + this Settings window itself
-        // (toggling stealth here previously left both visible to capture).
+        // #111 — also flip the overlay bar itself (toggling stealth here
+        // previously left it visible to capture). The bar stays inline (it is not
+        // in the registry); the Settings window itself is covered by the registry.
         if let Some(o) = overlay_for_stealth.upgrade() {
             o.set_stealth_active(on);
             if let Ok(hwnd) = grab_hwnd(o.window()) {
                 let _ = set_stealth(hwnd, on);
             }
         }
-        if let Some(sw) = self_weak_stealth.upgrade() {
-            if let Ok(hwnd) = grab_hwnd(sw.window()) {
-                let _ = set_stealth(hwnd, on);
-            }
-        }
-        // V0.8.3 (M1) — flip the "✏ Написать" input window too if it's open, so
-        // the typed question can't linger on a screen-share after stealth-on.
-        if let Some(t) = text_ask_st.borrow().as_ref() {
-            if let Ok(hwnd) = grab_hwnd(t.window()) {
-                let _ = set_stealth(hwnd, on);
-            }
-        }
-        // Stealth-leak fix — flip the F4 KB palette too (mirrors the bar-chip
-        // toggle at on_stealth_toggle_clicked). Without this, enabling stealth
-        // from the Settings tab left an OPEN palette visible to screen-capture
-        // (the KB search box + results), while the bar showed stealth as ON.
-        if let Some(p) = palette_st.borrow().as_ref() {
-            if let Ok(hwnd) = grab_hwnd(p.window()) {
-                let _ = set_stealth(hwnd, on);
-            }
-        }
-        // FIX #6 — flip the 🆘 help + crash-recovery-offer windows too if open,
-        // so the Settings-tab stealth toggle hides them from capture like every
-        // other surface (mirrors the palette/text_ask blocks above).
-        if let Some(h) = help_st.borrow().as_ref() {
-            if let Ok(hwnd) = grab_hwnd(h.window()) {
-                let _ = set_stealth(hwnd, on);
-            }
-        }
-        if let Some(ro) = recover_st.borrow().as_ref() {
-            if let Ok(hwnd) = grab_hwnd(ro.window()) {
-                let _ = set_stealth(hwnd, on);
-            }
-        }
-        // V0.8.4 — flip the first-run wizard window too if it's open, so the
-        // Settings-tab stealth toggle hides it from capture like every other
-        // surface (the wizard is screen-shareable until WDA is applied) and its
-        // in-window Switch stays in sync.
-        if let Some(wz) = wizard_st.borrow().as_ref() {
-            if let Ok(hwnd) = grab_hwnd(wz.window()) {
-                let _ = set_stealth(hwnd, on);
-            }
-            wz.set_stealth_on(on);
-        }
+        // Every other open window (incl. this Settings window) via the one path.
+        registry_stealth.apply_stealth(on);
     });
 
     // V0.8.4 — Settings → Interface "🪄 Run setup wizard" button. Re-opens the
     // guided first-run wizard on demand (it is also auto-shown on first launch).
     {
-        let wz = wizard_ref.clone();
+        // The wizard slot lives in the registry; forward the same registry so the
+        // wizard's stealth toggle reaches every open window (Phase 1 §5.1).
+        let wz = registry.wizard.clone();
         let cfg_w = cfg.clone();
         let st = settings_ref.clone();
         let state_w = state.clone();
-        let tiles_w = tiles_ref.clone();
         let ow = overlay_weak.clone();
-        let pal = palette_ref.clone();
-        let ta = text_ask_ref.clone();
-        // FIX #6 — forward help + recover_offer so the wizard opened from here
-        // also re-stealths them on its in-window stealth toggle.
-        let help_w = help_ref.clone();
-        let recover_w = recover_offer_ref.clone();
+        let registry_w = registry.clone();
         win.on_open_wizard_clicked(move || {
-            open_wizard(
-                &wz, &cfg_w, &state_w, &tiles_w, &ow, &pal, &ta, &st, &help_w, &recover_w,
-            );
+            open_wizard(&wz, &cfg_w, &state_w, &ow, &st, &registry_w);
         });
     }
 
@@ -7963,9 +7608,13 @@ fn open_settings(
     // persists color_scheme. Mirrors the tile-opacity handler's shape.
     {
         let cfg_scheme = cfg.clone();
-        let tiles_scheme = tiles_ref.clone();
         let overlay_scheme = overlay_weak.clone();
-        let settings_weak = win.as_weak();
+        // Phase 1 (§5.1) — re-skin every open window through the registry (the
+        // bar stays inline). This now also reaches the palette / text_ask /
+        // wizard / 🆘 help / recover-offer windows if open — same "no window
+        // forgotten" guarantee as stealth; previously only tiles + Settings were
+        // re-skinned live (the others kept their construction-time scheme).
+        let registry_scheme = registry.clone();
         win.on_color_scheme_selected(move |idx| {
             let scheme = clamp_scheme(idx);
             // Persist first so a crash mid-repaint still survives the choice.
@@ -7979,16 +7628,11 @@ fn open_settings(
             }
             // Future windows (tiles, palette) read this at construction.
             set_global_scheme(scheme);
-            // Re-skin all currently-live windows.
+            // Re-skin all currently-live windows: bar inline, the rest via registry.
             if let Some(o) = overlay_scheme.upgrade() {
                 apply_scheme_bar(&o, scheme);
             }
-            for tile in tiles_scheme.borrow().iter() {
-                apply_scheme_tile(tile, scheme);
-            }
-            if let Some(s) = settings_weak.upgrade() {
-                apply_scheme_settings(&s, scheme);
-            }
+            registry_scheme.apply_scheme(scheme);
             eprintln!("[overlay-host] color_scheme -> {scheme}");
         });
     }
