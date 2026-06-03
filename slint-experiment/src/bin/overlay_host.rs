@@ -5793,6 +5793,11 @@ fn build_recovery_block(recovered: &overlay_backend::journal::UnfinishedSession)
 ///   separator the seed inserts, so the user's own prose is neither duplicated
 ///   nor pushed further down on every reseed. (Loops so a config that already
 ///   stacked blocks under the pre-guard behaviour is collapsed to clean prose.)
+///
+/// Delimiter-based by design (matching Phase 1's seed): the markers are long,
+/// specific sentinels, so the negligible risk that a user's OWN prose holds
+/// BOTH literals verbatim — and is therefore mis-stripped — is accepted.
+/// Recovered fields are the user's own past transcript, never adversarial.
 fn strip_recovery_block(context: &str) -> String {
     let is_newline = |c: char| c == '\n' || c == '\r';
     let mut out = context.to_string();

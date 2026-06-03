@@ -1,5 +1,25 @@
 # Autonomous work plan
 
+## 🔧 Interactive follow-up (2026-06-03) — recovery strip-on-reseed (Phase 2 DONE)
+
+Implemented the strip-on-reseed guard the N2 finding below anticipated.
+`seed_recovery_context` now STRIPS any prior recovery block
+(`RECOVERY_CONTEXT_HEADER` … new `RECOVERY_CONTEXT_FOOTER`) out of
+`meeting_context` before prepending a fresh one, so a crash→recover→crash loop
+can no longer stack stale blocks (the live AI system prompt stops accreting old
+Q&A). Split the pure core out into `build_recovery_block` /
+`strip_recovery_block` / `compose_recovery_context`; added 7 unit tests in
+`recovery_seed_tests` (seed-twice → exactly one block; user prose preserved
+verbatim; no-prior-block == legacy byte-for-byte; + 4 strip edge cases incl.
+leftover-blank-line collapse and pre-guard stacked-block cleanup).
+`save_active_context` rewrites both the live field and the active profile's
+mirrored copy with the recomposed text, so the strip cleans the profile too.
+Char-count-only logging preserved (never logs context text). Gate green on both
+crates (fmt --check / clippy --all-targets -D warnings / test) + an independent
+review (1 MINOR only: delimiter-collision if a user types both sentinel literals
+verbatim — documented + accepted as a pre-existing Phase 1 design property).
+Touches `slint-experiment/src/bin/overlay_host.rs` only.
+
 ## 🌙 Autonomous run — translation + v0.8.9 + design scaffold + memory (2026-06-02 23:22 → ~08:22)
 
 Mandate (user asleep, full delegation): 4 tracks over ~9h, every decision mine
