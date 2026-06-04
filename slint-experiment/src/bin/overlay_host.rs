@@ -1403,9 +1403,8 @@ fn main() -> Result<(), slint::PlatformError> {
     let wizard: Rc<RefCell<Option<WizardWindow>>> = Rc::new(RefCell::new(None));
     // 🆘 Help window (F1 / 🆘 chip), created on demand.
     let help: Rc<RefCell<Option<HelpWindow>>> = Rc::new(RefCell::new(None));
-    // 🗄 Session-archive browser (F7; a 📚 bar chip lands in the follow-up
-    // commit), created on demand like the palette/help. Phase 3a — browse +
-    // FTS-search the SQLite session catalog.
+    // 🗄 Session-archive browser (F7 + 🗄 bar chip), created on demand like the
+    // palette/help. Phase 3a — browse + FTS-search the SQLite session catalog.
     let archive: Rc<RefCell<Option<ArchiveWindow>>> = Rc::new(RefCell::new(None));
     // Memory Phase 1 — crash-recovery offer, shown once a beat after startup if
     // the newest journal looks unfinished (see the delayed-open below).
@@ -1559,6 +1558,9 @@ fn main() -> Result<(), slint::PlatformError> {
                         eprintln!("[overlay-host] F7 pressed — closing archive (toggle)");
                         if let Some(a) = hp_archive.borrow_mut().take() {
                             let _ = a.hide();
+                        }
+                        if let Some(o) = hp_weak_overlay.upgrade() {
+                            o.set_archive_open(false);
                         }
                     } else {
                         eprintln!("[overlay-host] F7 pressed — opening archive");
@@ -2250,6 +2252,17 @@ fn main() -> Result<(), slint::PlatformError> {
         let ow = overlay.as_weak();
         overlay.on_help_clicked(move || {
             open_help(&help_ref, &ow);
+        });
+    }
+
+    // ===== 🗄 Session archive (F7 / 🗄 chip) =====
+    {
+        let archive_ref = archive.clone();
+        let tiles_ref = tiles.clone();
+        let state_ref = state.clone();
+        let ow = overlay.as_weak();
+        overlay.on_archive_clicked(move || {
+            open_archive(&archive_ref, &tiles_ref, &state_ref, &ow);
         });
     }
 

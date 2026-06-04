@@ -335,8 +335,7 @@ impl PaletteResultExt for PaletteResult {
 // Session archive (Phase 3a) — browse + FTS-search the SQLite catalog.
 // ============================================================================
 
-/// Phase 3a — open (or re-focus) the 🗄 session-archive browser (F7; a 📚 bar
-/// chip is wired in the follow-up commit).
+/// Phase 3a — open (or re-focus) the 🗄 session-archive browser (F7 / 🗄 chip).
 /// Lists every indexed session newest-first and full-text-searches their
 /// transcript + AI Q&A over the SQLite catalog; activating a row spawns a
 /// read-only tile with that session's content (via [`spawn_content_tile`], the
@@ -471,11 +470,15 @@ pub(crate) fn open_archive(
     {
         let weak = win.as_weak();
         let slot = archive_ref.clone();
+        let wov = weak_overlay.clone();
         win.on_close_requested(move || {
             if let Some(w) = weak.upgrade() {
                 let _ = w.hide();
             }
             *slot.borrow_mut() = None;
+            if let Some(o) = wov.upgrade() {
+                o.set_archive_open(false);
+            }
         });
     }
 
@@ -485,6 +488,11 @@ pub(crate) fn open_archive(
         let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
         focus_window(hwnd);
     });
+    // Light the 🗄 bar chip while the archive is open (like 🆘 / ⚙). Cleared
+    // by the F7 toggle + the in-window close handler.
+    if let Some(o) = weak_overlay.upgrade() {
+        o.set_archive_open(true);
+    }
     *archive_ref.borrow_mut() = Some(win);
 }
 

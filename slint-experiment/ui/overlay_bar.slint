@@ -243,7 +243,9 @@ export component OverlayBarWindow inherits Window {
     // the un-armed RU worst case (wide "⚠ AI недоступен" status + close-all + 2
     // open tiles) comfortably inside the fixed-width bar (single-row layout, so
     // total content — not cluster placement — is what clips).
-    preferred-width: 1120px;
+    // Phase 3a — 1120 → 1160 to absorb the new 🗄 archive chip with the SAME
+    // worst-case slack as the verified 1120 baseline (icon-only chip ≈ 30 px).
+    preferred-width: 1160px;
     preferred-height: 86px;
     min-width: 720px;
 
@@ -307,6 +309,9 @@ export component OverlayBarWindow inherits Window {
     // не загорается когда настройки открыты".
     in-out property <bool> settings-open: false;
     in-out property <bool> help-open: false;
+    // Phase 3a — lights the 🗄 archive chip while the archive window is open
+    // (same as settings-open / help-open).
+    in-out property <bool> archive-open: false;
     // Phase E6 v45 — X quit is two-step: first press arms an inline
     // "Quit? Yes/No" confirm (Rust auto-disarms after a few seconds) so a
     // stray click can't kill the app. User: "крестик моментально всё
@@ -342,6 +347,7 @@ export component OverlayBarWindow inherits Window {
     callback aggressive-toggle-clicked();
     callback open-settings-clicked();
     callback help-clicked();   // 🆘 chip / F1 → open the help window
+    callback archive-clicked(); // 🗄 chip / F7 → open the session archive
     callback quit-clicked();   // X pressed → Rust arms the inline confirm
     // V0.8.0 (Поток B) — emergency restart (⟳). Two-step like Quit.
     callback restart-clicked();
@@ -525,6 +531,15 @@ export component OverlayBarWindow inherits Window {
                 active: root.aggressive-active;
                 accent: #fb923c;
                 clicked => { root.aggressive-toggle-clicked(); }
+            }
+            // 🗄 Session archive (also F7) — browse + search past sessions.
+            // Icon-only + left of the spring so it consumes slack, not the
+            // width-sensitive right cluster. Lights while the archive is open.
+            Chip {
+                label: "🗄";
+                active: root.archive-open;
+                accent: #a78bfa;
+                clicked => { root.archive-clicked(); }
             }
 
             // Spring spacer — pushes the primary + system cluster right.
