@@ -515,10 +515,28 @@ impl OverlayBarBridge {
                     slot.take()
                 };
                 if let Some(stream) = finished {
+                    // An EMPTY answer means the model emitted a tool call (e.g. a
+                    // web-search tool the cloud bridge offers) instead of text —
+                    // which this text-stream client can't execute, so the tile
+                    // would otherwise render blank ("найди в интернете…" → nothing).
+                    // Show a generic note (no endpoint/tool internals) and do NOT
+                    // fold an empty assistant turn into the conversation.
+                    let answer_empty = stream.accumulated.trim().is_empty();
                     // Final body — used for the conversation snapshot AND the
                     // terminal render below (which is never throttled).
-                    let final_body = format!("{}{}", stream.prefix, stream.accumulated);
-                    if stream.convo_id >= 0 {
+                    let final_body = if answer_empty {
+                        let note = "_(Модель не вернула текст — вероятно, запросила \
+                            инструмент вроде веб-поиска, который в этом режиме не \
+                            поддерживается. Переформулируй вопрос без «найди/загугли».)_";
+                        if stream.prefix.is_empty() {
+                            note.to_string()
+                        } else {
+                            format!("{}\n\n{note}", stream.prefix)
+                        }
+                    } else {
+                        format!("{}{}", stream.prefix, stream.accumulated)
+                    };
+                    if stream.convo_id >= 0 && !answer_empty {
                         let mut messages = stream.request_messages;
                         messages.push(ai::ChatMessage {
                             role: "assistant".into(),
