@@ -60,3 +60,62 @@ pub struct SearchHit {
     pub body: String,
     pub rank: f64,
 }
+
+/// A suggested memory fragment mined from a session, awaiting the user's
+/// approve / reject / edit (Phase 3b — curated personal memory). Only an
+/// APPROVED candidate becomes a [`MemoryItem`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryCandidate {
+    pub id: i64,
+    pub profile_id: String,
+    /// The session it was mined from (`None` for a manually-added candidate).
+    pub source_session_id: Option<String>,
+    /// `experience` | `preference` | `answer` | `weak_topic` | `note`.
+    pub kind: String,
+    pub text: String,
+    /// Why it was suggested — shown to the user at review time.
+    pub reason: String,
+    /// `pending` | `approved` | `rejected`.
+    pub status: String,
+    pub created_at_ms: i64,
+}
+
+/// A user-APPROVED memory item — the ONLY memory `context_builder` may mix into
+/// a new AI request. User-owned + durable: survives a catalog re-index.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryItem {
+    pub id: i64,
+    pub profile_id: String,
+    /// `experience` | `preference` | `answer` | `weak_topic` | `note`.
+    pub kind: String,
+    pub text: String,
+    pub source_session_id: Option<String>,
+    pub approved_at_ms: i64,
+    /// `None` = active; `Some(ms)` = archived (soft-deleted — stops feeding
+    /// context but stays on record).
+    pub archived_at_ms: Option<i64>,
+    /// `none` | `pending` | `done` (Phase 4 embeddings).
+    pub embedding_status: String,
+}
+
+/// Fields for inserting a new [`MemoryCandidate`]. The store assigns `id`,
+/// defaults `status` to `pending`, and stamps `created_at_ms` from the caller.
+#[derive(Debug, Clone)]
+pub struct NewMemoryCandidate {
+    pub profile_id: String,
+    pub source_session_id: Option<String>,
+    pub kind: String,
+    pub text: String,
+    pub reason: String,
+}
+
+/// Fields for inserting a new [`MemoryItem`] directly (a manually-added note, or
+/// the item minted when a candidate is approved). The store assigns `id`, stamps
+/// `approved_at_ms` from the caller, and defaults `embedding_status` to `none`.
+#[derive(Debug, Clone)]
+pub struct NewMemoryItem {
+    pub profile_id: String,
+    pub kind: String,
+    pub text: String,
+    pub source_session_id: Option<String>,
+}

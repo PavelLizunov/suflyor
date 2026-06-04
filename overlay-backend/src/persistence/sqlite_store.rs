@@ -11,7 +11,10 @@ use rusqlite::{params, Connection, Row};
 use std::path::{Path, PathBuf};
 
 use super::migrations;
-use super::models::{AiTurn, SearchHit, Session, Utterance};
+use super::models::{
+    AiTurn, MemoryCandidate, MemoryItem, NewMemoryCandidate, NewMemoryItem, SearchHit, Session,
+    Utterance,
+};
 
 /// The catalog handle. Owns one SQLite connection.
 pub struct Store {
@@ -284,6 +287,197 @@ impl Store {
         }
         Ok(out)
     }
+
+    // ======================================================================
+    // Curated personal memory (Phase 3b) — candidates + approved items. These
+    // tables are USER-OWNED (not a rebuildable projection): the indexer never
+    // touches them, so they survive a catalog re-index. Timestamps are
+    // caller-stamped (like `Session::indexed_at_ms`) so callers control the
+    // clock and tests stay deterministic.
+    // ======================================================================
+
+    /// Insert a memory candidate (status defaults `pending`). Returns its id.
+    pub fn insert_candidate(&mut self, c: &NewMemoryCandidate, created_at_ms: i64) -> Result<i64> {
+        self.conn
+            .execute(
+                "INSERT INTO memory_candidates \
+                 (profile_id, source_session_id, kind, text, reason, status, created_at_ms) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, 'pending', ?6)",
+                params![
+                    c.profile_id,
+                    c.source_session_id,
+                    c.kind,
+                    c.text,
+                    c.reason,
+                    created_at_ms
+                ],
+            )
+            .context("insert memory candidate")?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    /// Candidates for a profile in a status (e.g. `pending`), newest first.
+    pub fn list_candidates(&self, profile_id: &str, status: &str) -> Result<Vec<MemoryCandidate>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id, profile_id, source_session_id, kind, text, reason, status, \
+                 created_at_ms FROM memory_candidates WHERE profile_id = ?1 AND status = ?2 \
+                 ORDER BY created_at_ms DESC, id DESC",
+            )
+            .context("prepare list_candidates")?;
+        let rows = stmt
+            .query_map(params![profile_id, status], row_to_candidate)
+            .context("query list_candidates")?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.context("map candidate")?);
+        }
+        Ok(out)
+    }
+
+    /// Count candidates for a profile in a status (e.g. `pending` → a badge).
+    pub fn count_candidates(&self, profile_id: &str, status: &str) -> Result<i64> {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM memory_candidates WHERE profile_id = ?1 AND status = ?2",
+                params![profile_id, status],
+                |r| r.get(0),
+            )
+            .context("count candidates")
+    }
+
+    /// Set a candidate's status (e.g. `rejected`). To APPROVE use
+    /// [`approve_candidate`] (it also mints the item).
+    pub fn set_candidate_status(&mut self, id: i64, status: &str) -> Result<()> {
+        self.conn
+            .execute(
+                "UPDATE memory_candidates SET status = ?2 WHERE id = ?1",
+                params![id, status],
+            )
+            .context("set candidate status")?;
+        Ok(())
+    }
+
+    /// Edit a candidate's text (refine before approving).
+    pub fn update_candidate_text(&mut self, id: i64, text: &str) -> Result<()> {
+        self.conn
+            .execute(
+                "UPDATE memory_candidates SET text = ?2 WHERE id = ?1",
+                params![id, text],
+            )
+            .context("update candidate text")?;
+        Ok(())
+    }
+
+    /// Approve a candidate: mark it `approved` AND mint a [`MemoryItem`] from it,
+    /// in ONE transaction. Returns the new item id. Errors if the candidate id
+    /// doesn't exist (the row read fails → the tx rolls back).
+    pub fn approve_candidate(&mut self, candidate_id: i64, approved_at_ms: i64) -> Result<i64> {
+        let tx = self.conn.transaction().context("begin approve tx")?;
+        let (profile_id, kind, text, source): (String, String, String, Option<String>) = tx
+            .query_row(
+                "SELECT profile_id, kind, text, source_session_id \
+                 FROM memory_candidates WHERE id = ?1",
+                params![candidate_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .context("load candidate to approve")?;
+        tx.execute(
+            "UPDATE memory_candidates SET status = 'approved' WHERE id = ?1",
+            params![candidate_id],
+        )
+        .context("mark candidate approved")?;
+        tx.execute(
+            "INSERT INTO memory_items \
+             (profile_id, kind, text, source_session_id, approved_at_ms, embedding_status) \
+             VALUES (?1, ?2, ?3, ?4, ?5, 'none')",
+            params![profile_id, kind, text, source, approved_at_ms],
+        )
+        .context("mint memory item")?;
+        let item_id = tx.last_insert_rowid();
+        tx.commit().context("commit approve tx")?;
+        Ok(item_id)
+    }
+
+    /// Insert a memory item directly (a manual note). Returns its id.
+    pub fn insert_memory_item(&mut self, m: &NewMemoryItem, approved_at_ms: i64) -> Result<i64> {
+        self.conn
+            .execute(
+                "INSERT INTO memory_items \
+                 (profile_id, kind, text, source_session_id, approved_at_ms, embedding_status) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, 'none')",
+                params![
+                    m.profile_id,
+                    m.kind,
+                    m.text,
+                    m.source_session_id,
+                    approved_at_ms
+                ],
+            )
+            .context("insert memory item")?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    /// Memory items for a profile, newest first. By default ACTIVE only;
+    /// `include_archived` adds the soft-deleted ones.
+    pub fn list_memory_items(
+        &self,
+        profile_id: &str,
+        include_archived: bool,
+    ) -> Result<Vec<MemoryItem>> {
+        let mut stmt = self
+            .conn
+            .prepare(if include_archived {
+                "SELECT id, profile_id, kind, text, source_session_id, approved_at_ms, \
+                 archived_at_ms, embedding_status FROM memory_items WHERE profile_id = ?1 \
+                 ORDER BY approved_at_ms DESC, id DESC"
+            } else {
+                "SELECT id, profile_id, kind, text, source_session_id, approved_at_ms, \
+                 archived_at_ms, embedding_status FROM memory_items WHERE profile_id = ?1 \
+                 AND archived_at_ms IS NULL ORDER BY approved_at_ms DESC, id DESC"
+            })
+            .context("prepare list_memory_items")?;
+        let rows = stmt
+            .query_map(params![profile_id], row_to_item)
+            .context("query list_memory_items")?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.context("map memory item")?);
+        }
+        Ok(out)
+    }
+
+    /// Edit an approved item's text.
+    pub fn update_memory_item_text(&mut self, id: i64, text: &str) -> Result<()> {
+        self.conn
+            .execute(
+                "UPDATE memory_items SET text = ?2 WHERE id = ?1",
+                params![id, text],
+            )
+            .context("update memory item text")?;
+        Ok(())
+    }
+
+    /// Soft-delete (archive) an item — it stops feeding context but stays on
+    /// record. Pass the archive timestamp.
+    pub fn archive_memory_item(&mut self, id: i64, archived_at_ms: i64) -> Result<()> {
+        self.conn
+            .execute(
+                "UPDATE memory_items SET archived_at_ms = ?2 WHERE id = ?1",
+                params![id, archived_at_ms],
+            )
+            .context("archive memory item")?;
+        Ok(())
+    }
+
+    /// Hard-delete an item (the user's "delete" — gone for good).
+    pub fn delete_memory_item(&mut self, id: i64) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM memory_items WHERE id = ?1", params![id])
+            .context("delete memory item")?;
+        Ok(())
+    }
 }
 
 /// Map a `sessions` row (column order matches the SELECTs above) to a [`Session`].
@@ -323,6 +517,34 @@ fn row_to_ai_turn(row: &Row) -> rusqlite::Result<AiTurn> {
         answer: row.get(5)?,
         latency_ms: row.get(6)?,
         attached_screenshot: row.get(7)?,
+    })
+}
+
+/// Map a `memory_candidates` row (column order matches the SELECTs above).
+fn row_to_candidate(row: &Row) -> rusqlite::Result<MemoryCandidate> {
+    Ok(MemoryCandidate {
+        id: row.get(0)?,
+        profile_id: row.get(1)?,
+        source_session_id: row.get(2)?,
+        kind: row.get(3)?,
+        text: row.get(4)?,
+        reason: row.get(5)?,
+        status: row.get(6)?,
+        created_at_ms: row.get(7)?,
+    })
+}
+
+/// Map a `memory_items` row (column order matches the SELECTs above).
+fn row_to_item(row: &Row) -> rusqlite::Result<MemoryItem> {
+    Ok(MemoryItem {
+        id: row.get(0)?,
+        profile_id: row.get(1)?,
+        kind: row.get(2)?,
+        text: row.get(3)?,
+        source_session_id: row.get(4)?,
+        approved_at_ms: row.get(5)?,
+        archived_at_ms: row.get(6)?,
+        embedding_status: row.get(7)?,
     })
 }
 
@@ -483,5 +705,126 @@ mod tests {
         // unicode61 splits on the hyphen, so "хеш" is its own searchable token.
         assert!(!store.search("хеш", 10).unwrap().is_empty());
         assert!(!store.search("деревья", 10).unwrap().is_empty());
+    }
+
+    // ---- Curated memory (Phase 3b) ----
+
+    fn new_cand(text: &str) -> NewMemoryCandidate {
+        NewMemoryCandidate {
+            profile_id: "default".into(),
+            source_session_id: Some("sess-1".into()),
+            kind: "answer".into(),
+            text: text.into(),
+            reason: "asked twice".into(),
+        }
+    }
+
+    #[test]
+    fn memory_migration_is_v3() {
+        let store = Store::open_in_memory().unwrap();
+        let v: i32 = store
+            .conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, migrations::LATEST_VERSION);
+        assert_eq!(v, 3);
+    }
+
+    #[test]
+    fn candidate_insert_then_list_pending() {
+        let mut store = Store::open_in_memory().unwrap();
+        let id = store
+            .insert_candidate(&new_cand("explain B-trees"), 100)
+            .unwrap();
+        assert!(id > 0);
+        let pending = store.list_candidates("default", "pending").unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].text, "explain B-trees");
+        assert_eq!(pending[0].status, "pending");
+        assert_eq!(store.count_candidates("default", "pending").unwrap(), 1);
+    }
+
+    #[test]
+    fn reject_candidate_leaves_no_item() {
+        let mut store = Store::open_in_memory().unwrap();
+        let id = store.insert_candidate(&new_cand("x"), 1).unwrap();
+        store.set_candidate_status(id, "rejected").unwrap();
+        assert_eq!(store.count_candidates("default", "pending").unwrap(), 0);
+        assert_eq!(store.count_candidates("default", "rejected").unwrap(), 1);
+        assert!(store
+            .list_memory_items("default", false)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn approve_candidate_mints_item_and_marks_approved() {
+        let mut store = Store::open_in_memory().unwrap();
+        let cid = store
+            .insert_candidate(&new_cand("use a hash map"), 5)
+            .unwrap();
+        let item_id = store.approve_candidate(cid, 50).unwrap();
+        assert!(item_id > 0);
+        assert_eq!(store.count_candidates("default", "pending").unwrap(), 0);
+        assert_eq!(store.count_candidates("default", "approved").unwrap(), 1);
+        let items = store.list_memory_items("default", false).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].text, "use a hash map");
+        assert_eq!(items[0].kind, "answer");
+        assert_eq!(items[0].source_session_id.as_deref(), Some("sess-1"));
+        assert_eq!(items[0].approved_at_ms, 50);
+        assert!(items[0].archived_at_ms.is_none());
+    }
+
+    #[test]
+    fn approve_missing_candidate_errs() {
+        let mut store = Store::open_in_memory().unwrap();
+        assert!(store.approve_candidate(999, 1).is_err());
+        // The failed transaction left no item behind.
+        assert!(store.list_memory_items("default", true).unwrap().is_empty());
+    }
+
+    #[test]
+    fn edit_candidate_then_approve_keeps_edit() {
+        let mut store = Store::open_in_memory().unwrap();
+        let cid = store.insert_candidate(&new_cand("raw"), 1).unwrap();
+        store.update_candidate_text(cid, "refined").unwrap();
+        store.approve_candidate(cid, 2).unwrap();
+        let items = store.list_memory_items("default", false).unwrap();
+        assert_eq!(items[0].text, "refined");
+    }
+
+    #[test]
+    fn archive_hides_from_active_but_kept() {
+        let mut store = Store::open_in_memory().unwrap();
+        let cid = store.insert_candidate(&new_cand("y"), 1).unwrap();
+        let item_id = store.approve_candidate(cid, 2).unwrap();
+        store.archive_memory_item(item_id, 99).unwrap();
+        assert!(store
+            .list_memory_items("default", false)
+            .unwrap()
+            .is_empty());
+        let all = store.list_memory_items("default", true).unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].archived_at_ms, Some(99));
+    }
+
+    #[test]
+    fn manual_item_insert_then_hard_delete() {
+        let mut store = Store::open_in_memory().unwrap();
+        let item_id = store
+            .insert_memory_item(
+                &NewMemoryItem {
+                    profile_id: "default".into(),
+                    kind: "note".into(),
+                    text: "manual note".into(),
+                    source_session_id: None,
+                },
+                10,
+            )
+            .unwrap();
+        assert_eq!(store.list_memory_items("default", true).unwrap().len(), 1);
+        store.delete_memory_item(item_id).unwrap();
+        assert!(store.list_memory_items("default", true).unwrap().is_empty());
     }
 }
