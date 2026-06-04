@@ -8,6 +8,7 @@
 //! all HTTP / SSE / retry / cost / secret-safe error handling.
 
 use crate::ai::{ChatMessage, ContentPart, ImageUrl, MessageContent};
+use anyhow::{anyhow, Result};
 
 /// Max tokens for a vision answer. A capture usually asks a single question
 /// (read / solve / explain), so a moderate budget keeps latency + cost down.
@@ -81,6 +82,57 @@ pub fn build_vision_request(image_data_url: &str, prompt: &str) -> Vec<ChatMessa
 // zeroing itself, so a separate stream_vision() wrapper here was dead code
 // (audit) and was removed — keeping a single vision-streaming entry point.
 
+/// A tiny SYNTHETIC test image — a 32×32 PNG with three flat colour blocks on
+/// white — embedded as a data URL. [`test_connection`] sends THIS, never a
+/// capture of the user's screen, so a vision connectivity check can NEVER leak
+/// private pixels off the box (§9 — Secrets). It is multi-tone and 32×32 (not a
+/// 1×1 / blank pixel) so servers that reject trivial images as "too small" still
+/// accept it.
+pub const SYNTHETIC_TEST_IMAGE_DATA_URL: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAABSSURBVFhHY/g/wIABXYDeAO6AOxoaJGFqgeHjAI2oO0RhdDDqgFEHjDpg1AGDxwEDBUYdMHgdILfAjaoYFxh1wKgDRh0w6oDB6wB6gVEHDLgDABuFvoF6wlCUAAAAAElFTkSuQmCC";
+
+/// Live-check the SEPARATE vision endpoint: POST the embedded synthetic image +
+/// a 1-token prompt to `{base_url}/chat/completions`. Unlike a plain text ping
+/// ([`crate::ai::test_connection`]), this actually exercises the IMAGE path — a
+/// text-only endpoint rejects the image content — so a "Vision: ready" result
+/// means the endpoint can genuinely read a screenshot, not just answer text.
+///
+/// SECURITY: a transport error's chain embeds the request URL (the LAN base_url +
+/// port). Mirroring [`crate::ai::test_connection`], it is logged to the file log
+/// and a GENERIC "connection failed" is returned, so no `base_url` / LAN IP can
+/// paint into the screen-shareable Settings / Diagnostics result. An HTTP-status
+/// error returns the server's own response snippet (capped by the caller).
+pub async fn test_connection(base_url: String, bearer: String, model: String) -> Result<String> {
+    let client = crate::ai::http_client();
+    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+    let body = serde_json::json!({
+        "model": model,
+        "messages": build_vision_request(SYNTHETIC_TEST_IMAGE_DATA_URL, "Reply with: ok"),
+        "max_tokens": 1,
+    });
+    let resp = match client
+        .post(&url)
+        .timeout(std::time::Duration::from_secs(15))
+        .bearer_auth(&bearer)
+        .json(&body)
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            log::warn!("vision endpoint test transport error: {e:#}");
+            return Err(anyhow!("connection failed"));
+        }
+    };
+    let status = resp.status();
+    if status.is_success() {
+        Ok(format!("HTTP {}", status.as_u16()))
+    } else {
+        let txt = resp.text().await.unwrap_or_default();
+        let snippet: String = txt.chars().take(100).collect();
+        Err(anyhow!("HTTP {} — {}", status.as_u16(), snippet))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -132,5 +184,35 @@ mod tests {
             assert!(matches!(&parts[0], ContentPart::Text { text }
                 if text.as_str() == DEFAULT_VISION_PROMPT));
         }
+    }
+
+    #[test]
+    fn synthetic_test_image_is_a_nontrivial_png_data_url() {
+        // The diagnostics vision live-check sends THIS embedded image, never a
+        // screen capture. Lock its shape so a botched edit can't ship a broken
+        // or oversized asset. Hermetic — no base64 dep, no network.
+        let b64 = SYNTHETIC_TEST_IMAGE_DATA_URL
+            .strip_prefix("data:image/png;base64,")
+            .expect("must be a base64 PNG data URL");
+        assert!(
+            b64.len() > 120 && b64.len() < 4096,
+            "synthetic image base64 should be small but non-trivial (got {})",
+            b64.len()
+        );
+        assert!(
+            b64.bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'+' || c == b'/' || c == b'='),
+            "data URL payload must be valid base64"
+        );
+        // Base64 of the 8-byte PNG magic (89 50 4E 47 0D 0A 1A 0A) always starts
+        // the encoded string with this prefix.
+        assert!(
+            b64.starts_with("iVBORw0KGgo"),
+            "payload must be a PNG (magic-byte prefix)"
+        );
+        // It round-trips through the request builder as a single 2-part turn.
+        let msgs = build_vision_request(SYNTHETIC_TEST_IMAGE_DATA_URL, "Reply with: ok");
+        assert_eq!(msgs.len(), 1);
+        assert!(matches!(&msgs[0].content, MessageContent::Parts(p) if p.len() == 2));
     }
 }

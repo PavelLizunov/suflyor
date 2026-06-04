@@ -123,8 +123,10 @@ pub(crate) fn wire_vision_settings(
         });
     }
     {
-        // Vision connection test — resolve the vision endpoint, reuse the AI
-        // bridge tester. Off-thread so the HTTP round-trip can't freeze the UI.
+        // Vision connection test — resolve the vision endpoint, then send the
+        // SYNTHETIC test image (never the user's screen) so this actually
+        // exercises the IMAGE path, not just text reachability. Off-thread so the
+        // HTTP round-trip can't freeze the UI.
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_vision_test_clicked(move || {
@@ -140,7 +142,7 @@ pub(crate) fn wire_vision_settings(
                     .enable_all()
                     .build()
                 {
-                    Ok(rt) => match rt.block_on(overlay_backend::ai::test_connection(
+                    Ok(rt) => match rt.block_on(overlay_backend::vision::test_connection(
                         ep.base_url,
                         ep.bearer,
                         ep.model,

@@ -226,7 +226,9 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
             w.set_diag_stt_detail(SharedString::from(""));
             w.set_diag_mic_level(-1);
             w.set_diag_sys_level(-1);
-            let (ai_base, ai_bearer, ai_model, stt_backend, mic_device, sys_device) = {
+            w.set_diag_vision_level(-1);
+            w.set_diag_vision_detail(SharedString::from(""));
+            let (ai_base, ai_bearer, ai_model, stt_backend, mic_device, sys_device, vision_ep) = {
                 let c = cfg_c.read();
                 let ep = c.ai_endpoint(false);
                 (
@@ -236,36 +238,59 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                     c.stt_backend(),
                     c.mic_device.clone(),
                     c.system_audio_device.clone(),
+                    c.vision_endpoint(),
                 )
             };
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
                 // 1. AI + STT live pings (async, on a throwaway runtime).
-                let (ai_level, ai_msg, stt_level, stt_msg): (i32, String, i32, String) =
-                    match tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                    {
-                        Ok(rt) => {
-                            let (al, am): (i32, String) = match rt.block_on(
-                                overlay_backend::ai::test_connection(ai_base, ai_bearer, ai_model),
-                            ) {
+                let (ai_level, ai_msg, stt_level, stt_msg, vis_level, vis_msg): (
+                    i32,
+                    String,
+                    i32,
+                    String,
+                    i32,
+                    String,
+                ) = match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(rt) => {
+                        let (al, am): (i32, String) = match rt.block_on(
+                            overlay_backend::ai::test_connection(ai_base, ai_bearer, ai_model),
+                        ) {
+                            Ok(s) => (0, format!("[ok] {s}")),
+                            Err(e) => (4, format!("[err] {e:#}").chars().take(80).collect()),
+                        };
+                        let (sl, sm): (i32, String) = match rt
+                            .block_on(overlay_backend::stt::test_connection_backend(&stt_backend))
+                        {
+                            Ok(s) => (0, format!("[ok] {s}")),
+                            Err(e) => (4, format!("[err] {e:#}").chars().take(80).collect()),
+                        };
+                        // P2 — Vision live-check: send a SYNTHETIC image (never the
+                        // user's screen) to the resolved vision endpoint, so a
+                        // "ready" result means the IMAGE path works — not just text
+                        // reachability (the old check only pinged text). Vision off
+                        // → neutral "off" (3), not an error.
+                        let (vl, vm): (i32, String) = match vision_ep {
+                            None => (3, "off".to_string()),
+                            Some(ep) => match rt.block_on(overlay_backend::vision::test_connection(
+                                ep.base_url,
+                                ep.bearer,
+                                ep.model,
+                            )) {
                                 Ok(s) => (0, format!("[ok] {s}")),
                                 Err(e) => (4, format!("[err] {e:#}").chars().take(80).collect()),
-                            };
-                            let (sl, sm): (i32, String) = match rt.block_on(
-                                overlay_backend::stt::test_connection_backend(&stt_backend),
-                            ) {
-                                Ok(s) => (0, format!("[ok] {s}")),
-                                Err(e) => (4, format!("[err] {e:#}").chars().take(80).collect()),
-                            };
-                            (al, am, sl, sm)
-                        }
-                        Err(e) => {
-                            let m = format!("[err] runtime: {e}");
-                            (4, m.clone(), 4, m)
-                        }
-                    };
+                            },
+                        };
+                        (al, am, sl, sm, vl, vm)
+                    }
+                    Err(e) => {
+                        let m = format!("[err] runtime: {e}");
+                        (4, m.clone(), 4, m.clone(), 4, m)
+                    }
+                };
                 let weak_a = weak_res.clone();
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak_a.upgrade() {
@@ -273,6 +298,8 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                         w.set_diag_ai_detail(SharedString::from(ai_msg));
                         w.set_diag_stt_level(stt_level);
                         w.set_diag_stt_detail(SharedString::from(stt_msg));
+                        w.set_diag_vision_level(vis_level);
+                        w.set_diag_vision_detail(SharedString::from(vis_msg));
                     }
                 });
                 // 2. Microphone — record 3s. "Готов" if the capture path works

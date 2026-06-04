@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 /// time-to-first-token). `reqwest::Client` is cheap to clone (Arc inside).
 /// Per-call timeouts are applied on the request builder (`.timeout(..)`),
 /// NOT on the client, so the existing 10s/120s/180s budgets are preserved.
-fn http_client() -> reqwest::Client {
+pub(crate) fn http_client() -> reqwest::Client {
     use std::sync::OnceLock;
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
     CLIENT
