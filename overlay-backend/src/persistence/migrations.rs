@@ -11,11 +11,13 @@ use anyhow::{Context, Result};
 use rusqlite::Connection;
 
 /// The newest schema version this build knows how to produce.
-pub(crate) const LATEST_VERSION: i32 = 1;
+pub(crate) const LATEST_VERSION: i32 = 2;
 
 /// Ordered `(target_user_version, sql)` migrations. Index = order applied.
-const MIGRATIONS: &[(i32, &str)] =
-    &[(1, include_str!("../../migrations/0001_session_catalog.sql"))];
+const MIGRATIONS: &[(i32, &str)] = &[
+    (1, include_str!("../../migrations/0001_session_catalog.sql")),
+    (2, include_str!("../../migrations/0002_fts.sql")),
+];
 
 /// Apply every migration newer than the DB's current `user_version`, each in its
 /// own transaction, bumping `user_version` on success. Idempotent: a DB already

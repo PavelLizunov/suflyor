@@ -11,7 +11,7 @@ use rusqlite::{params, Connection, Row};
 use std::path::{Path, PathBuf};
 
 use super::migrations;
-use super::models::{AiTurn, Session, Utterance};
+use super::models::{AiTurn, SearchHit, Session, Utterance};
 
 /// The catalog handle. Owns one SQLite connection.
 pub struct Store {
@@ -80,6 +80,13 @@ impl Store {
         let tx = self.conn.transaction().context("begin index tx")?;
         tx.execute("DELETE FROM sessions WHERE id = ?1", params![session.id])
             .context("clear prior session rows")?;
+        // The FTS5 index isn't FK-cascaded; clear this session's rows explicitly
+        // (the AFTER INSERT triggers repopulate it as the rows below re-insert).
+        tx.execute(
+            "DELETE FROM search_index WHERE session_id = ?1",
+            params![session.id],
+        )
+        .context("clear prior search rows")?;
         tx.execute(
             "INSERT INTO sessions (id, journal_path, started_at_ms, finished_at_ms, status, \
              ai_model, transcript_lines, ai_turns_count, total_cost_microcents, indexed_at_ms) \
@@ -247,6 +254,36 @@ impl Store {
         }
         Ok(out)
     }
+
+    /// Full-text search the catalog (FTS5 + BM25, best match first). `query` is a
+    /// raw FTS5 MATCH expression — a bare word or `"a phrase"` works. Returns up
+    /// to `limit` hits across utterances + AI questions/answers; an FTS syntax
+    /// error in `query` surfaces as `Err` (the caller can show "no results").
+    pub fn search(&self, query: &str, limit: i64) -> Result<Vec<SearchHit>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT session_id, kind, CAST(unix_ms AS INTEGER), body, bm25(search_index) \
+                 FROM search_index WHERE search_index MATCH ?1 ORDER BY bm25(search_index) LIMIT ?2",
+            )
+            .context("prepare search")?;
+        let rows = stmt
+            .query_map(params![query, limit], |r| {
+                Ok(SearchHit {
+                    session_id: r.get(0)?,
+                    kind: r.get(1)?,
+                    unix_ms: r.get(2)?,
+                    body: r.get(3)?,
+                    rank: r.get(4)?,
+                })
+            })
+            .context("query search")?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.context("map search hit")?);
+        }
+        Ok(out)
+    }
 }
 
 /// Map a `sessions` row (column order matches the SELECTs above) to a [`Session`].
@@ -388,5 +425,63 @@ mod tests {
     fn get_missing_session_is_none() {
         let store = Store::open_in_memory().unwrap();
         assert!(store.get_session("nope").unwrap().is_none());
+    }
+
+    #[test]
+    fn fts_search_finds_question_answer_and_utterance() {
+        let mut store = Store::open_in_memory().unwrap();
+        let s = sample_session("s1");
+        let utts = vec![utt(&s.id, 1, "mic", "tell me about binary trees")];
+        let turns = vec![AiTurn {
+            session_id: s.id.clone(),
+            unix_ms: 2,
+            purpose: "live_ask".into(),
+            model: "gemma".into(),
+            question: "what is a hash map".into(),
+            answer: "a key-value structure".into(),
+            latency_ms: Some(10),
+            attached_screenshot: false,
+        }];
+        store.replace_session(&s, &utts, &turns).unwrap();
+
+        assert!(store
+            .search("hash", 10)
+            .unwrap()
+            .iter()
+            .any(|h| h.kind == "question" && h.body.contains("hash")));
+        assert!(store
+            .search("structure", 10)
+            .unwrap()
+            .iter()
+            .any(|h| h.kind == "answer"));
+        assert!(store
+            .search("binary", 10)
+            .unwrap()
+            .iter()
+            .any(|h| h.kind == "utterance"));
+    }
+
+    #[test]
+    fn fts_reindex_does_not_duplicate_hits() {
+        let mut store = Store::open_in_memory().unwrap();
+        let s = sample_session("s1");
+        let utts = vec![utt(&s.id, 1, "mic", "uniquetoken here")];
+        store.replace_session(&s, &utts, &[]).unwrap();
+        assert_eq!(store.search("uniquetoken", 10).unwrap().len(), 1);
+        // Re-index the same session — the explicit search_index clear must keep
+        // it at one hit, not two.
+        store.replace_session(&s, &utts, &[]).unwrap();
+        assert_eq!(store.search("uniquetoken", 10).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn fts_search_matches_russian() {
+        let mut store = Store::open_in_memory().unwrap();
+        let s = sample_session("ru1");
+        let utts = vec![utt(&s.id, 1, "mic", "расскажи про хеш-таблицу и деревья")];
+        store.replace_session(&s, &utts, &[]).unwrap();
+        // unicode61 splits on the hyphen, so "хеш" is its own searchable token.
+        assert!(!store.search("хеш", 10).unwrap().is_empty());
+        assert!(!store.search("деревья", 10).unwrap().is_empty());
     }
 }

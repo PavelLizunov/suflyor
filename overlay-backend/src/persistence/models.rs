@@ -47,3 +47,16 @@ pub struct AiTurn {
     pub latency_ms: Option<i64>,
     pub attached_screenshot: bool,
 }
+
+/// One full-text search hit — a matching utterance or AI question/answer, the
+/// session it belongs to, and its BM25 rank (LOWER = more relevant, SQLite's
+/// convention).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SearchHit {
+    pub session_id: String,
+    /// `utterance` | `question` | `answer`.
+    pub kind: String,
+    pub unix_ms: i64,
+    pub body: String,
+    pub rank: f64,
+}

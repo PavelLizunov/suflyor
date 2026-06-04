@@ -19,5 +19,5 @@ pub mod models;
 mod sqlite_store;
 
 pub use indexer::{index_all, index_journal_file, IndexStats};
-pub use models::{AiTurn, Session, Utterance};
+pub use models::{AiTurn, SearchHit, Session, Utterance};
 pub use sqlite_store::Store;
