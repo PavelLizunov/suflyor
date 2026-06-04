@@ -92,10 +92,6 @@ pub(crate) fn clamp_scheme(n: i32) -> i32 {
     }
 }
 
-/// Apply the current global stealth flag to a freshly-shown window once
-/// winit realizes its native HWND (same 200 ms delay as tile placement).
-/// No-op when stealth is off. Used by windows that don't otherwise grab
-/// their HWND post-show (the F4 palette). (#111)
 /// Stealth-aware presentation for the auxiliary windows (F4 palette, Settings)
 /// that otherwise rely on winit's default centering. Mirrors
 /// `present_tile_window` + `apply_tile_hwnd_with_monitor` (review M1): park the
@@ -123,9 +119,9 @@ where
     // V0.8.4 — reveal as soon as the HWND realizes (~1-2 frames) instead of a
     // fixed 200ms blind wait, so on-demand windows (Settings/help/palette/wizard/
     // tiles) pop nearly instantly. A fast attempt covers the common case; if the
-    // HWND isn't grabbable yet, ONE conservative fallback at the old delay keeps a
-    // slow first-realize safe (no window stranded off-screen). Stealth-safe: in
-    // BOTH paths WDA is applied BEFORE a parked window is moved on-screen.
+    // HWND isn't grabbable yet, a bounded set of conservative retries keeps a slow
+    // first-realize safe (no window stranded off-screen). Stealth-safe: in EVERY
+    // native path WDA is applied BEFORE a parked window is moved on-screen.
     let do_reveal: Rc<dyn Fn(&W) -> bool> = Rc::new(move |w: &W| -> bool {
         let Ok(hwnd) = grab_hwnd(w.window()) else {
             return false;
@@ -148,6 +144,42 @@ where
         }
         true
     });
+    // Last-ditch reveal when the HWND NEVER becomes grabbable after every retry —
+    // otherwise the window is stranded invisibly parked at (-32000,-32000) with no
+    // trace, and the user opens Settings/help and "nothing happens". Warn-log it so
+    // it surfaces in the boot-smoke log + diagnostics. STEALTH-SAFE: only bring the
+    // window on-screen (via Slint's own positioning — no native HWND needed) when
+    // stealth is OFF; revealing without WDA under stealth would leak it into a
+    // screen-share, so under stealth it stays parked + warn-logged and the user can
+    // reopen to retry. Native decoration (rounded corners) is skipped in this
+    // degraded path — a plain but VISIBLE window beats an invisible one.
+    let fallback_reveal: Rc<dyn Fn(&W)> = Rc::new(move |w: &W| {
+        if global_stealth() {
+            diag!(
+                "[overlay-host] present: HWND never realized after retries; window kept \
+                 parked off-screen under stealth (reopen to retry)"
+            );
+            return;
+        }
+        diag!(
+            "[overlay-host] present: HWND never realized after retries; revealing via Slint \
+             fallback (no native decorate/center)"
+        );
+        let monitors = enum_monitors();
+        if let Some(mon) = pick_monitor(&monitors) {
+            let cx = (mon.left + (mon.width() - 460) / 2).max(mon.left + 8);
+            let cy = (mon.top + (mon.height() - 360) / 2).max(mon.top + 8);
+            w.window()
+                .set_position(slint::PhysicalPosition::new(cx, cy));
+        } else {
+            w.window()
+                .set_position(slint::PhysicalPosition::new(100, 100));
+        }
+    });
+    // Reveal schedule: fast attempt (~1-2 frames), then two conservative retries at
+    // the old blind-wait delay before the stealth-safe fallback — so a slow
+    // first-realize (heavy paint / busy compositor) no longer gives up after a
+    // single miss and strands the window off-screen.
     let weak = win.as_weak();
     Timer::single_shot(Duration::from_millis(HWND_REVEAL_FAST_MS), move || {
         let Some(w) = weak.upgrade() else { return };
@@ -158,14 +190,34 @@ where
         if revealed {
             return;
         }
-        // HWND not realized within the fast window — one conservative retry.
+        // Retry #1 at the conservative delay.
         let weak2 = w.as_weak();
         let do_reveal2 = do_reveal.clone();
+        let fallback2 = fallback_reveal.clone();
         Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
-            if let Some(w) = weak2.upgrade() {
+            let Some(w) = weak2.upgrade() else { return };
+            let revealed = {
                 let f = &*do_reveal2;
-                let _ = f(&w);
+                f(&w)
+            };
+            if revealed {
+                return;
             }
+            // Retry #2 (final) at a longer delay; on a final miss, warn + fallback.
+            let weak3 = w.as_weak();
+            let do_reveal3 = do_reveal2.clone();
+            let fallback3 = fallback2.clone();
+            Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS * 2), move || {
+                let Some(w) = weak3.upgrade() else { return };
+                let revealed = {
+                    let f = &*do_reveal3;
+                    f(&w)
+                };
+                if !revealed {
+                    let f = &*fallback3;
+                    f(&w);
+                }
+            });
         });
     });
 }
