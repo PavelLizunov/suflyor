@@ -42,7 +42,9 @@
 //! (reaching `SettingsWindow` / `SharedString` / `ModelRc` / `VecModel` / the
 //! `diag!` macro / `populate_token_status` / the `overlay_backend` config + ai
 //! helpers). That is intentional for the move; imports narrow in a later pass.
-use super::*;
+use super::{
+    populate_token_status, ComponentHandle, ModelRc, SettingsWindow, SharedString, VecModel,
+};
 
 /// Which model dropdown a fetch populates — the cloud bridge or the local server.
 #[derive(Clone, Copy)]

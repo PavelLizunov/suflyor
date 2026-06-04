@@ -20,7 +20,7 @@
 //! (reaching `SettingsWindow` / `SharedString` / the `diag!` macro / the
 //! `overlay_backend` config + ai helpers). That is intentional for the move;
 //! imports narrow in a later pass.
-use super::*;
+use super::{ComponentHandle, SettingsWindow, SharedString};
 
 /// Wire the Vision-tab Settings callbacks onto the Settings window. Moved
 /// VERBATIM out of `open_settings` (P1 domain split) — same captures, same

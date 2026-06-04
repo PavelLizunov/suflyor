@@ -43,7 +43,16 @@
 //! `OverlayBarBridge` / `install_streaming_tile` / `gated_events` /
 //! `PttStreamSink` that stay in `tile_controller.rs` through it). That is
 //! intentional for the extraction; the imports get narrowed in a later pass.
-use super::*;
+use super::{
+    ai, apply_tile_hwnd_with_monitor, audio, classify_ai_error, gated_events, grab_hwnd,
+    install_streaming_tile, journal, markdown, message_text, present_tile_window,
+    refresh_open_tiles, release_mic, strip_followup_directives, stt, to_md_blocks,
+    toggle_tile_maximize, tokio_mpsc, try_acquire_mic, vision, wire_copy, wire_tile_drag, Arc,
+    AtomicBool, ComponentHandle, Duration, MarkdownBlock, ModelRc, Ordering, OverlayBarBridge,
+    OverlayBarWindow, PttStreamSink, Rc, RefCell, RuntimeEvents, SharedSlintRuntime, SharedString,
+    StreamingTile, TileWindow, TileWindows, VecModel, AI_STREAM_MAX_TOKENS, CONVO_SEQ,
+    TILE_DISPLAY_SEQ,
+};
 
 // ============================================================================
 // Follow-up reframe — root cause of the escalate→follow-up bug.

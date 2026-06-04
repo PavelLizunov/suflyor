@@ -44,7 +44,16 @@
 // `set_global_stealth`, `populate_diagnostics` / `build_diag_report`,
 // `open_wizard`, `try_acquire_mic` / `release_mic`, and `active_stack_label`
 // through it). That is intentional for the move; imports narrow in a later pass.
-use super::*;
+use super::{
+    active_stack_label, ai, apply_scheme_bar, apply_scheme_settings, audio, clamp_scheme, config,
+    drag_begin, drag_update, fetch_models, grab_hwnd, make_transparent_tile, open_wizard,
+    populate_diagnostics, present_window_stealth_aware, release_mic, set_always_on_top,
+    set_global_scheme, set_global_stealth, set_global_tile_opacity, set_stealth,
+    spawn_ptt_watchdog, stt, try_acquire_mic, wire_ai_settings, wire_diagnostics,
+    wire_import_export, wire_local_ai, wire_stt_settings, wire_updates, wire_vision_settings, Arc,
+    AtomicBool, ComponentHandle, ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell,
+    SettingsWindow, SharedString, TileWindows, VecModel, WindowRegistry,
+};
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn open_settings(

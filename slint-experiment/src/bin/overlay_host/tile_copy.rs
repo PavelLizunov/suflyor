@@ -33,7 +33,12 @@
 //! `TileWindow`, the clipboard helper, and the `vision` prompts through it).
 //! That is intentional for the extraction; the imports get narrowed in a later
 //! pass.
-use super::*;
+use super::{ai, vision, Arc, ComponentHandle, Duration, OverlayBarBridge, TileWindow, Timer};
+// `conversations_evict_keys` lives in `tile_controller.rs`; only this module's
+// eviction unit test (`copy_tests`) exercises it, so import it TEST-ONLY — a
+// plain module-level import would be unused in the normal build (clippy -D).
+#[cfg(test)]
+use super::conversations_evict_keys;
 
 /// Plain text of one chat message — the `Text` body, or for a vision turn the
 /// concatenated text Part(s) only (NEVER the base64 image).

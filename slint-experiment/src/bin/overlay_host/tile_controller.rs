@@ -53,7 +53,11 @@
 //! win32 helpers, the runtime/journal/health glue, `to_md_blocks`, the mic
 //! guard, and `classify_ai_error` through it). That is intentional for the
 //! extraction; the imports get narrowed in a later pass.
-use super::*;
+use super::{
+    ai, classify_ai_error, to_md_blocks, tokio_mpsc, Arc, AtomicU64, ModelRc, MonitorHint,
+    Ordering, OverlayBarWindow, RuntimeEvents, SharedString, SlintUiBridge, TileKind, TileSpec,
+    TileWindow, VecModel,
+};
 
 /// Phase E6 v45 — monotonic conversation id for the in-tile continue-dialog
 /// feature. Each F9/PTT tile that supports follow-ups gets a unique id.
