@@ -13,10 +13,14 @@
 //! the registry: it is realized once and WDA-excluded from its first frame, so
 //! it must not be re-driven on the same rules as the on-demand windows.
 //!
-//! NOTE (§7): this first move imports the parent crate-root via `use super::*;`.
-//! That is intentional for the mechanical extraction; the imports get narrowed
-//! in a later pass.
-use super::*;
+//! NOTE (§7): the parent crate-root symbols this module references are imported
+//! explicitly below.
+use super::{
+    enum_monitors, get_window_rect, grab_hwnd, move_window_pos_only, pick_monitor, set_stealth, ui,
+    ComponentHandle, Duration, HelpWindow, OverlayBarWindow, PaletteWindow, Rc, RecoverOfferWindow,
+    RefCell, SettingsWindow, TextAskWindow, TileWindow, TileWindows, Timer, WizardWindow,
+    HWND_GRAB_DELAY_MS, HWND_REVEAL_FAST_MS,
+};
 
 /// Phase E6 v36 — process-global tile body opacity (raw f32 bits in an
 /// AtomicU32 so it stays lock-free). EVERY tile-spawn path reads this via

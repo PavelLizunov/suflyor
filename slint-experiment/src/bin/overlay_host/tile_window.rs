@@ -29,10 +29,14 @@
 //! constants (`HWND_GRAB_DELAY_MS`, `TILE_DEFAULT_W`/`TILE_DEFAULT_H`) through the
 //! crate-root glob below.
 //!
-//! NOTE (§7): this mechanical move imports the parent crate-root via
-//! `use super::*;`. That is intentional for the extraction; the imports get
-//! narrowed in a later pass.
-use super::*;
+//! NOTE (§7): the parent crate-root symbols this module references are imported
+//! explicitly below.
+use super::{
+    apply_scheme_tile, drag_begin, drag_update, enum_monitors, get_window_rect, global_scheme,
+    global_stealth, global_tile_opacity, grab_hwnd, make_transparent_tile, move_window_pos_only,
+    pick_monitor, set_always_on_top, set_stealth, work_area_for_window, ComponentHandle, Duration,
+    TileWindow, Timer, HWND_GRAB_DELAY_MS, TILE_DEFAULT_H, TILE_DEFAULT_W,
+};
 
 /// Atomic counter for tile-slot index — increments per spawn so
 /// successive tiles distribute across a 2-column grid on the right

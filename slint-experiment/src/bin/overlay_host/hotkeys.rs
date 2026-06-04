@@ -21,16 +21,11 @@
 //! strings, and the `HOTKEY_DIAG` write are preserved byte-for-byte (MECHANICAL
 //! move, §2 — no behaviour change).
 //!
-//! NOTE (§7): this mechanical move keeps the sibling-module convention of
-//! pulling the parent crate-root in via `use super::*;`. Unlike
-//! `window_lifecycle.rs` / `diagnostics.rs`, the moved code here is self-contained
-//! on `global_hotkey` + std (it touches no parent symbol), so the glob is
-//! `#[allow(unused_imports)]` to keep the uniform header without tripping
-//! `-D warnings`. It is still the re-export seam (`use hotkeys::*;` in the parent
-//! lifts `hotkey_diag_row` to crate root for `diagnostics.rs`); the import gets
-//! narrowed in a later pass.
-#[allow(unused_imports)]
-use super::*;
+//! NOTE (§7): this module is self-contained on `global_hotkey` + std (it
+//! references NO parent crate-root symbol via short name — everything is a full
+//! path), so it carries NO `use super::…` import. It is still the re-export seam
+//! (`use hotkeys::*;` in the parent lifts `hotkey_diag_row` to crate root for
+//! `diagnostics.rs`).
 
 /// P1.2 — outcome of registering the global hotkeys at startup, captured ONCE so
 /// the Diagnostics tab can surface a per-key conflict (not just an eprintln!).

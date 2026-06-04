@@ -17,10 +17,12 @@
 //! state, Phase 3) and `active_stack_label` (also used by the bar) deliberately
 //! stay in `overlay_host.rs` and are reached via the parent glob below.
 //!
-//! NOTE (§7): this mechanical move imports the parent crate-root via
-//! `use super::*;`. That is intentional for the extraction; the imports get
-//! narrowed in a later pass.
-use super::*;
+//! NOTE (§7): the parent crate-root symbols this module references are imported
+//! explicitly below.
+use super::{
+    active_stack_label, hotkey_diag_row, release_mic, try_acquire_mic, ComponentHandle, Duration,
+    SettingsWindow, SharedString, Timer,
+};
 
 /// #131 — push the config-only readiness snapshot + the active-stack summary
 /// into the diagnostics tab. Live AI/STT pings are layered on by the
