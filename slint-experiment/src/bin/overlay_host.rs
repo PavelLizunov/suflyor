@@ -230,6 +230,18 @@ use settings_vision::*;
 mod settings_stt;
 use settings_stt::*;
 
+// The AI (cloud bridge + local server) Settings-tab callbacks (provider switch,
+// token / base-url / model saves, `{base_url}/models` dropdown refresh, the
+// prompt-cache toggle, and the bridge + local connection tests) live in their
+// own file alongside the binary (P1 domain split of `settings_controller.rs`).
+// `use settings_ai::*;` re-exports `wire_ai_settings` (which `open_settings`
+// calls in place of the old inline AI blocks) plus `ModelTarget` + `fetch_models`
+// (moved with them — `populate_token_status`, which STAYS in
+// `settings_controller.rs`, reaches them back through these crate-root globs).
+#[path = "overlay_host/settings_ai.rs"]
+mod settings_ai;
+use settings_ai::*;
+
 pub(crate) type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
 
 /// Parse markdown source into the Slint `MarkdownBlock` rows a tile body
