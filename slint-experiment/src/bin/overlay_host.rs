@@ -207,6 +207,14 @@ use tile_cost::*;
 mod tile_routes;
 use tile_routes::*;
 
+// `tile_ptt.rs` — push-to-talk ask flow (the 30s watchdog + the PTT tile-error
+// helper + `fire_ptt_ask`) split out of `tile_ask.rs` (P1 split). `use
+// tile_ptt::*;` re-exports it so `main`'s PTT hotkey dispatch reaches
+// `fire_ptt_ask` through the crate root.
+#[path = "overlay_host/tile_ptt.rs"]
+mod tile_ptt;
+use tile_ptt::*;
+
 // Phase 7b of the modularization (docs/overlay-host-modularization-plan.md
 // §5.8/§5.9) — the FINAL phase: the Settings window controller. `open_settings`
 // (the Settings fn with its remaining inline handlers + the stealth/scheme/
