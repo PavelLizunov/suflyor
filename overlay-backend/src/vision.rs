@@ -19,12 +19,20 @@ pub const DEFAULT_VISION_PROMPT: &str = "Что на этом скриншоте
      текст — кратко опиши суть.";
 
 /// Translate-mode capture prompt (feature #3, "перевод для игр"). Outputs ONLY
-/// the translation — the whole point is that "describe my screen" is noise when
-/// the user just wants subtitles/dialogue translated. Target = RU for v1 (a later
-/// pass can read `ui_language` for an EN target).
-pub const TRANSLATE_VISION_PROMPT: &str = "Переведи на русский весь текст с \
-     изображения. Выведи ТОЛЬКО перевод, построчно, БЕЗ описания картинки и БЕЗ \
-     комментариев. Если текста нет — одной строкой сообщи об этом.";
+/// the Russian — "describe my screen" is noise when the user just wants
+/// subtitles/dialogue translated. Target = RU for v1 (a later pass can read
+/// `ui_language` for an EN target).
+///
+/// Tuned via a live A/B against the user's small LOCAL vision model (gemma-4-E4B):
+/// the original "Выведи ТОЛЬКО перевод" made the 4B model ECHO the source English
+/// instead of translating. The "перепиши … на русском, НЕ выводи английский
+/// оригинал" framing (don't copy, rewrite in Russian) makes it emit Russian-only.
+pub const TRANSLATE_VISION_PROMPT: &str = "Перепиши весь текст с изображения на \
+     русском языке — выводи СРАЗУ готовый русский текст, по одной строке. НЕ выводи \
+     английский оригинал и НЕ дублируй строки: в ответе должен быть ТОЛЬКО русский \
+     результат, без единой английской фразы. Имена собственные, команды и названия \
+     (git, kubectl, Bash, Docker) оставляй латиницей внутри русской фразы. Если \
+     текста на картинке нет — напиши: (текста нет).";
 
 /// Appended to [`TRANSLATE_VISION_PROMPT`] when phonetics is ON (feature #4): IPA
 /// only for non-trivial words, so short subtitles stay clean.
@@ -107,8 +115,13 @@ mod tests {
             with.contains("МФА") && with.contains("schedule"),
             "phonetics suffix appended when on"
         );
-        // Both must forbid describing the image (the whole point of feature #3).
-        assert!(plain.contains("ТОЛЬКО перевод") && with.contains("ТОЛЬКО перевод"));
+        // Both must demand Russian-only output (the anti-echo fix — the whole
+        // point of feature #3: no source English in the result).
+        assert!(plain.contains("ТОЛЬКО русский") && with.contains("ТОЛЬКО русский"));
+        assert!(
+            plain.contains("НЕ выводи английский") && with.contains("НЕ выводи английский"),
+            "translate prompt must forbid echoing the English source"
+        );
     }
 
     #[test]
