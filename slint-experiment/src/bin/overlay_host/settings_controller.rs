@@ -50,9 +50,10 @@ use super::{
     populate_diagnostics, present_window_stealth_aware, release_mic, set_always_on_top,
     set_global_scheme, set_global_stealth, set_global_tile_opacity, set_stealth,
     spawn_ptt_watchdog, stt, try_acquire_mic, wire_ai_settings, wire_diagnostics,
-    wire_import_export, wire_local_ai, wire_stt_settings, wire_updates, wire_vision_settings, Arc,
-    AtomicBool, ComponentHandle, ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell,
-    SettingsWindow, SharedString, TileWindows, VecModel, WindowRegistry,
+    wire_import_export, wire_local_ai, wire_memory, wire_stt_settings, wire_updates,
+    wire_vision_settings, Arc, AtomicBool, ComponentHandle, ModelRc, ModelTarget, Ordering,
+    OverlayBarWindow, Rc, RefCell, SettingsWindow, SharedString, TileWindows, VecModel,
+    WindowRegistry,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -380,6 +381,12 @@ pub(crate) fn open_settings(
     // (`on_stt_gigaam_gpu_changed` moved out of the AI-local block region above
     // into wire_stt_settings; the mic device/test callbacks stay in open_settings.)
     wire_stt_settings(&win, cfg);
+
+    // ===== 💭 Memory (Phase 3b.3): curated personal memory review =====
+    // Pending candidates (approve/reject) + approved items (delete) over the
+    // SQLite memory tables, + Extract (heuristic over recent sessions).
+    // Extracted to settings_memory.rs.
+    wire_memory(&win);
 
     // P1.7 — config parsed from a picked server-settings file, awaiting the
     // user's explicit Apply (set by the import-preview handler, taken by Apply,

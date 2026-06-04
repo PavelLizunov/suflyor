@@ -60,9 +60,9 @@ mod ui {
 }
 
 use ui::{
-    ArchiveRow, ArchiveWindow, CaptureOverlay, HelpWindow, MarkdownBlock, OverlayBarWindow,
-    PaletteResult, PaletteWindow, RecoverOfferWindow, SettingsWindow, TextAskWindow, TileWindow,
-    WizardWindow,
+    ArchiveRow, ArchiveWindow, CaptureOverlay, HelpWindow, MarkdownBlock, MemoryRow,
+    OverlayBarWindow, PaletteResult, PaletteWindow, RecoverOfferWindow, SettingsWindow,
+    TextAskWindow, TileWindow, WizardWindow,
 };
 
 // Phase 1 of the modularization (docs/overlay-host-modularization-plan.md §5.1):
@@ -266,6 +266,14 @@ use settings_vision::*;
 #[path = "overlay_host/settings_stt.rs"]
 mod settings_stt;
 use settings_stt::*;
+
+// Phase 3b.3 — the 💭 Memory Settings tab (curated-memory review). `use
+// settings_memory::*;` re-exports `wire_memory`, which `open_settings` calls to
+// bind the candidate/item lists + approve/reject/delete/extract over the SQLite
+// memory tables (3b.1) + the heuristic extractor (3b.2a).
+#[path = "overlay_host/settings_memory.rs"]
+mod settings_memory;
+use settings_memory::*;
 
 // The AI (cloud bridge + local server) Settings-tab callbacks (provider switch,
 // token / base-url / model saves, `{base_url}/models` dropdown refresh, the

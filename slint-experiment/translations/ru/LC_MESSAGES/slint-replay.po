@@ -911,3 +911,34 @@ msgstr "Нет совпадений для «{}»."
 
 msgid "Esc to close · Enter / click to open a session"
 msgstr "Esc — закрыть · Enter / клик — открыть сессию"
+
+# Phase 3b.3 — 💭 Memory tab (settings_panel.slint). "Delete" reuses the existing msgid.
+msgid "💭 Memory"
+msgstr "💭 Память"
+
+msgid "Memory"
+msgstr "Память"
+
+msgid "Personal memory: approve useful fragments from your sessions. Only APPROVED items are mixed into new AI requests. Stored locally; nothing leaves your machine."
+msgstr "Персональная память: одобряй полезные фрагменты из своих сессий. В новые запросы к ИИ подмешиваются ТОЛЬКО одобренные. Хранится локально; ничего не уходит с твоего компьютера."
+
+msgid "Extract from recent sessions"
+msgstr "Извлечь из последних сессий"
+
+msgid "Suggestions ({})"
+msgstr "Предложения ({})"
+
+msgid "No suggestions yet — click Extract after a session."
+msgstr "Пока нет предложений — нажми «Извлечь» после сессии."
+
+msgid "Approve"
+msgstr "Принять"
+
+msgid "Reject"
+msgstr "Отклонить"
+
+msgid "Approved memory ({})"
+msgstr "Одобренная память ({})"
+
+msgid "No approved memory yet."
+msgstr "Пока нет одобренной памяти."

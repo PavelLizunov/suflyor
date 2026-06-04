@@ -19,6 +19,17 @@
 import { Button, LineEdit, ScrollView, SpinBox, ComboBox, Slider, TextEdit, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
+// Curated-memory row (Phase 3b.3) — a candidate OR an approved item rendered in
+// the 💭 Memory tab. `id` is the DB row id (passed back on approve/reject/
+// delete); `kind` is a glyph; `reason` is the heuristic hint (candidates) or
+// empty (items). Built in Rust by settings_memory.rs.
+export struct MemoryRow {
+    id: int,
+    kind: string,
+    text: string,
+    reason: string,
+}
+
 // Phase E6 v40 — toggle SWITCH (borrowed from the Claude Design bundle:
 // "SwitchRow вместо чекбоксов"). Was a custom square checkbox (v24, to
 // dodge the std CheckBox's near-invisible unchecked label on Theme.bg-surface).
@@ -157,6 +168,16 @@ export component SettingsWindow inherits Window {
     background: transparent;
 
     in-out property <int> active-tab: 0;
+    // Phase 3b.3 — 💭 Memory tab data (built in Rust by settings_memory.rs over
+    // the SQLite memory tables). Candidates = pending suggestions; items =
+    // approved memory. `id` flows back through the callbacks.
+    in-out property <[MemoryRow]> memory-candidates: [];
+    in-out property <[MemoryRow]> memory-items: [];
+    in-out property <string> memory-status: "";
+    callback memory-approve(int);
+    callback memory-reject(int);
+    callback memory-delete-item(int);
+    callback memory-extract();
     // Persisted cross-window toggles (driven by overlay-host).
     in-out property <bool> always-on-top-toggle: true;
     in-out property <bool> stealth-toggle: false;
@@ -527,6 +548,11 @@ export component SettingsWindow inherits Window {
                 NavItem {
                     label: @tr("🩺 Diagnostics"); tab-index: 13;
                     active: root.active-tab == 13;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
+                }
+                NavItem {
+                    label: @tr("💭 Memory"); tab-index: 14;
+                    active: root.active-tab == 14;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
 
@@ -1703,6 +1729,111 @@ export component SettingsWindow inherits Window {
                         }
                     }
 
+                    // Phase 3b.3 — 💭 Memory: review curated personal memory.
+                    if root.active-tab == 14 : VerticalLayout {
+                        spacing: 8px;
+                        Text {
+                            text: @tr("Personal memory: approve useful fragments from your sessions. Only APPROVED items are mixed into new AI requests. Stored locally; nothing leaves your machine.");
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Button {
+                                text: @tr("Extract from recent sessions");
+                                clicked => { root.memory-extract(); }
+                            }
+                            if root.memory-status != "" : Text {
+                                text: root.memory-status;
+                                font-size: 11px;
+                                color: Theme.accent;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        Text {
+                            text: @tr("Suggestions ({})", root.memory-candidates.length);
+                            font-size: 12px;
+                            font-weight: 700;
+                            color: Theme.text-primary;
+                        }
+                        if root.memory-candidates.length == 0 : Text {
+                            text: @tr("No suggestions yet — click Extract after a session.");
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        for c in root.memory-candidates : Rectangle {
+                            background: Theme.bg-elevated;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            VerticalLayout {
+                                padding: 8px;
+                                spacing: 4px;
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    Text {
+                                        text: c.kind + "  " + c.reason;
+                                        font-size: 10px;
+                                        color: Theme.text-muted;
+                                        vertical-alignment: center;
+                                        horizontal-stretch: 1;
+                                    }
+                                    Button {
+                                        text: @tr("Approve");
+                                        clicked => { root.memory-approve(c.id); }
+                                    }
+                                    Button {
+                                        text: @tr("Reject");
+                                        clicked => { root.memory-reject(c.id); }
+                                    }
+                                }
+                                Text {
+                                    text: c.text;
+                                    font-size: 11px;
+                                    color: Theme.text-secondary;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: @tr("Approved memory ({})", root.memory-items.length);
+                            font-size: 12px;
+                            font-weight: 700;
+                            color: Theme.text-primary;
+                        }
+                        if root.memory-items.length == 0 : Text {
+                            text: @tr("No approved memory yet.");
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                        }
+                        for m in root.memory-items : Rectangle {
+                            background: Theme.bg-elevated;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            HorizontalLayout {
+                                padding: 8px;
+                                spacing: 6px;
+                                Text {
+                                    text: m.kind + "  " + m.text;
+                                    font-size: 11px;
+                                    color: Theme.text-secondary;
+                                    wrap: word-wrap;
+                                    horizontal-stretch: 1;
+                                    vertical-alignment: center;
+                                }
+                                Button {
+                                    text: @tr("Delete");
+                                    clicked => { root.memory-delete-item(m.id); }
+                                }
+                            }
+                        }
+                    }
+
                     // Phase E6 v18 — push tab content to TOP of viewport.
                     // Without this, ScrollView lets the VerticalLayout
                     // stretch to fill height, leaving small tabs (Stealth,
@@ -1728,6 +1859,7 @@ export component SettingsWindow inherits Window {
                idx == 11 ? @tr("AI bridge") :
                idx == 12 ? @tr("STT") :
                idx == 13 ? @tr("Diagnostics") :
+               idx == 14 ? @tr("Memory") :
                "—";
     }
 }
