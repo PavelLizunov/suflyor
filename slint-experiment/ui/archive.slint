@@ -1,0 +1,224 @@
+// Session-archive browser (Phase 3a of the personal-memory architecture —
+// docs/personal-memory-and-session-store-architecture.md). A frameless,
+// stealth-aware window over the SQLite session catalog: it lists past sessions
+// (newest first) and full-text-searches their transcript + AI Q&A (FTS5/BM25).
+// Activating a row spawns a read-only tile with that session's content.
+//
+// overlay_host.rs owns the wiring: the F7 hotkey (toggle, like F4/F1), the
+// `overlay_backend::persistence::Store` queries (list / search / detail), and
+// the tile spawn. Structurally a sibling of palette.slint (searchable list).
+//
+// i18n: the DATA rows are language-NEUTRAL (emoji-coded counts/status, built in
+// Rust) so there is no per-row translation; only the window CHROME (title,
+// search placeholder, empty / hint strings) is `@tr`, with the msgid as English
+// and the Russian in translations/ru/.../slint-replay.po.
+
+import { LineEdit, ScrollView, Palette } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Metrics } from "metrics.slint";
+
+// One archive row — a past SESSION or a SEARCH HIT (the Rust side fills both
+// shapes into this struct; the UI renders them identically).
+export struct ArchiveRow {
+    id: string,        // session id (file stem) — passed back on activation
+    title: string,     // session: "✓ 2026-06-04 10:00:00"; hit: "🔎 …"
+    subtitle: string,  // session: "💬 12 · 🤖 3 · model"; hit: the matched snippet
+    meta: string,      // session: cost (e.g. "$0.024"); hit: kind emoji
+}
+
+export component ArchiveWindow inherits Window {
+    // Keep std-widgets (the search LineEdit) on the active scheme rather than
+    // Slint's light fluent default — same trick as palette / settings.
+    property <bool> widgets-light: Theme.is-light;
+    init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
+    changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
+
+    title: "Session archive";
+    icon: @image-url("../assets/icon.png");
+    // Solid opaque background (NOT transparent) — a transparent + WS_EX_LAYERED
+    // frameless window alpha-clamps text to invisible (the palette learned this
+    // the hard way in Phase E6). Frame off for the floating-window feel.
+    background: Theme.bg-surface;
+    no-frame: true;
+    always-on-top: true;
+    preferred-width: 720px;
+    preferred-height: 540px;
+    min-width: 480px;
+    min-height: 320px;
+
+    in-out property <string> query: "";
+    in-out property <[ArchiveRow]> results: [];
+    in-out property <int> selected-index: 0;
+    // Header summary (Rust-built, language-neutral count, e.g. "128 · 5304💬").
+    in-out property <string> summary: "";
+    // True ONLY when the catalog can't be opened — an @tr'd message replaces the
+    // list so the window degrades gracefully (never a blank panel).
+    in-out property <bool> unavailable: false;
+
+    callback query-changed(string);
+    callback result-activated(int);
+    callback close-requested();
+
+    // Focus the search box on open so the user can type immediately AND so Esc
+    // has a focused element to bubble up from to the FocusScope (same wiring as
+    // the palette — a hotkey-spawned always-on-top window starts unfocused).
+    forward-focus: search-input;
+
+    Rectangle {
+        background: Theme.bg-surface.with-alpha(0.95);
+        border-radius: Metrics.radius-panel;
+        border-width: Metrics.border-thin;
+        border-color: Theme.border;
+
+        FocusScope {
+            width: 100%;
+            height: 100%;
+            key-pressed(event) => {
+                if (event.text == Key.Escape) {
+                    root.close-requested();
+                    return accept;
+                }
+                return reject;
+            }
+
+            VerticalLayout {
+                padding: Metrics.space-md;
+                spacing: Metrics.space-sm;
+
+                // ── Header: title · summary · close ──
+                HorizontalLayout {
+                    spacing: Metrics.space-sm;
+                    Text {
+                        text: "🗄 " + @tr("Session archive");
+                        font-size: Metrics.font-heading;
+                        font-weight: 700;
+                        color: Theme.text-primary;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: root.summary;
+                        font-size: Metrics.font-caption;
+                        color: Theme.text-muted;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    Rectangle {
+                        width: Metrics.control-md;
+                        height: Metrics.control-md;
+                        border-radius: Metrics.radius-control;
+                        border-width: Metrics.border-thin;
+                        border-color: Theme.border-strong;
+                        horizontal-stretch: 0;
+                        Text {
+                            text: "X";
+                            font-size: Metrics.font-label;
+                            color: Theme.text-secondary;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        TouchArea { clicked => { root.close-requested(); } }
+                    }
+                }
+
+                // ── Search box (FTS over transcript + AI answers) ──
+                search-input := LineEdit {
+                    placeholder-text: @tr("search transcript + AI answers…");
+                    text <=> root.query;
+                    edited(t) => {
+                        root.query-changed(t);
+                        root.selected-index = 0;
+                    }
+                    accepted => {
+                        if (root.results.length > 0) {
+                            root.result-activated(root.selected-index);
+                        }
+                    }
+                }
+
+                Rectangle {
+                    background: Theme.border;
+                    height: Metrics.border-thin;
+                }
+
+                // ── Error state: catalog unavailable ──
+                if root.unavailable : Text {
+                    text: @tr("The session archive is unavailable.");
+                    font-size: Metrics.font-label;
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    vertical-stretch: 1;
+                    wrap: word-wrap;
+                }
+
+                // ── Results list ──
+                if !root.unavailable : ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        spacing: 2px;
+                        if root.results.length == 0 : Text {
+                            text: root.query == ""
+                                ? @tr("No archived sessions yet.")
+                                : @tr("No matches for \"{}\".", root.query);
+                            font-size: Metrics.font-label;
+                            color: Theme.text-muted;
+                            horizontal-alignment: center;
+                        }
+                        for row[i] in root.results : Rectangle {
+                            background: i == root.selected-index ? Theme.bg-elevated : transparent;
+                            border-radius: 4px;
+                            border-color: i == root.selected-index ? Theme.accent : transparent;
+                            border-width: Metrics.border-thin;
+                            height: 50px;
+
+                            HorizontalLayout {
+                                padding-left: 10px;
+                                padding-right: 10px;
+                                spacing: Metrics.space-md;
+
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    spacing: 1px;
+                                    HorizontalLayout {
+                                        spacing: Metrics.space-sm;
+                                        Text {
+                                            text: row.title;
+                                            font-size: Metrics.font-body;
+                                            font-weight: 700;
+                                            color: i == root.selected-index ? Theme.accent : Theme.text-secondary;
+                                            vertical-alignment: center;
+                                            horizontal-stretch: 1;
+                                            overflow: elide;
+                                        }
+                                        Text {
+                                            text: row.meta;
+                                            font-size: Metrics.font-caption;
+                                            color: Theme.text-muted;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                    Text {
+                                        text: row.subtitle;
+                                        font-size: Metrics.font-caption;
+                                        color: Theme.text-muted;
+                                        overflow: elide;
+                                    }
+                                }
+                            }
+                            TouchArea {
+                                clicked => { root.result-activated(i); }
+                            }
+                        }
+                    }
+                }
+
+                Text {
+                    text: @tr("Esc to close · Enter / click to open a session");
+                    font-size: 9px;
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+    }
+}

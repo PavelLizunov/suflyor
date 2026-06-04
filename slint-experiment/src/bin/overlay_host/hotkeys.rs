@@ -4,7 +4,7 @@
 //!
 //! This module owns the one-time global-hotkey REGISTRATION ([`register_hotkeys`])
 //! — it builds the process-wide `GlobalHotKeyManager`, registers every F-key
-//! (F3 / F4 / F6 / F8 / Shift+F8 / F9 / Shift+F9 / F1), logs each
+//! (F3 / F4 / F6 / F7 / F8 / Shift+F8 / F9 / Shift+F9 / F1), logs each
 //! "Fx hotkey registered", and records the per-key outcome into [`HOTKEY_DIAG`]
 //! so the Settings ▸ Diagnostics tab can surface a CONFLICTING key by name
 //! instead of a blanket "hotkeys disabled" (audit P1.2). The captured outcome is
@@ -70,6 +70,7 @@ pub(crate) struct RegisteredHotkeys {
     pub f3_id: u32,
     pub f4_id: u32,
     pub f6_id: u32,
+    pub f7_id: u32,
     pub f8_id: u32,
     pub sf8_id: u32,
     pub f9_id: u32,
@@ -85,8 +86,8 @@ pub(crate) struct RegisteredHotkeys {
 ///
 /// Registered keys (see Settings ▸ Hotkeys):
 ///   F3 — re-ask the last question     F4 — KB palette (toggle)
-///   F6 — manual tile from transcript  F8 — screenshot → vision
-///   F9 — ask the AI now
+///   F6 — manual tile from transcript  F7 — session archive (toggle)
+///   F8 — screenshot → vision          F9 — ask the AI now
 ///
 /// Returns the manager (kept alive by the caller) + each key's id for the
 /// dispatch loop. Registration order, the per-key log lines, and the
@@ -126,9 +127,12 @@ pub(crate) fn register_hotkeys() -> RegisteredHotkeys {
     );
     // V0.8.4 — F1 opens the 🆘 help (toggle, like F4).
     let f1_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F1);
+    // Phase 3a — F7 opens the 🗄 session archive (toggle, like F4/F1).
+    let f7_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F7);
     let f3_id = f3_hotkey.id();
     let f4_id = f4_hotkey.id();
     let f6_id = f6_hotkey.id();
+    let f7_id = f7_hotkey.id();
     let f9_id = f9_hotkey.id();
     let sf9_id = sf9_hotkey.id();
     let f8_id = f8_hotkey.id();
@@ -144,6 +148,7 @@ pub(crate) fn register_hotkeys() -> RegisteredHotkeys {
                 ("F3", f3_hotkey),
                 ("F4", f4_hotkey),
                 ("F6", f6_hotkey),
+                ("F7", f7_hotkey),
                 ("F8", f8_hotkey),
                 ("Shift+F8", sf8_hotkey),
                 ("F9", f9_hotkey),
@@ -175,6 +180,7 @@ pub(crate) fn register_hotkeys() -> RegisteredHotkeys {
         f3_id,
         f4_id,
         f6_id,
+        f7_id,
         f8_id,
         sf8_id,
         f9_id,

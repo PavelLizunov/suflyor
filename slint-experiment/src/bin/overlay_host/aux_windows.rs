@@ -20,9 +20,13 @@ use super::{
     apply_scheme_palette, apply_scheme_text_ask, apply_tile_hwnd_with_monitor, clamp_scheme,
     drag_begin, drag_update, fire_f9_ask, focus_window, global_scheme, grab_hwnd, kb, markdown,
     present_tile_window, present_window_stealth_aware, refresh_open_tiles, toggle_tile_maximize,
-    ui, wire_tile_drag, Arc, AskRoute, ComponentHandle, HelpWindow, MarkdownBlock, ModelRc,
-    OverlayBarBridge, OverlayBarWindow, PaletteResult, PaletteWindow, Rc, RefCell, RuntimeEvents,
-    SharedSlintRuntime, SharedString, TextAskWindow, TileWindow, TileWindows, VecModel,
+    ui, wire_tile_drag, Arc, ArchiveRow, ArchiveWindow, AskRoute, ComponentHandle, HelpWindow,
+    MarkdownBlock, ModelRc, OverlayBarBridge, OverlayBarWindow, PaletteResult, PaletteWindow, Rc,
+    RefCell, RuntimeEvents, SharedSlintRuntime, SharedString, TextAskWindow, TileWindow,
+    TileWindows, VecModel,
+};
+use overlay_backend::persistence::{
+    open_default_store, AiTurn, SearchHit, Session, Store, Utterance,
 };
 
 /// V0.8.3 — "Написать": open (or re-focus) the small text-input window. On
@@ -244,78 +248,21 @@ pub(crate) fn open_palette(
             return;
         };
 
-        // Spawn a tile with the result content (re-uses Phase 4 plumbing).
-        let seq = {
-            let mut st = match s_ref.lock() {
-                Ok(g) => g,
-                Err(p) => p.into_inner(),
-            };
-            st.tiles_spawned += 1;
-            st.tiles_spawned
-        };
-        if let Some(o) = weak_overlay2.upgrade() {
-            o.set_tiles_spawned(seq as i32);
-        }
-        if let Ok(tile) = TileWindow::new() {
-            tile.set_sequence(seq as i32);
-            tile.set_tile_title(SharedString::from(result.title.to_string()));
-            tile.set_source_label(SharedString::from(format!("kb · {}", result.source)));
-            wire_tile_drag(&tile);
-            // Phase C — wire to real kb::get for the full body. Falls
-            // back to the preview if the key isn't found (defensive;
-            // shouldn't happen since result came from kb::search).
-            let body = kb::get(result.key.as_str())
-                .map_or_else(|| result.preview.to_string(), |e| e.body.clone());
-            let md = format!("# {}\n\n{body}\n", result.heading_or_key());
-            let blocks: Vec<MarkdownBlock> = markdown::parse(&md)
-                .into_iter()
-                .map(|b| MarkdownBlock {
-                    kind: b.kind,
-                    text: SharedString::from(b.text),
-                    lang: SharedString::from(b.lang),
-                })
-                .collect();
-            tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
-
-            let weak_tile = tile.as_weak();
-            let vec_for_close = tiles_ref2.clone();
-            let weak_overlay_close = weak_overlay2.clone();
-            tile.on_close_clicked(move || {
-                eprintln!("[overlay-host] tile (KB-palette) close_clicked fired");
-                if let Some(t) = weak_tile.upgrade() {
-                    let close_hwnd = grab_hwnd(t.window()).ok();
-                    let _ = t.hide();
-                    if let Some(target) = close_hwnd {
-                        vec_for_close
-                            .borrow_mut()
-                            .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
-                        refresh_open_tiles(&weak_overlay_close, &vec_for_close);
-                    }
-                }
-            });
-            // Pin toggles visual state (cycle 17 stub upgraded v17).
-            let weak_pin = tile.as_weak();
-            tile.on_pin_clicked(move || {
-                if let Some(t) = weak_pin.upgrade() {
-                    let new = !t.get_pinned();
-                    t.set_pinned(new);
-                }
-            });
-            let weak_max = tile.as_weak();
-            tile.on_maximize_clicked(move || {
-                if let Some(t) = weak_max.upgrade() {
-                    let Ok(hwnd) = grab_hwnd(t.window()) else {
-                        return;
-                    };
-                    toggle_tile_maximize(hwnd, &t);
-                }
-            });
-
-            present_tile_window(&tile);
-            apply_tile_hwnd_with_monitor(&tile);
-            tiles_ref2.borrow_mut().push(tile);
-            refresh_open_tiles(&weak_overlay2, &tiles_ref2);
-        }
+        // Spawn a read-only tile with the result content via the shared helper
+        // (also used by the session archive). Phase C — wire to real kb::get for
+        // the full body; fall back to the preview if the key isn't found
+        // (defensive — the result came from kb::search).
+        let body = kb::get(result.key.as_str())
+            .map_or_else(|| result.preview.to_string(), |e| e.body.clone());
+        let md = format!("# {}\n\n{body}\n", result.heading_or_key());
+        spawn_content_tile(
+            result.title.as_str(),
+            &format!("kb · {}", result.source),
+            &md,
+            &tiles_ref2,
+            &s_ref,
+            &weak_overlay2,
+        );
         // Close palette after activation.
         if let Some(p) = weak_self.upgrade() {
             let _ = p.hide();
@@ -381,5 +328,491 @@ impl PaletteResultExt for PaletteResult {
         } else {
             self.title.to_string()
         }
+    }
+}
+
+// ============================================================================
+// Session archive (Phase 3a) — browse + FTS-search the SQLite catalog.
+// ============================================================================
+
+/// Phase 3a — open (or re-focus) the 🗄 session-archive browser (F7; a 📚 bar
+/// chip is wired in the follow-up commit).
+/// Lists every indexed session newest-first and full-text-searches their
+/// transcript + AI Q&A over the SQLite catalog; activating a row spawns a
+/// read-only tile with that session's content (via [`spawn_content_tile`], the
+/// same path the KB palette uses). Stealth-aware + skip-taskbar like the other
+/// aux windows. The window holds ONE [`Store`] (opened here) for its lifetime,
+/// reused across the list / search / detail queries; if the catalog can't be
+/// opened it shows a graceful "unavailable" state instead of a blank panel.
+///
+/// SECURITY: renders ONLY the user's own transcript + AI answers — no bearer /
+/// base_url / config secret ever reaches its scope (like the palette).
+pub(crate) fn open_archive(
+    archive_ref: &Rc<RefCell<Option<ArchiveWindow>>>,
+    tiles_ref: &TileWindows,
+    state: &slint_replay::app_state::SharedState,
+    weak_overlay: &slint::Weak<OverlayBarWindow>,
+) {
+    {
+        let slot = archive_ref.borrow();
+        if let Some(existing) = slot.as_ref() {
+            let _ = existing.show();
+            if let Ok(hwnd) = grab_hwnd(existing.window()) {
+                focus_window(hwnd);
+            }
+            return;
+        }
+    }
+    let win = match ArchiveWindow::new() {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln!("[overlay-host] ArchiveWindow::new failed: {e}");
+            return;
+        }
+    };
+    win.global::<ui::Theme>()
+        .set_scheme(clamp_scheme(global_scheme()));
+
+    // Open ONE catalog handle for this browse session (reused by the closures
+    // below). On failure the window degrades to an "unavailable" state.
+    let store: Option<Rc<RefCell<Store>>> = match open_default_store() {
+        Ok(s) => Some(Rc::new(RefCell::new(s))),
+        Err(e) => {
+            eprintln!("[overlay-host] archive: catalog open failed: {e}");
+            None
+        }
+    };
+
+    match store.as_ref() {
+        Some(store_rc) => {
+            let sessions = store_rc.borrow().list_sessions().unwrap_or_default();
+            win.set_summary(SharedString::from(format!("{} 🗄", sessions.len())));
+            let rows: Vec<ArchiveRow> = sessions.iter().map(session_to_row).collect();
+            win.set_results(ModelRc::new(VecModel::from(rows)));
+        }
+        None => {
+            win.set_unavailable(true);
+        }
+    }
+
+    // Search-as-you-type: empty query → full list; else an FTS5 prefix search
+    // over utterances + AI questions/answers.
+    {
+        let weak = win.as_weak();
+        let store_q = store.clone();
+        win.on_query_changed(move |q| {
+            let Some(p) = weak.upgrade() else {
+                return;
+            };
+            let Some(store_rc) = store_q.as_ref() else {
+                return;
+            };
+            let trimmed = q.trim();
+            let rows: Vec<ArchiveRow> = if trimmed.is_empty() {
+                store_rc
+                    .borrow()
+                    .list_sessions()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(session_to_row)
+                    .collect()
+            } else {
+                let fts = fts_query(trimmed);
+                if fts.is_empty() {
+                    Vec::new()
+                } else {
+                    store_rc
+                        .borrow()
+                        .search(&fts, 60)
+                        .unwrap_or_default()
+                        .iter()
+                        .map(hit_to_row)
+                        .collect()
+                }
+            };
+            p.set_results(ModelRc::new(VecModel::from(rows)));
+        });
+    }
+
+    // Activate a row → spawn a read-only tile with that session's full content.
+    // The archive stays OPEN so several sessions can be opened in a row.
+    {
+        let weak = win.as_weak();
+        let store_a = store.clone();
+        let tiles_c = tiles_ref.clone();
+        let state_c = state.clone();
+        let wov = weak_overlay.clone();
+        win.on_result_activated(move |idx| {
+            let Some(p) = weak.upgrade() else {
+                return;
+            };
+            let Some(store_rc) = store_a.as_ref() else {
+                return;
+            };
+            let results = p.get_results();
+            let Some(row) = archive_row_at(&results, idx) else {
+                return;
+            };
+            let sid = row.id.to_string();
+            let (session, utts, turns) = {
+                let st = store_rc.borrow();
+                (
+                    st.get_session(&sid).ok().flatten(),
+                    st.session_utterances(&sid).unwrap_or_default(),
+                    st.session_ai_turns(&sid).unwrap_or_default(),
+                )
+            };
+            let title = pretty_session_label(&sid);
+            let md = build_session_markdown(session.as_ref(), &utts, &turns);
+            spawn_content_tile(&title, "archive", &md, &tiles_c, &state_c, &wov);
+        });
+    }
+
+    {
+        let weak = win.as_weak();
+        let slot = archive_ref.clone();
+        win.on_close_requested(move || {
+            if let Some(w) = weak.upgrade() {
+                let _ = w.hide();
+            }
+            *slot.borrow_mut() = None;
+        });
+    }
+
+    present_window_stealth_aware(&win, |hwnd| {
+        // Keep the archive out of the taskbar / Alt-Tab too (stealth existence
+        // leak — same as palette / help / text-ask).
+        let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
+        focus_window(hwnd);
+    });
+    *archive_ref.borrow_mut() = Some(win);
+}
+
+/// Spawn a standard read-only content tile (shared by the KB palette + the
+/// session archive): a `TileWindow` with markdown `body_md`, wired for
+/// close / pin / maximize / drag, placed on the right monitor and registered in
+/// `tiles`. Bumps the session tile counter exactly as the palette did.
+pub(crate) fn spawn_content_tile(
+    title: &str,
+    source_label: &str,
+    body_md: &str,
+    tiles: &TileWindows,
+    state: &slint_replay::app_state::SharedState,
+    weak_overlay: &slint::Weak<OverlayBarWindow>,
+) {
+    let seq = {
+        let mut st = match state.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        st.tiles_spawned += 1;
+        st.tiles_spawned
+    };
+    if let Some(o) = weak_overlay.upgrade() {
+        o.set_tiles_spawned(seq as i32);
+    }
+    let Ok(tile) = TileWindow::new() else {
+        return;
+    };
+    tile.set_sequence(seq as i32);
+    tile.set_tile_title(SharedString::from(title.to_string()));
+    tile.set_source_label(SharedString::from(source_label.to_string()));
+    wire_tile_drag(&tile);
+    let blocks: Vec<MarkdownBlock> = markdown::parse(body_md)
+        .into_iter()
+        .map(|b| MarkdownBlock {
+            kind: b.kind,
+            text: SharedString::from(b.text),
+            lang: SharedString::from(b.lang),
+        })
+        .collect();
+    tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
+
+    let weak_tile = tile.as_weak();
+    let vec_for_close = tiles.clone();
+    let weak_overlay_close = weak_overlay.clone();
+    tile.on_close_clicked(move || {
+        if let Some(t) = weak_tile.upgrade() {
+            let close_hwnd = grab_hwnd(t.window()).ok();
+            let _ = t.hide();
+            if let Some(target) = close_hwnd {
+                vec_for_close
+                    .borrow_mut()
+                    .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
+                refresh_open_tiles(&weak_overlay_close, &vec_for_close);
+            }
+        }
+    });
+    let weak_pin = tile.as_weak();
+    tile.on_pin_clicked(move || {
+        if let Some(t) = weak_pin.upgrade() {
+            let new = !t.get_pinned();
+            t.set_pinned(new);
+        }
+    });
+    let weak_max = tile.as_weak();
+    tile.on_maximize_clicked(move || {
+        if let Some(t) = weak_max.upgrade() {
+            let Ok(hwnd) = grab_hwnd(t.window()) else {
+                return;
+            };
+            toggle_tile_maximize(hwnd, &t);
+        }
+    });
+
+    present_tile_window(&tile);
+    apply_tile_hwnd_with_monitor(&tile);
+    tiles.borrow_mut().push(tile);
+    refresh_open_tiles(weak_overlay, tiles);
+}
+
+/// Bounds-checked row lookup into the archive results model (mirror of the
+/// palette's `results_index`).
+fn archive_row_at(model: &slint::ModelRc<ArchiveRow>, idx: i32) -> Option<ArchiveRow> {
+    use slint::Model;
+    if idx < 0 {
+        return None;
+    }
+    model.row_data(idx as usize)
+}
+
+/// Turn a free-text archive query into a safe FTS5 MATCH expression: split on
+/// every non-alphanumeric char (whitespace, hyphen, punctuation — matching the
+/// `unicode61` tokenizer), then append `*` to each token so it becomes a PREFIX
+/// match (incremental "search as you type"). An all-punctuation query collapses
+/// to `""` — the caller then shows no rows rather than passing FTS5 a string it
+/// would reject. Keeps the SQL/FTS surface entirely inside `persistence`.
+fn fts_query(raw: &str) -> String {
+    raw.split(|c: char| !c.is_alphanumeric())
+        .filter(|t| !t.is_empty())
+        .map(|t| format!("{t}*"))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Human label from a session id (the JSONL file stem, e.g.
+/// `2026-06-04_10-00-00_ab12`) → `2026-06-04 10:00:00`. The stem already
+/// encodes the start time, so no date/time crate is needed. Falls back to the
+/// raw id when it doesn't match the `date_time_suffix` shape.
+fn pretty_session_label(id: &str) -> String {
+    let parts: Vec<&str> = id.splitn(3, '_').collect();
+    if parts.len() >= 2 && parts[0].len() == 10 && parts[1].len() == 8 {
+        format!("{} {}", parts[0], parts[1].replace('-', ":"))
+    } else {
+        id.to_string()
+    }
+}
+
+/// Status → a single language-neutral glyph for the row title.
+fn status_glyph(status: &str) -> &'static str {
+    match status {
+        "completed" => "✓",
+        "crashed" => "⚠",
+        "active" => "●",
+        _ => "•",
+    }
+}
+
+/// Map an indexed [`Session`] to an archive list row. Counts are emoji-coded
+/// (💬 transcript lines · 🤖 AI turns) so the row needs no per-language string;
+/// the cost shows only when non-zero (local runs are $0 → blank).
+fn session_to_row(s: &Session) -> ArchiveRow {
+    let label = pretty_session_label(&s.id);
+    let model = s.ai_model.as_deref().unwrap_or("—");
+    let subtitle = format!(
+        "💬 {} · 🤖 {} · {model}",
+        s.transcript_lines, s.ai_turns_count
+    );
+    let meta = if s.total_cost_microcents > 0 {
+        format!("${:.3}", (s.total_cost_microcents as f64) / 100_000_000.0)
+    } else {
+        String::new()
+    };
+    ArchiveRow {
+        id: SharedString::from(s.id.clone()),
+        title: SharedString::from(format!("{} {label}", status_glyph(&s.status))),
+        subtitle: SharedString::from(subtitle),
+        meta: SharedString::from(meta),
+    }
+}
+
+/// Map an FTS [`SearchHit`] to an archive list row: the session label + a
+/// whitespace-collapsed, length-capped snippet of the matched body, tagged with
+/// the hit kind (❓ question · 💡 answer · 💬 utterance).
+fn hit_to_row(h: &SearchHit) -> ArchiveRow {
+    let label = pretty_session_label(&h.session_id);
+    let kind_glyph = match h.kind.as_str() {
+        "question" => "❓",
+        "answer" => "💡",
+        _ => "💬",
+    };
+    let snippet: String = h
+        .body
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(160)
+        .collect();
+    ArchiveRow {
+        id: SharedString::from(h.session_id.clone()),
+        title: SharedString::from(format!("🔎 {label}")),
+        subtitle: SharedString::from(snippet),
+        meta: SharedString::from(kind_glyph),
+    }
+}
+
+/// Render a session's content as the markdown body of a read-only tile:
+/// a heading (status + label + counts), the transcript (🎤 mic / 🗣 system),
+/// then the AI Q&A (❓ question / 💡 answer). Pure → unit-tested.
+fn build_session_markdown(
+    session: Option<&Session>,
+    utterances: &[Utterance],
+    ai_turns: &[AiTurn],
+) -> String {
+    let mut out = String::new();
+    if let Some(s) = session {
+        out.push_str(&format!(
+            "# {} {}\n\n",
+            status_glyph(&s.status),
+            pretty_session_label(&s.id)
+        ));
+        let model = s.ai_model.as_deref().unwrap_or("—");
+        out.push_str(&format!(
+            "💬 {} · 🤖 {} · {model}",
+            s.transcript_lines, s.ai_turns_count
+        ));
+        if s.total_cost_microcents > 0 {
+            out.push_str(&format!(
+                " · ${:.3}",
+                (s.total_cost_microcents as f64) / 100_000_000.0
+            ));
+        }
+        out.push_str("\n\n");
+    }
+    for u in utterances {
+        let icon = if u.source == "mic" { "🎤" } else { "🗣" };
+        out.push_str(&format!("{icon} {}\n\n", u.text.trim()));
+    }
+    if !ai_turns.is_empty() {
+        out.push_str("---\n\n");
+        for t in ai_turns {
+            if !t.question.trim().is_empty() {
+                out.push_str(&format!("❓ **{}**\n\n", t.question.trim()));
+            }
+            if !t.answer.trim().is_empty() {
+                out.push_str(&format!("💡 {}\n\n", t.answer.trim()));
+            }
+        }
+    }
+    if utterances.is_empty() && ai_turns.is_empty() {
+        out.push_str("—\n");
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+
+    #[test]
+    fn pretty_label_parses_stem() {
+        assert_eq!(
+            pretty_session_label("2026-06-04_10-00-00_ab12"),
+            "2026-06-04 10:00:00"
+        );
+    }
+
+    #[test]
+    fn pretty_label_falls_back_on_odd_id() {
+        assert_eq!(pretty_session_label("weird"), "weird");
+        assert_eq!(pretty_session_label(""), "");
+    }
+
+    #[test]
+    fn fts_query_prefixes_tokens_and_drops_punctuation() {
+        assert_eq!(fts_query("hash map"), "hash* map*");
+        // unicode61 splits on the hyphen, so the two halves become two prefixes.
+        assert_eq!(fts_query("хеш-таблицу"), "хеш* таблицу*");
+        assert_eq!(fts_query("   "), "");
+        assert_eq!(fts_query("!?.,"), "");
+    }
+
+    fn sample_session() -> Session {
+        Session {
+            id: "2026-06-04_09-30-00_zz".into(),
+            journal_path: "C:/sessions/x.jsonl".into(),
+            started_at_ms: Some(1),
+            finished_at_ms: Some(2),
+            status: "completed".into(),
+            ai_model: Some("gemma".into()),
+            transcript_lines: 12,
+            ai_turns_count: 3,
+            total_cost_microcents: 0,
+            indexed_at_ms: 0,
+        }
+    }
+
+    #[test]
+    fn session_row_is_emoji_coded() {
+        let row = session_to_row(&sample_session());
+        assert!(row.title.as_str().starts_with("✓ 2026-06-04 09:30:00"));
+        assert!(row.subtitle.as_str().contains("💬 12"));
+        assert!(row.subtitle.as_str().contains("🤖 3"));
+        assert_eq!(row.meta.as_str(), ""); // zero cost → blank meta
+    }
+
+    #[test]
+    fn session_row_shows_cost_when_nonzero() {
+        let mut s = sample_session();
+        s.total_cost_microcents = 2_400_000; // $0.024
+        let row = session_to_row(&s);
+        assert_eq!(row.meta.as_str(), "$0.024");
+    }
+
+    #[test]
+    fn hit_row_tags_kind_and_caps_snippet() {
+        let h = SearchHit {
+            session_id: "2026-06-04_09-30-00_zz".into(),
+            kind: "answer".into(),
+            unix_ms: 5,
+            body: "a   key value   structure".into(),
+            rank: -1.0,
+        };
+        let row = hit_to_row(&h);
+        assert!(row.title.as_str().starts_with("🔎 2026-06-04 09:30:00"));
+        assert_eq!(row.meta.as_str(), "💡");
+        assert_eq!(row.subtitle.as_str(), "a key value structure"); // whitespace collapsed
+    }
+
+    #[test]
+    fn session_markdown_has_transcript_and_qa() {
+        let utts = vec![Utterance {
+            session_id: "s".into(),
+            unix_ms: 1,
+            source: "mic".into(),
+            text: "hello there".into(),
+        }];
+        let turns = vec![AiTurn {
+            session_id: "s".into(),
+            unix_ms: 2,
+            purpose: "ask".into(),
+            model: "m".into(),
+            question: "what is it?".into(),
+            answer: "an answer.".into(),
+            latency_ms: None,
+            attached_screenshot: false,
+        }];
+        let md = build_session_markdown(None, &utts, &turns);
+        assert!(md.contains("🎤 hello there"));
+        assert!(md.contains("❓ **what is it?**"));
+        assert!(md.contains("💡 an answer."));
+    }
+
+    #[test]
+    fn session_markdown_empty_is_graceful() {
+        let md = build_session_markdown(None, &[], &[]);
+        assert_eq!(md, "—\n");
     }
 }

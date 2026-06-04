@@ -892,3 +892,22 @@ msgstr "Закрыть"
 
 msgid "Recover"
 msgstr "Восстановить"
+
+# Phase 3a — session-archive browser (archive.slint)
+msgid "Session archive"
+msgstr "Архив сессий"
+
+msgid "search transcript + AI answers…"
+msgstr "поиск по транскрипту и ответам ИИ…"
+
+msgid "The session archive is unavailable."
+msgstr "Архив сессий недоступен."
+
+msgid "No archived sessions yet."
+msgstr "Пока нет сохранённых сессий."
+
+msgid "No matches for \"{}\"."
+msgstr "Нет совпадений для «{}»."
+
+msgid "Esc to close · Enter / click to open a session"
+msgstr "Esc — закрыть · Enter / клик — открыть сессию"

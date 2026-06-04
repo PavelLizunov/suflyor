@@ -15,6 +15,7 @@ import { TextAskWindow } from "text_ask.slint";
 import { WizardWindow } from "wizard.slint";
 import { HelpWindow } from "help.slint";
 import { RecoverOfferWindow } from "recover_offer.slint";
+import { ArchiveWindow, ArchiveRow } from "archive.slint";
 // Re-export the design-token global so the Rust host can reach it
 // (`win.global::<Theme>().set_scheme(n)`) to switch colour schemes live
 // across every window instance — Theme is a PER-WINDOW global, so each
@@ -38,6 +39,7 @@ export {
     WizardWindow,
     HelpWindow,
     RecoverOfferWindow,
+    ArchiveWindow, ArchiveRow,
     Theme,
     Metrics,
 }

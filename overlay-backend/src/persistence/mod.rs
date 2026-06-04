@@ -42,3 +42,16 @@ pub fn reindex_default(skip_active: Option<&str>) -> Result<IndexStats> {
     let mut store = Store::open(&db)?;
     index_all(&mut store, &sessions, skip_active)
 }
+
+/// Open the default on-disk catalog (the same `catalog.sqlite` the startup
+/// indexer writes) for the UI READ paths — the session-archive list + FTS
+/// search. Opening runs the migrations + WAL setup, so the caller holds the
+/// returned [`Store`] for one browse session (reusing it across list / search /
+/// detail queries) instead of reopening per query. `Err` if the OS config dir
+/// can't be resolved or the open fails — the caller surfaces an "archive
+/// unavailable" state rather than crashing. The archive is read-only: it never
+/// writes, so it can race the indexer harmlessly under WAL.
+pub fn open_default_store() -> Result<Store> {
+    let db = Store::default_path().context("resolve catalog path")?;
+    Store::open(&db)
+}

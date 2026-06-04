@@ -60,8 +60,9 @@ mod ui {
 }
 
 use ui::{
-    CaptureOverlay, HelpWindow, MarkdownBlock, OverlayBarWindow, PaletteResult, PaletteWindow,
-    RecoverOfferWindow, SettingsWindow, TextAskWindow, TileWindow, WizardWindow,
+    ArchiveRow, ArchiveWindow, CaptureOverlay, HelpWindow, MarkdownBlock, OverlayBarWindow,
+    PaletteResult, PaletteWindow, RecoverOfferWindow, SettingsWindow, TextAskWindow, TileWindow,
+    WizardWindow,
 };
 
 // Phase 1 of the modularization (docs/overlay-host-modularization-plan.md §5.1):
@@ -1402,6 +1403,10 @@ fn main() -> Result<(), slint::PlatformError> {
     let wizard: Rc<RefCell<Option<WizardWindow>>> = Rc::new(RefCell::new(None));
     // 🆘 Help window (F1 / 🆘 chip), created on demand.
     let help: Rc<RefCell<Option<HelpWindow>>> = Rc::new(RefCell::new(None));
+    // 🗄 Session-archive browser (F7; a 📚 bar chip lands in the follow-up
+    // commit), created on demand like the palette/help. Phase 3a — browse +
+    // FTS-search the SQLite session catalog.
+    let archive: Rc<RefCell<Option<ArchiveWindow>>> = Rc::new(RefCell::new(None));
     // Memory Phase 1 — crash-recovery offer, shown once a beat after startup if
     // the newest journal looks unfinished (see the delayed-open below).
     let recover_offer: Rc<RefCell<Option<RecoverOfferWindow>>> = Rc::new(RefCell::new(None));
@@ -1480,6 +1485,7 @@ fn main() -> Result<(), slint::PlatformError> {
         f3_id,
         f4_id,
         f6_id,
+        f7_id,
         f8_id,
         sf8_id,
         f9_id,
@@ -1489,6 +1495,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let hotkey_poll = Timer::default();
     let hp_palette = palette.clone();
     let hp_help = help.clone();
+    let hp_archive = archive.clone();
     let hp_capture_overlay = capture_overlay.clone();
     let hp_tiles = tiles.clone();
     let hp_state = state.clone();
@@ -1541,6 +1548,21 @@ fn main() -> Result<(), slint::PlatformError> {
                     } else {
                         eprintln!("[overlay-host] F1 pressed — opening help");
                         open_help(&hp_help, &hp_weak_overlay);
+                    }
+                } else if event.id == f7_id {
+                    // Phase 3a — F7 toggles the 🗄 session archive (focus-
+                    // independent, like F4/F1; a hotkey-spawned always-on-top
+                    // window starts unfocused, so a toggle is the reliable
+                    // closer rather than relying on Esc landing).
+                    let archive_open = hp_archive.borrow().is_some();
+                    if archive_open {
+                        eprintln!("[overlay-host] F7 pressed — closing archive (toggle)");
+                        if let Some(a) = hp_archive.borrow_mut().take() {
+                            let _ = a.hide();
+                        }
+                    } else {
+                        eprintln!("[overlay-host] F7 pressed — opening archive");
+                        open_archive(&hp_archive, &hp_tiles, &hp_state, &hp_weak_overlay);
                     }
                 } else if event.id == f3_id {
                     // Phase E3 slice 3 — F3 reask via overlay-backend's
