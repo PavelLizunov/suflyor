@@ -55,6 +55,7 @@ anyhow = "1"
 # SHA-256 — verify the downloaded updater installer against the GitHub release
 # API digest before executing it (update.rs).
 sha2 = "0.10"
+rusqlite = { version = "0.40.0", features = ["bundled"] }
 
 [dev-dependencies]
 hound = "3"

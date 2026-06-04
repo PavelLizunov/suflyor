@@ -12,6 +12,7 @@ pub mod health;
 pub mod journal;
 pub mod kb;
 pub mod local_ai;
+pub mod persistence;
 pub mod runtime;
 pub mod stt;
 pub mod update;
