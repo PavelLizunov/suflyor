@@ -585,7 +585,9 @@ pub async fn reask_last(
     let (system_prompt, base_user_prompt) = build_auto_tile_prompts(
         &trigger,
         &inputs.recent_transcript_iconized,
-        &meeting_context,
+        // Phase 3b.4 — fold the user's APPROVED memory into the background block
+        // (off the audio thread; graceful + bounded; empty when none approved).
+        &crate::memory::context_for_meeting(&meeting_context),
         &response_language,
     );
 
@@ -868,7 +870,8 @@ pub async fn manual_spawn_tile(
     let (sys_full, usr_full) = build_auto_tile_prompts(
         &trigger,
         &inputs.recent_transcript_labeled,
-        &meeting_context,
+        // Phase 3b.4 — fold the user's APPROVED memory into the background block.
+        &crate::memory::context_for_meeting(&meeting_context),
         &response_language,
     );
     let messages = vec![

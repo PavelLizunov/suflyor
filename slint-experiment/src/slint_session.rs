@@ -654,7 +654,9 @@ async fn maybe_spawn_auto_tile(
     let (system_prompt, prompt) = backend_runtime::build_auto_tile_prompts(
         &trigger,
         &recent_transcript,
-        &meeting_context,
+        // Phase 3b.4 — fold the user's APPROVED memory into the background block
+        // (this auto/F9 ask runs on a spawned task, off the audio thread).
+        &overlay_backend::memory::context_for_meeting(&meeting_context),
         &response_language,
     );
     let sys_full = system_prompt.clone();

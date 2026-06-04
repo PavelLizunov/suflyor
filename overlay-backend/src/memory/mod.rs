@@ -14,5 +14,7 @@
 //! a separate AI extractor (a later commit) is an opt-in "deep extract".
 
 mod candidates;
+mod context_builder;
 
 pub use candidates::extract_heuristic;
+pub use context_builder::{context_for_meeting, format_memory_block, merge_context};
