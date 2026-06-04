@@ -215,6 +215,15 @@ use tile_routes::*;
 mod tile_ptt;
 use tile_ptt::*;
 
+// `tile_followup.rs` — the tile continuation surfaces (follow-up reframe + the
+// `6ffbc40` fix, `fire_followup_ask` / `fire_regenerate`, `wire_escalate` /
+// `wire_voice_followup` + `VFU_TX`) split out of `tile_ask.rs` (P1 split). `use
+// tile_followup::*;` re-exports them so the F9 / PTT tiles + `main`'s drains
+// reach them through the crate root.
+#[path = "overlay_host/tile_followup.rs"]
+mod tile_followup;
+use tile_followup::*;
+
 // Phase 7b of the modularization (docs/overlay-host-modularization-plan.md
 // §5.8/§5.9) — the FINAL phase: the Settings window controller. `open_settings`
 // (the Settings fn with its remaining inline handlers + the stealth/scheme/
