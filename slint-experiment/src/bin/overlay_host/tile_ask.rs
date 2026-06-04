@@ -44,14 +44,14 @@
 //! `PttStreamSink` that stay in `tile_controller.rs` through it). That is
 //! intentional for the extraction; the imports get narrowed in a later pass.
 use super::{
-    ai, apply_tile_hwnd_with_monitor, audio, classify_ai_error, gated_events, grab_hwnd,
-    install_streaming_tile, journal, markdown, message_text, present_tile_window,
-    refresh_open_tiles, release_mic, strip_followup_directives, stt, to_md_blocks,
-    toggle_tile_maximize, tokio_mpsc, try_acquire_mic, vision, wire_copy, wire_tile_drag, Arc,
-    AtomicBool, ComponentHandle, Duration, MarkdownBlock, ModelRc, Ordering, OverlayBarBridge,
-    OverlayBarWindow, PttStreamSink, Rc, RefCell, RuntimeEvents, SharedSlintRuntime, SharedString,
-    StreamingTile, TileWindow, TileWindows, VecModel, AI_STREAM_MAX_TOKENS, CONVO_SEQ,
-    TILE_DISPLAY_SEQ,
+    ai, apply_tile_hwnd_with_monitor, audio, classify_ai_error, cost_cap_reason, gated_events,
+    grab_hwnd, install_streaming_tile, journal, markdown, message_text, present_tile_window,
+    refresh_open_tiles, release_mic, select_recent_labeled, strip_followup_directives, stt,
+    to_md_blocks, toggle_tile_maximize, tokio_mpsc, try_acquire_mic, vision, warn_if_over_cost_cap,
+    wire_copy, wire_tile_drag, Arc, AtomicBool, ComponentHandle, Duration, MarkdownBlock, ModelRc,
+    Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink, Rc, RefCell, RuntimeEvents,
+    SharedSlintRuntime, SharedString, StreamingTile, TileWindow, TileWindows, VecModel,
+    AI_STREAM_MAX_TOKENS, CONVO_SEQ, TILE_DISPLAY_SEQ,
 };
 
 // ============================================================================
@@ -439,47 +439,6 @@ pub(crate) fn wire_escalate(
             AskRoute::Cloud,
         );
     });
-}
-
-/// Local helper: compute `Some(reason)` if session_cost is over the
-/// configured cap, else `None`. Duplicated from src-tauri's
-/// `over_cost_budget` — small enough to inline rather than promote
-/// to overlay-backend.
-fn cost_cap_reason(cap_usd: f64, current_microcents: u64) -> Option<String> {
-    if cap_usd <= 0.0 {
-        return None;
-    }
-    let current_usd = (current_microcents as f64) / 100_000_000.0;
-    if current_usd >= cap_usd {
-        Some(format!(
-            "over budget: ${current_usd:.4} spent ≥ ${cap_usd:.2} (Settings → Max cost per session)"
-        ))
-    } else {
-        None
-    }
-}
-
-/// Local helper: last `max` transcript lines labeled with speaker
-/// tags `[ПОЛЬЗОВАТЕЛЬ]` / `[СОБЕСЕДНИК]`. Mirrors src-tauri's
-/// `select_recent_lines_labeled` — kept local to avoid promoting a
-/// tiny helper to overlay-backend.
-pub(crate) fn select_recent_labeled(
-    transcript: &std::collections::VecDeque<overlay_backend::audio::TranscriptLine>,
-    max: usize,
-) -> Vec<String> {
-    let n = transcript.len();
-    let start = n.saturating_sub(max);
-    transcript
-        .iter()
-        .skip(start)
-        .map(|l| {
-            let src = match l.source {
-                overlay_backend::audio::AudioSource::System => "[СОБЕСЕДНИК]",
-                overlay_backend::audio::AudioSource::Mic => "[ПОЛЬЗОВАТЕЛЬ]",
-            };
-            format!("{src} {}", l.text)
-        })
-        .collect()
 }
 
 /// Phase E3 slice 3 — F3 reask handler.
@@ -1324,48 +1283,6 @@ pub(crate) fn fire_ptt_ask(
         )
         .await;
     });
-}
-
-/// v0.8.2 (MAJOR-2) — sticky-cloud cost-cap warning. After a 🧠 / Shift+F9
-/// escalation a tile's `live` route stays `Cloud`, so EVERY subsequent text
-/// follow-up + 🔄 regenerate + 🎤 voice follow-up is now a BILLABLE cloud call.
-/// `fire_f9_ask` already emits `cost:cap-hit` when over budget, but the
-/// continuation paths did not — so the per-session cap was silently ignored
-/// mid-conversation (the regression sticky-cloud introduced). This emits the
-/// SAME non-blocking warning (warn only — never block a continuation the user
-/// is mid-thread on). No-op for local ($0) calls, when no cap is set, or before
-/// any spend has accrued.
-fn warn_if_over_cost_cap(
-    events: &Arc<dyn RuntimeEvents>,
-    cfg: &overlay_backend::config::SharedConfig,
-    slint_rt: &SharedSlintRuntime,
-    is_local: bool,
-    source: &str,
-) {
-    if is_local {
-        return;
-    }
-    let cap_usd = cfg.read().max_session_cost_usd;
-    if cap_usd <= 0.0 {
-        return;
-    }
-    let current_micro = slint_replay::runtime_state::lock(slint_rt).session_cost_microcents;
-    if current_micro == 0 {
-        return;
-    }
-    let usd = (current_micro as f64) / 100_000_000.0;
-    if usd >= cap_usd {
-        events.emit(
-            "cost:cap-hit",
-            serde_json::json!({
-                "reason": format!(
-                    "over budget: ${usd:.4} spent ≥ ${cap_usd:.2} (Settings → Max cost per session)"
-                ),
-                "source": source,
-                "blocking": false,
-            }),
-        );
-    }
 }
 
 /// Phase E6 v45 — continue the dialog inside a tile. Reads the tile's

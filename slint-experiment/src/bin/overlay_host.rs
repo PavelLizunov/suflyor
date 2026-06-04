@@ -190,6 +190,15 @@ use tile_copy::*;
 mod tile_ask;
 use tile_ask::*;
 
+// `tile_cost.rs` — pure cost-cap + transcript-selection helpers split out of
+// `tile_ask.rs` (P1 `tile_ask` split, docs/overlay-host-modular-structure-current.md).
+// `use tile_cost::*;` re-exports them so the ask entrypoints still in `tile_ask.rs`
+// reach `cost_cap_reason` / `warn_if_over_cost_cap` / `select_recent_labeled`
+// through the crate root.
+#[path = "overlay_host/tile_cost.rs"]
+mod tile_cost;
+use tile_cost::*;
+
 // Phase 7b of the modularization (docs/overlay-host-modularization-plan.md
 // §5.8/§5.9) — the FINAL phase: the Settings window controller. `open_settings`
 // (the Settings fn with its remaining inline handlers + the stealth/scheme/
