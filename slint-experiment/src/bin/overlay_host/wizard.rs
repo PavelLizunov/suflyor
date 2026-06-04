@@ -23,12 +23,14 @@
 //! `open_wizard` on first run, and `open_settings`' "Run setup wizard" button —
 //! resolve through the `use wizard::*;` re-export at crate root.
 //!
-//! NOTE (§7): this mechanical move imports the parent crate-root via
-//! `use super::*;` (the moved code reaches the Slint window types, the win32
-//! helpers, `config::save`, the registry + scheme/stealth helpers, and the mic
-//! guard through it). That is intentional for the extraction; the imports get
-//! narrowed in a later pass.
-use super::*;
+//! NOTE (§7): the parent crate-root symbols this module references are imported
+//! explicitly below.
+use super::{
+    apply_scheme_wizard, config, focus_window, global_scheme, global_stealth, grab_hwnd,
+    present_window_stealth_aware, release_mic, set_global_stealth, set_skip_taskbar, set_stealth,
+    try_acquire_mic, ComponentHandle, OverlayBarWindow, Rc, RefCell, SettingsWindow, SharedString,
+    WindowRegistry, WizardWindow,
+};
 
 /// Refill the step-7 summary rows. Renders ONLY secret-free values: the live
 /// check detail a step already painted ([ok]/[err], secret-free, same as the

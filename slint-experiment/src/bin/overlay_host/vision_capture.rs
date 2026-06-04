@@ -32,12 +32,17 @@
 //! The low-level BGRA capture (`slint_replay::capture`) and the Win32 helpers
 //! (`slint_replay::win32`) are already separate modules and are NOT touched.
 //!
-//! NOTE (§7): this mechanical move imports the parent crate-root via
-//! `use super::*;` (the moved code reaches `CaptureOverlay`/`TileWindow`, the
-//! win32 helpers, the runtime/journal/health glue, and the shared tile fns
-//! through it). That is intentional for the extraction; the imports get narrowed
-//! in a later pass.
-use super::*;
+//! NOTE (§7): the parent crate-root symbols this module references are imported
+//! explicitly below.
+use super::{
+    ai, apply_tile_hwnd_with_monitor, fire_followup_ask, fire_regenerate, grab_hwnd, journal,
+    live_route, markdown, present_tile_window, ptt_tile_error, refresh_open_tiles,
+    set_always_on_top, toggle_tile_maximize, vision, wire_copy, wire_tile_drag,
+    wire_voice_followup, Arc, AskRoute, CaptureOverlay, ComponentHandle, MarkdownBlock, ModelRc,
+    Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink, Rc, RefCell, RuntimeEvents,
+    SharedSlintRuntime, SharedString, TileWindow, TileWindows, VecModel, CONVO_SEQ,
+    TILE_DISPLAY_SEQ,
+};
 
 /// Build a Slint RGBA image from a top-down BGRA capture. Alpha is forced
 /// opaque — GDI BitBlt leaves garbage in the alpha byte. Used by the V3 capture

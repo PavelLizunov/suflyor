@@ -22,12 +22,13 @@
 //! `open_recover_offer` Timer — resolve through the `use recovery::*;` re-export
 //! at crate root.
 //!
-//! NOTE (§7): this mechanical move imports the parent crate-root via
-//! `use super::*;` (the moved code reaches `RecoverOfferWindow`, the win32
-//! helpers, `present_window_stealth_aware`, `clamp_scheme`/`global_scheme`, and
-//! the runtime/session glue through it). That is intentional for the extraction;
-//! the imports get narrowed in a later pass.
-use super::*;
+//! NOTE (§7): the parent crate-root symbols this module references are imported
+//! explicitly below.
+use super::{
+    clamp_scheme, focus_window, global_scheme, grab_hwnd, present_window_stealth_aware,
+    slint_session, ui, Arc, ComponentHandle, OverlayBarWindow, Rc, RecoverOfferWindow, RefCell,
+    RuntimeEvents, SharedSlintRuntime, SharedString,
+};
 
 /// Opening marker that brackets the recovered-context block prepended to
 /// `cfg.meeting_context` by [`seed_recovery_context`]. A stable, greppable
