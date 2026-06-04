@@ -13,9 +13,11 @@
 //! and [`Store`] — no `rusqlite` types or raw SQL leak out. The JSONL→SQLite
 //! indexer + FTS search land in follow-up commits.
 
+mod indexer;
 mod migrations;
 pub mod models;
 mod sqlite_store;
 
+pub use indexer::{index_all, index_journal_file, IndexStats};
 pub use models::{AiTurn, Session, Utterance};
 pub use sqlite_store::Store;

@@ -192,6 +192,61 @@ impl Store {
             )
             .context("count ai_turns")
     }
+
+    /// The set of session ids already in the catalog — lets the indexer skip
+    /// immutable, already-indexed journals.
+    pub fn indexed_session_ids(&self) -> Result<std::collections::HashSet<String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM sessions")
+            .context("prepare indexed ids")?;
+        let rows = stmt
+            .query_map([], |r| r.get::<_, String>(0))
+            .context("query indexed ids")?;
+        let mut set = std::collections::HashSet::new();
+        for r in rows {
+            set.insert(r.context("map id")?);
+        }
+        Ok(set)
+    }
+
+    /// All utterances for a session, time-ordered (the session-detail view).
+    pub fn session_utterances(&self, session_id: &str) -> Result<Vec<Utterance>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT session_id, unix_ms, source, text FROM utterances \
+                 WHERE session_id = ?1 ORDER BY unix_ms ASC, id ASC",
+            )
+            .context("prepare session_utterances")?;
+        let rows = stmt
+            .query_map(params![session_id], row_to_utterance)
+            .context("query session_utterances")?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.context("map utterance")?);
+        }
+        Ok(out)
+    }
+
+    /// All AI turns for a session, time-ordered.
+    pub fn session_ai_turns(&self, session_id: &str) -> Result<Vec<AiTurn>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT session_id, unix_ms, purpose, model, question, answer, latency_ms, \
+                 attached_screenshot FROM ai_turns WHERE session_id = ?1 ORDER BY unix_ms ASC, id ASC",
+            )
+            .context("prepare session_ai_turns")?;
+        let rows = stmt
+            .query_map(params![session_id], row_to_ai_turn)
+            .context("query session_ai_turns")?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.context("map ai_turn")?);
+        }
+        Ok(out)
+    }
 }
 
 /// Map a `sessions` row (column order matches the SELECTs above) to a [`Session`].
@@ -207,6 +262,30 @@ fn row_to_session(row: &Row) -> rusqlite::Result<Session> {
         ai_turns_count: row.get(7)?,
         total_cost_microcents: row.get(8)?,
         indexed_at_ms: row.get(9)?,
+    })
+}
+
+/// Map an `utterances` row (column order matches the SELECTs above).
+fn row_to_utterance(row: &Row) -> rusqlite::Result<Utterance> {
+    Ok(Utterance {
+        session_id: row.get(0)?,
+        unix_ms: row.get(1)?,
+        source: row.get(2)?,
+        text: row.get(3)?,
+    })
+}
+
+/// Map an `ai_turns` row (column order matches the SELECTs above).
+fn row_to_ai_turn(row: &Row) -> rusqlite::Result<AiTurn> {
+    Ok(AiTurn {
+        session_id: row.get(0)?,
+        unix_ms: row.get(1)?,
+        purpose: row.get(2)?,
+        model: row.get(3)?,
+        question: row.get(4)?,
+        answer: row.get(5)?,
+        latency_ms: row.get(6)?,
+        attached_screenshot: row.get(7)?,
     })
 }
 
