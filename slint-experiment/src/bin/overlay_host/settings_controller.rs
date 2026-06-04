@@ -533,19 +533,6 @@ pub(crate) fn open_settings(
     }
     {
         let cfg_c = cfg.clone();
-        win.on_stt_gigaam_gpu_changed(move |on| {
-            let mut c = cfg_c.write();
-            c.stt_gigaam_gpu = on;
-            let _ = overlay_backend::config::save(&c);
-            // Apply immediately: update the global ORT accelerator + drop the
-            // cached model so the next transcription reloads on the new backend.
-            // (The live session pipeline reloads its own copy next session.)
-            overlay_backend::stt::configure_gigaam_accelerator(on);
-            overlay_backend::stt::reset_gigaam_cache();
-        });
-    }
-    {
-        let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_ai_local_test_clicked(move || {
             let Some(w) = weak.upgrade() else {
@@ -874,111 +861,14 @@ pub(crate) fn open_settings(
         });
     }
 
-    // Phase E6 v27 — STT (Groq) connection test. Same off-thread
-    // pattern; hits the Groq /models endpoint with the saved key.
-    {
-        let cfg_c = cfg.clone();
-        let weak = win.as_weak();
-        win.on_stt_test_clicked(move || {
-            let Some(w) = weak.upgrade() else { return };
-            w.set_stt_test_result(SharedString::from("testing…"));
-            let backend = cfg_c.read().stt_backend();
-            let weak_res = w.as_weak();
-            std::thread::spawn(move || {
-                let msg = match tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                {
-                    Ok(rt) => {
-                        match rt.block_on(overlay_backend::stt::test_connection_backend(&backend)) {
-                            Ok(s) => format!("[ok] {s}"),
-                            Err(e) => format!("[err] {e:#}").chars().take(90).collect(),
-                        }
-                    }
-                    Err(e) => format!("[err] runtime: {e}"),
-                };
-                let _ = slint::invoke_from_event_loop(move || {
-                    if let Some(w) = weak_res.upgrade() {
-                        w.set_stt_test_result(SharedString::from(msg));
-                    }
-                });
-            });
-        });
-    }
-
     // P0 — Diagnostics tab owns its callbacks (diagnostics.rs); Settings only wires.
     wire_diagnostics(&win, cfg);
 
-    // Phase E10 — STT provider selector + local-engine fields.
-    {
-        let cfg_c = cfg.clone();
-        win.on_stt_provider_changed(move |idx| {
-            let provider = match idx {
-                1 => "gigaam",
-                2 => "whisper",
-                _ => "cloud",
-            };
-            let mut c = cfg_c.write();
-            c.stt_provider = provider.to_string();
-            if let Err(e) = overlay_backend::config::save(&c) {
-                eprintln!("[overlay-host] stt_provider save failed: {e:#}");
-                return;
-            }
-            diag!("stt_provider -> {provider}");
-        });
-    }
-    {
-        let cfg_c = cfg.clone();
-        win.on_stt_gigaam_dir_save(move |v| {
-            let trimmed = v.trim().to_string();
-            let mut c = cfg_c.write();
-            c.stt_gigaam_dir = trimmed.clone();
-            if let Err(e) = overlay_backend::config::save(&c) {
-                eprintln!("[overlay-host] stt_gigaam_dir save failed: {e:#}");
-                return;
-            }
-            diag!("stt_gigaam_dir saved ({} chars)", trimmed.len());
-        });
-    }
-    {
-        let cfg_c = cfg.clone();
-        win.on_stt_whisper_url_save(move |v| {
-            let trimmed = v.trim().to_string();
-            let mut c = cfg_c.write();
-            c.stt_whisper_url = trimmed.clone();
-            if let Err(e) = overlay_backend::config::save(&c) {
-                eprintln!("[overlay-host] stt_whisper_url save failed: {e:#}");
-                return;
-            }
-            diag!("stt_whisper_url saved ({} chars)", trimmed.len());
-        });
-    }
-    {
-        let cfg_c = cfg.clone();
-        win.on_stt_whisper_bearer_save(move |v| {
-            let trimmed = v.trim().to_string();
-            let mut c = cfg_c.write();
-            c.stt_whisper_bearer = trimmed.clone();
-            if let Err(e) = overlay_backend::config::save(&c) {
-                eprintln!("[overlay-host] stt_whisper_bearer save failed: {e:#}");
-                return;
-            }
-            diag!("stt_whisper_bearer saved ({} chars)", trimmed.len());
-        });
-    }
-    {
-        let cfg_c = cfg.clone();
-        win.on_stt_whisper_model_save(move |v| {
-            let trimmed = v.trim().to_string();
-            let mut c = cfg_c.write();
-            c.stt_whisper_model = trimmed.clone();
-            if let Err(e) = overlay_backend::config::save(&c) {
-                eprintln!("[overlay-host] stt_whisper_model save failed: {e:#}");
-                return;
-            }
-            diag!("stt_whisper_model saved ({} chars)", trimmed.len());
-        });
-    }
+    // ===== STT (speech-to-text): provider switch + GigaAM GPU + field saves + test =====
+    // Extracted to settings_stt.rs (P1 domain split) — wired verbatim there.
+    // (`on_stt_gigaam_gpu_changed` moved out of the AI-local block region above
+    // into wire_stt_settings; the mic device/test callbacks stay in open_settings.)
+    wire_stt_settings(&win, cfg);
 
     // P1.7 — config parsed from a picked server-settings file, awaiting the
     // user's explicit Apply (set by the import-preview handler, taken by Apply,

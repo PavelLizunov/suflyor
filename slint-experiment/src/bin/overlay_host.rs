@@ -219,6 +219,17 @@ use settings_controller::*;
 mod settings_vision;
 use settings_vision::*;
 
+// The STT (speech-to-text) Settings-tab callbacks (provider switch + GigaAM GPU
+// toggle + GigaAM/Whisper field saves + the live connection test) live in their
+// own file alongside the binary (P1 domain split of `settings_controller.rs`).
+// `use settings_stt::*;` re-exports `wire_stt_settings`, which `open_settings`
+// calls in place of the old inline STT blocks; the moved code reaches
+// `SettingsWindow` / the `diag!` macro / the `overlay_backend` helpers through
+// the crate-root globs.
+#[path = "overlay_host/settings_stt.rs"]
+mod settings_stt;
+use settings_stt::*;
+
 pub(crate) type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
 
 /// Parse markdown source into the Slint `MarkdownBlock` rows a tile body
