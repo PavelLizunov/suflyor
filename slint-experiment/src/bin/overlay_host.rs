@@ -209,6 +209,16 @@ use tile_ask::*;
 mod settings_controller;
 use settings_controller::*;
 
+// The Vision (screenshot) Settings-tab callbacks (provider switch + cloud/local
+// field saves + the live connection test) live in their own file alongside the
+// binary (P1 domain split of `settings_controller.rs`). `use settings_vision::*;`
+// re-exports `wire_vision_settings`, which `open_settings` calls in place of the
+// old inline V4 block; the moved code reaches `SettingsWindow` / the `diag!`
+// macro / the `overlay_backend` helpers through the crate-root globs.
+#[path = "overlay_host/settings_vision.rs"]
+mod settings_vision;
+use settings_vision::*;
+
 pub(crate) type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
 
 /// Parse markdown source into the Slint `MarkdownBlock` rows a tile body
