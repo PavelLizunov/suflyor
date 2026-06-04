@@ -4,19 +4,21 @@
 //
 // This module owns the host-side Settings surface, moved here VERBATIM:
 //
-// - `open_settings` -- the entire Settings controller, including all its inline
+// - `open_settings` -- the Settings controller, including its remaining inline
 //   closures: the stealth toggle, the colour-scheme switch, the tile-opacity
-//   slider, and every tab handler (AI / STT / Vision / Audio / Profile /
-//   Interface / Diagnostics / Hotkeys), the server import / export wiring, and
-//   the Interface-tab "Run setup wizard" button (forwards to `open_wizard`);
-// - the updater + local-AI UI closures Phase 6 deferred because they are inline
-//   inside `open_settings`: `on_install_local_ai_clicked`,
-//   `on_cancel_local_ai_clicked`, `on_check_updates_clicked`,
-//   `on_install_update_clicked` (the backend installer / updater itself stays in
-//   `overlay-backend`; only the Slint wiring lives here);
-// - the Settings helpers `msg_refresh_after_import`, `apply_server_preview`,
-//   `refresh_profiles`, `populate_token_status` (the latter reaches `ModelTarget`
-//   + `fetch_models` — now in `settings_ai.rs` — through the crate-root glob).
+//   slider, the Audio (mic) + Profile + Interface + Hotkeys tab handlers, the
+//   full-PROFILE export / import, and the Interface-tab "Run setup wizard"
+//   button (forwards to `open_wizard`). The per-domain tab clusters now live in
+//   sibling modules and `open_settings` only CALLs each one: `wire_ai_settings`
+//   (settings_ai.rs), `wire_stt_settings` (settings_stt.rs), `wire_vision_settings`
+//   (settings_vision.rs), `wire_import_export` (settings_import_export.rs — the
+//   server-only import/export), `wire_updates` (settings_updates.rs), and
+//   `wire_local_ai` (settings_local_ai.rs);
+// - the Settings helpers `msg_refresh_after_import` (also called by the PROFILE
+//   import closure that stays here), `refresh_profiles`, `populate_token_status`
+//   (the latter reaches `ModelTarget` + `fetch_models` — now in `settings_ai.rs`
+//   — through the crate-root glob). `apply_server_preview` moved to
+//   `settings_import_export.rs` with its only caller.
 //
 // What STAYS in `overlay_host.rs` (reached here through the glob below):
 // - `fn main` (the gear-chip handler that calls `open_settings(...)` resolves
@@ -32,7 +34,8 @@
 //   transcript / profile / screenshot; LAN bridge IP masked);
 // - the AI / STT / Vision test-result tiles keep their GENERIC messages -- no
 //   `base_url` / LAN IP leaks into a screen-shared Settings window;
-// - `apply_server_preview` shows key PRESENCE only and `mask_host`s the URLs.
+// - `apply_server_preview` (now in settings_import_export.rs) shows key PRESENCE
+//   only and `mask_host`s the URLs.
 //
 // NOTE (section 7): this extraction imports the parent crate-root via
 // `use super::*;` (the moved code reaches the Slint `SettingsWindow` /
@@ -270,169 +273,11 @@ pub(crate) fn open_settings(
     // Extracted to settings_vision.rs (P1 domain split) — wired verbatim there.
     wire_vision_settings(&win, cfg);
 
-    // E10.4 — one-click in-app local-AI installer. Runs the whole
-    // download + launch pipeline on a worker thread, streams progress to
-    // the panel, and on success stores the server handles (for kill-on-
-    // quit), writes the local config (secrets preserved), and refreshes
-    // the panel dropdowns + the bar's active-stack readout.
-    {
-        let cfg_c = cfg.clone();
-        let state_c = state.clone();
-        let overlay_c = overlay_weak.clone();
-        let weak = win.as_weak();
-        win.on_install_local_ai_clicked(move || {
-            let Some(w) = weak.upgrade() else { return };
-            if w.get_local_ai_installing() {
-                return; // re-entry guard
-            }
-            w.set_local_ai_installing(true);
-            w.set_local_ai_progress(0.0);
-            w.set_local_ai_gpu(SharedString::from(""));
-            w.set_local_ai_status(SharedString::from("Подготовка…"));
-            let cfg_t = cfg_c.clone();
-            let state_t = state_c.clone();
-            let overlay_t = overlay_c.clone();
-            let weak_t = w.as_weak();
-            // Shared cancel flag (lives in AppState so the Cancel button can
-            // flip it); reset before each run.
-            let cancel = {
-                let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
-                s.local_ai_cancel.clone()
-            };
-            cancel.store(false, std::sync::atomic::Ordering::Relaxed);
-            std::thread::spawn(move || {
-                let on = {
-                    let weak_p = weak_t.clone();
-                    move |p: overlay_backend::local_ai::Progress| {
-                        let weak_p = weak_p.clone();
-                        let _ = slint::invoke_from_event_loop(move || {
-                            let Some(w) = weak_p.upgrade() else { return };
-                            match p {
-                                overlay_backend::local_ai::Progress::Step(s) => {
-                                    w.set_local_ai_status(SharedString::from(s));
-                                }
-                                overlay_backend::local_ai::Progress::Bytes {
-                                    label,
-                                    done,
-                                    total,
-                                } => {
-                                    let frac = if total > 0 {
-                                        (done as f64 / total as f64) as f32
-                                    } else {
-                                        0.0
-                                    };
-                                    w.set_local_ai_progress(frac);
-                                    let mb = |b: u64| (b as f64) / 1_048_576.0;
-                                    w.set_local_ai_status(SharedString::from(format!(
-                                        "{label}: {:.0} / {:.0} MB",
-                                        mb(done),
-                                        mb(total)
-                                    )));
-                                }
-                                overlay_backend::local_ai::Progress::Gpu(s) => {
-                                    w.set_local_ai_on_gpu(s.starts_with("GPU"));
-                                    w.set_local_ai_gpu(SharedString::from(s));
-                                }
-                            }
-                        });
-                    }
-                };
-                // Re-install hardening: stop any servers we previously launched
-                // so a fresh `--mmproj` llama-server can bind :8080. Without this
-                // a stale vision-less server keeps the port and the new one
-                // silently fails to start (wait_ready still sees the old one and
-                // reports success). Fresh installs have nothing to drain.
-                {
-                    let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
-                    for mut child in s.local_ai_servers.drain(..) {
-                        let _ = child.kill();
-                    }
-                }
-                let opts = overlay_backend::local_ai::InstallOptions::default();
-                match overlay_backend::local_ai::install(&opts, &cancel, &on) {
-                    Ok(res) => {
-                        let model = res.ai_local_model.clone();
-                        let gigaam_dir = res.stt_gigaam_dir.clone();
-                        let on_gpu = res.on_gpu;
-                        {
-                            let mut c = cfg_t.write();
-                            overlay_backend::local_ai::apply_result(&mut c, &res);
-                            if let Err(e) = overlay_backend::config::save(&c) {
-                                eprintln!("[overlay-host] local-ai config save failed: {e:#}");
-                            }
-                            overlay_backend::ai::set_local_no_think(!c.ai_local_thinking);
-                        }
-                        {
-                            let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
-                            s.local_ai_servers.extend(res.servers);
-                        }
-                        let weak_done = weak_t.clone();
-                        let overlay_done = overlay_t.clone();
-                        let cfg_done = cfg_t.clone();
-                        let _ = slint::invoke_from_event_loop(move || {
-                            diag!("local-ai installed: model={} gpu={}", model, on_gpu);
-                            if let Some(w) = weak_done.upgrade() {
-                                w.set_local_ai_installing(false);
-                                w.set_local_ai_progress(1.0);
-                                w.set_local_ai_status(SharedString::from(
-                                    "Готово. Локальный AI настроен и запущен.",
-                                ));
-                                w.set_ai_provider_index(1);
-                                w.set_ai_local_base_url_input(SharedString::from(
-                                    overlay_backend::local_ai::LLAMA_BASE_URL,
-                                ));
-                                w.set_stt_provider_index(2);
-                                w.set_stt_whisper_url_input(SharedString::from(
-                                    overlay_backend::local_ai::WHISPER_BASE_URL,
-                                ));
-                                w.set_stt_gigaam_dir_input(SharedString::from(gigaam_dir));
-                            }
-                            if let Some(o) = overlay_done.upgrade() {
-                                o.set_active_stack(SharedString::from(active_stack_label(
-                                    &cfg_done.read(),
-                                )));
-                            }
-                        });
-                    }
-                    Err(e) => {
-                        let cancelled = e
-                            .to_string()
-                            .contains(overlay_backend::local_ai::CANCEL_SENTINEL);
-                        let msg = if cancelled {
-                            "Отменено.".to_string()
-                        } else {
-                            eprintln!("[overlay-host] local-ai install failed: {e:#}");
-                            format!("Ошибка установки: {e}")
-                        };
-                        let weak_err = weak_t.clone();
-                        let _ = slint::invoke_from_event_loop(move || {
-                            if let Some(w) = weak_err.upgrade() {
-                                w.set_local_ai_installing(false);
-                                w.set_local_ai_status(SharedString::from(msg));
-                            }
-                        });
-                    }
-                }
-            });
-        });
-    }
-
-    // E10.4 — Cancel button: flip the shared cancel flag the install worker
-    // thread + the curl poll loop watch.
-    {
-        let state_c = state.clone();
-        let weak = win.as_weak();
-        win.on_cancel_local_ai_clicked(move || {
-            {
-                let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
-                s.local_ai_cancel
-                    .store(true, std::sync::atomic::Ordering::Relaxed);
-            }
-            if let Some(w) = weak.upgrade() {
-                w.set_local_ai_status(SharedString::from("Отмена…"));
-            }
-        });
-    }
+    // ===== Local AI: one-click in-app installer (download pipeline + Cancel) =====
+    // Extracted to settings_local_ai.rs (P1 domain split) — wired verbatim there.
+    // SECURITY: download -> verify -> spawn stays in overlay_backend::local_ai;
+    // this only CALLs install(); the sequence is byte-for-byte unchanged.
+    wire_local_ai(&win, cfg, state, overlay_weak);
 
     // Phase E6 v20 — tile opacity slider. Persists to config AND
     // applies to all currently-visible tiles via tiles_ref.
@@ -587,116 +432,13 @@ pub(crate) fn open_settings(
         });
     }
 
-    // P1.7 — server-ONLY EXPORT. Native save dialog; writes ONLY the AI/STT
-    // server fields (incl. creds — intentional for a PC->PC transfer) and none
-    // of the machine-local fields (profiles/devices/snippets/context).
-    {
-        let cfg_c = cfg.clone();
-        let weak = win.as_weak();
-        win.on_export_server_settings_clicked(move || {
-            let snapshot = cfg_c.read().clone();
-            let picked = rfd::FileDialog::new()
-                .set_title("Export server settings (AI/STT only — contains API keys)")
-                .set_file_name("suflyor-server-settings.json")
-                .add_filter("JSON", &["json"])
-                .save_file();
-            let Some(w) = weak.upgrade() else { return };
-            let msg = match picked {
-                None => "export cancelled".to_string(),
-                Some(path) => {
-                    match overlay_backend::config::export_server_settings_to(&path, &snapshot) {
-                        Ok(()) => format!("[ok] server settings exported to {}", path.display()),
-                        Err(e) => format!("[err] {e:#}"),
-                    }
-                }
-            };
-            w.set_profile_io_result(SharedString::from(msg));
-        });
-    }
-
-    // P1.7 — server-ONLY settings import, NOW two-step: pick a file -> show a
-    // REDACTED preview (provider/url/model old->new + key presence as set/—;
-    // never a secret value) and stash the parsed config; the user then clicks
-    // Apply (below) to actually merge. The machine-local GigaAM model path is
-    // kept from THIS PC on apply (apply_server_settings).
-    {
-        let cfg_c = cfg.clone();
-        let weak = win.as_weak();
-        let pending = pending_server_import.clone();
-        win.on_import_server_settings_clicked(move || {
-            let snapshot = cfg_c.read().clone();
-            let picked = rfd::FileDialog::new()
-                .set_title("Import server settings (AI/STT only) from a backup")
-                .add_filter("JSON", &["json"])
-                .pick_file();
-            let Some(w) = weak.upgrade() else { return };
-            let Some(path) = picked else {
-                w.set_profile_io_result(SharedString::from("import cancelled"));
-                return;
-            };
-            // Read + parse + build the redacted preview. The parse error stays
-            // value-free (parse_config_bytes inside). No save happens yet.
-            match overlay_backend::config::preview_server_settings_from(&path, &snapshot) {
-                Ok((preview, imported)) => {
-                    apply_server_preview(&w, &preview);
-                    *pending.borrow_mut() = Some(imported);
-                    w.set_server_preview_ready(true);
-                    w.set_profile_io_result(SharedString::from(
-                        "review the changes below, then Apply",
-                    ));
-                }
-                Err(e) => {
-                    *pending.borrow_mut() = None;
-                    w.set_server_preview_ready(false);
-                    w.set_profile_io_result(SharedString::from(format!("[err] {e:#}")));
-                }
-            }
-        });
-    }
-
-    // P1.7 — APPLY the previewed server settings. Merges the stashed config's
-    // server fields onto the current one (EXCLUDING the machine-local GigaAM
-    // dir), persists, applies live, and refreshes the token-status display.
-    {
-        let cfg_c = cfg.clone();
-        let weak = win.as_weak();
-        let pending = pending_server_import.clone();
-        win.on_apply_server_settings_clicked(move || {
-            let Some(w) = weak.upgrade() else { return };
-            let Some(imported) = pending.borrow_mut().take() else {
-                w.set_server_preview_ready(false);
-                w.set_profile_io_result(SharedString::from("nothing to apply"));
-                return;
-            };
-            let merged = {
-                let current = cfg_c.read().clone();
-                overlay_backend::config::apply_server_settings(&current, imported)
-            };
-            w.set_server_preview_ready(false);
-            let msg = match overlay_backend::config::save(&merged) {
-                Ok(()) => {
-                    // Apply to the running session + refresh token-status.
-                    *cfg_c.write() = merged;
-                    let _ = msg_refresh_after_import(&w, &cfg_c);
-                    "[ok] server settings applied (AI/STT providers, URLs, models, keys). Local profiles, devices, UI and snippets kept; the local GigaAM model path was kept from this PC. Restart for full effect.".to_string()
-                }
-                Err(e) => format!("[err] {e:#}"),
-            };
-            w.set_profile_io_result(SharedString::from(msg));
-        });
-    }
-
-    // P1.7 — CANCEL the preview: drop the stashed config + hide the diff.
-    {
-        let weak = win.as_weak();
-        let pending = pending_server_import.clone();
-        win.on_cancel_server_settings_clicked(move || {
-            let Some(w) = weak.upgrade() else { return };
-            *pending.borrow_mut() = None;
-            w.set_server_preview_ready(false);
-            w.set_profile_io_result(SharedString::from("import cancelled"));
-        });
-    }
+    // ===== Server settings import/export (server-only export, two-step import
+    // preview, Apply, Cancel) =====
+    // Extracted to settings_import_export.rs (P1 domain split) — wired verbatim
+    // there (`apply_server_preview` moved with it; the shared
+    // `pending_server_import` cell is threaded in). The PROFILE export/import
+    // (above) + `refresh_profiles` + `msg_refresh_after_import` STAY here.
+    wire_import_export(&win, cfg, &pending_server_import);
 
     // Phase E6 v29 — meeting-context (Profile) save. Writes to
     // cfg.meeting_context + persists; new AI calls read it from cfg
@@ -1047,121 +789,11 @@ pub(crate) fn open_settings(
         });
     }
 
-    // Phase E8 — in-app auto-update (Updates tab). Network calls run on a
-    // detached thread with a local current-thread tokio runtime (same
-    // pattern as the AI/STT test buttons — open_settings has no rt_handle).
-    {
-        let weak = win.as_weak();
-        win.on_check_updates_clicked(move || {
-            let Some(w) = weak.upgrade() else {
-                return;
-            };
-            w.set_update_checking(true);
-            w.set_update_available(false);
-            w.set_update_status(SharedString::from("Проверка GitHub…"));
-            diag!("update: checking GitHub for newer release");
-            let weak2 = w.as_weak();
-            std::thread::spawn(move || {
-                let res = match tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                {
-                    Ok(rt) => rt.block_on(overlay_backend::update::check_latest(env!(
-                        "CARGO_PKG_VERSION"
-                    ))),
-                    Err(e) => Err(anyhow::anyhow!("runtime: {e}")),
-                };
-                let _ = slint::invoke_from_event_loop(move || {
-                    let Some(w) = weak2.upgrade() else {
-                        return;
-                    };
-                    w.set_update_checking(false);
-                    match res {
-                        Ok(info) if info.newer && !info.download_url.is_empty() => {
-                            w.set_update_download_url(SharedString::from(info.download_url));
-                            w.set_update_available(true);
-                            w.set_update_status(SharedString::from(format!(
-                                "Доступна версия {} — нажмите «Обновить сейчас»",
-                                info.latest_version
-                            )));
-                        }
-                        Ok(info) if info.newer => w.set_update_status(SharedString::from(format!(
-                            "Есть версия {}, но в релизе нет установщика",
-                            info.latest_version
-                        ))),
-                        Ok(info) => w.set_update_status(SharedString::from(format!(
-                            "У вас последняя версия ({})",
-                            info.latest_version
-                        ))),
-                        Err(e) => {
-                            w.set_update_status(SharedString::from(format!("Ошибка проверки: {e}")))
-                        }
-                    }
-                });
-            });
-        });
-    }
-    {
-        let weak = win.as_weak();
-        win.on_install_update_clicked(move || {
-            let Some(w) = weak.upgrade() else {
-                return;
-            };
-            let url = w.get_update_download_url().to_string();
-            if url.is_empty() {
-                return;
-            }
-            w.set_update_checking(true);
-            w.set_update_status(SharedString::from("Скачивание установщика…"));
-            diag!("update: downloading installer");
-            let weak2 = w.as_weak();
-            std::thread::spawn(move || {
-                let res = match tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                {
-                    Ok(rt) => rt.block_on(overlay_backend::update::download_installer(&url)),
-                    Err(e) => Err(anyhow::anyhow!("runtime: {e}")),
-                };
-                match res {
-                    Ok(path) => match overlay_backend::update::run_installer(&path) {
-                        Ok(()) => {
-                            // Installer launched — quit so it can overwrite the
-                            // running binary (its first page is interactive, so
-                            // the app is gone before it reaches the File step).
-                            diag!("update: installer launched, quitting app");
-                            let _ = slint::invoke_from_event_loop(|| {
-                                let _ = slint::quit_event_loop();
-                            });
-                        }
-                        Err(e) => {
-                            // P0.3: the installer failed to spawn (blocked exe /
-                            // deleted file). Do NOT quit — stay open + show why.
-                            diag!("update: installer spawn FAILED: {e:#}");
-                            let _ = slint::invoke_from_event_loop(move || {
-                                if let Some(w) = weak2.upgrade() {
-                                    w.set_update_checking(false);
-                                    w.set_update_status(SharedString::from(
-                                        "Не удалось запустить установщик — приложение оставлено открытым (см. лог)",
-                                    ));
-                                }
-                            });
-                        }
-                    },
-                    Err(e) => {
-                        let _ = slint::invoke_from_event_loop(move || {
-                            if let Some(w) = weak2.upgrade() {
-                                w.set_update_checking(false);
-                                w.set_update_status(SharedString::from(format!(
-                                    "Ошибка обновления: {e}"
-                                )));
-                            }
-                        });
-                    }
-                }
-            });
-        });
-    }
+    // ===== Updates (GitHub check + download-then-run installer) =====
+    // Extracted to settings_updates.rs (P1 domain split) — wired verbatim there.
+    // SECURITY: download -> verify -> spawn stays in overlay_backend::update;
+    // this only CALLs it; the sequence is byte-for-byte unchanged.
+    wire_updates(&win);
 
     let weak_close = win.as_weak();
     let settings_close = settings_ref.clone();
@@ -1203,62 +835,6 @@ pub(crate) fn msg_refresh_after_import(
 ) -> String {
     populate_token_status(win, cfg);
     "[ok] imported — restart binary for full effect".to_string()
-}
-
-/// P1.7 — compose the REDACTED server-import preview into the Settings props.
-/// Each line is data-only (provider/url/model old->new + key PRESENCE as
-/// "set"/"—"), built the same way the diagnostics `detail` strings are (shown
-/// raw, not @tr'd). It NEVER carries a secret value — `preview_server_settings`
-/// only ever fills booleans for keys, asserted by the redaction guard test.
-pub(crate) fn apply_server_preview(
-    win: &SettingsWindow,
-    p: &overlay_backend::config::ServerSettingsPreview,
-) {
-    // "value" or "—" for an empty string; "set"/"—" for a presence bool.
-    let v = |s: &str| {
-        let t = s.trim();
-        if t.is_empty() {
-            "—".to_string()
-        } else {
-            t.to_string()
-        }
-    };
-    let key = |present: bool| if present { "set" } else { "—" };
-    let line = |g: &overlay_backend::config::PreviewGroup| -> String {
-        // Mask the host in the URL portion (copyable text) — keeps scheme/port/
-        // path, blanks the private LAN IP. Provider + model are non-secret.
-        let url_old = overlay_backend::config::mask_host(&g.base_url_old);
-        let url_new = overlay_backend::config::mask_host(&g.base_url_new);
-        format!(
-            "{}: provider {} -> {} | url {} -> {} | model {} -> {} | key {} -> {}",
-            g.label,
-            v(&g.provider_old),
-            v(&g.provider_new),
-            v(&url_old),
-            v(&url_new),
-            v(&g.model_old),
-            v(&g.model_new),
-            key(g.key_present_old),
-            key(g.key_present_new),
-        )
-    };
-    win.set_server_preview_cloud(SharedString::from(line(&p.cloud_ai)));
-    win.set_server_preview_local(SharedString::from(line(&p.local_ai)));
-    win.set_server_preview_vision(SharedString::from(line(&p.vision)));
-    win.set_server_preview_stt(SharedString::from(line(&p.stt)));
-    // GigaAM local model path: kept from THIS PC on apply. Show the incoming
-    // path (masked is unnecessary — a filesystem path is not a secret, but it
-    // IS machine-local) only when one side carries it, to keep the line useful.
-    let gig = if p.gigaam_dir_incoming.trim().is_empty() && p.gigaam_dir_current.trim().is_empty() {
-        String::new()
-    } else {
-        format!(
-            "local GigaAM model path kept from this PC ({}); the imported file's path ({}) is NOT applied",
-            v(&p.gigaam_dir_current),
-            v(&p.gigaam_dir_incoming),
-        )
-    };
-    win.set_server_preview_gigaam(SharedString::from(gig));
 }
 
 /// Push the multi-profile state into the Settings UI: the profile-name list, the

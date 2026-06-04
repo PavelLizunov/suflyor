@@ -192,19 +192,21 @@ use tile_ask::*;
 
 // Phase 7b of the modularization (docs/overlay-host-modularization-plan.md
 // §5.8/§5.9) — the FINAL phase: the Settings window controller. `open_settings`
-// (the entire ~1800-line fn with every inline tab handler + the stealth/scheme/
-// tile-opacity closures + the server import/export wiring + the "Run setup
-// wizard" button + the four updater/local-AI closures Phase 6 deferred:
-// `on_install_local_ai_clicked`/`on_cancel_local_ai_clicked`/
-// `on_check_updates_clicked`/`on_install_update_clicked`), `ModelTarget` +
-// `fetch_models`, and the Settings helpers (`msg_refresh_after_import`/
-// `apply_server_preview`/`refresh_profiles`/`populate_token_status`) live in
-// their own file alongside the binary. `use settings_controller::*;` re-exports
-// them so `main`'s ⚙ gear-chip handler resolves unchanged. The window openers
-// `open_text_ask`/`open_help`/`open_palette` (+ palette helpers) and
-// `short_model_name`/`active_stack_label` stay in `main`; the moved code reaches
-// the diagnostics REDACTED `build_diag_report`, `open_wizard`, the
-// `WindowRegistry`, and the mic guard through the existing crate-root globs.
+// (the Settings fn with its remaining inline handlers + the stealth/scheme/
+// tile-opacity closures + the full-PROFILE import/export + the "Run setup
+// wizard" button) lives here; the per-domain tab clusters are now sibling
+// modules it only CALLs — AI/STT/Vision (Waves 1-3) plus the Wave-4 split of the
+// server import/export (`wire_import_export`), the updater (`wire_updates`), and
+// the local-AI installer (`wire_local_ai`). `ModelTarget` + `fetch_models` and
+// the Settings helpers (`msg_refresh_after_import`/`refresh_profiles`/
+// `populate_token_status`) live in their own files alongside the binary
+// (`apply_server_preview` moved into settings_import_export.rs).
+// `use settings_controller::*;` re-exports them so `main`'s ⚙ gear-chip handler
+// resolves unchanged. The window openers `open_text_ask`/`open_help`/
+// `open_palette` (+ palette helpers) and `short_model_name`/`active_stack_label`
+// stay in `main`; the moved code reaches the diagnostics REDACTED
+// `build_diag_report`, `open_wizard`, the `WindowRegistry`, and the mic guard
+// through the existing crate-root globs.
 #[path = "overlay_host/settings_controller.rs"]
 mod settings_controller;
 use settings_controller::*;
@@ -241,6 +243,43 @@ use settings_stt::*;
 #[path = "overlay_host/settings_ai.rs"]
 mod settings_ai;
 use settings_ai::*;
+
+// The server-settings import/export Settings-tab callbacks (server-only export,
+// the two-step import preview, Apply, Cancel) live in their own file alongside
+// the binary (P1 domain split of `settings_controller.rs`). `use
+// settings_import_export::*;` re-exports `wire_import_export` (which
+// `open_settings` calls in place of the old inline server import/export blocks)
+// plus `apply_server_preview` (moved with it — its only caller is the moved
+// import closure). The PROFILE export/import + `refresh_profiles` +
+// `msg_refresh_after_import` STAY in `settings_controller.rs`; the moved code
+// reaches `msg_refresh_after_import` back through these crate-root globs.
+#[path = "overlay_host/settings_import_export.rs"]
+mod settings_import_export;
+use settings_import_export::*;
+
+// The Updates Settings-tab callbacks (GitHub release check + the
+// download-then-run installer action) live in their own file alongside the
+// binary (P1 domain split of `settings_controller.rs`). `use
+// settings_updates::*;` re-exports `wire_updates`, which `open_settings` calls
+// in place of the old inline Updates blocks; the moved code reaches the `diag!`
+// macro / `overlay_backend::update` through the crate-root scope. SECURITY: the
+// download -> verify -> spawn sequence is unchanged (verification lives in
+// `overlay_backend::update`).
+#[path = "overlay_host/settings_updates.rs"]
+mod settings_updates;
+use settings_updates::*;
+
+// The one-click local-AI installer Settings-tab callbacks (install pipeline +
+// Cancel) live in their own file alongside the binary (P1 domain split of
+// `settings_controller.rs`). `use settings_local_ai::*;` re-exports
+// `wire_local_ai`, which `open_settings` calls in place of the old inline
+// install/cancel blocks; the moved code reaches `active_stack_label` + the
+// `diag!` macro / `overlay_backend::local_ai` through the crate-root scope.
+// SECURITY: the download -> verify -> spawn sequence is unchanged (verification
+// lives in `overlay_backend::local_ai`).
+#[path = "overlay_host/settings_local_ai.rs"]
+mod settings_local_ai;
+use settings_local_ai::*;
 
 pub(crate) type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
 
