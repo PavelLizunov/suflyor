@@ -186,6 +186,14 @@ pub struct Config {
     #[serde(default = "default_post_meeting_debrief_enabled")]
     pub post_meeting_debrief_enabled: bool,
 
+    /// P2 — index finished JSONL sessions into the local SQLite archive
+    /// (searchable interview history). ON by default; the JSONL journals stay the
+    /// source of truth either way, and the catalog can be deleted + rebuilt.
+    /// Disabling stops the startup indexing. Old configs without this key default
+    /// ON.
+    #[serde(default = "default_session_archive_enabled")]
+    pub session_archive_enabled: bool,
+
     /// v0.0.73: when true, `quit_app` exports the most recent session's
     /// JSONL journal to a Markdown file on the user's Desktop right
     /// before exiting. Filename: `suflyor-session-YYYY-MM-DD-HHmm.md`.
@@ -455,6 +463,7 @@ impl Config {
             tile_font_size: default_tile_font_size(),
             snippets: default_snippets(),
             post_meeting_debrief_enabled: default_post_meeting_debrief_enabled(),
+            session_archive_enabled: default_session_archive_enabled(),
             auto_export_on_quit: false,
             max_session_cost_usd: default_max_session_cost_usd(),
             detector_skip_mic: default_detector_skip_mic(),
@@ -782,6 +791,10 @@ fn default_tile_body_opacity() -> f32 {
 
 fn default_post_meeting_debrief_enabled() -> bool {
     false // opt-in — surprise Sonnet calls are bad UX
+}
+
+fn default_session_archive_enabled() -> bool {
+    true // the JSONL journals already exist; the catalog just indexes them
 }
 
 fn default_max_session_cost_usd() -> f64 {

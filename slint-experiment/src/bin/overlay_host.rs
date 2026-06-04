@@ -454,6 +454,24 @@ fn main() -> Result<(), slint::PlatformError> {
     // Phase C — load config once at startup. SharedConfig (Arc<RwLock>)
     // because Settings tab will eventually mutate it.
     let cfg = config::shared();
+    // P2 — build the local session archive (SQLite catalog) OFF the hot path:
+    // idempotently index the finished JSONL journals so the interview history is
+    // searchable. On by default; the JSONL journals stay the source of truth, and
+    // the catalog can be deleted + rebuilt. Best-effort — never blocks startup.
+    // `None` = skip no live session (a session starts later; it indexes next launch).
+    if cfg.read().session_archive_enabled {
+        std::thread::spawn(
+            || match overlay_backend::persistence::reindex_default(None) {
+                Ok(stats) => diag!(
+                    "[overlay-host] catalog: indexed {} sessions ({} skipped, {} failed)",
+                    stats.indexed,
+                    stats.skipped,
+                    stats.failed
+                ),
+                Err(e) => diag!("[overlay-host] catalog reindex failed: {e:#}"),
+            },
+        );
+    }
     {
         // Log key PRESENCE only (never the values) so a tester can confirm
         // from the log file whether their AI/STT keys are configured.

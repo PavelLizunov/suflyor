@@ -21,3 +21,24 @@ mod sqlite_store;
 pub use indexer::{index_all, index_journal_file, IndexStats};
 pub use models::{AiTurn, SearchHit, Session, Utterance};
 pub use sqlite_store::Store;
+
+use anyhow::{Context, Result};
+use std::path::PathBuf;
+
+/// `%APPDATA%\overlay-mvp\sessions` — where the JSONL journals are written.
+#[must_use]
+pub fn sessions_dir() -> Option<PathBuf> {
+    dirs::config_dir().map(|d| d.join("overlay-mvp").join("sessions"))
+}
+
+/// One-call startup entry point: open the default catalog and idempotently index
+/// every finished JSONL session under the default `sessions/` dir. `skip_active`
+/// is the live session id to skip (its file is still being written), or `None` at
+/// app launch. Meant to run OFF the hot path (the caller spawns it on a detached
+/// thread) so the live audio / AI pipeline never waits on it.
+pub fn reindex_default(skip_active: Option<&str>) -> Result<IndexStats> {
+    let db = Store::default_path().context("resolve catalog path")?;
+    let sessions = sessions_dir().context("resolve sessions dir")?;
+    let mut store = Store::open(&db)?;
+    index_all(&mut store, &sessions, skip_active)
+}
