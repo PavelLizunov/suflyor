@@ -199,6 +199,14 @@ use tile_ask::*;
 mod tile_cost;
 use tile_cost::*;
 
+// `tile_routes.rs` — the AskRoute (Text/Vision/Cloud) model + LiveRoute split out
+// of `tile_ask.rs` (P1 split). `use tile_routes::*;` re-exports it so the ask
+// entrypoints + the other tile modules (vision_capture, tile_controller) reach
+// `AskRoute` / `LiveRoute` / `live_route` through the crate root.
+#[path = "overlay_host/tile_routes.rs"]
+mod tile_routes;
+use tile_routes::*;
+
 // Phase 7b of the modularization (docs/overlay-host-modularization-plan.md
 // §5.8/§5.9) — the FINAL phase: the Settings window controller. `open_settings`
 // (the Settings fn with its remaining inline handlers + the stealth/scheme/

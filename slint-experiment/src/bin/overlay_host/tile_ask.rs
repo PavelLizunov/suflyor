@@ -45,13 +45,14 @@
 //! intentional for the extraction; the imports get narrowed in a later pass.
 use super::{
     ai, apply_tile_hwnd_with_monitor, audio, classify_ai_error, cost_cap_reason, gated_events,
-    grab_hwnd, install_streaming_tile, journal, markdown, message_text, present_tile_window,
-    refresh_open_tiles, release_mic, select_recent_labeled, strip_followup_directives, stt,
-    to_md_blocks, toggle_tile_maximize, tokio_mpsc, try_acquire_mic, vision, warn_if_over_cost_cap,
-    wire_copy, wire_tile_drag, Arc, AtomicBool, ComponentHandle, Duration, MarkdownBlock, ModelRc,
-    Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink, Rc, RefCell, RuntimeEvents,
-    SharedSlintRuntime, SharedString, StreamingTile, TileWindow, TileWindows, VecModel,
-    AI_STREAM_MAX_TOKENS, CONVO_SEQ, TILE_DISPLAY_SEQ,
+    grab_hwnd, install_streaming_tile, journal, live_route, markdown, message_text,
+    present_tile_window, refresh_open_tiles, release_mic, select_recent_labeled,
+    strip_followup_directives, stt, to_md_blocks, toggle_tile_maximize, tokio_mpsc,
+    try_acquire_mic, warn_if_over_cost_cap, wire_copy, wire_tile_drag, Arc, AskRoute, AtomicBool,
+    ComponentHandle, Duration, LiveRoute, MarkdownBlock, ModelRc, Ordering, OverlayBarBridge,
+    OverlayBarWindow, PttStreamSink, Rc, RefCell, RuntimeEvents, SharedSlintRuntime, SharedString,
+    StreamingTile, TileWindow, TileWindows, VecModel, AI_STREAM_MAX_TOKENS, CONVO_SEQ,
+    TILE_DISPLAY_SEQ,
 };
 
 // ============================================================================
@@ -205,55 +206,6 @@ fn reframe_for_send(
             content: ai::MessageContent::Text(question),
         },
     ]
-}
-
-/// V0.8.0 (Поток D) — which AI endpoint an ask/follow-up/regenerate routes to.
-/// Replaces the old `use_vision: bool` so the three routes are explicit and the
-/// compiler enforces exhaustive handling (no silent bool transposition across
-/// the ~9 call sites of the central ask fns).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum AskRoute {
-    /// Default text model (local or cloud per `ai_provider`).
-    Text,
-    /// Vision endpoint — the stored conversation carries the screenshot (F8).
-    Vision,
-    /// One-shot CLOUD escalation: the smart `prep_model` on the cloud bridge,
-    /// IGNORING `ai_provider`. For a single hard question without flipping the
-    /// persistent provider. Stronger reasoning, NOT live web.
-    Cloud,
-}
-
-impl AskRoute {
-    /// Resolve the endpoint for this route from config.
-    fn endpoint(self, c: &overlay_backend::config::Config) -> overlay_backend::config::AiEndpoint {
-        match self {
-            AskRoute::Text => c.ai_endpoint(false),
-            AskRoute::Vision => c.vision_endpoint().unwrap_or_else(|| c.ai_endpoint(false)),
-            AskRoute::Cloud => c.ai_endpoint_cloud(),
-        }
-    }
-    /// Max output tokens for this route (vision is capped tighter).
-    fn max_tokens(self) -> u32 {
-        match self {
-            AskRoute::Vision => vision::VISION_MAX_TOKENS,
-            AskRoute::Text | AskRoute::Cloud => AI_STREAM_MAX_TOKENS,
-        }
-    }
-    /// True when the request carries a screenshot (journal flag).
-    fn attaches_screenshot(self) -> bool {
-        matches!(self, AskRoute::Vision)
-    }
-}
-
-/// V0.8.1 — a per-tile MUTABLE route, shared by a tile's continuation surfaces
-/// (text follow-up, 🔄 regenerate, 🎤 voice). They read it at CLICK time (not at
-/// wire time), so when the 🧠 escalate button flips it to Cloud the rest of that
-/// tile's conversation stays in the cloud — matching the sticky-cloud behaviour
-/// Shift+F9 already has. UI-thread-only, so a Cell (no lock) is sufficient.
-pub(crate) type LiveRoute = Rc<std::cell::Cell<AskRoute>>;
-
-pub(crate) fn live_route(initial: AskRoute) -> LiveRoute {
-    Rc::new(std::cell::Cell::new(initial))
 }
 
 /// V5 — voice follow-up: a tile's 🎤 button records + transcribes a question
