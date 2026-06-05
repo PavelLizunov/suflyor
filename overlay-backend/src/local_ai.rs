@@ -853,30 +853,52 @@ fn curl_resumable(
     Ok(())
 }
 
+/// Download a SMALL artifact (e.g. the GigaAM `vocab.txt`) with retries.
+///
+/// Two failure modes are handled, because they bit a tester (2026-06-05: HF
+/// served an HTML error page for `vocab.txt`, leaving the install with no usable
+/// vocab → STT dead, fixed only by hand-copying a good file):
+///  - `-f` makes curl treat an HTTP 4xx/5xx as an ERROR, so its own
+///    `--retry-all-errors` actually re-fetches a 404/503/rate-limit (without
+///    `-f`, curl downloads the error BODY at exit 0 and never retries);
+///  - a 200-with-HTML-body soft-error (not an HTTP error, so `-f` can't catch
+///    it) is detected by the leading-`<` guard and re-attempted at the APP level
+///    a few times with a short delay (transient HF hiccups usually clear).
+///
+/// A real model/vocab artifact never begins with `<`, so the content check is a
+/// cheap, size-pin-free sanity guard. The bad/partial file is removed between
+/// attempts and on final failure.
 fn curl_small(url: &str, out: &Path) -> Result<()> {
-    let status = launch_hidden_wait(
-        "curl.exe",
-        &[
-            "-sL",
-            "--retry",
-            "8",
-            "--retry-all-errors",
-            "-o",
-            &out.to_string_lossy(),
-            url,
-        ],
-    )?;
-    if !status.success() || file_len(out) == 0 {
-        bail!("download failed: {}", out.display());
-    }
-    // Guard against a CDN/HTTP error page written to disk (curl isn't run with
-    // -f, so a 200-with-error-body can land here): a real model/vocab artifact
-    // never begins with '<'. Cheap content sanity check — no exact size pin.
-    if std::fs::read(out).ok().and_then(|b| b.first().copied()) == Some(b'<') {
+    const ATTEMPTS: u32 = 3;
+    let mut last_err = format!("download failed: {}", out.display());
+    for attempt in 1..=ATTEMPTS {
+        let status = launch_hidden_wait(
+            "curl.exe",
+            &[
+                "-fsL",
+                "--retry",
+                "8",
+                "--retry-all-errors",
+                "-o",
+                &out.to_string_lossy(),
+                url,
+            ],
+        )?;
+        if status.success() && file_len(out) > 0 {
+            // Reject a CDN/HTTP error page that landed with a 200 body.
+            let looks_html = std::fs::read(out).ok().and_then(|b| b.first().copied()) == Some(b'<');
+            if !looks_html {
+                return Ok(());
+            }
+            last_err = format!("download looks like an HTML error page: {}", out.display());
+        }
+        // Clean up the partial/bad file before the next attempt (or before bail).
         let _ = std::fs::remove_file(out);
-        bail!("download looks like an HTML error page: {}", out.display());
+        if attempt < ATTEMPTS {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+        }
     }
-    Ok(())
+    bail!("{last_err} (after {ATTEMPTS} attempts)");
 }
 
 // ---- GPU verification + readiness ------------------------------------------
