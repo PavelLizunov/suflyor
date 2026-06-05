@@ -1,19 +1,21 @@
 //! File logging for the overlay-host binary.
 //!
-//! Release builds are compiled with `windows_subsystem = "windows"`
-//! (no console window — see the crate-attribute in `bin/overlay_host.rs`),
-//! so `eprintln!` output goes nowhere. To keep diagnostics available for
+//! Release builds are compiled with `windows_subsystem = "windows"` (no
+//! console window — see the crate-attribute in `bin/overlay_host.rs`), so
+//! `eprintln!` would normally go nowhere. To keep diagnostics available for
 //! testers, `init()` opens a log file next to `config.json`
 //! (`%APPDATA%\overlay-mvp\overlay-host.log`), installs a panic hook that
-//! records crashes there, and exposes `line()` to append timestamped
-//! entries. Entries are ALSO mirrored to stderr, so debug builds (which
-//! keep their console) still print to the terminal as before.
+//! records crashes there, and — IN RELEASE — redirects the process stderr to
+//! that file via `SetStdHandle`, so EVERY `eprintln!` across the binary (~170
+//! of them) is captured (v0.9.3 — before this, the log held only `line()`
+//! entries + panics, leaving testers with near-empty logs). Debug builds keep
+//! their console (stderr untouched); `line()` writes its timestamped entries to
+//! the file directly there.
 //!
 //! NEVER log secrets (API keys / bearer tokens). Call sites log presence
 //! booleans, not values.
 
 use std::fs::OpenOptions;
-use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
@@ -41,6 +43,24 @@ pub fn init() {
         }
     }
     if let Ok(file) = OpenOptions::new().create(true).append(true).open(&path) {
+        // RELEASE is built `windows_subsystem="windows"` → NO console, so the
+        // process stderr is invalid and EVERY `eprintln!` (~170 of them across
+        // the binary) is silently discarded — testers ended up with an almost
+        // empty log. Redirect stderr to the log file so all of them land in
+        // `overlay-host.log`. DEBUG keeps its console untouched (the terminal
+        // still prints), and `line()` writes its own entries via `LOG_FILE`.
+        // The file is kept alive in `LOG_FILE` below, so the handle backing
+        // stderr stays valid for the whole process; a failure here is non-fatal
+        // (logging must never take the app down).
+        #[cfg(all(windows, not(debug_assertions)))]
+        {
+            use std::os::windows::io::AsRawHandle;
+            use windows::Win32::Foundation::HANDLE;
+            use windows::Win32::System::Console::{SetStdHandle, STD_ERROR_HANDLE};
+            unsafe {
+                let _ = SetStdHandle(STD_ERROR_HANDLE, HANDLE(file.as_raw_handle()));
+            }
+        }
         let _ = LOG_FILE.set(Mutex::new(file));
     }
 
@@ -73,12 +93,19 @@ pub fn line(msg: &str) {
         (secs / 60) % 60,
         secs % 60
     );
+    // DEBUG: stderr goes to the console, NOT the file — so write the entry to
+    // `LOG_FILE` directly here. RELEASE: stderr is redirected to the log file
+    // (see `init`), so the `eprintln!` below already lands there; a direct
+    // write would duplicate every `line()` entry.
+    #[cfg(debug_assertions)]
     if let Some(lock) = LOG_FILE.get() {
         if let Ok(mut f) = lock.lock() {
+            use std::io::Write;
             let _ = writeln!(f, "[{stamp}] {msg}");
             let _ = f.flush();
         }
     }
-    // Visible in debug builds (which keep a console); a no-op in release.
-    eprintln!("{msg}");
+    // Console in debug; the redirected log file in release. Timestamped so a
+    // raw `eprintln!` elsewhere and a `line()` entry interleave readably.
+    eprintln!("[{stamp}] {msg}");
 }

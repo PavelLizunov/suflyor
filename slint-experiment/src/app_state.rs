@@ -158,7 +158,7 @@ pub fn classify_ai_error(msg: &str) -> &'static str {
     } else if lower.contains("500") || lower.contains("502") || lower.contains("503") {
         "AI bridge returned server error"
     } else {
-        "AI bridge call failed (see overlay-host stderr for diagnostic)"
+        "AI bridge call failed (see overlay-host.log for diagnostic)"
     }
 }
 
@@ -313,7 +313,7 @@ mod tests {
             ),
             (
                 "some weird new failure mode we never heard of",
-                "AI bridge call failed (see overlay-host stderr for diagnostic)",
+                "AI bridge call failed (see overlay-host.log for diagnostic)",
             ),
         ];
         for (input, expected_category) in cases {

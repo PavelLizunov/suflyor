@@ -3,7 +3,7 @@
 # the sibling overlay-backend crate for audio/STT/AI/journal/KB/config.
 [package]
 name = "slint-replay"
-version = "0.9.2"
+version = "0.9.3"
 edition = "2021"
 description = "suflyor — AI-interview overlay (Slint UI + orchestration)"
 publish = false
@@ -82,6 +82,10 @@ windows = { version = "0.62", features = [
     # V0.8.0 (Поток B) — named mutex for the single-instance guard so the
     # emergency-restart child waits for the parent to exit before it shows a bar.
     "Win32_System_Threading",
+    # v0.9.3 — SetStdHandle to redirect the process stderr into
+    # overlay-host.log in release (windows_subsystem="windows" has no console,
+    # so every eprintln! would otherwise be discarded — testers got empty logs).
+    "Win32_System_Console",
 ] }
 
 # Phase 0.5 MCP spike: per docs.rs/i-slint-backend-testing 1.16, the
