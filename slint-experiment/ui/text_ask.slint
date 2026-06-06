@@ -46,6 +46,9 @@ export component TextAskWindow inherits Window {
     preferred-height: 112px;
 
     in-out property <string> query;
+    // v0.10.1 — the active profile/persona label (set live by the host on open),
+    // so the user can see which profile will shape the typed answer.
+    in-out property <string> active-profile;
     // Emitted with the typed text when the user presses Enter / clicks Send.
     callback submitted(string);
     // Emitted on Esc — the host hides + drops the window.
@@ -86,7 +89,17 @@ export component TextAskWindow inherits Window {
                     font-size: Metrics.font-body;   // was 12px
                     font-weight: 600;
                     vertical-alignment: center;
+                }
+                // v0.10.1 — active profile/persona (applies to the typed answer
+                // too, identically to voice). Right-aligned, muted, elides.
+                Text {
+                    text: root.active-profile;
+                    color: Theme.text-muted;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    horizontal-alignment: right;
                     horizontal-stretch: 1;
+                    overflow: elide;
                 }
                 // V0.8.4 — explicit close. The window previously closed only on
                 // Esc, which wasn't discoverable. ASCII "X" (not ✕ U+2715, which

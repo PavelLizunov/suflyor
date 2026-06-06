@@ -29,6 +29,21 @@ use overlay_backend::persistence::{
     open_default_store, AiTurn, SearchHit, Session, Store, Utterance,
 };
 
+/// v0.10.1 — format the active profile/persona for the text-ask header so the
+/// user sees which profile will shape the typed answer. The profile applies to
+/// a typed question the SAME as to a voice one (both go through `fire_f9_ask` →
+/// `cfg.read().meeting_context` → `ai::build_request`); this label just makes it
+/// visible. Read LIVE so a profile switch in Settings is reflected even on a
+/// reused window.
+fn text_ask_profile_label(cfg: &overlay_backend::config::SharedConfig) -> String {
+    let c = cfg.read();
+    match c.active_profile.as_deref() {
+        Some(n) if !n.trim().is_empty() => format!("Профиль: {n}"),
+        _ if !c.meeting_context.trim().is_empty() => "Профиль: свой контекст".to_string(),
+        _ => "Профиль: не задан".to_string(),
+    }
+}
+
 /// V0.8.3 — "Написать": open (or re-focus) the small text-input window. On
 /// submit it routes the typed text through `fire_f9_ask(.., Some(text))`, so the
 /// whole tile-create + stream + cost + journal + follow-up pipeline is reused →
@@ -49,6 +64,9 @@ pub(crate) fn open_text_ask(
     {
         let slot = slot_ref.borrow();
         if let Some(existing) = slot.as_ref() {
+            // Refresh the profile label in case it changed since this window was
+            // first opened (reused windows keep their original handlers).
+            existing.set_active_profile(SharedString::from(text_ask_profile_label(cfg)));
             let _ = existing.show();
             if let Ok(hwnd) = grab_hwnd(existing.window()) {
                 focus_window(hwnd);
@@ -64,6 +82,7 @@ pub(crate) fn open_text_ask(
         }
     };
     apply_scheme_text_ask(&win, global_scheme());
+    win.set_active_profile(SharedString::from(text_ask_profile_label(cfg)));
     {
         let weak = win.as_weak();
         let slot = slot_ref.clone();

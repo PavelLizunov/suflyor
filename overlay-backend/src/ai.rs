@@ -645,9 +645,18 @@ pub fn build_request(
     let ctx_block = if meeting_context.trim().is_empty() {
         "Контекст встречи не задан.".to_string()
     } else {
+        // Profile/context applies EQUALLY to every answer — voice (transcript)
+        // and typed (pencil) alike. If the profile sets a ROLE or speaking style
+        // (e.g. «отвечай как психолог»), the assistant must adopt it; if it's
+        // background/experience, use it for depth without restricting the topic.
+        // (v0.10.1 fix: the old wording framed this purely as "background — don't
+        // be limited by it", so a persona profile was dropped on bare typed asks.)
         format!(
-            "Бэкграунд пользователя (фон для понимания уровня — НЕ ограничивай ответ этой темой \
-             если вопрос про что-то другое):\n{}",
+            "Профиль/контекст пользователя — применяй его ОДИНАКОВО к каждому ответу (и на вопрос \
+             голосом, и на введённый текстом). Если профиль задаёт РОЛЬ или стиль общения \
+             (например «отвечай как психолог», «говори кратко») — следуй ему во всех ответах. \
+             Если это бэкграунд/опыт — используй для уровня детализации, НЕ ограничивая тему \
+             ответа этим, если вопрос про другое:\n{}",
             meeting_context.trim()
         )
     };
