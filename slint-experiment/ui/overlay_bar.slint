@@ -18,13 +18,20 @@ import { Theme } from "theme.slint";
 // an optional active state for the colored variant.
 component Chip inherits Rectangle {
     in property <string> label;
+    // Design-system icon (skia-safe line SVG, tinted by `colorize` to the
+    // chip's semantic colour). When `has-icon` is set, the icon renders in
+    // place of (or alongside) the text. Icon-only chips set `a11y` so screen
+    // readers still get a word instead of a glyph.
+    in property <image> icon;
+    in property <bool> has-icon: false;
+    in property <string> a11y;
     in property <bool> active: false;
     in property <color> accent: Theme.accent;
 
     callback clicked();
 
     accessible-role: button;
-    accessible-label: label;
+    accessible-label: label != "" ? label : a11y;
 
     background: active ? accent.with-alpha(0.18) : transparent;
     border-color: active ? accent : Theme.border-strong;
@@ -36,7 +43,17 @@ component Chip inherits Rectangle {
     HorizontalLayout {
         padding-left: 8px;
         padding-right: 8px;
-        Text {
+        spacing: 4px;
+        alignment: center;
+        if root.has-icon : Image {
+            source: root.icon;
+            colorize: active ? accent : Theme.text-secondary;
+            width: 14px;
+            height: 14px;
+            image-fit: contain;
+            vertical-alignment: center;
+        }
+        if root.label != "" : Text {
             text: label;
             font-size: 11px;
             color: active ? accent : Theme.text-secondary;
@@ -50,13 +67,16 @@ component Chip inherits Rectangle {
 // represents an "active" / "live" capture state. Used for mic + sys.
 component LiveChip inherits Rectangle {
     in property <string> label;
+    in property <image> icon;
+    in property <bool> has-icon: false;
+    in property <string> a11y;
     in property <bool> active: false;
     in property <color> accent: Theme.success;
 
     callback clicked();
 
     accessible-role: button;
-    accessible-label: label;
+    accessible-label: label != "" ? label : a11y;
     accessible-checkable: true;
     accessible-checked: active;
 
@@ -78,7 +98,15 @@ component LiveChip inherits Rectangle {
             background: active ? accent : Theme.border-strong;
             y: (parent.height - self.height) / 2;
         }
-        Text {
+        if root.has-icon : Image {
+            source: root.icon;
+            colorize: active ? accent : Theme.text-secondary;
+            width: 14px;
+            height: 14px;
+            image-fit: contain;
+            vertical-alignment: center;
+        }
+        if root.label != "" : Text {
             text: label;
             font-size: 11px;
             color: active ? accent : Theme.text-secondary;
@@ -96,6 +124,9 @@ component LiveChip inherits Rectangle {
 // no ⏺ glyph — a Rectangle dot dodges the missing-glyph font issue.
 component RecordBtn inherits Rectangle {
     in property <string> label;
+    // Source icon (mic / speaker), tinted like the label.
+    in property <image> icon;
+    in property <bool> has-icon: false;
     in property <color> accent: Theme.success;
     in property <bool> recording: false;
     callback pressed();
@@ -150,6 +181,14 @@ component RecordBtn inherits Rectangle {
             background: root.recording ? Theme.danger : transparent;
             border-width: root.recording ? 0px : 1px;
             border-color: root.accent;
+        }
+        if root.has-icon : Image {
+            source: root.icon;
+            colorize: root.recording ? Theme.danger : Theme.text-secondary;
+            width: 14px;
+            height: 14px;
+            image-fit: contain;
+            vertical-alignment: center;
         }
         Text {
             text: root.label;
@@ -403,8 +442,11 @@ export component OverlayBarWindow inherits Window {
                     }
                     moved => { if (self.pressed) { root.drag-moved(); } }
                 }
+                // Brand "head" mark (headphones = the candidate). Colorized
+                // per scheme; on a colorized image the black/light PNG render
+                // identically, so the surface-rule is moot here.
                 Image {
-                    source: @image-url("../assets/icon.svg");
+                    source: @image-url("../assets/brand-head.png");
                     colorize: Theme.accent;
                     width: 40px;
                     height: 40px;
@@ -440,13 +482,14 @@ export component OverlayBarWindow inherits Window {
                     padding-left: 8px;
                     padding-right: 8px;
                     spacing: 0px;
-                    // ":: " grip — drag affordance (accent). The brand logo
-                    // now lives as the big vector mark left of this pill.
-                    Text {
-                        text: "::";
-                        font-size: 11px;
-                        font-weight: 600;
-                        color: Theme.accent;
+                    // Grip — drag affordance (accent). Design-system 6-dot
+                    // grip icon (skia-safe) in place of the "::" text.
+                    Image {
+                        source: @image-url("../assets/icons/grip.svg");
+                        colorize: Theme.accent;
+                        width: 12px;
+                        height: 12px;
+                        image-fit: contain;
                         vertical-alignment: center;
                     }
                     Text {
@@ -469,13 +512,17 @@ export component OverlayBarWindow inherits Window {
 
             // ── Capture toggles (continuous mic / sys) — icon-only + dot ──
             LiveChip {
-                label: "🎤";
+                icon: @image-url("../assets/icons/mic.svg");
+                has-icon: true;
+                a11y: "Mic capture";
                 active: root.mic-active;
                 accent: Theme.success;
                 clicked => { root.mic-toggle-clicked(); }
             }
             LiveChip {
-                label: "🔊";
+                icon: @image-url("../assets/icons/speaker.svg");
+                has-icon: true;
+                a11y: "System audio capture";
                 active: root.sys-active;
                 accent: Theme.accent;
                 clicked => { root.sys-toggle-clicked(); }
@@ -486,14 +533,18 @@ export component OverlayBarWindow inherits Window {
             // ── Push-to-record (hold to ask) — labelled; dot colour marks
             //    the source: green = mic (your voice), cyan = sys (them).
             RecordBtn {
-                label: "🎤 " + @tr("ask");
+                icon: @image-url("../assets/icons/mic.svg");
+                has-icon: true;
+                label: @tr("ask");
                 accent: Theme.success;
                 recording: root.mic-recording;
                 pressed => { root.ptt-mic-pressed(); }
                 released => { root.ptt-mic-released(); }
             }
             RecordBtn {
-                label: "🔊 " + @tr("grab");
+                icon: @image-url("../assets/icons/speaker.svg");
+                has-icon: true;
+                label: @tr("grab");
                 accent: Theme.accent;
                 recording: root.sys-recording;
                 pressed => { root.ptt-sys-pressed(); }
@@ -504,9 +555,11 @@ export component OverlayBarWindow inherits Window {
 
             // ── Session info (timer / model / cost) ──
             Chip {
-                label: root.timer-active
-                    ? @tr("⏸ {}", root.timer-label)
-                    : @tr("▶ start");
+                icon: root.timer-active
+                    ? @image-url("../assets/icons/stop.svg")
+                    : @image-url("../assets/icons/play.svg");
+                has-icon: true;
+                label: root.timer-active ? root.timer-label : @tr("start");
                 active: root.timer-active;
                 accent: #fbbf24;
                 clicked => { root.timer-toggle-clicked(); }
@@ -521,13 +574,17 @@ export component OverlayBarWindow inherits Window {
 
             // ── Quick actions — icon-only (stealth / auto)
             Chip {
-                label: "🎯";
+                icon: @image-url("../assets/icons/stealth.svg");
+                has-icon: true;
+                a11y: "Stealth (hide from capture)";
                 active: root.stealth-active;
                 accent: #ec4899;
                 clicked => { root.stealth-toggle-clicked(); }
             }
             Chip {
-                label: "🔥";
+                icon: @image-url("../assets/icons/flame.svg");
+                has-icon: true;
+                a11y: "Aggressive auto-tile";
                 active: root.aggressive-active;
                 accent: #fb923c;
                 clicked => { root.aggressive-toggle-clicked(); }
@@ -536,7 +593,9 @@ export component OverlayBarWindow inherits Window {
             // Icon-only + left of the spring so it consumes slack, not the
             // width-sensitive right cluster. Lights while the archive is open.
             Chip {
-                label: "🗄";
+                icon: @image-url("../assets/icons/archive.svg");
+                has-icon: true;
+                a11y: "Session archive";
                 active: root.archive-open;
                 accent: #a78bfa;
                 clicked => { root.archive-clicked(); }
@@ -557,7 +616,9 @@ export component OverlayBarWindow inherits Window {
             // V0.8.3 — ✏ Написать: type a question when speaking aloud isn't an
             // option. Opens a small stealth-aware input window.
             if !root.confirming : Chip {
-                label: "✏";
+                icon: @image-url("../assets/icons/pencil.svg");
+                has-icon: true;
+                a11y: "Write a question";
                 accent: #34d399;
                 clicked => { root.text-ask-clicked(); }
             }
@@ -567,12 +628,16 @@ export component OverlayBarWindow inherits Window {
                 clicked => { root.spawn-tile-clicked(); }
             }
             if !root.confirming : Chip {
-                label: "📷";
+                icon: @image-url("../assets/icons/camera.svg");
+                has-icon: true;
+                a11y: "Screenshot to vision";
                 accent: #22d3ee;
                 clicked => { root.capture-clicked(); }
             }
             if !root.confirming : Chip {
-                label: "⚙";
+                icon: @image-url("../assets/icons/gear.svg");
+                has-icon: true;
+                a11y: "Settings";
                 active: root.settings-open;
                 accent: Theme.text-muted;
                 clicked => { root.open-settings-clicked(); }
@@ -580,7 +645,9 @@ export component OverlayBarWindow inherits Window {
             // V0.8.4 — 🆘 help (icons + hotkeys + gestures); also F1. Lights up
             // while the help window is open (same as the ⚙ chip for Settings).
             if !root.confirming : Chip {
-                label: "🆘";
+                icon: @image-url("../assets/icons/sos.svg");
+                has-icon: true;
+                a11y: "Help";
                 active: root.help-open;
                 accent: #60a5fa;
                 clicked => { root.help-clicked(); }
@@ -592,7 +659,9 @@ export component OverlayBarWindow inherits Window {
             // the Slint+skia text-font fallback (same class as ✕, why Quit uses
             // ASCII "X"). 🔄 renders fine (proven by tile.slint's regen button).
             if !root.restart-armed : Chip {
-                label: "🔄";
+                icon: @image-url("../assets/icons/restart.svg");
+                has-icon: true;
+                a11y: "Emergency restart";
                 accent: #38bdf8;
                 clicked => { root.restart-clicked(); }
             }
@@ -621,7 +690,9 @@ export component OverlayBarWindow inherits Window {
             // as a missing-glyph box on the Slint+skia fallback). Armed:
             // inline "Quit? [Yes] [No]" so a stray click can't kill the app.
             if !root.quit-armed : Chip {
-                label: "X";
+                icon: @image-url("../assets/icons/x.svg");
+                has-icon: true;
+                a11y: "Quit";
                 accent: Theme.danger;
                 clicked => { root.quit-clicked(); }
             }
@@ -680,7 +751,7 @@ export component OverlayBarWindow inherits Window {
             // The live transcript text — elide when too long.
             Text {
                 text: root.last-transcript-line == ""
-                    ? @tr("🎙 waiting for transcript... (mic/sys → STT)")
+                    ? @tr("waiting for transcript... (mic/sys → STT)")
                     : root.last-transcript-line;
                 font-size: 11px;
                 color: root.last-transcript-line == "" ? Theme.text-muted : Theme.text-secondary;
@@ -698,13 +769,25 @@ export component OverlayBarWindow inherits Window {
                 border-width: root.ai-streaming ? 1px : 0px;
                 border-radius: 9px;
                 horizontal-stretch: 0;
-                Text {
-                    visible: root.ai-streaming;
-                    text: "🧠 AI streaming";
-                    font-size: 10px;
-                    color: #818cf8;
-                    vertical-alignment: center;
-                    horizontal-alignment: center;
+                if root.ai-streaming : HorizontalLayout {
+                    alignment: center;
+                    spacing: 4px;
+                    padding-left: 6px;
+                    padding-right: 6px;
+                    Image {
+                        source: @image-url("../assets/icons/brain.svg");
+                        colorize: #818cf8;
+                        width: 12px;
+                        height: 12px;
+                        image-fit: contain;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: "AI streaming";
+                        font-size: 10px;
+                        color: #818cf8;
+                        vertical-alignment: center;
+                    }
                 }
             }
         }

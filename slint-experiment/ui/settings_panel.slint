@@ -105,6 +105,8 @@ component NavGroupHeader inherits Rectangle {
 
 component NavItem inherits Rectangle {
     in property <string> label;
+    // Design-system nav icon (skia-safe line SVG), tinted with the row colour.
+    in property <image> icon;
     in property <int> tab-index;
     in property <bool> active: false;
     callback chosen(int);
@@ -124,7 +126,16 @@ component NavItem inherits Rectangle {
         background: Theme.accent;
     }
     HorizontalLayout {
-        padding-left: 11px;
+        padding-left: 10px;
+        spacing: 8px;
+        Image {
+            source: root.icon;
+            colorize: root.active ? Theme.accent : Theme.text-secondary;
+            width: 15px;
+            height: 15px;
+            image-fit: contain;
+            vertical-alignment: center;
+        }
         Text {
             text: root.label;
             font-size: 12px;
@@ -455,18 +466,19 @@ export component SettingsWindow inherits Window {
                         spacing: 7px;
                         alignment: start;
                         Image {
-                            source: @image-url("../assets/icon.svg");
+                            source: @image-url("../assets/brand-head.png");
                             colorize: Theme.accent;
                             width: 22px;
                             height: 22px;
                             image-fit: contain;
                             vertical-alignment: center;
                         }
-                        Text {
-                            text: "::";
-                            font-size: 14px;
-                            font-weight: 700;
-                            color: Theme.accent;
+                        Image {
+                            source: @image-url("../assets/icons/grip.svg");
+                            colorize: Theme.accent;
+                            width: 13px;
+                            height: 13px;
+                            image-fit: contain;
                             vertical-alignment: center;
                         }
                         Text {
@@ -487,71 +499,71 @@ export component SettingsWindow inherits Window {
                 // reuse the existing emoji+text @tr msgids verbatim.
                 NavGroupHeader { label: @tr("SESSION"); }
                 NavItem {
-                    label: @tr("👤 Profile + context"); tab-index: 10;
+                    label: @tr("Profile + context"); icon: @image-url("../assets/icons/user.svg"); tab-index: 10;
                     active: root.active-tab == 10;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
-                    label: @tr("🎯 Coaching"); tab-index: 1;
+                    label: @tr("Coaching"); icon: @image-url("../assets/icons/coach.svg"); tab-index: 1;
                     active: root.active-tab == 1;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
 
                 NavGroupHeader { label: "AI"; }
                 NavItem {
-                    label: @tr("🧠 AI bridge"); tab-index: 11;
+                    label: @tr("AI bridge"); icon: @image-url("../assets/icons/ai.svg"); tab-index: 11;
                     active: root.active-tab == 11;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
-                    label: @tr("🗣 STT"); tab-index: 12;
+                    label: @tr("STT"); icon: @image-url("../assets/icons/stt.svg"); tab-index: 12;
                     active: root.active-tab == 12;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
-                    label: @tr("🪟 Auto-tiles"); tab-index: 7;
+                    label: @tr("Auto-tiles"); icon: @image-url("../assets/icons/tiles.svg"); tab-index: 7;
                     active: root.active-tab == 7;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
-                    label: @tr("📚 Knowledge base"); tab-index: 9;
+                    label: @tr("Knowledge base"); icon: @image-url("../assets/icons/knowledge.svg"); tab-index: 9;
                     active: root.active-tab == 9;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
 
                 NavGroupHeader { label: @tr("APP"); }
                 NavItem {
-                    label: @tr("🎤 Audio"); tab-index: 6;
+                    label: @tr("Audio"); icon: @image-url("../assets/icons/audio.svg"); tab-index: 6;
                     active: root.active-tab == 6;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
-                    label: @tr("🌐 Interface"); tab-index: 3;
+                    label: @tr("Interface"); icon: @image-url("../assets/icons/monitor.svg"); tab-index: 3;
                     active: root.active-tab == 3;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
-                    label: @tr("⌨ Hotkeys"); tab-index: 2;
+                    label: @tr("Hotkeys"); icon: @image-url("../assets/icons/kb.svg"); tab-index: 2;
                     active: root.active-tab == 2;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
-                    label: @tr("🛡 Stealth"); tab-index: 0;
+                    label: @tr("Stealth"); icon: @image-url("../assets/icons/stealth.svg"); tab-index: 0;
                     active: root.active-tab == 0;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
-                    label: @tr("⬆ Updates"); tab-index: 4;
+                    label: @tr("Updates"); icon: @image-url("../assets/icons/update.svg"); tab-index: 4;
                     active: root.active-tab == 4;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
-                    label: @tr("🩺 Diagnostics"); tab-index: 13;
+                    label: @tr("Diagnostics"); icon: @image-url("../assets/icons/diag.svg"); tab-index: 13;
                     active: root.active-tab == 13;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
-                    label: @tr("💭 Memory"); tab-index: 14;
+                    label: @tr("Memory"); icon: @image-url("../assets/icons/bubble.svg"); tab-index: 14;
                     active: root.active-tab == 14;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
@@ -578,7 +590,8 @@ export component SettingsWindow inherits Window {
             // adapts it to dark *and* light schemes. User: бренд на
             // заднем плане меню.
             Image {
-                source: @image-url("../assets/icon.svg");
+                // Penguin mark (the assistant) as the faint settings watermark.
+                source: @image-url("../assets/brand-penguin.png");
                 // Dark themes → tint the mark WHITE; light theme → keep it dark
                 // (text-primary). Low opacity (5%) so it never muddies the text
                 // contrast, esp. on screen-share. (User: тёмная тема — знак

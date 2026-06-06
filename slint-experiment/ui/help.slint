@@ -38,7 +38,7 @@ export component HelpWindow inherits Window {
         // centred, same as Settings. Everything above is transparent so it shows
         // through. colorize adapts it to dark + light schemes.
         Image {
-            source: @image-url("../assets/icon.svg");
+            source: @image-url("../assets/brand-penguin.png");
             colorize: Theme.is-light ? Theme.text-primary : #ffffff;
             opacity: 0.05;
             width: 300px;
@@ -80,7 +80,7 @@ export component HelpWindow inherits Window {
                         spacing: 7px;
                         alignment: start;
                         Image {
-                            source: @image-url("../assets/icon.svg");
+                            source: @image-url("../assets/brand-head.png");
                             colorize: Theme.accent;
                             width: 22px;
                             height: 22px;
@@ -125,35 +125,52 @@ export component HelpWindow inherits Window {
                         font-size: Metrics.font-body;   // was 12px
                         color: Theme.accent;
                     }
+                    // Icon column uses the SAME design-system SVGs as the bar
+                    // (skia-safe, colorized) so the help mirrors the live bar
+                    // exactly. `hasicon` rows show the SVG (+ optional word for
+                    // ask/grab); the cost row shows a "$0.000" text sample.
                     for row in [
-                        ["::", @tr("Drag to move the bar; shows the live state")],
-                        ["🎤", @tr("Toggle continuous mic capture (your voice)")],
-                        ["🔊", @tr("Toggle continuous system-audio capture (the other side)")],
-                        ["🎤 " + @tr("ask"), @tr("Hold to record your voice → AI answer (swipe up to lock)")],
-                        ["🔊 " + @tr("grab"), @tr("Hold to capture system audio → AI answer (swipe up to lock)")],
-                        ["▶", @tr("Start / stop the live session (transcript + auto-tips)")],
-                        ["$0.000", @tr("Session cost (cloud only; local is free)")],
-                        ["🎯", @tr("Stealth: hide the overlay from screen capture / share")],
-                        ["🔥", @tr("Aggressive auto-tiles (answer more often)")],
-                        ["✏", @tr("Write a question as text")],
-                        ["+", @tr("New tile from the last line / a manual question")],
-                        ["📷", @tr("Screenshot a region → AI vision answer")],
-                        ["⚙", @tr("Settings")],
-                        ["🆘", @tr("This help (also F1)")],
-                        ["🔄", @tr("Restart the overlay (two-step; settings survive)")],
-                        ["X", @tr("Quit (two-step)")],
+                        { ico: @image-url("../assets/icons/grip.svg"), hasicon: true, glyph: "", desc: @tr("Drag to move the bar; shows the live state") },
+                        { ico: @image-url("../assets/icons/mic.svg"), hasicon: true, glyph: "", desc: @tr("Toggle continuous mic capture (your voice)") },
+                        { ico: @image-url("../assets/icons/speaker.svg"), hasicon: true, glyph: "", desc: @tr("Toggle continuous system-audio capture (the other side)") },
+                        { ico: @image-url("../assets/icons/mic.svg"), hasicon: true, glyph: @tr("ask"), desc: @tr("Hold to record your voice → AI answer (swipe up to lock)") },
+                        { ico: @image-url("../assets/icons/speaker.svg"), hasicon: true, glyph: @tr("grab"), desc: @tr("Hold to capture system audio → AI answer (swipe up to lock)") },
+                        { ico: @image-url("../assets/icons/play.svg"), hasicon: true, glyph: "", desc: @tr("Start / stop the live session (transcript + auto-tips)") },
+                        { ico: @image-url("../assets/icons/x.svg"), hasicon: false, glyph: "$0.000", desc: @tr("Session cost (cloud only; local is free)") },
+                        { ico: @image-url("../assets/icons/stealth.svg"), hasicon: true, glyph: "", desc: @tr("Stealth: hide the overlay from screen capture / share") },
+                        { ico: @image-url("../assets/icons/flame.svg"), hasicon: true, glyph: "", desc: @tr("Aggressive auto-tiles (answer more often)") },
+                        { ico: @image-url("../assets/icons/pencil.svg"), hasicon: true, glyph: "", desc: @tr("Write a question as text") },
+                        { ico: @image-url("../assets/icons/plus.svg"), hasicon: true, glyph: "", desc: @tr("New tile from the last line / a manual question") },
+                        { ico: @image-url("../assets/icons/camera.svg"), hasicon: true, glyph: "", desc: @tr("Screenshot a region → AI vision answer") },
+                        { ico: @image-url("../assets/icons/gear.svg"), hasicon: true, glyph: "", desc: @tr("Settings") },
+                        { ico: @image-url("../assets/icons/sos.svg"), hasicon: true, glyph: "", desc: @tr("This help (also F1)") },
+                        { ico: @image-url("../assets/icons/restart.svg"), hasicon: true, glyph: "", desc: @tr("Restart the overlay (two-step; settings survive)") },
+                        { ico: @image-url("../assets/icons/x.svg"), hasicon: true, glyph: "", desc: @tr("Quit (two-step)") },
                     ] : HorizontalLayout {
                         padding: 3px;                // small inset; no exact token (space-xs=4)
                         spacing: Metrics.space-md;   // was 12px
-                        Text {
-                            text: row[0];
-                            font-family: Theme.font-mono;
-                            font-size: Metrics.font-body;   // was 12px
-                            color: Theme.text-primary;
+                        HorizontalLayout {
                             width: 86px;
+                            spacing: 5px;
+                            alignment: start;
+                            if row.hasicon : Image {
+                                source: row.ico;
+                                colorize: Theme.text-primary;
+                                width: 15px;
+                                height: 15px;
+                                image-fit: contain;
+                                vertical-alignment: center;
+                            }
+                            if row.glyph != "" : Text {
+                                text: row.glyph;
+                                font-family: Theme.font-mono;
+                                font-size: Metrics.font-body;   // was 12px
+                                color: Theme.text-primary;
+                                vertical-alignment: center;
+                            }
                         }
                         Text {
-                            text: row[1];
+                            text: row.desc;
                             font-size: Metrics.font-body;   // was 12px
                             color: Theme.text-secondary;
                             wrap: word-wrap;

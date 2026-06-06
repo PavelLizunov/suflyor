@@ -35,8 +35,8 @@ msgstr "захватить"
 msgid "⏸ {}"
 msgstr "⏸ {}"
 
-msgid "▶ start"
-msgstr "▶ старт"
+msgid "start"
+msgstr "старт"
 
 msgid "🧠 {}"
 msgstr "🧠 {}"
@@ -702,8 +702,8 @@ msgstr "модель whisper — напр. whisper-large-v3-turbo"
 msgid "Groq STT (Whisper) — API key + model. Used only when the engine above is Cloud."
 msgstr "Groq STT (Whisper) — ключ и модель. Используется, только если движок выше — Облако."
 
-msgid "🎙 waiting for transcript... (mic/sys → STT)"
-msgstr "🎙 ожидаю транскрипт... (mic/sys → STT)"
+msgid "waiting for transcript... (mic/sys → STT)"
+msgstr "ожидаю транскрипт... (mic/sys → STT)"
 
 msgid "✏ Write a question for the assistant"
 msgstr "✏ Напишите вопрос ассистенту"

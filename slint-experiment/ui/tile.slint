@@ -225,11 +225,14 @@ export component TileWindow inherits Window {
                     regen-touch := TouchArea {
                         clicked => { if (!root.followup-busy) { root.regenerate-clicked(); } }
                     }
-                    Text {
-                        text: "🔄";
-                        font-size: 12px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                    Image {
+                        source: @image-url("../assets/icons/restart.svg");
+                        colorize: Theme.text-secondary;
+                        width: 14px;
+                        height: 14px;
+                        image-fit: contain;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
                     }
                 }
                 // V0.8.0 (Поток D) — 🧠 escalate this answer to the smart cloud
@@ -244,11 +247,14 @@ export component TileWindow inherits Window {
                     esc-touch := TouchArea {
                         clicked => { if (!root.followup-busy) { root.escalate-clicked(); } }
                     }
-                    Text {
-                        text: "🧠";
-                        font-size: 12px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                    Image {
+                        source: @image-url("../assets/icons/brain.svg");
+                        colorize: Theme.accent;
+                        width: 15px;
+                        height: 15px;
+                        image-fit: contain;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
                     }
                 }
                 Rectangle {
@@ -280,13 +286,14 @@ export component TileWindow inherits Window {
                     close-touch := TouchArea {
                         clicked => { root.close-clicked(); }
                     }
-                    Text {
-                        text: "X";
-                        font-size: 12px;
-                        font-weight: 700;
-                        color: Theme.text-primary;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                    Image {
+                        source: @image-url("../assets/icons/x.svg");
+                        colorize: Theme.text-primary;
+                        width: 14px;
+                        height: 14px;
+                        image-fit: contain;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
                     }
                 }
             }
@@ -491,11 +498,21 @@ export component TileWindow inherits Window {
                             voicebtn.v-locked = false;
                         }
                     }
-                    Text {
-                        // 🎤 idle · ↑ while holding (hint: swipe up to lock) · ⏹
-                        // once locked (click to stop) — parity with the bar chip.
-                        text: voicebtn.v-locked ? "⏹" : (root.voice-recording ? "↑" : "🎤");
+                    // Idle = mic icon · ↑ while holding (swipe up to lock) · ⏹
+                    // once locked (click to stop) — parity with the bar chip.
+                    if !root.voice-recording && !voicebtn.v-locked : Image {
+                        source: @image-url("../assets/icons/mic.svg");
+                        colorize: Theme.text-secondary;
+                        width: 15px;
+                        height: 15px;
+                        image-fit: contain;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                    }
+                    if root.voice-recording || voicebtn.v-locked : Text {
+                        text: voicebtn.v-locked ? "⏹" : "↑";
                         font-size: 13px;
+                        color: voicebtn.v-locked ? Theme.danger : Theme.warning;
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
