@@ -359,15 +359,15 @@ pub fn detector_allows(source: AudioSource, skip_mic: bool) -> bool {
 
 /// Phase E6 v12 — convert a detector Trigger into TileSpec.highlights.
 /// First slot is a human-readable trigger label rendered as a colored
-/// badge in the tile (e.g. "🔥 docker", "❓ question"). Empty Vec for
+/// badge in the tile (e.g. "keyword docker", "question snippet"). Empty Vec for
 /// no badge (manual F9 / F6 spawns don't go through this helper).
 #[must_use]
 pub fn trigger_highlights(trigger: &backend_runtime::Trigger) -> Vec<String> {
     match trigger {
-        backend_runtime::Trigger::Keyword(kw, _) => vec![format!("🔥 {kw}")],
+        backend_runtime::Trigger::Keyword(kw, _) => vec![format!("keyword {kw}")],
         backend_runtime::Trigger::Question(q) => {
             let snippet: String = q.trim().chars().take(60).collect();
-            vec![format!("❓ {snippet}")]
+            vec![format!("question {snippet}")]
         }
     }
 }
@@ -389,7 +389,7 @@ const QA_CACHE_TTL_SECS: u64 = 600;
 const QA_CACHE_MAX_ENTRIES: usize = 256;
 /// V0.8.0 (Поток A) — min interval between auto-tile AI-error notice tiles.
 /// During a sustained outage the detector fires per transcript line; we spawn
-/// at most one "⚠ AI недоступен" tile per this window so the user is informed
+/// at most one "AI недоступен" tile per this window so the user is informed
 /// once, not spammed. 20s balances "noticed promptly" vs "not nagging".
 const AI_ERROR_TILE_DEBOUNCE_MS: u64 = 20_000;
 
@@ -742,13 +742,13 @@ async fn maybe_spawn_auto_tile(
                 let reason = crate::app_state::classify_ai_error(&chain);
                 let _ = events.spawn_tile_full(
                         TileSpec {
-                            question: "⚠ AI недоступен".into(),
+                            question: "AI недоступен".into(),
                             answer: format!(
-                                "**Не получаю ответ от AI:** {reason}\n\nАвто-подсказки приостановлены, пока AI не ответит. Проверьте локальный AI-сервер или AI-мост (Настройки → AI). Можно перезапустить приложение кнопкой 🔄 на панели."
+                                "**Не получаю ответ от AI:** {reason}\n\nАвто-подсказки приостановлены, пока AI не ответит. Проверьте локальный AI-сервер или AI-мост (Настройки -> AI). Можно перезапустить приложение кнопкой restart на панели."
                             ),
                             source: "ai_error".into(),
                             is_translation: false,
-                            highlights: vec!["⚠ AI".into()],
+                            highlights: vec!["AI error".into()],
                         },
                         MonitorHint::Auto,
                         stealth,
@@ -822,7 +822,9 @@ async fn maybe_spawn_auto_tile(
     // ===== Spawn auto-tile =====
     let question_label = match &trigger {
         backend_runtime::Trigger::Question(q) => q.clone(),
-        backend_runtime::Trigger::Keyword(kw, _) => format!("📚 {kw}"),
+        // De-emojified to match the rest of the UI (Codex icon pass): the
+        // keyword itself is the tile title / stored last_question, no glyph.
+        backend_runtime::Trigger::Keyword(kw, _) => kw.clone(),
     };
     {
         let mut s = lock(&rt);

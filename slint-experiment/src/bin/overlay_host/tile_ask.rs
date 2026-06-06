@@ -76,8 +76,8 @@ pub(crate) fn fire_f3_reask(
                 .rev()
                 .map(|l| {
                     let icon = match l.source {
-                        overlay_backend::audio::AudioSource::System => "🗣",
-                        overlay_backend::audio::AudioSource::Mic => "🎤",
+                        overlay_backend::audio::AudioSource::System => "sys",
+                        overlay_backend::audio::AudioSource::Mic => "mic",
                     };
                     format!("{icon} {}", l.text)
                 })
@@ -212,7 +212,7 @@ pub(crate) fn fire_f9_ask(
     let seq = TILE_DISPLAY_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
     tile.set_sequence(seq as i32);
     tile.set_tile_title(SharedString::from(if is_text {
-        "✏ текст · live"
+        "text · live"
     } else {
         "F9 ask · live"
     }));
@@ -223,13 +223,13 @@ pub(crate) fn fire_f9_ask(
     // user sees THIS answer came from the cloud model (egress is visible).
     // V0.8.3 — a typed "✏ Написать" ask gets its own green badge.
     if is_text {
-        tile.set_trigger_label(SharedString::from("✏ Написать"));
+        tile.set_trigger_label(SharedString::from("text ask"));
         tile.set_trigger_color(slint::Color::from_rgb_u8(0x34, 0xd3, 0x99));
     } else if route == AskRoute::Cloud {
-        tile.set_trigger_label(SharedString::from("🧠 cloud (Shift+F9)"));
+        tile.set_trigger_label(SharedString::from("cloud (Shift+F9)"));
         tile.set_trigger_color(slint::Color::from_rgb_u8(0x38, 0xbd, 0xf8));
     } else {
-        tile.set_trigger_label(SharedString::from("✋ F9 manual ask"));
+        tile.set_trigger_label(SharedString::from("F9 manual ask"));
         tile.set_trigger_color(slint::Color::from_rgb_u8(0xa7, 0x8b, 0xfa));
     }
     // Phase E6 v45 — this tile carries a conversation, so it shows the

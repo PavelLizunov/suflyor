@@ -1,4 +1,4 @@
-// Settings window — custom dark tab bar + content area (the std TabWidget
+﻿// Settings window — custom dark tab bar + content area (the std TabWidget
 // clashes with our theme, and we want per-tab control of content rendering).
 // The sidebar groups tabs into SESSION / AI / APP; `active-tab` indexes the
 // content pane. Indices have gaps (5 + 8) where the Stats + Snippets panes
@@ -18,6 +18,44 @@
 
 import { Button, LineEdit, ScrollView, SpinBox, ComboBox, Slider, TextEdit, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+
+component IconSlot inherits Rectangle {
+    in property <image> icon;
+    in property <color> tint: Theme.text-secondary;
+    in property <length> glyph-size: 15px;
+    in property <length> slot-width: 16px;
+    in property <length> slot-height: 26px;
+    width: slot-width;
+    height: slot-height;
+    horizontal-stretch: 0;
+
+    Image {
+        source: root.icon;
+        colorize: root.tint;
+        width: root.glyph-size;
+        height: root.glyph-size;
+        image-fit: contain;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+}
+
+component BrandHeaderMark inherits Rectangle {
+    in property <length> mark-size: 22px;
+    width: mark-size;
+    height: mark-size;
+    horizontal-stretch: 0;
+
+    Image {
+        source: @image-url("../assets/brand-head.svg");
+        colorize: Theme.is-light ? #111827 : #ffffff;
+        width: root.mark-size;
+        height: root.mark-size;
+        image-fit: contain;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+}
 
 // Curated-memory row (Phase 3b.3) — a candidate OR an approved item rendered in
 // the 💭 Memory tab. `id` is the DB row id (passed back on approve/reject/
@@ -128,13 +166,12 @@ component NavItem inherits Rectangle {
     HorizontalLayout {
         padding-left: 10px;
         spacing: 8px;
-        Image {
-            source: root.icon;
-            colorize: root.active ? Theme.accent : Theme.text-secondary;
-            width: 15px;
-            height: 15px;
-            image-fit: contain;
-            vertical-alignment: center;
+        IconSlot {
+            icon: root.icon;
+            tint: root.active ? Theme.accent : Theme.text-secondary;
+            glyph-size: 15px;
+            slot-width: 16px;
+            slot-height: 26px;
         }
         Text {
             text: root.label;
@@ -164,7 +201,7 @@ export component SettingsWindow inherits Window {
     // (drag-start-requested + drag-moved → win32 cursor-delta drag,
     // same mechanism as the overlay bar). Close via the existing
     // "X Close" button.
-    icon: @image-url("../assets/icon.png");
+    icon: @image-url("../assets/icon.svg");
     no-frame: true;
     preferred-width: 720px;
     // Phase E6 v39 — taller (480→560) to fit the grouped sidebar
@@ -459,29 +496,19 @@ export component SettingsWindow inherits Window {
                         }
                         moved => { if (self.pressed) { root.drag-moved(); } }
                     }
-                    // Phase E6 v26 — ":: " grip in accent Theme.accent (same as
-                    // overlay bar) for visual continuity; label neutral.
-                    // App icon sits first as branding (also in taskbar/Start).
+                    // Drag grip + title.
                     HorizontalLayout {
                         spacing: 7px;
                         alignment: start;
-                        Image {
-                            // Head mark — theme-picked, NOT colorized (per design).
-                            source: Theme.is-light
-                                ? @image-url("../assets/brand-head.png")
-                                : @image-url("../assets/brand-head-light.png");
-                            width: 22px;
-                            height: 22px;
-                            image-fit: contain;
-                            vertical-alignment: center;
+                        BrandHeaderMark {
+                            mark-size: 22px;
                         }
-                        Image {
-                            source: @image-url("../assets/icons/grip.svg");
-                            colorize: Theme.accent;
-                            width: 13px;
-                            height: 13px;
-                            image-fit: contain;
-                            vertical-alignment: center;
+                        IconSlot {
+                            icon: @image-url("../assets/icons/grip.svg");
+                            tint: Theme.accent;
+                            glyph-size: 13px;
+                            slot-width: 13px;
+                            slot-height: 26px;
                         }
                         Text {
                             text: @tr("Settings");
@@ -586,24 +613,16 @@ export component SettingsWindow inherits Window {
             horizontal-stretch: 1;
             background: Theme.bg-surface;
             clip: true;
-            // Brand watermark — faint vector logo behind the content,
-            // centred in the content pane (the pane bg is opaque, so the
-            // mark must live INSIDE it, before the ScrollView). colorize
-            // adapts it to dark *and* light schemes. User: бренд на
-            // заднем плане меню.
             Image {
-                // Full brand scene as the faint watermark. Per the design's
-                // logo-sizing sheet: brand-mark-light (white scene) on the dark
-                // schemes, plain brand-mark on Light Frost; NO colorize (keeps
-                // the illustration detail); 4–6% opacity at 240–320px so it never
-                // muddies the text, esp. on a screen-share.
                 source: Theme.is-light
                     ? @image-url("../assets/brand-mark.png")
                     : @image-url("../assets/brand-mark-light.png");
-                opacity: 0.05;
-                width: 280px;
-                height: 280px;
+                opacity: Theme.is-light ? 0.055 : 0.085;
+                width: 300px;
+                height: 300px;
                 image-fit: contain;
+                x: parent.width - self.width - 18px;
+                y: parent.height - self.height - 22px;
             }
             ScrollView {
                 VerticalLayout {
@@ -690,7 +709,7 @@ export component SettingsWindow inherits Window {
                         Rectangle { background: Theme.border; height: 1px; }
                         for entry in [
                             ["F9",  @tr("Ask AI now (streams the answer into a tile)")],
-                            ["Shift+F9", @tr("Ask AI escalated to the smart cloud model (one-shot; tile shows a 🧠 badge)")],
+                            ["Shift+F9", @tr("Ask AI escalated to the smart cloud model (one-shot; tile shows a cloud badge)")],
                             ["F8",  @tr("Screenshot → AI vision (drag a region; Esc cancels)")],
                             ["F3",  @tr("Re-ask the last question with fresh context")],
                             ["F4",  @tr("Knowledge-base palette (open / close)")],
@@ -1186,8 +1205,8 @@ export component SettingsWindow inherits Window {
                             // Phase E6 v43 — voice dictation toggle.
                             Button {
                                 text: root.context-dictating
-                                    ? @tr("🔴 Stop recording")
-                                    : @tr("🎤 Dictate");
+                                    ? @tr("Stop recording")
+                                    : @tr("Dictate");
                                 clicked => { root.context-dictate-clicked(); }
                             }
                             Button {
@@ -1198,7 +1217,7 @@ export component SettingsWindow inherits Window {
                             Button {
                                 text: root.context-processing
                                     ? @tr("Structuring…")
-                                    : @tr("✨ Structure via AI");
+                                    : @tr("Structure via AI");
                                 enabled: !root.context-processing;
                                 clicked => { root.context-process-clicked(); }
                             }

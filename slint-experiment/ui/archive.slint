@@ -34,7 +34,7 @@ export component ArchiveWindow inherits Window {
     changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
 
     title: "Session archive";
-    icon: @image-url("../assets/icon.png");
+    icon: @image-url("../assets/icon.svg");
     // Solid opaque background (NOT transparent) — a transparent + WS_EX_LAYERED
     // frameless window alpha-clamps text to invisible (the palette learned this
     // the hard way in Phase E6). Frame off for the floating-window feel.

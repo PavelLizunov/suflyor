@@ -74,11 +74,10 @@ export global Metrics {
     out property <duration> motion-normal: 200ms; // GUESSED — design-doc canonical; closest real literal is 140ms (settings nav)
 
     // ---- Opacity ----
-    // surface (0.92) is the translucent bar/tile fill alpha; muted (0.05) the
-    // brand-watermark wash. disabled (0.5) is GUESSED — no disabled-dim literal
-    // exists yet (std-widgets handle their own disabled tint); seeded for a
-    // future custom disabled state.
+    // surface (0.92) is the translucent bar/tile fill alpha. muted (0.05) and
+    // disabled (0.5) are kept as low-level tokens for future custom muted/
+    // disabled states; std-widgets still handle their own disabled tint.
     out property <float> surface-opacity: 0.92;   // bar + tile `Theme.bg-surface.with-alpha(0.92)`
-    out property <float> muted-opacity: 0.05;     // watermark `opacity: 0.05` (help + settings brand logo)
+    out property <float> muted-opacity: 0.05;
     out property <float> disabled-opacity: 0.5;   // GUESSED — no current literal; sensible dim for a future disabled control
 }

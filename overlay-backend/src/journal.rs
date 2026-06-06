@@ -460,8 +460,8 @@ fn parse_unfinished(path: &Path) -> Option<UnfinishedSession> {
                         .and_then(serde_json::Value::as_str)
                         .unwrap_or("");
                     let marker = match src {
-                        "mic" => "🎤 ",
-                        "system" => "🔊 ",
+                        "mic" => "mic: ",
+                        "system" => "sys: ",
                         _ => "",
                     };
                     last_lines.push_back(format!("{marker}{}", text.trim()));
@@ -1381,8 +1381,8 @@ mod tests {
         );
         // last_lines preserves order + source markers, newest last.
         assert_eq!(got.last_lines.len(), 2);
-        assert_eq!(got.last_lines[0], "🔊 what is your experience");
-        assert_eq!(got.last_lines[1], "🎤 let me explain my background");
+        assert_eq!(got.last_lines[0], "sys: what is your experience");
+        assert_eq!(got.last_lines[1], "mic: let me explain my background");
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1411,7 +1411,7 @@ mod tests {
         // Only the ONE complete transcript line survives; the truncated tail
         // is skipped, not panicked on.
         assert_eq!(got.last_lines.len(), 1);
-        assert_eq!(got.last_lines[0], "🔊 tell me about a hard outage");
+        assert_eq!(got.last_lines[0], "sys: tell me about a hard outage");
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1533,7 +1533,7 @@ mod tests {
         let got = find_unfinished_session(&dir).expect("unfinished");
         assert_eq!(got.last_lines.len(), RECOVERY_LAST_LINES);
         // Oldest evicted: first surviving line is "line 5".
-        assert_eq!(got.last_lines[0], "🔊 line 5");
+        assert_eq!(got.last_lines[0], "sys: line 5");
         std::fs::remove_dir_all(&dir).ok();
     }
 }

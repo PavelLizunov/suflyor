@@ -772,7 +772,7 @@ pub struct ManualSpawnInputs {
 /// finishes. Returned only on AI success.
 #[derive(Debug, Clone)]
 pub struct ManualSpawnOutcome {
-    /// "✋ {line.text}" form to store as the new `last_question`.
+    /// Display question to store as the new `last_question`.
     pub display_question: String,
     /// Trimmed model answer to store as the new `last_answer`.
     pub answer_trimmed: String,
@@ -837,7 +837,7 @@ pub async fn manual_spawn_tile(
         // completely dead. Now the user always gets a tile explaining why.
         let _ = events.spawn_tile_full(
             TileSpec {
-                question: "✋ Ручной запрос (F6)".into(),
+                question: "Ручной запрос (F6)".into(),
                 answer: if response_language == "ru" {
                     "Транскрипт пустой — нечего спрашивать. Запустите сессию (захват аудио), дождитесь реплик и снова нажмите F6."
                 } else {
@@ -921,7 +921,7 @@ pub async fn manual_spawn_tile(
             // on-screen. Full detail stays in journal + log.
             let _ = events.spawn_tile_full(
                     TileSpec {
-                        question: format!("✋ {}", line.text),
+                        question: line.text.clone(),
                         answer: if response_language == "ru" {
                             "Не удалось получить ответ от AI. Проверьте, что выбранный провайдер запущен (Настройки → AI)."
                         } else {
@@ -961,7 +961,7 @@ pub async fn manual_spawn_tile(
         });
     }
 
-    let question = format!("✋ {}", line.text);
+    let question = line.text.clone();
     // `monitor_hint` + `stealth` were resolved up-front (shared with the
     // empty/error feedback tiles above), so just reuse them here.
     // TileKind::Manual (NOT Ai) — F6 / manual chip / PTT is the
@@ -1566,7 +1566,7 @@ mod tests {
         let inputs = ReaskInputs {
             last_question: Some("How to scale Kubernetes?".into()),
             last_answer: Some("Use horizontal pod autoscaler.".into()),
-            recent_transcript_iconized: vec!["🎤 we need more pods".into()],
+            recent_transcript_iconized: vec!["mic: we need more pods".into()],
             journal: None,
             health: Arc::new(HealthSignals::default()),
         };

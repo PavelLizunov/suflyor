@@ -1175,11 +1175,11 @@ fn main() -> Result<(), slint::PlatformError> {
             )));
             // Phase E6 v12 — first highlight (if any) becomes the
             // trigger badge. Backend's trigger_highlights() already
-            // formats it as "🔥 keyword" or "❓ question snippet".
+            // formats it as "keyword ..." or "question ...".
             // Color: orange for keyword/aggressive, blue for question.
             if let Some(first) = req.spec.highlights.first() {
                 tile.set_trigger_label(SharedString::from(first.clone()));
-                let is_keyword = first.starts_with("🔥");
+                let is_keyword = first.starts_with("keyword");
                 tile.set_trigger_color(if is_keyword {
                     slint::Color::from_rgb_u8(0xfb, 0x92, 0x3c) // orange
                 } else {
@@ -2062,9 +2062,9 @@ fn main() -> Result<(), slint::PlatformError> {
                 String::new()
             };
             let heading = if has_tx {
-                format!("✋ Вопрос по встрече #{seq}")
+                format!("Вопрос по встрече #{seq}")
             } else {
-                format!("✋ Тайл #{seq}")
+                format!("Тайл #{seq}")
             };
             tile.set_sequence(seq as i32);
             tile.set_tile_title(SharedString::from(heading.clone()));
@@ -2576,9 +2576,9 @@ use slint_replay::app_state::classify_ai_error;
 /// Recompute status pill based on capture flags.
 fn refresh_status(overlay: &OverlayBarWindow, mic: bool, sys: bool) {
     let (text, color) = match (mic, sys) {
-        (true, true) => ("recording 🎤🗣", slint::Color::from_rgb_u8(0x34, 0xd3, 0x99)),
-        (true, false) => ("mic only 🎤", slint::Color::from_rgb_u8(0x34, 0xd3, 0x99)),
-        (false, true) => ("sys only 🗣", slint::Color::from_rgb_u8(0x6c, 0xcf, 0xff)),
+        (true, true) => ("recording", slint::Color::from_rgb_u8(0x34, 0xd3, 0x99)),
+        (true, false) => ("mic only", slint::Color::from_rgb_u8(0x34, 0xd3, 0x99)),
+        (false, true) => ("sys only", slint::Color::from_rgb_u8(0x6c, 0xcf, 0xff)),
         (false, false) => ("idle", slint::Color::from_rgb_u8(0x88, 0x88, 0x8c)),
     };
     overlay.set_status_text(SharedString::from(text));

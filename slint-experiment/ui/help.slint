@@ -1,15 +1,151 @@
-// V0.8.4 — 🆘 Help (F1): a read-only reference listing the bar icons, the global
-// hotkeys, and the record gestures. Opened by F1 (toggle) or the bar's 🆘 chip
-// via `open_help`; mirrors text_ask / wizard (frameless, SOLID Theme.bg-surface
-// to dodge the documented Windows-DWM "created-but-invisible" pitfall for new
-// frameless windows, stealth-aware, Esc / "X" to close). Strings are @tr; the
-// hotkey rows REUSE the exact msgids already in the Settings ⌨ Hotkeys tab, so
-// they need no new translations. ASCII "X" for close (✕ U+2715 renders as a
-// missing-glyph box on the Slint+skia text fallback — same as the bar Quit).
-
 import { Button, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Metrics } from "metrics.slint";
+
+component IconSlot inherits Rectangle {
+    in property <image> icon;
+    in property <color> tint: Theme.text-primary;
+    in property <length> glyph-size: 15px;
+    in property <length> slot-width: 26px;
+    in property <length> slot-height: 26px;
+    width: slot-width;
+    height: slot-height;
+    horizontal-stretch: 0;
+
+    Image {
+        source: root.icon;
+        colorize: root.tint;
+        width: root.glyph-size;
+        height: root.glyph-size;
+        image-fit: contain;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+}
+
+component BrandHeaderMark inherits Rectangle {
+    in property <length> mark-size: 22px;
+    width: mark-size;
+    height: mark-size;
+    horizontal-stretch: 0;
+
+    Image {
+        source: @image-url("../assets/brand-head.svg");
+        colorize: Theme.is-light ? #111827 : #ffffff;
+        width: root.mark-size;
+        height: root.mark-size;
+        image-fit: contain;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+}
+
+component TableHeader inherits Rectangle {
+    in property <string> left;
+    in property <string> right;
+    height: 28px;
+    background: Theme.bg-elevated;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    HorizontalLayout {
+        spacing: 0px;
+        Rectangle {
+            width: 124px;
+            height: parent.height;
+            border-width: 0px;
+            Text {
+                text: root.left;
+                font-family: Theme.font-mono;
+                font-size: 10px;
+                font-weight: 700;
+                color: Theme.text-muted;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                x: parent.width - 1px;
+                width: 1px;
+                height: parent.height;
+                background: Theme.border;
+            }
+        }
+        Text {
+            text: root.right;
+            font-family: Theme.font-mono;
+            font-size: 10px;
+            font-weight: 700;
+            color: Theme.text-muted;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+    }
+}
+
+component TableRow inherits Rectangle {
+    in property <image> icon;
+    in property <bool> has-icon: false;
+    in property <string> glyph: "";
+    in property <string> desc;
+    in property <bool> key-row: false;
+    height: 42px;
+    background: transparent;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    HorizontalLayout {
+        spacing: 0px;
+        Rectangle {
+            width: 124px;
+            height: parent.height;
+            Rectangle {
+                width: root.key-row ? 86px : (root.glyph != "" ? 104px : 28px);
+                height: 26px;
+                border-radius: 7px;
+                border-width: 1px;
+                border-color: Theme.border-strong;
+                background: root.key-row ? Theme.accent.with-alpha(0.12) : Theme.bg-elevated;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+
+                if root.has-icon && root.glyph == "" : IconSlot {
+                    icon: root.icon;
+                    tint: Theme.text-primary;
+                    glyph-size: 15px;
+                    slot-width: parent.width;
+                    slot-height: parent.height;
+                }
+                if root.glyph != "" : Text {
+                    text: root.glyph;
+                    x: 0px;
+                    width: parent.width;
+                    height: parent.height;
+                    font-family: Theme.font-mono;
+                    font-size: root.key-row ? 11px : 10px;
+                    font-weight: 700;
+                    color: root.key-row ? Theme.accent : Theme.text-primary;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+            Rectangle {
+                x: parent.width - 1px;
+                width: 1px;
+                height: parent.height;
+                background: Theme.border;
+            }
+        }
+        Text {
+            text: root.desc;
+            font-size: 12px;
+            color: Theme.text-secondary;
+            wrap: word-wrap;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+    }
+}
 
 export component HelpWindow inherits Window {
     no-frame: true;
@@ -17,11 +153,10 @@ export component HelpWindow inherits Window {
     title: @tr("Help");
     default-font-family: Theme.font-sans;
     background: Theme.bg-surface;
-    preferred-width: 580px;
-    preferred-height: 660px;
+    preferred-width: 640px;
+    preferred-height: 680px;
 
     callback cancelled();
-    // Frameless drag (cursor-delta, same as Settings) — the header is the handle.
     callback drag-start-requested();
     callback drag-moved();
     forward-focus: scope;
@@ -34,35 +169,16 @@ export component HelpWindow inherits Window {
             }
             return reject;
         }
-        // Brand watermark — faint vector logo behind the content (5% opacity),
-        // centred, same as Settings. Everything above is transparent so it shows
-        // through. colorize adapts it to dark + light schemes.
-        Image {
-            // Full brand scene watermark — theme-picked, NO colorize, 4–6%
-            // opacity so it never competes with the help text (per design).
-            source: Theme.is-light
-                ? @image-url("../assets/brand-mark.png")
-                : @image-url("../assets/brand-mark-light.png");
-            opacity: 0.05;
-            width: 280px;
-            height: 280px;
-            image-fit: contain;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-        }
-        VerticalLayout {
-            padding: Metrics.space-lg;   // was 16px
-            spacing: 10px;               // no exact token (between space-sm=8 and space-md=12)
 
-            // ---- Header (doubles as the window drag handle, like Settings) ----
+        VerticalLayout {
+            padding: Metrics.space-lg;
+            spacing: 10px;
+
             HorizontalLayout {
-                spacing: Metrics.space-sm;   // was 8px
+                spacing: Metrics.space-sm;
                 Rectangle {
                     horizontal-stretch: 1;
-                    height: Metrics.control-lg;   // was 28px
-                    // Drag handle fills the header; the icon + grip + title are
-                    // drawn on top. Neither a Text nor a (non-Touch) layout
-                    // captures pointer events, so the drag falls through here.
+                    height: Metrics.control-lg;
                     TouchArea {
                         mouse-cursor: grab;
                         pointer-event(ev) => {
@@ -72,35 +188,23 @@ export component HelpWindow inherits Window {
                             }
                         }
                         moved => {
-                            if (self.pressed) {
-                                root.drag-moved();
-                            }
+                            if (self.pressed) { root.drag-moved(); }
                         }
                     }
-                    // App icon + ":: " accent grip + label — the same header
-                    // chrome as Settings, so 🆘 reads as a real, draggable window.
                     HorizontalLayout {
                         spacing: 7px;
                         alignment: start;
-                        Image {
-                            // Head mark — theme-picked, NOT colorized (per design).
-                            source: Theme.is-light
-                                ? @image-url("../assets/brand-head.png")
-                                : @image-url("../assets/brand-head-light.png");
-                            width: 22px;
-                            height: 22px;
-                            image-fit: contain;
-                            vertical-alignment: center;
-                        }
+                        BrandHeaderMark { mark-size: 22px; }
                         Text {
                             text: "::";
-                            font-size: 14px;
+                            font-family: Theme.font-mono;
+                            font-size: 13px;
                             font-weight: 700;
-                            color: Theme.accent;
+                            color: Theme.text-muted;
                             vertical-alignment: center;
                         }
                         Text {
-                            text: @tr("Help — icons, hotkeys & gestures");
+                            text: "Справка - иконки, хоткеи и жесты";
                             font-size: 15px;
                             font-weight: 700;
                             color: Theme.text-primary;
@@ -110,128 +214,81 @@ export component HelpWindow inherits Window {
                 }
                 Button {
                     text: "X";
-                    clicked => {
-                        root.cancelled();
-                    }
+                    clicked => { root.cancelled(); }
                 }
             }
 
-            // Under-header divider — same as Settings.
             Rectangle { background: Theme.border; height: 1px; }
 
             ScrollView {
                 VerticalLayout {
-                    spacing: 3px;
+                    spacing: 0px;
 
-                    // ---- Bar icons ----
                     Text {
-                        text: @tr("Bar icons");
+                        text: "Иконки бара";
                         font-weight: 700;
-                        font-size: Metrics.font-body;   // was 12px
+                        font-size: Metrics.font-body;
                         color: Theme.accent;
                     }
-                    // Icon column uses the SAME design-system SVGs as the bar
-                    // (skia-safe, colorized) so the help mirrors the live bar
-                    // exactly. `hasicon` rows show the SVG (+ optional word for
-                    // ask/grab); the cost row shows a "$0.000" text sample.
+                    Rectangle { height: 8px; }
+                    TableHeader { left: "Иконка"; right: "Что делает"; }
                     for row in [
-                        { ico: @image-url("../assets/icons/grip.svg"), hasicon: true, glyph: "", desc: @tr("Drag to move the bar; shows the live state") },
-                        { ico: @image-url("../assets/icons/mic.svg"), hasicon: true, glyph: "", desc: @tr("Toggle continuous mic capture (your voice)") },
-                        { ico: @image-url("../assets/icons/speaker.svg"), hasicon: true, glyph: "", desc: @tr("Toggle continuous system-audio capture (the other side)") },
-                        { ico: @image-url("../assets/icons/mic.svg"), hasicon: true, glyph: @tr("ask"), desc: @tr("Hold to record your voice → AI answer (swipe up to lock)") },
-                        { ico: @image-url("../assets/icons/speaker.svg"), hasicon: true, glyph: @tr("grab"), desc: @tr("Hold to capture system audio → AI answer (swipe up to lock)") },
-                        { ico: @image-url("../assets/icons/play.svg"), hasicon: true, glyph: "", desc: @tr("Start / stop the live session (transcript + auto-tips)") },
-                        { ico: @image-url("../assets/icons/x.svg"), hasicon: false, glyph: "$0.000", desc: @tr("Session cost (cloud only; local is free)") },
-                        { ico: @image-url("../assets/icons/stealth.svg"), hasicon: true, glyph: "", desc: @tr("Stealth: hide the overlay from screen capture / share") },
-                        { ico: @image-url("../assets/icons/flame.svg"), hasicon: true, glyph: "", desc: @tr("Aggressive auto-tiles (answer more often)") },
-                        { ico: @image-url("../assets/icons/pencil.svg"), hasicon: true, glyph: "", desc: @tr("Write a question as text") },
-                        { ico: @image-url("../assets/icons/plus.svg"), hasicon: true, glyph: "", desc: @tr("New tile from the last line / a manual question") },
-                        { ico: @image-url("../assets/icons/camera.svg"), hasicon: true, glyph: "", desc: @tr("Screenshot a region → AI vision answer") },
-                        { ico: @image-url("../assets/icons/gear.svg"), hasicon: true, glyph: "", desc: @tr("Settings") },
-                        { ico: @image-url("../assets/icons/sos.svg"), hasicon: true, glyph: "", desc: @tr("This help (also F1)") },
-                        { ico: @image-url("../assets/icons/restart.svg"), hasicon: true, glyph: "", desc: @tr("Restart the overlay (two-step; settings survive)") },
-                        { ico: @image-url("../assets/icons/x.svg"), hasicon: true, glyph: "", desc: @tr("Quit (two-step)") },
-                    ] : HorizontalLayout {
-                        padding: 3px;                // small inset; no exact token (space-xs=4)
-                        spacing: Metrics.space-md;   // was 12px
-                        HorizontalLayout {
-                            width: 86px;
-                            spacing: 5px;
-                            alignment: start;
-                            if row.hasicon : Image {
-                                source: row.ico;
-                                colorize: Theme.text-primary;
-                                width: 15px;
-                                height: 15px;
-                                image-fit: contain;
-                                vertical-alignment: center;
-                            }
-                            if row.glyph != "" : Text {
-                                text: row.glyph;
-                                font-family: Theme.font-mono;
-                                font-size: Metrics.font-body;   // was 12px
-                                color: Theme.text-primary;
-                                vertical-alignment: center;
-                            }
-                        }
-                        Text {
-                            text: row.desc;
-                            font-size: Metrics.font-body;   // was 12px
-                            color: Theme.text-secondary;
-                            wrap: word-wrap;
-                            horizontal-stretch: 1;
-                        }
+                        { ico: @image-url("../assets/icons/grip.svg"), hasicon: true, glyph: "", desc: "Перетащить = двигать бар; показывает состояние" },
+                        { ico: @image-url("../assets/icons/mic.svg"), hasicon: true, glyph: "", desc: "Постоянный захват микрофона (твой голос)" },
+                        { ico: @image-url("../assets/icons/speaker.svg"), hasicon: true, glyph: "", desc: "Постоянный захват системного звука (собеседник)" },
+                        { ico: @image-url("../assets/icons/mic.svg"), hasicon: true, glyph: "спросить", desc: "Удержание = запись голоса -> ответ AI (свайп вверх = lock)" },
+                        { ico: @image-url("../assets/icons/speaker.svg"), hasicon: true, glyph: "захватить", desc: "Удержание = запись системного звука -> ответ AI (свайп вверх = lock)" },
+                        { ico: @image-url("../assets/icons/play.svg"), hasicon: true, glyph: "", desc: "Старт/стоп живой сессии (распознавание + авто-подсказки)" },
+                        { ico: @image-url("../assets/icons/x.svg"), hasicon: false, glyph: "$0.000", desc: "Стоимость сессии (только cloud; локально бесплатно)" },
+                        { ico: @image-url("../assets/icons/stealth.svg"), hasicon: true, glyph: "", desc: "Stealth: скрыть overlay от захвата/шеринга экрана" },
+                        { ico: @image-url("../assets/icons/flame.svg"), hasicon: true, glyph: "", desc: "Агрессивные авто-тайлы (отвечать чаще)" },
+                        { ico: @image-url("../assets/icons/pencil.svg"), hasicon: true, glyph: "", desc: "Написать вопрос текстом" },
+                        { ico: @image-url("../assets/icons/plus.svg"), hasicon: true, glyph: "", desc: "Новый тайл из последней строки / ручной вопрос" },
+                        { ico: @image-url("../assets/icons/camera.svg"), hasicon: true, glyph: "", desc: "Скриншот области -> ответ vision-AI" },
+                        { ico: @image-url("../assets/icons/gear.svg"), hasicon: true, glyph: "", desc: "Настройки" },
+                        { ico: @image-url("../assets/icons/sos.svg"), hasicon: true, glyph: "", desc: "Эта справка (также F1)" },
+                        { ico: @image-url("../assets/icons/restart.svg"), hasicon: true, glyph: "", desc: "Перезапуск overlay (в 2 шага; настройки сохраняются)" },
+                        { ico: @image-url("../assets/icons/x.svg"), hasicon: true, glyph: "", desc: "Выход (в 2 шага)" },
+                    ] : TableRow {
+                        icon: row.ico;
+                        has-icon: row.hasicon;
+                        glyph: row.glyph;
+                        desc: row.desc;
                     }
 
-                    Rectangle { height: Metrics.space-sm; }   // was 8px (section spacer)
-
-                    // ---- Hotkeys (msgids reused from Settings → ⌨ Hotkeys) ----
+                    Rectangle { height: 18px; }
                     Text {
-                        text: @tr("Hotkeys");
+                        text: "Хоткеи";
                         font-weight: 700;
-                        font-size: Metrics.font-body;   // was 12px
+                        font-size: Metrics.font-body;
                         color: Theme.accent;
                     }
+                    Rectangle { height: 8px; }
+                    TableHeader { left: "Клавиша"; right: "Действие"; }
                     for row in [
-                        ["F1", @tr("This help")],
-                        ["F9", @tr("Ask AI now (streams the answer into a tile)")],
-                        ["Shift+F9", @tr("Ask AI escalated to the smart cloud model (one-shot; tile shows a 🧠 badge)")],
-                        ["F8", @tr("Screenshot → AI vision (drag a region; Esc cancels)")],
-                        ["F3", @tr("Re-ask the last question with fresh context")],
-                        ["F4", @tr("Knowledge-base palette (open / close)")],
-                        ["F6", @tr("Manual tile from the last transcript line")],
-                    ] : HorizontalLayout {
-                        padding: 3px;                // small inset; no exact token (space-xs=4)
-                        spacing: Metrics.space-md;   // was 12px
-                        Text {
-                            text: row[0];
-                            font-family: Theme.font-mono;
-                            font-size: Metrics.font-body;   // was 12px
-                            font-weight: 700;
-                            color: Theme.accent;
-                            width: 86px;
-                        }
-                        Text {
-                            text: row[1];
-                            font-size: Metrics.font-body;   // was 12px
-                            color: Theme.text-secondary;
-                            wrap: word-wrap;
-                            horizontal-stretch: 1;
-                        }
+                        ["F1", "Эта справка"],
+                        ["F9", "Спросить AI сейчас (ответ стримится в тайл)"],
+                        ["Shift+F9", "Спросить AI с эскалацией к умной cloud-модели (разово)"],
+                        ["F8", "Скриншот -> Vision-AI (выделите область; Esc - отмена)"],
+                        ["F3", "Повторить последний вопрос со свежим контекстом"],
+                        ["F4", "Палитра базы знаний (открыть / закрыть)"],
+                        ["F6", "Ручной тайл из последней строки транскрипта"],
+                    ] : TableRow {
+                        key-row: true;
+                        glyph: row[0];
+                        desc: row[1];
                     }
 
-                    Rectangle { height: Metrics.space-sm; }   // was 8px (section spacer)
-
-                    // ---- Record gestures ----
+                    Rectangle { height: 18px; }
                     Text {
                         text: @tr("Record gestures");
                         font-weight: 700;
-                        font-size: Metrics.font-body;   // was 12px
+                        font-size: Metrics.font-body;
                         color: Theme.accent;
                     }
                     Text {
-                        text: @tr("Hold a record button to record, release to send. While holding, swipe up to LOCK (hands-free) — releasing keeps recording; click ⏹ to stop + send. Works on the bar (🎤/🔊) and on a tile's 🎤.");
-                        font-size: Metrics.font-label;   // was 11px
+                        text: @tr("Hold a record button to record, release to send. While holding, swipe up to lock; releasing keeps recording. Click stop to send.");
+                        font-size: Metrics.font-label;
                         color: Theme.text-secondary;
                         wrap: word-wrap;
                     }
@@ -239,14 +296,11 @@ export component HelpWindow inherits Window {
             }
         }
 
-        // ---- Square 1px frame, matching Settings' bordered card (обводка) ----
-        // A bare Rectangle captures no pointer events, so the X button, the
-        // scrollbar and the drag handle all keep working underneath it.
         Rectangle {
             width: parent.width;
             height: parent.height;
             background: transparent;
-            border-width: Metrics.border-thin;   // was 1px
+            border-width: Metrics.border-thin;
             border-color: Theme.border;
         }
     }

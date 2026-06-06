@@ -69,8 +69,8 @@ pub(crate) fn fire_ptt_ask(
 ) {
     let (source, pcm) = recording;
     let icon = match source {
-        audio::AudioSource::Mic => "🎤",
-        audio::AudioSource::System => "🔊",
+        audio::AudioSource::Mic => "mic",
+        audio::AudioSource::System => "sys",
     };
 
     // Ignore trivially short holds (<~0.3 s @ 16 kHz mono = 4800 samples).

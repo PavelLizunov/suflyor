@@ -180,9 +180,9 @@ pub(crate) fn format_convo_copy(messages: &[ai::ChatMessage], rendered: &str) ->
             out.push_str("\n\n");
         }
         out.push_str(if *role == "assistant" {
-            "🤖 "
+            "Assistant: "
         } else {
-            "🧑 "
+            "You: "
         });
         out.push_str(display.trim());
     }
@@ -192,8 +192,8 @@ pub(crate) fn format_convo_copy(messages: &[ai::ChatMessage], rendered: &str) ->
     out
 }
 
-/// V0.8.3 — wire a tile's 📋 copy button: write the answer text to the Windows
-/// clipboard and flash the ✅ feedback glyph for ~1.5 s. Called for every
+/// V0.8.3 — wire a tile's copy button: write the answer text to the Windows
+/// clipboard and flash feedback for ~1.5 s. Called for every
 /// conversational tile (those with a `convo_id`). Copy is purely local — no
 /// network egress — so it stays safe under screen-share / stealth.
 pub(crate) fn wire_copy(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayBarBridge>) {
@@ -352,7 +352,7 @@ mod copy_tests {
         let out = format_convo_copy(&msgs, "RENDERED");
         assert_eq!(
             out,
-            "🧑 вопрос 1\n\n🤖 ответ 1\n\n🧑 вопрос 2\n\n🤖 ответ 2"
+            "You: вопрос 1\n\nAssistant: ответ 1\n\nYou: вопрос 2\n\nAssistant: ответ 2"
         );
         // The raw Mic/System transcript must never reach the clipboard.
         assert!(!out.contains("СОБЕСЕДНИК"));
@@ -369,7 +369,7 @@ mod copy_tests {
         let out = format_convo_copy(&msgs, "RENDERED");
         assert_eq!(
             out,
-            "🤖 на экране код\n\n🧑 а на каком языке?\n\n🤖 на Rust"
+            "Assistant: на экране код\n\nYou: а на каком языке?\n\nAssistant: на Rust"
         );
     }
 

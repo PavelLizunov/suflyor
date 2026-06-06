@@ -257,7 +257,7 @@ pub(crate) fn wire_voice_followup(
         *voice_stop.borrow_mut() = Some(stop.clone());
         spawn_ptt_watchdog(stop.clone());
         t.set_voice_recording(true);
-        t.set_source_label(SharedString::from("🎤 запись… (нажми ⏹)"));
+        t.set_source_label(SharedString::from("recording... (click stop)"));
         // V0.8.1 — snapshot the LIVE route NOW (UI thread, click time) into a
         // plain Copy value; the worker thread can't hold the !Send Rc<Cell>. So
         // a 🎤 follow-up after 🧠-escalation correctly routes to Cloud.
@@ -342,7 +342,7 @@ pub(crate) fn wire_escalate(
         // answer now came off-box — parity with the Shift+F9 🧠 badge. Egress is
         // a conscious action (the user clicked 🧠); this just makes it legible.
         if let Some(t) = weak.upgrade() {
-            t.set_trigger_label(SharedString::from("🧠 cloud (escalated)"));
+            t.set_trigger_label(SharedString::from("cloud (escalated)"));
             t.set_trigger_color(slint::Color::from_rgb_u8(0x38, 0xbd, 0xf8));
         }
         fire_regenerate(
@@ -429,7 +429,7 @@ pub(crate) fn fire_followup_ask(
 
     // Visible thread = prior thread + the new question header; the streamed
     // answer renders after this prefix.
-    let prefix = format!("{prior_rendered}\n\n---\n\n**🧑 {question}**\n\n");
+    let prefix = format!("{prior_rendered}\n\n---\n\n**You: {question}**\n\n");
 
     // Show the question immediately + mark busy; register the slot so the
     // ai:event deltas land in this tile.

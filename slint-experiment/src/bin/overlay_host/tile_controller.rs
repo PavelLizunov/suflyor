@@ -299,9 +299,9 @@ impl RuntimeEvents for PttStreamSink {
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(t) = weak.upgrade() {
                         t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&format!(
-                            "⚠ AI error: {safe}"
+                            "AI error: {safe}"
                         )))));
-                        t.set_source_label(SharedString::from("⚠ error"));
+                        t.set_source_label(SharedString::from("error"));
                         t.set_followup_busy(false);
                     }
                 });
@@ -591,14 +591,14 @@ impl OverlayBarBridge {
                     // Keep any prior thread; append the error below it so a
                     // follow-up failure doesn't wipe the conversation.
                     let body = if stream.prefix.is_empty() {
-                        format!("⚠ AI error: {safe}")
+                        format!("AI error: {safe}")
                     } else {
-                        format!("{}\n\n⚠ AI error: {safe}", stream.prefix)
+                        format!("{}\n\nAI error: {safe}", stream.prefix)
                     };
                     let _ = slint::invoke_from_event_loop(move || {
                         if let Some(tile) = weak.upgrade() {
                             tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&body))));
-                            tile.set_source_label(SharedString::from("⚠ error"));
+                            tile.set_source_label(SharedString::from("error"));
                             tile.set_followup_busy(false);
                         }
                     });
@@ -793,14 +793,14 @@ impl SlintUiBridge for OverlayBarBridge {
                     // reported pain). The marker is set/cleared only by this arm,
                     // so we restore the session pill on recovery without
                     // clobbering session:started/stopped's own text.
-                    const AI_DOWN_MARK: &str = "⚠ AI недоступен";
+                    const AI_DOWN_MARK: &str = "AI недоступен";
                     let cur = o.get_status_text();
                     // v0.8.2 (C1 fix) — only SET the mark while a session is
                     // active (timer_active). Without this guard a stale
                     // health:update{ai:down} that the aborted emitter queued just
                     // before stop_session could land AFTER session:stopped set
                     // "idle"; with the emitter now dead nothing would ever clear
-                    // it, stranding the bar on "⚠ AI недоступен" over an idle
+                    // it, stranding the bar on "AI недоступен" over an idle
                     // session — exactly when the user stops to go fix the bridge.
                     // The clear branch stays unguarded so it can still tidy up.
                     if ai_down && o.get_timer_active() {

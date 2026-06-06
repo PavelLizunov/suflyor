@@ -23,7 +23,7 @@ export component TileWindow inherits Window {
     init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     title: "tile";
-    icon: @image-url("../assets/icon.png");
+    icon: @image-url("../assets/icon.svg");
     background: transparent;
     no-frame: true;
     always-on-top: true;
@@ -66,8 +66,8 @@ export component TileWindow inherits Window {
     // the same question on the cloud model (deeper reasoning) when the local
     // answer was too weak — one-shot, without changing the default provider.
     in-out property <bool> can-escalate: false;
-    // V0.8.3 — 📋 copy the answer to the clipboard. `can-copy` shows the button
-    // (set on conversational tiles); `copied` briefly flips the glyph to ✅.
+    // V0.8.3 — copy the answer to the clipboard. `can-copy` shows the button
+    // (set on conversational tiles); `copied` briefly flips to a check icon.
     in-out property <bool> can-copy: false;
     in-out property <bool> copied: false;
     // Bound to the follow-up LineEdit so do-submit() can read + clear it.
@@ -80,7 +80,7 @@ export component TileWindow inherits Window {
     callback regenerate-clicked();
     // V0.8.0 (Поток D) — re-run the same question on the smart cloud model.
     callback escalate-clicked();
-    // V0.8.3 — copy the answer text to the clipboard (Rust writes + flashes ✅).
+    // V0.8.3 — copy the answer text to the clipboard (Rust flashes a check icon).
     callback copy-clicked();
     // Phase E6 v22 — manual cursor-delta drag. drag-start-requested
     // fires on pointer-down (records anchor), drag-moved fires on
@@ -130,7 +130,7 @@ export component TileWindow inherits Window {
             // internal TouchArea is the only one in the click path.
             HorizontalLayout {
                 spacing: 6px;
-                height: 28px;
+                height: 30px;
                 // Title + drag-handle area — stretches to fill
                 // remaining width on the LEFT of the source-label +
                 // buttons cluster. TouchArea covers ONLY this area
@@ -194,42 +194,47 @@ export component TileWindow inherits Window {
                 // функционала развернуть, нужно отдельной кнопкой
                 // или даб-кликом". Win32 SetWindowPos resizes window
                 // 460x360 → 800x600 (toggle).
-                // V0.8.3 — 📋 copy the answer text to the clipboard (→ ✅ on
-                // success). Shown on conversational tiles (can-copy).
+                // V0.8.3 — copy the answer text to the clipboard.
+                // Shown on conversational tiles (can-copy).
                 if root.can-copy: Rectangle {
-                    width: 28px;
-                    height: 28px;
+                    width: 30px;
+                    height: 30px;
                     background: copy-touch.has-hover ? Theme.border-strong : Theme.border;
-                    border-radius: 4px;
+                    border-radius: 6px;
                     border-width: 1px;
                     border-color: Theme.border-strong;
                     copy-touch := TouchArea {
                         clicked => { root.copy-clicked(); }
                     }
-                    Text {
-                        text: root.copied ? "✅" : "📋";
-                        font-size: 12px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                    Image {
+                        source: root.copied
+                            ? @image-url("../assets/icons/check.svg")
+                            : @image-url("../assets/icons/copy.svg");
+                        colorize: root.copied ? Theme.success : Theme.text-secondary;
+                        width: 16px;
+                        height: 16px;
+                        image-fit: contain;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
                     }
                 }
                 // V5 — 🔄 regenerate (only on tiles that support it, e.g. F8
                 // vision). Re-runs the last request for a longer / different answer.
                 if root.can-regenerate: Rectangle {
-                    width: 28px;
-                    height: 28px;
+                    width: 30px;
+                    height: 30px;
                     background: regen-touch.has-hover ? Theme.border-strong : Theme.border;
-                    border-radius: 4px;
+                    border-radius: 6px;
                     border-width: 1px;
                     border-color: Theme.border-strong;
                     regen-touch := TouchArea {
                         clicked => { if (!root.followup-busy) { root.regenerate-clicked(); } }
                     }
                     Image {
-                        source: @image-url("../assets/icons/restart.svg");
-                        colorize: Theme.text-secondary;
-                        width: 15px;
-                        height: 15px;
+                        source: @image-url("../assets/icons/refresh.svg");
+                        colorize: root.followup-busy ? Theme.text-muted : Theme.text-secondary;
+                        width: 16px;
+                        height: 16px;
                         image-fit: contain;
                         x: (parent.width - self.width) / 2;
                         y: (parent.height - self.height) / 2;
@@ -238,10 +243,10 @@ export component TileWindow inherits Window {
                 // V0.8.0 (Поток D) — 🧠 escalate this answer to the smart cloud
                 // model (one-shot). Shown when the answer came from local AI.
                 if root.can-escalate: Rectangle {
-                    width: 28px;
-                    height: 28px;
+                    width: 30px;
+                    height: 30px;
                     background: esc-touch.has-hover ? Theme.border-strong : Theme.border;
-                    border-radius: 4px;
+                    border-radius: 6px;
                     border-width: 1px;
                     border-color: Theme.border-strong;
                     esc-touch := TouchArea {
@@ -250,37 +255,40 @@ export component TileWindow inherits Window {
                     Image {
                         source: @image-url("../assets/icons/brain.svg");
                         colorize: Theme.accent;
-                        width: 15px;
-                        height: 15px;
+                        width: 16px;
+                        height: 16px;
                         image-fit: contain;
                         x: (parent.width - self.width) / 2;
                         y: (parent.height - self.height) / 2;
                     }
                 }
                 Rectangle {
-                    width: 28px;
-                    height: 28px;
+                    width: 30px;
+                    height: 30px;
                     background: max-touch.has-hover ? Theme.border-strong : Theme.border;
-                    border-radius: 4px;
+                    border-radius: 6px;
                     border-width: 1px;
                     border-color: Theme.border-strong;
                     max-touch := TouchArea {
                         clicked => { root.maximize-clicked(); }
                     }
-                    Text {
-                        text: root.maximized ? "▢" : "□";
-                        font-size: 13px;
-                        font-weight: 700;
-                        color: Theme.text-primary;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                    Image {
+                        source: root.maximized
+                            ? @image-url("../assets/icons/restore.svg")
+                            : @image-url("../assets/icons/maximize.svg");
+                        colorize: Theme.text-primary;
+                        width: 16px;
+                        height: 16px;
+                        image-fit: contain;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
                     }
                 }
                 Rectangle {
-                    width: 28px;
-                    height: 28px;
+                    width: 30px;
+                    height: 30px;
                     background: close-touch.has-hover ? #5a2a2a : Theme.border;
-                    border-radius: 4px;
+                    border-radius: 6px;
                     border-width: 1px;
                     border-color: Theme.border-strong;
                     close-touch := TouchArea {
@@ -289,8 +297,8 @@ export component TileWindow inherits Window {
                     Image {
                         source: @image-url("../assets/icons/x.svg");
                         colorize: Theme.text-primary;
-                        width: 15px;
-                        height: 15px;
+                        width: 16px;
+                        height: 16px;
                         image-fit: contain;
                         x: (parent.width - self.width) / 2;
                         y: (parent.height - self.height) / 2;
@@ -421,7 +429,7 @@ export component TileWindow inherits Window {
                                 // Code keeps no-wrap so commands / YAML / JSON
                                 // don't reflow and lose meaning; long lines
                                 // clip at the box edge (clip:true) — maximize
-                                // the tile (□) to read them in full.
+                                // the tile (maximize button) to read them in full.
                                 Text {
                                     text: block.text;
                                     font-size: 11px;
@@ -439,7 +447,7 @@ export component TileWindow inherits Window {
                         // Table (kind 7) — aligned monospace block (#109).
                         // no-wrap preserves column alignment; very wide
                         // tables clip on the right rather than scrambling
-                        // (maximize the tile with □ to see them in full).
+                        // (maximize the tile to see them in full).
                         if block.kind == 7 : Rectangle {
                             background: Theme.code-bg;
                             border-radius: 4px;
@@ -498,8 +506,8 @@ export component TileWindow inherits Window {
                             voicebtn.v-locked = false;
                         }
                     }
-                    // Idle = mic icon · ↑ while holding (swipe up to lock) · ⏹
-                    // once locked (click to stop) — parity with the bar chip.
+                    // Idle = mic icon; recording states use SVG stop / arrow-up
+                    // icons for font-independent rendering.
                     if !root.voice-recording && !voicebtn.v-locked : Image {
                         source: @image-url("../assets/icons/mic.svg");
                         colorize: Theme.text-secondary;
@@ -509,12 +517,16 @@ export component TileWindow inherits Window {
                         x: (parent.width - self.width) / 2;
                         y: (parent.height - self.height) / 2;
                     }
-                    if root.voice-recording || voicebtn.v-locked : Text {
-                        text: voicebtn.v-locked ? "⏹" : "↑";
-                        font-size: 13px;
-                        color: voicebtn.v-locked ? Theme.danger : Theme.warning;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                    if root.voice-recording || voicebtn.v-locked : Image {
+                        source: voicebtn.v-locked
+                            ? @image-url("../assets/icons/stop.svg")
+                            : @image-url("../assets/icons/arrow-up.svg");
+                        colorize: voicebtn.v-locked ? Theme.danger : Theme.warning;
+                        width: 15px;
+                        height: 15px;
+                        image-fit: contain;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
                     }
                     vtouch := TouchArea {
                         mouse-cursor: pointer;

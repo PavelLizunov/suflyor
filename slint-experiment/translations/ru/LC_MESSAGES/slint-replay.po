@@ -227,8 +227,8 @@ msgstr "Глобальные хоткеи (работают везде, даже
 msgid "Ask AI now (streams the answer into a tile)"
 msgstr "Спросить AI сейчас (ответ стримится в тайл)"
 
-msgid "Ask AI escalated to the smart cloud model (one-shot; tile shows a 🧠 badge)"
-msgstr "Спросить AI с эскалацией к умной облачной модели (разово; на тайле значок 🧠)"
+msgid "Ask AI escalated to the smart cloud model (one-shot; tile shows a cloud badge)"
+msgstr "Спросить AI с эскалацией к умной облачной модели (разово; на тайле облачный значок)"
 
 msgid "Screenshot → AI vision (drag a region; Esc cancels)"
 msgstr "Скриншот → Vision-AI (выделите область; Esc — отмена)"
@@ -867,8 +867,8 @@ msgstr "Эта справка"
 msgid "Record gestures"
 msgstr "Жесты записи"
 
-msgid "Hold a record button to record, release to send. While holding, swipe up to LOCK (hands-free) — releasing keeps recording; click ⏹ to stop + send. Works on the bar (🎤/🔊) and on a tile's 🎤."
-msgstr "Удержание кнопки записи = запись, отпустил = отправка. Во время удержания свайп вверх = ЛОК (хендс-фри) — отпускание не останавливает; клик ⏹ = стоп + отправка. Работает на баре (🎤/🔊) и в тайле (🎤)."
+msgid "Hold a record button to record, release to send. While holding, swipe up to lock; releasing keeps recording. Click stop to send."
+msgstr "Удержание кнопки записи = запись, отпустил = отправка. Во время удержания свайп вверх = лок: отпускание не останавливает. Клик «стоп» = отправка."
 
 # === recover_offer.slint (Memory Phase 1 — crash recovery) ===
 

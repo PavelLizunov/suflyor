@@ -14,6 +14,47 @@ import { Theme } from "theme.slint";
 
 // ===== Reusable chip primitives =====
 
+component IconSlot inherits Rectangle {
+    in property <image> icon;
+    in property <color> tint: Theme.text-secondary;
+    in property <length> glyph-size: 14px;
+    in property <length> slot-width: 14px;
+    in property <length> slot-height: 22px;
+    width: slot-width;
+    height: slot-height;
+    horizontal-stretch: 0;
+
+    Image {
+        source: root.icon;
+        colorize: root.tint;
+        width: root.glyph-size;
+        height: root.glyph-size;
+        image-fit: contain;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+}
+
+component BrandStateMark inherits Rectangle {
+    in property <bool> assistant-active: false;
+    in property <length> mark-size: 22px;
+    width: mark-size;
+    height: mark-size;
+    horizontal-stretch: 0;
+
+    Image {
+        source: root.assistant-active
+            ? @image-url("../assets/brand-penguin.svg")
+            : @image-url("../assets/brand-head.svg");
+        colorize: Theme.is-light ? #111827 : #ffffff;
+        width: root.mark-size;
+        height: root.mark-size;
+        image-fit: contain;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+}
+
 // Generic chip: rounded background + 1px border + small label, with
 // an optional active state for the colored variant.
 component Chip inherits Rectangle {
@@ -45,13 +86,12 @@ component Chip inherits Rectangle {
         padding-right: 8px;
         spacing: 4px;
         alignment: center;
-        if root.has-icon : Image {
-            source: root.icon;
-            colorize: active ? accent : Theme.text-secondary;
-            width: 14px;
-            height: 14px;
-            image-fit: contain;
-            vertical-alignment: center;
+        if root.has-icon : IconSlot {
+            icon: root.icon;
+            tint: active ? accent : Theme.text-secondary;
+            glyph-size: 14px;
+            slot-width: 14px;
+            slot-height: 22px;
         }
         if root.label != "" : Text {
             text: label;
@@ -98,13 +138,12 @@ component LiveChip inherits Rectangle {
             background: active ? accent : Theme.border-strong;
             y: (parent.height - self.height) / 2;
         }
-        if root.has-icon : Image {
-            source: root.icon;
-            colorize: active ? accent : Theme.text-secondary;
-            width: 14px;
-            height: 14px;
-            image-fit: contain;
-            vertical-alignment: center;
+        if root.has-icon : IconSlot {
+            icon: root.icon;
+            tint: active ? accent : Theme.text-secondary;
+            glyph-size: 14px;
+            slot-width: 14px;
+            slot-height: 22px;
         }
         if root.label != "" : Text {
             text: label;
@@ -182,13 +221,12 @@ component RecordBtn inherits Rectangle {
             border-width: root.recording ? 0px : 1px;
             border-color: root.accent;
         }
-        if root.has-icon : Image {
-            source: root.icon;
-            colorize: root.recording ? Theme.danger : Theme.text-secondary;
-            width: 14px;
-            height: 14px;
-            image-fit: contain;
-            vertical-alignment: center;
+        if root.has-icon : IconSlot {
+            icon: root.icon;
+            tint: root.recording ? Theme.danger : Theme.text-secondary;
+            glyph-size: 14px;
+            slot-width: 14px;
+            slot-height: 22px;
         }
         Text {
             text: root.label;
@@ -196,12 +234,14 @@ component RecordBtn inherits Rectangle {
             color: root.recording ? Theme.danger : Theme.text-secondary;
             vertical-alignment: center;
         }
-        // Hint: "↑" while held (swipe up to lock); "⏹" once locked (click to stop).
-        Text {
-            text: root.locked ? "⏹" : (root.recording ? "↑" : "");
-            font-size: 10px;
-            color: Theme.danger;
-            vertical-alignment: center;
+        if root.recording : IconSlot {
+            icon: root.locked
+                ? @image-url("../assets/icons/stop.svg")
+                : @image-url("../assets/icons/arrow-up.svg");
+            tint: root.locked ? Theme.danger : Theme.warning;
+            glyph-size: 12px;
+            slot-width: 12px;
+            slot-height: 22px;
         }
     }
     TouchArea {
@@ -261,7 +301,7 @@ export component OverlayBarWindow inherits Window {
     init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     title: "overlay-mvp (Slint)";
-    icon: @image-url("../assets/icon.png");
+    icon: @image-url("../assets/icon.svg");
     background: transparent;
     no-frame: true;
     always-on-top: true;
@@ -424,37 +464,6 @@ export component OverlayBarWindow inherits Window {
             spacing: 6px;
             alignment: start;
 
-            // Brand "head" mark (headphones = the candidate) — far-left, DOUBLES
-            // AS A DRAG HANDLE (user: "иконка должна быть областью за которую
-            // можно таскать приложение"). Per the design logo-sizing sheet:
-            // 24px (= chip height), clear-space 6px (the row spacing), and NOT
-            // colorized — colorize flattens the illustration's detail. Asset is
-            // theme-picked: brand-head-light (white) on the dark schemes, the
-            // plain black brand-head on Light Frost.
-            Rectangle {
-                width: 24px;
-                height: 24px;
-                horizontal-stretch: 0;
-                TouchArea {
-                    mouse-cursor: grab;
-                    pointer-event(ev) => {
-                        if (ev.button == PointerEventButton.left
-                            && ev.kind == PointerEventKind.down) {
-                            root.drag-start-requested();
-                        }
-                    }
-                    moved => { if (self.pressed) { root.drag-moved(); } }
-                }
-                Image {
-                    source: Theme.is-light
-                        ? @image-url("../assets/brand-head.png")
-                        : @image-url("../assets/brand-head-light.png");
-                    width: 24px;
-                    height: 24px;
-                    image-fit: contain;
-                }
-            }
-
             // Status pill (left edge) — DOUBLES AS DRAG HANDLE.
             // It has no click action of its own, so a pointer-event
             // TouchArea here is safe: its bbox is only the pill, so
@@ -480,21 +489,24 @@ export component OverlayBarWindow inherits Window {
                     }
                 }
                 HorizontalLayout {
-                    padding-left: 8px;
+                    padding-left: 4px;
                     padding-right: 8px;
-                    spacing: 0px;
+                    spacing: 4px;
+                    BrandStateMark {
+                        assistant-active: root.ai-streaming;
+                        mark-size: 22px;
+                    }
                     // Grip — drag affordance (accent). Design-system 6-dot
                     // grip icon (skia-safe) in place of the "::" text.
-                    Image {
-                        source: @image-url("../assets/icons/grip.svg");
-                        colorize: Theme.accent;
-                        width: 12px;
-                        height: 12px;
-                        image-fit: contain;
-                        vertical-alignment: center;
+                    IconSlot {
+                        icon: @image-url("../assets/icons/grip.svg");
+                        tint: Theme.accent;
+                        glyph-size: 12px;
+                        slot-width: 12px;
+                        slot-height: 22px;
                     }
                     Text {
-                        text: " " + root.status-text;
+                        text: root.status-text;
                         font-size: 11px;
                         font-weight: 600;
                         color: root.status-color;

@@ -330,7 +330,7 @@ mod tests {
             session_id: "2026-06-03_10-00-00_test".to_string(),
             path: std::path::PathBuf::from("ignored.jsonl"),
             started_unix_ms: 0,
-            last_lines: vec!["🎤 привет".to_string(), "🔊 как дела".to_string()],
+            last_lines: vec!["mic: привет".to_string(), "sys: как дела".to_string()],
             last_qa: Some((
                 "что такое actor model".to_string(),
                 "модель акторов — это…".to_string(),

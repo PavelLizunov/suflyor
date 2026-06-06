@@ -230,14 +230,14 @@ pub fn render_event(ev: &serde_json::Value) -> (String, String) {
             (
                 "SUMMARY".to_string(),
                 format!(
-                    "{dur_min:.1} min · {lines} lines ({mic}🎤 · {sys}🗣) · detector: {trig}/{} · {tail} · ${cost:.4}",
+                    "{dur_min:.1} min · {lines} lines (mic {mic} · sys {sys}) · detector: {trig}/{} · {tail} · ${cost:.4}",
                     trig + skip
                 ),
             )
         }
         "transcript_line" => {
             let src = ev_str(ev, "source");
-            let icon = if src == "mic" { "🎤" } else { "🗣" };
+            let icon = if src == "mic" { "mic" } else { "sys" };
             // React renders transcript_line text FULL (no preview cap) so the
             // user can read complete utterances without scrolling into the
             // event JSON. Pilot does the same. Whitespace already normalized

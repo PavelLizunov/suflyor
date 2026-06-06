@@ -611,24 +611,24 @@ fn pretty_session_label(id: &str) -> String {
     }
 }
 
-/// Status → a single language-neutral glyph for the row title.
+/// Status → a compact language-neutral label for the row title.
 fn status_glyph(status: &str) -> &'static str {
     match status {
-        "completed" => "✓",
-        "crashed" => "⚠",
-        "active" => "●",
-        _ => "•",
+        "completed" => "done",
+        "crashed" => "crashed",
+        "active" => "active",
+        _ => "session",
     }
 }
 
 /// Map an indexed [`Session`] to an archive list row. Counts are emoji-coded
-/// (💬 transcript lines · 🤖 AI turns) so the row needs no per-language string;
+/// as plain text counts so the row needs no per-language string;
 /// the cost shows only when non-zero (local runs are $0 → blank).
 fn session_to_row(s: &Session) -> ArchiveRow {
     let label = pretty_session_label(&s.id);
     let model = s.ai_model.as_deref().unwrap_or("—");
     let subtitle = format!(
-        "💬 {} · 🤖 {} · {model}",
+        "lines {} · ai {} · {model}",
         s.transcript_lines, s.ai_turns_count
     );
     let meta = if s.total_cost_microcents > 0 {
@@ -646,13 +646,13 @@ fn session_to_row(s: &Session) -> ArchiveRow {
 
 /// Map an FTS [`SearchHit`] to an archive list row: the session label + a
 /// whitespace-collapsed, length-capped snippet of the matched body, tagged with
-/// the hit kind (❓ question · 💡 answer · 💬 utterance).
+/// the hit kind (question · answer · utterance).
 fn hit_to_row(h: &SearchHit) -> ArchiveRow {
     let label = pretty_session_label(&h.session_id);
     let kind_glyph = match h.kind.as_str() {
-        "question" => "❓",
-        "answer" => "💡",
-        _ => "💬",
+        "question" => "question",
+        "answer" => "answer",
+        _ => "line",
     };
     let snippet: String = h
         .body
@@ -664,15 +664,15 @@ fn hit_to_row(h: &SearchHit) -> ArchiveRow {
         .collect();
     ArchiveRow {
         id: SharedString::from(h.session_id.clone()),
-        title: SharedString::from(format!("🔎 {label}")),
+        title: SharedString::from(format!("search {label}")),
         subtitle: SharedString::from(snippet),
         meta: SharedString::from(kind_glyph),
     }
 }
 
 /// Render a session's content as the markdown body of a read-only tile:
-/// a heading (status + label + counts), the transcript (🎤 mic / 🗣 system),
-/// then the AI Q&A (❓ question / 💡 answer). Pure → unit-tested.
+/// a heading (status + label + counts), the transcript, then the AI Q&A.
+/// Pure → unit-tested.
 fn build_session_markdown(
     session: Option<&Session>,
     utterances: &[Utterance],
@@ -687,7 +687,7 @@ fn build_session_markdown(
         ));
         let model = s.ai_model.as_deref().unwrap_or("—");
         out.push_str(&format!(
-            "💬 {} · 🤖 {} · {model}",
+            "lines {} · ai {} · {model}",
             s.transcript_lines, s.ai_turns_count
         ));
         if s.total_cost_microcents > 0 {
@@ -699,17 +699,17 @@ fn build_session_markdown(
         out.push_str("\n\n");
     }
     for u in utterances {
-        let icon = if u.source == "mic" { "🎤" } else { "🗣" };
-        out.push_str(&format!("{icon} {}\n\n", u.text.trim()));
+        let label = if u.source == "mic" { "Mic" } else { "System" };
+        out.push_str(&format!("{label}: {}\n\n", u.text.trim()));
     }
     if !ai_turns.is_empty() {
         out.push_str("---\n\n");
         for t in ai_turns {
             if !t.question.trim().is_empty() {
-                out.push_str(&format!("❓ **{}**\n\n", t.question.trim()));
+                out.push_str(&format!("Question: **{}**\n\n", t.question.trim()));
             }
             if !t.answer.trim().is_empty() {
-                out.push_str(&format!("💡 {}\n\n", t.answer.trim()));
+                out.push_str(&format!("Answer: {}\n\n", t.answer.trim()));
             }
         }
     }
@@ -763,11 +763,11 @@ mod tests {
     }
 
     #[test]
-    fn session_row_is_emoji_coded() {
+    fn session_row_uses_plain_counts() {
         let row = session_to_row(&sample_session());
-        assert!(row.title.as_str().starts_with("✓ 2026-06-04 09:30:00"));
-        assert!(row.subtitle.as_str().contains("💬 12"));
-        assert!(row.subtitle.as_str().contains("🤖 3"));
+        assert!(row.title.as_str().starts_with("done 2026-06-04 09:30:00"));
+        assert!(row.subtitle.as_str().contains("lines 12"));
+        assert!(row.subtitle.as_str().contains("ai 3"));
         assert_eq!(row.meta.as_str(), ""); // zero cost → blank meta
     }
 
@@ -789,8 +789,8 @@ mod tests {
             rank: -1.0,
         };
         let row = hit_to_row(&h);
-        assert!(row.title.as_str().starts_with("🔎 2026-06-04 09:30:00"));
-        assert_eq!(row.meta.as_str(), "💡");
+        assert!(row.title.as_str().starts_with("search 2026-06-04 09:30:00"));
+        assert_eq!(row.meta.as_str(), "answer");
         assert_eq!(row.subtitle.as_str(), "a key value structure"); // whitespace collapsed
     }
 
@@ -813,9 +813,9 @@ mod tests {
             attached_screenshot: false,
         }];
         let md = build_session_markdown(None, &utts, &turns);
-        assert!(md.contains("🎤 hello there"));
-        assert!(md.contains("❓ **what is it?**"));
-        assert!(md.contains("💡 an answer."));
+        assert!(md.contains("Mic: hello there"));
+        assert!(md.contains("Question: **what is it?**"));
+        assert!(md.contains("Answer: an answer."));
     }
 
     #[test]
