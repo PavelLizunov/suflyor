@@ -17,7 +17,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
 use serde::Deserialize;
@@ -440,7 +440,13 @@ pub fn install(
         // don't report success on a wedged server.
         wait_ready(&format!("{LLAMA_BASE_URL}/models"), 120)
             .context("llama-server did not become ready")?;
-        verify_llama_ready().context("llama-server failed its readiness smoke")?;
+        // The tile shows {e} (this top-level context), so it must be actionable
+        // RU; the inner bail (with a reply snippet) only reaches the log via {e:#}.
+        verify_llama_ready(on).context(
+            "Локальная модель установилась, но не смогла запуститься на этом \
+             компьютере (не успела прогреться). Попробуйте переустановить, либо \
+             включите облачный AI в Настройках → AI.",
+        )?;
         if use_gpu {
             on_gpu = verify_gpu_offload(24);
             let verdict = if on_gpu {
@@ -988,7 +994,17 @@ fn wait_ready(url: &str, max_secs: u64) -> Result<()> {
 /// Beyond reachability: verify the llama server lists a model AND can actually
 /// generate. A reachable `/models` alone isn't enough — a wedged or broken
 /// model still answers `/models` but fails real requests. Audit P0.2.
-fn verify_llama_ready() -> Result<()> {
+///
+/// On a weak or virtualised machine the weights are still warming up after
+/// `/models` already answers: llama.cpp binds the port and serves `/models`
+/// long before the model finishes loading, returning HTTP 503 ("loading
+/// model") to a generation request until it's ready. We therefore POLL the
+/// 1-token smoke until a real reply OR a wall-clock budget is spent, and only
+/// fail once it's clear the server lists a model but never starts generating —
+/// so slow boxes succeed instead of hitting a false "readiness smoke" failure
+/// on the first 503. A heartbeat keeps the install status ticking so the wait
+/// doesn't look frozen. (v0.10.4)
+fn verify_llama_ready(on: &dyn Fn(Progress)) -> Result<()> {
     let models = run_capture(
         "curl.exe",
         &["-s", "--max-time", "5", &format!("{LLAMA_BASE_URL}/models")],
@@ -999,26 +1015,55 @@ fn verify_llama_ready() -> Result<()> {
     }
     // 1-token completion proves the model actually generates (llama.cpp server
     // accepts /chat/completions without a model field — uses the loaded one).
-    let smoke = run_capture(
-        "curl.exe",
-        &[
-            "-s",
-            "--max-time",
-            "30",
-            "-X",
-            "POST",
-            &format!("{LLAMA_BASE_URL}/chat/completions"),
-            "-H",
-            "Content-Type: application/json",
-            "-d",
-            r#"{"messages":[{"role":"user","content":"hi"}],"max_tokens":1}"#,
-        ],
-    )
-    .context("llama smoke completion")?;
-    if !String::from_utf8_lossy(&smoke.stdout).contains("choices") {
-        bail!("llama smoke completion failed (server answered /models but did not generate)");
+    // Poll until a "choices" reply OR the warm-up budget is spent. We bound the
+    // loop by a WALL-CLOCK deadline (not an attempt count) so a server that
+    // *hangs* each request — eating the full --max-time per try — can't stretch
+    // the wait far past the budget. Worst case ≈ budget + one curl timeout.
+    let start = Instant::now();
+    let budget = Duration::from_secs(240); // ~4 min warm-up on a slow/VM box
+                                           // Deferred init: the infinite loop always assigns `last` before any `break`,
+                                           // so an initial empty value would just be a dead store (-D unused-assignments).
+    let mut last;
+    loop {
+        let smoke = run_capture(
+            "curl.exe",
+            &[
+                "-s",
+                "--max-time",
+                "15",
+                "-X",
+                "POST",
+                &format!("{LLAMA_BASE_URL}/chat/completions"),
+                "-H",
+                "Content-Type: application/json",
+                "-d",
+                r#"{"messages":[{"role":"user","content":"hi"}],"max_tokens":1}"#,
+            ],
+        )
+        .context("llama smoke completion")?;
+        last = String::from_utf8_lossy(&smoke.stdout).trim().to_string();
+        if last.contains("choices") {
+            return Ok(()); // generated — the model is genuinely ready
+        }
+        let elapsed = start.elapsed();
+        if elapsed >= budget {
+            break;
+        }
+        // Not ready yet: a warming model replies 503 "loading"; an empty body
+        // means the request timed out before a reply. Tick the status (so the
+        // UI shows movement) + log it for the tester, then wait and retry.
+        let secs = elapsed.as_secs();
+        on(Progress::Step(format!(
+            "Waiting for the model to load… ({secs}s)"
+        )));
+        eprintln!("[local-ai] llama smoke not ready after {secs}s, retrying in 5s…");
+        std::thread::sleep(Duration::from_secs(5));
     }
-    Ok(())
+    // Keep a short, secret-free snippet of the last reply in the error chain so
+    // the LOG (printed with {e:#}) shows WHY. The tile shows the caller's
+    // actionable RU context, not this technical detail.
+    let snippet: String = last.chars().take(160).collect();
+    bail!("llama smoke completion never produced output within the warm-up budget (last reply: {snippet})");
 }
 
 // ---- process + fs helpers --------------------------------------------------
