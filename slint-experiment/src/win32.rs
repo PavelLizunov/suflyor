@@ -24,8 +24,8 @@
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Dwm::{
-    DwmEnableBlurBehindWindow, DwmExtendFrameIntoClientArea, DWM_BB_BLURREGION, DWM_BB_ENABLE,
-    DWM_BLURBEHIND,
+    DwmEnableBlurBehindWindow, DwmExtendFrameIntoClientArea, DwmIsCompositionEnabled,
+    DWM_BB_BLURREGION, DWM_BB_ENABLE, DWM_BLURBEHIND,
 };
 use windows::Win32::Graphics::Gdi::{CreateRectRgn, DeleteObject};
 use windows::Win32::UI::Controls::MARGINS;
@@ -83,6 +83,23 @@ pub fn make_transparent_overlay(hwnd: HWND) -> Result<(), Box<dyn std::error::Er
 /// swallowed every TouchArea press.
 pub fn make_transparent_tile(hwnd: HWND) -> Result<(), Box<dyn std::error::Error>> {
     apply_transparency(hwnd, /* click_through */ false)
+}
+
+/// True if DWM desktop composition is active. Per-pixel-alpha transparency
+/// (`DwmEnableBlurBehindWindow`, above) REQUIRES this — without it the overlay
+/// renders OPAQUE (the transparent margins show as black) no matter what we wire.
+/// It can be OFF on RDP / remote sessions, some VMs without a virtual GPU, or
+/// with a very old GPU driver. Logged at startup so a "transparency doesn't work"
+/// report is diagnosable from the log instead of guessed. NOTE: this is NOT the
+/// Windows "Transparency effects" toggle (that only gates acrylic/Mica, a
+/// different API).
+#[must_use]
+pub fn composition_enabled() -> bool {
+    unsafe {
+        DwmIsCompositionEnabled()
+            .map(|b| b.as_bool())
+            .unwrap_or(false)
+    }
 }
 
 fn apply_transparency(hwnd: HWND, click_through: bool) -> Result<(), Box<dyn std::error::Error>> {

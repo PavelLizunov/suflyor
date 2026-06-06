@@ -2662,6 +2662,18 @@ fn apply_overlay_hwnd(overlay: &OverlayBarWindow) {
                     Ok(()) => eprintln!("[overlay-host] overlay transparency wired"),
                     Err(e) => eprintln!("[overlay-host] overlay transparency failed: {e}"),
                 }
+                // Surface WHY transparency may look broken: per-pixel alpha needs
+                // DWM composition. If it's off (RDP / a VM without a GPU / very old
+                // driver) the overlay renders OPAQUE no matter the wiring. This is
+                // NOT the Windows "Transparency effects" toggle. Logged so a
+                // tester's "transparency doesn't work" report is diagnosable.
+                if slint_replay::win32::composition_enabled() {
+                    eprintln!(
+                        "[overlay-host] DWM composition: ON (overlay transparency available)"
+                    );
+                } else {
+                    eprintln!("[overlay-host] DWM composition: OFF — overlay renders OPAQUE (no per-pixel alpha). Cause is the environment (RDP/remote, a VM without a GPU, or an outdated GPU driver), not the app. NB: NOT the Windows 'Transparency effects' toggle.");
+                }
                 // #E10.2 — apply persisted stealth to the bar on launch.
                 if global_stealth() {
                     let _ = set_stealth(hwnd, true);
