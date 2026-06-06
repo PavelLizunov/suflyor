@@ -57,6 +57,12 @@ const GIGAAM_MODEL_SIZE: u64 = 224_893_347;
 const GIGAAM_SHA256: &str = "2e3fcb7a7b66030336fd10c2fcfb033bd1dc7e1bf238fe5cfd83b1d0cfc9d28e";
 const GIGAAM_VOCAB_URL: &str =
     "https://huggingface.co/istupakov/gigaam-v3-onnx/resolve/main/v3_e2e_ctc_vocab.txt";
+/// GigaAM-v3 vocab (2 KB, FIXED for this model) — BUNDLED via include_bytes so the
+/// install never depends on the flaky HF download. HF has repeatedly served an
+/// HTML error page for this tiny file, which (before v0.10.2) aborted the WHOLE
+/// install at the vocab step → gemma never deployed + server never launched. The
+/// download (`GIGAAM_VOCAB_URL` / `curl_small`) is kept only as a fallback.
+const GIGAAM_VOCAB: &[u8] = include_bytes!("../assets/gigaam-v3-vocab.txt");
 
 const LLAMA_REPO: &str = "ggml-org/llama.cpp";
 const WHISPER_REPO: &str = "ggml-org/whisper.cpp";
@@ -314,25 +320,52 @@ pub fn install(
         verify_sha256(&whisper_dest, WHISPER_SHA256, "Whisper model")?;
     }
 
-    // ---- GigaAM-v3 (in-process; no server) --------------------------------
+    // ---- GigaAM-v3 (in-process; no server) — OPTIONAL local STT -----------
+    // NON-FATAL (v0.10.2): GigaAM is the *optional* best-Russian STT; the default
+    // STT is Whisper (see `apply_result`) and cloud Whisper also remains. So a
+    // GigaAM hiccup must NOT abort the install before the llama-server (LLM)
+    // launches. Before this, a tester's vocab.txt download (HF served an HTML
+    // error page) aborted the whole install at the `?` → gemma never deployed +
+    // server never started. Now we log + continue; `gigaam_ok` gates the dir we
+    // hand back so STT cleanly stays on Whisper if GigaAM didn't complete.
+    let mut gigaam_ok = false;
     if !opts.skip_gigaam {
         bail_if_cancelled(cancel)?;
         on(Progress::Step("Downloading GigaAM-v3".to_string()));
-        std::fs::create_dir_all(&gigaam_dir)?;
-        // transcribe_rs loads exactly `model.int8.onnx` + `vocab.txt`.
-        let giga_dest = gigaam_dir.join("model.int8.onnx");
-        if !reuse_if_available(&giga_dest, GIGAAM_MODEL_SIZE, GIGAAM_SHA256, &[]) {
-            curl_resumable(
-                GIGAAM_MODEL_URL,
-                &giga_dest,
-                GIGAAM_MODEL_SIZE,
-                "GigaAM",
-                cancel,
-                on,
-            )?;
+        let giga_res = (|| -> Result<()> {
+            std::fs::create_dir_all(&gigaam_dir)?;
+            // transcribe_rs loads exactly `model.int8.onnx` + `vocab.txt`.
+            let giga_dest = gigaam_dir.join("model.int8.onnx");
+            if !reuse_if_available(&giga_dest, GIGAAM_MODEL_SIZE, GIGAAM_SHA256, &[]) {
+                curl_resumable(
+                    GIGAAM_MODEL_URL,
+                    &giga_dest,
+                    GIGAAM_MODEL_SIZE,
+                    "GigaAM",
+                    cancel,
+                    on,
+                )?;
+            }
+            verify_sha256(&giga_dest, GIGAAM_SHA256, "GigaAM model")?;
+            // vocab.txt — write the BUNDLED copy (no flaky HF download for this
+            // 2 KB file). Fall back to the network only if the embedded write fails.
+            let vocab_dest = gigaam_dir.join("vocab.txt");
+            if std::fs::write(&vocab_dest, GIGAAM_VOCAB).is_err() {
+                curl_small(GIGAAM_VOCAB_URL, &vocab_dest)?;
+            }
+            Ok(())
+        })();
+        match giga_res {
+            Ok(()) => gigaam_ok = true,
+            Err(e) => {
+                eprintln!(
+                    "[local-ai] GigaAM STT setup failed — continuing (STT stays on Whisper): {e:#}"
+                );
+                on(Progress::Step(
+                    "GigaAM STT unavailable — continuing".to_string(),
+                ));
+            }
         }
-        verify_sha256(&giga_dest, GIGAAM_SHA256, "GigaAM model")?;
-        curl_small(GIGAAM_VOCAB_URL, &gigaam_dir.join("vocab.txt"))?;
     }
 
     // ---- launch servers ----------------------------------------------------
@@ -429,7 +462,14 @@ pub fn install(
 
     Ok(LocalAiResult {
         ai_local_model: GEMMA_FILE.to_string(),
-        stt_gigaam_dir: gigaam_dir.to_string_lossy().to_string(),
+        // Only advertise the GigaAM dir if it actually completed — otherwise STT
+        // stays cleanly on Whisper (the default) instead of pointing at a partial
+        // GigaAM that would bail at session start.
+        stt_gigaam_dir: if gigaam_ok {
+            gigaam_dir.to_string_lossy().to_string()
+        } else {
+            String::new()
+        },
         on_gpu,
         cuda_version,
         servers,
@@ -1224,6 +1264,25 @@ mod tests {
             browser_download_url: format!("https://example/{name}"),
             size: 123,
         }
+    }
+
+    /// v0.10.2 — the GigaAM vocab is BUNDLED (include_bytes) so the install never
+    /// depends on the flaky HF download (HF served an HTML error page for it,
+    /// aborting installs). Guard the embedded asset is present + the right shape
+    /// (gigaam-v3 = 257 tokens, starts with the `<unk>` entry — NOT an HTML body).
+    #[test]
+    fn bundled_gigaam_vocab_is_sane() {
+        assert!(
+            GIGAAM_VOCAB.len() > 1000,
+            "bundled vocab too small ({} bytes) — asset missing/truncated?",
+            GIGAAM_VOCAB.len()
+        );
+        assert!(
+            GIGAAM_VOCAB.starts_with(b"<unk>"),
+            "vocab must start with the <unk> token (rules out an HTML error page)"
+        );
+        let lines = GIGAAM_VOCAB.iter().filter(|&&b| b == b'\n').count();
+        assert!(lines >= 250, "expected ~257 vocab lines, got {lines}");
     }
 
     #[test]
