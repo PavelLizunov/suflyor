@@ -115,13 +115,12 @@ pub(crate) fn wire_local_ai(
                 // a stale vision-less server keeps the port and the new one
                 // silently fails to start (wait_ready still sees the old one and
                 // reports success). Fresh installs have nothing to drain.
-                {
-                    let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
-                    for mut child in s.local_ai_servers.drain(..) {
-                        let _ = child.kill();
-                    }
-                }
                 let opts = overlay_backend::local_ai::InstallOptions::default();
+                let old_servers = {
+                    let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
+                    s.local_ai_servers.drain(..).collect::<Vec<_>>()
+                };
+                overlay_backend::local_ai::stop_managed_servers(&opts.root, old_servers);
                 match overlay_backend::local_ai::install(&opts, &cancel, &on) {
                     Ok(res) => {
                         let model = res.ai_local_model.clone();

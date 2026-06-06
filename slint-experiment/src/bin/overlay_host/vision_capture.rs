@@ -382,6 +382,15 @@ pub(crate) fn launch_vision_for_bgra(
     } else {
         vision::DEFAULT_VISION_PROMPT.to_string()
     };
+    // v0.10.5 — apply the user's profile/persona to a DESCRIBE capture too (a
+    // tester reported the profile wasn't reaching screenshots). Translate is a
+    // pure translation task, so it stays profile-free. Read sync on the UI thread;
+    // the async task below just sends the finished string.
+    let vision_context = if translate {
+        String::new()
+    } else {
+        cfg.read().meeting_context.clone()
+    };
     let (journal_for_loop, health_for_stream) = {
         let s = slint_replay::runtime_state::lock(slint_rt);
         (s.journal.clone(), s.health.clone())
@@ -424,9 +433,10 @@ pub(crate) fn launch_vision_for_bgra(
                 return;
             }
         };
-        let messages = vision::build_vision_request(&data_url, &prompt);
+        let messages =
+            vision::build_vision_request_with_context(&data_url, &prompt, &vision_context);
         let usr_full = prompt;
-        let sys_full = String::new();
+        let sys_full = vision_context;
         // Dedicated per-tile sink (convo_id = -1 → no conversation fold) so a
         // vision answer streams independently of any live text answer.
         let sink: Arc<dyn RuntimeEvents> = Arc::new(PttStreamSink::new(

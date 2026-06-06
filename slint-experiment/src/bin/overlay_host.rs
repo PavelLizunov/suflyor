@@ -2552,13 +2552,14 @@ fn main() -> Result<(), slint::PlatformError> {
     let result = overlay.run();
     // E10.4 — kill any local-AI servers the in-app installer launched so they
     // do not outlive the app (best-effort; clean-exit path only).
-    {
+    let local_ai_servers = {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-        for mut child in s.local_ai_servers.drain(..) {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
-    }
+        s.local_ai_servers.drain(..).collect::<Vec<_>>()
+    };
+    overlay_backend::local_ai::stop_managed_servers(
+        &overlay_backend::local_ai::default_root(),
+        local_ai_servers,
+    );
     // Tokio MT-runtime drop cancels spawned tasks at their next .await
     // (NOT graceful — they don't get to finish their HTTP response).
     // shutdown_timeout gives in-flight tasks a budgeted window to wrap

@@ -77,10 +77,43 @@ pub fn build_vision_request(image_data_url: &str, prompt: &str) -> Vec<ChatMessa
     }]
 }
 
+/// Like [`build_vision_request`] but prepends a SYSTEM turn carrying the user's
+/// PROFILE/context — the same `meeting_context` the F9 text/voice flow injects
+/// via [`crate::ai::build_request`] — so a screenshot answer honours the active
+/// persona/role too (a tester reported the profile wasn't applied to F8). The
+/// framing mirrors `build_request`'s ctx_block: a ROLE/style is followed,
+/// background is used for depth without restricting the topic. An empty/blank
+/// `meeting_context` yields exactly the plain 1-turn request (so behaviour is
+/// unchanged when no profile is set). Used by the F8 DESCRIBE capture; the
+/// TRANSLATE capture deliberately passes "" here (a pure translation task must
+/// not be bent by a persona). (v0.10.5)
+#[must_use]
+pub fn build_vision_request_with_context(
+    image_data_url: &str,
+    prompt: &str,
+    meeting_context: &str,
+) -> Vec<ChatMessage> {
+    let ctx = meeting_context.trim();
+    let mut msgs: Vec<ChatMessage> = Vec::with_capacity(2);
+    if !ctx.is_empty() {
+        msgs.push(ChatMessage {
+            role: "system".into(),
+            content: MessageContent::Text(format!(
+                "Профиль/контекст пользователя — учитывай его при ответе на скриншот. \
+                 Если профиль задаёт РОЛЬ или стиль общения (например «отвечай как психолог», \
+                 «говори кратко») — следуй ему. Если это бэкграунд/опыт — используй для уровня \
+                 детализации, НЕ ограничивая тему ответа этим:\n{ctx}"
+            )),
+        });
+    }
+    msgs.extend(build_vision_request(image_data_url, prompt));
+    msgs
+}
+
 // NOTE: the live F8 capture path calls crate::ai::stream_chat directly with
-// build_vision_request() + VISION_MAX_TOKENS and applies the is_local cost
-// zeroing itself, so a separate stream_vision() wrapper here was dead code
-// (audit) and was removed — keeping a single vision-streaming entry point.
+// build_vision_request[_with_context]() + VISION_MAX_TOKENS and applies the
+// is_local cost zeroing itself, so a separate stream_vision() wrapper here was
+// dead code (audit) and was removed — keeping a single vision-streaming entry.
 
 /// A tiny SYNTHETIC test image — a 32×32 PNG with three flat colour blocks on
 /// white — embedded as a data URL. [`test_connection`] sends THIS, never a
@@ -152,6 +185,42 @@ mod tests {
             assert!(matches!(&parts[1], ContentPart::ImageUrl { image_url }
                 if image_url.url.as_str() == "data:image/jpeg;base64,AAAA"));
         }
+    }
+
+    #[test]
+    fn vision_context_prepends_system_turn_only_when_set() {
+        // Empty/blank context → identical to the plain 1-turn request.
+        let plain = build_vision_request("data:image/jpeg;base64,AAAA", "прочитай");
+        let blank =
+            build_vision_request_with_context("data:image/jpeg;base64,AAAA", "прочитай", "");
+        let ws =
+            build_vision_request_with_context("data:image/jpeg;base64,AAAA", "прочитай", "   ");
+        assert_eq!(blank.len(), 1, "blank context must not add a system turn");
+        assert_eq!(ws.len(), 1, "whitespace context must not add a system turn");
+        assert_eq!(blank[0].role, plain[0].role);
+
+        // Non-empty context → a leading system turn carrying the profile, then
+        // the original user (text+image) turn unchanged.
+        let with = build_vision_request_with_context(
+            "data:image/jpeg;base64,AAAA",
+            "прочитай",
+            "Отвечай как senior Rust-разработчик",
+        );
+        assert_eq!(
+            with.len(),
+            2,
+            "set context must prepend exactly one system turn"
+        );
+        assert_eq!(with[0].role, "system");
+        assert!(
+            matches!(&with[0].content, MessageContent::Text(t) if t.contains("senior Rust")),
+            "system turn must embed the profile text"
+        );
+        assert_eq!(with[1].role, "user");
+        assert!(
+            matches!(&with[1].content, MessageContent::Parts(p) if p.len() == 2),
+            "user turn must still be the 2-part (text + image) capture turn"
+        );
     }
 
     #[test]

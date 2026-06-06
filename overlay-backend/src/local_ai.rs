@@ -415,6 +415,12 @@ pub fn install(
         let exe = find_exe(&whisper_dir, "whisper-server.exe")
             .or_else(|| find_exe(&whisper_dir, "server.exe"))
             .context("whisper-server.exe not found after install")?;
+        if !stop_listener_on_port(WHISPER_PORT, &opts.root) {
+            bail!(
+                "port :8081 is in use by another application - close it (or stop that server) and retry the local-AI install"
+            );
+        }
+        std::thread::sleep(Duration::from_millis(300));
         let bin = whisper_dir.join(WHISPER_FILE);
         let child = launch_hidden(
             &exe,
@@ -490,6 +496,38 @@ fn is_reachable(url: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Stop local-AI servers that this app owns.
+///
+/// Child handles cover the normal in-app install / auto-start path. The port
+/// sweep is a backstop for older versions and race windows where a managed
+/// server is alive but no handle made it into AppState yet. The sweep is
+/// owner-aware: only listeners whose executable lives under `root` are killed.
+pub fn stop_managed_servers<I>(root: &Path, servers: I)
+where
+    I: IntoIterator<Item = Child>,
+{
+    for child in servers {
+        terminate_child_tree(child);
+    }
+    let _ = stop_listener_on_port(LLAMA_PORT, root);
+    let _ = stop_listener_on_port(WHISPER_PORT, root);
+}
+
+fn terminate_child_tree(mut child: Child) {
+    #[cfg(windows)]
+    {
+        let pid = child.id().to_string();
+        if !kill_pid_tree(&pid) {
+            let _ = child.kill();
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = child.kill();
+    }
+    let _ = child.wait();
+}
+
 /// Resolve the full exe path of a PID via PowerShell (always present on PATH;
 /// `wmic` is deprecated). None when the process is gone or we can't read it
 /// (e.g. an elevated/other-user process — in which case we conservatively treat
@@ -526,6 +564,45 @@ fn exe_path_for_pid(pid: &str) -> Option<String> {
 /// We must replace OUR orphan but never an unrelated app's server. Parses
 /// `netstat -ano`.
 #[cfg(windows)]
+fn kill_pid_tree(pid: &str) -> bool {
+    run_capture("taskkill", &["/T", "/F", "/PID", pid])
+        .map(|out| out.status.success())
+        .unwrap_or(false)
+}
+
+#[cfg(all(windows, test))]
+fn listener_pids_on_port<'a>(netstat: &'a str, port: &str) -> Vec<&'a str> {
+    let suffix = format!(":{port}");
+    let mut pids = Vec::new();
+    for line in netstat.lines() {
+        // Columns: Proto  LocalAddr  ForeignAddr  State  PID
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        if cols.len() >= 5
+            && cols[3].eq_ignore_ascii_case("LISTENING")
+            && cols[1].ends_with(suffix.as_str())
+        {
+            let pid = cols[4];
+            if pid != "0" && !pids.contains(&pid) {
+                pids.push(pid);
+            }
+        }
+    }
+    pids
+}
+
+#[cfg(windows)]
+fn path_is_under_root(path: &str, root_lc: &str) -> bool {
+    let root = root_lc.trim_end_matches(['\\', '/']);
+    if root.is_empty() {
+        return false;
+    }
+    let path_lc = path.to_lowercase();
+    path_lc == root
+        || path_lc.starts_with(&format!("{root}\\"))
+        || path_lc.starts_with(&format!("{root}/"))
+}
+
+#[cfg(windows)]
 fn stop_listener_on_port(port: &str, root: &Path) -> bool {
     let Ok(out) = run_capture("netstat", &["-ano", "-p", "tcp"]) else {
         return true; // can't enumerate — best-effort; let the bind attempt decide
@@ -546,9 +623,9 @@ fn stop_listener_on_port(port: &str, root: &Path) -> bool {
             if pid == "0" || killed.iter().any(|k| k == pid) {
                 continue;
             }
-            match exe_path_for_pid(pid).map(|p| p.to_lowercase()) {
-                Some(p) if !root_lc.is_empty() && p.starts_with(&root_lc) => {
-                    let _ = run_capture("taskkill", &["/F", "/PID", pid]);
+            match exe_path_for_pid(pid) {
+                Some(p) if path_is_under_root(&p, &root_lc) => {
+                    let _ = kill_pid_tree(pid);
                     killed.push(pid.to_string());
                 }
                 other => {
@@ -995,75 +1072,98 @@ fn wait_ready(url: &str, max_secs: u64) -> Result<()> {
 /// generate. A reachable `/models` alone isn't enough — a wedged or broken
 /// model still answers `/models` but fails real requests. Audit P0.2.
 ///
-/// On a weak or virtualised machine the weights are still warming up after
-/// `/models` already answers: llama.cpp binds the port and serves `/models`
-/// long before the model finishes loading, returning HTTP 503 ("loading
-/// model") to a generation request until it's ready. We therefore POLL the
-/// 1-token smoke until a real reply OR a wall-clock budget is spent, and only
-/// fail once it's clear the server lists a model but never starts generating —
-/// so slow boxes succeed instead of hitting a false "readiness smoke" failure
-/// on the first 503. A heartbeat keeps the install status ticking so the wait
-/// doesn't look frozen. (v0.10.4)
+/// On a weak or virtualised machine the weights are still warming up after the
+/// port opens: llama.cpp binds :8080 and serves `/models` long before the model
+/// finishes loading, returning HTTP 503 ("loading model") to BOTH `/models` and
+/// a generation request until it's ready. We therefore POLL the WHOLE readiness
+/// — `/models` must list a loaded model AND a 1-token generation must succeed —
+/// until both pass OR a wall-clock budget is spent. The budget is wall-clock
+/// (not an attempt count) so a server that *hangs* each request can't over-run.
+/// A heartbeat keeps the install status ticking so the wait doesn't look frozen.
+///
+/// (v0.10.5 — extends v0.10.4, which only retried the GENERATION step and so
+/// still false-failed at the `/models did not return a model list` check on a
+/// box where the model hadn't finished loading when the check first ran. That
+/// false failure aborted the install BEFORE `apply_result`, leaving both the
+/// gemma model AND the GigaAM dir UNSET in config — a tester hit exactly this.)
 fn verify_llama_ready(on: &dyn Fn(Progress)) -> Result<()> {
-    let models = run_capture(
-        "curl.exe",
-        &["-s", "--max-time", "5", &format!("{LLAMA_BASE_URL}/models")],
-    )
-    .context("query llama /models")?;
-    if !String::from_utf8_lossy(&models.stdout).contains("\"data\"") {
-        bail!("llama /models did not return a model list");
-    }
-    // 1-token completion proves the model actually generates (llama.cpp server
-    // accepts /chat/completions without a model field — uses the loaded one).
-    // Poll until a "choices" reply OR the warm-up budget is spent. We bound the
-    // loop by a WALL-CLOCK deadline (not an attempt count) so a server that
-    // *hangs* each request — eating the full --max-time per try — can't stretch
-    // the wait far past the budget. Worst case ≈ budget + one curl timeout.
     let start = Instant::now();
     let budget = Duration::from_secs(240); // ~4 min warm-up on a slow/VM box
-                                           // Deferred init: the infinite loop always assigns `last` before any `break`,
-                                           // so an initial empty value would just be a dead store (-D unused-assignments).
-    let mut last;
+                                           // String::new() is read on the bail path if the very first iteration lists a
+                                           // model but the generation curl errors before `last` is reassigned, so this
+                                           // is NOT a dead store.
+    let mut last = String::new();
     loop {
-        let smoke = run_capture(
+        // Step 1: /models must list a loaded model. While the weights load,
+        // llama.cpp answers 503 "loading" here too (no "data") — so this is part
+        // of the poll, not a one-shot check (the v0.10.4 gap).
+        let models_ok = match run_capture(
             "curl.exe",
-            &[
-                "-s",
-                "--max-time",
-                "15",
-                "-X",
-                "POST",
-                &format!("{LLAMA_BASE_URL}/chat/completions"),
-                "-H",
-                "Content-Type: application/json",
-                "-d",
-                r#"{"messages":[{"role":"user","content":"hi"}],"max_tokens":1}"#,
-            ],
-        )
-        .context("llama smoke completion")?;
-        last = String::from_utf8_lossy(&smoke.stdout).trim().to_string();
-        if last.contains("choices") {
-            return Ok(()); // generated — the model is genuinely ready
+            &["-s", "--max-time", "5", &format!("{LLAMA_BASE_URL}/models")],
+        ) {
+            Ok(o) => {
+                let body = String::from_utf8_lossy(&o.stdout);
+                if body.contains("\"data\"") {
+                    true
+                } else {
+                    last = body.trim().to_string();
+                    false
+                }
+            }
+            Err(_) => false,
+        };
+        // Step 2: only once a model is listed, prove it actually generates (the
+        // server accepts /chat/completions without a model field — uses the
+        // loaded one). A 1-token reply containing "choices" = genuinely ready.
+        if models_ok {
+            if let Ok(s) = run_capture(
+                "curl.exe",
+                &[
+                    "-s",
+                    "--max-time",
+                    "20",
+                    "-X",
+                    "POST",
+                    &format!("{LLAMA_BASE_URL}/chat/completions"),
+                    "-H",
+                    "Content-Type: application/json",
+                    "-d",
+                    r#"{"messages":[{"role":"user","content":"hi"}],"max_tokens":1}"#,
+                ],
+            ) {
+                last = String::from_utf8_lossy(&s.stdout).trim().to_string();
+                if last.contains("choices") {
+                    return Ok(());
+                }
+            }
         }
         let elapsed = start.elapsed();
         if elapsed >= budget {
             break;
         }
-        // Not ready yet: a warming model replies 503 "loading"; an empty body
-        // means the request timed out before a reply. Tick the status (so the
-        // UI shows movement) + log it for the tester, then wait and retry.
+        // Not ready yet: a warming model replies 503 "loading"; an empty/timed-out
+        // body means the request was refused before a reply. Tick the status (so
+        // the UI shows movement) + log it for the tester, then wait and retry.
         let secs = elapsed.as_secs();
         on(Progress::Step(format!(
             "Waiting for the model to load… ({secs}s)"
         )));
-        eprintln!("[local-ai] llama smoke not ready after {secs}s, retrying in 5s…");
+        eprintln!(
+            "[local-ai] llama not ready after {secs}s (models_ok={models_ok}), retrying in 5s…"
+        );
         std::thread::sleep(Duration::from_secs(5));
     }
     // Keep a short, secret-free snippet of the last reply in the error chain so
     // the LOG (printed with {e:#}) shows WHY. The tile shows the caller's
-    // actionable RU context, not this technical detail.
-    let snippet: String = last.chars().take(160).collect();
-    bail!("llama smoke completion never produced output within the warm-up budget (last reply: {snippet})");
+    // actionable RU context, not this technical detail. If the server never
+    // produced ANY body (curl errored/timed out on every probe), `last` is still
+    // empty — say so explicitly instead of logging a blank "(last reply: )".
+    let snippet: String = if last.is_empty() {
+        "no reply (curl error or timeout on every probe)".to_string()
+    } else {
+        last.chars().take(160).collect()
+    };
+    bail!("llama never became ready within the warm-up budget (last reply: {snippet})");
 }
 
 // ---- process + fs helpers --------------------------------------------------
@@ -1464,6 +1564,36 @@ mod tests {
         assert!(!parse_compute_apps(
             "C:\\x\\dwm.exe, [N/A]\nexplorer.exe, [N/A]"
         ));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn listener_pids_on_port_parses_only_listening_target_port() {
+        let netstat = "\
+  Proto  Local Address          Foreign Address        State           PID
+  TCP    127.0.0.1:8080         0.0.0.0:0              LISTENING       111
+  TCP    127.0.0.1:8081         0.0.0.0:0              LISTENING       222
+  TCP    127.0.0.1:8080         127.0.0.1:50000        ESTABLISHED     333
+  TCP    [::1]:8080             [::]:0                 LISTENING       111
+";
+        assert_eq!(listener_pids_on_port(netstat, "8080"), vec!["111"]);
+        assert_eq!(listener_pids_on_port(netstat, "8081"), vec!["222"]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn path_is_under_root_rejects_sibling_prefix() {
+        let root = "c:\\users\\me\\suflyor-local-ai";
+        assert!(path_is_under_root(
+            "C:\\Users\\Me\\suflyor-local-ai\\llama.cpp\\llama-server.exe",
+            root
+        ));
+        assert!(path_is_under_root("C:\\Users\\Me\\suflyor-local-ai", root));
+        assert!(!path_is_under_root(
+            "C:\\Users\\Me\\suflyor-local-ai-old\\llama-server.exe",
+            root
+        ));
+        assert!(!path_is_under_root("", root));
     }
 
     #[test]
