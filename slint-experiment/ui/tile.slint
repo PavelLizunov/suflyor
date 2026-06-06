@@ -197,7 +197,7 @@ export component TileWindow inherits Window {
                 // V0.8.3 — 📋 copy the answer text to the clipboard (→ ✅ on
                 // success). Shown on conversational tiles (can-copy).
                 if root.can-copy: Rectangle {
-                    width: 30px;
+                    width: 28px;
                     height: 28px;
                     background: copy-touch.has-hover ? Theme.border-strong : Theme.border;
                     border-radius: 4px;
@@ -216,7 +216,7 @@ export component TileWindow inherits Window {
                 // V5 — 🔄 regenerate (only on tiles that support it, e.g. F8
                 // vision). Re-runs the last request for a longer / different answer.
                 if root.can-regenerate: Rectangle {
-                    width: 30px;
+                    width: 28px;
                     height: 28px;
                     background: regen-touch.has-hover ? Theme.border-strong : Theme.border;
                     border-radius: 4px;
@@ -228,8 +228,8 @@ export component TileWindow inherits Window {
                     Image {
                         source: @image-url("../assets/icons/restart.svg");
                         colorize: Theme.text-secondary;
-                        width: 14px;
-                        height: 14px;
+                        width: 15px;
+                        height: 15px;
                         image-fit: contain;
                         x: (parent.width - self.width) / 2;
                         y: (parent.height - self.height) / 2;
@@ -238,7 +238,7 @@ export component TileWindow inherits Window {
                 // V0.8.0 (Поток D) — 🧠 escalate this answer to the smart cloud
                 // model (one-shot). Shown when the answer came from local AI.
                 if root.can-escalate: Rectangle {
-                    width: 30px;
+                    width: 28px;
                     height: 28px;
                     background: esc-touch.has-hover ? Theme.border-strong : Theme.border;
                     border-radius: 4px;
@@ -258,7 +258,7 @@ export component TileWindow inherits Window {
                     }
                 }
                 Rectangle {
-                    width: 36px;
+                    width: 28px;
                     height: 28px;
                     background: max-touch.has-hover ? Theme.border-strong : Theme.border;
                     border-radius: 4px;
@@ -277,7 +277,7 @@ export component TileWindow inherits Window {
                     }
                 }
                 Rectangle {
-                    width: 30px;
+                    width: 28px;
                     height: 28px;
                     background: close-touch.has-hover ? #5a2a2a : Theme.border;
                     border-radius: 4px;
@@ -289,8 +289,8 @@ export component TileWindow inherits Window {
                     Image {
                         source: @image-url("../assets/icons/x.svg");
                         colorize: Theme.text-primary;
-                        width: 14px;
-                        height: 14px;
+                        width: 15px;
+                        height: 15px;
                         image-fit: contain;
                         x: (parent.width - self.width) / 2;
                         y: (parent.height - self.height) / 2;

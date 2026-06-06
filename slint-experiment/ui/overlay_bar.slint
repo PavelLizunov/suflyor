@@ -424,13 +424,16 @@ export component OverlayBarWindow inherits Window {
             spacing: 6px;
             alignment: start;
 
-            // Brand logo — vector SVG, prominent, on the far left. It also
-            // DOUBLES AS A DRAG HANDLE (user: "иконка должна быть областью
-            // за которую можно таскать приложение"): the TouchArea mirrors
-            // the status pill's drag. colorize tints it per scheme.
+            // Brand "head" mark (headphones = the candidate) — far-left, DOUBLES
+            // AS A DRAG HANDLE (user: "иконка должна быть областью за которую
+            // можно таскать приложение"). Per the design logo-sizing sheet:
+            // 24px (= chip height), clear-space 6px (the row spacing), and NOT
+            // colorized — colorize flattens the illustration's detail. Asset is
+            // theme-picked: brand-head-light (white) on the dark schemes, the
+            // plain black brand-head on Light Frost.
             Rectangle {
-                width: 40px;
-                height: 40px;
+                width: 24px;
+                height: 24px;
                 horizontal-stretch: 0;
                 TouchArea {
                     mouse-cursor: grab;
@@ -442,14 +445,12 @@ export component OverlayBarWindow inherits Window {
                     }
                     moved => { if (self.pressed) { root.drag-moved(); } }
                 }
-                // Brand "head" mark (headphones = the candidate). Colorized
-                // per scheme; on a colorized image the black/light PNG render
-                // identically, so the surface-rule is moot here.
                 Image {
-                    source: @image-url("../assets/brand-head.png");
-                    colorize: Theme.accent;
-                    width: 40px;
-                    height: 40px;
+                    source: Theme.is-light
+                        ? @image-url("../assets/brand-head.png")
+                        : @image-url("../assets/brand-head-light.png");
+                    width: 24px;
+                    height: 24px;
                     image-fit: contain;
                 }
             }

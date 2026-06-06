@@ -466,8 +466,10 @@ export component SettingsWindow inherits Window {
                         spacing: 7px;
                         alignment: start;
                         Image {
-                            source: @image-url("../assets/brand-head.png");
-                            colorize: Theme.accent;
+                            // Head mark — theme-picked, NOT colorized (per design).
+                            source: Theme.is-light
+                                ? @image-url("../assets/brand-head.png")
+                                : @image-url("../assets/brand-head-light.png");
                             width: 22px;
                             height: 22px;
                             image-fit: contain;
@@ -590,16 +592,17 @@ export component SettingsWindow inherits Window {
             // adapts it to dark *and* light schemes. User: бренд на
             // заднем плане меню.
             Image {
-                // Penguin mark (the assistant) as the faint settings watermark.
-                source: @image-url("../assets/brand-penguin.png");
-                // Dark themes → tint the mark WHITE; light theme → keep it dark
-                // (text-primary). Low opacity (5%) so it never muddies the text
-                // contrast, esp. on screen-share. (User: тёмная тема — знак
-                // светлый + прозрачность 4–6%; 12% было слишком много.)
-                colorize: Theme.is-light ? Theme.text-primary : #ffffff;
+                // Full brand scene as the faint watermark. Per the design's
+                // logo-sizing sheet: brand-mark-light (white scene) on the dark
+                // schemes, plain brand-mark on Light Frost; NO colorize (keeps
+                // the illustration detail); 4–6% opacity at 240–320px so it never
+                // muddies the text, esp. on a screen-share.
+                source: Theme.is-light
+                    ? @image-url("../assets/brand-mark.png")
+                    : @image-url("../assets/brand-mark-light.png");
                 opacity: 0.05;
-                width: 360px;
-                height: 360px;
+                width: 280px;
+                height: 280px;
                 image-fit: contain;
             }
             ScrollView {

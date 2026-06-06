@@ -38,11 +38,14 @@ export component HelpWindow inherits Window {
         // centred, same as Settings. Everything above is transparent so it shows
         // through. colorize adapts it to dark + light schemes.
         Image {
-            source: @image-url("../assets/brand-penguin.png");
-            colorize: Theme.is-light ? Theme.text-primary : #ffffff;
+            // Full brand scene watermark — theme-picked, NO colorize, 4–6%
+            // opacity so it never competes with the help text (per design).
+            source: Theme.is-light
+                ? @image-url("../assets/brand-mark.png")
+                : @image-url("../assets/brand-mark-light.png");
             opacity: 0.05;
-            width: 300px;
-            height: 300px;
+            width: 280px;
+            height: 280px;
             image-fit: contain;
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
@@ -80,8 +83,10 @@ export component HelpWindow inherits Window {
                         spacing: 7px;
                         alignment: start;
                         Image {
-                            source: @image-url("../assets/brand-head.png");
-                            colorize: Theme.accent;
+                            // Head mark — theme-picked, NOT colorized (per design).
+                            source: Theme.is-light
+                                ? @image-url("../assets/brand-head.png")
+                                : @image-url("../assets/brand-head-light.png");
                             width: 22px;
                             height: 22px;
                             image-fit: contain;
