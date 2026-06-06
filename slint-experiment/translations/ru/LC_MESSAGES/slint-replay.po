@@ -319,6 +319,12 @@ msgstr "🌐 Перевод — нажми для Описания"
 msgid "Phonetics in F8 translate mode (IPA, e.g. schedule [ˈʃedjuːl])"
 msgstr "Фонетика в режиме перевода F8 (МФА, напр. schedule [ˈʃedjuːl])"
 
+msgid "F8 → Test Practice: answer + short explanation (for practice & self-check)"
+msgstr "F8 → Тренировка: ответ + краткий разбор (для тренировки и самопроверки)"
+
+msgid "🎓 Test Practice (self-check)"
+msgstr "🎓 Тренировка (самопроверка)"
+
 msgid "registering…"
 msgstr "регистрация…"
 

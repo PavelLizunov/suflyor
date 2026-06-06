@@ -34,6 +34,9 @@ export component CaptureOverlay inherits Window {
     // (output ONLY the translation, no screen description). Seeded by the host
     // (F8 = describe, Shift+F8 = translate); flippable via the on-overlay toggle.
     in-out property <bool> translate-mode: false;
+    // v0.11.0 — Test Practice capture (seeded from the Settings toggle on plain
+    // F8). Shown as a distinct hint; translate-mode takes precedence on read-back.
+    in-out property <bool> practice-mode: false;
 
     // Normalised selection rect.
     property <length> rx: min(root.sx, root.ex);
@@ -187,12 +190,13 @@ export component CaptureOverlay inherits Window {
         y: 46px;
         width: modehint.preferred-width + 24px;
         height: 26px;
-        background: root.translate-mode ? #0e7490ee : #111827dd;
+        background: root.translate-mode ? #0e7490ee : (root.practice-mode ? #6d28d9ee : #111827dd);
         border-radius: 6px;
         border-width: 1px;
         border-color: #22d3ee;
         modehint := Text {
-            text: root.translate-mode ? @tr("🌐 Translate — tap to Describe") : @tr("📖 Describe — tap to Translate");
+            text: root.translate-mode ? @tr("🌐 Translate — tap to Describe")
+                : (root.practice-mode ? @tr("🎓 Test Practice (self-check)") : @tr("📖 Describe — tap to Translate"));
             color: #e8e8ec;
             font-size: 12px;
             horizontal-alignment: center;

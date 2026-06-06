@@ -64,6 +64,19 @@ pub(crate) fn wire_vision_settings(
     }
     {
         let cfg_c = cfg.clone();
+        // v0.11.0 — Test Practice toggle for plain F8 (study / self-check).
+        win.on_vision_test_practice_changed(move |on| {
+            let mut c = cfg_c.write();
+            c.vision_test_practice = on;
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] vision_test_practice save failed: {e:#}");
+                return;
+            }
+            diag!("vision_test_practice -> {on}");
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
         win.on_vision_base_url_save(move |v| {
             let mut c = cfg_c.write();
             c.vision_base_url = v.trim().to_string();

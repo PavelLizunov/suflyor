@@ -120,6 +120,14 @@ pub struct Config {
     #[serde(default)]
     pub vision_phonetics: bool,
 
+    /// Test Practice mode for the F8 capture (v0.11.0). When ON, plain F8 (NOT
+    /// Shift+F8, which stays translate) treats the screenshot as a PRACTICE quiz
+    /// question and returns the answer + a short explanation, for study /
+    /// self-check. OFF by default = F8 keeps the normal Describe behaviour. A
+    /// deliberate, persisted, non-hidden opt-in (it is NOT for graded exams).
+    #[serde(default)]
+    pub vision_test_practice: bool,
+
     /// Language tag (ISO 639-1) the assistant should ALWAYS respond in.
     /// Injected into the system prompt at runtime.
     pub response_language: String, // e.g. "ru"
@@ -444,6 +452,7 @@ impl Config {
             vision_local_bearer: String::new(),
             vision_local_model: String::new(),
             vision_phonetics: false,
+            vision_test_practice: false,
             response_language: "ru".into(),
             groq_api_key: String::new(),
             stt_language: Some("ru".into()),

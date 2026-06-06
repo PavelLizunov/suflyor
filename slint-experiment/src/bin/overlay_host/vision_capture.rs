@@ -76,7 +76,7 @@ pub(crate) fn fire_f8_vision_capture(
     tiles: &TileWindows,
     weak_overlay: &slint::Weak<OverlayBarWindow>,
     capture_overlay: &Rc<RefCell<Option<CaptureOverlay>>>,
-    translate: bool,
+    mode: vision::VisionMode,
 ) {
     // Second F8 while an overlay is up → dismiss it FIRST (before resolving the
     // provider), so a stuck overlay can ALWAYS be cleared — even if Vision was
@@ -133,9 +133,11 @@ pub(crate) fn fire_f8_vision_capture(
     };
     win.set_frozen(img);
     win.set_dragging(false); // clear any stale selection rect from a prior capture
-                             // Feature #3 — seed the capture overlay's mode (Shift+F8 → translate). The
-                             // user can still flip the on-overlay Describe/Translate toggle before drag.
-    win.set_translate_mode(translate);
+                             // Seed the capture overlay's mode: Shift+F8 → translate; plain F8 →
+                             // describe OR test-practice (per the Settings toggle, resolved by the
+                             // caller). The on-overlay tap can still flip to translate before drag.
+    win.set_translate_mode(mode == vision::VisionMode::Translate);
+    win.set_practice_mode(mode == vision::VisionMode::TestPractice);
     // PHYSICAL units = monitor pixels (1:1 with the captured frame). Geometry is
     // set on the still-hidden window, then show() lands it there (Slint's
     // set_size/set_position apply reliably).
@@ -163,13 +165,20 @@ pub(crate) fn fire_f8_vision_capture(
         win.on_region_selected(move |x1, y1, x2, y2| {
             // Read the overlay's mode BEFORE hiding it (Shift+F8 seeds it; the
             // on-overlay Describe/Translate toggle can override before drag).
-            let translate = if let Some(w) = weak_self.upgrade() {
-                let t = w.get_translate_mode();
+            let mode = if let Some(w) = weak_self.upgrade() {
+                // translate-mode takes precedence: a tap on the overlay toggles it.
+                let m = if w.get_translate_mode() {
+                    vision::VisionMode::Translate
+                } else if w.get_practice_mode() {
+                    vision::VisionMode::TestPractice
+                } else {
+                    vision::VisionMode::Describe
+                };
                 w.set_shown(false);
                 let _ = w.hide();
-                t
+                m
             } else {
-                false
+                vision::VisionMode::Describe
             };
             // logical px × scale = image px.
             let to_px = |v: f32| (v * scale).round().max(0.0) as u32;
@@ -185,7 +194,7 @@ pub(crate) fn fire_f8_vision_capture(
             launch_vision_for_bgra(
                 cropped,
                 ep_c.clone(),
-                translate,
+                mode,
                 &bridge_c,
                 &events_c,
                 &cfg_c,
@@ -228,7 +237,7 @@ pub(crate) fn fire_f8_vision_capture(
 pub(crate) fn launch_vision_for_bgra(
     shot: slint_replay::capture::CapturedBgra,
     ep: overlay_backend::config::AiEndpoint,
-    translate: bool,
+    mode: vision::VisionMode,
     bridge: &Arc<OverlayBarBridge>,
     events: &Arc<dyn RuntimeEvents>,
     cfg: &overlay_backend::config::SharedConfig,
@@ -251,32 +260,38 @@ pub(crate) fn launch_vision_for_bgra(
     // done; follow-ups then route to the VISION endpoint (use_vision = true).
     let convo_id = CONVO_SEQ.fetch_add(1, Ordering::Relaxed) as i32;
     tile.set_sequence(seq as i32);
-    tile.set_tile_title(SharedString::from(if translate {
-        "🌐 Перевод"
-    } else {
-        "📷 Скриншот"
-    }));
-    tile.set_source_label(SharedString::from(if translate {
-        "vision · перевод…"
-    } else {
-        "vision · анализ…"
-    }));
-    tile.set_trigger_label(SharedString::from(if translate {
-        "🌐 Shift+F8 перевод"
-    } else {
-        "📷 F8 vision"
-    }));
+    // Per-mode tile chrome. The trigger_label doubles as the "Practice" badge
+    // so a test-practice answer is always visibly marked as self-check.
+    let (title_s, source_s, trigger_s, placeholder_s) = match mode {
+        vision::VisionMode::Translate => (
+            "🌐 Перевод",
+            "vision · перевод…",
+            "🌐 Shift+F8 перевод",
+            "⏳ Перевожу…",
+        ),
+        vision::VisionMode::TestPractice => (
+            "🎓 Тренировка",
+            "vision · тренировка…",
+            "🎓 Practice",
+            "⏳ Решаю вопрос…",
+        ),
+        vision::VisionMode::Describe => (
+            "📷 Скриншот",
+            "vision · анализ…",
+            "📷 F8 vision",
+            "⏳ Распознаю экран…",
+        ),
+    };
+    tile.set_tile_title(SharedString::from(title_s));
+    tile.set_source_label(SharedString::from(source_s));
+    tile.set_trigger_label(SharedString::from(trigger_s));
     tile.set_trigger_color(slint::Color::from_rgb_u8(0x22, 0xd3, 0xee)); // cyan
     tile.set_convo_id(convo_id);
     tile.set_followup_busy(true);
     wire_tile_drag(&tile);
     tile.set_blocks(ModelRc::new(VecModel::from(vec![MarkdownBlock {
         kind: markdown::kind::PARAGRAPH,
-        text: SharedString::from(if translate {
-            "⏳ Перевожу…"
-        } else {
-            "⏳ Распознаю экран…"
-        }),
+        text: SharedString::from(placeholder_s),
         lang: SharedString::from(""),
     }])));
     let weak_close = tile.as_weak();
@@ -377,19 +392,23 @@ pub(crate) fn launch_vision_for_bgra(
     // Feature #3/#4 — describe vs translate prompt (translate appends the IPA
     // phonetics suffix when the user enabled it). Computed sync (UI thread) so the
     // async task below just sends the finished string.
-    let prompt = if translate {
-        vision::translate_prompt(cfg.read().vision_phonetics)
-    } else {
-        vision::DEFAULT_VISION_PROMPT.to_string()
+    // Per-mode prompt (sync on the UI thread; the async task just sends it):
+    //  - Translate → the RU rewrite prompt (+ IPA suffix if enabled).
+    //  - TestPractice → built below from `response_language` (answer + short why).
+    //  - Describe → the default capture prompt.
+    let response_language = cfg.read().response_language.clone();
+    let prompt = match mode {
+        vision::VisionMode::Translate => vision::translate_prompt(cfg.read().vision_phonetics),
+        vision::VisionMode::TestPractice => String::new(),
+        vision::VisionMode::Describe => vision::DEFAULT_VISION_PROMPT.to_string(),
     };
-    // v0.10.5 — apply the user's profile/persona to a DESCRIBE capture too (a
-    // tester reported the profile wasn't reaching screenshots). Translate is a
-    // pure translation task, so it stays profile-free. Read sync on the UI thread;
-    // the async task below just sends the finished string.
-    let vision_context = if translate {
-        String::new()
-    } else {
+    // Profile/persona applies ONLY to Describe (v0.10.5). Translate is a pure
+    // translation task; TestPractice is a factual answer — a persona would
+    // distort both, so they stay profile-free.
+    let vision_context = if matches!(mode, vision::VisionMode::Describe) {
         cfg.read().meeting_context.clone()
+    } else {
+        String::new()
     };
     let (journal_for_loop, health_for_stream) = {
         let s = slint_replay::runtime_state::lock(slint_rt);
@@ -433,10 +452,18 @@ pub(crate) fn launch_vision_for_bgra(
                 return;
             }
         };
-        let messages =
-            vision::build_vision_request_with_context(&data_url, &prompt, &vision_context);
-        let usr_full = prompt;
-        let sys_full = vision_context;
+        let (messages, usr_full, sys_full) = match mode {
+            vision::VisionMode::TestPractice => (
+                vision::build_test_practice_request(&data_url, &response_language),
+                "Вопрос со скриншота — разбери для самопроверки.".to_string(),
+                vision::test_practice_prompt(&response_language),
+            ),
+            _ => (
+                vision::build_vision_request_with_context(&data_url, &prompt, &vision_context),
+                prompt,
+                vision_context,
+            ),
+        };
         // Dedicated per-tile sink (convo_id = -1 → no conversation fold) so a
         // vision answer streams independently of any live text answer.
         let sink: Arc<dyn RuntimeEvents> = Arc::new(PttStreamSink::new(

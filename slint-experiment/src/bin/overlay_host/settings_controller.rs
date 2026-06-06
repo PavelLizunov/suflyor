@@ -941,6 +941,7 @@ pub(crate) fn populate_token_status(
     win.set_ai_local_model_index(0);
     win.set_ai_local_vision(c.ai_local_vision);
     win.set_vision_phonetics(c.vision_phonetics);
+    win.set_vision_test_practice(c.vision_test_practice);
     win.set_ai_local_thinking(c.ai_local_thinking);
     // Phase E10 — STT provider selector + local-engine fields.
     win.set_stt_provider_index(match c.stt_provider.as_str() {

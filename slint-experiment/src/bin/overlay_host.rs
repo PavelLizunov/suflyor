@@ -1634,7 +1634,13 @@ fn main() -> Result<(), slint::PlatformError> {
                         &hp_tiles,
                         &hp_weak_overlay,
                         &hp_capture_overlay,
-                        false,
+                        // Plain F8: describe, OR test-practice if the Settings
+                        // toggle is on (Shift+F8 below always = translate).
+                        if hp_cfg.read().vision_test_practice {
+                            overlay_backend::vision::VisionMode::TestPractice
+                        } else {
+                            overlay_backend::vision::VisionMode::Describe
+                        },
                     );
                 } else if event.id == sf8_id {
                     // Feature #3 — Shift+F8: same region capture, TRANSLATE mode.
@@ -1648,7 +1654,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         &hp_tiles,
                         &hp_weak_overlay,
                         &hp_capture_overlay,
-                        true,
+                        overlay_backend::vision::VisionMode::Translate,
                     );
                 }
             }
@@ -1987,7 +1993,12 @@ fn main() -> Result<(), slint::PlatformError> {
                 &tiles_c,
                 &weak_c,
                 &cap_c,
-                false,
+                // 📷 chip mirrors plain F8 (describe / test-practice per Settings).
+                if cfg_c.read().vision_test_practice {
+                    overlay_backend::vision::VisionMode::TestPractice
+                } else {
+                    overlay_backend::vision::VisionMode::Describe
+                },
             );
         });
     }

@@ -110,6 +110,72 @@ pub fn build_vision_request_with_context(
     msgs
 }
 
+/// Which answer shape a capture produces. Describe = the default "what's on
+/// screen / solve it" prompt; Translate = rewrite the text in RU; TestPractice =
+/// study/self-check helper for a PRACTICE question (answer + short why). The
+/// capture mode is chosen by the F8/Shift+F8 trigger + the Settings toggle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VisionMode {
+    Describe,
+    Translate,
+    TestPractice,
+}
+
+/// System instruction for [`VisionMode::TestPractice`]. This is a STUDY /
+/// SELF-CHECK helper: the user has already attempted a practice question and
+/// wants to check the answer AND understand the mistake — so the answer comes
+/// WITH a short explanation (never answer-only), and the model must say
+/// "Не уверен" rather than fabricate when the image is unclear. `response_lang`
+/// is the ISO tag the rest of the app answers in. No persona/profile is applied
+/// (a role like «отвечай как психолог» would distort a factual answer).
+#[must_use]
+pub fn test_practice_prompt(response_lang: &str) -> String {
+    let lang_line = match response_lang {
+        "ru" => "Отвечай на русском языке.",
+        "en" => "Answer in English.",
+        _ => "Отвечай на языке вопроса.",
+    };
+    format!(
+        "Режим тренировки и самопроверки: пользователь УЖЕ ответил на учебный вопрос и хочет \
+         свериться и понять, где ошибся. Это не оцениваемый экзамен.\n\
+         По изображению:\n\
+         1) Определи вопрос и варианты ответа.\n\
+         2) ПЕРВОЙ строкой дай правильный ответ в формате «Ответ: <буква или вариант>».\n\
+         3) Затем КРАТКО объясни, почему он верный и почему основные неверные варианты неверны — \
+         ради этого и нужен режим (понять ошибку). 2–4 коротких пункта, по делу, без воды.\n\
+         4) Если вопрос или варианты плохо видны либо неоднозначны — вместо ответа напиши \
+         «Не уверен» и что именно мешает. НЕ выдумывай ответ.\n\
+         {lang_line} Без преамбулы. Допустим Markdown."
+    )
+}
+
+/// Build a [`VisionMode::TestPractice`] request: a SYSTEM turn carrying the
+/// study/self-check instructions ([`test_practice_prompt`]) + a user turn with a
+/// short ask and the screenshot. No persona/context (intentionally — see
+/// `test_practice_prompt`). (v0.11.0)
+#[must_use]
+pub fn build_test_practice_request(image_data_url: &str, response_lang: &str) -> Vec<ChatMessage> {
+    vec![
+        ChatMessage {
+            role: "system".into(),
+            content: MessageContent::Text(test_practice_prompt(response_lang)),
+        },
+        ChatMessage {
+            role: "user".into(),
+            content: MessageContent::Parts(vec![
+                ContentPart::Text {
+                    text: "Вопрос со скриншота — разбери для самопроверки.".to_string(),
+                },
+                ContentPart::ImageUrl {
+                    image_url: ImageUrl {
+                        url: image_data_url.to_string(),
+                    },
+                },
+            ]),
+        },
+    ]
+}
+
 // NOTE: the live F8 capture path calls crate::ai::stream_chat directly with
 // build_vision_request[_with_context]() + VISION_MAX_TOKENS and applies the
 // is_local cost zeroing itself, so a separate stream_vision() wrapper here was
@@ -221,6 +287,54 @@ mod tests {
             matches!(&with[1].content, MessageContent::Parts(p) if p.len() == 2),
             "user turn must still be the 2-part (text + image) capture turn"
         );
+    }
+
+    #[test]
+    fn test_practice_request_is_answer_plus_explanation_and_refuses_to_fabricate() {
+        let msgs = build_test_practice_request("data:image/jpeg;base64,AAAA", "ru");
+        // Shape: a system turn (the study instructions) + a user turn (ask + image).
+        assert_eq!(
+            msgs.len(),
+            2,
+            "practice request = system + user(image) turns"
+        );
+        assert_eq!(msgs[0].role, "system");
+        assert_eq!(msgs[1].role, "user");
+        // The user turn must still carry the screenshot as an image part.
+        assert!(
+            matches!(&msgs[1].content, MessageContent::Parts(p)
+                if p.iter().any(|x| matches!(x, ContentPart::ImageUrl { image_url }
+                    if image_url.url.as_str() == "data:image/jpeg;base64,AAAA"))),
+            "practice request must keep the screenshot image part"
+        );
+        // The instruction is NOT answer-only: it mandates the explanation AND the
+        // no-fabrication guard. These two properties are the whole point.
+        assert!(
+            matches!(&msgs[0].content, MessageContent::Text(_)),
+            "practice system turn must be text"
+        );
+        if let MessageContent::Text(sys) = &msgs[0].content {
+            assert!(
+                sys.contains("Ответ:"),
+                "must ask for an explicit answer line"
+            );
+            assert!(
+                sys.contains("объясни") && sys.contains("почему"),
+                "must mandate an explanation (not answer-only)"
+            );
+            assert!(
+                sys.contains("Не уверен") && sys.contains("НЕ выдумывай"),
+                "must refuse to fabricate on an unclear image"
+            );
+        }
+    }
+
+    #[test]
+    fn test_practice_prompt_honors_response_language() {
+        assert!(test_practice_prompt("ru").contains("на русском"));
+        assert!(test_practice_prompt("en").contains("in English"));
+        // Unknown tag falls back to "language of the question".
+        assert!(test_practice_prompt("de").contains("на языке вопроса"));
     }
 
     #[test]

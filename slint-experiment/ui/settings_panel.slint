@@ -251,6 +251,8 @@ export component SettingsWindow inherits Window {
     in-out property <int> vision-provider-index: 2; // 0=off 1=same 2=cloud 3=local
     // Feature #4 — IPA phonetics in F8 translate-mode output (OFF by default).
     in-out property <bool> vision-phonetics: false;
+    // v0.11.0 — Test Practice mode for plain F8 (study / self-check). OFF default.
+    in-out property <bool> vision-test-practice: false;
     in-out property <string> vision-base-url-input;
     in-out property <string> vision-bearer-input;
     in-out property <string> vision-model-input;
@@ -260,6 +262,7 @@ export component SettingsWindow inherits Window {
     in-out property <string> vision-test-result;
     callback vision-provider-changed(int);
     callback vision-phonetics-changed(bool);
+    callback vision-test-practice-changed(bool);
     callback vision-base-url-save(string);
     callback vision-bearer-save(string);
     callback vision-model-save(string);
@@ -1605,6 +1608,16 @@ export component SettingsWindow inherits Window {
                                 font-size: 11px;
                                 color: Theme.accent;
                                 vertical-alignment: center;
+                            }
+                        }
+                        // v0.11.0 — Test Practice mode for plain F8 (study / self-check):
+                        // answer + a short explanation from a screenshot of a PRACTICE
+                        // question. For studying, NOT graded exams. Shown when vision is on.
+                        if root.vision-provider-index >= 1 : DarkCheck {
+                            text: @tr("F8 → Test Practice: answer + short explanation (for practice & self-check)");
+                            checked <=> root.vision-test-practice;
+                            toggled(v) => {
+                                root.vision-test-practice-changed(v);
                             }
                         }
                         // Feature #4 — phonetics in TRANSLATE mode (F8 toggle / Shift+F8).
