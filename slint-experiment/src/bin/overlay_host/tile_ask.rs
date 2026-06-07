@@ -388,6 +388,11 @@ pub(crate) fn fire_f9_ask(
             c.ai_local_vision,
         )
     };
+    // Audit (prompt-context): the F9 / typed-ask LLM prompt must carry the user's
+    // APPROVED memory + profile, the same as the auto/F6/re-ask paths —
+    // context_for_meeting folds the bounded memory block in (no-op when nothing
+    // is approved, so the request is byte-identical for users without memory).
+    let meeting_context = overlay_backend::memory::context_for_meeting(&meeting_context);
     let current_micro = slint_replay::runtime_state::lock(slint_rt).session_cost_microcents;
     if current_micro > 0 && cap_usd > 0.0 {
         let usd = (current_micro as f64) / 100_000_000.0;

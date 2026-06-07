@@ -1281,6 +1281,11 @@ fn main() -> Result<(), slint::PlatformError> {
                     let c = cfg_for_poll.read();
                     (c.meeting_context.clone(), c.response_language.clone())
                 };
+                // Audit (prompt-context): seed the completed-tile history with the
+                // SAME effective context (profile + approved memory) the live answer
+                // paths use, so a follow-up/regenerate matches the original request.
+                let meeting_context =
+                    overlay_backend::memory::context_for_meeting(&meeting_context);
                 let question = req.spec.question.clone();
                 let mut messages = ai::build_request(
                     &meeting_context,

@@ -538,9 +538,13 @@ async fn maybe_spawn_auto_tile(
     }
 
     // ===== QA cache key + lookup =====
+    // Audit (prompt-context): compute the EFFECTIVE context (profile + approved
+    // memory) ONCE here, hash IT (not the raw meeting_context) so approving/editing/
+    // deleting memory invalidates a stale cached answer, and reuse it for the prompt.
+    let effective_context = overlay_backend::memory::context_for_meeting(&meeting_context);
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
-    meeting_context.hash(&mut h);
+    effective_context.hash(&mut h);
     let ctx_hash = h.finish();
     let mut h2 = std::collections::hash_map::DefaultHasher::new();
     trigger_keywords.hash(&mut h2);
@@ -654,9 +658,10 @@ async fn maybe_spawn_auto_tile(
     let (system_prompt, prompt) = backend_runtime::build_auto_tile_prompts(
         &trigger,
         &recent_transcript,
-        // Phase 3b.4 — fold the user's APPROVED memory into the background block
-        // (this auto/F9 ask runs on a spawned task, off the audio thread).
-        &overlay_backend::memory::context_for_meeting(&meeting_context),
+        // Phase 3b.4 — fold the user's APPROVED memory into the background block.
+        // Audit (prompt-context): reuse the SAME effective context hashed for the
+        // cache key above (computed once; off the audio thread).
+        &effective_context,
         &response_language,
     );
     let sys_full = system_prompt.clone();

@@ -406,7 +406,10 @@ pub(crate) fn launch_vision_for_bgra(
     // translation task; TestPractice is a factual answer — a persona would
     // distort both, so they stay profile-free.
     let vision_context = if matches!(mode, vision::VisionMode::Describe) {
-        cfg.read().meeting_context.clone()
+        // Audit (prompt-context): F8 Describe carries approved memory + profile too
+        // (Translate/TestPractice stay profile-free above).
+        let raw = cfg.read().meeting_context.clone();
+        overlay_backend::memory::context_for_meeting(&raw)
     } else {
         String::new()
     };

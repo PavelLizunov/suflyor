@@ -60,9 +60,15 @@ fn followup_system_prompt(
     let ctx_block = if meeting_context.trim().is_empty() {
         String::new()
     } else {
+        // Audit Finding 2: mirror ai::build_request's profile semantics so a ROLE/
+        // style profile is honored in follow-ups as strongly as in the first answer
+        // (it used to be framed only as weak "background", causing persona drift).
         format!(
-            "\n\nБэкграунд пользователя (фон для уровня детализации — НЕ ограничивай \
-             ответ этой темой):\n{}",
+            "\n\nПрофиль/контекст пользователя — применяй его ОДИНАКОВО к этому \
+             продолжению диалога. Если профиль задаёт РОЛЬ или стиль общения \
+             (например «отвечай как психолог», «говори кратко») — следуй ему. Если \
+             это бэкграунд/опыт — используй для уровня детализации, НЕ ограничивая \
+             тему ответа этим:\n{}",
             meeting_context.trim()
         )
     };
@@ -465,6 +471,9 @@ pub(crate) fn fire_followup_ask(
             c.meeting_context.clone(),
         )
     };
+    // Audit (prompt-context): the follow-up LLM prompt carries approved memory +
+    // profile too (reframe builds a fresh neutral system prompt, so no double-add).
+    let meeting_context = overlay_backend::memory::context_for_meeting(&meeting_context);
     // THE FIX — send a reframed copy (neutral continuation system + demoted
     // transcript turns) so the model answers THIS question, not the original
     // transcript question. The STORED history (request_messages installed above)
@@ -603,6 +612,10 @@ pub(crate) fn fire_regenerate(
     // turn) keeps the rich F9 system so the cloud re-answer has full meeting
     // context. Send-time only — the STORED history stays original.
     let send_messages = if messages.iter().filter(|m| m.role == "user").count() >= 2 {
+        // Audit (prompt-context): the reframed follow-up prompt carries approved
+        // memory + profile. Computed ONLY on this branch — a 1-turn regenerate
+        // sends the stored (already-effective) system as-is, no extra catalog read.
+        let meeting_context = overlay_backend::memory::context_for_meeting(&meeting_context);
         reframe_for_send(&messages, &response_language, &meeting_context)
     } else {
         messages.clone()
@@ -809,6 +822,22 @@ mod tests {
         assert!(s.contains("Пользователь ранее спросил: X"));
         assert!(followup_system_prompt("en", "", "").contains("English"));
         // Empty meeting-context → no background block.
-        assert!(!followup_system_prompt("ru", "", "").contains("Бэкграунд"));
+        assert!(!followup_system_prompt("ru", "", "").contains("Профиль/контекст"));
+    }
+
+    #[test]
+    fn followup_system_prompt_carries_role_style_semantics() {
+        // Audit Finding 2: a ROLE/style profile must be honored in follow-ups as
+        // strongly as in the first answer (was previously framed as weak background).
+        let s = followup_system_prompt("ru", "отвечай как психолог", "");
+        assert!(
+            s.contains("РОЛЬ") || s.contains("роль"),
+            "follow-up must invoke role semantics"
+        );
+        assert!(s.contains("стиль"), "follow-up must invoke style semantics");
+        assert!(
+            s.contains("отвечай как психолог"),
+            "follow-up must carry the profile text"
+        );
     }
 }
