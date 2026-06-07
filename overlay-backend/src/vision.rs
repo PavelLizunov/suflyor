@@ -123,9 +123,12 @@ pub enum VisionMode {
 
 /// System instruction for [`VisionMode::TestPractice`]. This is a STUDY /
 /// SELF-CHECK helper: the user has already attempted a practice question and
-/// wants to check the answer AND understand the mistake — so the answer comes
-/// WITH a short explanation (never answer-only), and the model must say
-/// "Не уверен" rather than fabricate when the image is unclear. `response_lang`
+/// wants to check the answer AND understand the mistake. Handles single-choice,
+/// MULTI-select (lists ALL correct), fill-in-the-blank («___», where the empty
+/// blank is the slot to fill — NOT a reason to refuse), and open questions — the
+/// answer comes WITH a short explanation (never answer-only), and the model says
+/// "Не уверен" rather than fabricate ONLY when the question text itself is
+/// unreadable/ambiguous (missing A/B/C alone is not a reason). `response_lang`
 /// is the ISO tag the rest of the app answers in. No persona/profile is applied
 /// (a role like «отвечай как психолог» would distort a factual answer).
 #[must_use]
@@ -138,13 +141,19 @@ pub fn test_practice_prompt(response_lang: &str) -> String {
     format!(
         "Режим тренировки и самопроверки: пользователь УЖЕ ответил на учебный вопрос и хочет \
          свериться и понять, где ошибся. Это не оцениваемый экзамен.\n\
-         По изображению:\n\
-         1) Определи вопрос и варианты ответа.\n\
-         2) ПЕРВОЙ строкой дай правильный ответ в формате «Ответ: <буква или вариант>».\n\
-         3) Затем КРАТКО объясни, почему он верный и почему основные неверные варианты неверны — \
-         ради этого и нужен режим (понять ошибку). 2–4 коротких пункта, по делу, без воды.\n\
-         4) Если вопрос или варианты плохо видны либо неоднозначны — вместо ответа напиши \
-         «Не уверен» и что именно мешает. НЕ выдумывай ответ.\n\
+         Сначала определи ТИП вопроса и ответь под него:\n\
+         - Один верный вариант → «Ответ: <буква или текст варианта>».\n\
+         - Несколько верных вариантов → перечисли ВСЕ верные: «Ответ: B, D» (или все подходящие).\n\
+         - Заполнить пропуск / вставить слово (в тексте есть «___» или пропуск) → дай слово или \
+         фразу, которой заполняется пропуск: «Ответ: <слово/фраза>». Пустой «___» — это и есть \
+         место для ответа, его НАДО заполнить, а НЕ повод писать «не уверен».\n\
+         - Открытый вопрос без вариантов → дай краткий правильный ответ.\n\
+         ПЕРВОЙ строкой всегда «Ответ: …». Затем КРАТКО объясни, почему ответ верный (для выбора — \
+         ещё и почему основные неверные варианты неверны) — ради этого и нужен режим (понять \
+         ошибку). 2–4 коротких пункта, без воды.\n\
+         «Не уверен» (и что мешает) пиши ТОЛЬКО если сам текст вопроса не читается (слишком мелко \
+         или обрезано) либо он по-настоящему неоднозначен. Отсутствие букв A/B/C само по себе \
+         НЕ причина — это может быть вопрос на заполнение пропуска или открытый. НЕ выдумывай ответ.\n\
          {lang_line} Без преамбулы. Допустим Markdown."
     )
 }
@@ -335,6 +344,23 @@ mod tests {
         assert!(test_practice_prompt("en").contains("in English"));
         // Unknown tag falls back to "language of the question".
         assert!(test_practice_prompt("de").contains("на языке вопроса"));
+    }
+
+    #[test]
+    fn test_practice_prompt_covers_fill_blank_and_multi_answer() {
+        let p = test_practice_prompt("ru");
+        // Fill-in-the-blank: must recognise «___» as the slot to fill.
+        assert!(p.contains("пропуск"), "must handle fill-in-the-blank");
+        assert!(
+            p.contains("Несколько верных") || p.contains("перечисли ВСЕ"),
+            "must handle multi-answer (more than one correct option)"
+        );
+        // The mere absence of A/B/C options must NOT force a refusal — that was
+        // the bug: fill-in-the-blank questions got a wrong «Не уверен».
+        assert!(
+            p.contains("НЕ причина"),
+            "missing A/B/C must not force 'Не уверен'"
+        );
     }
 
     #[test]
