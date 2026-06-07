@@ -165,10 +165,16 @@ export component CaptureOverlay inherits Window {
                     root.ey = self.mouse-y;
                     root.dragging = true;
                 } else if (ev.kind == PointerEventKind.up) {
-                    root.dragging = false;
-                    if (root.rw >= 4px && root.rh >= 4px) {
+                    // Emit ONLY for a real drag started in THIS session
+                    // (root.dragging) that covers a deliberate area. A stray up, a
+                    // plain click, or a tiny accidental drag cancels — never a
+                    // spurious 1×1 capture. (4px was far too low: normal click
+                    // jitter exceeded it and fired a vision request on noise.)
+                    if (root.dragging && root.rw >= 16px && root.rh >= 16px) {
+                        root.dragging = false;
                         root.region-selected(root.rx, root.ry, root.rx + root.rw, root.ry + root.rh);
                     } else {
+                        root.dragging = false;
                         root.cancelled();
                     }
                 }

@@ -184,13 +184,21 @@ pub(crate) fn fire_f8_vision_capture(
             let to_px = |v: f32| (v * scale).round().max(0.0) as u32;
             let (px1, py1) = (to_px(x1), to_px(y1));
             let (px2, py2) = (to_px(x2), to_px(y2));
-            let cropped = slint_replay::capture::crop_bgra(
-                &frozen_c,
-                px1,
-                py1,
-                px2.saturating_sub(px1),
-                py2.saturating_sub(py1),
-            );
+            let (cw, ch) = (px2.saturating_sub(px1), py2.saturating_sub(py1));
+            // Audit (F8 #4): reject a tiny/degenerate region BEFORE crop_bgra — its
+            // `.max(1)` would otherwise coerce it into a 1×1 buffer and launch a
+            // spurious vision request on noise. The .slint already guards with a
+            // 16px-logical minimum + a fresh-drag check; this is the physical-px
+            // backstop (covers DPI rounding + any future caller of this path).
+            const MIN_CAPTURE_PX: u32 = 8;
+            if cw < MIN_CAPTURE_PX || ch < MIN_CAPTURE_PX {
+                diag!(
+                    "[overlay-host] F8 region rejected: {cw}x{ch}px physical \
+                     (logical {x1:.0},{y1:.0}-{x2:.0},{y2:.0} scale={scale:.2}) — too small, no request"
+                );
+                return;
+            }
+            let cropped = slint_replay::capture::crop_bgra(&frozen_c, px1, py1, cw, ch);
             launch_vision_for_bgra(
                 cropped,
                 ep_c.clone(),
