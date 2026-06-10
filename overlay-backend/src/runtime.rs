@@ -330,11 +330,20 @@ pub fn summary_system_prompt(is_ru: bool, truncated: bool) -> String {
 /// regenerate (🔄) / escalate (🧠) re-asks this exact pair and rebuilds the
 /// summary instead of re-asking a bare title. `is_local` picks the char budget
 /// (local llama-server ctx is tighter than a hosted window).
+///
+/// v0.16.0 — `memory_ref`: an optional keyword-gated reference block (facts
+/// from the user's approved memory whose terms came up in THIS transcript —
+/// see `memory::summary_reference_for_transcript`). It is framed strictly as
+/// term DECODING, so the v0.12.0 factual-digest rule (no persona/memory in
+/// the recap) still holds: the model may interpret «Альфа», it may NOT add
+/// reference facts the call never mentioned. `None` → byte-identical to the
+/// pre-v0.16 seed.
 #[must_use]
 pub fn build_summary_seed(
     transcript: &[TranscriptLine],
     is_ru: bool,
     is_local: bool,
+    memory_ref: Option<&str>,
 ) -> Vec<ai::ChatMessage> {
     let budget = if is_local {
         SUMMARY_INPUT_BUDGET_LOCAL_CHARS
@@ -349,10 +358,25 @@ pub fn build_summary_seed(
             formatted.chars().count()
         );
     }
+    let mut system = summary_system_prompt(is_ru, truncated);
+    if let Some(r) = memory_ref.map(str::trim).filter(|r| !r.is_empty()) {
+        system.push_str(if is_ru {
+            "\n\nСПРАВКА — внутренние термины/имена пользователя (его одобренная память; \
+             эти термины звучали в разговоре). Используй её ТОЛЬКО чтобы правильно понять \
+             и расшифровать эти названия в сводке; НЕ добавляй из справки факты, которых \
+             не было в самом разговоре:\n"
+        } else {
+            "\n\nREFERENCE — the user's internal terms/names (their approved memory; these \
+             terms came up in the conversation). Use it ONLY to correctly interpret those \
+             names in the summary; do NOT add reference facts the conversation itself \
+             never mentioned:\n"
+        });
+        system.push_str(r);
+    }
     vec![
         ai::ChatMessage {
             role: "system".into(),
-            content: ai::MessageContent::Text(summary_system_prompt(is_ru, truncated)),
+            content: ai::MessageContent::Text(system),
         },
         ai::ChatMessage {
             role: "user".into(),
@@ -391,10 +415,19 @@ pub async fn run_meeting_summary(
         )
     };
     let is_ru = response_language == "ru";
+    // v0.16.0 — keyword-gated memory reference: facts whose terms came up in
+    // this transcript decode internal names for the secretary. None (the
+    // common case) keeps the request byte-identical to a no-memory build.
+    let memory_ref = crate::memory::summary_reference_for_transcript(
+        &format_transcript_for_summary(&transcript, is_ru),
+    );
+    if memory_ref.is_some() {
+        log::info!("meeting summary: keyword-gated memory reference attached");
+    }
     // Same pair the tile will seed its conversation with, so the bar-button
     // summary and a tile-level 🔄/🧠 rebuild are byte-identical for the same
     // transcript + provider.
-    let messages = build_summary_seed(&transcript, is_ru, is_local);
+    let messages = build_summary_seed(&transcript, is_ru, is_local, memory_ref.as_deref());
     let tile_title = if is_ru {
         "Summary созвона".to_string()
     } else {
@@ -1505,7 +1538,7 @@ mod tests {
                 )
             })
             .collect();
-        let seed = build_summary_seed(&big, true, true);
+        let seed = build_summary_seed(&big, true, true, None);
         let sys = match &seed[0].content {
             ai::MessageContent::Text(s) => s.clone(),
             _ => String::new(),
@@ -1628,7 +1661,7 @@ mod tests {
             line(AudioSource::Mic, "обсудим план", 0),
             line(AudioSource::System, "давай, я записываю", 1),
         ];
-        let seed = build_summary_seed(&t, true, false);
+        let seed = build_summary_seed(&t, true, false, None);
         assert_eq!(seed.len(), 2, "seed must be exactly [system, user]");
         assert_eq!(seed[0].role, "system");
         assert_eq!(seed[1].role, "user");
@@ -1656,13 +1689,44 @@ mod tests {
             line(AudioSource::Mic, "коротко", 0),
             line(AudioSource::System, "ок", 1),
         ];
-        let seed = build_summary_seed(&t, true, true);
+        let seed = build_summary_seed(&t, true, true, None);
         let sys = match &seed[0].content {
             ai::MessageContent::Text(s) => s.clone(),
             _ => String::new(),
         };
         assert!(!sys.contains("усечён"));
         assert_eq!(sys, summary_system_prompt(true, false));
+    }
+
+    #[test]
+    fn summary_seed_memory_ref_is_decode_only_and_none_is_byte_identical() {
+        fn text_of(m: &ai::ChatMessage) -> String {
+            match &m.content {
+                ai::MessageContent::Text(s) => s.clone(),
+                _ => String::new(),
+            }
+        }
+        let t = vec![
+            line(AudioSource::Mic, "обсудим по Альфе", 0),
+            line(AudioSource::System, "давай", 1),
+        ];
+        // None / empty / whitespace → byte-identical to the pre-v0.16 seed.
+        let plain = build_summary_seed(&t, true, false, None);
+        let empty = build_summary_seed(&t, true, false, Some("   "));
+        assert_eq!(text_of(&plain[0]), text_of(&empty[0]));
+        assert_eq!(text_of(&plain[1]), text_of(&empty[1]));
+        // Some(block) → the system prompt gains the decode-only СПРАВКА with
+        // the block, and the user turn (transcript) is untouched.
+        let with_ref = build_summary_seed(&t, true, false, Some("- Проект Альфа — внутренняя CRM"));
+        let sys = text_of(&with_ref[0]);
+        assert!(sys.contains("СПРАВКА"));
+        assert!(sys.contains("Проект Альфа — внутренняя CRM"));
+        assert!(sys.contains("НЕ добавляй из справки факты"));
+        assert_eq!(
+            text_of(&with_ref[1]),
+            text_of(&plain[1]),
+            "user turn must be unchanged"
+        );
     }
 
     /// Smoke: with a hermetic empty config the AI call fails fast and the

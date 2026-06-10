@@ -13,7 +13,9 @@
 use std::collections::HashSet;
 
 use overlay_backend::memory::extract_heuristic;
-use overlay_backend::persistence::{open_default_store, MemoryCandidate, MemoryItem};
+use overlay_backend::persistence::{
+    open_default_store, MemoryCandidate, MemoryItem, NewMemoryItem,
+};
 
 use super::{ComponentHandle, MemoryRow, ModelRc, SettingsWindow, SharedString, VecModel};
 
@@ -68,6 +70,32 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
                 w.set_memory_status(SharedString::from(format!("➕ {inserted}")));
                 reload_memory(&w);
             }
+        });
+    }
+    // v0.16.0 — manual "add your own fact" (personal knowledge base). Inserts
+    // straight into the APPROVED items as kind `note` (typing the fact IS the
+    // consent the approve step otherwise provides); empty input is a no-op.
+    {
+        let weak = win.as_weak();
+        win.on_memory_add_fact(move |text| {
+            let Some(w) = weak.upgrade() else { return };
+            let trimmed = text.trim();
+            if trimmed.is_empty() {
+                return;
+            }
+            if let Ok(mut store) = open_default_store() {
+                let _ = store.insert_memory_item(
+                    &NewMemoryItem {
+                        profile_id: PROFILE.into(),
+                        kind: "note".into(),
+                        text: trimmed.to_string(),
+                        source_session_id: None,
+                    },
+                    now_ms(),
+                );
+            }
+            w.set_memory_add_text(SharedString::default());
+            reload_memory(&w);
         });
     }
 }

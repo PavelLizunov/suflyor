@@ -1220,10 +1220,25 @@ fn main() -> Result<(), slint::PlatformError> {
                         (is_local, tx)
                     };
                     summary_seed_has_transcript = !transcript.is_empty();
+                    // v0.16.0 — same keyword-gated memory LOGIC as the bar
+                    // build. Computed at seed time, so a 🔄/🧠 rebuild uses the
+                    // CURRENT transcript + memory — the v0.12.2 "rebuild" sema:
+                    // the transcript here is also read live, and a fact added
+                    // after the bar press SHOULD shape the rebuild. Small
+                    // read-only catalog query on a user-initiated path (same
+                    // budget class as context_for_meeting, v0.11.2).
+                    let is_ru = response_language == "ru";
+                    let memory_ref = overlay_backend::memory::summary_reference_for_transcript(
+                        &overlay_backend::runtime::format_transcript_for_summary(
+                            &transcript,
+                            is_ru,
+                        ),
+                    );
                     overlay_backend::runtime::build_summary_seed(
                         &transcript,
-                        response_language == "ru",
+                        is_ru,
                         is_local,
+                        memory_ref.as_deref(),
                     )
                 } else {
                     ai::build_request(

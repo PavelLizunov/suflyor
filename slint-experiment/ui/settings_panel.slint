@@ -226,6 +226,11 @@ export component SettingsWindow inherits Window {
     callback memory-reject(int);
     callback memory-delete-item(int);
     callback memory-extract();
+    // v0.16.0 — manual "add your own fact" input (personal knowledge base):
+    // the text goes straight into the APPROVED memory_items (typing it IS the
+    // consent the approve step otherwise provides).
+    in-out property <string> memory-add-text: "";
+    callback memory-add-fact(string);
     // Persisted cross-window toggles (driven by overlay-host).
     in-out property <bool> always-on-top-toggle: true;
     in-out property <bool> stealth-toggle: false;
@@ -1892,6 +1897,28 @@ export component SettingsWindow inherits Window {
                         spacing: 8px;
                         Text {
                             text: @tr("Personal memory: approve useful fragments from your sessions. Only APPROVED items are mixed into new AI requests. Stored locally; nothing leaves your machine.");
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        // v0.16.0 — personal knowledge base: add your own fact
+                        // (internal project, term, names). Lands directly in the
+                        // approved list below.
+                        HorizontalLayout {
+                            spacing: 8px;
+                            LineEdit {
+                                placeholder-text: @tr("Your fact: project, term, names…");
+                                text <=> root.memory-add-text;
+                                horizontal-stretch: 1;
+                                accepted(t) => { root.memory-add-fact(t); }
+                            }
+                            Button {
+                                text: @tr("Add");
+                                clicked => { root.memory-add-fact(root.memory-add-text); }
+                            }
+                        }
+                        Text {
+                            text: @tr("Facts also reach the meeting Summary — but only when their terms come up in the conversation.");
                             font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;

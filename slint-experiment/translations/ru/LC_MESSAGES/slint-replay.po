@@ -973,6 +973,16 @@ msgstr "Память"
 msgid "Personal memory: approve useful fragments from your sessions. Only APPROVED items are mixed into new AI requests. Stored locally; nothing leaves your machine."
 msgstr "Персональная память: одобряй полезные фрагменты из своих сессий. В новые запросы к ИИ подмешиваются ТОЛЬКО одобренные. Хранится локально; ничего не уходит с твоего компьютера."
 
+# --- v0.16.0: personal knowledge base (manual facts + Summary reference) ---
+msgid "Your fact: project, term, names…"
+msgstr "Свой факт: проект, термин, имена…"
+
+msgid "Add"
+msgstr "Добавить"
+
+msgid "Facts also reach the meeting Summary — but only when their terms come up in the conversation."
+msgstr "Факты попадают и в Сводку встречи — но только когда их термины звучат в разговоре."
+
 msgid "Extract from recent sessions"
 msgstr "Извлечь из последних сессий"
 
