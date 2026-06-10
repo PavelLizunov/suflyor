@@ -4016,6 +4016,7 @@ dependencies = [
  "bytes",
  "dirs",
  "futures-util",
+ "hound",
  "log",
  "once_cell",
  "parking_lot",
@@ -5395,7 +5396,7 @@ dependencies = [
 
 [[package]]
 name = "slint-replay"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "anyhow",
  "base64",

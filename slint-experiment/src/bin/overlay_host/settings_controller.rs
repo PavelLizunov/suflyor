@@ -111,6 +111,7 @@ pub(crate) fn open_settings(
         let snap = cfg.read();
         refresh_profiles(&win, &snap);
         win.set_coaching_debrief(snap.post_meeting_debrief_enabled);
+        win.set_record_audio(snap.record_audio_enabled);
         win.set_auto_tiles_enabled(snap.auto_tiles_enabled);
         win.set_trigger_keywords_input(SharedString::from(snap.trigger_keywords.as_str()));
     }
@@ -562,6 +563,32 @@ pub(crate) fn open_settings(
             let mut c = cfg_c.write();
             c.post_meeting_debrief_enabled = on;
             let _ = overlay_backend::config::save(&c);
+        });
+    }
+    // v0.13.0 — raw-audio recording toggle + "open recordings folder". The tee
+    // in slint_session reads record_audio_enabled at the NEXT session start, so
+    // a change applies to the next session (an in-flight recording keeps going).
+    {
+        let cfg_c = cfg.clone();
+        win.on_record_audio_changed(move |on| {
+            let mut c = cfg_c.write();
+            c.record_audio_enabled = on;
+            let _ = overlay_backend::config::save(&c);
+        });
+    }
+    {
+        win.on_open_recordings_clicked(move || {
+            match overlay_backend::recorder::recordings_dir() {
+                Ok(dir) => {
+                    // Create it first so the folder opens even before the first
+                    // recording exists. Explorer launch is fire-and-forget.
+                    let _ = std::fs::create_dir_all(&dir);
+                    if let Err(e) = std::process::Command::new("explorer").arg(&dir).spawn() {
+                        eprintln!("[overlay-host] open recordings folder failed: {e}");
+                    }
+                }
+                Err(e) => eprintln!("[overlay-host] cannot resolve recordings dir: {e:#}"),
+            }
         });
     }
     {

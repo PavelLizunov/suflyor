@@ -14,6 +14,7 @@ pub mod kb;
 pub mod local_ai;
 pub mod memory;
 pub mod persistence;
+pub mod recorder;
 pub mod runtime;
 pub mod stt;
 pub mod update;

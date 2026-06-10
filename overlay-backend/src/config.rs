@@ -194,6 +194,24 @@ pub struct Config {
     #[serde(default = "default_post_meeting_debrief_enabled")]
     pub post_meeting_debrief_enabled: bool,
 
+    /// v0.13.0 — record the raw session audio (mic + system, separate 16 kHz
+    /// mono WAVs) under `%APPDATA%\overlay-mvp\recordings\<session_id>\`. Kept
+    /// locally; nothing is uploaded. Enables a future "re-transcribe + re-summary
+    /// from the archive" flow (the live STT transcript is real-time-bounded;
+    /// re-running offline over the saved audio yields a better transcript).
+    /// Default ON — the recordings power the "re-summary from the archive"
+    /// flow, so they should accumulate by default. The Settings → Audio toggle
+    /// and the retention bound let a user turn it off or cap disk use.
+    /// See `default_record_audio_enabled`.
+    #[serde(default = "default_record_audio_enabled")]
+    pub record_audio_enabled: bool,
+
+    /// v0.13.0 — how many of the most-recent recorded sessions to keep on disk
+    /// (older `recordings\<id>\` dirs are pruned at session start). ~230 MB/hr
+    /// for both channels, so a bound matters. 0 = keep everything (unbounded).
+    #[serde(default = "default_record_retention_sessions")]
+    pub record_retention_sessions: u32,
+
     /// P2 — index finished JSONL sessions into the local SQLite archive
     /// (searchable interview history). ON by default; the JSONL journals stay the
     /// source of truth either way, and the catalog can be deleted + rebuilt.
@@ -472,6 +490,8 @@ impl Config {
             tile_font_size: default_tile_font_size(),
             snippets: default_snippets(),
             post_meeting_debrief_enabled: default_post_meeting_debrief_enabled(),
+            record_audio_enabled: default_record_audio_enabled(),
+            record_retention_sessions: default_record_retention_sessions(),
             session_archive_enabled: default_session_archive_enabled(),
             auto_export_on_quit: false,
             max_session_cost_usd: default_max_session_cost_usd(),
@@ -800,6 +820,17 @@ fn default_tile_body_opacity() -> f32 {
 
 fn default_post_meeting_debrief_enabled() -> bool {
     false // opt-in — surprise Sonnet calls are bad UX
+}
+
+fn default_record_audio_enabled() -> bool {
+    // ON by default — the saved audio is what a later "re-transcribe + re-summary
+    // from the archive" flow needs; every un-recorded call is lost to it. The
+    // Settings toggle + retention give the user control over privacy + disk.
+    true
+}
+
+fn default_record_retention_sessions() -> u32 {
+    10 // ~ last 10 sessions; user-adjustable, 0 = unbounded
 }
 
 fn default_session_archive_enabled() -> bool {

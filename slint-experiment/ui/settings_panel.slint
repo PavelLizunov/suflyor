@@ -414,6 +414,10 @@ export component SettingsWindow inherits Window {
     // Phase F — Coaching + Auto-tiles controls (were dead/cosmetic: no binding).
     in-out property <bool> coaching-debrief: false;
     callback coaching-debrief-changed(bool);
+    // v0.13.0 — raw-audio recording (Audio tab).
+    in-out property <bool> record-audio: true;
+    callback record-audio-changed(bool);
+    callback open-recordings-clicked();
     in-out property <bool> auto-tiles-enabled: true;
     callback auto-tiles-enabled-changed(bool);
     in-out property <string> trigger-keywords-input: "";
@@ -1074,6 +1078,25 @@ export component SettingsWindow inherits Window {
                             font-size: 11px;
                             color: Theme.accent;
                             wrap: word-wrap;
+                        }
+                        // v0.13.0 — raw session-audio recording.
+                        Rectangle { background: Theme.border; height: 1px; }
+                        DarkCheck {
+                            text: @tr("Record session audio (mic + system)");
+                            checked <=> root.record-audio;
+                            toggled(v) => {
+                                root.record-audio-changed(v);
+                            }
+                        }
+                        Text {
+                            text: @tr("Saved locally as separate mic + system WAVs per session — nothing is uploaded. Powers a future \"re-summary from the archive\". ~230 MB/hour; the last 10 sessions are kept, older are removed.");
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        Button {
+                            text: @tr("Open recordings folder");
+                            clicked => { root.open-recordings-clicked(); }
                         }
                     }
                     if root.active-tab == 7 : VerticalLayout {

@@ -62,8 +62,13 @@ anyhow = "1"
 sha2 = "0.10"
 rusqlite = { version = "0.40.0", features = ["bundled"] }
 
-[dev-dependencies]
+# WAV encode/decode (recorder.rs — session audio recording, v0.13.0). Was a
+# dev-dep (STT test round-trip); promoted to a real dep now that recorder.rs
+# writes the per-channel session WAVs at runtime. Tests still use it freely
+# (a [dependencies] entry is visible to the test target too).
 hound = "3"
+
+[dev-dependencies]
 tempfile = "3"
 # Drop-guard for test cleanup (bookmark_tests in journal.rs).
 scopeguard = "1"

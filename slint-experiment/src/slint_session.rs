@@ -26,7 +26,7 @@
 
 use crate::runtime_state::{lock, push_transcript_line, SharedSlintRuntime};
 use anyhow::{Context, Result};
-use overlay_backend::audio::{self, AudioSource, TranscriptLine};
+use overlay_backend::audio::{self, AudioChunk, AudioSource, TranscriptLine};
 use overlay_backend::config::SharedConfig;
 use overlay_backend::events::{MonitorHint, RuntimeEvents, TileKind, TileSpec};
 use overlay_backend::journal::{now_unix_ms, Journal, JournalEvent};
@@ -211,9 +211,68 @@ fn start_session_inner(
         .context("audio::start_capture failed (check mic / system audio devices in Settings)")?;
     let health = lock(&rt).health.clone();
 
+    // ===== 4b. Optional raw-audio recorder (v0.13.0) =====
+    // When recording is enabled, tee the AudioChunk stream to per-channel WAVs
+    // via a forwarding task that ALSO feeds the recorder. The recorder.feed is
+    // non-blocking (drops on overflow), and forwarding to STT keeps the SAME
+    // bounded(128) back-pressure as the direct path — so recording never slows
+    // transcription. The recorder is MOVED into the task and dropped (WAVs
+    // finalised) when the stream ends on session stop. When disabled, audio_rx
+    // flows straight into STT with zero overhead.
+    let stt_audio_rx = if cfg.read().record_audio_enabled {
+        let keep_sessions = cfg.read().record_retention_sessions as usize;
+        let session_id = journal
+            .current_path()
+            .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
+            .unwrap_or_else(|| format!("session_{}", now_unix_ms()));
+        match overlay_backend::recorder::SessionRecorder::start(&session_id, keep_sessions) {
+            Ok(recorder) => {
+                log_info(&format!("audio recording → {}", recorder.dir().display()));
+                let (stt_tx, stt_rx2) = tokio::sync::mpsc::channel::<AudioChunk>(128);
+                let mut src_rx = audio_rx;
+                // Intentionally NOT stored as an abort-tracked task: it
+                // self-terminates when src_rx closes (stop_session drops the
+                // CaptureHandle → WASAPI threads exit → senders dropped), and the
+                // recorder MUST finalise its WAVs via Drop rather than be aborted
+                // mid-write. The retention prune's grace window keeps a rapid
+                // restart from racing a still-finalising prior dir.
+                tokio::spawn(async move {
+                    // `recorder` is owned here → it is finalised when this task
+                    // ends, i.e. when capture stops and src_rx closes.
+                    let recorder = recorder;
+                    while let Some(chunk) = src_rx.recv().await {
+                        recorder.feed(&chunk);
+                        if stt_tx.send(chunk).await.is_err() {
+                            break; // STT pipeline gone — stop teeing
+                        }
+                    }
+                    // Finalise the WAVs on the BLOCKING pool: the recorder's Drop
+                    // join()s its writer std-thread (real disk I/O), and the
+                    // runtime has only 2 worker threads — dropping it inline would
+                    // park a scarce async worker for the flush, and a stacked
+                    // teardown on rapid restart could park both. spawn_blocking
+                    // moves the join off the async workers (review v0.13.0). The
+                    // handle is detached (dropped) — the blocking finalise still
+                    // runs to completion.
+                    std::mem::drop(tokio::task::spawn_blocking(move || drop(recorder)));
+                });
+                stt_rx2
+            }
+            Err(e) => {
+                // Recording is best-effort: a failure must NOT abort the session.
+                log_info(&format!(
+                    "audio recording unavailable (continuing without it): {e:#}"
+                ));
+                audio_rx
+            }
+        }
+    } else {
+        audio_rx
+    };
+
     // ===== 5. Spawn STT pipeline =====
     let stt_rx = stt::spawn(
-        audio_rx,
+        stt_audio_rx,
         stt_backend,
         language,
         whisper_prompt,
