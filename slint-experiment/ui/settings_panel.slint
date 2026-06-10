@@ -417,6 +417,16 @@ export component SettingsWindow inherits Window {
     // v0.13.0 — raw-audio recording (Audio tab).
     in-out property <bool> record-audio: true;
     callback record-audio-changed(bool);
+    // v0.15.0 — storage/retention controls (Audio tab). Mode: 0 = keep all,
+    // 1 = keep last N sessions, 2 = keep last N days; the value LineEdit holds
+    // N as text (parsed + persisted by Rust; invalid input is ignored).
+    in-out property <int> retention-mode: 1;
+    in-out property <string> retention-value: "10";
+    callback retention-changed(int, string);
+    // Journal (archive transcripts) retention: count + disk cap, 0 = unlimited.
+    in-out property <string> journal-keep-value: "100";
+    in-out property <string> journal-mb-value: "500";
+    callback journal-retention-changed(string, string);
     callback open-recordings-clicked();
     in-out property <bool> auto-tiles-enabled: true;
     callback auto-tiles-enabled-changed(bool);
@@ -1089,14 +1099,91 @@ export component SettingsWindow inherits Window {
                             }
                         }
                         Text {
-                            text: @tr("Saved locally as separate mic + system WAVs per session — nothing is uploaded. Powers a future \"re-summary from the archive\". ~230 MB/hour; the last 10 sessions are kept, older are removed.");
+                            text: @tr("Saved locally as separate mic + system WAVs per session — nothing is uploaded. ~230 MB/hour. Used by the archive's re-Summary.");
                             font-size: 11px;
                             color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        // v0.15.0 — recordings retention policy (was a fixed
+                        // "last 10 sessions"). Applied at the next session start.
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Text {
+                                text: @tr("Keep recordings:");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                vertical-alignment: center;
+                            }
+                            ComboBox {
+                                model: [@tr("all (no limit)"), @tr("last N sessions"), @tr("last N days")];
+                                current-index <=> root.retention-mode;
+                                selected(v) => {
+                                    root.retention-changed(root.retention-mode, root.retention-value);
+                                }
+                            }
+                            if root.retention-mode != 0 : LineEdit {
+                                width: 64px;
+                                text <=> root.retention-value;
+                                edited(t) => { root.retention-changed(root.retention-mode, t); }
+                                accepted(t) => { root.retention-changed(root.retention-mode, t); }
+                            }
+                        }
+                        if root.retention-mode == 0 : Text {
+                            text: @tr("Unlimited recordings can take tens of GB per month with daily calls.");
+                            font-size: 11px;
+                            color: Theme.warning;
                             wrap: word-wrap;
                         }
                         Button {
                             text: @tr("Open recordings folder");
                             clicked => { root.open-recordings-clicked(); }
+                        }
+                        // v0.15.0 — journal (archive) retention: the JSONL
+                        // transcripts behind the archive window. Was a hidden
+                        // hard-coded 100-sessions / 500 MB bound — a 10-calls-a-day
+                        // user lost archive history after ~2 weeks.
+                        Rectangle { background: Theme.border; height: 1px; }
+                        Text {
+                            text: @tr("Session journals — the transcripts + AI answers behind the archive (F7). When the disk cap is exceeded, the oldest journals are deleted even if the count limit is not reached:");
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Text {
+                                text: @tr("Journals to keep (0 = unlimited):");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                vertical-alignment: center;
+                            }
+                            LineEdit {
+                                width: 64px;
+                                text <=> root.journal-keep-value;
+                                edited(t) => { root.journal-retention-changed(t, root.journal-mb-value); }
+                                accepted(t) => { root.journal-retention-changed(t, root.journal-mb-value); }
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Text {
+                                text: @tr("Journal disk cap, MB (0 = unlimited):");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                vertical-alignment: center;
+                            }
+                            LineEdit {
+                                width: 64px;
+                                text <=> root.journal-mb-value;
+                                edited(t) => { root.journal-retention-changed(root.journal-keep-value, t); }
+                                accepted(t) => { root.journal-retention-changed(root.journal-keep-value, t); }
+                            }
+                        }
+                        Text {
+                            text: @tr("Retention changes apply at the next session start.");
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
                         }
                     }
                     if root.active-tab == 7 : VerticalLayout {

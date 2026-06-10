@@ -146,7 +146,18 @@ pub struct Journal {
 }
 
 impl Journal {
+    /// Open with the pre-v0.15 hard-coded retention (keep 100 / 500 MB).
+    /// Production callers should prefer [`Journal::open_new_session_with_limits`]
+    /// with the user's configured values.
     pub fn open_new_session() -> Result<Self> {
+        Self::open_new_session_with_limits(KEEP_LAST_SESSIONS, MAX_TOTAL_BYTES)
+    }
+
+    /// v0.15.0 — open a new session journal with user-configurable retention.
+    /// `keep_sessions == 0` means "unlimited count" (NOT "delete all" — that is
+    /// the raw `prune_old_sessions` semantics, deliberately translated away
+    /// here); `max_bytes == 0` disables the size cap.
+    pub fn open_new_session_with_limits(keep_sessions: usize, max_bytes: u64) -> Result<Self> {
         let dir = sessions_dir()?;
         std::fs::create_dir_all(&dir).context("create sessions dir")?;
         let stamp = chrono_like_stamp();
@@ -160,10 +171,15 @@ impl Journal {
             .context("open journal file")?;
         log::info!("journal opened: {}", path.display());
 
-        // Best-effort prune: keep the newest KEEP_LAST_SESSIONS files (which
+        // Best-effort prune: keep the newest `keep_sessions` files (which
         // includes the one we just created). Failure here is non-fatal —
         // we don't want a permissions glitch to block opening a session.
-        match prune_old_sessions(&dir, KEEP_LAST_SESSIONS) {
+        let keep = if keep_sessions == 0 {
+            usize::MAX // user chose "keep all" → count prune never fires
+        } else {
+            keep_sessions
+        };
+        match prune_old_sessions_with_size_cap(&dir, keep, max_bytes) {
             Ok(n) if n > 0 => log::info!("journal pruned {n} old session(s)"),
             Ok(_) => {}
             Err(e) => log::warn!("journal prune failed (non-fatal): {e:#}"),
@@ -541,6 +557,11 @@ fn json_u64(v: &serde_json::Value) -> Option<u64> {
 /// Keep at most `keep` newest `*.jsonl` files in `dir`; delete older ones.
 /// Returns number of files deleted. Other extensions (e.g. .bak) ignored.
 /// Errors from individual remove calls are logged but don't abort the prune.
+///
+/// ⚠️ `keep == 0` means **DELETE ALL**, not "unlimited" — the opposite of the
+/// user-facing config spelling. To keep everything pass `usize::MAX` (that is
+/// exactly what [`Journal::open_new_session_with_limits`] does for a user 0);
+/// never forward a user-entered 0 into this function directly.
 pub fn prune_old_sessions(dir: &Path, keep: usize) -> Result<usize> {
     prune_old_sessions_with_size_cap(dir, keep, MAX_TOTAL_BYTES)
 }
@@ -792,6 +813,22 @@ mod tests {
         std::fs::create_dir_all(&tmp).unwrap();
         let deleted = prune_old_sessions(&tmp, 10).unwrap();
         assert_eq!(deleted, 0);
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn v015_unlimited_spelling_deletes_nothing() {
+        // `open_new_session_with_limits(0, 0)` translates "keep all" to exactly
+        // this call — it must NEVER delete (the raw prune's keep==0 means the
+        // OPPOSITE, "delete all", so the translation is load-bearing).
+        let tmp = std::env::temp_dir().join(format!("overlay-prune-unlim-{}", now_unix_ms()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        for i in 0..5 {
+            make_jsonl_file(&tmp, &format!("s_{i}.jsonl"));
+        }
+        let deleted = prune_old_sessions_with_size_cap(&tmp, usize::MAX, 0).unwrap();
+        assert_eq!(deleted, 0, "unlimited count + disabled size cap = no-op");
+        assert_eq!(std::fs::read_dir(&tmp).unwrap().count(), 5);
         std::fs::remove_dir_all(&tmp).ok();
     }
 

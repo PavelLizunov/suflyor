@@ -426,11 +426,39 @@ msgstr "Проверить микрофон (запись 3 сек)"
 msgid "Record session audio (mic + system)"
 msgstr "Записывать аудио созвона (микрофон + система)"
 
-msgid "Saved locally as separate mic + system WAVs per session — nothing is uploaded. Powers a future \"re-summary from the archive\". ~230 MB/hour; the last 10 sessions are kept, older are removed."
-msgstr "Сохраняется локально — отдельные WAV для микрофона и системы по каждой сессии, никуда не отправляется. Нужно для будущей «пере-сводки из архива». ~230 МБ/час; хранятся последние 10 сессий, старые удаляются."
+msgid "Saved locally as separate mic + system WAVs per session — nothing is uploaded. ~230 MB/hour. Used by the archive's re-Summary."
+msgstr "Сохраняется локально — отдельные WAV для микрофона и системы по каждой сессии, никуда не отправляется. ~230 МБ/час. Используется для «Сводки» из архива."
 
 msgid "Open recordings folder"
 msgstr "Открыть папку записей"
+
+# --- v0.15.0: storage / retention controls ---
+msgid "Keep recordings:"
+msgstr "Хранить записи:"
+
+msgid "all (no limit)"
+msgstr "все (без лимита)"
+
+msgid "last N sessions"
+msgstr "последние N сессий"
+
+msgid "last N days"
+msgstr "за последние N дней"
+
+msgid "Unlimited recordings can take tens of GB per month with daily calls."
+msgstr "Без лимита записи при ежедневных созвонах занимают десятки ГБ в месяц."
+
+msgid "Session journals — the transcripts + AI answers behind the archive (F7). When the disk cap is exceeded, the oldest journals are deleted even if the count limit is not reached:"
+msgstr "Журналы сессий — транскрипты и ответы ИИ, на которых работает архив (F7). При превышении потолка по МБ старейшие журналы удаляются, даже если лимит по количеству не достигнут:"
+
+msgid "Journals to keep (0 = unlimited):"
+msgstr "Хранить журналов (0 = без лимита):"
+
+msgid "Journal disk cap, MB (0 = unlimited):"
+msgstr "Потолок журналов на диске, МБ (0 = без лимита):"
+
+msgid "Retention changes apply at the next session start."
+msgstr "Изменения хранения применяются при следующем старте сессии."
 
 # --- v0.14.0: re-Summary from the archive ---
 msgid "Summary"

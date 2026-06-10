@@ -185,11 +185,22 @@ fn start_session_inner(
     ));
 
     // ===== 3. Open fresh journal =====
-    let journal = match Journal::open_new_session() {
-        Ok(j) => j,
-        Err(e) => {
-            log_warn(&format!("journal open failed: {e:#}"));
-            Journal::default()
+    // v0.15.0 — journal retention from config (was hard-coded 100 / 500 MB):
+    // 0 = unlimited for either bound.
+    let journal = {
+        let (keep, max_mb) = {
+            let c = cfg.read();
+            (
+                c.journal_retention_sessions as usize,
+                u64::from(c.journal_max_total_mb),
+            )
+        };
+        match Journal::open_new_session_with_limits(keep, max_mb * 1024 * 1024) {
+            Ok(j) => j,
+            Err(e) => {
+                log_warn(&format!("journal open failed: {e:#}"));
+                Journal::default()
+            }
         }
     };
     {
@@ -219,13 +230,27 @@ fn start_session_inner(
     // transcription. The recorder is MOVED into the task and dropped (WAVs
     // finalised) when the stream ends on session stop. When disabled, audio_rx
     // flows straight into STT with zero overhead.
-    let stt_audio_rx = if cfg.read().record_audio_enabled {
-        let keep_sessions = cfg.read().record_retention_sessions as usize;
+    // One atomic snapshot — the enabled flag + both retention bounds are read
+    // under a SINGLE lock so a concurrent Settings save can't split the
+    // decision across two config states (review v0.15.0).
+    let (record_enabled, keep_sessions, keep_days) = {
+        let c = cfg.read();
+        (
+            c.record_audio_enabled,
+            c.record_retention_sessions as usize,
+            c.record_retention_days,
+        )
+    };
+    let stt_audio_rx = if record_enabled {
         let session_id = journal
             .current_path()
             .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
             .unwrap_or_else(|| format!("session_{}", now_unix_ms()));
-        match overlay_backend::recorder::SessionRecorder::start(&session_id, keep_sessions) {
+        match overlay_backend::recorder::SessionRecorder::start(
+            &session_id,
+            keep_sessions,
+            keep_days,
+        ) {
             Ok(recorder) => {
                 log_info(&format!("audio recording → {}", recorder.dir().display()));
                 let (stt_tx, stt_rx2) = tokio::sync::mpsc::channel::<AudioChunk>(128);

@@ -114,6 +114,22 @@ pub(crate) fn open_settings(
         win.set_record_audio(snap.record_audio_enabled);
         win.set_auto_tiles_enabled(snap.auto_tiles_enabled);
         win.set_trigger_keywords_input(SharedString::from(snap.trigger_keywords.as_str()));
+        // v0.15.0 — seed the storage/retention controls. Days wins the display
+        // when both bounds are set (hand-edited config); saving from the UI
+        // then keeps exactly one bound active.
+        let (mode, value) = if snap.record_retention_days > 0 {
+            (2, snap.record_retention_days.to_string())
+        } else if snap.record_retention_sessions > 0 {
+            (1, snap.record_retention_sessions.to_string())
+        } else {
+            (0, "10".to_string()) // placeholder N for when the user switches mode
+        };
+        win.set_retention_mode(mode);
+        win.set_retention_value(SharedString::from(value));
+        win.set_journal_keep_value(SharedString::from(
+            snap.journal_retention_sessions.to_string(),
+        ));
+        win.set_journal_mb_value(SharedString::from(snap.journal_max_total_mb.to_string()));
     }
 
     // Phase E6 v23 — populate the Audio tab's mic dropdown from real
@@ -573,6 +589,53 @@ pub(crate) fn open_settings(
         win.on_record_audio_changed(move |on| {
             let mut c = cfg_c.write();
             c.record_audio_enabled = on;
+            let _ = overlay_backend::config::save(&c);
+        });
+    }
+    // v0.15.0 — recordings retention policy. The prune runs at the NEXT session
+    // start (recorder::start), so a change applies from the next call on.
+    // Invalid / partial numeric input is ignored — the config keeps its last
+    // valid value (the field re-seeds to canonical on the next Settings open).
+    {
+        let cfg_c = cfg.clone();
+        win.on_retention_changed(move |mode, value| {
+            let n: Option<u32> = value.trim().parse().ok();
+            let mut c = cfg_c.write();
+            match mode {
+                0 => {
+                    c.record_retention_sessions = 0;
+                    c.record_retention_days = 0;
+                }
+                1 => match n.filter(|n| *n > 0) {
+                    Some(n) => {
+                        c.record_retention_sessions = n;
+                        c.record_retention_days = 0;
+                    }
+                    None => return,
+                },
+                2 => match n.filter(|n| *n > 0) {
+                    Some(n) => {
+                        c.record_retention_days = n;
+                        c.record_retention_sessions = 0;
+                    }
+                    None => return,
+                },
+                _ => return,
+            }
+            let _ = overlay_backend::config::save(&c);
+        });
+    }
+    // v0.15.0 — journal (archive transcripts) retention: count + MB cap, both
+    // 0 = unlimited. Applied at the next session start (journal open prune).
+    {
+        let cfg_c = cfg.clone();
+        win.on_journal_retention_changed(move |keep, mb| {
+            let (Ok(keep), Ok(mb)) = (keep.trim().parse::<u32>(), mb.trim().parse::<u32>()) else {
+                return; // partial / non-numeric input — keep the last valid value
+            };
+            let mut c = cfg_c.write();
+            c.journal_retention_sessions = keep;
+            c.journal_max_total_mb = mb;
             let _ = overlay_backend::config::save(&c);
         });
     }

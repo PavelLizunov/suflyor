@@ -70,7 +70,7 @@ impl SessionRecorder {
     /// Returns Err if the recordings directory can't be created or the writer
     /// thread can't be spawned. Callers treat this as "record disabled this
     /// session" — it must NOT abort the session.
-    pub fn start(session_id: &str, keep_sessions: usize) -> Result<Self> {
+    pub fn start(session_id: &str, keep_sessions: usize, keep_days: u32) -> Result<Self> {
         let root = recordings_dir()?;
         // Best-effort: a fixup failure must not block opening the recorder. The
         // 30s grace skips a prior session still finalising after a rapid restart.
@@ -78,14 +78,22 @@ impl SessionRecorder {
             log::warn!("recorder: WAV repair sweep failed (non-fatal): {e:#}");
         }
         let rec = Self::start_in(root.join(session_id))?;
-        // Retention sweep AFTER the new dir exists, so it's the newest and is
+        // Retention sweeps AFTER the new dir exists, so it's the newest and is
         // always kept. A 30 s grace protects the just-created dir AND any prior
         // session still finalising after a rapid restart. Best-effort — a prune
-        // failure must not abort recording.
+        // failure must not abort recording. Count-based and age-based bounds
+        // (v0.15.0) are independent: whichever is set (non-zero) applies.
         match prune_old_recordings_in(&root, keep_sessions, std::time::Duration::from_secs(30)) {
             Ok(n) if n > 0 => log::info!("recorder: pruned {n} old recording session(s)"),
             Ok(_) => {}
             Err(e) => log::warn!("recorder: retention prune failed (non-fatal): {e:#}"),
+        }
+        match prune_recordings_older_than_in(&root, keep_days, std::time::Duration::from_secs(30)) {
+            Ok(n) if n > 0 => {
+                log::info!("recorder: pruned {n} recording(s) older than {keep_days} day(s)")
+            }
+            Ok(_) => {}
+            Err(e) => log::warn!("recorder: age prune failed (non-fatal): {e:#}"),
         }
         Ok(rec)
     }
@@ -306,6 +314,66 @@ pub fn prune_old_recordings_in(
             Ok(()) => {
                 removed += 1;
                 log::info!("recorder: pruned old recording {}", p.display());
+            }
+            Err(e) => log::warn!("recorder: cannot prune {}: {e}", p.display()),
+        }
+    }
+    Ok(removed)
+}
+
+/// v0.15.0 — age-based retention: delete session sub-directories of `root`
+/// whose modified-time is older than `max_age_days` days. `max_age_days == 0`
+/// means "no age limit" (no-op). The same `min_age` grace as the count-based
+/// prune applies (an actively-written dir keeps bumping its mtime, so the
+/// current session is double-protected: it is both newest and recent).
+/// Best-effort: an undeletable dir is skipped, not fatal.
+///
+/// # Errors
+/// Returns Err only if `root` exists but can't be enumerated.
+pub fn prune_recordings_older_than_in(
+    root: &Path,
+    max_age_days: u32,
+    min_age: std::time::Duration,
+) -> Result<usize> {
+    prune_recordings_older_than_at(root, max_age_days, min_age, std::time::SystemTime::now())
+}
+
+/// Test seam for [`prune_recordings_older_than_in`]: `now` is injected so a
+/// test can age fresh directories by passing a future clock instead of
+/// rewriting filesystem mtimes.
+fn prune_recordings_older_than_at(
+    root: &Path,
+    max_age_days: u32,
+    min_age: std::time::Duration,
+    now: std::time::SystemTime,
+) -> Result<usize> {
+    if max_age_days == 0 || !root.exists() {
+        return Ok(0);
+    }
+    let max_age = std::time::Duration::from_secs(u64::from(max_age_days) * 24 * 60 * 60);
+    let mut removed = 0usize;
+    for e in std::fs::read_dir(root)
+        .with_context(|| format!("read {}", root.display()))?
+        .flatten()
+    {
+        let p = e.path();
+        if !p.is_dir() {
+            continue;
+        }
+        let Some(mtime) = e.metadata().ok().and_then(|m| m.modified().ok()) else {
+            continue;
+        };
+        // Unknown / future-dated mtime → treat as recent, never delete.
+        let Ok(age) = now.duration_since(mtime) else {
+            continue;
+        };
+        if age < min_age || age <= max_age {
+            continue;
+        }
+        match std::fs::remove_dir_all(&p) {
+            Ok(()) => {
+                removed += 1;
+                log::info!("recorder: pruned aged recording {}", p.display());
             }
             Err(e) => log::warn!("recorder: cannot prune {}: {e}", p.display()),
         }
@@ -684,5 +752,88 @@ mod tests {
         std::fs::create_dir_all(&sdir).unwrap();
         std::fs::write(sdir.join("notes.txt"), b"hello").unwrap();
         assert_eq!(repair_unfinalized_in(tmp.path(), z).unwrap(), 0);
+    }
+
+    // ── prune_recordings_older_than_* — v0.15.0 age-based retention ──
+
+    #[test]
+    fn age_prune_zero_days_is_noop_and_fresh_dirs_survive() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().to_path_buf();
+        for i in 0..3 {
+            let d = root.join(format!("sess{i}"));
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(d.join("mic.wav"), b"x").unwrap();
+        }
+        let zero = std::time::Duration::ZERO;
+        // days == 0 → "no age limit": no-op even with a far-future clock.
+        let far = std::time::SystemTime::now() + std::time::Duration::from_secs(365 * 24 * 3600);
+        assert_eq!(
+            prune_recordings_older_than_at(&root, 0, zero, far).unwrap(),
+            0
+        );
+        // Real clock: nothing is older than a day → all kept.
+        assert_eq!(prune_recordings_older_than_in(&root, 1, zero).unwrap(), 0);
+        for i in 0..3 {
+            assert!(root.join(format!("sess{i}")).exists());
+        }
+    }
+
+    #[test]
+    fn age_prune_removes_dirs_older_than_limit() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().to_path_buf();
+        for i in 0..3 {
+            std::fs::create_dir_all(root.join(format!("sess{i}"))).unwrap();
+        }
+        std::fs::write(root.join("loose.txt"), b"not a dir").unwrap();
+        // Inject a clock 8 days ahead: every fresh dir is now "8 days old",
+        // which exceeds the 7-day limit → all pruned; the loose file survives.
+        let future = std::time::SystemTime::now() + std::time::Duration::from_secs(8 * 24 * 3600);
+        let removed =
+            prune_recordings_older_than_at(&root, 7, std::time::Duration::ZERO, future).unwrap();
+        assert_eq!(removed, 3);
+        for i in 0..3 {
+            assert!(!root.join(format!("sess{i}")).exists());
+        }
+        assert!(root.join("loose.txt").exists());
+    }
+
+    #[test]
+    fn age_prune_keeps_dir_at_exact_age_boundary() {
+        // age == max_age must be KEPT (the comparison is `age <= max_age` →
+        // skip): "older than N days" is strict. Pins the boundary semantics.
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().to_path_buf();
+        let d = root.join("sess0");
+        std::fs::create_dir_all(&d).unwrap();
+        let mtime = std::fs::metadata(&d).unwrap().modified().unwrap();
+        let exactly_one_day = mtime + std::time::Duration::from_secs(24 * 3600);
+        let removed =
+            prune_recordings_older_than_at(&root, 1, std::time::Duration::ZERO, exactly_one_day)
+                .unwrap();
+        assert_eq!(removed, 0, "a dir exactly max_age old is kept");
+        assert!(d.exists());
+    }
+
+    #[test]
+    fn age_prune_grace_window_beats_age_limit() {
+        // The min_age grace must win over the age limit: with a +2-day clock a
+        // fresh dir looks 2 days old (> the 1-day limit), but a 3-day grace
+        // still protects it (mirrors the count-prune's still-finalising guard).
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().to_path_buf();
+        let d = root.join("sess0");
+        std::fs::create_dir_all(&d).unwrap();
+        let future = std::time::SystemTime::now() + std::time::Duration::from_secs(2 * 24 * 3600);
+        let removed = prune_recordings_older_than_at(
+            &root,
+            1,
+            std::time::Duration::from_secs(3 * 24 * 3600),
+            future,
+        )
+        .unwrap();
+        assert_eq!(removed, 0);
+        assert!(d.exists());
     }
 }

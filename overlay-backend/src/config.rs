@@ -212,6 +212,26 @@ pub struct Config {
     #[serde(default = "default_record_retention_sessions")]
     pub record_retention_sessions: u32,
 
+    /// v0.15.0 — age-based retention for recorded audio: `recordings\<id>\`
+    /// dirs older than this many days are pruned at session start. 0 = no age
+    /// limit (default — old configs behave exactly as before). Combines with
+    /// `record_retention_sessions`: when both are non-zero BOTH bounds apply.
+    #[serde(default)]
+    pub record_retention_days: u32,
+
+    /// v0.15.0 — how many session JOURNALS (`sessions\*.jsonl` — the
+    /// transcripts + AI turns behind the 🗄 archive) to keep on disk. Was a
+    /// hard-coded 100, which a 10-calls-a-day user exhausts in two weeks.
+    /// 0 = unlimited. Pruned at the NEXT session start.
+    #[serde(default = "default_journal_retention_sessions")]
+    pub journal_retention_sessions: u32,
+
+    /// v0.15.0 — total disk budget for session journals, in MB (was a
+    /// hard-coded 500). After the count prune, oldest journals are deleted
+    /// until under this budget. 0 = unlimited.
+    #[serde(default = "default_journal_max_total_mb")]
+    pub journal_max_total_mb: u32,
+
     /// P2 — index finished JSONL sessions into the local SQLite archive
     /// (searchable interview history). ON by default; the JSONL journals stay the
     /// source of truth either way, and the catalog can be deleted + rebuilt.
@@ -492,6 +512,9 @@ impl Config {
             post_meeting_debrief_enabled: default_post_meeting_debrief_enabled(),
             record_audio_enabled: default_record_audio_enabled(),
             record_retention_sessions: default_record_retention_sessions(),
+            record_retention_days: 0,
+            journal_retention_sessions: default_journal_retention_sessions(),
+            journal_max_total_mb: default_journal_max_total_mb(),
             session_archive_enabled: default_session_archive_enabled(),
             auto_export_on_quit: false,
             max_session_cost_usd: default_max_session_cost_usd(),
@@ -831,6 +854,14 @@ fn default_record_audio_enabled() -> bool {
 
 fn default_record_retention_sessions() -> u32 {
     10 // ~ last 10 sessions; user-adjustable, 0 = unbounded
+}
+
+fn default_journal_retention_sessions() -> u32 {
+    100 // matches the pre-v0.15 hard-coded journal::KEEP_LAST_SESSIONS
+}
+
+fn default_journal_max_total_mb() -> u32 {
+    500 // matches the pre-v0.15 hard-coded journal::MAX_TOTAL_BYTES
 }
 
 fn default_session_archive_enabled() -> bool {
@@ -3049,6 +3080,29 @@ mod tests {
         assert_eq!(cfg.ai_model, "");
         assert_eq!(cfg.response_language, "");
         assert!(!cfg.stealth_enabled);
+    }
+
+    #[test]
+    fn v015_retention_fields_default_to_pre_v015_behaviour() {
+        // A pre-v0.15 config (no retention keys) must carry the pre-v0.15
+        // CONSTANTS: audio keep 10 / no age limit, journals keep 100 / 500 MB.
+        // (The prune behaviour for these values is pinned by the recorder's
+        // prune tests + journal's size-cap tests; this test pins the VALUES.)
+        let cfg: Config = serde_json::from_str("{}").expect("parses");
+        assert_eq!(cfg.record_retention_sessions, 10);
+        assert_eq!(cfg.record_retention_days, 0);
+        assert_eq!(cfg.journal_retention_sessions, 100);
+        assert_eq!(cfg.journal_max_total_mb, 500);
+        // And the explicit "unlimited" spelling round-trips.
+        let cfg: Config = serde_json::from_str(
+            r#"{"record_retention_sessions":0,"record_retention_days":30,
+                "journal_retention_sessions":0,"journal_max_total_mb":0}"#,
+        )
+        .expect("parses");
+        assert_eq!(cfg.record_retention_sessions, 0);
+        assert_eq!(cfg.record_retention_days, 30);
+        assert_eq!(cfg.journal_retention_sessions, 0);
+        assert_eq!(cfg.journal_max_total_mb, 0);
     }
 
     #[test]

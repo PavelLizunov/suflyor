@@ -14,7 +14,7 @@
 ; and bump the upgrade GUID so it overwrites v0.1.1 cleanly.
 
 !define PRODUCT_NAME "suflyor"
-!define PRODUCT_VERSION "0.14.0"
+!define PRODUCT_VERSION "0.15.0"
 !define PRODUCT_PUBLISHER "x3d_mutant"
 !define PRODUCT_EXE "overlay-host.exe"
 !define PRODUCT_INSTALL_DIR "$LOCALAPPDATA\suflyor-slint"
