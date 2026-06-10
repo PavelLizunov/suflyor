@@ -1330,8 +1330,16 @@ fn main() -> Result<(), slint::PlatformError> {
                         );
                     });
                 }
-                tile.set_can_regenerate(true);
-                {
+                // v0.12.1 — Summary/Debrief are GENERATIVE RECAPS whose seeded
+                // "question" is a TITLE ("Summary созвона"), not a self-contained
+                // prompt. Regenerate/escalate re-ask that bare title, so the model
+                // replies "give me the transcript". Hide both for these kinds:
+                // follow-up still works (reframe folds the recap TEXT into context),
+                // and for Summary the bar button already re-runs over the fresh
+                // transcript — a tile-level regenerate would be redundant anyway.
+                let allow_reask = !matches!(req.kind, TileKind::Summary | TileKind::Debrief);
+                if allow_reask {
+                    tile.set_can_regenerate(true);
                     let weak_re = tile.as_weak();
                     let bridge_re = bridge_for_poll.clone();
                     let events_re = events_for_poll.clone();
@@ -1354,16 +1362,18 @@ fn main() -> Result<(), slint::PlatformError> {
                 }
                 wire_voice_followup(&tile, convo_id, live.clone(), &cfg_for_poll);
                 wire_copy(&tile, convo_id, &bridge_for_poll);
-                wire_escalate(
-                    &tile,
-                    convo_id,
-                    &live,
-                    &bridge_for_poll,
-                    &events_for_poll,
-                    &cfg_for_poll,
-                    &slint_rt_for_poll,
-                    &rt_handle_for_poll,
-                );
+                if allow_reask {
+                    wire_escalate(
+                        &tile,
+                        convo_id,
+                        &live,
+                        &bridge_for_poll,
+                        &events_for_poll,
+                        &cfg_for_poll,
+                        &slint_rt_for_poll,
+                        &rt_handle_for_poll,
+                    );
+                }
             }
             // (monitor placement applied via apply_tile_hwnd_with_monitor.)
             present_tile_window(&tile);
