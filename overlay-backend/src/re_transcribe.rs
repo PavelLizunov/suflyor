@@ -14,6 +14,18 @@
 //! topics / decisions / tasks from both sides regardless of fine turn order, and
 //! preserving the better re-STT text matters more than reconstructing
 //! interleaving (a journal-scaffold upgrade could add ordering later).
+//!
+//! ## Chunked streaming (v0.17.0 — план B, 7-8 h workdays)
+//!
+//! The v0.14 implementation loaded a channel's WHOLE WAV into RAM and ran ONE
+//! STT inference over it, behind a hard 2-hour guard. That blocked exactly the
+//! sessions the tester records (7-8+ h) and would have cost GigaAM a ~1.8 GB
+//! f32 peak at 8 h. Now each channel is STREAMED from disk in per-backend
+//! windows ([`chunk_secs`]) and transcribed chunk by chunk — peak RAM is one
+//! chunk, the 2 h guard is replaced by a 24 h sanity ceiling, and the archive
+//! header shows per-chunk progress. Fixed windows can split a word at a chunk
+//! boundary (a rare, single-word artefact); silence-aware splitting is a
+//! possible refinement, embeddings-era.
 
 use crate::audio::{AudioSource, TranscriptLine};
 use crate::config::{SharedConfig, SttBackendCfg};
@@ -29,21 +41,35 @@ pub enum Progress {
     Step(String),
 }
 
-/// Hard memory/length guard: refuse a single channel longer than this. 2 h of
-/// 16 kHz mono i16 ≈ 230 MB of PCM — well past any real meeting; anything bigger
-/// is almost certainly a corrupt/over-long file we shouldn't load into RAM.
+/// Full-load guard for the [`load_wav_pcm`] helper ONLY (tests/tools): 2 h of
+/// 16 kHz mono i16 ≈ 230 MB of PCM. The production re-transcribe path streams
+/// in chunks and is bounded by [`MAX_REASONABLE_SECS`] instead.
 const MAX_CHANNEL_SAMPLES: usize = 16_000 * 60 * 120;
 
-/// Read a saved 16 kHz mono i16 WAV back into PCM samples.
-///
-/// # Errors
-/// Returns Err if the file can't be opened, isn't the canonical 1 ch / 16 kHz /
-/// 16-bit format the recorder writes, exceeds [`MAX_CHANNEL_SAMPLES`], or a
-/// sample can't be decoded.
-pub fn load_wav_pcm(path: &Path) -> Result<Vec<i16>> {
-    let reader =
-        hound::WavReader::open(path).with_context(|| format!("open {}", path.display()))?;
-    let spec = reader.spec();
+/// Sanity ceiling for the streamed path: refuse a channel claiming more than
+/// 24 h of audio — that is not a workday recording, it is a corrupt header or
+/// a runaway file (v0.17.0: replaces the old 2 h full-load guard).
+const MAX_REASONABLE_SECS: u64 = 24 * 60 * 60;
+
+/// Offline STT window per backend, in seconds. Peak RAM per channel = ONE
+/// window (i16 + the backend's own transient copies), not the whole file:
+/// - Cloud (Groq): 600 s → ~19 MB WAV per request — under the API's 25 MB
+///   file cap; an 8 h channel becomes ~48 requests instead of one giant body.
+/// - Local whisper server: 300 s — a moderate request for a local HTTP hop.
+/// - GigaAM (in-process ONNX): 60 s — bounds the f32 conversion (~3.8 MB per
+///   window vs ~1.8 GB for a full 8 h channel) and stays near the attention
+///   lengths it was trained on (the live pipeline feeds it ≤25 s utterances).
+fn chunk_secs(backend: &SttBackendCfg) -> u64 {
+    match backend {
+        SttBackendCfg::Cloud { .. } => 600,
+        SttBackendCfg::Whisper { .. } => 300,
+        SttBackendCfg::Gigaam { .. } => 60,
+    }
+}
+
+/// Bail unless `spec` is the canonical 1 ch / 16 kHz / 16-bit format the
+/// recorder writes.
+fn validate_wav_spec(spec: &hound::WavSpec) -> Result<()> {
     if spec.channels != 1 || spec.sample_rate != recorder::SAMPLE_RATE || spec.bits_per_sample != 16
     {
         bail!(
@@ -54,8 +80,51 @@ pub fn load_wav_pcm(path: &Path) -> Result<Vec<i16>> {
             recorder::SAMPLE_RATE
         );
     }
+    Ok(())
+}
+
+/// Pull up to `max` samples from a WAV sample iterator into a fresh buffer.
+/// An empty result means end-of-file. Split out of the chunk loop so the
+/// windowing is unit-testable without an STT backend.
+fn read_next_chunk<R: std::io::Read>(
+    samples: &mut hound::WavIntoSamples<R, i16>,
+    max: usize,
+) -> Result<Vec<i16>> {
+    // Cap the PRE-allocation at 2M samples (4 MB): a Cloud window is 9.6M
+    // samples and pre-allocating 19 MB for a file that turns out to be 10 s
+    // long is waste; Vec growth amortises the big-window case just fine.
+    let mut buf = Vec::with_capacity(max.min(1 << 21));
+    for s in samples.by_ref().take(max) {
+        buf.push(s.context("read WAV samples")?);
+    }
+    Ok(buf)
+}
+
+/// Append a transcribed chunk to the channel text with a single-space joint.
+fn append_chunk_text(acc: &mut String, piece: &str) {
+    let piece = piece.trim();
+    if piece.is_empty() {
+        return;
+    }
+    if !acc.is_empty() {
+        acc.push(' ');
+    }
+    acc.push_str(piece);
+}
+
+/// Read a saved 16 kHz mono i16 WAV back into PCM samples — FULL-LOAD helper
+/// for tests/tools. The production path streams via [`read_next_chunk`].
+///
+/// # Errors
+/// Returns Err if the file can't be opened, isn't the canonical 1 ch / 16 kHz /
+/// 16-bit format the recorder writes, exceeds [`MAX_CHANNEL_SAMPLES`], or a
+/// sample can't be decoded.
+pub fn load_wav_pcm(path: &Path) -> Result<Vec<i16>> {
+    let reader =
+        hound::WavReader::open(path).with_context(|| format!("open {}", path.display()))?;
+    validate_wav_spec(&reader.spec())?;
     if (reader.len() as usize) > MAX_CHANNEL_SAMPLES {
-        bail!("recording too long to re-transcribe (over 2 hours)");
+        bail!("recording too long for a full in-memory load (over 2 hours)");
     }
     let samples: std::result::Result<Vec<i16>, _> = reader.into_samples::<i16>().collect();
     samples.context("read WAV samples")
@@ -129,19 +198,49 @@ pub async fn transcribe_session(
         if !path.exists() {
             continue;
         }
-        on_progress(Progress::Step(format!("Re-transcribing {who}…")));
-        let pcm = load_wav_pcm(&path).with_context(|| format!("load {file}"))?;
-        if pcm.is_empty() {
+        // v0.17.0 — STREAM the channel in per-backend windows instead of one
+        // full-file load + one giant inference (план B: 7-8 h recordings).
+        let reader =
+            hound::WavReader::open(&path).with_context(|| format!("open {}", path.display()))?;
+        validate_wav_spec(&reader.spec()).with_context(|| format!("load {file}"))?;
+        let total_samples = u64::from(reader.len());
+        if total_samples == 0 {
             continue;
         }
-        texts[idx] = stt::transcribe_once(
-            &backend,
-            &pcm,
-            language.as_deref(),
-            whisper_prompt.as_deref(),
-        )
-        .await
-        .with_context(|| format!("re-transcribe {file}"))?;
+        if total_samples > MAX_REASONABLE_SECS * u64::from(recorder::SAMPLE_RATE) {
+            bail!("recording too long to re-transcribe (over 24 hours)");
+        }
+        let chunk = usize::try_from(chunk_secs(&backend) * u64::from(recorder::SAMPLE_RATE))
+            .unwrap_or(usize::MAX);
+        let n_chunks = usize::try_from(total_samples.div_ceil(chunk as u64)).unwrap_or(1);
+        log::info!(
+            "re-transcribe {file}: {total_samples} samples → {n_chunks} chunk(s) × {}s",
+            chunk_secs(&backend)
+        );
+        let mut samples = reader.into_samples::<i16>();
+        let mut text = String::new();
+        for part in 1..=n_chunks {
+            on_progress(Progress::Step(if n_chunks > 1 {
+                format!("Re-transcribing {who}… {part}/{n_chunks}")
+            } else {
+                format!("Re-transcribing {who}…")
+            }));
+            let buf =
+                read_next_chunk(&mut samples, chunk).with_context(|| format!("load {file}"))?;
+            if buf.is_empty() {
+                break; // end-of-file (header over-claimed)
+            }
+            let piece = stt::transcribe_once(
+                &backend,
+                &buf,
+                language.as_deref(),
+                whisper_prompt.as_deref(),
+            )
+            .await
+            .with_context(|| format!("re-transcribe {file} (part {part}/{n_chunks})"))?;
+            append_chunk_text(&mut text, &piece);
+        }
+        texts[idx] = text;
     }
 
     let lines = assemble_lines(&texts[0], &texts[1]);
@@ -230,5 +329,58 @@ mod tests {
         let only_sys = assemble_lines("", "они говорили");
         assert_eq!(only_sys.len(), 1);
         assert!(matches!(only_sys[0].source, AudioSource::System));
+    }
+
+    // ── v0.17.0 chunked streaming ──
+
+    #[test]
+    fn read_next_chunk_windows_a_wav_without_loss() {
+        // 5 samples, windows of 2 → [2, 2, 1, 0] and the content round-trips.
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("mic.wav");
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: recorder::SAMPLE_RATE,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+        let mut w = hound::WavWriter::create(&path, spec).unwrap();
+        for s in [1i16, 2, 3, 4, 5] {
+            w.write_sample(s).unwrap();
+        }
+        w.finalize().unwrap();
+        let reader = hound::WavReader::open(&path).unwrap();
+        let mut samples = reader.into_samples::<i16>();
+        assert_eq!(read_next_chunk(&mut samples, 2).unwrap(), vec![1, 2]);
+        assert_eq!(read_next_chunk(&mut samples, 2).unwrap(), vec![3, 4]);
+        assert_eq!(read_next_chunk(&mut samples, 2).unwrap(), vec![5]);
+        assert!(read_next_chunk(&mut samples, 2).unwrap().is_empty());
+    }
+
+    #[test]
+    fn chunk_secs_is_per_backend_and_bounded() {
+        let cloud = SttBackendCfg::Cloud {
+            api_key: "k".into(),
+            model: "m".into(),
+        };
+        let gigaam = SttBackendCfg::Gigaam {
+            model_dir: "d".into(),
+        };
+        // Cloud window must stay under Groq's 25 MB file cap:
+        // secs × 16000 Hz × 2 B + 44 B header.
+        let cloud_bytes = chunk_secs(&cloud) * u64::from(recorder::SAMPLE_RATE) * 2 + 44;
+        assert!(cloud_bytes < 25 * 1024 * 1024, "{cloud_bytes}");
+        // GigaAM windows are much smaller (in-process RAM bound).
+        assert!(chunk_secs(&gigaam) <= 60);
+    }
+
+    #[test]
+    fn append_chunk_text_joins_with_single_space_and_skips_blank() {
+        let mut acc = String::new();
+        append_chunk_text(&mut acc, "  первая часть ");
+        append_chunk_text(&mut acc, "");
+        append_chunk_text(&mut acc, "   ");
+        append_chunk_text(&mut acc, "вторая");
+        assert_eq!(acc, "первая часть вторая");
     }
 }

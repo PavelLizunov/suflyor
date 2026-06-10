@@ -160,12 +160,12 @@ pub fn lock(rt: &SharedSlintRuntime) -> std::sync::MutexGuard<'_, SlintRuntime> 
 pub const TRANSCRIPT_MAX_LINES: usize = 80;
 
 /// Hard bound for the full-session transcript backing the Summary
-/// feature (v0.12.0). 4000 lines ≈ several hours of conversation
-/// (~0.5 MB) — generous, but bounded so a forgotten running session
-/// can't grow memory without limit. Overflow drops the OLDEST lines
-/// (the summary keeps covering the recent majority) and raises
-/// `full_transcript_truncated`.
-pub const FULL_TRANSCRIPT_MAX_LINES: usize = 4000;
+/// feature (v0.12.0). v0.17.0 (план B, 7-8h workdays): 4000 → 20000
+/// lines — covers a full 8+ hour day of active conversation at a few
+/// MB of RAM, while still bounding a forgotten running session.
+/// Overflow drops the OLDEST lines (the summary keeps covering the
+/// recent majority) and raises `full_transcript_truncated`.
+pub const FULL_TRANSCRIPT_MAX_LINES: usize = 20000;
 
 /// Push a transcript line into BOTH transcript buffers, evicting
 /// oldest on overflow. Caller already holds the rt lock. Single choke

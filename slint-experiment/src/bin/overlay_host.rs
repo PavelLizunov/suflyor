@@ -1227,6 +1227,11 @@ fn main() -> Result<(), slint::PlatformError> {
                     // after the bar press SHOULD shape the rebuild. Small
                     // read-only catalog query on a user-initiated path (same
                     // budget class as context_for_meeting, v0.11.2).
+                    // v0.17.0 — for an OVER-BUDGET transcript the bar runs
+                    // map-reduce (runtime.rs); a seeded pair can't replay N map
+                    // calls, so this 🔄 seed falls back to the middle-truncated
+                    // single pass — a documented degraded rebuild. The bar /
+                    // archive button remains the quality path.
                     let is_ru = response_language == "ru";
                     let memory_ref = overlay_backend::memory::summary_reference_for_transcript(
                         &overlay_backend::runtime::format_transcript_for_summary(

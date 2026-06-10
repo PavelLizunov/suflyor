@@ -169,6 +169,14 @@ const SUMMARY_INPUT_BUDGET_LOCAL_CHARS: usize = 12_000;
 const SUMMARY_MAX_TOKENS: u32 = 1536;
 /// Minimum transcript lines before a summary is worth an AI call.
 const SUMMARY_MIN_LINES: usize = 2;
+/// v0.17.0 (план B) — map-reduce: cap on map parts so an extreme transcript
+/// can't queue dozens of AI calls. 12 × the per-part budget ≈ 288k chars on
+/// cloud ≈ a full 8+ hour workday; anything beyond is middle-truncated FIRST
+/// (the pre-v0.17 behavior, just at 12× the scale).
+const SUMMARY_MAX_MAP_PARTS: usize = 12;
+/// Token cap for ONE partial (map) recap — a per-part bullet conspectus
+/// needs less room than the final five-section summary.
+const SUMMARY_PARTIAL_MAX_TOKENS: u32 = 700;
 
 /// Gate the Summary button: `Ok(())` when there is enough transcript to
 /// summarise, `Err(reason)` (log-only English, mirrors `debrief_gate`)
@@ -359,6 +367,23 @@ pub fn build_summary_seed(
         );
     }
     let mut system = summary_system_prompt(is_ru, truncated);
+    push_memory_ref(&mut system, is_ru, memory_ref);
+    vec![
+        ai::ChatMessage {
+            role: "system".into(),
+            content: ai::MessageContent::Text(system),
+        },
+        ai::ChatMessage {
+            role: "user".into(),
+            content: ai::MessageContent::Text(input),
+        },
+    ]
+}
+
+/// Append the decode-only memory СПРАВКА to a summary system prompt (shared
+/// by the single-pass seed and the map-reduce final pass). No-op for
+/// `None`/blank — the prompt stays byte-identical to a no-memory build.
+fn push_memory_ref(system: &mut String, is_ru: bool, memory_ref: Option<&str>) {
     if let Some(r) = memory_ref.map(str::trim).filter(|r| !r.is_empty()) {
         system.push_str(if is_ru {
             "\n\nСПРАВКА — внутренние термины/имена пользователя (его одобренная память; \
@@ -373,6 +398,141 @@ pub fn build_summary_seed(
         });
         system.push_str(r);
     }
+}
+
+/// v0.17.0 (план B) — split a formatted transcript into consecutive parts,
+/// each within `budget_chars`. Packs whole LINES; a single line longer than
+/// the budget (the re-Summary transcript is ONE giant line per channel) is
+/// word-wrapped into budget-sized pieces. Pure → unit-tested.
+#[must_use]
+pub fn split_transcript_for_map(formatted: &str, budget_chars: usize) -> Vec<String> {
+    let budget = budget_chars.max(1);
+    let mut parts: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let mut cur_chars = 0usize;
+    for line in formatted.lines() {
+        let line_chars = line.chars().count();
+        if line_chars > budget {
+            // Oversized line: flush what we have, then word-wrap it.
+            if !cur.trim().is_empty() {
+                parts.push(std::mem::take(&mut cur));
+            } else {
+                cur.clear();
+            }
+            cur_chars = 0;
+            let mut piece = String::new();
+            let mut piece_chars = 0usize;
+            for word in line.split_whitespace() {
+                let w = word.chars().count();
+                if piece_chars > 0 && piece_chars + 1 + w > budget {
+                    parts.push(std::mem::take(&mut piece));
+                    piece_chars = 0;
+                }
+                if piece_chars > 0 {
+                    piece.push(' ');
+                    piece_chars += 1;
+                }
+                piece.push_str(word);
+                piece_chars += w;
+            }
+            if !piece.trim().is_empty() {
+                parts.push(piece);
+            }
+            continue;
+        }
+        if cur_chars > 0 && cur_chars + 1 + line_chars > budget {
+            parts.push(std::mem::take(&mut cur));
+            cur_chars = 0;
+        }
+        if cur_chars > 0 {
+            cur.push('\n');
+            cur_chars += 1;
+        }
+        cur.push_str(line);
+        cur_chars += line_chars;
+    }
+    if !cur.trim().is_empty() {
+        parts.push(cur);
+    }
+    parts
+}
+
+/// System prompt for ONE map part: a bullet conspectus of exactly that
+/// slice, same no-fabrication rules as the final pass.
+fn partial_summary_prompt(is_ru: bool, part: usize, total: usize) -> String {
+    if is_ru {
+        format!(
+            "Ты — секретарь встречи. Это ЧАСТЬ {part}/{total} транскрипта ОДНОГО длинного \
+             созвона; метки строк: «Вы:» — пользователь, «Собеседник:» — другая сторона \
+             (за меткой может стоять несколько людей). Составь краткий КОНСПЕКТ ИМЕННО ЭТОЙ \
+             ЧАСТИ маркированным списком: темы, прозвучавшие решения, задачи (кто → что, \
+             сроки), договорённости, важные факты/цифры/имена. СТРОГО по тексту части — НЕ \
+             выдумывай; спорную атрибуцию помечай «(неточно)». Без вступлений и без выводов \
+             о других частях. Отвечай на русском языке."
+        )
+    } else {
+        format!(
+            "You are a meeting secretary. This is PART {part}/{total} of ONE long call's \
+             transcript; line labels: \"You:\" — the app user, \"Interlocutor:\" — the other \
+             side (the label may cover several people). Produce a brief bullet CONSPECTUS of \
+             EXACTLY THIS PART: topics, decisions voiced, action items (who → what, \
+             deadlines), agreements, key facts/numbers/names. STRICTLY from this part's text \
+             — do NOT invent; mark uncertain attribution \"(uncertain)\". No preamble, no \
+             conclusions about other parts. Respond in English."
+        )
+    }
+}
+
+/// Final (reduce) pass seed: same five-section rules as the single pass, but
+/// the input is the consecutive part conspectuses instead of a raw transcript.
+/// The memory СПРАВКА (when any) attaches HERE — term decoding belongs to the
+/// final digest.
+///
+/// The combined conspectuses are bounded by the SAME per-provider input
+/// budget as the single pass: 12 parts × up to [`SUMMARY_PARTIAL_MAX_TOKENS`]
+/// of output each could otherwise reach ~8k tokens of reduce input, which
+/// would overflow the local llama-server's `-c 8192` together with the system
+/// prompt + the 1536-token response. Conspectuses are ~5-10× denser than raw
+/// transcript, so a middle truncation here still loses far less than the
+/// pre-v0.17 raw-text truncation did. Pure → unit-tested.
+#[must_use]
+pub fn build_summary_reduce_seed(
+    partials: &[String],
+    is_ru: bool,
+    is_local: bool,
+    memory_ref: Option<&str>,
+) -> Vec<ai::ChatMessage> {
+    let mut user = String::new();
+    let total = partials.len();
+    for (i, p) in partials.iter().enumerate() {
+        let n = i + 1;
+        let label = if is_ru { "Часть" } else { "Part" };
+        user.push_str(&format!("=== {label} {n}/{total} ===\n{}\n\n", p.trim()));
+    }
+    let budget = if is_local {
+        SUMMARY_INPUT_BUDGET_LOCAL_CHARS
+    } else {
+        SUMMARY_INPUT_BUDGET_CLOUD_CHARS
+    };
+    let (input, truncated) = truncate_transcript_middle(user.trim_end(), budget, is_ru);
+    if truncated {
+        log::info!(
+            "meeting summary: combined conspectuses over the reduce budget ({} chars > \
+             {budget}), middle truncated",
+            user.chars().count()
+        );
+    }
+    let mut system = summary_system_prompt(is_ru, truncated);
+    system.push_str(if is_ru {
+        "\n\nОсобенность входа: вместо сырого транскрипта даны КОНСПЕКТЫ ПОСЛЕДОВАТЕЛЬНЫХ \
+         ЧАСТЕЙ одного созвона (составлены строго по транскрипту). Собери из них ЕДИНЫЙ \
+         итог по правилам и разделам выше; повторы между частями объедини."
+    } else {
+        "\n\nInput note: instead of a raw transcript you are given CONSPECTUSES OF \
+         CONSECUTIVE PARTS of one call (each built strictly from the transcript). Merge \
+         them into a SINGLE recap per the rules and sections above; deduplicate overlaps."
+    });
+    push_memory_ref(&mut system, is_ru, memory_ref);
     vec![
         ai::ChatMessage {
             role: "system".into(),
@@ -415,19 +575,14 @@ pub async fn run_meeting_summary(
         )
     };
     let is_ru = response_language == "ru";
+    let formatted = format_transcript_for_summary(&transcript, is_ru);
     // v0.16.0 — keyword-gated memory reference: facts whose terms came up in
     // this transcript decode internal names for the secretary. None (the
     // common case) keeps the request byte-identical to a no-memory build.
-    let memory_ref = crate::memory::summary_reference_for_transcript(
-        &format_transcript_for_summary(&transcript, is_ru),
-    );
+    let memory_ref = crate::memory::summary_reference_for_transcript(&formatted);
     if memory_ref.is_some() {
         log::info!("meeting summary: keyword-gated memory reference attached");
     }
-    // Same pair the tile will seed its conversation with, so the bar-button
-    // summary and a tile-level 🔄/🧠 rebuild are byte-identical for the same
-    // transcript + provider.
-    let messages = build_summary_seed(&transcript, is_ru, is_local, memory_ref.as_deref());
     let tile_title = if is_ru {
         "Summary созвона".to_string()
     } else {
@@ -436,6 +591,77 @@ pub async fn run_meeting_summary(
     let monitor_hint = match preferred_monitor.as_deref() {
         Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
         _ => MonitorHint::Auto,
+    };
+    let budget = if is_local {
+        SUMMARY_INPUT_BUDGET_LOCAL_CHARS
+    } else {
+        SUMMARY_INPUT_BUDGET_CLOUD_CHARS
+    };
+    // Within budget → the single pass, byte-identical to pre-v0.17 (and the
+    // same pair the tile seeds its conversation with, so 🔄/🧠 rebuild it).
+    // Over budget → map-reduce (v0.17.0, план B): the pre-v0.17 behavior was
+    // a middle truncation that DROPPED most of a long day; now each part gets
+    // its own conspectus and the final pass merges them. The tile's 🔄 rebuild
+    // for over-budget transcripts still uses the truncated single pass (it
+    // can't replay N map calls from a seeded pair) — a documented degraded
+    // rebuild; the bar/archive path is the quality path.
+    let messages = if formatted.chars().count() <= budget {
+        build_summary_seed(&transcript, is_ru, is_local, memory_ref.as_deref())
+    } else {
+        let cap = budget.saturating_mul(SUMMARY_MAX_MAP_PARTS);
+        let (bounded, hard_truncated) = truncate_transcript_middle(&formatted, cap, is_ru);
+        if hard_truncated {
+            log::info!(
+                "meeting summary: transcript over even the map-reduce cap ({} chars > {cap}), \
+                 middle truncated first",
+                formatted.chars().count()
+            );
+        }
+        let parts = split_transcript_for_map(&bounded, budget);
+        let total = parts.len();
+        log::info!("meeting summary: map-reduce over {total} part(s)");
+        let mut partials: Vec<String> = Vec::with_capacity(total);
+        let mut ok_parts = 0usize;
+        for (i, part) in parts.iter().enumerate() {
+            let n = i + 1;
+            let msgs = vec![
+                ai::ChatMessage {
+                    role: "system".into(),
+                    content: ai::MessageContent::Text(partial_summary_prompt(is_ru, n, total)),
+                },
+                ai::ChatMessage {
+                    role: "user".into(),
+                    content: ai::MessageContent::Text(part.clone()),
+                },
+            ];
+            match ai::complete(&base_url, &bearer, &model, msgs, SUMMARY_PARTIAL_MAX_TOKENS).await {
+                Ok(t) => {
+                    log::info!("meeting summary: part {n}/{total} done ({} chars)", t.len());
+                    partials.push(t);
+                    ok_parts += 1;
+                }
+                Err(e) => {
+                    // One failed slice degrades the recap, it doesn't kill it.
+                    log::warn!("meeting summary: part {n}/{total} failed: {e:#}");
+                    partials.push(
+                        if is_ru {
+                            "(эту часть законспектировать не удалось — ошибка AI)"
+                        } else {
+                            "(this part could not be summarised — AI error)"
+                        }
+                        .to_string(),
+                    );
+                }
+            }
+        }
+        if ok_parts == 0 {
+            // Endpoint is down — go straight to the same generic error tile
+            // the single-pass failure path shows (no point in a final call).
+            log::warn!("meeting summary: ALL {total} map parts failed — endpoint down?");
+            spawn_summary_error_tile(&events, tile_title, monitor_hint, stealth, is_ru);
+            return;
+        }
+        build_summary_reduce_seed(&partials, is_ru, is_local, memory_ref.as_deref())
     };
     match ai::complete(&base_url, &bearer, &model, messages, SUMMARY_MAX_TOKENS).await {
         Ok(answer) => {
@@ -457,28 +683,41 @@ pub async fn run_meeting_summary(
         }
         Err(e) => {
             log::warn!("meeting summary AI call failed: {e:#}");
-            let msg = if is_ru {
-                "Не получилось составить summary — AI недоступен. \
-                 Проверьте Настройки → AI и попробуйте ещё раз."
-            } else {
-                "Couldn't build the summary — the AI endpoint is unavailable. \
-                 Check Settings → AI and try again."
-            };
-            if let Err(e2) = events.spawn_tile_full(
-                TileSpec {
-                    question: tile_title,
-                    answer: msg.to_string(),
-                    source: "summary".into(),
-                    is_translation: false,
-                    highlights: vec![],
-                },
-                monitor_hint,
-                stealth,
-                TileKind::Error,
-            ) {
-                log::warn!("meeting summary error tile spawn failed: {e2}");
-            }
+            spawn_summary_error_tile(&events, tile_title, monitor_hint, stealth, is_ru);
         }
+    }
+}
+
+/// Spawn the GENERIC summary-failure tile (no error chain / base_url — the
+/// full chain goes to the log only). Shared by the single-pass Err arm and
+/// the map-reduce all-parts-failed short-circuit.
+fn spawn_summary_error_tile(
+    events: &Arc<dyn RuntimeEvents>,
+    tile_title: String,
+    monitor_hint: MonitorHint,
+    stealth: bool,
+    is_ru: bool,
+) {
+    let msg = if is_ru {
+        "Не получилось составить summary — AI недоступен. \
+         Проверьте Настройки → AI и попробуйте ещё раз."
+    } else {
+        "Couldn't build the summary — the AI endpoint is unavailable. \
+         Check Settings → AI and try again."
+    };
+    if let Err(e2) = events.spawn_tile_full(
+        TileSpec {
+            question: tile_title,
+            answer: msg.to_string(),
+            source: "summary".into(),
+            is_translation: false,
+            highlights: vec![],
+        },
+        monitor_hint,
+        stealth,
+        TileKind::Error,
+    ) {
+        log::warn!("meeting summary error tile spawn failed: {e2}");
     }
 }
 
@@ -1696,6 +1935,100 @@ mod tests {
         };
         assert!(!sys.contains("усечён"));
         assert_eq!(sys, summary_system_prompt(true, false));
+    }
+
+    // ── v0.17.0 map-reduce (план B: 7-8 h workdays) ──
+
+    #[test]
+    fn split_for_map_packs_lines_within_budget_and_preserves_words() {
+        let formatted = "Вы: один два три\nСобеседник: четыре пять\nВы: шесть семь восемь";
+        let parts = split_transcript_for_map(formatted, 30);
+        assert!(parts.len() >= 2, "{parts:?}");
+        for p in &parts {
+            assert!(p.chars().count() <= 30, "part over budget: {p:?}");
+        }
+        // No words lost or reordered.
+        let joined: Vec<&str> = parts.iter().flat_map(|p| p.split_whitespace()).collect();
+        let original: Vec<&str> = formatted.split_whitespace().collect();
+        assert_eq!(joined, original);
+    }
+
+    #[test]
+    fn split_for_map_word_wraps_one_giant_line() {
+        // The re-Summary transcript is ONE giant line per channel — exactly
+        // план B's case. A single line over budget must word-wrap, not become
+        // one oversized part.
+        let giant = format!("Вы: {}", "слово ".repeat(200).trim_end());
+        let parts = split_transcript_for_map(&giant, 100);
+        assert!(parts.len() > 5, "{}", parts.len());
+        for p in &parts {
+            assert!(p.chars().count() <= 100, "part over budget");
+        }
+        let joined: Vec<&str> = parts.iter().flat_map(|p| p.split_whitespace()).collect();
+        let original: Vec<&str> = giant.split_whitespace().collect();
+        assert_eq!(joined, original);
+    }
+
+    #[test]
+    fn reduce_seed_bounds_combined_conspectuses_to_the_provider_budget() {
+        // 12 parts × ~2.8k chars = ~34k > both budgets → the reduce input must
+        // be middle-truncated to the provider budget (else the local
+        // llama-server's -c 8192 overflows) and the system gains the
+        // truncation note.
+        let partials: Vec<String> = (0..12)
+            .map(|i| format!("- факт {i} {}", "x".repeat(2800)))
+            .collect();
+        let seed = build_summary_reduce_seed(&partials, true, true, None);
+        let usr = match &seed[1].content {
+            ai::MessageContent::Text(s) => s.clone(),
+            _ => String::new(),
+        };
+        assert!(
+            usr.chars().count() <= SUMMARY_INPUT_BUDGET_LOCAL_CHARS + 200,
+            "reduce input over local budget: {}",
+            usr.chars().count()
+        );
+        let sys = match &seed[0].content {
+            ai::MessageContent::Text(s) => s.clone(),
+            _ => String::new(),
+        };
+        assert!(sys.contains("усечён"), "truncation note must be flagged");
+    }
+
+    #[test]
+    fn reduce_seed_carries_rules_part_headers_and_memory_ref() {
+        let partials = vec!["- тема А".to_string(), "- тема Б".to_string()];
+        let seed = build_summary_reduce_seed(&partials, true, false, Some("- Альфа — CRM"));
+        assert_eq!(seed.len(), 2);
+        let sys = match &seed[0].content {
+            ai::MessageContent::Text(s) => s.clone(),
+            _ => String::new(),
+        };
+        // Final pass keeps the five-section rules + gains the reduce note +
+        // the decode-only СПРАВКА.
+        assert!(sys.contains("Участники"));
+        assert!(sys.contains("КОНСПЕКТЫ ПОСЛЕДОВАТЕЛЬНЫХ"));
+        assert!(sys.contains("СПРАВКА"));
+        assert!(sys.contains("Альфа — CRM"));
+        let usr = match &seed[1].content {
+            ai::MessageContent::Text(s) => s.clone(),
+            _ => String::new(),
+        };
+        assert!(usr.contains("=== Часть 1/2 ==="));
+        assert!(usr.contains("=== Часть 2/2 ==="));
+        assert!(usr.contains("- тема А"));
+        assert!(usr.contains("- тема Б"));
+    }
+
+    #[test]
+    fn partial_prompt_is_no_fabrication_and_part_numbered() {
+        let ru = partial_summary_prompt(true, 3, 7);
+        assert!(ru.contains("ЧАСТЬ 3/7"));
+        assert!(ru.contains("НЕ"));
+        assert!(ru.contains("(неточно)"));
+        let en = partial_summary_prompt(false, 1, 2);
+        assert!(en.contains("PART 1/2"));
+        assert!(en.contains("do NOT invent"));
     }
 
     #[test]
