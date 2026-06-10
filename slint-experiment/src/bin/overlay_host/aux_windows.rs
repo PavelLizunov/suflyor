@@ -28,6 +28,29 @@ use super::{
 use overlay_backend::persistence::{
     open_default_store, AiTurn, SearchHit, Session, Store, Utterance,
 };
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// v0.14.0 — PROCESS-GLOBAL one-job-at-a-time guard for archive re-transcription.
+///
+/// The per-window `retranscribe-busy` Slint property drives this window's UI
+/// (button hidden + progress shown), but it dies with the window: closing the
+/// archive mid-job then re-opening it builds a FRESH `ArchiveWindow` whose
+/// property starts `false`, which would let a second `retranscribe_and_summarize`
+/// spawn while the first still runs (N× the ~230 MB/channel WAV load + a
+/// duplicate Summary tile). This static outlives any single window, so a
+/// close+reopen still sees the running job. One `try_acquire` pairs with exactly
+/// one `release` in the worker's completion path. (Same pattern as `MIC_BUSY`.)
+static RETRANSCRIBE_BUSY: AtomicBool = AtomicBool::new(false);
+
+fn try_acquire_retranscribe() -> bool {
+    RETRANSCRIBE_BUSY
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+}
+
+fn release_retranscribe() {
+    RETRANSCRIBE_BUSY.store(false, Ordering::Release);
+}
 
 /// v0.10.1 — format the active profile/persona for the text-ask header so the
 /// user sees which profile will shape the typed answer. The profile applies to
@@ -365,11 +388,15 @@ impl PaletteResultExt for PaletteResult {
 ///
 /// SECURITY: renders ONLY the user's own transcript + AI answers — no bearer /
 /// base_url / config secret ever reaches its scope (like the palette).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn open_archive(
     archive_ref: &Rc<RefCell<Option<ArchiveWindow>>>,
     tiles_ref: &TileWindows,
     state: &slint_replay::app_state::SharedState,
     weak_overlay: &slint::Weak<OverlayBarWindow>,
+    cfg: &overlay_backend::config::SharedConfig,
+    events: &Arc<dyn RuntimeEvents>,
+    rt_handle: &tokio::runtime::Handle,
 ) {
     {
         let slot = archive_ref.borrow();
@@ -390,6 +417,9 @@ pub(crate) fn open_archive(
     };
     win.global::<ui::Theme>()
         .set_scheme(clamp_scheme(global_scheme()));
+    // Egress signpost: warn (in the header) that "↻ Summary" re-uploads saved
+    // audio when STT is the cloud (Groq). Local backends stay one-click, no note.
+    win.set_stt_is_cloud(!cfg.read().stt_is_local());
 
     // Open ONE catalog handle for this browse session (reused by the closures
     // below). On failure the window degrades to an "unavailable" state.
@@ -483,6 +513,96 @@ pub(crate) fn open_archive(
             let title = pretty_session_label(&sid);
             let md = build_session_markdown(session.as_ref(), &utts, &turns);
             spawn_content_tile(&title, "archive", &md, &tiles_c, &state_c, &wov);
+        });
+    }
+
+    // v0.14.0 — "↻ Summary": re-transcribe a session's saved recordings OFFLINE
+    // (unconstrained by real-time → a better transcript than the live one) and
+    // run the meeting summary over it. ONE job at a time; the header shows
+    // progress; run_meeting_summary spawns its own Summary tile, and the archive
+    // stays open. A transcribe failure (no recordings / STT down) shows a generic
+    // (non-leaking) error tile.
+    {
+        let weak = win.as_weak();
+        let cfg_c = cfg.clone();
+        let events_c = events.clone();
+        let rt = rt_handle.clone();
+        win.on_retranscribe_requested(move |idx| {
+            let Some(p) = weak.upgrade() else {
+                return;
+            };
+            let results = p.get_results();
+            let Some(row) = archive_row_at(&results, idx) else {
+                return;
+            };
+            if !row.has_recordings {
+                return;
+            }
+            // PROCESS-GLOBAL latch (not the per-window property): blocks a second
+            // job even after this archive was closed+reopened mid-run (a fresh
+            // window's `retranscribe-busy` starts false). Silently no-op while a
+            // job runs, like MIC_BUSY. Released in the worker's completion below.
+            if !try_acquire_retranscribe() {
+                return;
+            }
+            let sid = row.id.to_string();
+            p.set_retranscribe_busy(true);
+            p.set_retranscribe_status(SharedString::from("starting…"));
+            let weak_job = weak.clone();
+            let cfg_job = cfg_c.clone();
+            let events_job = events_c.clone();
+            let events_err = events_c.clone();
+            let stealth = cfg_c.read().stealth_enabled;
+            rt.spawn(async move {
+                let weak_prog = weak_job.clone();
+                // Progress is Send-safe: it only carries a String + the Send
+                // slint::Weak, re-upgraded on the UI thread.
+                let on_progress = move |prog: overlay_backend::re_transcribe::Progress| {
+                    let overlay_backend::re_transcribe::Progress::Step(msg) = prog;
+                    let w = weak_prog.clone();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(win) = w.upgrade() {
+                            win.set_retranscribe_status(SharedString::from(msg));
+                        }
+                    });
+                };
+                let result = overlay_backend::re_transcribe::retranscribe_and_summarize(
+                    events_job,
+                    cfg_job,
+                    &sid,
+                    &on_progress,
+                )
+                .await;
+                if let Err(e) = &result {
+                    // Log the chain locally; show a GENERIC tile (no leak).
+                    eprintln!("[overlay-host] re-transcribe failed: {e:#}");
+                    let _ = events_err.spawn_tile_full(
+                        overlay_backend::events::TileSpec {
+                            question: "Ре-Summary из архива".to_string(),
+                            answer: "Не удалось перетранскрибировать запись этой сессии. \
+                                     Проверьте, что запись на месте и STT настроен \
+                                     (Настройки → STT), и попробуйте ещё раз."
+                                .to_string(),
+                            source: "summary".into(),
+                            is_translation: false,
+                            highlights: vec![],
+                        },
+                        overlay_backend::events::MonitorHint::Auto,
+                        stealth,
+                        overlay_backend::events::TileKind::Error,
+                    );
+                }
+                // Release the PROCESS-GLOBAL latch first (survives even if this
+                // window was closed mid-job and the weak upgrade below fails).
+                release_retranscribe();
+                let weak_done = weak_job.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(win) = weak_done.upgrade() {
+                        win.set_retranscribe_busy(false);
+                        win.set_retranscribe_status(SharedString::from(""));
+                    }
+                });
+            });
         });
     }
 
@@ -640,6 +760,14 @@ fn status_glyph(status: &str) -> &'static str {
     }
 }
 
+/// v0.14.0 — does this session have saved recordings on disk
+/// (`recordings/<session_id>/`)? Gates the per-row "↻ Summary" button.
+fn recordings_exist(session_id: &str) -> bool {
+    overlay_backend::recorder::recordings_dir()
+        .map(|d| d.join(session_id).is_dir())
+        .unwrap_or(false)
+}
+
 /// Map an indexed [`Session`] to an archive list row. Counts are emoji-coded
 /// as plain text counts so the row needs no per-language string;
 /// the cost shows only when non-zero (local runs are $0 → blank).
@@ -660,6 +788,7 @@ fn session_to_row(s: &Session) -> ArchiveRow {
         title: SharedString::from(format!("{} {label}", status_glyph(&s.status))),
         subtitle: SharedString::from(subtitle),
         meta: SharedString::from(meta),
+        has_recordings: recordings_exist(&s.id),
     }
 }
 
@@ -686,6 +815,7 @@ fn hit_to_row(h: &SearchHit) -> ArchiveRow {
         title: SharedString::from(format!("search {label}")),
         subtitle: SharedString::from(snippet),
         meta: SharedString::from(kind_glyph),
+        has_recordings: recordings_exist(&h.session_id),
     }
 }
 

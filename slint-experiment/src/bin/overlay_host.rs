@@ -724,158 +724,64 @@ fn main() -> Result<(), slint::PlatformError> {
     overlay.set_stealth_active(cfg.read().stealth_enabled);
     overlay.set_cost_label(SharedString::from("$0.000"));
     overlay.set_timer_label(SharedString::from("00:00"));
+    // v0.13.1 — the mic is LIVE (not muted) by default; the chip shows it lit.
+    overlay.set_mic_active(true);
+    overlay.set_mic_muted(false);
+    {
+        let mut st = match state.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        st.mic_active = true;
+    }
 
     apply_overlay_hwnd(&overlay);
 
-    // ===== Mic chip (Phase C: real 3s mic level test via audio backend) =====
+    // ===== Mic chip = MUTE toggle (v0.13.1) =====
     //
-    // Going-active toggle now runs `audio::record_mic_blocking(3000)` on
-    // a tokio blocking task (WASAPI is synchronous), computes peak dBFS
-    // from the i16 samples, and posts the result to the status pill via
-    // slint::invoke_from_event_loop.
+    // Click mutes / un-mutes the microphone. When muted: mic-source transcript
+    // lines are dropped (the transcript forwarder already honours rt.mic_muted)
+    // AND mic audio is NOT written to the session recording (the recorder tee
+    // honours it too) — one control, both effects. System audio is unaffected.
+    // The "test mic level" probe now lives only in Settings → Audio.
     //
-    // Real continuous capture (start_capture + STT pipeline drain) is
-    // Phase B2 work — needs the runtime::start_session port. For now
-    // the chip click is a 3-second mic-health probe.
+    // `mic_active` here means "mic is LIVE" (= NOT muted): it starts true, and
+    // the bar chip shows a slashed-mic icon + dims when muted.
     {
         let s = state.clone();
         let weak = overlay.as_weak();
-        let cfg_mic = cfg.clone();
-        let rt_mic = rt_handle.clone();
+        let slint_rt_mic = slint_rt.clone();
         overlay.on_mic_toggle_clicked(move || {
-            // Re-entry guard: don't spawn a second probe while the
-            // first is still running. Review-agent finding 2026-05-27.
-            let (new_active, may_probe) = {
+            let muted = {
+                let mut rt = slint_replay::runtime_state::lock(&slint_rt_mic);
+                rt.mic_muted = !rt.mic_muted;
+                rt.mic_muted
+            };
+            {
                 let mut st = match s.lock() {
                     Ok(g) => g,
                     Err(p) => p.into_inner(),
                 };
-                st.mic_active = !st.mic_active;
-                let may = st.mic_active && !st.mic_probe_in_flight;
-                if may {
-                    st.mic_probe_in_flight = true;
-                }
-                (st.mic_active, may)
-            };
-            let Some(o) = weak.upgrade() else { return };
-            o.set_mic_active(new_active);
-            refresh_status(&o, new_active, get_sys_active(&s));
-
-            if !new_active || !may_probe {
-                // off-toggle OR a probe is already in flight; let the
-                // current one finish and fire its own status update.
-                return;
+                st.mic_active = !muted; // "live" when not muted
             }
-
-            // Capture device name + spawn the blocking probe.
-            let mic_device = cfg_mic.read().mic_device.clone();
-            let weak_for_status = weak.clone();
-            let s_for_status = s.clone();
-            rt_mic.spawn_blocking(move || {
-                let started_label = mic_device.clone().unwrap_or_else(|| "default".into());
-                eprintln!("[overlay-host] mic test 3s — device={started_label}");
-                // M-1: don't open a 2nd WASAPI capture if PTT / voice follow-up /
-                // dictation already hold the mic (both get garbage). Clear the
-                // in-flight flag + show "busy" instead of recording.
-                if !try_acquire_mic() {
-                    eprintln!("[overlay-host] mic test skipped — mic busy");
-                    let s_busy = s_for_status.clone();
-                    let weak_busy = weak_for_status.clone();
-                    let _ = slint::invoke_from_event_loop(move || {
-                        {
-                            let mut st = match s_busy.lock() {
-                                Ok(g) => g,
-                                Err(p) => p.into_inner(),
-                            };
-                            st.mic_probe_in_flight = false;
-                        }
-                        if let Some(o) = weak_busy.upgrade() {
-                            o.set_status_text(SharedString::from("mic busy"));
-                            o.set_status_color(slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24));
-                        }
-                    });
-                    return;
+            if let Some(o) = weak.upgrade() {
+                o.set_mic_active(!muted);
+                o.set_mic_muted(muted);
+                if muted {
+                    o.set_status_text(SharedString::from("mic muted"));
+                    o.set_status_color(slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24));
+                } else {
+                    refresh_status(&o, true, get_sys_active(&s));
                 }
-                let result = audio::record_mic_blocking(PROBE_DURATION_MS, mic_device);
-                release_mic();
-                let peak_dbfs = match result {
-                    Ok(samples) if samples.is_empty() => None,
-                    Ok(samples) => {
-                        let peak = samples
-                            .iter()
-                            .map(|s| s.unsigned_abs() as u32)
-                            .max()
-                            .unwrap_or(0);
-                        if peak == 0 {
-                            Some(f32::NEG_INFINITY)
-                        } else {
-                            let norm = peak as f32 / 32768.0;
-                            Some(20.0 * norm.log10())
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("[overlay-host] mic test failed: {e:#}");
-                        None
-                    }
-                };
-                let _ = slint::invoke_from_event_loop(move || {
-                    // Clear the in-flight flag whatever happens (success,
-                    // silence, error, or user toggled off mid-test).
-                    {
-                        let mut st = match s_for_status.lock() {
-                            Ok(g) => g,
-                            Err(p) => p.into_inner(),
-                        };
-                        st.mic_probe_in_flight = false;
-                    }
-                    let Some(o) = weak_for_status.upgrade() else {
-                        return;
-                    };
-                    // If user toggled mic OFF while the probe was running,
-                    // don't overwrite the now-idle status with a "mic ok"
-                    // flash. Review-agent finding 2026-05-27.
-                    if !get_mic_active(&s_for_status) {
-                        eprintln!(
-                            "[overlay-host] mic test result ignored — user toggled off mid-probe"
-                        );
-                        return;
-                    }
-                    // 3-bucket label aligned with React's coloured-dot
-                    // convention (silent / quiet / ok). Avoids leaking
-                    // dev jargon ("-42.3 dBFS") to non-technical users.
-                    let (label, color) = match peak_dbfs {
-                        Some(db) if db.is_finite() && db >= -40.0 => {
-                            ("mic ok", slint::Color::from_rgb_u8(0x34, 0xd3, 0x99))
-                        }
-                        Some(db) if db.is_finite() => {
-                            ("mic quiet", slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24))
-                        }
-                        Some(_) => ("mic silent", slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24)),
-                        None => (
-                            "mic test failed",
-                            slint::Color::from_rgb_u8(0xf8, 0x71, 0x71),
-                        ),
-                    };
-                    o.set_status_text(SharedString::from(label));
-                    o.set_status_color(color);
-                    eprintln!(
-                        "[overlay-host] mic test result: {} dBFS ({label})",
-                        peak_dbfs.map_or_else(|| "?".into(), |d| format!("{d:.2}"))
-                    );
-                    // Auto-revert status after 5s.
-                    let weak_revert = weak_for_status.clone();
-                    let s_revert = s_for_status.clone();
-                    slint::Timer::single_shot(Duration::from_secs(STATUS_REVERT_SECS), move || {
-                        if let Some(o) = weak_revert.upgrade() {
-                            refresh_status(
-                                &o,
-                                get_mic_active(&s_revert),
-                                get_sys_active(&s_revert),
-                            );
-                        }
-                    });
-                });
-            });
+            }
+            eprintln!(
+                "[overlay-host] mic {}",
+                if muted {
+                    "MUTED (transcript + recording off)"
+                } else {
+                    "live"
+                }
+            );
         });
     }
 
@@ -1625,7 +1531,15 @@ fn main() -> Result<(), slint::PlatformError> {
                         }
                     } else {
                         eprintln!("[overlay-host] F7 pressed — opening archive");
-                        open_archive(&hp_archive, &hp_tiles, &hp_state, &hp_weak_overlay);
+                        open_archive(
+                            &hp_archive,
+                            &hp_tiles,
+                            &hp_state,
+                            &hp_weak_overlay,
+                            &hp_cfg,
+                            &hp_events,
+                            &hp_rt_handle,
+                        );
                     }
                 } else if event.id == f3_id {
                     // Phase E3 slice 3 — F3 reask via overlay-backend's
@@ -2333,8 +2247,19 @@ fn main() -> Result<(), slint::PlatformError> {
         let tiles_ref = tiles.clone();
         let state_ref = state.clone();
         let ow = overlay.as_weak();
+        let cfg_ar = cfg.clone();
+        let events_ar = events.clone();
+        let rt_ar = rt_handle.clone();
         overlay.on_archive_clicked(move || {
-            open_archive(&archive_ref, &tiles_ref, &state_ref, &ow);
+            open_archive(
+                &archive_ref,
+                &tiles_ref,
+                &state_ref,
+                &ow,
+                &cfg_ar,
+                &events_ar,
+                &rt_ar,
+            );
         });
     }
 

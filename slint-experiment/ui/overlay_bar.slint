@@ -336,6 +336,9 @@ export component OverlayBarWindow inherits Window {
 
     // Live capture flags.
     in-out property <bool> mic-active: false;
+    // v0.13.1 — mic muted (drops mic transcript + mic recording). Drives the
+    // mic chip's slashed-icon + dimmed look.
+    in-out property <bool> mic-muted: false;
     in-out property <bool> sys-active: false;
 
     // Session timer label (formatted by Rust, e.g. "03:42").
@@ -533,11 +536,14 @@ export component OverlayBarWindow inherits Window {
 
             // ── Capture toggles (continuous mic / sys) — icon-only + dot ──
             LiveChip {
-                icon: @image-url("../assets/icons/mic.svg");
+                // v0.13.1 — slashed mic when muted; lit green when live.
+                icon: root.mic-muted
+                    ? @image-url("../assets/icons/micslash.svg")
+                    : @image-url("../assets/icons/mic.svg");
                 has-icon: true;
-                a11y: "Mic capture";
-                active: root.mic-active;
-                accent: Theme.success;
+                a11y: root.mic-muted ? "Mic muted (click to unmute)" : "Mic live (click to mute)";
+                active: !root.mic-muted;
+                accent: root.mic-muted ? Theme.text-muted : Theme.success;
                 clicked => { root.mic-toggle-clicked(); }
             }
             LiveChip {

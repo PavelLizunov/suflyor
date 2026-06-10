@@ -230,6 +230,7 @@ fn start_session_inner(
                 log_info(&format!("audio recording → {}", recorder.dir().display()));
                 let (stt_tx, stt_rx2) = tokio::sync::mpsc::channel::<AudioChunk>(128);
                 let mut src_rx = audio_rx;
+                let rt_for_rec = rt.clone();
                 // Intentionally NOT stored as an abort-tracked task: it
                 // self-terminates when src_rx closes (stop_session drops the
                 // CaptureHandle → WASAPI threads exit → senders dropped), and the
@@ -241,7 +242,15 @@ fn start_session_inner(
                     // ends, i.e. when capture stops and src_rx closes.
                     let recorder = recorder;
                     while let Some(chunk) = src_rx.recv().await {
-                        recorder.feed(&chunk);
+                        // v0.13.1 — when the mic chip is muted, do NOT write mic
+                        // audio to the recording (system audio still records). The
+                        // transcript forwarder drops mic transcript lines on the
+                        // same rt.mic_muted flag, so one toggle stops both.
+                        let mic_muted =
+                            matches!(chunk.source, AudioSource::Mic) && lock(&rt_for_rec).mic_muted;
+                        if !mic_muted {
+                            recorder.feed(&chunk);
+                        }
                         if stt_tx.send(chunk).await.is_err() {
                             break; // STT pipeline gone — stop teeing
                         }
