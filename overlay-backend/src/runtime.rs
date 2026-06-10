@@ -154,6 +154,281 @@ pub async fn run_post_meeting_debrief(
     }
 }
 
+// ===== Meeting summary (v0.12.0 — «Summary созвона», tester request) =====
+
+/// Char budget for the transcript fed to the summary model on CLOUD
+/// providers: ~24k chars ≈ 8–10k tokens — fits hosted context windows
+/// with headroom for the system prompt + response.
+const SUMMARY_INPUT_BUDGET_CLOUD_CHARS: usize = 24_000;
+/// LOCAL budget. The managed llama-server launches with `-c 8192`
+/// (local_ai.rs), so 12k chars (≈5–6k tokens of Russian) + system prompt
+/// + `SUMMARY_MAX_TOKENS` response must all fit inside 8192.
+const SUMMARY_INPUT_BUDGET_LOCAL_CHARS: usize = 12_000;
+/// Response cap — five structured sections for a long meeting need more
+/// room than the debrief's 3 bullets.
+const SUMMARY_MAX_TOKENS: u32 = 1536;
+/// Minimum transcript lines before a summary is worth an AI call.
+const SUMMARY_MIN_LINES: usize = 2;
+
+/// Gate the Summary button: `Ok(())` when there is enough transcript to
+/// summarise, `Err(reason)` (log-only English, mirrors `debrief_gate`)
+/// when the call would waste an AI round-trip. Deliberately NO settings
+/// opt-in and NO duration / mic-lines floor (unlike the debrief gate):
+/// the user pressed an explicit button, so the only requirement is that
+/// a transcript exists at all — the caller turns the Err into a friendly
+/// "no transcript yet" info tile.
+pub fn summary_gate(transcript: &[TranscriptLine]) -> Result<(), &'static str> {
+    if transcript.len() < SUMMARY_MIN_LINES {
+        return Err("not enough transcript lines for a summary");
+    }
+    Ok(())
+}
+
+/// Render the transcript for the summary prompt — one line per utterance,
+/// labelled by channel. Labels match what `summary_system_prompt` explains
+/// to the model: mic = the app user («Вы»/"You"), system loopback = the
+/// other side («Собеседник»/"Interlocutor"). Blank/whitespace lines are
+/// dropped so they don't eat the char budget.
+pub fn format_transcript_for_summary(transcript: &[TranscriptLine], is_ru: bool) -> String {
+    let (mic_label, sys_label) = if is_ru {
+        ("Вы", "Собеседник")
+    } else {
+        ("You", "Interlocutor")
+    };
+    transcript
+        .iter()
+        .filter(|l| !l.text.trim().is_empty())
+        .map(|l| {
+            let label = match l.source {
+                AudioSource::Mic => mic_label,
+                AudioSource::System => sys_label,
+            };
+            format!("{label}: {}", l.text.trim())
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Cut an over-budget transcript in the MIDDLE, keeping whole lines: the
+/// head survives (participants introduce themselves early) and the tail
+/// survives (decisions + action items cluster at the end); a marker line
+/// tells the model a gap exists. Under-budget input passes through
+/// unchanged (`was_truncated == false`). Budget counts CHARS, not bytes,
+/// so Cyrillic costs the same as Latin; output may exceed the budget by
+/// at most the marker length.
+pub fn truncate_transcript_middle(text: &str, budget_chars: usize, is_ru: bool) -> (String, bool) {
+    if text.chars().count() <= budget_chars {
+        return (text.to_string(), false);
+    }
+    let marker = if is_ru {
+        "[… середина встречи пропущена — транскрипт длиннее лимита …]"
+    } else {
+        "[… middle of the meeting omitted — transcript over budget …]"
+    };
+    // 1/3 head + 2/3 tail: the end of a meeting carries the decisions.
+    let head_budget = budget_chars / 3;
+    let tail_budget = budget_chars.saturating_sub(head_budget);
+    let lines: Vec<&str> = text.lines().collect();
+    let mut head_count = 0usize; // lines [0, head_count) kept
+    let mut used = 0usize;
+    for line in &lines {
+        let cost = line.chars().count() + 1;
+        if used + cost > head_budget {
+            break;
+        }
+        used += cost;
+        head_count += 1;
+    }
+    let mut tail_start = lines.len(); // lines [tail_start, len) kept
+    let mut tail_used = 0usize;
+    for i in (head_count..lines.len()).rev() {
+        let cost = lines[i].chars().count() + 1;
+        if tail_used + cost > tail_budget {
+            break;
+        }
+        tail_used += cost;
+        tail_start = i;
+    }
+    if head_count == 0 && tail_start == lines.len() {
+        // Degenerate input: one giant line, no usable line boundaries —
+        // fall back to a raw char slice so the model still gets head+tail.
+        let total = text.chars().count();
+        let head_str: String = text.chars().take(head_budget).collect();
+        let tail_str: String = text
+            .chars()
+            .skip(total.saturating_sub(tail_budget))
+            .collect();
+        return (format!("{head_str}\n{marker}\n{tail_str}"), true);
+    }
+    let head_str = lines[..head_count].join("\n");
+    let tail_str = lines[tail_start..].join("\n");
+    (format!("{head_str}\n{marker}\n{tail_str}"), true)
+}
+
+/// System prompt for the meeting summary. Factual-extraction framing:
+/// NO persona / profile / curated memory is applied (deliberate — the
+/// summary reports what was said, it does not answer AS the user; this
+/// mirrors the v0.11.2 audit rule that `context_for_meeting` belongs to
+/// answer-generation paths only). The model is told the channel labels,
+/// warned that «Собеседник» may be several people, and required to say
+/// "nothing recorded" instead of inventing content for empty sections.
+pub fn summary_system_prompt(is_ru: bool, truncated: bool) -> String {
+    let mut p = if is_ru {
+        "Ты — секретарь встречи. На входе — транскрипт созвона, каждая строка помечена: \
+         «Вы:» — пользователь приложения, «Собеседник:» — другая сторона звонка. \
+         Внимание: за меткой «Собеседник» может стоять НЕСКОЛЬКО разных людей.\n\
+         Составь итог встречи в markdown, СТРОГО по транскрипту, с разделами:\n\
+         **Участники** — кто участвовал. Имена бери только из самого разговора \
+         (кто представился, к кому обращались). Если имён нет — пиши «Собеседник» \
+         (или «Собеседник 1», «Собеседник 2», если они различимы по контексту).\n\
+         **О чём говорили** — 3–6 пунктов, по одной теме на пункт.\n\
+         **Решения** — к чему пришли. Если решений не прозвучало — «Решений не зафиксировано».\n\
+         **Задачи** — «кто → что сделать» (+ срок, если назван). Если задач нет — \
+         «Задач не зафиксировано».\n\
+         **Договорённости** — что стороны зафиксировали (следующая встреча, сроки, условия). \
+         Если нет — «Договорённостей не зафиксировано».\n\
+         Правила: только факты из транскрипта — НЕ выдумывай и не додумывай детали; \
+         неоднозначную атрибуцию реплик помечай «(неточно)»; пиши кратко, без воды. \
+         Отвечай на русском языке."
+            .to_string()
+    } else {
+        "You are a meeting secretary. The input is a call transcript where each line is \
+         labelled: \"You:\" — the app user, \"Interlocutor:\" — the other side of the call. \
+         Note: the \"Interlocutor\" label may cover SEVERAL different people.\n\
+         Produce the meeting summary in markdown, STRICTLY from the transcript, with these sections:\n\
+         **Participants** — who took part. Take names only from the conversation itself \
+         (who introduced themselves, how people were addressed). If no names were spoken, \
+         write \"Interlocutor\" (or \"Interlocutor 1\", \"Interlocutor 2\" when distinguishable \
+         from context).\n\
+         **Topics discussed** — 3–6 bullets, one topic per bullet.\n\
+         **Decisions** — what was decided. If none were made, write \"No decisions recorded\".\n\
+         **Action items** — \"who → what\" (+ deadline if mentioned). If none, write \
+         \"No action items recorded\".\n\
+         **Agreements** — what the parties fixed (next meeting, deadlines, terms). If none, \
+         write \"No agreements recorded\".\n\
+         Rules: facts from the transcript only — do NOT invent or extrapolate details; mark \
+         uncertain attribution with \"(uncertain)\"; be concise. Respond in English."
+            .to_string()
+    };
+    if truncated {
+        p.push_str(if is_ru {
+            "\nВажно: транскрипт усечён посередине — суммируй только то, что есть, \
+             и не делай выводов о пропущенной части."
+        } else {
+            "\nImportant: the transcript was cut in the middle — summarise only what is \
+             present and draw no conclusions about the omitted part."
+        });
+    }
+    p
+}
+
+/// Meeting summary — run the FULL session transcript (both channels)
+/// through the structuring model and spawn the result as a Summary tile.
+/// Triggered by the bar's Summary button (works mid-session and after
+/// stop), NOT automatically — the debrief keeps the on-stop slot.
+///
+/// Unlike the fire-and-forget debrief, an AI failure here spawns a
+/// GENERIC error tile: the user explicitly pressed a button, so silence
+/// would read as "broken". Security boundary: the tile text carries no
+/// error chain / base_url — the full chain goes to the log only.
+pub async fn run_meeting_summary(
+    events: Arc<dyn RuntimeEvents>,
+    cfg: SharedConfig,
+    transcript: Vec<TranscriptLine>,
+) {
+    let (base_url, bearer, model, response_language, preferred_monitor, stealth, is_local) = {
+        let c = cfg.read();
+        // Same endpoint policy as the debrief: prep=true picks the
+        // structuring model (local honors ai_local_prep_model).
+        let ep = c.ai_endpoint(true);
+        (
+            ep.base_url,
+            ep.bearer,
+            ep.model,
+            c.response_language.clone(),
+            c.tile_monitor_name.clone(),
+            c.stealth_enabled,
+            ep.is_local,
+        )
+    };
+    let is_ru = response_language == "ru";
+    let budget = if is_local {
+        SUMMARY_INPUT_BUDGET_LOCAL_CHARS
+    } else {
+        SUMMARY_INPUT_BUDGET_CLOUD_CHARS
+    };
+    let formatted = format_transcript_for_summary(&transcript, is_ru);
+    let (input, truncated) = truncate_transcript_middle(&formatted, budget, is_ru);
+    if truncated {
+        log::info!(
+            "meeting summary: transcript over budget ({} chars > {budget}), middle truncated",
+            formatted.chars().count()
+        );
+    }
+    let messages = vec![
+        ai::ChatMessage {
+            role: "system".into(),
+            content: ai::MessageContent::Text(summary_system_prompt(is_ru, truncated)),
+        },
+        ai::ChatMessage {
+            role: "user".into(),
+            content: ai::MessageContent::Text(input),
+        },
+    ];
+    let tile_title = if is_ru {
+        "Summary созвона".to_string()
+    } else {
+        "Meeting summary".to_string()
+    };
+    let monitor_hint = match preferred_monitor.as_deref() {
+        Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
+        _ => MonitorHint::Auto,
+    };
+    match ai::complete(&base_url, &bearer, &model, messages, SUMMARY_MAX_TOKENS).await {
+        Ok(answer) => {
+            log::info!("meeting summary landed: {} chars", answer.len());
+            if let Err(e) = events.spawn_tile_full(
+                TileSpec {
+                    question: tile_title,
+                    answer,
+                    source: "summary".into(),
+                    is_translation: false,
+                    highlights: vec![],
+                },
+                monitor_hint,
+                stealth,
+                TileKind::Summary,
+            ) {
+                log::warn!("meeting summary tile spawn failed: {e}");
+            }
+        }
+        Err(e) => {
+            log::warn!("meeting summary AI call failed: {e:#}");
+            let msg = if is_ru {
+                "Не получилось составить summary — AI недоступен. \
+                 Проверьте Настройки → AI и попробуйте ещё раз."
+            } else {
+                "Couldn't build the summary — the AI endpoint is unavailable. \
+                 Check Settings → AI and try again."
+            };
+            if let Err(e2) = events.spawn_tile_full(
+                TileSpec {
+                    question: tile_title,
+                    answer: msg.to_string(),
+                    source: "summary".into(),
+                    is_translation: false,
+                    highlights: vec![],
+                },
+                monitor_hint,
+                stealth,
+                TileKind::Error,
+            ) {
+                log::warn!("meeting summary error tile spawn failed: {e2}");
+            }
+        }
+    }
+}
+
 // ===== Trigger + prompt builder (moved from src-tauri Phase B2 port #2) =====
 
 /// Auto-tile trigger discriminant. Question = sentence ends with '?'
@@ -1185,6 +1460,127 @@ mod tests {
         // and the fn returns without spawning a tile. Either way
         // no panic, no resource leak.
         run_post_meeting_debrief(sink, cfg, transcript).await;
+    }
+
+    // ── Meeting-summary battery (v0.12.0 — S1) ──
+
+    fn line(source: AudioSource, text: &str, ms: u64) -> TranscriptLine {
+        TranscriptLine {
+            source,
+            text: text.into(),
+            timestamp_ms: ms,
+        }
+    }
+
+    #[test]
+    fn summary_gate_requires_two_lines() {
+        assert!(summary_gate(&[]).is_err());
+        assert!(summary_gate(&[line(AudioSource::Mic, "привет", 0)]).is_err());
+        assert!(summary_gate(&[
+            line(AudioSource::Mic, "привет", 0),
+            line(AudioSource::System, "здравствуйте", 1),
+        ])
+        .is_ok());
+    }
+
+    #[test]
+    fn summary_format_labels_channels_ru_en() {
+        let t = vec![
+            line(AudioSource::Mic, " моя реплика ", 0),
+            line(AudioSource::System, "их реплика", 1),
+            line(AudioSource::Mic, "   ", 2), // whitespace-only — dropped
+        ];
+        assert_eq!(
+            format_transcript_for_summary(&t, true),
+            "Вы: моя реплика\nСобеседник: их реплика"
+        );
+        assert_eq!(
+            format_transcript_for_summary(&t, false),
+            "You: моя реплика\nInterlocutor: их реплика"
+        );
+    }
+
+    #[test]
+    fn summary_truncate_passes_under_budget_unchanged() {
+        let text = "Вы: раз\nСобеседник: два";
+        let (out, truncated) = truncate_transcript_middle(text, 1_000, true);
+        assert_eq!(out, text);
+        assert!(!truncated);
+    }
+
+    #[test]
+    fn summary_truncate_keeps_head_tail_and_marker() {
+        // 20 lines × 10 chars (incl. newline cost) — budget 100 keeps
+        // ~3 head lines + ~6 tail lines, drops the middle.
+        let lines: Vec<String> = (0..20).map(|i| format!("Вы: ст{i:03}")).collect();
+        let text = lines.join("\n");
+        let (out, truncated) = truncate_transcript_middle(&text, 100, true);
+        assert!(truncated);
+        assert!(out.contains("пропущена"), "marker missing: {out}");
+        assert!(out.starts_with("Вы: ст000"), "head must survive: {out}");
+        assert!(out.ends_with("Вы: ст019"), "tail must survive: {out}");
+        assert!(!out.contains("ст010"), "middle must be dropped: {out}");
+    }
+
+    #[test]
+    fn summary_truncate_handles_single_giant_line() {
+        // No newlines at all — line-based cut degenerates; the char-slice
+        // fallback must still deliver head + marker + tail.
+        let text = "а".repeat(500);
+        let (out, truncated) = truncate_transcript_middle(&text, 90, true);
+        assert!(truncated);
+        assert!(out.contains("пропущена"));
+        assert!(out.starts_with(&"а".repeat(30)));
+        assert!(out.ends_with(&"а".repeat(60)));
+        assert!(out.chars().count() < 500);
+    }
+
+    #[test]
+    fn summary_prompt_has_sections_and_honesty_rules_ru_en() {
+        let ru = summary_system_prompt(true, false);
+        for s in [
+            "Участники",
+            "О чём говорили",
+            "Решения",
+            "Задачи",
+            "Договорённости",
+        ] {
+            assert!(ru.contains(s), "ru prompt missing section {s}");
+        }
+        assert!(ru.contains("НЕ выдумывай"));
+        assert!(ru.contains("(неточно)"));
+        assert!(ru.contains("НЕСКОЛЬКО"));
+        assert!(!ru.contains("усечён"));
+        assert!(summary_system_prompt(true, true).contains("усечён"));
+
+        let en = summary_system_prompt(false, false);
+        for s in [
+            "Participants",
+            "Topics discussed",
+            "Decisions",
+            "Action items",
+            "Agreements",
+        ] {
+            assert!(en.contains(s), "en prompt missing section {s}");
+        }
+        assert!(en.contains("do NOT invent"));
+        assert!(en.contains("(uncertain)"));
+        assert!(!en.contains("cut in the middle"));
+        assert!(summary_system_prompt(false, true).contains("cut in the middle"));
+    }
+
+    /// Smoke: with a hermetic empty config the AI call fails fast and the
+    /// fn takes the generic-ERROR-tile branch (button feedback) without
+    /// panicking and without touching the network (empty base_url).
+    #[tokio::test]
+    async fn run_meeting_summary_with_noop_events_does_not_panic() {
+        let cfg = hermetic_empty_config();
+        let transcript = vec![
+            line(AudioSource::Mic, "обсуждаем план", 0),
+            line(AudioSource::System, "согласен, делаем", 1),
+        ];
+        let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
+        run_meeting_summary(sink, cfg, transcript).await;
     }
 
     // ── Prompt-builder battery (moved from src-tauri Phase B2 port #2) ──

@@ -41,6 +41,18 @@ pub struct SlintRuntime {
     /// (80) entries. Append-only; oldest evicted on overflow.
     pub transcript: VecDeque<TranscriptLine>,
 
+    /// v0.12.0 — FULL session transcript. Unlike the 80-line rolling
+    /// window above, this accumulates EVERY line of the active session
+    /// (bounded at `FULL_TRANSCRIPT_MAX_LINES`) so the Summary button
+    /// covers the whole meeting, not just the tail. Cleared on session
+    /// START — deliberately NOT on stop, so the button keeps working
+    /// between Стоп and the next Старт.
+    pub full_transcript: VecDeque<TranscriptLine>,
+
+    /// True once `full_transcript` overflowed and dropped its oldest
+    /// lines — the summary then covers the recent majority, not 100%.
+    pub full_transcript_truncated: bool,
+
     /// Last successful AI question shown to the user. Reask reads
     /// this for the F3 "reask the reask" flow.
     pub last_question: Option<String>,
@@ -147,9 +159,24 @@ pub fn lock(rt: &SharedSlintRuntime) -> std::sync::MutexGuard<'_, SlintRuntime> 
 /// reask/auto-detector behavior identical across binaries.
 pub const TRANSCRIPT_MAX_LINES: usize = 80;
 
-/// Push a transcript line, evicting oldest if the cap is reached.
-/// Caller already holds the rt lock.
+/// Hard bound for the full-session transcript backing the Summary
+/// feature (v0.12.0). 4000 lines ≈ several hours of conversation
+/// (~0.5 MB) — generous, but bounded so a forgotten running session
+/// can't grow memory without limit. Overflow drops the OLDEST lines
+/// (the summary keeps covering the recent majority) and raises
+/// `full_transcript_truncated`.
+pub const FULL_TRANSCRIPT_MAX_LINES: usize = 4000;
+
+/// Push a transcript line into BOTH transcript buffers, evicting
+/// oldest on overflow. Caller already holds the rt lock. Single choke
+/// point — every STT line flows through here, so the Summary
+/// accumulator can't drift from the rolling window.
 pub fn push_transcript_line(rt: &mut SlintRuntime, line: TranscriptLine) {
+    rt.full_transcript.push_back(line.clone());
+    while rt.full_transcript.len() > FULL_TRANSCRIPT_MAX_LINES {
+        rt.full_transcript.pop_front();
+        rt.full_transcript_truncated = true;
+    }
     rt.transcript.push_back(line);
     while rt.transcript.len() > TRANSCRIPT_MAX_LINES {
         rt.transcript.pop_front();
@@ -201,5 +228,32 @@ mod tests {
         assert_eq!(first, "line 5");
         let last = &s.transcript.back().expect("non-empty").text;
         assert_eq!(last, &format!("line {}", TRANSCRIPT_MAX_LINES + 4));
+        // v0.12.0 — the Summary accumulator kept EVERYTHING (85 < 4000)
+        // even though the rolling window evicted the first 5.
+        assert_eq!(s.full_transcript.len(), TRANSCRIPT_MAX_LINES + 5);
+        assert!(!s.full_transcript_truncated);
+        let full_first = &s.full_transcript.front().expect("non-empty").text;
+        assert_eq!(full_first, "line 0");
+    }
+
+    #[test]
+    fn full_transcript_caps_at_max_and_flags_truncation() {
+        let rt = shared_runtime();
+        let mut s = lock(&rt);
+        for i in 0..(FULL_TRANSCRIPT_MAX_LINES + 5) {
+            push_transcript_line(
+                &mut s,
+                TranscriptLine {
+                    source: AudioSource::System,
+                    text: format!("line {i}"),
+                    timestamp_ms: i as u64,
+                },
+            );
+        }
+        assert_eq!(s.full_transcript.len(), FULL_TRANSCRIPT_MAX_LINES);
+        assert!(s.full_transcript_truncated);
+        // Oldest dropped — coverage shifted to the recent majority.
+        let first = &s.full_transcript.front().expect("non-empty").text;
+        assert_eq!(first, "line 5");
     }
 }

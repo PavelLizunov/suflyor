@@ -1269,6 +1269,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     | TileKind::System
                     | TileKind::Mic
                     | TileKind::Debrief
+                    | TileKind::Summary
             );
             if is_conversational && !req.spec.answer.trim().is_empty() {
                 let convo_id = CONVO_SEQ.fetch_add(1, Ordering::Relaxed) as i32;
@@ -2287,6 +2288,112 @@ fn main() -> Result<(), slint::PlatformError> {
         let ow = overlay.as_weak();
         overlay.on_archive_clicked(move || {
             open_archive(&archive_ref, &tiles_ref, &state_ref, &ow);
+        });
+    }
+
+    // ===== 📝 Meeting summary (v0.12.0 — Summary chip) =====
+    // Snapshot the FULL session transcript (runtime_state accumulator, not
+    // the 80-line rolling window) and run it through run_meeting_summary.
+    // Works mid-session AND between Стоп and the next Старт (the
+    // accumulator survives stop_session). The summary-busy bar property
+    // doubles as the in-flight guard: re-clicks while lit are ignored, so
+    // a slow model can't stack parallel summary calls.
+    {
+        let rt_for_summary = slint_rt.clone();
+        let events_for_summary = events.clone();
+        let cfg_for_summary = cfg.clone();
+        let rt_handle_for_summary = rt_handle.clone();
+        let weak_for_summary = overlay.as_weak();
+        overlay.on_summary_clicked(move || {
+            let Some(o) = weak_for_summary.upgrade() else {
+                return;
+            };
+            if o.get_summary_busy() {
+                eprintln!("[overlay-host] summary already in flight — click ignored");
+                return;
+            }
+            let (transcript, truncated) = {
+                let s = slint_replay::runtime_state::lock(&rt_for_summary);
+                (
+                    s.full_transcript.iter().cloned().collect::<Vec<_>>(),
+                    s.full_transcript_truncated,
+                )
+            };
+            if let Err(reason) = overlay_backend::runtime::summary_gate(&transcript) {
+                eprintln!("[overlay-host] summary skipped: {reason}");
+                // The button must visibly react — friendly notice tile
+                // instead of silence (kind=Error → not conversational).
+                // NOTE: advice mentions ONLY Старт — PTT results don't flow
+                // through push_transcript_line, so suggesting PTT here would
+                // send the user in a circle (review-agent finding).
+                let (is_ru, stealth, preferred_monitor) = {
+                    let c = cfg_for_summary.read();
+                    (
+                        c.response_language == "ru",
+                        c.stealth_enabled,
+                        c.tile_monitor_name.clone(),
+                    )
+                };
+                let (title, msg) = if is_ru {
+                    (
+                        "Summary созвона",
+                        "Транскрипта пока нет. Нажмите Старт, поговорите — \
+                         и Summary соберёт итог встречи.",
+                    )
+                } else {
+                    (
+                        "Meeting summary",
+                        "No transcript yet. Press Start and talk a bit — \
+                         then Summary will assemble the meeting recap.",
+                    )
+                };
+                // Same monitor policy as the real summary tile (and every
+                // other ask path) — Named pin from config, else Auto.
+                let hint = match preferred_monitor.as_deref() {
+                    Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
+                    _ => MonitorHint::Auto,
+                };
+                if let Err(e) = events_for_summary.spawn_tile_full(
+                    TileSpec {
+                        question: title.to_string(),
+                        answer: msg.to_string(),
+                        source: "summary".into(),
+                        is_translation: false,
+                        highlights: vec![],
+                    },
+                    hint,
+                    stealth,
+                    TileKind::Error,
+                ) {
+                    eprintln!("[overlay-host] summary notice tile spawn failed: {e}");
+                }
+                return;
+            }
+            if truncated {
+                eprintln!(
+                    "[overlay-host] summary: accumulator overflowed earlier — covering the \
+                     most recent {} lines",
+                    transcript.len()
+                );
+            }
+            o.set_summary_busy(true);
+            eprintln!(
+                "[overlay-host] summary requested over {} transcript lines",
+                transcript.len()
+            );
+            let events_c = events_for_summary.clone();
+            let cfg_c = cfg_for_summary.clone();
+            let weak_done = weak_for_summary.clone();
+            rt_handle_for_summary.spawn(async move {
+                overlay_backend::runtime::run_meeting_summary(events_c, cfg_c, transcript).await;
+                // Success OR error — run_meeting_summary spawned a tile
+                // either way; just release the busy latch on the UI thread.
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(o) = weak_done.upgrade() {
+                        o.set_summary_busy(false);
+                    }
+                });
+            });
         });
     }
 

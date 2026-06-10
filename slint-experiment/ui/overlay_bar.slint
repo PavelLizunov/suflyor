@@ -324,7 +324,9 @@ export component OverlayBarWindow inherits Window {
     // total content — not cluster placement — is what clips).
     // Phase 3a — 1120 → 1160 to absorb the new 🗄 archive chip with the SAME
     // worst-case slack as the verified 1120 baseline (icon-only chip ≈ 30 px).
-    preferred-width: 1160px;
+    // v0.12.0 — 1160 → 1200 to absorb the new 📝 Summary chip (icon-only,
+    // ≈ 30 px) with the same RU worst-case slack (review-agent finding).
+    preferred-width: 1200px;
     preferred-height: 86px;
     min-width: 720px;
 
@@ -408,6 +410,11 @@ export component OverlayBarWindow inherits Window {
     // is pixel-identical to before (chips only hide during the ≤4s confirm).
     property <bool> confirming: root.quit-armed || root.restart-armed;
 
+    // v0.12.0 — true while a Summary request is in flight. Lights the 📝
+    // chip AND doubles as the Rust-side re-click guard (a slow model must
+    // not stack parallel summary calls).
+    in-out property <bool> summary-busy: false;
+
     // ===== Callbacks =====
     callback mic-toggle-clicked();
     callback sys-toggle-clicked();
@@ -427,6 +434,7 @@ export component OverlayBarWindow inherits Window {
     callback open-settings-clicked();
     callback help-clicked();   // 🆘 chip / F1 → open the help window
     callback archive-clicked(); // 🗄 chip / F7 → open the session archive
+    callback summary-clicked(); // v0.12.0 — 📝 chip → meeting-summary tile
     callback quit-clicked();   // X pressed → Rust arms the inline confirm
     // V0.8.0 (Поток B) — emergency restart (⟳). Two-step like Quit.
     callback restart-clicked();
@@ -612,6 +620,18 @@ export component OverlayBarWindow inherits Window {
                 active: root.archive-open;
                 accent: #a78bfa;
                 clicked => { root.archive-clicked(); }
+            }
+            // v0.12.0 — Summary созвона: run the full-session transcript
+            // through the AI → structured recap tile (participants / topics /
+            // decisions / tasks / agreements). Works mid-session AND after
+            // Стоп. Lights while the request is in flight.
+            Chip {
+                icon: @image-url("../assets/icons/summary.svg");
+                has-icon: true;
+                a11y: "Meeting summary";
+                active: root.summary-busy;
+                accent: #38bdf8;
+                clicked => { root.summary-clicked(); }
             }
 
             // Spring spacer — pushes the primary + system cluster right.

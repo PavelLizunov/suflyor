@@ -84,6 +84,11 @@ fn start_session_inner(
         let mut s = lock(&rt);
         s.capture = None; // Drop signals capture thread to stop.
         s.transcript.clear();
+        // v0.12.0 — the Summary accumulator resets at session START (not
+        // stop) so the Summary button keeps working between Стоп and the
+        // next Старт.
+        s.full_transcript.clear();
+        s.full_transcript_truncated = false;
         s.session_cost_microcents = 0;
         // New session generation — invalidates any in-flight auto-tile task
         // from a prior session (it bails post-AI-call on the gen mismatch).
@@ -903,6 +908,9 @@ pub fn stop_session(rt: SharedSlintRuntime) -> Vec<TranscriptLine> {
     s.last_ai_error_tile_ms = 0;
     let snapshot: Vec<TranscriptLine> = s.transcript.iter().cloned().collect();
     s.transcript.clear();
+    // v0.12.0 — deliberately NOT clearing s.full_transcript here: the
+    // Summary button must still work after Стоп (it resets on the next
+    // Старт in start_session_inner).
     // Write the SessionSummary roll-up + SessionStop marker before closing, so
     // the journal has the "how did this session go" one-liner on disk (audit:
     // these were defined + counted but never emitted on the shipping stack).
@@ -1103,5 +1111,36 @@ mod tests {
         let rt = shared_runtime();
         let snap = stop_session(rt);
         assert!(snap.is_empty());
+    }
+
+    /// v0.12.0 — stop_session clears the rolling window (debrief snapshot
+    /// semantics unchanged) but KEEPS the full transcript so the Summary
+    /// button still works between Стоп and the next Старт.
+    #[test]
+    fn stop_session_keeps_full_transcript_for_summary() {
+        use crate::runtime_state::{lock, push_transcript_line, shared_runtime};
+        let rt = shared_runtime();
+        {
+            let mut s = lock(&rt);
+            for i in 0..3u64 {
+                push_transcript_line(
+                    &mut s,
+                    TranscriptLine {
+                        source: AudioSource::Mic,
+                        text: format!("реплика {i}"),
+                        timestamp_ms: i,
+                    },
+                );
+            }
+        }
+        let snapshot = stop_session(rt.clone());
+        assert_eq!(snapshot.len(), 3, "debrief snapshot must be unchanged");
+        let s = lock(&rt);
+        assert!(s.transcript.is_empty(), "rolling window clears on stop");
+        assert_eq!(
+            s.full_transcript.len(),
+            3,
+            "summary source must survive stop"
+        );
     }
 }

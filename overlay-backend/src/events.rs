@@ -151,6 +151,12 @@ pub enum TileKind {
     /// when an auto-tile AI call fails so the user isn't left wondering why
     /// auto-tiles silently stopped. NOT conversational (no follow-up / 🔄 / 🎤).
     Error,
+    /// V0.12.0 — meeting-summary tile («Summary созвона»): the bar button
+    /// runs the full-session transcript through `run_meeting_summary` and
+    /// the structured result (participants / topics / decisions / action
+    /// items / agreements) lands here. Conversational — follow-ups can
+    /// drill into the summary text.
+    Summary,
 }
 
 impl TileKind {
@@ -171,6 +177,7 @@ impl TileKind {
             Self::System => "system",
             Self::Mic => "mic",
             Self::Error => "error",
+            Self::Summary => "summary",
         }
     }
 }
@@ -295,6 +302,7 @@ mod tests {
             TileKind::System,
             TileKind::Mic,
             TileKind::Error,
+            TileKind::Summary,
         ];
         let tags: HashSet<_> = all.iter().map(|k| k.as_journal_tag()).collect();
         assert_eq!(tags.len(), all.len(), "duplicate journal tag in TileKind");
