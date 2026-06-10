@@ -322,6 +322,45 @@ pub fn summary_system_prompt(is_ru: bool, truncated: bool) -> String {
     p
 }
 
+/// Build the `[system, user]` prompt pair that produces a meeting summary:
+/// system = the structured-recap instructions (with the truncation note when
+/// the transcript was cut), user = the channel-labelled, budget-truncated
+/// transcript. Pure + deterministic — used BOTH by `run_meeting_summary` (the
+/// bar button) AND by the Summary tile's seeded conversation, so a tile-level
+/// regenerate (🔄) / escalate (🧠) re-asks this exact pair and rebuilds the
+/// summary instead of re-asking a bare title. `is_local` picks the char budget
+/// (local llama-server ctx is tighter than a hosted window).
+#[must_use]
+pub fn build_summary_seed(
+    transcript: &[TranscriptLine],
+    is_ru: bool,
+    is_local: bool,
+) -> Vec<ai::ChatMessage> {
+    let budget = if is_local {
+        SUMMARY_INPUT_BUDGET_LOCAL_CHARS
+    } else {
+        SUMMARY_INPUT_BUDGET_CLOUD_CHARS
+    };
+    let formatted = format_transcript_for_summary(transcript, is_ru);
+    let (input, truncated) = truncate_transcript_middle(&formatted, budget, is_ru);
+    if truncated {
+        log::info!(
+            "meeting summary: transcript over budget ({} chars > {budget}), middle truncated",
+            formatted.chars().count()
+        );
+    }
+    vec![
+        ai::ChatMessage {
+            role: "system".into(),
+            content: ai::MessageContent::Text(summary_system_prompt(is_ru, truncated)),
+        },
+        ai::ChatMessage {
+            role: "user".into(),
+            content: ai::MessageContent::Text(input),
+        },
+    ]
+}
+
 /// Meeting summary — run the FULL session transcript (both channels)
 /// through the structuring model and spawn the result as a Summary tile.
 /// Triggered by the bar's Summary button (works mid-session and after
@@ -352,29 +391,10 @@ pub async fn run_meeting_summary(
         )
     };
     let is_ru = response_language == "ru";
-    let budget = if is_local {
-        SUMMARY_INPUT_BUDGET_LOCAL_CHARS
-    } else {
-        SUMMARY_INPUT_BUDGET_CLOUD_CHARS
-    };
-    let formatted = format_transcript_for_summary(&transcript, is_ru);
-    let (input, truncated) = truncate_transcript_middle(&formatted, budget, is_ru);
-    if truncated {
-        log::info!(
-            "meeting summary: transcript over budget ({} chars > {budget}), middle truncated",
-            formatted.chars().count()
-        );
-    }
-    let messages = vec![
-        ai::ChatMessage {
-            role: "system".into(),
-            content: ai::MessageContent::Text(summary_system_prompt(is_ru, truncated)),
-        },
-        ai::ChatMessage {
-            role: "user".into(),
-            content: ai::MessageContent::Text(input),
-        },
-    ];
+    // Same pair the tile will seed its conversation with, so the bar-button
+    // summary and a tile-level 🔄/🧠 rebuild are byte-identical for the same
+    // transcript + provider.
+    let messages = build_summary_seed(&transcript, is_ru, is_local);
     let tile_title = if is_ru {
         "Summary созвона".to_string()
     } else {
@@ -1473,6 +1493,39 @@ mod tests {
     }
 
     #[test]
+    fn summary_seed_truncates_over_local_budget_and_flags_system() {
+        // A transcript well over the 12k local budget → user turn carries the
+        // middle marker, system gains the «усечён» note. ~250 chars × 80 = 20k.
+        let big: Vec<TranscriptLine> = (0..80)
+            .map(|i| {
+                line(
+                    AudioSource::System,
+                    &format!("реплика {i} {}", "слово ".repeat(40)),
+                    i,
+                )
+            })
+            .collect();
+        let seed = build_summary_seed(&big, true, true);
+        let sys = match &seed[0].content {
+            ai::MessageContent::Text(s) => s.clone(),
+            _ => String::new(),
+        };
+        let usr = match &seed[1].content {
+            ai::MessageContent::Text(s) => s.clone(),
+            _ => String::new(),
+        };
+        assert!(sys.contains("усечён"), "truncated system must warn");
+        assert!(
+            usr.contains("пропущена"),
+            "user turn must carry middle marker"
+        );
+        assert!(
+            usr.chars().count() <= 12_000 + 200,
+            "stays within budget + marker"
+        );
+    }
+
+    #[test]
     fn summary_gate_requires_two_lines() {
         assert!(summary_gate(&[]).is_err());
         assert!(summary_gate(&[line(AudioSource::Mic, "привет", 0)]).is_err());
@@ -1567,6 +1620,49 @@ mod tests {
         assert!(en.contains("(uncertain)"));
         assert!(!en.contains("cut in the middle"));
         assert!(summary_system_prompt(false, true).contains("cut in the middle"));
+    }
+
+    #[test]
+    fn summary_seed_is_system_plus_user_with_transcript() {
+        let t = vec![
+            line(AudioSource::Mic, "обсудим план", 0),
+            line(AudioSource::System, "давай, я записываю", 1),
+        ];
+        let seed = build_summary_seed(&t, true, false);
+        assert_eq!(seed.len(), 2, "seed must be exactly [system, user]");
+        assert_eq!(seed[0].role, "system");
+        assert_eq!(seed[1].role, "user");
+        // System carries the recap instructions…
+        let sys = match &seed[0].content {
+            ai::MessageContent::Text(s) => s.clone(),
+            _ => String::new(),
+        };
+        assert!(sys.contains("Участники"));
+        // …and the user turn is the channel-labelled transcript (NOT a title),
+        // so a 1-user-turn regenerate re-asks THIS and rebuilds the summary.
+        let usr = match &seed[1].content {
+            ai::MessageContent::Text(s) => s.clone(),
+            _ => String::new(),
+        };
+        assert_eq!(usr, "Вы: обсудим план\nСобеседник: давай, я записываю");
+    }
+
+    #[test]
+    fn summary_seed_matches_what_run_meeting_summary_would_send() {
+        // The seed used by the tile must equal the bar-button's request pair so
+        // 🔄/🧠 rebuild byte-identically. Local budget path (12k) over a short
+        // transcript = no truncation, so the system has no "усечён" note.
+        let t = vec![
+            line(AudioSource::Mic, "коротко", 0),
+            line(AudioSource::System, "ок", 1),
+        ];
+        let seed = build_summary_seed(&t, true, true);
+        let sys = match &seed[0].content {
+            ai::MessageContent::Text(s) => s.clone(),
+            _ => String::new(),
+        };
+        assert!(!sys.contains("усечён"));
+        assert_eq!(sys, summary_system_prompt(true, false));
     }
 
     /// Smoke: with a hermetic empty config the AI call fails fast and the

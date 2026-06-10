@@ -1288,13 +1288,46 @@ fn main() -> Result<(), slint::PlatformError> {
                 let meeting_context =
                     overlay_backend::memory::context_for_meeting(&meeting_context);
                 let question = req.spec.question.clone();
-                let mut messages = ai::build_request(
-                    &meeting_context,
-                    &response_language,
-                    &[],
-                    None,
-                    Some(&question),
-                );
+                // v0.12.2 — Summary tiles seed their dialog with the REAL recap
+                // payload ([summary-prompt, transcript]) instead of the bare title,
+                // so the generic regenerate/escalate (which re-ask the stored
+                // [system, user] of a 1-user-turn history WITHOUT reframing) rebuild
+                // the summary correctly. The transcript is read live from the
+                // full-session accumulator at seed time (≈ completion time); for an
+                // ongoing session this may include a few seconds more speech than the
+                // displayed summary, which is the right input for a "rebuild".
+                // Stays true for every non-Summary kind; for Summary it records
+                // whether the seed actually captured a transcript. A session restart
+                // between the Summary request and this tile painting clears
+                // full_transcript (slint_session.rs) → empty seed → 🔄/🧠 would
+                // rebuild from nothing, so we leave them OFF for that (rare) tile
+                // below. The displayed answer is unaffected (already computed).
+                let mut summary_seed_has_transcript = true;
+                let mut messages = if matches!(req.kind, TileKind::Summary) {
+                    let (is_local, transcript) = {
+                        let is_local = cfg_for_poll.read().ai_endpoint(true).is_local;
+                        let tx = slint_replay::runtime_state::lock(&slint_rt_for_poll)
+                            .full_transcript
+                            .iter()
+                            .cloned()
+                            .collect::<Vec<_>>();
+                        (is_local, tx)
+                    };
+                    summary_seed_has_transcript = !transcript.is_empty();
+                    overlay_backend::runtime::build_summary_seed(
+                        &transcript,
+                        response_language == "ru",
+                        is_local,
+                    )
+                } else {
+                    ai::build_request(
+                        &meeting_context,
+                        &response_language,
+                        &[],
+                        None,
+                        Some(&question),
+                    )
+                };
                 messages.push(ai::ChatMessage {
                     role: "assistant".into(),
                     content: ai::MessageContent::Text(req.spec.answer.clone()),
@@ -1330,14 +1363,18 @@ fn main() -> Result<(), slint::PlatformError> {
                         );
                     });
                 }
-                // v0.12.1 — Summary/Debrief are GENERATIVE RECAPS whose seeded
-                // "question" is a TITLE ("Summary созвона"), not a self-contained
-                // prompt. Regenerate/escalate re-ask that bare title, so the model
-                // replies "give me the transcript". Hide both for these kinds:
-                // follow-up still works (reframe folds the recap TEXT into context),
-                // and for Summary the bar button already re-runs over the fresh
-                // transcript — a tile-level regenerate would be redundant anyway.
-                let allow_reask = !matches!(req.kind, TileKind::Summary | TileKind::Debrief);
+                // v0.12.2 — Summary now seeds a REAL [summary-prompt, transcript]
+                // dialog (above), so its 🔄/🧠 rebuild the summary correctly — they
+                // get re-enabled. Debrief stays gated: its mic-only snapshot is not
+                // retained after the coaching call, so there's nothing to rebuild
+                // from, and a bare-title re-ask would still fail. (For Summary the
+                // bar button rebuilds over the LIVE transcript; the tile 🔄 rebuilds
+                // over the transcript frozen into this tile's dialog — distinct.)
+                // `summary_seed_has_transcript` is always true off the Summary path;
+                // it only suppresses reask for a Summary tile whose seed came back
+                // empty (rare session-restart race — review v0.12.2 minor).
+                let allow_reask =
+                    !matches!(req.kind, TileKind::Debrief) && summary_seed_has_transcript;
                 if allow_reask {
                     tile.set_can_regenerate(true);
                     let weak_re = tile.as_weak();
