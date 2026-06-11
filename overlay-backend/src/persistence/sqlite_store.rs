@@ -40,8 +40,14 @@ impl Store {
         let mut conn = Connection::open(path).context("open catalog")?;
         // WAL keeps reads non-blocking while the indexer writes; foreign keys
         // power the ON DELETE CASCADE that makes re-indexing clean.
-        conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")
-            .context("set pragmas")?;
+        // busy_timeout (v0.17.2): the stop-session indexer thread and the
+        // archive-open sweep can write concurrently (stop → immediate F7);
+        // WAL allows ONE writer, and without a timeout the loser gets an
+        // instant SQLITE_BUSY instead of waiting out the ~ms-long window.
+        conn.execute_batch(
+            "PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 2000;",
+        )
+        .context("set pragmas")?;
         if preexisting {
             let current: i32 = conn
                 .query_row("PRAGMA user_version", [], |r| r.get(0))

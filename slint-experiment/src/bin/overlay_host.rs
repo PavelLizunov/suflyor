@@ -982,7 +982,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     st.session_secs
                 };
                 rt_handle_for_timer.spawn(async move {
-                    let snapshot = slint_session::stop_session(rt_c);
+                    let snapshot = slint_session::stop_session(rt_c, &cfg_c);
                     eprintln!(
                         "[overlay-host] session stopped — {} transcript lines snapshotted",
                         snapshot.len()
@@ -1560,6 +1560,7 @@ fn main() -> Result<(), slint::PlatformError> {
                             &hp_cfg,
                             &hp_events,
                             &hp_rt_handle,
+                            &hp_rt,
                         );
                     }
                 } else if event.id == f3_id {
@@ -2271,6 +2272,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let cfg_ar = cfg.clone();
         let events_ar = events.clone();
         let rt_ar = rt_handle.clone();
+        let slint_rt_ar = slint_rt.clone();
         overlay.on_archive_clicked(move || {
             open_archive(
                 &archive_ref,
@@ -2280,6 +2282,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 &cfg_ar,
                 &events_ar,
                 &rt_ar,
+                &slint_rt_ar,
             );
         });
     }

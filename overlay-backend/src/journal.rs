@@ -651,6 +651,68 @@ fn chrono_like_stamp() -> String {
     format!("{year:04}-{month:02}-{day:02}_{h:02}-{m:02}-{s:02}")
 }
 
+/// Fixed Moscow offset (UTC+3 — no DST in Russia since 2014). Display-only:
+/// session ids / journal stamps stay UTC (they are opaque sortable keys the
+/// recordings dir + catalog are joined on; converting THEM would orphan
+/// every existing recording).
+pub const MSK_OFFSET_SECS: u64 = 3 * 3600;
+
+/// Moscow wall-clock label for the archive UI: `"11.06.2026 14:30:12 (МСК)"`
+/// from unix MILLISECONDS (the `started_at_ms` the indexer stores). Negative /
+/// zero input clamps to the epoch rather than panicking on bad journals.
+#[must_use]
+pub fn format_msk_label(unix_ms: i64) -> String {
+    let secs = (unix_ms.max(0) as u64) / 1000 + MSK_OFFSET_SECS;
+    let (year, month, day, h, m, s) = unix_to_ymdhms(secs);
+    format!("{day:02}.{month:02}.{year:04} {h:02}:{m:02}:{s:02} (МСК)")
+}
+
+/// Parse a session-id stamp prefix `"YYYY-MM-DD_HH-MM-SS…"` (the UTC
+/// [`chrono_like_stamp`] format used as the journal file stem) back to unix
+/// seconds. `None` on anything malformed — callers fall back to showing the
+/// raw id. This is how PRE-EXISTING sessions (and FTS hits, which carry only
+/// the id) get the Moscow label retroactively.
+#[must_use]
+pub fn stamp_to_unix_secs(id: &str) -> Option<u64> {
+    let date = id.get(0..10)?;
+    let time = id.get(11..19)?;
+    if id.as_bytes().get(10) != Some(&b'_') {
+        return None;
+    }
+    let mut dp = date.split('-');
+    let (y, mo, d) = (
+        dp.next()?.parse::<i64>().ok()?,
+        dp.next()?.parse::<u64>().ok()?,
+        dp.next()?.parse::<u64>().ok()?,
+    );
+    let mut tp = time.split('-');
+    let (h, mi, s) = (
+        tp.next()?.parse::<u64>().ok()?,
+        tp.next()?.parse::<u64>().ok()?,
+        tp.next()?.parse::<u64>().ok()?,
+    );
+    if !(1..=12).contains(&mo) || !(1..=31).contains(&d) || h > 23 || mi > 59 || s > 59 {
+        return None;
+    }
+    let days = days_from_civil(y, mo, d);
+    if days < 0 {
+        return None; // pre-1970 stamp — not a real session id
+    }
+    Some((days as u64) * 86_400 + h * 3600 + mi * 60 + s)
+}
+
+/// Civil Y/M/D → days since the unix epoch (Howard Hinnant's `days_from_civil`,
+/// the exact inverse of the math in [`unix_to_ymdhms`]).
+fn days_from_civil(y: i64, m: u64, d: u64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = (y - era * 400) as u64;
+    let mp = if m > 2 { m - 3 } else { m + 9 };
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe as i64 - 719_468
+}
+
 /// Public domain unix→Y/M/D/H/M/S, days-since-epoch math. Avoids the
 /// chrono dependency (saves ~200 KB of binary).
 fn unix_to_ymdhms(secs: u64) -> (i32, u32, u32, u32, u32, u32) {
@@ -685,6 +747,36 @@ mod tests {
         assert_eq!((y, mo, d, h, mi, s), (2026, 5, 24, 0, 0, 0));
         let (y, mo, d, _, _, _) = unix_to_ymdhms(946_684_800);
         assert_eq!((y, mo, d), (2000, 1, 1));
+    }
+
+    #[test]
+    fn format_msk_label_shifts_utc_plus_three() {
+        // 2026-05-24 00:00:00 UTC → 03:00:00 МСК, DD.MM.YYYY order.
+        assert_eq!(
+            format_msk_label(1_779_580_800_000),
+            "24.05.2026 03:00:00 (МСК)"
+        );
+        // Midnight rollover: 23:30 UTC → 02:30 МСК NEXT day.
+        assert_eq!(
+            format_msk_label((1_779_580_800 - 1800) * 1000),
+            "24.05.2026 02:30:00 (МСК)"
+        );
+        // Garbage (negative) clamps instead of panicking.
+        assert_eq!(format_msk_label(-5), "01.01.1970 03:00:00 (МСК)");
+    }
+
+    #[test]
+    fn stamp_to_unix_secs_round_trips_chrono_like_stamp() {
+        // Round-trip: unix → stamp text → unix.
+        for secs in [946_684_800u64, 1_779_580_800, 1_780_000_000, 86_399] {
+            let (y, mo, d, h, m, s) = unix_to_ymdhms(secs);
+            let stamp = format!("{y:04}-{mo:02}-{d:02}_{h:02}-{m:02}-{s:02}_abc123");
+            assert_eq!(stamp_to_unix_secs(&stamp), Some(secs), "stamp {stamp}");
+        }
+        // Malformed ids → None (caller falls back to the raw id).
+        assert_eq!(stamp_to_unix_secs("session_12345"), None);
+        assert_eq!(stamp_to_unix_secs("2026-13-01_10-00-00_x"), None);
+        assert_eq!(stamp_to_unix_secs("short"), None);
     }
 
     #[test]

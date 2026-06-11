@@ -397,6 +397,7 @@ pub(crate) fn open_archive(
     cfg: &overlay_backend::config::SharedConfig,
     events: &Arc<dyn RuntimeEvents>,
     rt_handle: &tokio::runtime::Handle,
+    slint_rt: &SharedSlintRuntime,
 ) {
     {
         let slot = archive_ref.borrow();
@@ -420,6 +421,30 @@ pub(crate) fn open_archive(
     // Egress signpost: warn (in the header) that "↻ Summary" re-uploads saved
     // audio when STT is the cloud (Groq). Local backends stay one-click, no note.
     win.set_stt_is_cloud(!cfg.read().stt_is_local());
+
+    // v0.17.2 (тестер P0.1) — reindex BEFORE listing. The catalog used to be
+    // populated only by the launch-time sweep, so sessions finished in the
+    // current run (and everything, if that sweep failed) were invisible —
+    // the tester's "архив показывает 0 и 0 / старые сессии пропали".
+    // Idempotent + cheap when there is nothing new (one read_dir + one id-set
+    // query); the LIVE session's still-growing journal is skipped so its row
+    // can't be frozen mid-write as "crashed".
+    // Gated on the same toggle as the launch sweep + stop-index, so disabling
+    // the archive in Settings really stops ALL catalog writes (review #2).
+    if cfg.read().session_archive_enabled {
+        let active_id = slint_replay::runtime_state::lock(slint_rt)
+            .journal
+            .as_ref()
+            .and_then(overlay_backend::journal::Journal::current_path)
+            .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()));
+        match overlay_backend::persistence::reindex_default(active_id.as_deref()) {
+            Ok(st) => eprintln!(
+                "[overlay-host] archive: reindex on open — {} new, {} skipped, {} failed",
+                st.indexed, st.skipped, st.failed
+            ),
+            Err(e) => eprintln!("[overlay-host] archive: reindex on open failed: {e:#}"),
+        }
+    }
 
     // Open ONE catalog handle for this browse session (reused by the closures
     // below). On failure the window degrades to an "unavailable" state.
@@ -519,7 +544,7 @@ pub(crate) fn open_archive(
                     st.session_ai_turns(&sid).unwrap_or_default(),
                 )
             };
-            let title = pretty_session_label(&sid);
+            let title = archive_time_label(session.as_ref().and_then(|s| s.started_at_ms), &sid);
             let md = build_session_markdown(session.as_ref(), &utts, &turns);
             spawn_content_tile(&title, "archive", &md, &tiles_c, &state_c, &wov);
         });
@@ -785,6 +810,24 @@ fn pretty_session_label(id: &str) -> String {
     }
 }
 
+/// v0.17.2 (тестер P0.2) — Moscow wall-clock label for archive rows. The
+/// session id is a UTC stamp ([`journal::chrono_like_stamp`]), and the old
+/// label re-formatted it verbatim — so an МСК user saw every call 3 hours
+/// early. Prefer the indexed `started_at_ms` (the true session_start time);
+/// fall back to parsing the id stamp (old rows, FTS hits — which carry only
+/// the id). Both paths convert at DISPLAY time, so ALREADY-RECORDED sessions
+/// show МСК retroactively; ids/dirs stay UTC (opaque join keys).
+fn archive_time_label(started_at_ms: Option<i64>, id: &str) -> String {
+    if let Some(ms) = started_at_ms.filter(|ms| *ms > 0) {
+        return overlay_backend::journal::format_msk_label(ms);
+    }
+    match overlay_backend::journal::stamp_to_unix_secs(id) {
+        Some(secs) => overlay_backend::journal::format_msk_label((secs as i64) * 1000),
+        // Not a stamp-shaped id — show it as before rather than guessing.
+        None => pretty_session_label(id),
+    }
+}
+
 /// Status → a compact language-neutral label for the row title.
 fn status_glyph(status: &str) -> &'static str {
     match status {
@@ -818,7 +861,7 @@ fn recording_ids_snapshot() -> std::collections::HashSet<String> {
 /// as plain text counts so the row needs no per-language string;
 /// the cost shows only when non-zero (local runs are $0 → blank).
 fn session_to_row(s: &Session, recordings: &std::collections::HashSet<String>) -> ArchiveRow {
-    let label = pretty_session_label(&s.id);
+    let label = archive_time_label(s.started_at_ms, &s.id);
     let model = s.ai_model.as_deref().unwrap_or("—");
     let subtitle = format!(
         "lines {} · ai {} · {model}",
@@ -842,7 +885,7 @@ fn session_to_row(s: &Session, recordings: &std::collections::HashSet<String>) -
 /// whitespace-collapsed, length-capped snippet of the matched body, tagged with
 /// the hit kind (question · answer · utterance).
 fn hit_to_row(h: &SearchHit, recordings: &std::collections::HashSet<String>) -> ArchiveRow {
-    let label = pretty_session_label(&h.session_id);
+    let label = archive_time_label(None, &h.session_id);
     let kind_glyph = match h.kind.as_str() {
         "question" => "question",
         "answer" => "answer",
@@ -878,7 +921,7 @@ fn build_session_markdown(
         out.push_str(&format!(
             "# {} {}\n\n",
             status_glyph(&s.status),
-            pretty_session_label(&s.id)
+            archive_time_label(s.started_at_ms, &s.id)
         ));
         let model = s.ai_model.as_deref().unwrap_or("—");
         out.push_str(&format!(
@@ -934,6 +977,27 @@ mod tests {
     }
 
     #[test]
+    fn archive_time_label_prefers_started_at_then_id_then_raw() {
+        // Real start time wins (UTC ms → МСК).
+        assert_eq!(
+            archive_time_label(Some(1_779_580_800_000), "2026-06-04_09-30-00_zz"),
+            "24.05.2026 03:00:00 (МСК)"
+        );
+        // No indexed time (old rows / FTS hits) → parse the UTC id stamp.
+        assert_eq!(
+            archive_time_label(None, "2026-06-04_09-30-00_zz"),
+            "04.06.2026 12:30:00 (МСК)"
+        );
+        // Zero/garbage started_at_ms falls through to the id.
+        assert_eq!(
+            archive_time_label(Some(0), "2026-06-04_09-30-00_zz"),
+            "04.06.2026 12:30:00 (МСК)"
+        );
+        // Non-stamp id → raw, as before.
+        assert_eq!(archive_time_label(None, "weird"), "weird");
+    }
+
+    #[test]
     fn fts_query_prefixes_tokens_and_drops_punctuation() {
         assert_eq!(fts_query("hash map"), "hash* map*");
         // unicode61 splits on the hyphen, so the two halves become two prefixes.
@@ -946,8 +1010,9 @@ mod tests {
         Session {
             id: "2026-06-04_09-30-00_zz".into(),
             journal_path: "C:/sessions/x.jsonl".into(),
-            started_at_ms: Some(1),
-            finished_at_ms: Some(2),
+            // 2026-05-24 00:00:00 UTC → 03:00:00 МСК in the row label.
+            started_at_ms: Some(1_779_580_800_000),
+            finished_at_ms: Some(1_779_580_800_002),
             status: "completed".into(),
             ai_model: Some("gemma".into()),
             transcript_lines: 12,
@@ -964,7 +1029,14 @@ mod tests {
     #[test]
     fn session_row_uses_plain_counts() {
         let row = session_to_row(&sample_session(), &no_recordings());
-        assert!(row.title.as_str().starts_with("done 2026-06-04 09:30:00"));
+        // v0.17.2 — the label is МСК wall-clock from started_at_ms, not the UTC id.
+        assert!(
+            row.title
+                .as_str()
+                .starts_with("done 24.05.2026 03:00:00 (МСК)"),
+            "got {:?}",
+            row.title
+        );
         assert!(row.subtitle.as_str().contains("lines 12"));
         assert!(row.subtitle.as_str().contains("ai 3"));
         assert_eq!(row.meta.as_str(), ""); // zero cost → blank meta
@@ -988,7 +1060,14 @@ mod tests {
             rank: -1.0,
         };
         let row = hit_to_row(&h, &no_recordings());
-        assert!(row.title.as_str().starts_with("search 2026-06-04 09:30:00"));
+        // Hits carry only the UTC id stamp → parsed + shifted to МСК (+3h).
+        assert!(
+            row.title
+                .as_str()
+                .starts_with("search 04.06.2026 12:30:00 (МСК)"),
+            "got {:?}",
+            row.title
+        );
         assert_eq!(row.meta.as_str(), "answer");
         assert_eq!(row.subtitle.as_str(), "a key value structure"); // whitespace collapsed
     }

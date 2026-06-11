@@ -2508,6 +2508,13 @@ pub fn shared() -> SharedConfig {
     Arc::new(RwLock::new(load()))
 }
 
+/// Wrap an in-memory [`Config`] as a [`SharedConfig`] WITHOUT touching the
+/// on-disk config — for tests and callers that already hold a `Config`.
+#[must_use]
+pub fn shared_from(cfg: Config) -> SharedConfig {
+    Arc::new(RwLock::new(cfg))
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

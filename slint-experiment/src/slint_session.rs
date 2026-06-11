@@ -976,7 +976,7 @@ async fn maybe_spawn_auto_tile(
 /// with the returned snapshot — that helper checks the debrief gate
 /// (cfg opt-in + ≥30s session + ≥5 mic lines + non-empty AI bearer)
 /// and fires `overlay_backend::runtime::run_post_meeting_debrief`.
-pub fn stop_session(rt: SharedSlintRuntime) -> Vec<TranscriptLine> {
+pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<TranscriptLine> {
     let mut s = lock(&rt);
     s.capture = None;
     // Bump generation so an in-flight auto-tile call from this session
@@ -1027,7 +1027,63 @@ pub fn stop_session(rt: SharedSlintRuntime) -> Vec<TranscriptLine> {
             });
             j.write(&overlay_backend::journal::JournalEvent::SessionStop { unix_ms: now });
         }
+        let journal_path = j.current_path();
         drop(j);
+        // v0.17.2 (тестер P0.1) — project the just-closed session into the
+        // archive catalog NOW. The catalog used to be indexed ONLY at app
+        // launch (overlay_host.rs reindex_default), so a session finished in
+        // the CURRENT run stayed invisible to the F7 archive — and its
+        // "↻ Summary" — until a restart. Off the UI thread, best-effort;
+        // `index_journal_file` replaces the row wholesale, so a row indexed
+        // mid-session (archive opened during the call → status "crashed")
+        // is corrected to its final counts + "completed" here.
+        if cfg.read().session_archive_enabled {
+            if let Some(path) = journal_path {
+                std::thread::spawn(move || {
+                    // `j.write(SessionStop)` only ENQUEUES into the journal's
+                    // mpsc — the writer thread drains it asynchronously, so a
+                    // single read here can race the stop marker onto disk and
+                    // freeze the row as "crashed" forever (the launch / open
+                    // sweeps skip already-indexed ids). Wholesale replace
+                    // makes re-indexing idempotent: retry until the row reads
+                    // "completed" (a partial row is still kept if we give
+                    // up). The pauses also absorb a transient SQLITE_BUSY
+                    // from a concurrent archive-open sweep.
+                    let mut last_err: Option<anyhow::Error> = None;
+                    for attempt in 0..4u8 {
+                        if attempt > 0 {
+                            std::thread::sleep(std::time::Duration::from_millis(400));
+                        }
+                        let indexed = overlay_backend::persistence::open_default_store().and_then(
+                            |mut store| {
+                                overlay_backend::persistence::index_journal_file(&mut store, &path)
+                            },
+                        );
+                        match indexed {
+                            Ok(sess) => {
+                                let done = sess.status == "completed";
+                                log_info(&format!(
+                                    "archive: indexed closed session {} ({} lines, {} ai turns, {}{})",
+                                    sess.id,
+                                    sess.transcript_lines,
+                                    sess.ai_turns_count,
+                                    sess.status,
+                                    if done { "" } else { " — awaiting stop marker" }
+                                ));
+                                last_err = None;
+                                if done {
+                                    break;
+                                }
+                            }
+                            Err(e) => last_err = Some(e),
+                        }
+                    }
+                    if let Some(e) = last_err {
+                        eprintln!("[slint-session] WARN: archive index on stop failed: {e:#}");
+                    }
+                });
+            }
+        }
     }
     snapshot
 }
@@ -1202,7 +1258,8 @@ mod tests {
     fn stop_session_on_empty_rt_returns_empty_snapshot() {
         use crate::runtime_state::shared_runtime;
         let rt = shared_runtime();
-        let snap = stop_session(rt);
+        let cfg = overlay_backend::config::shared_from(Default::default());
+        let snap = stop_session(rt, &cfg);
         assert!(snap.is_empty());
     }
 
@@ -1226,7 +1283,8 @@ mod tests {
                 );
             }
         }
-        let snapshot = stop_session(rt.clone());
+        let cfg = overlay_backend::config::shared_from(Default::default());
+        let snapshot = stop_session(rt.clone(), &cfg);
         assert_eq!(snapshot.len(), 3, "debrief snapshot must be unchanged");
         let s = lock(&rt);
         assert!(s.transcript.is_empty(), "rolling window clears on stop");
