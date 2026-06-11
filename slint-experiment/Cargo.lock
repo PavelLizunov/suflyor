@@ -5396,7 +5396,7 @@ dependencies = [
 
 [[package]]
 name = "slint-replay"
-version = "0.17.0"
+version = "0.17.1"
 dependencies = [
  "anyhow",
  "base64",
@@ -5406,6 +5406,7 @@ dependencies = [
  "i-slint-backend-selector",
  "i-slint-backend-testing",
  "image",
+ "log",
  "overlay-backend",
  "pulldown-cmark",
  "raw-window-handle",

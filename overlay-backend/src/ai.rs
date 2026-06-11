@@ -287,9 +287,13 @@ async fn stream_inner(
         // DROP the body: a server's body can carry paths/internals that would
         // paint into the streamed error tile. Body → file log only.
         let body = resp.text().await.unwrap_or_default();
+        // v0.17.1 (мега-аудит) — this line is now LIVE (the log facade finally
+        // reaches overlay-host.log). 500 → 200 chars: enough to identify the
+        // error shape, less room for a server body to echo paths/internals
+        // into the tester log. Tile text stays status-only either way.
         log::warn!(
             "AI stream HTTP {status} body: {}",
-            body.chars().take(500).collect::<String>()
+            body.chars().take(200).collect::<String>()
         );
         return Err(anyhow!("HTTP {status}"));
     }

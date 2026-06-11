@@ -1233,14 +1233,15 @@ fn main() -> Result<(), slint::PlatformError> {
                     // single pass — a documented degraded rebuild. The bar /
                     // archive button remains the quality path.
                     let is_ru = response_language == "ru";
-                    let memory_ref = overlay_backend::memory::summary_reference_for_transcript(
-                        &overlay_backend::runtime::format_transcript_for_summary(
-                            &transcript,
-                            is_ru,
-                        ),
-                    );
-                    overlay_backend::runtime::build_summary_seed(
-                        &transcript,
+                    // v0.17.1 (мега-аудит) — format ONCE and reuse for both the
+                    // memory_ref gating and the seed (was two full passes over
+                    // a potentially 20k-line transcript on the UI thread).
+                    let formatted =
+                        overlay_backend::runtime::format_transcript_for_summary(&transcript, is_ru);
+                    let memory_ref =
+                        overlay_backend::memory::summary_reference_for_transcript(&formatted);
+                    overlay_backend::runtime::build_summary_seed_from_formatted(
+                        &formatted,
                         is_ru,
                         is_local,
                         memory_ref.as_deref(),
@@ -2690,12 +2691,18 @@ fn main() -> Result<(), slint::PlatformError> {
 use slint_replay::app_state::classify_ai_error;
 
 /// Recompute status pill based on capture flags.
+///
+/// v0.17.1 (мега-аудит) — `mic == false` here means MUTED: the mic chip is
+/// the ONLY writer of `AppState.mic_active` (since v0.13.1 it mirrors
+/// `rt.mic_muted`), so any refresh while the mic is off must keep showing the
+/// amber «mic muted» pill. Before this, a sys-chip click or the sys-probe
+/// revert timer silently overwrote «mic muted» with «sys only»/«idle»,
+/// hiding the privacy-relevant mute state from the user.
 fn refresh_status(overlay: &OverlayBarWindow, mic: bool, sys: bool) {
     let (text, color) = match (mic, sys) {
         (true, true) => ("recording", slint::Color::from_rgb_u8(0x34, 0xd3, 0x99)),
         (true, false) => ("mic only", slint::Color::from_rgb_u8(0x34, 0xd3, 0x99)),
-        (false, true) => ("sys only", slint::Color::from_rgb_u8(0x6c, 0xcf, 0xff)),
-        (false, false) => ("idle", slint::Color::from_rgb_u8(0x88, 0x88, 0x8c)),
+        (false, _) => ("mic muted", slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24)),
     };
     overlay.set_status_text(SharedString::from(text));
     overlay.set_status_color(color);

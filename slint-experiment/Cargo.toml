@@ -3,7 +3,7 @@
 # the sibling overlay-backend crate for audio/STT/AI/journal/KB/config.
 [package]
 name = "slint-replay"
-version = "0.17.0"
+version = "0.17.1"
 edition = "2021"
 description = "suflyor — AI-interview overlay (Slint UI + orchestration)"
 publish = false
@@ -62,6 +62,11 @@ slint = { version = "1.16", features = ["raw-window-handle-06"] }
 serde_json = "1"
 dirs = "6"
 anyhow = "1"
+
+# v0.17.1 (мега-аудит) — the `log` facade, so logging.rs can install the
+# FacadeLogger bridge that finally makes overlay-backend's 120+ log:: lines
+# reach overlay-host.log. Already a backend dep — no new third-party crate.
+log = "0.4"
 
 # Phase C — async runtime for AI calls. overlay_backend::ai functions
 # are async and need a tokio runtime. multi-threaded so the AI HTTP

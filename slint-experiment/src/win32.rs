@@ -695,6 +695,28 @@ pub fn drag_end() {
     DRAG_ANCHOR.with(|a| a.set(None));
 }
 
+/// v0.17.1 — ask DWM to round this window's corners (Windows 11). A frameless
+/// Slint window with an OPAQUE background (the archive / settings / palette,
+/// which can't use per-pixel-alpha rounding like the transparent-overlay
+/// tiles) otherwise shows hard square corners; an inner `border-radius` only
+/// rounds the FILL, leaving the window's own square edges. `DWMWCP_ROUND`
+/// clips the actual window region at the OS level — all four corners, no
+/// content change. No-op on Windows 10 (the attribute is silently ignored).
+pub fn set_round_corners(hwnd: HWND) {
+    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE};
+    // DWMWCP_ROUND = 2 (the standard, larger-radius rounding).
+    const DWMWCP_ROUND: u32 = 2;
+    unsafe {
+        let pref = DWMWCP_ROUND;
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_WINDOW_CORNER_PREFERENCE,
+            std::ptr::addr_of!(pref).cast(),
+            std::mem::size_of::<u32>() as u32,
+        );
+    }
+}
+
 /// Pick a target monitor for a new tile. Mirrors the heuristic in
 /// `src-tauri/src/tile.rs::pick_monitor` — default to primary unless
 /// a non-primary monitor is landscape AND at least as wide as primary.

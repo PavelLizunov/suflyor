@@ -2156,7 +2156,13 @@ pub fn load() -> Config {
         dirty = true;
     }
     if dirty {
-        let _ = save(&cfg);
+        // v0.17.1 (мега-аудит): was a silent `let _` — a failed migration save
+        // (full disk, permissions, AV lock) lost the stamped changes with zero
+        // trace. Non-fatal either way (the in-memory cfg is correct for this
+        // run), but now the tester log says WHY settings didn't persist.
+        if let Err(e) = save(&cfg) {
+            log::warn!("config migration save failed (changes not persisted): {e:#}");
+        }
     }
     cfg
 }

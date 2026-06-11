@@ -353,13 +353,31 @@ pub fn build_summary_seed(
     is_local: bool,
     memory_ref: Option<&str>,
 ) -> Vec<ai::ChatMessage> {
+    build_summary_seed_from_formatted(
+        &format_transcript_for_summary(transcript, is_ru),
+        is_ru,
+        is_local,
+        memory_ref,
+    )
+}
+
+/// v0.17.1 (мега-аудит) — the same seed from an ALREADY-formatted transcript.
+/// Callers that need `formatted` anyway (the memory_ref keyword-gating does)
+/// were paying a SECOND full format pass — megabytes of String work on a
+/// 20k-line day, on the UI thread in the tile-seed path. Format once, reuse.
+#[must_use]
+pub fn build_summary_seed_from_formatted(
+    formatted: &str,
+    is_ru: bool,
+    is_local: bool,
+    memory_ref: Option<&str>,
+) -> Vec<ai::ChatMessage> {
     let budget = if is_local {
         SUMMARY_INPUT_BUDGET_LOCAL_CHARS
     } else {
         SUMMARY_INPUT_BUDGET_CLOUD_CHARS
     };
-    let formatted = format_transcript_for_summary(transcript, is_ru);
-    let (input, truncated) = truncate_transcript_middle(&formatted, budget, is_ru);
+    let (input, truncated) = truncate_transcript_middle(formatted, budget, is_ru);
     if truncated {
         log::info!(
             "meeting summary: transcript over budget ({} chars > {budget}), middle truncated",
@@ -606,7 +624,9 @@ pub async fn run_meeting_summary(
     // can't replay N map calls from a seeded pair) — a documented degraded
     // rebuild; the bar/archive path is the quality path.
     let messages = if formatted.chars().count() <= budget {
-        build_summary_seed(&transcript, is_ru, is_local, memory_ref.as_deref())
+        // from_formatted: `formatted` is already computed above for the
+        // memory_ref keyword-gating — no second format pass (v0.17.1 audit).
+        build_summary_seed_from_formatted(&formatted, is_ru, is_local, memory_ref.as_deref())
     } else {
         let cap = budget.saturating_mul(SUMMARY_MAX_MAP_PARTS);
         let (bounded, hard_truncated) = truncate_transcript_middle(&formatted, cap, is_ru);

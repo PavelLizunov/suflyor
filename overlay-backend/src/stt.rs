@@ -327,11 +327,18 @@ pub fn spawn(
             let should_flush =
                 (utt.silent_run_ms >= VAD_HANG_MS && utt.had_voice) || forced_by_size;
             if forced_by_size {
-                log::warn!(
+                // info, not warn (v0.17.1 audit): the size-cap flush is normal,
+                // designed behavior for continuous speech — a warn read like an
+                // error in the tester log once the log facade went live.
+                log::info!(
                     "STT forced flush for {:?}: {:.1}s buffer reached cap ({}s) — \
-                     had_voice={} silent_run={}ms (VAD threshold {}, max chunk RMS in this buffer ≈?)",
-                    chunk.source, dur_sec, MAX_UTTERANCE_SEC,
-                    utt.had_voice, utt.silent_run_ms, VAD_RMS_THRESHOLD,
+                     had_voice={} silent_run={}ms (VAD threshold {})",
+                    chunk.source,
+                    dur_sec,
+                    MAX_UTTERANCE_SEC,
+                    utt.had_voice,
+                    utt.silent_run_ms,
+                    VAD_RMS_THRESHOLD,
                 );
             }
 

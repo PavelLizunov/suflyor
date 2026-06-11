@@ -70,6 +70,10 @@ export component ArchiveWindow inherits Window {
     callback result-activated(int);
     callback retranscribe-requested(int);
     callback close-requested();
+    // v0.17.1 — frameless window drag by the header (mirrors the tile drag:
+    // pointer-down records the anchor, moved-while-pressed moves the HWND).
+    callback drag-start-requested();
+    callback drag-moved();
 
     // Focus the search box on open so the user can type immediately AND so Esc
     // has a focused element to bubble up from to the FocusScope (same wiring as
@@ -97,22 +101,47 @@ export component ArchiveWindow inherits Window {
                 padding: Metrics.space-md;
                 spacing: Metrics.space-sm;
 
-                // ── Header: title · summary · close ──
+                // ── Header: icon · title · summary (DRAG handle) · close ──
                 HorizontalLayout {
                     spacing: Metrics.space-sm;
-                    Text {
-                        text: "🗄 " + @tr("Session archive");
-                        font-size: Metrics.font-heading;
-                        font-weight: 700;
-                        color: Theme.text-primary;
-                        vertical-alignment: center;
-                    }
-                    Text {
-                        text: root.summary;
-                        font-size: Metrics.font-caption;
-                        color: Theme.text-muted;
-                        vertical-alignment: center;
+                    // Drag area covers the icon + title + summary, NOT the close
+                    // button (a sibling below), so dragging never eats the X.
+                    Rectangle {
                         horizontal-stretch: 1;
+                        TouchArea {
+                            pointer-event(ev) => {
+                                if (ev.button == PointerEventButton.left
+                                    && ev.kind == PointerEventKind.down) {
+                                    root.drag-start-requested();
+                                }
+                            }
+                            moved => { if (self.pressed) { root.drag-moved(); } }
+                        }
+                        HorizontalLayout {
+                            spacing: Metrics.space-sm;
+                            Image {
+                                source: @image-url("../assets/icons/archive.svg");
+                                colorize: Theme.text-primary;
+                                width: 18px;
+                                height: 18px;
+                                image-fit: contain;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                text: @tr("Session archive");
+                                font-size: Metrics.font-heading;
+                                font-weight: 700;
+                                color: Theme.text-primary;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                text: root.summary;
+                                font-size: Metrics.font-caption;
+                                color: Theme.text-muted;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                            }
+                        }
                     }
                     Rectangle {
                         width: Metrics.control-md;
@@ -247,7 +276,6 @@ export component ArchiveWindow inherits Window {
                                 if row.has-recordings && !root.retranscribe-busy : Rectangle {
                                     width: 96px;
                                     horizontal-stretch: 0;
-                                    y: (parent.height - 26px) / 2;
                                     height: 26px;
                                     border-radius: Metrics.radius-control;
                                     border-width: Metrics.border-thin;
@@ -255,15 +283,21 @@ export component ArchiveWindow inherits Window {
                                     background: touch.has-hover ? Theme.accent.with-alpha(0.18) : transparent;
                                     // SVG refresh icon (not a "↻" glyph — the bundled
                                     // Skia font has no U+21BB, it renders as tofu).
+                                    // v0.17.1 — the icon is wrapped in a centering
+                                    // VerticalLayout so it sits on the text baseline
+                                    // (it used to ride the top of the row cell).
                                     HorizontalLayout {
                                         alignment: center;
                                         spacing: 5px;
-                                        Image {
-                                            source: @image-url("../assets/icons/refresh.svg");
-                                            colorize: Theme.accent;
-                                            width: 13px;
-                                            height: 13px;
-                                            image-fit: contain;
+                                        VerticalLayout {
+                                            alignment: center;
+                                            Image {
+                                                source: @image-url("../assets/icons/refresh.svg");
+                                                colorize: Theme.accent;
+                                                width: 13px;
+                                                height: 13px;
+                                                image-fit: contain;
+                                            }
                                         }
                                         Text {
                                             text: @tr("Summary");

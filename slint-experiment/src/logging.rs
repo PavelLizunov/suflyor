@@ -21,6 +21,39 @@ use std::sync::{Mutex, OnceLock};
 
 static LOG_FILE: OnceLock<Mutex<std::fs::File>> = OnceLock::new();
 
+/// v0.17.1 (мега-аудит, CRITICAL fix) — bridge the `log` crate facade into
+/// this sink. overlay-backend speaks `log::info!/warn!/error!` at 120+ call
+/// sites (STT retries, recorder/journal prunes, AI stream errors, summary
+/// map-reduce progress, re-transcribe chunk counts…), and NO logger was ever
+/// installed — every one of those lines silently vanished, so the release
+/// tester log told well under half of the story. This bridge forwards
+/// Info-and-above records through [`line`], which already lands in
+/// `overlay-host.log` (release, via the stderr redirect) and on the console +
+/// file (debug). Secret-safety: backend log sites print presence flags /
+/// char-counts, never key values (v0.11.4 scout + the 2026-06-11 audit
+/// re-verified); the AI HTTP error-body snippet is hardened in the same
+/// release since this bridge is what makes it live.
+struct FacadeLogger;
+
+impl log::Log for FacadeLogger {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.level() <= log::Level::Info
+    }
+    fn log(&self, record: &log::Record) {
+        if self.enabled(record.metadata()) {
+            line(&format!(
+                "[{}] {}: {}",
+                record.level(),
+                record.target(),
+                record.args()
+            ));
+        }
+    }
+    fn flush(&self) {}
+}
+
+static FACADE_LOGGER: FacadeLogger = FacadeLogger;
+
 /// `%APPDATA%\overlay-mvp\overlay-host.log` — same dir as `config.json`.
 fn log_path() -> Option<PathBuf> {
     dirs::config_dir().map(|d| d.join("overlay-mvp").join("overlay-host.log"))
@@ -62,6 +95,13 @@ pub fn init() {
             }
         }
         let _ = LOG_FILE.set(Mutex::new(file));
+    }
+
+    // Wire the `log` facade to this sink (see FacadeLogger above). Must run
+    // AFTER the stderr redirect so the very first forwarded record already
+    // lands in the file. A second init() call would fail set_logger — ignored.
+    if log::set_logger(&FACADE_LOGGER).is_ok() {
+        log::set_max_level(log::LevelFilter::Info);
     }
 
     // Crashes are the single most valuable thing to capture for a tester

@@ -431,11 +431,19 @@ pub(crate) fn open_archive(
         }
     };
 
+    // One recordings snapshot for this browse session (v0.17.1 — was a
+    // filesystem stat PER ROW per rebuild; see recording_ids_snapshot).
+    let recordings = Rc::new(recording_ids_snapshot());
+
     match store.as_ref() {
         Some(store_rc) => {
             let sessions = store_rc.borrow().list_sessions().unwrap_or_default();
-            win.set_summary(SharedString::from(format!("{} 🗄", sessions.len())));
-            let rows: Vec<ArchiveRow> = sessions.iter().map(session_to_row).collect();
+            // v0.17.1 — plain count (the 🗄 now lives in the header SVG icon).
+            win.set_summary(SharedString::from(sessions.len().to_string()));
+            let rows: Vec<ArchiveRow> = sessions
+                .iter()
+                .map(|s| session_to_row(s, &recordings))
+                .collect();
             win.set_results(ModelRc::new(VecModel::from(rows)));
         }
         None => {
@@ -448,6 +456,7 @@ pub(crate) fn open_archive(
     {
         let weak = win.as_weak();
         let store_q = store.clone();
+        let recordings_q = recordings.clone();
         win.on_query_changed(move |q| {
             let Some(p) = weak.upgrade() else {
                 return;
@@ -462,7 +471,7 @@ pub(crate) fn open_archive(
                     .list_sessions()
                     .unwrap_or_default()
                     .iter()
-                    .map(session_to_row)
+                    .map(|s| session_to_row(s, &recordings_q))
                     .collect()
             } else {
                 let fts = fts_query(trimmed);
@@ -474,7 +483,7 @@ pub(crate) fn open_archive(
                         .search(&fts, 60)
                         .unwrap_or_default()
                         .iter()
-                        .map(hit_to_row)
+                        .map(|h| hit_to_row(h, &recordings_q))
                         .collect()
                 }
             };
@@ -621,10 +630,36 @@ pub(crate) fn open_archive(
         });
     }
 
+    // v0.17.1 — drag the frameless window by its header (mirror of the tile
+    // drag: pointer-down anchors, moved-while-pressed moves the HWND).
+    {
+        let weak = win.as_weak();
+        win.on_drag_start_requested(move || {
+            if let Some(w) = weak.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(w.window()) {
+                    drag_begin(hwnd);
+                }
+            }
+        });
+    }
+    {
+        let weak = win.as_weak();
+        win.on_drag_moved(move || {
+            if let Some(w) = weak.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(w.window()) {
+                    drag_update(hwnd);
+                }
+            }
+        });
+    }
+
     present_window_stealth_aware(&win, |hwnd| {
         // Keep the archive out of the taskbar / Alt-Tab too (stealth existence
         // leak — same as palette / help / text-ask).
         let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
+        // v0.17.1 — OS-level rounded corners (opaque frameless window can't get
+        // them from an inner border-radius; see win32::set_round_corners).
+        slint_replay::win32::set_round_corners(hwnd);
         focus_window(hwnd);
     });
     // Light the 🗄 bar chip while the archive is open (like 🆘 / ⚙). Cleared
@@ -760,18 +795,29 @@ fn status_glyph(status: &str) -> &'static str {
     }
 }
 
-/// v0.14.0 — does this session have saved recordings on disk
-/// (`recordings/<session_id>/`)? Gates the per-row "↻ Summary" button.
-fn recordings_exist(session_id: &str) -> bool {
+/// v0.17.1 (мега-аудит) — snapshot the recordings dir ONCE per archive open.
+/// The per-row `is_dir()` probe ran for EVERY row on EVERY list rebuild —
+/// with 160+ sessions that was 160+ filesystem stats per keystroke in the
+/// search box, all on the UI thread. One `read_dir` at open replaces them;
+/// a recording created while the archive stays open shows its button after
+/// a reopen (acceptable — recordings appear at session start, not mid-browse).
+fn recording_ids_snapshot() -> std::collections::HashSet<String> {
     overlay_backend::recorder::recordings_dir()
-        .map(|d| d.join(session_id).is_dir())
-        .unwrap_or(false)
+        .ok()
+        .and_then(|root| std::fs::read_dir(root).ok())
+        .map(|rd| {
+            rd.flatten()
+                .filter(|e| e.path().is_dir())
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Map an indexed [`Session`] to an archive list row. Counts are emoji-coded
 /// as plain text counts so the row needs no per-language string;
 /// the cost shows only when non-zero (local runs are $0 → blank).
-fn session_to_row(s: &Session) -> ArchiveRow {
+fn session_to_row(s: &Session, recordings: &std::collections::HashSet<String>) -> ArchiveRow {
     let label = pretty_session_label(&s.id);
     let model = s.ai_model.as_deref().unwrap_or("—");
     let subtitle = format!(
@@ -788,14 +834,14 @@ fn session_to_row(s: &Session) -> ArchiveRow {
         title: SharedString::from(format!("{} {label}", status_glyph(&s.status))),
         subtitle: SharedString::from(subtitle),
         meta: SharedString::from(meta),
-        has_recordings: recordings_exist(&s.id),
+        has_recordings: recordings.contains(&s.id),
     }
 }
 
 /// Map an FTS [`SearchHit`] to an archive list row: the session label + a
 /// whitespace-collapsed, length-capped snippet of the matched body, tagged with
 /// the hit kind (question · answer · utterance).
-fn hit_to_row(h: &SearchHit) -> ArchiveRow {
+fn hit_to_row(h: &SearchHit, recordings: &std::collections::HashSet<String>) -> ArchiveRow {
     let label = pretty_session_label(&h.session_id);
     let kind_glyph = match h.kind.as_str() {
         "question" => "question",
@@ -815,7 +861,7 @@ fn hit_to_row(h: &SearchHit) -> ArchiveRow {
         title: SharedString::from(format!("search {label}")),
         subtitle: SharedString::from(snippet),
         meta: SharedString::from(kind_glyph),
-        has_recordings: recordings_exist(&h.session_id),
+        has_recordings: recordings.contains(&h.session_id),
     }
 }
 
@@ -911,9 +957,13 @@ mod tests {
         }
     }
 
+    fn no_recordings() -> std::collections::HashSet<String> {
+        std::collections::HashSet::new()
+    }
+
     #[test]
     fn session_row_uses_plain_counts() {
-        let row = session_to_row(&sample_session());
+        let row = session_to_row(&sample_session(), &no_recordings());
         assert!(row.title.as_str().starts_with("done 2026-06-04 09:30:00"));
         assert!(row.subtitle.as_str().contains("lines 12"));
         assert!(row.subtitle.as_str().contains("ai 3"));
@@ -924,7 +974,7 @@ mod tests {
     fn session_row_shows_cost_when_nonzero() {
         let mut s = sample_session();
         s.total_cost_microcents = 2_400_000; // $0.024
-        let row = session_to_row(&s);
+        let row = session_to_row(&s, &no_recordings());
         assert_eq!(row.meta.as_str(), "$0.024");
     }
 
@@ -937,7 +987,7 @@ mod tests {
             body: "a   key value   structure".into(),
             rank: -1.0,
         };
-        let row = hit_to_row(&h);
+        let row = hit_to_row(&h, &no_recordings());
         assert!(row.title.as_str().starts_with("search 2026-06-04 09:30:00"));
         assert_eq!(row.meta.as_str(), "answer");
         assert_eq!(row.subtitle.as_str(), "a key value structure"); // whitespace collapsed
