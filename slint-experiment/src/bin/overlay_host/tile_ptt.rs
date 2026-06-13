@@ -79,6 +79,17 @@ pub(crate) fn fire_ptt_ask(
             "[overlay-host] PTT: hold too short ({} samples) — skipping",
             pcm.len()
         );
+        // UI-audit 2026-06-13: a SYSTEM hold that came back essentially EMPTY
+        // (loopback returned ~0 samples) used to be silent, so "захватить" read
+        // as broken. It almost always means nothing was playing OR the selected
+        // output device isn't the one currently producing sound. Surface that on
+        // the bar instead of nothing. (A short MIC hold stays silent — fat-finger.)
+        if matches!(source, audio::AudioSource::System) && pcm.len() < 1600 {
+            if let Some(o) = weak_overlay.upgrade() {
+                o.set_status_text(SharedString::from("системный звук не пойман"));
+                o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x9b, 0x2b));
+            }
+        }
         return;
     }
 

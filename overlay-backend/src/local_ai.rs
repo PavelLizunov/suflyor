@@ -55,6 +55,12 @@ const MMPROJ_FILE: &str = "mmproj-F32.gguf";
 const MMPROJ_SIZE: u64 = 1_912_464_192;
 const MMPROJ_SHA256: &str = "343cdea7775835ebdd1caa6c42ec3ec3e711d082835c72253d4e87c4b7e303d0";
 
+// NOTE: the 12B DOES have a matching vision projector in its repo, but it uses
+// a newer "gemma4uv" projector type the bundled (May) llama-server CANNOT load
+// ("unknown projector type: gemma4uv" → exits → crash-loop, verified live
+// 2026-06-13). So the 12B runs TEXT-ONLY until llama.cpp is upgraded; we never
+// attach a 12B projector to the shipped build. Vision works on the E4B (4B).
+
 const WHISPER_URL: &str =
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin";
 const WHISPER_FILE: &str = "ggml-large-v3-turbo-q8_0.bin";
@@ -517,11 +523,23 @@ pub fn stop_managed_servers<I>(root: &Path, servers: I)
 where
     I: IntoIterator<Item = Child>,
 {
+    terminate_servers(servers);
+    let _ = stop_listener_on_port(LLAMA_PORT, root);
+    let _ = stop_listener_on_port(WHISPER_PORT, root);
+}
+
+/// Terminate the given managed-server child processes (kill the whole tree)
+/// WITHOUT sweeping any port. Used to clean up the children of a relaunch that
+/// failed to bind, so a dead/wedged llama is reaped immediately instead of
+/// leaking until quit — and without the port sweep that `stop_managed_servers`
+/// does, which could kill a HEALTHY server on the other port (whisper :8081).
+pub fn terminate_servers<I>(servers: I)
+where
+    I: IntoIterator<Item = Child>,
+{
     for child in servers {
         terminate_child_tree(child);
     }
-    let _ = stop_listener_on_port(LLAMA_PORT, root);
-    let _ = stop_listener_on_port(WHISPER_PORT, root);
 }
 
 fn terminate_child_tree(mut child: Child) {
@@ -710,6 +728,61 @@ pub fn switch_local_model(
     (ModelSwitch::FailedToStart, started)
 }
 
+/// True if llama-server is answering on :8080 (even a 503 "loading" counts —
+/// the process is alive and bound). A `false` means a truly dead port
+/// (connection refused), which is the ONLY thing the boot/watchdog recovery
+/// acts on. Public so the runtime watchdog can distinguish "server crashed"
+/// from "server answered with an error" before deciding to relaunch.
+#[must_use]
+pub fn llama_reachable() -> bool {
+    is_reachable(&format!("{LLAMA_BASE_URL}/models"))
+}
+
+/// Make :8080 actually serve — the robust primitive shared by boot and the
+/// runtime watchdog. If llama already answers (even a mid-load 503) we leave
+/// it ALONE: killing a healthy/warming server would defeat warm-up and drop
+/// in-flight requests. Only a truly-dead port triggers a clean owner-aware
+/// free + relaunch via [`switch_local_model`], which POLLS until the fresh
+/// server answers and returns the honest [`ModelSwitch`]. Whisper (:8081) is
+/// never touched here (boot launches STT separately). Call from a worker
+/// thread (blocks up to ~21 s on the relaunch+poll path).
+#[must_use]
+pub fn ensure_llama_serving(root: &Path, prefer_quality: bool) -> (ModelSwitch, Vec<Child>) {
+    if llama_reachable() {
+        // Alive (serving or cold-loading) — do not disturb.
+        return (ModelSwitch::Switched, Vec::new());
+    }
+    // Dead port: free any stale under-root listener and relaunch the selected
+    // GGUF, confirming readiness before reporting success.
+    switch_local_model(root, prefer_quality, false)
+}
+
+/// Friendly, compact label for a LOCAL model GGUF basename — so the bar's
+/// active-stack readout says "Gemma 4B" / "Gemma 12B" (the user must be able
+/// to tell the fast vs smart model apart at a glance) instead of a bare
+/// "gemma". Pure (no I/O); falls back to the first filename token for any
+/// non-Gemma local model. Checks 12B before 4B so the "12b" filename never
+/// matches the generic "4b" branch.
+#[must_use]
+pub fn local_model_label(basename: &str) -> String {
+    let l = basename.to_ascii_lowercase();
+    if l.contains("12b") {
+        "Gemma 12B".to_string()
+    } else if l.contains("e4b") || l.contains("e2b") || l.contains("4b") {
+        "Gemma 4B".to_string()
+    } else if l.contains("gemma") {
+        "Gemma".to_string()
+    } else {
+        basename
+            .trim_end_matches(".gguf")
+            .trim_end_matches(".bin")
+            .split(['-', '.', '/', ' ', ':'])
+            .find(|s| !s.is_empty())
+            .unwrap_or("—")
+            .to_string()
+    }
+}
+
 /// Basename of the GGUF [`selected_llama_gguf`] would load — so callers keep
 /// `config.ai_local_model` (the bar's active-stack readout) in sync with the
 /// model actually serving. Pure string pick mirroring [`pick_llama_gguf`].
@@ -792,6 +865,21 @@ pub fn download_quality_model(
     Ok(())
 }
 
+/// The vision projector to attach for `gguf`, if present on disk. ONLY the E4B
+/// (n_embd 2560 ↔ `mmproj-F32.gguf`) gets one: the bundled llama-server can load
+/// it. The 12B's own projector uses a newer "gemma4uv" type the shipped build
+/// rejects ("unknown projector type") and would crash-loop the server, so the
+/// 12B (and any other model) returns `None` and runs TEXT-ONLY. Returns `None`
+/// when the projector isn't downloaded too (text-only, never a crash).
+fn mmproj_for_model(llama_dir: &Path, gguf: &Path) -> Option<PathBuf> {
+    if gguf.file_name().and_then(|n| n.to_str()) == Some(GEMMA_FILE) {
+        let proj = llama_dir.join(MMPROJ_FILE);
+        proj.exists().then_some(proj)
+    } else {
+        None
+    }
+}
+
 /// On launch, start the local servers the config points at but that aren't
 /// already running (the app kills its servers on quit, so after a restart
 /// following an in-app install they'd be down). Uses the binaries + models
@@ -818,11 +906,15 @@ pub fn ensure_servers(
     if want_llama && !is_reachable(&format!("{LLAMA_BASE_URL}/models")) {
         let llama_dir = root.join("llama.cpp");
         let gguf = selected_llama_gguf(&llama_dir, prefer_quality);
-        let mmproj = llama_dir.join(MMPROJ_FILE);
+        // The MATCHING vision projector for the selected model, if downloaded
+        // (E4B ↔ mmproj-F32, 12B ↔ mmproj-12b-F16). A mismatched projector
+        // crashes llama-server on model load; a missing one → the model runs
+        // text-only (F8 vision then prompts to download the right projector).
+        let mmproj_s =
+            mmproj_for_model(&llama_dir, &gguf).map(|p| p.to_string_lossy().into_owned());
         if let Some(exe) = find_exe(&llama_dir, "llama-server.exe") {
             if gguf.exists() {
                 let gguf_s = gguf.to_string_lossy().into_owned();
-                let mmproj_s = mmproj.to_string_lossy().into_owned();
                 let ngl = if use_gpu { "99" } else { "0" };
                 let mut args: Vec<&str> = vec![
                     "-m",
@@ -837,11 +929,9 @@ pub fn ensure_servers(
                     "8192",
                     "--jinja",
                 ];
-                // Load the vision projector if it's present so a restart keeps
-                // F8 local vision working (downloaded by the installer).
-                if mmproj.exists() {
+                if let Some(p) = &mmproj_s {
                     args.push("--mmproj");
-                    args.push(&mmproj_s);
+                    args.push(p.as_str());
                 }
                 if let Ok(child) = launch_hidden(&exe, &args) {
                     started.push(child);
@@ -1608,6 +1698,48 @@ mod tests {
         assert_eq!(active_local_model_name(tmp.path(), false), GEMMA_FILE);
         // quality wanted but 12B absent → still E4B (safe fallback).
         assert_eq!(active_local_model_name(tmp.path(), true), GEMMA_FILE);
+    }
+
+    /// The bar must show the fast vs smart model distinctly. Pin the friendly
+    /// label against the ACTUAL shipped GGUF constants (so a future filename
+    /// rename that breaks the mapping fails here) plus the 12B-before-4B order
+    /// and the non-Gemma fallback.
+    #[test]
+    fn local_model_label_distinguishes_fast_and_smart() {
+        // Real shipped basenames map to the at-a-glance labels.
+        assert_eq!(local_model_label(GEMMA_FILE), "Gemma 4B");
+        assert_eq!(local_model_label(GEMMA12_FILE), "Gemma 12B");
+        // Case-insensitive + 12B wins over the generic 4b branch.
+        assert_eq!(local_model_label("GEMMA-4-12B-IT.gguf"), "Gemma 12B");
+        // A Gemma file with no size token → bare "Gemma" (never empty).
+        assert_eq!(local_model_label("gemma-it.gguf"), "Gemma");
+        // Non-Gemma local model → first filename token, never empty.
+        assert_eq!(local_model_label("qwen2.5-7b-instruct.gguf"), "qwen2");
+        assert_eq!(local_model_label(""), "—");
+    }
+
+    /// REGRESSION (fatal): ONLY the E4B may get a projector. The E4B projector
+    /// on the 12B (n_embd mismatch) AND the 12B's own "gemma4uv" projector on the
+    /// bundled llama-server BOTH make it fail model load and exit (crash-loop,
+    /// the user's "сломалась"). So the 12B always runs text-only here, even if a
+    /// projector file is on disk; and the E4B gets its projector only when present.
+    #[test]
+    fn only_e4b_takes_a_projector() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        // E4B projector absent → text-only.
+        assert!(mmproj_for_model(dir, &dir.join(GEMMA_FILE)).is_none());
+        std::fs::write(dir.join(MMPROJ_FILE), b"x").unwrap();
+        // E4B → its F32 once present.
+        assert_eq!(
+            mmproj_for_model(dir, &dir.join(GEMMA_FILE)),
+            Some(dir.join(MMPROJ_FILE))
+        );
+        // The 12B NEVER gets a projector here — even if a file is present (its
+        // gemma4uv type would crash the shipped llama-server).
+        std::fs::write(dir.join("mmproj-12b-F16.gguf"), b"x").unwrap();
+        assert!(mmproj_for_model(dir, &dir.join(GEMMA12_FILE)).is_none());
+        assert!(mmproj_for_model(dir, &dir.join("qwen2.5-7b.gguf")).is_none());
     }
 
     /// v0.10.2 — the GigaAM vocab is BUNDLED (include_bytes) so the install never

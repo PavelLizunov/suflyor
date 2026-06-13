@@ -152,6 +152,8 @@ pub(crate) fn open_text_ask(
         // like the bar/tiles — otherwise under stealth they leak an existence
         // entry while open (content is WDA-hidden, but the window button isn't).
         let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
+        // OS-level rounded corners (opaque frameless window) — same as archive.
+        slint_replay::win32::set_round_corners(hwnd);
         focus_window(hwnd);
     });
     *slot_ref.borrow_mut() = Some(win);
@@ -225,6 +227,9 @@ pub(crate) fn open_help(
         // like the bar/tiles — otherwise under stealth they leak an existence
         // entry while open (content is WDA-hidden, but the window button isn't).
         let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
+        // OS-level rounded corners (opaque frameless window can't get them from
+        // an inner border-radius) — same as the archive window.
+        slint_replay::win32::set_round_corners(hwnd);
         focus_window(hwnd);
     });
     *slot_ref.borrow_mut() = Some(win);
@@ -319,6 +324,8 @@ pub(crate) fn open_palette(
         // Keep the palette out of the taskbar/Alt-Tab too (stealth existence
         // leak — same as help/text-ask/wizard above).
         let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
+        // OS-level rounded corners (opaque frameless window) — same as archive.
+        slint_replay::win32::set_round_corners(hwnd);
     });
     *slot = Some(win);
 }

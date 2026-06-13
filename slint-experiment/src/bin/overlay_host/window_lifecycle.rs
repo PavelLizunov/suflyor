@@ -190,11 +190,14 @@ where
         if revealed {
             return;
         }
-        // Retry #1 at the conservative delay.
+        // Retry #1 SOON (80ms, not the full 200ms) — the heavy Settings window
+        // often isn't HWND-realized by the 33ms fast attempt, so the old 200ms
+        // gap was the "Settings opens with a delay" the user saw. Still only
+        // reveals once grab_hwnd succeeds (window painted off-screen → no flash).
         let weak2 = w.as_weak();
         let do_reveal2 = do_reveal.clone();
         let fallback2 = fallback_reveal.clone();
-        Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
+        Timer::single_shot(Duration::from_millis(80), move || {
             let Some(w) = weak2.upgrade() else { return };
             let revealed = {
                 let f = &*do_reveal2;

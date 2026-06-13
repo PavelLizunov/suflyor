@@ -330,7 +330,7 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
             let Some(w) = weak.upgrade() else {
                 return;
             };
-            w.set_ai_local_test_result(SharedString::from("testing…"));
+            w.set_ai_local_test_result(SharedString::from("Проверка…"));
             let (base_url, bearer, model) = {
                 let c = cfg_c.read();
                 (
@@ -350,7 +350,24 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
                             base_url, bearer, model,
                         )) {
                             Ok(s) => format!("[ok] {s}"),
-                            Err(e) => format!("[--] {e}"),
+                            // UI-audit 2026-06-13: do NOT echo the raw error body
+                            // into the panel. A starting llama-server returns the
+                            // full `HTTP 503 — {"error":{"message":"Loading
+                            // model"…}}` JSON, which (a) stretched the window and
+                            // (b) read as a failure when the model is just still
+                            // loading. Map the common cases to a short human line;
+                            // a generic message otherwise (also avoids leaking a
+                            // base_url/host from a transport error).
+                            Err(e) => {
+                                let es = e.to_string().to_lowercase();
+                                if es.contains("503") || es.contains("loading") {
+                                    "Сервер запускает модель — подождите ~10 с и повторите."
+                                        .to_string()
+                                } else {
+                                    "[--] Локальный сервер не отвечает — проверьте, что он запущен."
+                                        .to_string()
+                                }
+                            }
                         }
                     }
                     Err(e) => format!("[--] runtime: {e}"),

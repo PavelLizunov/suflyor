@@ -97,6 +97,25 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
         });
     }
     {
+        // Recognition language (stt_language): 0=auto, 1=ru, 2=en. None = let the
+        // engine auto-detect per phrase (Whisper/Groq); a forced language pins it.
+        let cfg_c = cfg.clone();
+        win.on_stt_language_changed(move |idx| {
+            let lang = match idx {
+                1 => Some("ru".to_string()),
+                2 => Some("en".to_string()),
+                _ => None,
+            };
+            let mut c = cfg_c.write();
+            c.stt_language = lang.clone();
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] stt_language save failed: {e:#}");
+                return;
+            }
+            diag!("stt_language -> {}", lang.as_deref().unwrap_or("auto"));
+        });
+    }
+    {
         let cfg_c = cfg.clone();
         win.on_stt_gigaam_dir_save(move |v| {
             let trimmed = v.trim().to_string();

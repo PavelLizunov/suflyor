@@ -352,6 +352,8 @@ export component SettingsWindow inherits Window {
     in-out property <string> stt-test-result: "";
     // STT provider (Phase E10): 0=cloud Groq, 1=local GigaAM, 2=local whisper-server.
     in-out property <int> stt-provider-index: 0;
+    // Recognition language (stt_language): 0=auto-detect, 1=Russian, 2=English.
+    in-out property <int> stt-language-index: 0;
     in-out property <string> stt-gigaam-dir-input: "";
     // GigaAM GPU acceleration via the ONNX Runtime DirectML EP (default on).
     in-out property <bool> stt-gigaam-gpu: true;
@@ -361,6 +363,7 @@ export component SettingsWindow inherits Window {
     callback ai-bridge-test-clicked();
     callback stt-test-clicked();
     callback stt-provider-changed(int);
+    callback stt-language-changed(int);
     callback stt-gigaam-dir-save(string);
     callback stt-gigaam-gpu-changed(bool);
     callback stt-whisper-url-save(string);
@@ -1630,12 +1633,16 @@ export component SettingsWindow inherits Window {
                                         root.ai-local-test-clicked();
                                     }
                                 }
-                                if root.ai-local-test-result != "" : Text {
-                                    text: root.ai-local-test-result;
-                                    font-size: 11px;
-                                    color: Theme.accent;
-                                    vertical-alignment: center;
-                                }
+                            }
+                            // UI-audit 2026-06-13: the test result is its OWN
+                            // row with word-wrap — inside the HorizontalLayout
+                            // above (no wrap) a long error (e.g. the raw 503
+                            // "Loading model" body) stretched the whole window.
+                            if root.ai-local-test-result != "" : Text {
+                                text: root.ai-local-test-result;
+                                font-size: 11px;
+                                color: Theme.accent;
+                                wrap: word-wrap;
                             }
                             // ----- one-click in-app local-AI installer -----
                             Rectangle { background: Theme.border; height: 1px; }
@@ -1842,6 +1849,22 @@ export component SettingsWindow inherits Window {
                                 // re-opening Settings.
                                 root.stt-provider-index = self.current-index;
                                 root.stt-provider-changed(self.current-index);
+                            }
+                        }
+                        // Recognition language (stt_language) — what the mic is
+                        // transcribed as, by default.
+                        Text {
+                            text: @tr("Recognition language — Auto detects per phrase (Whisper/Groq). GigaAM is Russian-only.");
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        ComboBox {
+                            model: [@tr("Auto-detect"), @tr("Russian"), @tr("English")];
+                            current-index: root.stt-language-index;
+                            selected => {
+                                root.stt-language-index = self.current-index;
+                                root.stt-language-changed(self.current-index);
                             }
                         }
                         if root.stt-provider-index == 1 : HorizontalLayout {

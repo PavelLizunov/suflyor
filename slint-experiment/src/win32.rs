@@ -540,6 +540,22 @@ pub fn focus_window(hwnd: HWND) {
     }
 }
 
+/// Force a window VISIBLE at the Win32 level and bring it to the foreground.
+/// Used when re-opening a REUSED overlay window (Settings) that may have been
+/// hidden OUT FROM UNDER Slint by `hide_own_windows()` — the F8 / capture-chip
+/// flow hides every app window via `SW_HIDE`, but Slint's own visibility state
+/// is unchanged, so a later `window().show()` is a no-op and the window would
+/// stay invisible with no way back. `SW_SHOW` bypasses that stale state, so the
+/// gear ALWAYS brings Settings back. WDA stealth + DWM alpha persist across
+/// show/hide, so this does not un-stealth the window.
+pub fn reveal_window(hwnd: HWND) {
+    use windows::Win32::UI::WindowsAndMessaging::{SetForegroundWindow, ShowWindow, SW_SHOW};
+    unsafe {
+        let _ = ShowWindow(hwnd, SW_SHOW);
+        let _ = SetForegroundWindow(hwnd);
+    }
+}
+
 /// Position a window at the given screen coordinates with the given size.
 /// Used by `apply_tile_hwnd_with_monitor` in overlay_host to drive
 /// freshly-spawned tile windows onto the chosen display.

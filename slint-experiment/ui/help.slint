@@ -245,6 +245,8 @@ export component HelpWindow inherits Window {
                         { ico: @image-url("../assets/icons/pencil.svg"), hasicon: true, glyph: "", desc: "Написать вопрос текстом" },
                         { ico: @image-url("../assets/icons/plus.svg"), hasicon: true, glyph: "", desc: "Новый тайл из последней строки / ручной вопрос" },
                         { ico: @image-url("../assets/icons/camera.svg"), hasicon: true, glyph: "", desc: "Скриншот области -> ответ vision-AI" },
+                        { ico: @image-url("../assets/icons/archive.svg"), hasicon: true, glyph: "", desc: "Архив сессий: просмотр и поиск прошлых созвонов (также F7)" },
+                        { ico: @image-url("../assets/icons/summary.svg"), hasicon: true, glyph: "", desc: "Сводка созвона: конспект (участники, темы, решения, задачи)" },
                         { ico: @image-url("../assets/icons/gear.svg"), hasicon: true, glyph: "", desc: "Настройки" },
                         { ico: @image-url("../assets/icons/sos.svg"), hasicon: true, glyph: "", desc: "Эта справка (также F1)" },
                         { ico: @image-url("../assets/icons/restart.svg"), hasicon: true, glyph: "", desc: "Перезапуск overlay (в 2 шага; настройки сохраняются)" },
@@ -273,6 +275,8 @@ export component HelpWindow inherits Window {
                         ["F3", "Повторить последний вопрос со свежим контекстом"],
                         ["F4", "Палитра базы знаний (открыть / закрыть)"],
                         ["F6", "Ручной тайл из последней строки транскрипта"],
+                        ["F7", "Архив сессий (просмотр и поиск)"],
+                        ["Shift+F8", "Скриншот -> перевод текста (Vision-AI)"],
                     ] : TableRow {
                         key-row: true;
                         glyph: row[0];
@@ -288,6 +292,21 @@ export component HelpWindow inherits Window {
                     }
                     Text {
                         text: @tr("Hold a record button to record, release to send. While holding, swipe up to lock; releasing keeps recording. Click stop to send.");
+                        font-size: Metrics.font-label;
+                        color: Theme.text-secondary;
+                        wrap: word-wrap;
+                    }
+
+                    Rectangle { height: 18px; }
+                    Text {
+                        text: "Локальная модель и зрение";
+                        font-weight: 700;
+                        font-size: Metrics.font-body;
+                        color: Theme.accent;
+                    }
+                    Rectangle { height: 8px; }
+                    Text {
+                        text: "Локальная AI-модель: Быстрее (4B) или Умнее (12B) — выбор в Настройки -> AI. Если локальный AI отвалится, overlay перезапустит сервер сам. Язык распознавания (Авто/Русский/English) — там же, в Настройки -> Речь. Зрение (F8) работает на модели 4B.";
                         font-size: Metrics.font-label;
                         color: Theme.text-secondary;
                         wrap: word-wrap;

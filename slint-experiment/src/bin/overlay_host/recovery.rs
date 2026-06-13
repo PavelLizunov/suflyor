@@ -312,6 +312,8 @@ pub(crate) fn open_recover_offer(
 
     present_window_stealth_aware(&win, |hwnd| {
         let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
+        // OS-level rounded corners (opaque frameless window) — same as archive.
+        slint_replay::win32::set_round_corners(hwnd);
         focus_window(hwnd);
     });
     *slot_ref.borrow_mut() = Some(win);

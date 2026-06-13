@@ -110,6 +110,16 @@ pub(crate) fn wire_local_ai(
                         });
                     }
                 };
+                // Own the local-AI lifecycle lock for the WHOLE install so the
+                // boot/watchdog auto-recovery can't race our free+relaunch of
+                // :8080 (it try_locks and skips its tick while we hold it). RAII
+                // release covers every exit path including a panic, so the lock
+                // can never wedge.
+                let lifecycle_lock = {
+                    let s = state_t.lock().unwrap_or_else(|p| p.into_inner());
+                    s.local_ai_lock.clone()
+                };
+                let _ai_guard = lifecycle_lock.lock().unwrap_or_else(|p| p.into_inner());
                 // Re-install hardening: stop any servers we previously launched
                 // so a fresh `--mmproj` llama-server can bind :8080. Without this
                 // a stale vision-less server keeps the port and the new one
@@ -185,6 +195,7 @@ pub(crate) fn wire_local_ai(
                         });
                     }
                 }
+                // _ai_guard drops here → lifecycle lock released, watchdog re-armed.
             });
         });
     }
@@ -250,6 +261,15 @@ pub(crate) fn wire_local_ai(
             let weak_t = w.as_weak();
             std::thread::spawn(move || {
                 let root = overlay_backend::local_ai::default_root();
+                // Own the local-AI lifecycle lock for the whole switch so the
+                // boot/watchdog auto-recovery can't race our free+relaunch of
+                // :8080 (it try_locks and skips while we hold it). RAII release
+                // covers every exit path incl. panic.
+                let lifecycle_lock = {
+                    let s = state_t.lock().unwrap_or_else(|p| p.into_inner());
+                    s.local_ai_lock.clone()
+                };
+                let _ai_guard = lifecycle_lock.lock().unwrap_or_else(|p| p.into_inner());
                 let want_whisper = {
                     let c = cfg_t.read();
                     c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081")
@@ -263,15 +283,25 @@ pub(crate) fn wire_local_ai(
                     want_whisper,
                 );
                 let switched = outcome == overlay_backend::local_ai::ModelSwitch::Switched;
-                {
+                let to_terminate = {
                     let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
-                    // Drop dead handles (the old llama we just port-killed) so
-                    // the vec doesn't grow each switch; keep the live ones
-                    // (whisper) (review #4).
+                    // Reap only DEFINITIVELY-exited handles (Ok(Some)); keep
+                    // running (Ok(None)) AND unknown (Err) so a live child is
+                    // never lost from kill-on-quit tracking (review #3).
                     s.local_ai_servers
-                        .retain_mut(|c| matches!(c.try_wait(), Ok(None)));
-                    s.local_ai_servers.extend(started);
-                }
+                        .retain_mut(|c| !matches!(c.try_wait(), Ok(Some(_))));
+                    if switched {
+                        s.local_ai_servers.extend(started);
+                        Vec::new()
+                    } else {
+                        // Failed relaunch — don't track its dead/wedged children.
+                        started
+                    }
+                };
+                // Outside the state lock: kill the failed relaunch's children
+                // (no-op when switched). No port sweep → whisper (:8081) is left
+                // alone.
+                overlay_backend::local_ai::terminate_servers(to_terminate);
                 // Commit the choice ONLY on a confirmed switch: persist
                 // ai_local_quality + the active-stack model name (the bar reads
                 // cfg.ai_local_model; the request "model" field is ignored by
@@ -314,6 +344,7 @@ pub(crate) fn wire_local_ai(
                         )));
                     }
                 });
+                // _ai_guard drops here → lifecycle lock released, watchdog re-armed.
             });
         });
     }

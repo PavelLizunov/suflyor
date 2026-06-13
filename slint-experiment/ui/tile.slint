@@ -108,7 +108,11 @@ export component TileWindow inherits Window {
     }
 
     Rectangle {
-        background: Theme.bg-surface.with-alpha(0.92);
+        // Near-opaque (was 0.92): at 8% see-through a tile CASCADED behind this
+        // one bled its text through as faint ghosting over the answer (user's
+        // screenshot). 0.98 kills the visible bleed but keeps a hint of depth;
+        // the body-opacity slider below still gives an INTENTIONAL fade.
+        background: Theme.bg-surface.with-alpha(0.98);
         border-radius: 10px;
         border-width: 1px;
         border-color: Theme.border;

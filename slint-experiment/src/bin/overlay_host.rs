@@ -405,6 +405,18 @@ const HWND_REVEAL_FAST_MS: u64 = 33;
 const AUTO_TILE_DELAY_MS: u64 = 500;
 /// Periodic session-timer chip update interval.
 const TIMER_TICK_SECS: u64 = 1;
+/// Local-AI watchdog: how often to confirm llama-server is still answering on
+/// :8080. llama binds the HTTP port early (returns 503 while the model loads),
+/// so a still-unreachable port at the next tick means the process is genuinely
+/// dead, not slow-loading.
+const WATCHDOG_SECS: u64 = 15;
+/// Minimum gap between two auto-(re)start attempts, so a server that can't
+/// start (missing model/binary) isn't hammered. A healthy server resets this.
+const WATCHDOG_COOLDOWN_SECS: u64 = 30;
+/// Stop auto-retrying after this many consecutive failed (re)starts so a
+/// genuinely broken install doesn't spawn forever; a reachable server (e.g.
+/// after a manual Install) re-arms the counter to 0.
+const WATCHDOG_MAX_FAILS: u32 = 6;
 /// Default tile window dimensions (match ui/tile.slint preferred-*
 /// values so the spawned window isn't forcibly shrunk on first paint).
 pub(crate) const TILE_DEFAULT_W: i32 = 460;
@@ -621,16 +633,42 @@ fn main() -> Result<(), slint::PlatformError> {
                 )
             };
             if ai_local {
+                // UI-audit 2026-06-13 (user: "Gemma works only after I press
+                // Install local AI"): the old code did ONE test_connection and
+                // gave up on the first HTTP 503 "Loading model" — but a freshly
+                // launched llama-server returns 503 for the whole time the model
+                // is loading into VRAM (seconds for 4B, much longer for 12B). So
+                // the warm-up always "skipped", and the FIRST real ask hit a
+                // still-loading server → felt broken until the user clicked
+                // Install (which polls readiness). POLL here too: retry past 503
+                // until the model answers or a generous deadline (12B cold-load).
                 let t = std::time::Instant::now();
-                match overlay_backend::ai::test_connection(
-                    ai_ep.base_url,
-                    ai_ep.bearer,
-                    ai_ep.model,
-                )
-                .await
-                {
-                    Ok(_) => diag!("local AI warmed in {:?}", t.elapsed()),
-                    Err(e) => diag!("local AI warm-up skipped: {e}"),
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(180);
+                loop {
+                    match overlay_backend::ai::test_connection(
+                        ai_ep.base_url.clone(),
+                        ai_ep.bearer.clone(),
+                        ai_ep.model.clone(),
+                    )
+                    .await
+                    {
+                        Ok(_) => {
+                            diag!("local AI warmed in {:?}", t.elapsed());
+                            break;
+                        }
+                        Err(_) if std::time::Instant::now() < deadline => {
+                            // still loading (503) or briefly unreachable — wait.
+                            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                        }
+                        Err(e) => {
+                            diag!(
+                                "local AI not ready after {:?}: {e} — \
+                                 open Settings → AI → Install local AI",
+                                t.elapsed()
+                            );
+                            break;
+                        }
+                    }
                 }
             }
             if stt_local {
@@ -643,39 +681,10 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // E10.5 — auto-start the local AI servers the config points at but that
-    // aren't already running (after a restart following an in-app install the
-    // app's own servers are gone — it kills them on quit). Off the UI thread;
-    // tracked in app_state for kill-on-quit.
-    {
-        let (want_llama, want_whisper, prefer_quality) = {
-            let c = cfg.read();
-            (
-                c.ai_provider == "local" && c.ai_local_base_url.contains(":8080"),
-                c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081"),
-                c.ai_local_quality,
-            )
-        };
-        if want_llama || want_whisper {
-            let state_auto = state.clone();
-            std::thread::spawn(move || {
-                let root = overlay_backend::local_ai::default_root();
-                let started = overlay_backend::local_ai::ensure_servers(
-                    &root,
-                    want_llama,
-                    want_whisper,
-                    prefer_quality,
-                );
-                if !started.is_empty() {
-                    state_auto
-                        .lock()
-                        .unwrap_or_else(|p| p.into_inner())
-                        .local_ai_servers
-                        .extend(started);
-                }
-            });
-        }
-    }
+    // E10.5 — auto-start the local AI servers the config points at. MOVED below
+    // overlay creation (see the "Local-AI boot + watchdog" thread) so a recovery
+    // can refresh the bar's active-stack readout. It now confirms readiness and
+    // self-heals a dead :8080 mid-session instead of fire-and-forget launching.
     let tiles: TileWindows = Rc::new(RefCell::new(Vec::new()));
     let settings: Rc<RefCell<Option<SettingsWindow>>> = Rc::new(RefCell::new(None));
 
@@ -726,6 +735,165 @@ fn main() -> Result<(), slint::PlatformError> {
     overlay.set_status_text(SharedString::from("idle"));
     overlay.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
     overlay.set_active_stack(SharedString::from(active_stack_label(&cfg.read())));
+
+    // ===== Local-AI boot + watchdog (E10.5, hardened 2026-06-13) =====
+    // The local servers ARE the user's AI/STT brain. Previously boot did a
+    // fire-and-forget `ensure_servers` launch: if llama-server crashed on spawn
+    // or died mid-session, nothing noticed and nothing retried — the bar sat on
+    // "AI недоступен" until the user manually hit Settings → "Install local AI"
+    // (the ONLY path that frees :8080 + waits for readiness). Reported by the
+    // user ("сломалась в какой-то момент… пофиксилось после Установить").
+    //
+    // This single off-UI thread makes boot AND mid-session self-healing:
+    //   • once: best-effort launch whisper (:8081) if STT is local;
+    //   • every WATCHDOG_SECS: if AI is local and :8080 is TRULY dead (a real
+    //     connection-refused — NOT a server that merely returned an error, which
+    //     `llama_reachable()` still counts as alive so we never kill a working
+    //     server), free + relaunch + confirm-ready via `ensure_llama_serving`.
+    // A manual install/switch holds `local_ai_lock` so we never race it; a 30 s
+    // cooldown + a fail cap keep a broken install from spawning forever; a
+    // reachable server re-arms the cap. On a confirmed (re)start we sync the
+    // persisted model name and refresh the bar so the user always sees the
+    // model that is actually serving (Gemma 4B / 12B).
+    {
+        let cfg_w = cfg.clone();
+        let state_w = state.clone();
+        let overlay_w = overlay.as_weak();
+        std::thread::spawn(move || {
+            let root = overlay_backend::local_ai::default_root();
+            // One-time best-effort STT launch. Whisper has not shown llama's
+            // dies-on-boot fragility; ensure_servers skips it if it already
+            // answers.
+            let want_whisper = {
+                let c = cfg_w.read();
+                c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081")
+            };
+            if want_whisper {
+                let started = overlay_backend::local_ai::ensure_servers(&root, false, true, false);
+                if !started.is_empty() {
+                    state_w
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .local_ai_servers
+                        .extend(started);
+                }
+            }
+            let mut last_attempt: Option<std::time::Instant> = None;
+            let mut consecutive_fails: u32 = 0;
+            loop {
+                let (want_llama, prefer_quality) = {
+                    let c = cfg_w.read();
+                    (
+                        c.ai_provider == "local" && c.ai_local_base_url.contains(":8080"),
+                        c.ai_local_quality,
+                    )
+                };
+                if want_llama {
+                    if overlay_backend::local_ai::llama_reachable() {
+                        // Alive (serving or cold-loading) — re-arm the fail cap
+                        // so any future crash is retried from scratch.
+                        consecutive_fails = 0;
+                    } else {
+                        let cooled = last_attempt.is_none_or(|t| {
+                            t.elapsed() >= std::time::Duration::from_secs(WATCHDOG_COOLDOWN_SECS)
+                        });
+                        if cooled && consecutive_fails < WATCHDOG_MAX_FAILS {
+                            // Claim the local-AI lifecycle lock so we never race a
+                            // manual install/switch on :8080. try_lock → skip this
+                            // tick if a manual op holds it (it will bring :8080 up).
+                            // RAII: the guard releases on every path incl. panic, so
+                            // a crash here can't wedge the lock.
+                            let lifecycle_lock = {
+                                let s = state_w.lock().unwrap_or_else(|p| p.into_inner());
+                                s.local_ai_lock.clone()
+                            };
+                            let guard = match lifecycle_lock.try_lock() {
+                                Ok(g) => Some(g),
+                                Err(std::sync::TryLockError::Poisoned(p)) => Some(p.into_inner()),
+                                // A manual install/switch owns the lifecycle — let
+                                // it bring :8080 up; we re-check next tick.
+                                Err(std::sync::TryLockError::WouldBlock) => None,
+                            };
+                            if let Some(_ai_guard) = guard {
+                                // Re-check UNDER the lock — a manual op may have
+                                // brought :8080 up between our probe and the lock.
+                                if !overlay_backend::local_ai::llama_reachable() {
+                                    diag!(
+                                        "local AI :8080 not answering — auto-(re)starting llama-server"
+                                    );
+                                    let (outcome, started) =
+                                        overlay_backend::local_ai::ensure_llama_serving(
+                                            &root,
+                                            prefer_quality,
+                                        );
+                                    last_attempt = Some(std::time::Instant::now());
+                                    match outcome {
+                                        overlay_backend::local_ai::ModelSwitch::Switched => {
+                                            consecutive_fails = 0;
+                                            {
+                                                let mut s = state_w
+                                                    .lock()
+                                                    .unwrap_or_else(|p| p.into_inner());
+                                                // Reap only definitively-exited
+                                                // handles (Ok(Some)); keep running
+                                                // (Ok(None)) AND unknown (Err) so a
+                                                // live child is never lost from
+                                                // kill-on-quit tracking.
+                                                s.local_ai_servers.retain_mut(|c| {
+                                                    !matches!(c.try_wait(), Ok(Some(_)))
+                                                });
+                                                s.local_ai_servers.extend(started);
+                                            }
+                                            // Sync the persisted model name to what
+                                            // is actually serving + refresh the bar
+                                            // so the readout shows the real model.
+                                            let label = {
+                                                let mut c = cfg_w.write();
+                                                c.ai_local_model =
+                                                    overlay_backend::local_ai::active_local_model_name(
+                                                        &root,
+                                                        prefer_quality,
+                                                    );
+                                                active_stack_label(&c)
+                                            };
+                                            diag!("local AI server ready ({label})");
+                                            let ow = overlay_w.clone();
+                                            let _ = slint::invoke_from_event_loop(move || {
+                                                if let Some(o) = ow.upgrade() {
+                                                    o.set_active_stack(SharedString::from(label));
+                                                }
+                                            });
+                                        }
+                                        overlay_backend::local_ai::ModelSwitch::PortBusy => {
+                                            consecutive_fails += 1;
+                                            // started is empty on PortBusy; harmless.
+                                            overlay_backend::local_ai::terminate_servers(started);
+                                            diag!(
+                                                "local AI :8080 held by a foreign process — not restarting"
+                                            );
+                                        }
+                                        overlay_backend::local_ai::ModelSwitch::FailedToStart => {
+                                            consecutive_fails += 1;
+                                            // Kill the wedged/dead child instead of
+                                            // leaking it until quit. No port sweep →
+                                            // whisper (:8081) is left alone.
+                                            overlay_backend::local_ai::terminate_servers(started);
+                                            diag!(
+                                                "local AI failed to (re)start (attempt {consecutive_fails}/{WATCHDOG_MAX_FAILS}) \
+                                                 — check the local model/binary in Settings → AI"
+                                            );
+                                        }
+                                    }
+                                }
+                                // _ai_guard drops here → lifecycle lock released.
+                            }
+                        }
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_secs(WATCHDOG_SECS));
+            }
+        });
+    }
     overlay.set_stealth_active(cfg.read().stealth_enabled);
     overlay.set_cost_label(SharedString::from("$0.000"));
     overlay.set_timer_label(SharedString::from("00:00"));
@@ -2878,7 +3046,14 @@ pub(crate) fn active_stack_label(c: &overlay_backend::config::Config) -> String 
     } else {
         c.ai_model.as_str()
     };
-    let model = short_model_name(model_full);
+    // For a LOCAL model show the friendly "Gemma 4B" / "Gemma 12B" so the user
+    // can tell the fast vs smart model apart at a glance (the user asked to see
+    // the selected model more explicitly); cloud models keep the short id.
+    let model = if ai_local {
+        overlay_backend::local_ai::local_model_label(model_full)
+    } else {
+        short_model_name(model_full)
+    };
     // ASCII tag + Latin-1 middle dot only — fancier glyphs (✕/✓/arrows) render
     // as missing-glyph boxes on the user's Slint+skia font fallback.
     let tag = if stt_local && ai_local {

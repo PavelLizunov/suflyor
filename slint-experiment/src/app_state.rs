@@ -53,6 +53,16 @@ pub struct AppState {
     /// Set true by the installer's "Cancel" button to abort an in-progress
     /// local-AI install; the worker thread + the curl poll loop check it.
     pub local_ai_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Serializes EVERY local-AI lifecycle op that frees/relaunches :8080 —
+    /// the manual install + the fast/smart switch + the boot/watchdog
+    /// auto-recovery. A holder owns the port exclusively for the op's whole
+    /// duration; the watchdog `try_lock`s and skips its tick if a manual op
+    /// holds it, so two `free_llama_port`+relaunch sequences can never overlap.
+    /// A real mutex (not a checked-then-acted flag) is required: the watchdog's
+    /// reachability probe + relaunch span seconds, far too wide for a bare bool
+    /// to serialize. RAII release also means a panic in any holder can't wedge
+    /// the lock (a poisoned mutex is recovered via `into_inner`).
+    pub local_ai_lock: std::sync::Arc<std::sync::Mutex<()>>,
 }
 
 /// Convenience alias used by all window-spawning callbacks.

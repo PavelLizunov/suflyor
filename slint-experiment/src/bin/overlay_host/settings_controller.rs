@@ -85,6 +85,15 @@ pub(crate) fn open_settings(
             refresh_profiles(existing, &snap);
         }
         let _ = existing.show();
+        // The F8 / capture-chip flow hides EVERY app window via Win32 SW_HIDE
+        // (hide_own_windows) so the overlay isn't in the screenshot. That bypasses
+        // Slint, so the line above can no-op (Slint still thinks Settings is shown)
+        // and the window would stay invisible with the gear stuck lit — the user's
+        // "настройки активны, но окно пропало". Force it Win32-visible + to the
+        // front so the gear ALWAYS recovers it.
+        if let Ok(hwnd) = grab_hwnd(existing.window()) {
+            slint_replay::win32::reveal_window(hwnd);
+        }
         return;
     }
     let win = match SettingsWindow::new() {
@@ -1063,6 +1072,12 @@ pub(crate) fn populate_token_status(
     win.set_stt_provider_index(match c.stt_provider.as_str() {
         "gigaam" => 1,
         "whisper" => 2,
+        _ => 0,
+    });
+    // Recognition language (stt_language): None=auto → 0, "ru" → 1, "en" → 2.
+    win.set_stt_language_index(match c.stt_language.as_deref() {
+        Some("ru") => 1,
+        Some("en") => 2,
         _ => 0,
     });
     win.set_stt_gigaam_dir_input(SharedString::from(c.stt_gigaam_dir.clone()));

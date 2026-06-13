@@ -765,6 +765,18 @@ msgstr "Локально GigaAM-v3 (русский)"
 msgid "Local Whisper (whisper.cpp)"
 msgstr "Локально Whisper (whisper.cpp)"
 
+msgid "Recognition language — Auto detects per phrase (Whisper/Groq). GigaAM is Russian-only."
+msgstr "Язык распознавания — «Авто» определяет по фразе (Whisper/Groq). GigaAM только русский."
+
+msgid "Auto-detect"
+msgstr "Авто"
+
+msgid "Russian"
+msgstr "Русский"
+
+msgid "English"
+msgstr "English"
+
 msgid "GigaAM model dir — folder with model.int8.onnx + vocab.txt"
 msgstr "Папка модели GigaAM — с model.int8.onnx + vocab.txt"
 
