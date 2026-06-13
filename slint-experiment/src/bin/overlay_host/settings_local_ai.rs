@@ -226,15 +226,19 @@ pub(crate) fn wire_local_ai(
             if w.get_model_switching() {
                 return;
             }
-            w.set_model_switching(true);
-            {
-                let mut c = cfg_c.write();
-                c.ai_local_quality = want_quality;
-                if let Err(e) = overlay_backend::config::save(&c) {
-                    eprintln!("[overlay-host] quality switch save failed: {e:#}");
-                }
+            // No-op if already on the requested model (the active button is
+            // disabled, but guard anyway).
+            if w.get_ai_local_quality() == want_quality {
+                return;
             }
-            w.set_ai_local_quality(want_quality);
+            // UI-audit 2026-06-13 (IMPORTANT): do NOT flip ai_local_quality /
+            // config optimistically. If the relaunch returns PortBusy/
+            // FailedToStart, an optimistic flip would leave the "●" active
+            // marker + the button enabled-states pointing at a model the server
+            // is NOT running, while the status says "не выполнено". We commit
+            // the flip (config + UI) ONLY on a confirmed Switched outcome below;
+            // until then the UI keeps showing the previous (still-running) model.
+            w.set_model_switching(true);
             w.set_quality_status(SharedString::from(if want_quality {
                 "Переключаю на умную модель (12B)…"
             } else {
@@ -268,14 +272,19 @@ pub(crate) fn wire_local_ai(
                         .retain_mut(|c| matches!(c.try_wait(), Ok(None)));
                     s.local_ai_servers.extend(started);
                 }
-                // Keep the bar's active-stack readout truthful (review #5): the
-                // request "model" field is ignored by single-model llama.cpp,
-                // but the label reads cfg.ai_local_model.
+                // Commit the choice ONLY on a confirmed switch: persist
+                // ai_local_quality + the active-stack model name (the bar reads
+                // cfg.ai_local_model; the request "model" field is ignored by
+                // single-model llama.cpp). On failure nothing is persisted, so
+                // the next launch still starts the model that's actually running.
                 if switched {
                     let mut c = cfg_t.write();
+                    c.ai_local_quality = want_quality;
                     c.ai_local_model =
                         overlay_backend::local_ai::active_local_model_name(&root, want_quality);
-                    let _ = overlay_backend::config::save(&c);
+                    if let Err(e) = overlay_backend::config::save(&c) {
+                        eprintln!("[overlay-host] quality switch save failed: {e:#}");
+                    }
                 }
                 let weak_done = weak_t.clone();
                 let overlay_done = overlay_t.clone();

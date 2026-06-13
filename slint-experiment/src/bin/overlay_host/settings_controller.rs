@@ -1011,6 +1011,27 @@ pub(crate) fn populate_token_status(
     win.set_vision_local_base_url_input(SharedString::from(c.vision_local_base_url.clone()));
     win.set_vision_local_model_input(SharedString::from(c.vision_local_model.clone()));
     win.set_vision_test_result(SharedString::from(""));
+    // UI-audit 2026-06-13 (CRITICAL): the Settings window is REUSED, not
+    // recreated, so every transient one-shot status string survived from the
+    // previous open and described a STALE action (the user caught a lingering
+    // "Готово: умная модель (12B)…" after a model switch). `populate_token_status`
+    // runs on every open incl. reopen, so clear them ALL here — only
+    // `vision_test_result` was reset before. Persistent state (key presence,
+    // dropdowns, toggles, ai_local_quality) is reseeded below and is NOT touched.
+    let blank = || SharedString::from("");
+    win.set_quality_status(blank());
+    win.set_local_ai_status(blank());
+    win.set_local_ai_gpu(blank());
+    win.set_local_ai_on_gpu(false);
+    win.set_ai_local_test_result(blank());
+    win.set_ai_bridge_test_result(blank());
+    win.set_stt_test_result(blank());
+    win.set_mic_test_result(blank());
+    win.set_meeting_context_result(blank());
+    win.set_profile_io_result(blank());
+    win.set_server_preview_ready(false);
+    win.set_update_status(blank());
+    win.set_memory_status(blank());
     win.set_ai_prompt_cache(c.ai_prompt_cache);
     win.set_ai_provider_index(i32::from(c.ai_provider == "local"));
     win.set_ai_local_base_url_input(SharedString::from(c.ai_local_base_url.clone()));

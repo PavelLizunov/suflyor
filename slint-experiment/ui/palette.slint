@@ -39,7 +39,12 @@ export component PaletteWindow inherits Window {
     min-width: 420px;
 
     in-out property <string> query: "";
-    in-out property <[string]> recent-chips: ["kubernetes", "postgres", "docker"];
+    // UI-audit 2026-06-13: was `["kubernetes","postgres","docker"]` — fake
+    // "recent" data that ALWAYS showed (no Rust `set_recent_chips` ever
+    // overwrote it), so every F4 open displayed three queries the user never
+    // ran. Empty by default + the "recent:" label below hides when empty.
+    // Wiring real recent queries is a separate backlog item.
+    in-out property <[string]> recent-chips: [];
     in-out property <[PaletteResult]> results: [];
     in-out property <int> selected-index: 0;
 
@@ -105,7 +110,7 @@ export component PaletteWindow inherits Window {
             // Recent chips row
             HorizontalLayout {
                 spacing: Metrics.space-xs;   // was 4px
-                Text {
+                if root.recent-chips.length > 0 : Text {
                     text: @tr("recent:");
                     font-size: Metrics.font-caption;   // was 10px
                     color: Theme.text-muted;

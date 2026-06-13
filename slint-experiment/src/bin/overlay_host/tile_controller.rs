@@ -821,7 +821,10 @@ impl SlintUiBridge for OverlayBarBridge {
                     // (set by session:started / session:stopped).
                 }
                 "meeting:ending" => {
-                    o.set_status_text(SharedString::from("🏁 wrapping up"));
+                    // UI-audit 2026-06-13: dropped the 🏁 flag emoji — the rest
+                    // of the chrome is SVG/ASCII; the status pill is English-only
+                    // by design (idle/recording/…), so this matches it.
+                    o.set_status_text(SharedString::from("wrapping up"));
                 }
                 "transcript:line" => {
                     // Phase E6 v11 — surface latest STT on bar.

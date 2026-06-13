@@ -123,6 +123,82 @@ type. The debug binary's `eprintln!` startup log (hotkey registration, bar
 pin coords, transparency) is the cheapest smoke signal — launch, capture
 stderr ~5s, kill, read it. See memory `[[overlay-host-visual-verification]]`.
 
+### Release protocol (adopted 2026-06-13 — after the v0.17.1→v0.18.0 run)
+
+**Why:** that run shipped 3 releases back-to-back, each with a "green gate",
+and the USER caught every UI defect (crooked icon, emoji-not-SVG, UTC-not-MSK,
+a stuck "Готово" status). Root cause: a green gate (clippy/test/fmt) means
+"compiles + doesn't crash", NOT "UI verified". Layer 5 was fake for UI — it
+booted + CopyFromScreen'd a couple of windows but never opened Settings or
+clicked real controls, so button states / texts / signs / status-logic reached
+the user unverified. And releases were published immediately after the
+self-gate, with no human visual acceptance. See memory `[[release-protocol]]`.
+
+**The rules (mandatory — chosen by the user):**
+1. **NEVER auto-publish a GitHub release.** Build + self-gate → SHOW the user
+   → wait for an explicit "релизь" → only then `gh release`. Release ≠ push;
+   even a master push defaults to "only with a built, verified build".
+2. **Accumulate** changes into one verified release — release is an event, not
+   a per-task default. (hardening of `[[no-marathon-releases]]`.)
+3. **Every UI diff passes THREE checks before the user is shown:**
+   - **(a) screenshots + UI checklist** — `CopyFromScreen` the key windows in
+     the RELEVANT states (Settings/bar/tile) + a written checklist: every
+     string in `@tr` AND in the `.po`; no emoji where an SVG belongs; button
+     states (enabled/disabled/active-marker) are logical; **status text matches
+     real state** (no "Готово" when not done); signs/punctuation/spacing.
+   - **(b) UI-review agent** on the `.slint` + wiring diff (the category that
+     slips through static gates).
+   - **(c) Slint-MCP** — `SLINT_EMIT_DEBUG_INFO=1 SLINT_MCP_PORT=N` binds
+     `http://127.0.0.1:N/mcp` (VERIFIED working in the release build
+     2026-06-13). Drive/read the UI tree programmatically — reliable, unlike
+     computer-use clicks on the floating gear.
+4. Present to the user as EVIDENCE ("here are the screenshots + checklist
+   results, look at X"), never "all green, releasing".
+
+### UI-audit toolkit (obkatano 2026-06-13 — these caught real bugs)
+
+The "illogical UI" class is invisible to clippy/test. Run these on any UI diff:
+
+- **i18n drift guard** — `cargo test --manifest-path slint-experiment\Cargo.toml
+  --test i18n_guard`. Fails if a `@tr("English…")` has no `msgid` in
+  `ru.po` (RU user → English fallback). It caught 3 strings whose `.po` msgids
+  still had old emoji prefixes (`🎤 Dictate`) after the .slint was
+  de-emojified — a silent drift. **This test is now part of the gate.**
+- **Slint-MCP live inspection** — build, then launch with
+  `SLINT_MCP_PORT=9123` (+ optional `SLINT_EMIT_DEBUG_INFO=1`). Stateless
+  JSON-RPC at `http://127.0.0.1:9123/mcp`. Recipe:
+  `curl -s -X POST .../mcp -H 'Content-Type: application/json'
+  -H 'Accept: application/json, text/event-stream' -d '{jsonrpc,id,method,params}'`.
+  `initialize` → `tools/call list_windows` → `get_element_tree {elementHandle}`
+  → `query_element_descendants {queryStack:[{matchDescendants:true},{matchElementTypeNameOrBase:"Button"}]}`
+  → `click_element` (open Settings via the gear) → `get_element_properties`
+  (read REAL button text/enabled in a given state) → `take_screenshot`.
+  Reliable where computer-use clicks on the floating gear are not. win0 is a
+  parked 1×1; the bar is the 1200×60 window; Settings/tiles are separate windows
+  that appear after a click/hotkey. **Gotcha (verified 2026-06-13):**
+  `take_screenshot {windowHandle}` WORKS and returns true colours (better than
+  computer-use, which mis-renders the transparent overlay). But
+  `query_element_descendants` / `get_element_tree` on the overlay BAR return 0
+  children (the overlay renders its tree in a way MCP doesn't walk) — so for the
+  bar use `take_screenshot` + CopyFromScreen, and use the tree-walk on ordinary
+  windows (Settings/tiles). Param names differ per tool: screenshot wants
+  `windowHandle`; tree wants `elementHandle`; descendants want `findAll` (no
+  `maxElements`). curl from Git-bash resets cwd — write helper output to an
+  absolute path, not a relative one.
+- **The recurring UI bug shapes** (check the .rs side, not just .slint):
+  1. **Stale status on a REUSED window** — the Settings window is reused, so
+     every transient `*_status`/`*_result` string survives the next open unless
+     `populate_token_status` clears it. (Caused the user's lingering
+     "Готово: умная модель (12B)".)
+  2. **Optimistic state-flip before an async result** — writing config + UI to
+     the new value *before* the operation confirms; on failure the UI lies.
+     Commit only on the confirmed-success branch.
+  3. **A `.slint` default property with NO Rust setter** — renders fake data
+     forever (palette `recent-chips: ["kubernetes",…]` had no `set_recent_chips`
+     → always shown). Grep for `set_<prop>`; if absent, the default IS the
+     production value.
+  4. **emoji where the chrome standard is SVG** / **@tr↔.po drift after a string edit**.
+
 ### Lessons learned (the "we got burned" list)
 
 1. **Don't skip a layer.** Every skip during the marathon reached the user.
