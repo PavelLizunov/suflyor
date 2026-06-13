@@ -293,6 +293,18 @@ export component SettingsWindow inherits Window {
     in-out property <bool> model-switching: false; // server relaunch in flight
     in-out property <float> quality-progress: 0.0; // 0.0..1.0
     in-out property <string> quality-status: "";
+    // v0.18.2 — 12B vision: its own projector (gemma4uv, ~175 MB) downloaded on
+    // demand, attachable ONLY on a new-enough engine (>= b9626). present = file
+    // on disk; supported = engine can load it; downloading = pull in flight.
+    in-out property <bool> quality-vision-present: false;
+    in-out property <bool> quality-vision-supported: false;
+    in-out property <bool> vision12b-downloading: false;
+    in-out property <string> vision12b-status: "";
+    // v0.18.2 — llama.cpp engine auto-update. build = installed bNNNN (display);
+    // updating = a check/swap in flight; status = live English/RU line.
+    in-out property <string> engine-build: "";
+    in-out property <bool> engine-updating: false;
+    in-out property <string> engine-update-status: "";
     in-out property <string> ai-local-test-result: "";
     in-out property <string> ai-local-bearer-input: "";
     // E10.4 — in-app local-AI installer: downloads llama.cpp/whisper.cpp + models,
@@ -346,6 +358,9 @@ export component SettingsWindow inherits Window {
     // `download-quality-clicked` pulls the 12B on demand (it isn't bundled).
     callback model-quality-changed(bool);
     callback download-quality-clicked();
+    // v0.18.2 — pull the 12B vision projector; update the llama.cpp engine.
+    callback download-vision12b-clicked();
+    callback update-engine-clicked();
     callback ai-local-test-clicked();
     // Phase E6 v27 — connection test buttons (AI bridge + STT).
     in-out property <string> ai-bridge-test-result: "";
@@ -1625,6 +1640,41 @@ export component SettingsWindow inherits Window {
                                     background: Theme.accent;
                                 }
                             }
+                            // ----- v0.18.2 — 12B vision (its own gemma4uv projector) -----
+                            if root.quality-model-present && root.quality-vision-supported && root.quality-vision-present : Text {
+                                text: @tr("12B vision projector installed — used when the 12B is the active model.");
+                                font-size: 11px;
+                                color: Theme.success;
+                                wrap: word-wrap;
+                            }
+                            if root.quality-model-present && root.quality-vision-supported && !root.quality-vision-present : HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: root.vision12b-downloading ? @tr("Downloading…") : @tr("Enable vision on 12B — download projector (175 MB)");
+                                    enabled: !root.vision12b-downloading && !root.quality-downloading && !root.model-switching && !root.local-ai-installing && !root.engine-updating;
+                                    clicked => {
+                                        root.download-vision12b-clicked();
+                                    }
+                                }
+                                if root.vision12b-downloading : Button {
+                                    text: @tr("Cancel");
+                                    clicked => {
+                                        root.cancel-local-ai-clicked();
+                                    }
+                                }
+                            }
+                            if root.quality-model-present && !root.quality-vision-supported : Text {
+                                text: @tr("12B vision needs a newer engine — use Update engine below.");
+                                font-size: 11px;
+                                color: Theme.warning;
+                                wrap: word-wrap;
+                            }
+                            if root.vision12b-status != "" : Text {
+                                text: root.vision12b-status;
+                                font-size: 11px;
+                                color: Theme.accent;
+                                wrap: word-wrap;
+                            }
                             HorizontalLayout {
                                 spacing: 6px;
                                 Button {
@@ -1692,6 +1742,36 @@ export component SettingsWindow inherits Window {
                                     border-radius: 3px;
                                     background: Theme.accent;
                                 }
+                            }
+                            // ----- v0.18.2 — llama.cpp engine auto-update -----
+                            Rectangle { background: Theme.border; height: 1px; }
+                            Text {
+                                text: @tr("Engine (llama.cpp). The app keeps it up to date automatically (checked weekly) so the local model stays fast and 12B vision works. A new build is verified to run before it replaces the current one.");
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: root.engine-updating ? @tr("Updating…") : @tr("Update engine");
+                                    enabled: !root.engine-updating && !root.local-ai-installing && !root.quality-downloading && !root.model-switching && !root.vision12b-downloading;
+                                    clicked => {
+                                        root.update-engine-clicked();
+                                    }
+                                }
+                                if root.engine-build != "" : Text {
+                                    text: @tr("Installed: {}", root.engine-build);
+                                    font-size: 11px;
+                                    color: Theme.text-muted;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            if root.engine-update-status != "" : Text {
+                                text: root.engine-update-status;
+                                font-size: 11px;
+                                color: Theme.accent;
+                                wrap: word-wrap;
                             }
                         }
 

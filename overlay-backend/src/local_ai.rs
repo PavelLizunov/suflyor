@@ -55,11 +55,21 @@ const MMPROJ_FILE: &str = "mmproj-F32.gguf";
 const MMPROJ_SIZE: u64 = 1_912_464_192;
 const MMPROJ_SHA256: &str = "343cdea7775835ebdd1caa6c42ec3ec3e711d082835c72253d4e87c4b7e303d0";
 
-// NOTE: the 12B DOES have a matching vision projector in its repo, but it uses
-// a newer "gemma4uv" projector type the bundled (May) llama-server CANNOT load
-// ("unknown projector type: gemma4uv" → exits → crash-loop, verified live
-// 2026-06-13). So the 12B runs TEXT-ONLY until llama.cpp is upgraded; we never
-// attach a 12B projector to the shipped build. Vision works on the E4B (4B).
+// Vision projector for the 12B — its OWN, from the 12B repo. Uses a newer
+// "gemma4uv" projector type, so it ONLY loads on a recent enough llama.cpp
+// (a May build dies with "unknown projector type: gemma4uv" → crash-loop). We
+// gate attaching it on the installed build >= GEMMA4UV_MIN_BUILD (verified live
+// 2026-06-14: b9626 loads it). Saved under a DISTINCT local name so it never
+// clobbers the E4B projectors. SHA-256 pinned (verify-before-launch, P1.5).
+const GEMMA12_MMPROJ_URL: &str =
+    "https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/main/mmproj-F16.gguf";
+const GEMMA12_MMPROJ_FILE: &str = "mmproj-12b-F16.gguf";
+const GEMMA12_MMPROJ_SIZE: u64 = 175_115_840;
+const GEMMA12_MMPROJ_SHA256: &str =
+    "ecc4e93128da8363b7dbf2193eab98cf1142353f52ceaa0c95c0872997aaadd3";
+/// Minimum llama.cpp release build (the `bNNNN` tag) that can load the 12B's
+/// "gemma4uv" projector. Below this we keep the 12B text-only (no crash).
+const GEMMA4UV_MIN_BUILD: u32 = 9626;
 
 const WHISPER_URL: &str =
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin";
@@ -248,8 +258,8 @@ pub fn install(
         on(Progress::Step("Installing llama.cpp".to_string()));
         std::fs::create_dir_all(&llama_dir)?;
         if find_exe(&llama_dir, "llama-server.exe").is_none() {
-            let assets = github_assets(LLAMA_REPO)?;
-            let pick = pick_llama(&assets, !use_gpu)?;
+            let rel = github_release(LLAMA_REPO)?;
+            let pick = pick_llama(&rel.assets, !use_gpu)?;
             cuda_version = pick.version.clone();
             let blabel = format!("llama.cpp {}", pick.version.as_deref().unwrap_or("CPU"));
             download_and_extract(
@@ -263,6 +273,11 @@ pub fn install(
             if let Some(cu) = &pick.cudart_url {
                 download_and_extract(cu, pick.cudart_size, "CUDA runtime", &llama_dir, cancel, on)?;
             }
+            // Stamp the build tag (e.g. "b9626") so the engine-version gate knows
+            // whether this binary can load the 12B's gemma4uv vision projector, and
+            // so the updater can compare installed-vs-latest. Best-effort: a missing
+            // stamp just means 12B vision stays gated off (safe) until next update.
+            write_build_stamp(&llama_dir, &rel.tag_name);
         }
         // Reuse an existing Gemma (e.g. a prior manual ~\llama.cpp) instead of
         // re-downloading 5 GB.
@@ -814,6 +829,22 @@ pub fn quality_model_present(root: &Path) -> bool {
     file_len(&quality_gguf_path(root)) >= GEMMA12_SIZE
 }
 
+/// True when the 12B's OWN vision projector is downloaded AND complete. The UI
+/// uses it to show "download 12B vision" vs "vision ready". A truncated file
+/// reads as absent (the launch only attaches a present projector).
+#[must_use]
+pub fn quality_vision_present(root: &Path) -> bool {
+    file_len(&root.join("llama.cpp").join(GEMMA12_MMPROJ_FILE)) >= GEMMA12_MMPROJ_SIZE
+}
+
+/// True when the installed llama.cpp is new enough to LOAD the 12B projector
+/// (gemma4uv). The UI uses it to only offer the 12B-vision download on a capable
+/// engine — on an old engine it points the user at "update the engine" instead.
+#[must_use]
+pub fn quality_vision_supported(root: &Path) -> bool {
+    llama_build_supports_gemma4uv(&root.join("llama.cpp"))
+}
+
 /// Pick which llama GGUF to load: the 12B ONLY when the user asked for it AND
 /// the file is actually present+complete; otherwise the always-installed E4B.
 /// Centralised so `ensure_servers` and `install`'s launch agree. Does the disk
@@ -865,19 +896,362 @@ pub fn download_quality_model(
     Ok(())
 }
 
-/// The vision projector to attach for `gguf`, if present on disk. ONLY the E4B
-/// (n_embd 2560 ↔ `mmproj-F32.gguf`) gets one: the bundled llama-server can load
-/// it. The 12B's own projector uses a newer "gemma4uv" type the shipped build
-/// rejects ("unknown projector type") and would crash-loop the server, so the
-/// 12B (and any other model) returns `None` and runs TEXT-ONLY. Returns `None`
-/// when the projector isn't downloaded too (text-only, never a crash).
+/// Download (resumable) + SHA-verify the 12B's OWN vision projector so F8 vision
+/// works on the 12B. Same verify-before-launch discipline as the model download
+/// (P1.5). Saved under a DISTINCT name so it never clobbers the E4B projectors.
+/// Does NOT restart the server — the caller restarts so the projector loads. The
+/// launch path additionally gates attaching it on a gemma4uv-capable engine.
+///
+/// # Errors
+/// Network/disk failure, cancellation, or a SHA-256 mismatch after download.
+pub fn download_quality_vision(
+    root: &Path,
+    cancel: &AtomicBool,
+    on: &dyn Fn(Progress),
+) -> Result<()> {
+    let llama_dir = root.join("llama.cpp");
+    std::fs::create_dir_all(&llama_dir)
+        .with_context(|| format!("create llama dir {}", llama_dir.display()))?;
+    let dest = llama_dir.join(GEMMA12_MMPROJ_FILE);
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    if reuse_if_available(
+        &dest,
+        GEMMA12_MMPROJ_SIZE,
+        GEMMA12_MMPROJ_SHA256,
+        &[home.join("llama.cpp").join(GEMMA12_MMPROJ_FILE)],
+    ) {
+        on(Progress::Step(
+            "Vision-проектор 12B уже загружен".to_string(),
+        ));
+    } else {
+        curl_resumable(
+            GEMMA12_MMPROJ_URL,
+            &dest,
+            GEMMA12_MMPROJ_SIZE,
+            "Vision 12B",
+            cancel,
+            on,
+        )?;
+    }
+    verify_sha256(&dest, GEMMA12_MMPROJ_SHA256, "Gemma 12B vision projector")?;
+    Ok(())
+}
+
+/// The installed llama.cpp release build number (the `bNNNN` tag), read from the
+/// `.llama-build` stamp `install`/the engine-updater write next to the binaries.
+/// `None` when the stamp is missing/unparseable (an old install) → treated as
+/// too-old by the gemma4uv gate (so we stay safe, never crash).
+fn installed_llama_build(llama_dir: &Path) -> Option<u32> {
+    parse_build_tag(&std::fs::read_to_string(llama_dir.join(".llama-build")).ok()?)
+}
+
+/// Parse a llama.cpp build tag (`b9626`, or a bare `9626`) into its number.
+/// `None` for anything unparseable (an old/garbage stamp) → callers treat that
+/// as "too old", staying on the safe side of the gemma4uv gate.
+fn parse_build_tag(tag: &str) -> Option<u32> {
+    tag.trim().trim_start_matches('b').parse::<u32>().ok()
+}
+
+/// Record which llama.cpp build is installed (the `bNNNN` tag, e.g. `b9626`).
+/// Best-effort: a write failure just leaves the gate conservative (12B vision
+/// stays off until the next successful install/update). Trims to keep the stamp
+/// a clean single token regardless of what the GitHub API returned.
+fn write_build_stamp(llama_dir: &Path, tag: &str) {
+    let tag = tag.trim();
+    if !tag.is_empty() {
+        let _ = std::fs::write(llama_dir.join(".llama-build"), tag);
+    }
+}
+
+/// True if the installed llama.cpp is new enough to load the 12B's "gemma4uv"
+/// projector (build >= [`GEMMA4UV_MIN_BUILD`]). A missing/old stamp → false.
+fn llama_build_supports_gemma4uv(llama_dir: &Path) -> bool {
+    installed_llama_build(llama_dir).is_some_and(|b| b >= GEMMA4UV_MIN_BUILD)
+}
+
+/// The vision projector to attach for `gguf`, if present AND loadable. The E4B
+/// (n_embd 2560 ↔ `mmproj-F32.gguf`) always gets its projector. The 12B gets its
+/// OWN `mmproj-12b-F16.gguf` ONLY when (a) it's downloaded AND (b) the installed
+/// llama.cpp is new enough to load its "gemma4uv" type ([`llama_build_supports_gemma4uv`]) —
+/// otherwise the server would die with "unknown projector type" and crash-loop,
+/// so the 12B falls back to TEXT-ONLY. `None` for any other model.
 fn mmproj_for_model(llama_dir: &Path, gguf: &Path) -> Option<PathBuf> {
-    if gguf.file_name().and_then(|n| n.to_str()) == Some(GEMMA_FILE) {
+    let name = gguf.file_name().and_then(|n| n.to_str())?;
+    if name == GEMMA_FILE {
         let proj = llama_dir.join(MMPROJ_FILE);
+        proj.exists().then_some(proj)
+    } else if name == GEMMA12_FILE && llama_build_supports_gemma4uv(llama_dir) {
+        let proj = llama_dir.join(GEMMA12_MMPROJ_FILE);
         proj.exists().then_some(proj)
     } else {
         None
     }
+}
+
+// ---- engine auto-update (keep llama.cpp fresh) -----------------------------
+
+/// How long between unattended boot-time "is there a newer llama.cpp?" checks.
+/// llama.cpp tags builds almost daily; a weekly cadence keeps the engine current
+/// (so the 12B's gemma4uv vision + perf fixes land) without re-pulling ~160 MB
+/// every launch. The manual Settings button bypasses this throttle.
+const ENGINE_UPDATE_THROTTLE_SECS: u64 = 7 * 24 * 60 * 60;
+
+/// Scratch port the verify-before-swap launch binds (never the live :8080).
+const ENGINE_VERIFY_PORT: &str = "8077";
+
+/// Outcome of an engine-update run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EngineUpdate {
+    /// Already on the latest build (or newer) — nothing downloaded.
+    UpToDate { build: u32 },
+    /// Swapped the engine from `from` (None if the old build was unstamped) to
+    /// the new `to` build. The caller should (re)start the server to pick it up.
+    Updated { from: Option<u32>, to: u32 },
+    /// A newer build exists but we did NOT swap (verify failed, download failed,
+    /// or no engine installed). The live engine is UNCHANGED. `reason` is a short
+    /// English log string — never surface it verbatim to the user.
+    Skipped { reason: String },
+}
+
+fn now_unix() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Whether boot should run an engine-update check now: only when an engine is
+/// already installed AND the weekly throttle has elapsed (a missing stamp =
+/// never checked = yes). Keeps boot from hitting GitHub on every launch.
+#[must_use]
+pub fn should_check_engine_update(root: &Path) -> bool {
+    let llama_dir = root.join("llama.cpp");
+    if find_exe(&llama_dir, "llama-server.exe").is_none() {
+        return false; // first install is install()'s job, not the updater's.
+    }
+    match std::fs::read_to_string(llama_dir.join(".update-check"))
+        .ok()
+        .and_then(|s| s.trim().parse::<u64>().ok())
+    {
+        Some(last) => now_unix().saturating_sub(last) >= ENGINE_UPDATE_THROTTLE_SECS,
+        None => true,
+    }
+}
+
+/// Record that an engine-update check ran now (regardless of outcome), so the
+/// throttle holds until the next interval. Best-effort.
+pub fn mark_engine_update_checked(root: &Path) {
+    let stamp = root.join("llama.cpp").join(".update-check");
+    let _ = std::fs::write(stamp, now_unix().to_string());
+}
+
+/// The installed llama.cpp build number, for display ("движок bNNNN"). `None`
+/// when unstamped (an engine installed before stamping existed).
+#[must_use]
+pub fn installed_engine_build(root: &Path) -> Option<u32> {
+    installed_llama_build(&root.join("llama.cpp"))
+}
+
+/// Update the installed llama.cpp engine to the latest ggml-org release **if
+/// newer**, verifying the new binaries actually run on THIS machine BEFORE
+/// swapping the live ones — a regressed build can never brick local AI.
+///
+/// Sequence: compare installed `.llama-build` vs the latest release tag → if not
+/// newer, [`EngineUpdate::UpToDate`]. Otherwise download the GPU/CPU-matched
+/// build (+cudart) into a staging dir, smoke-launch it on a scratch port with the
+/// smallest installed model and wait for `/v1/models` (proves the exe + DLLs +
+/// CUDA init + a model load all work). Only on success: stop the live server,
+/// back up the binaries we overwrite, copy the new ones in (models untouched),
+/// stamp the build. On ANY failure the live engine is left UNCHANGED.
+///
+/// The caller MUST serialize this against the watchdog / install / switch (hold
+/// `local_ai_lock`) and (re)start the server afterwards on `Updated`.
+pub fn update_llama_engine(
+    root: &Path,
+    cancel: &AtomicBool,
+    on: &dyn Fn(Progress),
+) -> Result<EngineUpdate> {
+    let llama_dir = root.join("llama.cpp");
+    if find_exe(&llama_dir, "llama-server.exe").is_none() {
+        return Ok(EngineUpdate::Skipped {
+            reason: "no engine installed".into(),
+        });
+    }
+    let installed = installed_llama_build(&llama_dir);
+
+    on(Progress::Step("Checking for a newer llama.cpp".into()));
+    let rel = github_release(LLAMA_REPO)?;
+    let latest =
+        parse_build_tag(&rel.tag_name).context("latest llama.cpp release has no build tag")?;
+    if installed.is_some_and(|cur| cur >= latest) {
+        return Ok(EngineUpdate::UpToDate { build: latest });
+    }
+    bail_if_cancelled(cancel)?;
+
+    // Download the matching build into a CLEAN staging dir (never touch the live
+    // binaries until the new ones are proven good). The staging dir is a SIBLING
+    // of `llama.cpp` (NOT inside it) so `find_exe(&llama_dir, …)` — which recurses
+    // — can never pick up the half-downloaded staged binary and launch it on :8080.
+    let use_gpu = detect_nvidia();
+    let pick = pick_llama(&rel.assets, !use_gpu)?;
+    let staging = root.join(".llama-staging-update");
+    let _ = std::fs::remove_dir_all(&staging);
+    std::fs::create_dir_all(&staging).context("create engine staging dir")?;
+    let blabel = format!("llama.cpp {} (update)", rel.tag_name);
+    download_and_extract(
+        &pick.build_url,
+        pick.build_size,
+        &blabel,
+        &staging,
+        cancel,
+        on,
+    )?;
+    if let Some(cu) = &pick.cudart_url {
+        download_and_extract(cu, pick.cudart_size, "CUDA runtime", &staging, cancel, on)?;
+    }
+    bail_if_cancelled(cancel)?;
+
+    // Verify-before-swap: prove the staged engine runs on THIS box.
+    on(Progress::Step("Verifying the new engine".into()));
+    let staged_exe = match find_exe(&staging, "llama-server.exe") {
+        Some(e) => e,
+        None => {
+            let _ = std::fs::remove_dir_all(&staging);
+            return Ok(EngineUpdate::Skipped {
+                reason: "staged build missing llama-server.exe".into(),
+            });
+        }
+    };
+    if !verify_engine_runs(&staged_exe, &llama_dir, use_gpu, cancel) {
+        let _ = std::fs::remove_dir_all(&staging);
+        return Ok(EngineUpdate::Skipped {
+            reason: "new build failed to launch — kept the current engine".into(),
+        });
+    }
+
+    // Swap. Free the live :8080 first so its binaries aren't file-locked.
+    on(Progress::Step("Installing the new engine".into()));
+    let _ = stop_listener_on_port(LLAMA_PORT, root);
+    std::thread::sleep(Duration::from_millis(500));
+    let backup_name = installed
+        .map(|b| format!("llama.cpp.backup-b{b}"))
+        .unwrap_or_else(|| "llama.cpp.backup-prev".into());
+    swap_engine_binaries(&staging, &llama_dir, &root.join(backup_name))
+        .context("swap engine binaries")?;
+    let _ = std::fs::remove_dir_all(&staging);
+    write_build_stamp(&llama_dir, &rel.tag_name);
+
+    Ok(EngineUpdate::Updated {
+        from: installed,
+        to: latest,
+    })
+}
+
+/// Launch a staged engine on a scratch port with the smallest installed model
+/// and wait for `/v1/models`. Proves binary + DLL + CUDA + model-load all work
+/// (the regression class that would brick local AI). Falls back to a `--version`
+/// integrity check when no model is on disk yet. Always reaps the test server.
+fn verify_engine_runs(
+    staged_exe: &Path,
+    llama_dir: &Path,
+    use_gpu: bool,
+    cancel: &AtomicBool,
+) -> bool {
+    if cancel.load(Ordering::Relaxed) {
+        return false;
+    }
+    let root = llama_dir.parent().unwrap_or(llama_dir);
+    // Smallest always-present model (E4B, text-only — fast warm-up). Skip the
+    // projector: we're verifying the BINARY, not vision, and a text-only load is
+    // lighter on VRAM/time.
+    let model = {
+        let e4b = llama_dir.join(GEMMA_FILE);
+        let q = llama_dir.join(GEMMA12_FILE);
+        if e4b.exists() {
+            Some(e4b)
+        } else if q.exists() {
+            Some(q)
+        } else {
+            None
+        }
+    };
+    let Some(model) = model else {
+        // No weights yet — at least prove the image + its DLLs load.
+        return run_capture(&staged_exe.to_string_lossy(), &["--version"])
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+    };
+    let _ = stop_listener_on_port(ENGINE_VERIFY_PORT, root);
+    let model_s = model.to_string_lossy().into_owned();
+    let ngl = if use_gpu { "99" } else { "0" };
+    let child = match launch_hidden(
+        staged_exe,
+        &[
+            "-m",
+            &model_s,
+            "--host",
+            "127.0.0.1",
+            "--port",
+            ENGINE_VERIFY_PORT,
+            "-ngl",
+            ngl,
+            "-c",
+            "2048",
+        ],
+    ) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let ok = wait_ready(
+        &format!("http://127.0.0.1:{ENGINE_VERIFY_PORT}/v1/models"),
+        90,
+    )
+    .is_ok();
+    terminate_child_tree(child);
+    let _ = stop_listener_on_port(ENGINE_VERIFY_PORT, root);
+    ok
+}
+
+/// Copy the staged engine files over the live install dir, backing up each live
+/// file we overwrite. The `.gguf` models stay put (they're not in `staging`).
+///
+/// The `.exe` files are copied FIRST: on Windows you cannot overwrite a running
+/// image, so if `llama-server.exe` is still locked the copy fails and we bail
+/// having touched no DLL — never a half-swapped (new-DLL/old-exe) engine.
+fn swap_engine_binaries(staging: &Path, live: &Path, backup: &Path) -> Result<()> {
+    std::fs::create_dir_all(backup).context("create engine backup dir")?;
+    // Only the engine binaries — copying a stray non-binary (e.g. a license txt)
+    // over the live dir is pointless and risks shadowing a model/stamp. The
+    // llama.cpp + cudart zips ship exactly these.
+    let is_engine_file = |p: &Path| {
+        p.extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("exe") || e.eq_ignore_ascii_case("dll"))
+    };
+    let mut files: Vec<PathBuf> = std::fs::read_dir(staging)
+        .context("read staging dir")?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_file() && is_engine_file(p))
+        .collect();
+    files.sort_by_key(|p| {
+        // exes (false → sorts first), then everything else.
+        !p.extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("exe"))
+    });
+    for src in files {
+        let Some(name) = src.file_name() else {
+            continue;
+        };
+        let dst = live.join(name);
+        if dst.exists() {
+            let _ = std::fs::copy(&dst, backup.join(name));
+        }
+        std::fs::copy(&src, &dst)
+            .with_context(|| format!("install engine file {}", name.to_string_lossy()))?;
+    }
+    Ok(())
 }
 
 /// On launch, start the local servers the config points at but that aren't
@@ -979,6 +1353,11 @@ struct GhAsset {
 
 #[derive(Debug, Deserialize)]
 struct GhRelease {
+    /// The release tag, e.g. `b9626` for a llama.cpp build. Used as the
+    /// `.llama-build` stamp so we can later compare installed vs latest and
+    /// gate gemma4uv (12B vision) on a new-enough engine.
+    #[serde(default)]
+    tag_name: String,
     assets: Vec<GhAsset>,
 }
 
@@ -991,7 +1370,7 @@ struct LlamaPick {
     version: Option<String>,
 }
 
-fn github_assets(repo: &str) -> Result<Vec<GhAsset>> {
+fn github_release(repo: &str) -> Result<GhRelease> {
     let url = format!("https://api.github.com/repos/{repo}/releases/latest");
     let out = run_capture(
         "curl.exe",
@@ -1009,9 +1388,14 @@ fn github_assets(repo: &str) -> Result<Vec<GhAsset>> {
     if !out.status.success() {
         bail!("GitHub API request for {repo} failed");
     }
-    let rel: GhRelease = serde_json::from_slice(&out.stdout)
-        .with_context(|| format!("parse release JSON for {repo}"))?;
-    Ok(rel.assets)
+    serde_json::from_slice(&out.stdout).with_context(|| format!("parse release JSON for {repo}"))
+}
+
+/// Just the downloadable assets of the latest release (whisper path + tests
+/// don't need the tag). The llama path uses [`github_release`] to also stamp
+/// the build tag.
+fn github_assets(repo: &str) -> Result<Vec<GhAsset>> {
+    Ok(github_release(repo)?.assets)
 }
 
 /// Parse the CUDA version out of a llama.cpp build asset name, e.g.
@@ -1718,28 +2102,105 @@ mod tests {
         assert_eq!(local_model_label(""), "—");
     }
 
-    /// REGRESSION (fatal): ONLY the E4B may get a projector. The E4B projector
-    /// on the 12B (n_embd mismatch) AND the 12B's own "gemma4uv" projector on the
-    /// bundled llama-server BOTH make it fail model load and exit (crash-loop,
-    /// the user's "сломалась"). So the 12B always runs text-only here, even if a
-    /// projector file is on disk; and the E4B gets its projector only when present.
+    /// The projector-attach rules: E4B always gets its F32 (once present); the
+    /// 12B gets its own projector ONLY when present AND the engine build is
+    /// gemma4uv-capable (`.llama-build` >= GEMMA4UV_MIN_BUILD) — else text-only,
+    /// because an old engine would crash-loop on the gemma4uv type (the user's
+    /// "сломалась"). Other models never get a Gemma projector.
     #[test]
-    fn only_e4b_takes_a_projector() {
+    fn mmproj_attach_rules_e4b_and_gated_12b() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
-        // E4B projector absent → text-only.
+        // E4B projector absent → text-only; present → attached.
         assert!(mmproj_for_model(dir, &dir.join(GEMMA_FILE)).is_none());
         std::fs::write(dir.join(MMPROJ_FILE), b"x").unwrap();
-        // E4B → its F32 once present.
         assert_eq!(
             mmproj_for_model(dir, &dir.join(GEMMA_FILE)),
             Some(dir.join(MMPROJ_FILE))
         );
-        // The 12B NEVER gets a projector here — even if a file is present (its
-        // gemma4uv type would crash the shipped llama-server).
-        std::fs::write(dir.join("mmproj-12b-F16.gguf"), b"x").unwrap();
+        // 12B projector present but NO build stamp → engine assumed too old → none.
+        std::fs::write(dir.join(GEMMA12_MMPROJ_FILE), b"x").unwrap();
         assert!(mmproj_for_model(dir, &dir.join(GEMMA12_FILE)).is_none());
+        // An OLD build stamp (< floor) → still none (would crash-loop).
+        std::fs::write(dir.join(".llama-build"), b"b9410").unwrap();
+        assert!(mmproj_for_model(dir, &dir.join(GEMMA12_FILE)).is_none());
+        // A gemma4uv-capable build → 12B finally gets its projector.
+        std::fs::write(dir.join(".llama-build"), format!("b{GEMMA4UV_MIN_BUILD}")).unwrap();
+        assert_eq!(
+            mmproj_for_model(dir, &dir.join(GEMMA12_FILE)),
+            Some(dir.join(GEMMA12_MMPROJ_FILE))
+        );
+        // Non-Gemma model never gets a Gemma projector.
         assert!(mmproj_for_model(dir, &dir.join("qwen2.5-7b.gguf")).is_none());
+    }
+
+    #[test]
+    fn build_tag_parses_with_or_without_b() {
+        assert_eq!(parse_build_tag("b9626"), Some(9626));
+        assert_eq!(parse_build_tag("  b9626\n"), Some(9626));
+        assert_eq!(parse_build_tag("9626"), Some(9626));
+        assert_eq!(parse_build_tag(""), None);
+        assert_eq!(parse_build_tag("master"), None);
+    }
+
+    /// The engine-update throttle: no engine → never (install()'s job); engine
+    /// present + no stamp → check now; fresh stamp → wait; stale stamp → check.
+    #[test]
+    fn engine_update_throttle() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let llama = root.join("llama.cpp");
+        std::fs::create_dir_all(&llama).unwrap();
+        // No llama-server.exe yet → updater stays out of the way.
+        assert!(!should_check_engine_update(root));
+        // Pretend an engine is installed.
+        std::fs::write(llama.join("llama-server.exe"), b"x").unwrap();
+        // No .update-check stamp → check now.
+        assert!(should_check_engine_update(root));
+        // A fresh stamp → within the throttle window → skip.
+        std::fs::write(llama.join(".update-check"), now_unix().to_string()).unwrap();
+        assert!(!should_check_engine_update(root));
+        // A stamp older than the interval → check again.
+        let stale = now_unix().saturating_sub(ENGINE_UPDATE_THROTTLE_SECS + 1);
+        std::fs::write(llama.join(".update-check"), stale.to_string()).unwrap();
+        assert!(should_check_engine_update(root));
+    }
+
+    /// The binary swap backs up every overwritten live file and copies new ones
+    /// in, and `.gguf` models (absent from staging) are never touched.
+    #[test]
+    fn swap_backs_up_and_overwrites_keeping_models() {
+        let tmp = tempfile::tempdir().unwrap();
+        let live = tmp.path().join("llama.cpp");
+        let staging = tmp.path().join("staging");
+        let backup = tmp.path().join("backup");
+        std::fs::create_dir_all(&live).unwrap();
+        std::fs::create_dir_all(&staging).unwrap();
+        // Live: old engine + a precious model.
+        std::fs::write(live.join("llama-server.exe"), b"OLD-EXE").unwrap();
+        std::fs::write(live.join("ggml.dll"), b"OLD-DLL").unwrap();
+        std::fs::write(live.join("gemma.gguf"), b"MODEL").unwrap();
+        // Staging: new engine binaries only (no model).
+        std::fs::write(staging.join("llama-server.exe"), b"NEW-EXE").unwrap();
+        std::fs::write(staging.join("ggml.dll"), b"NEW-DLL").unwrap();
+
+        swap_engine_binaries(&staging, &live, &backup).unwrap();
+
+        // New binaries are in place.
+        assert_eq!(
+            std::fs::read(live.join("llama-server.exe")).unwrap(),
+            b"NEW-EXE"
+        );
+        assert_eq!(std::fs::read(live.join("ggml.dll")).unwrap(), b"NEW-DLL");
+        // The model is untouched.
+        assert_eq!(std::fs::read(live.join("gemma.gguf")).unwrap(), b"MODEL");
+        // The old binaries are backed up; the model was not (never overwritten).
+        assert_eq!(
+            std::fs::read(backup.join("llama-server.exe")).unwrap(),
+            b"OLD-EXE"
+        );
+        assert_eq!(std::fs::read(backup.join("ggml.dll")).unwrap(), b"OLD-DLL");
+        assert!(!backup.join("gemma.gguf").exists());
     }
 
     /// v0.10.2 — the GigaAM vocab is BUNDLED (include_bytes) so the install never

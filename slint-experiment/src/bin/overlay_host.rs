@@ -761,9 +761,13 @@ fn main() -> Result<(), slint::PlatformError> {
         let overlay_w = overlay.as_weak();
         std::thread::spawn(move || {
             let root = overlay_backend::local_ai::default_root();
+            // Bring the local servers UP FIRST (on the CURRENT engine) so AI + STT
+            // are available immediately; the throttled engine refresh further down
+            // then runs BEHIND the running servers, so a slow ~160 MB download can
+            // never delay first AI/STT availability (review I1).
+            //
             // One-time best-effort STT launch. Whisper has not shown llama's
-            // dies-on-boot fragility; ensure_servers skips it if it already
-            // answers.
+            // dies-on-boot fragility; ensure_servers skips it if it already answers.
             let want_whisper = {
                 let c = cfg_w.read();
                 c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081")
@@ -777,6 +781,68 @@ fn main() -> Result<(), slint::PlatformError> {
                         .local_ai_servers
                         .extend(started);
                 }
+            }
+            // Best-effort llama launch on the current engine. The watchdog loop
+            // below also (re)starts it, but doing it here means local AI is up
+            // BEFORE the engine-update block claims the lifecycle lock for a
+            // potentially long download.
+            {
+                let (want_llama, prefer_quality) = {
+                    let c = cfg_w.read();
+                    (
+                        c.ai_provider == "local" && c.ai_local_base_url.contains(":8080"),
+                        c.ai_local_quality,
+                    )
+                };
+                if want_llama {
+                    let started = overlay_backend::local_ai::ensure_servers(
+                        &root,
+                        true,
+                        false,
+                        prefer_quality,
+                    );
+                    if !started.is_empty() {
+                        state_w
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .local_ai_servers
+                            .extend(started);
+                    }
+                }
+            }
+            // v0.18.2 — keep llama.cpp fresh: a throttled (weekly) auto-update of
+            // the engine so the local model stays fast and 12B vision (gemma4uv)
+            // works without the user ever touching it. Runs ONCE at boot, BEHIND
+            // the servers started above, under the lifecycle lock so it can't race
+            // the watchdog/install. Verify-before-swap inside means a bad build can
+            // never brick local AI — on any failure the engine is left as-is. On a
+            // real swap :8080 is stopped; the watchdog loop below brings the new
+            // binary up within one tick.
+            if overlay_backend::local_ai::should_check_engine_update(&root) {
+                let lifecycle_lock = {
+                    let s = state_w.lock().unwrap_or_else(|p| p.into_inner());
+                    s.local_ai_lock.clone()
+                };
+                let guard = lifecycle_lock.lock().unwrap_or_else(|p| p.into_inner());
+                let no_cancel = std::sync::atomic::AtomicBool::new(false);
+                match overlay_backend::local_ai::update_llama_engine(&root, &no_cancel, &|p| {
+                    if let overlay_backend::local_ai::Progress::Step(s) = p {
+                        diag!("engine auto-update: {s}");
+                    }
+                }) {
+                    Ok(overlay_backend::local_ai::EngineUpdate::Updated { from, to }) => {
+                        diag!("llama.cpp auto-updated {from:?} -> b{to}");
+                    }
+                    Ok(overlay_backend::local_ai::EngineUpdate::UpToDate { build }) => {
+                        diag!("llama.cpp already current (b{build})");
+                    }
+                    Ok(overlay_backend::local_ai::EngineUpdate::Skipped { reason }) => {
+                        diag!("llama.cpp engine update skipped: {reason}");
+                    }
+                    Err(e) => diag!("llama.cpp engine update check failed: {e:#}"),
+                }
+                drop(guard);
+                overlay_backend::local_ai::mark_engine_update_checked(&root);
             }
             let mut last_attempt: Option<std::time::Instant> = None;
             let mut consecutive_fails: u32 = 0;

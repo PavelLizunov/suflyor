@@ -1065,9 +1065,23 @@ pub(crate) fn populate_token_status(
     win.set_ai_local_thinking(c.ai_local_thinking);
     // v0.18.0 — local model size choice + whether the 12B is downloaded yet.
     win.set_ai_local_quality(c.ai_local_quality);
-    win.set_quality_model_present(overlay_backend::local_ai::quality_model_present(
-        &overlay_backend::local_ai::default_root(),
-    ));
+    {
+        let root = overlay_backend::local_ai::default_root();
+        win.set_quality_model_present(overlay_backend::local_ai::quality_model_present(&root));
+        // v0.18.2 — 12B vision projector state + engine build (drives the
+        // download-projector button / "update engine first" hint / Installed: bNNNN).
+        win.set_quality_vision_present(overlay_backend::local_ai::quality_vision_present(&root));
+        win.set_quality_vision_supported(overlay_backend::local_ai::quality_vision_supported(
+            &root,
+        ));
+        win.set_engine_build(SharedString::from(
+            overlay_backend::local_ai::installed_engine_build(&root)
+                .map(|b| format!("b{b}"))
+                .unwrap_or_default(),
+        ));
+        win.set_vision12b_status(blank());
+        win.set_engine_update_status(blank());
+    }
     // Phase E10 — STT provider selector + local-engine fields.
     win.set_stt_provider_index(match c.stt_provider.as_str() {
         "gigaam" => 1,

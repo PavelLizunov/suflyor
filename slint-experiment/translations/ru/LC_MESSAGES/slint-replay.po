@@ -691,6 +691,27 @@ msgstr "Загрузка…"
 msgid "The 12B model is noticeably smarter but ~2× slower and needs ~10 GB of video memory (VRAM). On a weaker GPU keep 4B."
 msgstr "Модель 12B заметно умнее, но примерно вдвое медленнее и требует ~10 ГБ видеопамяти (VRAM). На слабой видеокарте оставьте 4B."
 
+msgid "12B vision projector installed — used when the 12B is the active model."
+msgstr "Проектор зрения 12B установлен — задействуется, когда активна модель 12B."
+
+msgid "Enable vision on 12B — download projector (175 MB)"
+msgstr "Включить зрение на 12B — скачать проектор (175 МБ)"
+
+msgid "12B vision needs a newer engine — use Update engine below."
+msgstr "Для зрения 12B нужен более новый движок — нажмите «Обновить движок» ниже."
+
+msgid "Engine (llama.cpp). The app keeps it up to date automatically (checked weekly) so the local model stays fast and 12B vision works. A new build is verified to run before it replaces the current one."
+msgstr "Движок (llama.cpp). Приложение само поддерживает его актуальным (проверка раз в неделю), чтобы локальная модель работала быстро и зрение 12B функционировало. Новая сборка проверяется на запуск перед заменой текущей."
+
+msgid "Update engine"
+msgstr "Обновить движок"
+
+msgid "Updating…"
+msgstr "Обновление…"
+
+msgid "Installed: {}"
+msgstr "Установлено: {}"
+
 msgid "Install local AI"
 msgstr "Установить локальный AI"
 

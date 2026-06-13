@@ -437,4 +437,229 @@ pub(crate) fn wire_local_ai(
             });
         });
     }
+
+    // v0.18.2 — download the 12B vision projector (gemma4uv, ~175 MB). On success,
+    // if the 12B is the ACTIVE model, relaunch :8080 so the projector attaches and
+    // F8 vision works on the 12B. Same worker/progress pattern as the 12B download.
+    {
+        let cfg_c = cfg.clone();
+        let state_c = state.clone();
+        let weak = win.as_weak();
+        win.on_download_vision12b_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            if w.get_vision12b_downloading() {
+                return; // re-entry guard
+            }
+            w.set_vision12b_downloading(true);
+            w.set_vision12b_status(SharedString::from("Подготовка…"));
+            let cancel = {
+                let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
+                s.local_ai_cancel.clone()
+            };
+            cancel.store(false, std::sync::atomic::Ordering::Relaxed);
+            let cfg_t = cfg_c.clone();
+            let state_t = state_c.clone();
+            let weak_t = w.as_weak();
+            std::thread::spawn(move || {
+                let on = {
+                    let weak_p = weak_t.clone();
+                    move |p: overlay_backend::local_ai::Progress| {
+                        let weak_p = weak_p.clone();
+                        let _ = slint::invoke_from_event_loop(move || {
+                            let Some(w) = weak_p.upgrade() else { return };
+                            match p {
+                                overlay_backend::local_ai::Progress::Step(s) => {
+                                    w.set_vision12b_status(SharedString::from(s));
+                                }
+                                overlay_backend::local_ai::Progress::Bytes {
+                                    label,
+                                    done,
+                                    total,
+                                } => {
+                                    let mb = |b: u64| (b as f64) / 1_048_576.0;
+                                    w.set_vision12b_status(SharedString::from(format!(
+                                        "{label}: {:.0} / {:.0} MB",
+                                        mb(done),
+                                        mb(total)
+                                    )));
+                                }
+                                overlay_backend::local_ai::Progress::Gpu(_) => {}
+                            }
+                        });
+                    }
+                };
+                let root = overlay_backend::local_ai::default_root();
+                let res = overlay_backend::local_ai::download_quality_vision(&root, &cancel, &on);
+                // On success, if the 12B is active, relaunch :8080 with the
+                // projector. Hold the lifecycle lock ONLY for the restart so the
+                // long download never blocks the watchdog. RAII release.
+                let restarted = if res.is_ok() && cfg_t.read().ai_local_quality {
+                    let lifecycle_lock = {
+                        let s = state_t.lock().unwrap_or_else(|p| p.into_inner());
+                        s.local_ai_lock.clone()
+                    };
+                    let _ai_guard = lifecycle_lock.lock().unwrap_or_else(|p| p.into_inner());
+                    let want_whisper = {
+                        let c = cfg_t.read();
+                        c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081")
+                    };
+                    let (outcome, started) =
+                        overlay_backend::local_ai::switch_local_model(&root, true, want_whisper);
+                    let ok = outcome == overlay_backend::local_ai::ModelSwitch::Switched;
+                    {
+                        let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
+                        s.local_ai_servers
+                            .retain_mut(|c| !matches!(c.try_wait(), Ok(Some(_))));
+                        if ok {
+                            s.local_ai_servers.extend(started);
+                        } else {
+                            overlay_backend::local_ai::terminate_servers(started);
+                        }
+                    }
+                    ok
+                } else {
+                    false
+                };
+                let weak_done = weak_t.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    let Some(w) = weak_done.upgrade() else { return };
+                    w.set_vision12b_downloading(false);
+                    match res {
+                        Ok(()) => {
+                            w.set_quality_vision_present(true);
+                            w.set_vision12b_status(SharedString::from(if restarted {
+                                "Зрение 12B включено — F8 теперь работает на 12B."
+                            } else {
+                                "Проектор загружен. Включите «Умнее (12B)», чтобы заработало зрение."
+                            }));
+                        }
+                        Err(e) => {
+                            let cancelled = e
+                                .to_string()
+                                .contains(overlay_backend::local_ai::CANCEL_SENTINEL);
+                            if cancelled {
+                                w.set_vision12b_status(SharedString::from("Отменено."));
+                            } else {
+                                eprintln!("[overlay-host] 12B vision projector download failed: {e:#}");
+                                w.set_vision12b_status(SharedString::from(
+                                    "Не удалось загрузить проектор зрения. Попробуйте ещё раз.",
+                                ));
+                            }
+                        }
+                    }
+                });
+            });
+        });
+    }
+
+    // v0.18.2 — manual "Update engine": pull the latest llama.cpp, verify it runs
+    // on this PC, then swap it in (verify-before-swap keeps a bad build from
+    // breaking local AI). On a real update the live server was stopped, so we
+    // relaunch it with the user's preferred model. Bypasses the weekly throttle.
+    {
+        let cfg_c = cfg.clone();
+        let state_c = state.clone();
+        let weak = win.as_weak();
+        win.on_update_engine_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            if w.get_engine_updating() {
+                return; // re-entry guard
+            }
+            w.set_engine_updating(true);
+            w.set_engine_update_status(SharedString::from("Проверяю обновление движка…"));
+            let cancel = {
+                let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
+                s.local_ai_cancel.clone()
+            };
+            cancel.store(false, std::sync::atomic::Ordering::Relaxed);
+            let cfg_t = cfg_c.clone();
+            let state_t = state_c.clone();
+            let weak_t = w.as_weak();
+            std::thread::spawn(move || {
+                let on = {
+                    let weak_p = weak_t.clone();
+                    move |p: overlay_backend::local_ai::Progress| {
+                        let weak_p = weak_p.clone();
+                        let _ = slint::invoke_from_event_loop(move || {
+                            let Some(w) = weak_p.upgrade() else { return };
+                            match p {
+                                overlay_backend::local_ai::Progress::Step(s) => {
+                                    w.set_engine_update_status(SharedString::from(s));
+                                }
+                                overlay_backend::local_ai::Progress::Bytes {
+                                    label,
+                                    done,
+                                    total,
+                                } => {
+                                    let mb = |b: u64| (b as f64) / 1_048_576.0;
+                                    w.set_engine_update_status(SharedString::from(format!(
+                                        "{label}: {:.0} / {:.0} MB",
+                                        mb(done),
+                                        mb(total)
+                                    )));
+                                }
+                                overlay_backend::local_ai::Progress::Gpu(_) => {}
+                            }
+                        });
+                    }
+                };
+                let root = overlay_backend::local_ai::default_root();
+                // Own the lifecycle lock for the whole check/swap so the watchdog
+                // can't race the binary swap. RAII release covers every path.
+                let lifecycle_lock = {
+                    let s = state_t.lock().unwrap_or_else(|p| p.into_inner());
+                    s.local_ai_lock.clone()
+                };
+                let _ai_guard = lifecycle_lock.lock().unwrap_or_else(|p| p.into_inner());
+                let res = overlay_backend::local_ai::update_llama_engine(&root, &cancel, &on);
+                overlay_backend::local_ai::mark_engine_update_checked(&root);
+                // A real swap stopped :8080 — relaunch with the preferred model so
+                // local AI stays up on the new engine.
+                if matches!(
+                    res,
+                    Ok(overlay_backend::local_ai::EngineUpdate::Updated { .. })
+                ) {
+                    let prefer_quality = cfg_t.read().ai_local_quality;
+                    let (outcome, started) =
+                        overlay_backend::local_ai::ensure_llama_serving(&root, prefer_quality);
+                    let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
+                    s.local_ai_servers
+                        .retain_mut(|c| !matches!(c.try_wait(), Ok(Some(_))));
+                    if outcome == overlay_backend::local_ai::ModelSwitch::Switched {
+                        s.local_ai_servers.extend(started);
+                    } else {
+                        overlay_backend::local_ai::terminate_servers(started);
+                    }
+                }
+                let build = overlay_backend::local_ai::installed_engine_build(&root);
+                let supported = overlay_backend::local_ai::quality_vision_supported(&root);
+                let weak_done = weak_t.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    let Some(w) = weak_done.upgrade() else { return };
+                    w.set_engine_updating(false);
+                    if let Some(b) = build {
+                        w.set_engine_build(SharedString::from(format!("b{b}")));
+                    }
+                    // The engine may now (or no longer) support 12B vision.
+                    w.set_quality_vision_supported(supported);
+                    let msg = match res {
+                        Ok(overlay_backend::local_ai::EngineUpdate::UpToDate { .. }) => {
+                            "Движок уже последней версии.".to_string()
+                        }
+                        Ok(overlay_backend::local_ai::EngineUpdate::Updated { to, .. }) => {
+                            format!("Движок обновлён до b{to}.")
+                        }
+                        Ok(overlay_backend::local_ai::EngineUpdate::Skipped { .. }) => {
+                            "Обновление пропущено — оставлен текущий движок.".to_string()
+                        }
+                        Err(e) => {
+                            eprintln!("[overlay-host] engine update failed: {e:#}");
+                            "Не удалось проверить обновление движка.".to_string()
+                        }
+                    };
+                    w.set_engine_update_status(SharedString::from(msg));
+                });
+            });
+        });
+    }
 }
