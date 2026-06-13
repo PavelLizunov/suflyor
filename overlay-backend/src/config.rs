@@ -84,6 +84,14 @@ pub struct Config {
     /// model to think. Only affects the LOCAL provider.
     #[serde(default)]
     pub ai_local_thinking: bool,
+    /// Local LLM size preference: `false` (default) = the fast ~4B model
+    /// (Gemma 4 E4B), `true` = the smarter but ~2× slower 12B (Gemma 4 12B
+    /// QAT). The local server loads ONE GGUF; flipping this restarts
+    /// llama-server with the other file. `true` is honoured only when the 12B
+    /// GGUF is actually present on disk (downloaded on demand from Settings),
+    /// else we transparently fall back to the 4B so the server always starts.
+    #[serde(default)]
+    pub ai_local_quality: bool,
 
     /// Screenshot/vision channel — resolved INDEPENDENTLY of the text AI (via
     /// [`Config::vision_endpoint`]) so a local text model can keep answering
@@ -482,6 +490,7 @@ impl Config {
             ai_local_prep_model: String::new(),
             ai_local_vision: false,
             ai_local_thinking: false,
+            ai_local_quality: false,
             vision_provider: default_vision_provider(),
             vision_base_url: String::new(),
             vision_bearer: String::new(),

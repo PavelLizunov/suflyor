@@ -648,19 +648,24 @@ fn main() -> Result<(), slint::PlatformError> {
     // app's own servers are gone — it kills them on quit). Off the UI thread;
     // tracked in app_state for kill-on-quit.
     {
-        let (want_llama, want_whisper) = {
+        let (want_llama, want_whisper, prefer_quality) = {
             let c = cfg.read();
             (
                 c.ai_provider == "local" && c.ai_local_base_url.contains(":8080"),
                 c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081"),
+                c.ai_local_quality,
             )
         };
         if want_llama || want_whisper {
             let state_auto = state.clone();
             std::thread::spawn(move || {
                 let root = overlay_backend::local_ai::default_root();
-                let started =
-                    overlay_backend::local_ai::ensure_servers(&root, want_llama, want_whisper);
+                let started = overlay_backend::local_ai::ensure_servers(
+                    &root,
+                    want_llama,
+                    want_whisper,
+                    prefer_quality,
+                );
                 if !started.is_empty() {
                     state_auto
                         .lock()

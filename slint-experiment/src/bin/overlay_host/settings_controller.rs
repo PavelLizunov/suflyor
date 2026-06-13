@@ -1033,6 +1033,11 @@ pub(crate) fn populate_token_status(
     win.set_vision_phonetics(c.vision_phonetics);
     win.set_vision_test_practice(c.vision_test_practice);
     win.set_ai_local_thinking(c.ai_local_thinking);
+    // v0.18.0 — local model size choice + whether the 12B is downloaded yet.
+    win.set_ai_local_quality(c.ai_local_quality);
+    win.set_quality_model_present(overlay_backend::local_ai::quality_model_present(
+        &overlay_backend::local_ai::default_root(),
+    ));
     // Phase E10 — STT provider selector + local-engine fields.
     win.set_stt_provider_index(match c.stt_provider.as_str() {
         "gigaam" => 1,

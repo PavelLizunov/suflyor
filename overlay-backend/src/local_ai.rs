@@ -33,6 +33,17 @@ const GEMMA_SIZE: u64 = 4_977_169_568;
 // swapped bytes (P1.5).
 const GEMMA_SHA256: &str = "519b9793ed6ce0ff530f1b7c96e848e08e49e7af4d57bb97f76215963a54146d";
 
+// ---- OPTIONAL "smarter" model: Gemma 4 12B QAT (downloaded on demand) -------
+// Same family/prompt as E4B (so the vision projector + chat template still fit),
+// QAT 4-bit ≈ bf16 quality. ~2× slower than E4B + ~9.5 GB VRAM (bench 2026-06-13),
+// so it is NOT bundled in the installer — the user pulls it from Settings when
+// they want "smarter", and the app loads it instead of E4B when ai_local_quality
+// is on AND this file is present. SHA-256 pinned (verify-before-launch, P1.5).
+const GEMMA12_URL: &str = "https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/main/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf";
+const GEMMA12_FILE: &str = "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf";
+const GEMMA12_SIZE: u64 = 6_716_355_328;
+const GEMMA12_SHA256: &str = "cc9ff072e0a8203429ed854e6662c17a6c2bc1e5dca5b475dd4736caaacbc165";
+
 // Vision projector for Gemma 4 (multimodal). Loaded via llama-server `--mmproj`
 // so the SAME local model reads images — F8 screenshots stay fully local with no
 // cloud egress. Same HuggingFace repo as the model. We ship F32 (full precision)
@@ -646,14 +657,155 @@ fn stop_listener_on_port(_port: &str, _root: &Path) -> bool {
     true
 }
 
+/// Free the llama port (:8080) owner-aware so a model switch can relaunch the
+/// server with the OTHER GGUF — covers a server we manage AND one an external
+/// `setup-local-ai.ps1` started (same exe under `root`), which `ensure_servers`
+/// would otherwise see still answering and skip. Whisper (:8081) is untouched,
+/// so switching the LLM never disturbs local STT. Returns true if the port is
+/// free of FOREIGN listeners afterwards (one we can't/won't kill → false).
+pub fn free_llama_port(root: &Path) -> bool {
+    stop_listener_on_port(LLAMA_PORT, root)
+}
+
+/// Honest outcome of a [`switch_local_model`] so the UI never claims success
+/// when the new server didn't actually come up (review v0.18.0).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModelSwitch {
+    /// :8080 now answers with the requested GGUF loaded.
+    Switched,
+    /// A FOREIGN process holds :8080 (started outside our `root`) we won't
+    /// force-kill — the OLD model keeps serving, so the switch did NOT happen.
+    PortBusy,
+    /// Freed + relaunched but the server never became reachable in time
+    /// (missing binary/GGUF, failed bind, or still cold-loading past the wait).
+    FailedToStart,
+}
+
+/// Restart llama-server with the GGUF `prefer_quality` selects: free :8080
+/// owner-aware, relaunch via [`ensure_servers`], then POLL `/models` until the
+/// fresh server answers (model load is a few seconds; 12B cold ≈ 5 s). Returns
+/// the honest [`ModelSwitch`] + any launched child handles. Whisper (:8081) is
+/// left alone. Call from a worker thread (it blocks up to ~20 s).
+#[must_use]
+pub fn switch_local_model(
+    root: &Path,
+    prefer_quality: bool,
+    want_whisper: bool,
+) -> (ModelSwitch, Vec<Child>) {
+    // A foreign owner we can't kill means the old model stays up — don't lie.
+    if !free_llama_port(root) {
+        return (ModelSwitch::PortBusy, Vec::new());
+    }
+    // Let the OS release the port before the relaunch binds it.
+    std::thread::sleep(Duration::from_millis(800));
+    let started = ensure_servers(root, true, want_whisper, prefer_quality);
+    let url = format!("{LLAMA_BASE_URL}/models");
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while Instant::now() < deadline {
+        if is_reachable(&url) {
+            return (ModelSwitch::Switched, started);
+        }
+        std::thread::sleep(Duration::from_millis(400));
+    }
+    (ModelSwitch::FailedToStart, started)
+}
+
+/// Basename of the GGUF [`selected_llama_gguf`] would load — so callers keep
+/// `config.ai_local_model` (the bar's active-stack readout) in sync with the
+/// model actually serving. Pure string pick mirroring [`pick_llama_gguf`].
+#[must_use]
+pub fn active_local_model_name(root: &Path, prefer_quality: bool) -> String {
+    pick_llama_gguf(
+        &root.join("llama.cpp"),
+        prefer_quality,
+        quality_model_present(root),
+    )
+    .file_name()
+    .map(|s| s.to_string_lossy().into_owned())
+    .unwrap_or_default()
+}
+
+/// Absolute path the optional 12B "smarter" GGUF lives at (whether or not it
+/// has been downloaded yet) under an install `root`.
+#[must_use]
+pub fn quality_gguf_path(root: &Path) -> PathBuf {
+    root.join("llama.cpp").join(GEMMA12_FILE)
+}
+
+/// True when the 12B model is downloaded AND complete (size matches the pin) —
+/// the cheap presence check the UI uses to show "download" vs "switch". A
+/// truncated/partial file reads as absent so the user is offered the download
+/// again (the launch path also falls back to E4B on a bad file).
+#[must_use]
+pub fn quality_model_present(root: &Path) -> bool {
+    file_len(&quality_gguf_path(root)) >= GEMMA12_SIZE
+}
+
+/// Pick which llama GGUF to load: the 12B ONLY when the user asked for it AND
+/// the file is actually present+complete; otherwise the always-installed E4B.
+/// Centralised so `ensure_servers` and `install`'s launch agree. Does the disk
+/// check then defers the choice to the pure [`pick_llama_gguf`] (unit-tested
+/// without materialising a 6 GB file).
+fn selected_llama_gguf(llama_dir: &Path, prefer_quality: bool) -> PathBuf {
+    let present = file_len(&llama_dir.join(GEMMA12_FILE)) >= GEMMA12_SIZE;
+    pick_llama_gguf(llama_dir, prefer_quality, present)
+}
+
+/// Pure model-choice rule (no I/O): 12B only when wanted AND present.
+fn pick_llama_gguf(llama_dir: &Path, prefer_quality: bool, quality_present: bool) -> PathBuf {
+    if prefer_quality && quality_present {
+        llama_dir.join(GEMMA12_FILE)
+    } else {
+        llama_dir.join(GEMMA_FILE)
+    }
+}
+
+/// Download (resumable) + SHA-verify the optional 12B model into `root`, on
+/// demand from Settings. Mirrors the installer's download→verify discipline
+/// (P1.5: a tampered byte-stream fails the pinned hash and the partial file is
+/// left for a clean re-pull, never launched). Does NOT restart the server —
+/// the caller flips `ai_local_quality` and restarts so the new GGUF loads.
+///
+/// # Errors
+/// Network/disk failure, cancellation, or a SHA-256 mismatch after download.
+pub fn download_quality_model(
+    root: &Path,
+    cancel: &AtomicBool,
+    on: &dyn Fn(Progress),
+) -> Result<()> {
+    let llama_dir = root.join("llama.cpp");
+    std::fs::create_dir_all(&llama_dir)
+        .with_context(|| format!("create llama dir {}", llama_dir.display()))?;
+    let dest = llama_dir.join(GEMMA12_FILE);
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    if reuse_if_available(
+        &dest,
+        GEMMA12_SIZE,
+        GEMMA12_SHA256,
+        &[home.join("llama.cpp").join(GEMMA12_FILE)],
+    ) {
+        on(Progress::Step("Умная модель уже загружена".to_string()));
+    } else {
+        curl_resumable(GEMMA12_URL, &dest, GEMMA12_SIZE, "Gemma 12B", cancel, on)?;
+    }
+    verify_sha256(&dest, GEMMA12_SHA256, "Gemma 12B model")?;
+    Ok(())
+}
+
 /// On launch, start the local servers the config points at but that aren't
 /// already running (the app kills its servers on quit, so after a restart
 /// following an in-app install they'd be down). Uses the binaries + models
 /// under `root` (the installer/script layout); skips a server whose port
-/// already answers. Best-effort — a missing binary just means that server is
-/// not started. Returns the launched child handles for kill-on-quit tracking.
+/// already answers. `prefer_quality` picks the 12B GGUF when present (see
+/// [`selected_llama_gguf`]). Best-effort — a missing binary just means that
+/// server is not started. Returns the launched child handles for kill-on-quit.
 #[must_use]
-pub fn ensure_servers(root: &Path, want_llama: bool, want_whisper: bool) -> Vec<Child> {
+pub fn ensure_servers(
+    root: &Path,
+    want_llama: bool,
+    want_whisper: bool,
+    prefer_quality: bool,
+) -> Vec<Child> {
     let mut started = Vec::new();
     let use_gpu = detect_nvidia();
     // NOTE: deliberately launch-only — do NOT kill+relaunch a server that is
@@ -665,7 +817,7 @@ pub fn ensure_servers(root: &Path, want_llama: bool, want_whisper: bool) -> Vec<
     // stop_listener_on_port still frees :8080 for a fresh install.
     if want_llama && !is_reachable(&format!("{LLAMA_BASE_URL}/models")) {
         let llama_dir = root.join("llama.cpp");
-        let gguf = llama_dir.join(GEMMA_FILE);
+        let gguf = selected_llama_gguf(&llama_dir, prefer_quality);
         let mmproj = llama_dir.join(MMPROJ_FILE);
         if let Some(exe) = find_exe(&llama_dir, "llama-server.exe") {
             if gguf.exists() {
@@ -1409,6 +1561,53 @@ mod tests {
             browser_download_url: format!("https://example/{name}"),
             size: 123,
         }
+    }
+
+    /// v0.18.0 — the "smarter/faster" model picker. The 12B is chosen ONLY when
+    /// the user asked for quality AND a complete file is present; everything
+    /// else (quality-off, file absent, file truncated) falls back to the
+    /// always-installed E4B so the server can never fail to find a model.
+    #[test]
+    fn pick_llama_gguf_prefers_12b_only_when_present_and_wanted() {
+        let dir = Path::new("C:/root/llama.cpp");
+        let e4b = dir.join(GEMMA_FILE);
+        let q = dir.join(GEMMA12_FILE);
+        // 12B only when BOTH wanted AND present; every other combo → E4B.
+        assert_eq!(pick_llama_gguf(dir, true, true), q);
+        assert_eq!(pick_llama_gguf(dir, true, false), e4b); // wanted, absent
+        assert_eq!(pick_llama_gguf(dir, false, true), e4b); // present, not wanted
+        assert_eq!(pick_llama_gguf(dir, false, false), e4b);
+    }
+
+    /// A truncated/partial 12B (smaller than the pinned size) must read as
+    /// ABSENT so the user is re-offered the download and the launch path falls
+    /// back to E4B instead of handing llama-server a corrupt file.
+    #[test]
+    fn quality_model_present_rejects_truncated_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join("llama.cpp")).unwrap();
+        assert!(!quality_model_present(root), "absent file → not present");
+        std::fs::write(quality_gguf_path(root), b"partial").unwrap();
+        assert!(!quality_model_present(root), "truncated file → not present");
+    }
+
+    #[test]
+    fn quality_gguf_path_is_under_llama_dir() {
+        let p = quality_gguf_path(Path::new("C:/root"));
+        assert!(p.ends_with(GEMMA12_FILE));
+        assert!(p.to_string_lossy().contains("llama.cpp"));
+    }
+
+    /// The bar's active-model label must follow the pick: quality-off (or 12B
+    /// absent) → the E4B basename. (Quality-on+present needs a 6 GB file, so the
+    /// 12B branch is covered by `pick_llama_gguf` above, not here.)
+    #[test]
+    fn active_local_model_name_reports_e4b_when_not_quality() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert_eq!(active_local_model_name(tmp.path(), false), GEMMA_FILE);
+        // quality wanted but 12B absent → still E4B (safe fallback).
+        assert_eq!(active_local_model_name(tmp.path(), true), GEMMA_FILE);
     }
 
     /// v0.10.2 — the GigaAM vocab is BUNDLED (include_bytes) so the install never

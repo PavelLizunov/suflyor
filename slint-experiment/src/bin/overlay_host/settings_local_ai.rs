@@ -190,7 +190,8 @@ pub(crate) fn wire_local_ai(
     }
 
     // E10.4 — Cancel button: flip the shared cancel flag the install worker
-    // thread + the curl poll loop watch.
+    // thread + the curl poll loop watch. Shared with the 12B download (same
+    // flag), so one Cancel button serves both long downloads.
     {
         let state_c = state.clone();
         let weak = win.as_weak();
@@ -202,7 +203,198 @@ pub(crate) fn wire_local_ai(
             }
             if let Some(w) = weak.upgrade() {
                 w.set_local_ai_status(SharedString::from("Отмена…"));
+                w.set_quality_status(SharedString::from("Отмена…"));
             }
+        });
+    }
+
+    // v0.18.0 — "faster (4B) ↔ smarter (12B)" switch. Persists the choice, then
+    // (off the UI thread) frees :8080 owner-aware and relaunches llama-server
+    // with the OTHER GGUF. STT (:8081) is left alone. The 12B button is only
+    // enabled when the file is present, so the relaunch can always find a model
+    // (selected_llama_gguf falls back to 4B otherwise).
+    {
+        let cfg_c = cfg.clone();
+        let state_c = state.clone();
+        let overlay_c = overlay_weak.clone();
+        let weak = win.as_weak();
+        win.on_model_quality_changed(move |want_quality| {
+            let Some(w) = weak.upgrade() else { return };
+            // Re-entry guard (review #3): the Slint `enabled:` bindings only
+            // block the SAME button, so a fast opposite-button click during the
+            // relaunch could double-launch :8080. `model-switching` gates both.
+            if w.get_model_switching() {
+                return;
+            }
+            w.set_model_switching(true);
+            {
+                let mut c = cfg_c.write();
+                c.ai_local_quality = want_quality;
+                if let Err(e) = overlay_backend::config::save(&c) {
+                    eprintln!("[overlay-host] quality switch save failed: {e:#}");
+                }
+            }
+            w.set_ai_local_quality(want_quality);
+            w.set_quality_status(SharedString::from(if want_quality {
+                "Переключаю на умную модель (12B)…"
+            } else {
+                "Переключаю на быструю модель (4B)…"
+            }));
+            let cfg_t = cfg_c.clone();
+            let state_t = state_c.clone();
+            let overlay_t = overlay_c.clone();
+            let weak_t = w.as_weak();
+            std::thread::spawn(move || {
+                let root = overlay_backend::local_ai::default_root();
+                let want_whisper = {
+                    let c = cfg_t.read();
+                    c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081")
+                };
+                // Backend frees :8080 owner-aware, relaunches with the chosen
+                // GGUF, and POLLS until it answers — returning the honest
+                // outcome (review #1/#2) instead of a blind "done".
+                let (outcome, started) = overlay_backend::local_ai::switch_local_model(
+                    &root,
+                    want_quality,
+                    want_whisper,
+                );
+                let switched = outcome == overlay_backend::local_ai::ModelSwitch::Switched;
+                {
+                    let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
+                    // Drop dead handles (the old llama we just port-killed) so
+                    // the vec doesn't grow each switch; keep the live ones
+                    // (whisper) (review #4).
+                    s.local_ai_servers
+                        .retain_mut(|c| matches!(c.try_wait(), Ok(None)));
+                    s.local_ai_servers.extend(started);
+                }
+                // Keep the bar's active-stack readout truthful (review #5): the
+                // request "model" field is ignored by single-model llama.cpp,
+                // but the label reads cfg.ai_local_model.
+                if switched {
+                    let mut c = cfg_t.write();
+                    c.ai_local_model =
+                        overlay_backend::local_ai::active_local_model_name(&root, want_quality);
+                    let _ = overlay_backend::config::save(&c);
+                }
+                let weak_done = weak_t.clone();
+                let overlay_done = overlay_t.clone();
+                let cfg_done = cfg_t.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = weak_done.upgrade() {
+                        w.set_model_switching(false);
+                        w.set_quality_status(SharedString::from(match outcome {
+                            overlay_backend::local_ai::ModelSwitch::Switched => {
+                                if want_quality {
+                                    "Готово: умная модель (12B). Первый ответ может грузиться ~5 с."
+                                } else {
+                                    "Готово: быстрая модель (4B)."
+                                }
+                            }
+                            overlay_backend::local_ai::ModelSwitch::PortBusy => {
+                                "Порт :8080 занят другим процессом — переключение не выполнено."
+                            }
+                            overlay_backend::local_ai::ModelSwitch::FailedToStart => {
+                                "Не удалось запустить модель — проверьте установку локального AI."
+                            }
+                        }));
+                    }
+                    if let Some(o) = overlay_done.upgrade() {
+                        o.set_active_stack(SharedString::from(active_stack_label(
+                            &cfg_done.read(),
+                        )));
+                    }
+                });
+            });
+        });
+    }
+
+    // v0.18.0 — download the optional 12B on demand (it isn't bundled). Same
+    // worker/progress pattern as the installer; the backend verifies the pinned
+    // SHA-256 before the file is ever loaded. On success the 12B button appears;
+    // the user taps it to switch (no auto-switch, so a background download can't
+    // swap the model mid-call).
+    {
+        let state_c = state.clone();
+        let weak = win.as_weak();
+        win.on_download_quality_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            if w.get_quality_downloading() {
+                return; // re-entry guard
+            }
+            w.set_quality_downloading(true);
+            w.set_quality_progress(0.0);
+            w.set_quality_status(SharedString::from("Подготовка…"));
+            let cancel = {
+                let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
+                s.local_ai_cancel.clone()
+            };
+            cancel.store(false, std::sync::atomic::Ordering::Relaxed);
+            let weak_t = w.as_weak();
+            std::thread::spawn(move || {
+                let on = {
+                    let weak_p = weak_t.clone();
+                    move |p: overlay_backend::local_ai::Progress| {
+                        let weak_p = weak_p.clone();
+                        let _ = slint::invoke_from_event_loop(move || {
+                            let Some(w) = weak_p.upgrade() else { return };
+                            match p {
+                                overlay_backend::local_ai::Progress::Step(s) => {
+                                    w.set_quality_status(SharedString::from(s));
+                                }
+                                overlay_backend::local_ai::Progress::Bytes {
+                                    label,
+                                    done,
+                                    total,
+                                } => {
+                                    let frac = if total > 0 {
+                                        (done as f64 / total as f64) as f32
+                                    } else {
+                                        0.0
+                                    };
+                                    w.set_quality_progress(frac);
+                                    let mb = |b: u64| (b as f64) / 1_048_576.0;
+                                    w.set_quality_status(SharedString::from(format!(
+                                        "{label}: {:.0} / {:.0} MB",
+                                        mb(done),
+                                        mb(total)
+                                    )));
+                                }
+                                overlay_backend::local_ai::Progress::Gpu(_) => {}
+                            }
+                        });
+                    }
+                };
+                let root = overlay_backend::local_ai::default_root();
+                let res = overlay_backend::local_ai::download_quality_model(&root, &cancel, &on);
+                let weak_done = weak_t.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    let Some(w) = weak_done.upgrade() else { return };
+                    w.set_quality_downloading(false);
+                    match res {
+                        Ok(()) => {
+                            w.set_quality_progress(1.0);
+                            w.set_quality_model_present(true);
+                            w.set_quality_status(SharedString::from(
+                                "Умная модель загружена. Нажмите «Умнее (12B)», чтобы включить.",
+                            ));
+                        }
+                        Err(e) => {
+                            let cancelled = e
+                                .to_string()
+                                .contains(overlay_backend::local_ai::CANCEL_SENTINEL);
+                            if cancelled {
+                                w.set_quality_status(SharedString::from("Отменено."));
+                            } else {
+                                eprintln!("[overlay-host] 12B download failed: {e:#}");
+                                w.set_quality_status(SharedString::from(format!(
+                                    "Ошибка загрузки: {e}"
+                                )));
+                            }
+                        }
+                    }
+                });
+            });
         });
     }
 }

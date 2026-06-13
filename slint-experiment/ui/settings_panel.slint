@@ -284,6 +284,15 @@ export component SettingsWindow inherits Window {
     // E10 — local-model "thinking"/reasoning toggle. Off (default) sends
     // enable_thinking=false for faster answers; on lets the model reason.
     in-out property <bool> ai-local-thinking: false;
+    // v0.18.0 — local LLM size choice: false = fast 4B (default), true = smart
+    // but ~2× slower 12B. The 12B is downloaded on demand (not bundled); these
+    // mirror config + the download worker state.
+    in-out property <bool> ai-local-quality: false;
+    in-out property <bool> quality-model-present: false;
+    in-out property <bool> quality-downloading: false;
+    in-out property <bool> model-switching: false; // server relaunch in flight
+    in-out property <float> quality-progress: 0.0; // 0.0..1.0
+    in-out property <string> quality-status: "";
     in-out property <string> ai-local-test-result: "";
     in-out property <string> ai-local-bearer-input: "";
     // E10.4 — in-app local-AI installer: downloads llama.cpp/whisper.cpp + models,
@@ -332,6 +341,11 @@ export component SettingsWindow inherits Window {
     callback ai-local-models-refresh();
     callback ai-local-vision-changed(bool);
     callback ai-local-thinking-changed(bool);
+    // v0.18.0 — local model size: faster 4B vs smarter 12B. `model-quality-changed`
+    // writes config + restarts the local server with the other GGUF;
+    // `download-quality-clicked` pulls the 12B on demand (it isn't bundled).
+    callback model-quality-changed(bool);
+    callback download-quality-clicked();
     callback ai-local-test-clicked();
     // Phase E6 v27 — connection test buttons (AI bridge + STT).
     in-out property <string> ai-bridge-test-result: "";
@@ -1545,6 +1559,69 @@ export component SettingsWindow inherits Window {
                                     root.ai-local-thinking-changed(v);
                                 }
                             }
+                            // ----- v0.18.0 — local model: faster (4B) vs smarter (12B) -----
+                            Rectangle { background: Theme.border; height: 1px; }
+                            Text {
+                                text: @tr("Local model: speed vs quality. Switching restarts the local server (~5s).");
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: root.ai-local-quality ? @tr("Faster (4B)") : @tr("● Faster (4B)");
+                                    enabled: root.ai-local-quality && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
+                                    clicked => {
+                                        root.model-quality-changed(false);
+                                    }
+                                }
+                                if root.quality-model-present : Button {
+                                    text: root.ai-local-quality ? @tr("● Smarter (12B)") : @tr("Smarter (12B)");
+                                    enabled: !root.ai-local-quality && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
+                                    clicked => {
+                                        root.model-quality-changed(true);
+                                    }
+                                }
+                                if !root.quality-model-present : Button {
+                                    text: root.quality-downloading ? @tr("Downloading…") : @tr("Download smart model (6 GB)");
+                                    enabled: !root.quality-downloading && !root.local-ai-installing;
+                                    clicked => {
+                                        root.download-quality-clicked();
+                                    }
+                                }
+                                if root.quality-downloading : Button {
+                                    text: @tr("Cancel");
+                                    clicked => {
+                                        root.cancel-local-ai-clicked();
+                                    }
+                                }
+                            }
+                            Text {
+                                text: @tr("The 12B model is noticeably smarter but ~2× slower and needs ~10 GB of video memory (VRAM). On a weaker GPU keep 4B.");
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            if root.quality-status != "" : Text {
+                                text: root.quality-status;
+                                font-size: 11px;
+                                color: Theme.accent;
+                                wrap: word-wrap;
+                            }
+                            if root.quality-downloading : Rectangle {
+                                height: 6px;
+                                border-radius: 3px;
+                                background: Theme.border;
+                                Rectangle {
+                                    x: 0;
+                                    y: 0;
+                                    height: parent.height;
+                                    width: parent.width * root.quality-progress;
+                                    border-radius: 3px;
+                                    background: Theme.accent;
+                                }
+                            }
                             HorizontalLayout {
                                 spacing: 6px;
                                 Button {
@@ -1572,7 +1649,7 @@ export component SettingsWindow inherits Window {
                                 spacing: 6px;
                                 Button {
                                     text: root.local-ai-installing ? @tr("Installing…") : @tr("Install local AI");
-                                    enabled: !root.local-ai-installing;
+                                    enabled: !root.local-ai-installing && !root.quality-downloading && !root.model-switching;
                                     clicked => {
                                         root.install-local-ai-clicked();
                                     }
