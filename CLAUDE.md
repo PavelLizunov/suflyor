@@ -176,15 +176,20 @@ The "illogical UI" class is invisible to clippy/test. Run these on any UI diff:
   Reliable where computer-use clicks on the floating gear are not. win0 is a
   parked 1×1; the bar is the 1200×60 window; Settings/tiles are separate windows
   that appear after a click/hotkey. **Gotcha (verified 2026-06-13):**
-  `take_screenshot {windowHandle}` WORKS and returns true colours (better than
-  computer-use, which mis-renders the transparent overlay). But
-  `query_element_descendants` / `get_element_tree` on the overlay BAR return 0
-  children (the overlay renders its tree in a way MCP doesn't walk) — so for the
-  bar use `take_screenshot` + CopyFromScreen, and use the tree-walk on ordinary
-  windows (Settings/tiles). Param names differ per tool: screenshot wants
-  `windowHandle`; tree wants `elementHandle`; descendants want `findAll` (no
-  `maxElements`). curl from Git-bash resets cwd — write helper output to an
-  absolute path, not a relative one.
+  `take_screenshot {windowHandle}` WORKS and returns TRUE colours (better than
+  computer-use which mis-renders the transparent overlay) — **the primary MCP
+  tool; `Read` the saved PNG to eyeball a window.** But
+  `query_element_descendants` / `get_element_tree` return **0 children for EVERY
+  window** in this build (accessibility tree not populated) — do NOT rely on
+  programmatic text/state reads; verify VISUALLY via screenshot. **Open the
+  target window by its GLOBAL HOTKEY** (F1 help / F4 palette / F7 archive —
+  `keybd_event` fires regardless of foreground), then `list_windows` (new window
+  = next index), then `take_screenshot`. The gear (Settings) has no hotkey and
+  is a floating synth-click target — unreliable; prefer hotkey-reachable windows
+  or let the user open Settings. Param names: screenshot=`windowHandle`,
+  tree=`elementHandle`, descendants=`findAll` (no `maxElements`). Drive curl from
+  a Python helper written to an ABSOLUTE path (Git-bash resets cwd between calls,
+  so inline heredocs lose `/tmp` files).
 - **The recurring UI bug shapes** (check the .rs side, not just .slint):
   1. **Stale status on a REUSED window** — the Settings window is reused, so
      every transient `*_status`/`*_result` string survives the next open unless
