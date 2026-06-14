@@ -754,8 +754,8 @@ msgstr "Рассуждения локальной модели (медленне
 msgid "Test local connection"
 msgstr "Проверить локальное подключение"
 
-msgid "Tip: Save writes to %APPDATA%\\overlay-mvp\\config.json. Restart binary to re-load."
-msgstr "Подсказка: «Сохранить» пишет в %APPDATA%\\overlay-mvp\\config.json. Перезапустите бинарник для перезагрузки."
+msgid "Tip: Save writes to %APPDATA%\\suflyor\\config.json. Restart binary to re-load."
+msgstr "Подсказка: «Сохранить» пишет в %APPDATA%\\suflyor\\config.json. Перезапустите бинарник для перезагрузки."
 
 # --- Tab 12: STT ---
 
@@ -837,8 +837,8 @@ msgstr "Повторно пройти мастер первичной настр
 msgid "Step {} of 7"
 msgstr "Шаг {} из 7"
 
-msgid "Choose how overlay-mvp runs"
-msgstr "Выберите режим работы overlay-mvp"
+msgid "Choose how suflyor runs"
+msgstr "Выберите режим работы suflyor"
 
 msgid "Cloud — Groq STT + Claude bridge (fast start, needs keys + internet)"
 msgstr "Cloud — Groq STT + мост Claude (быстрый старт, нужны ключи и интернет)"
