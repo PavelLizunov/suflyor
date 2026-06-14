@@ -2210,12 +2210,45 @@ pub fn save(cfg: &Config) -> Result<()> {
     // copy error must not fail the real save.
     if path.exists() {
         let bak = path.with_extension("json.bak");
-        if let Err(e) = std::fs::copy(&path, &bak) {
-            log::debug!("config .bak snapshot skipped ({e})");
+        // fs-audit — the .bak is a SINGLE never-pruned generation, so a raw copy
+        // left the user's groq_api_key / ai_bearer in plaintext on disk forever
+        // (and a key rotation left the OLD key behind in it). Snapshot a
+        // SECRET-REDACTED clone of the previous config instead: undo still
+        // restores profiles / hotkeys / devices / settings; the live secrets stay
+        // only in config.json (where the user can re-enter them). Best-effort —
+        // any read / parse / serialize error just skips the .bak, exactly as the
+        // prior copy-error path did.
+        match std::fs::read(&path)
+            .ok()
+            .and_then(|b| parse_config_bytes(&b).ok())
+            .and_then(|old| serde_json::to_vec_pretty(&secret_redacted(&old)).ok())
+        {
+            Some(redacted) => {
+                if let Err(e) = std::fs::write(&bak, redacted) {
+                    log::debug!("config .bak snapshot skipped ({e})");
+                }
+            }
+            None => log::debug!("config .bak snapshot skipped (unreadable/unparseable)"),
         }
     }
     std::fs::rename(&tmp, &path).context("replace config")?;
     Ok(())
+}
+
+/// A clone of `cfg` with every at-rest secret blanked, for the `config.json.bak`
+/// undo snapshot — so a never-pruned backup never holds plaintext credentials
+/// (fs-audit). Undo still restores profiles / hotkeys / devices / settings; only
+/// the bearer tokens + API key are dropped (they live in config.json, and the
+/// user can re-enter them). Keep in sync with the secret `String` fields.
+fn secret_redacted(cfg: &Config) -> Config {
+    let mut c = cfg.clone();
+    c.ai_bearer.clear();
+    c.ai_local_bearer.clear();
+    c.vision_bearer.clear();
+    c.vision_local_bearer.clear();
+    c.groq_api_key.clear();
+    c.stt_whisper_bearer.clear();
+    c
 }
 
 /// Phase E6 v28 — export the full config (INCLUDING ai_bearer +
@@ -3116,6 +3149,52 @@ mod tests {
         assert_eq!(cfg.ai_model, "");
         assert_eq!(cfg.response_language, "");
         assert!(!cfg.stealth_enabled);
+    }
+
+    #[test]
+    fn secret_redacted_blanks_every_secret_keeps_the_rest() {
+        // fs-audit — the config.json.bak undo snapshot must carry NO plaintext
+        // credentials, but must still preserve the non-secret fields so an undo
+        // restores profiles / hotkeys / settings.
+        let c = Config {
+            config_version: 7, // a non-secret field that must survive
+            ai_bearer: "sk-live-secret".into(),
+            ai_local_bearer: "local-bearer".into(),
+            vision_bearer: "vision-bearer".into(),
+            vision_local_bearer: "vision-local".into(),
+            groq_api_key: "gsk_secret".into(),
+            stt_whisper_bearer: "whisper-bearer".into(),
+            ..Default::default()
+        };
+
+        let r = secret_redacted(&c);
+        assert!(r.ai_bearer.is_empty(), "ai_bearer redacted");
+        assert!(r.ai_local_bearer.is_empty(), "ai_local_bearer redacted");
+        assert!(r.vision_bearer.is_empty(), "vision_bearer redacted");
+        assert!(
+            r.vision_local_bearer.is_empty(),
+            "vision_local_bearer redacted"
+        );
+        assert!(r.groq_api_key.is_empty(), "groq_api_key redacted");
+        assert!(
+            r.stt_whisper_bearer.is_empty(),
+            "stt_whisper_bearer redacted"
+        );
+        assert_eq!(r.config_version, 7, "non-secret fields survive for undo");
+        // And the serialized .bak bytes contain none of the secret values.
+        let bytes = serde_json::to_vec(&r).expect("serialize redacted");
+        let s = String::from_utf8(bytes).expect("utf8");
+        for secret in [
+            "sk-live-secret",
+            "gsk_secret",
+            "whisper-bearer",
+            "vision-bearer",
+        ] {
+            assert!(
+                !s.contains(secret),
+                "secret {secret} leaked into .bak bytes"
+            );
+        }
     }
 
     #[test]
