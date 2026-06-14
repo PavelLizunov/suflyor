@@ -611,16 +611,18 @@ async fn maybe_spawn_auto_tile(
         s.recent_tile_triggers.push_back(now);
     }
 
+    // Normalize ONCE (lowercase + collapse whitespace): the dedup prefix (60) and
+    // the QA cache key (200) below both slice this same string, instead of
+    // recomputing the full lowercase+tokenize+join twice per spawn (audit P6).
+    let normalized_full: String = text
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+
     // ===== Dedup recently-spawned prefixes =====
     {
-        let normalized: String = text
-            .to_lowercase()
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-            .chars()
-            .take(60)
-            .collect();
+        let normalized: String = normalized_full.chars().take(60).collect();
         let mut s = lock(&rt);
         let now = Instant::now();
         let cutoff = now - Duration::from_secs(60);
@@ -649,13 +651,7 @@ async fn maybe_spawn_auto_tile(
     let kw_hash = h2.finish();
     let cache_key: String = format!(
         "m={model};l={response_language};c={ctx_hash:x};k={kw_hash:x};q={}",
-        text.to_lowercase()
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-            .chars()
-            .take(200)
-            .collect::<String>(),
+        normalized_full.chars().take(200).collect::<String>(),
     );
     let cache_hit: Option<String> = {
         let mut s = lock(&rt);

@@ -274,6 +274,7 @@ fn capture_thread(
     // Downsampling state — simple averaging decimator from actual_rate → 16k.
     let ratio = actual_rate as f64 / TARGET_SAMPLE_RATE as f64;
     let start_ts = std::time::Instant::now();
+    let mut dropped_chunks: u64 = 0;
 
     while !stop.load(Ordering::Acquire) {
         if event.wait_for_event(2000).is_err() {
@@ -311,9 +312,29 @@ fn capture_thread(
                     pcm_i16,
                     timestamp_ms: start_ts.elapsed().as_millis() as u64,
                 };
-                if tx.blocking_send(chunk).is_err() {
-                    log::info!("[{source:?}] receiver dropped, exiting");
-                    break;
+                // Non-blocking send (audit P3): on a full queue DROP the chunk and
+                // count it, rather than `blocking_send` PARKING this WASAPI capture
+                // thread — parking back-pressures the OS capture buffer and silently
+                // loses real meeting audio. A full queue means the STT consumer is
+                // momentarily starved (GigaAM reload / 2-worker-runtime saturation).
+                // Mirrors recorder.feed's try_send + dropped-counter.
+                match tx.try_send(chunk) {
+                    Ok(()) => {}
+                    Err(mpsc::error::TrySendError::Full(_)) => {
+                        dropped_chunks += 1;
+                        // ~ every 5 s of dropped audio, so the stall is observable
+                        // in the log instead of a silent capture-buffer overrun.
+                        if dropped_chunks % 25 == 1 {
+                            log::warn!(
+                                "[{source:?}] STT feed stalled — dropped ~{}s of audio ({dropped_chunks} chunks)",
+                                dropped_chunks / 5
+                            );
+                        }
+                    }
+                    Err(mpsc::error::TrySendError::Closed(_)) => {
+                        log::info!("[{source:?}] receiver dropped, exiting");
+                        break;
+                    }
                 }
             }
         }
