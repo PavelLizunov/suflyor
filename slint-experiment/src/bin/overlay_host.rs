@@ -433,6 +433,51 @@ const WATCHDOG_COOLDOWN_SECS: u64 = 30;
 /// genuinely broken install doesn't spawn forever; a reachable server (e.g.
 /// after a manual Install) re-arms the counter to 0.
 const WATCHDOG_MAX_FAILS: u32 = 6;
+
+/// The local-AI watchdog's pure decision state (cooldown timestamp + the
+/// consecutive-failure cap), extracted from the live loop so the safety-critical
+/// retry policy is unit-testable — the loop itself interleaves this with network
+/// probes, the lifecycle lock, and process spawns, none of which a test can
+/// reach (audit B1). Time is passed in as an `Instant` so tests can offset it.
+#[derive(Default)]
+struct WatchdogState {
+    last_attempt: Option<std::time::Instant>,
+    consecutive_fails: u32,
+}
+
+impl WatchdogState {
+    /// Whether to attempt a (re)start NOW. The caller has already confirmed the
+    /// server is unreachable and that local AI is wanted. True iff the cooldown
+    /// has elapsed since the last attempt (or there was none) AND we're still
+    /// under the consecutive-failure cap.
+    fn should_restart(
+        &self,
+        now: std::time::Instant,
+        cooldown: std::time::Duration,
+        max_fails: u32,
+    ) -> bool {
+        let cooled = self
+            .last_attempt
+            .is_none_or(|t| now.duration_since(t) >= cooldown);
+        cooled && self.consecutive_fails < max_fails
+    }
+
+    /// The server answered — re-arm the cap so any future crash retries fresh.
+    fn note_reachable(&mut self) {
+        self.consecutive_fails = 0;
+    }
+
+    /// Record a (re)start attempt at `now`: a confirmed `Switched` resets the
+    /// fail count, anything else (PortBusy / FailedToStart) increments it.
+    fn note_attempt(&mut self, now: std::time::Instant, switched: bool) {
+        self.last_attempt = Some(now);
+        if switched {
+            self.consecutive_fails = 0;
+        } else {
+            self.consecutive_fails += 1;
+        }
+    }
+}
 /// Default tile window dimensions (match ui/tile.slint preferred-*
 /// values so the spawned window isn't forcibly shrunk on first paint).
 pub(crate) const TILE_DEFAULT_W: i32 = 460;
@@ -860,8 +905,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 drop(guard);
                 overlay_backend::local_ai::mark_engine_update_checked(&root);
             }
-            let mut last_attempt: Option<std::time::Instant> = None;
-            let mut consecutive_fails: u32 = 0;
+            let mut watchdog = WatchdogState::default();
             loop {
                 let (want_llama, prefer_quality) = {
                     let c = cfg_w.read();
@@ -874,12 +918,14 @@ fn main() -> Result<(), slint::PlatformError> {
                     if overlay_backend::local_ai::llama_reachable() {
                         // Alive (serving or cold-loading) — re-arm the fail cap
                         // so any future crash is retried from scratch.
-                        consecutive_fails = 0;
+                        watchdog.note_reachable();
                     } else {
-                        let cooled = last_attempt.is_none_or(|t| {
-                            t.elapsed() >= std::time::Duration::from_secs(WATCHDOG_COOLDOWN_SECS)
-                        });
-                        if cooled && consecutive_fails < WATCHDOG_MAX_FAILS {
+                        let now = std::time::Instant::now();
+                        if watchdog.should_restart(
+                            now,
+                            std::time::Duration::from_secs(WATCHDOG_COOLDOWN_SECS),
+                            WATCHDOG_MAX_FAILS,
+                        ) {
                             // Claim the local-AI lifecycle lock so we never race a
                             // manual install/switch on :8080. try_lock → skip this
                             // tick if a manual op holds it (it will bring :8080 up).
@@ -908,10 +954,10 @@ fn main() -> Result<(), slint::PlatformError> {
                                             &root,
                                             prefer_quality,
                                         );
-                                    last_attempt = Some(std::time::Instant::now());
+                                    let attempt_now = std::time::Instant::now();
                                     match outcome {
                                         overlay_backend::local_ai::ModelSwitch::Switched => {
-                                            consecutive_fails = 0;
+                                            watchdog.note_attempt(attempt_now, true);
                                             {
                                                 let mut s = state_w
                                                     .lock()
@@ -947,7 +993,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                             });
                                         }
                                         overlay_backend::local_ai::ModelSwitch::PortBusy => {
-                                            consecutive_fails += 1;
+                                            watchdog.note_attempt(attempt_now, false);
                                             // started is empty on PortBusy; harmless.
                                             overlay_backend::local_ai::terminate_servers(started);
                                             diag!(
@@ -955,13 +1001,14 @@ fn main() -> Result<(), slint::PlatformError> {
                                             );
                                         }
                                         overlay_backend::local_ai::ModelSwitch::FailedToStart => {
-                                            consecutive_fails += 1;
+                                            watchdog.note_attempt(attempt_now, false);
+                                            let fails = watchdog.consecutive_fails;
                                             // Kill the wedged/dead child instead of
                                             // leaking it until quit. No port sweep →
                                             // whisper (:8081) is left alone.
                                             overlay_backend::local_ai::terminate_servers(started);
                                             diag!(
-                                                "local AI failed to (re)start (attempt {consecutive_fails}/{WATCHDOG_MAX_FAILS}) \
+                                                "local AI failed to (re)start (attempt {fails}/{WATCHDOG_MAX_FAILS}) \
                                                  — check the local model/binary in Settings → AI"
                                             );
                                         }
@@ -3151,4 +3198,70 @@ pub(crate) fn active_stack_label(c: &overlay_backend::config::Config) -> String 
         "mixed"
     };
     format!("{tag}: {stt} · {model}")
+}
+
+#[cfg(test)]
+mod watchdog_tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)] // test asserts
+    use super::WatchdogState;
+    use std::time::{Duration, Instant};
+
+    const COOLDOWN: Duration = Duration::from_secs(30);
+    const MAX: u32 = 6;
+
+    #[test]
+    fn first_attempt_allowed_immediately() {
+        // No prior attempt → cooled, under cap → attempt.
+        assert!(WatchdogState::default().should_restart(Instant::now(), COOLDOWN, MAX));
+    }
+
+    #[test]
+    fn within_cooldown_skips_then_attempts_after() {
+        let t0 = Instant::now();
+        let mut wd = WatchdogState::default();
+        wd.note_attempt(t0, false);
+        assert!(
+            !wd.should_restart(t0 + Duration::from_secs(10), COOLDOWN, MAX),
+            "10s < 30s cooldown → skip"
+        );
+        assert!(
+            wd.should_restart(t0 + Duration::from_secs(31), COOLDOWN, MAX),
+            "31s ≥ 30s cooldown → attempt"
+        );
+    }
+
+    #[test]
+    fn fail_cap_stops_then_reachable_rearms() {
+        let t0 = Instant::now();
+        let mut wd = WatchdogState::default();
+        // MAX cooled failures in a row.
+        for i in 0..MAX {
+            let now = t0 + Duration::from_secs(31 * u64::from(i + 1));
+            assert!(
+                wd.should_restart(now, COOLDOWN, MAX),
+                "attempt {i} under cap"
+            );
+            wd.note_attempt(now, false);
+        }
+        assert!(
+            !wd.should_restart(t0 + Duration::from_secs(10_000), COOLDOWN, MAX),
+            "hit the fail cap → stop attempting"
+        );
+        wd.note_reachable(); // server came back on its own
+        assert!(
+            wd.should_restart(t0 + Duration::from_secs(10_000), COOLDOWN, MAX),
+            "a reachable server re-arms the cap"
+        );
+    }
+
+    #[test]
+    fn switched_resets_fail_count() {
+        let t0 = Instant::now();
+        let mut wd = WatchdogState::default();
+        wd.note_attempt(t0, false);
+        wd.note_attempt(t0, false);
+        wd.note_attempt(t0, true); // a confirmed restart
+        assert_eq!(wd.consecutive_fails, 0, "Switched resets the counter");
+        assert!(wd.should_restart(t0 + Duration::from_secs(31), COOLDOWN, MAX));
+    }
 }
