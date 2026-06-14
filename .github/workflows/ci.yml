@@ -1,0 +1,57 @@
+# Machine-independent gate (added 2026-06-14 from the regression-risk audit).
+#
+# The local `.claude/hooks/git-gate.ps1` is the ONLY enforcement today, and it
+# is fail-OPEN: a commit/push from a plain shell, a different machine, a
+# `--no-verify`, or a cargo not at the hard-coded path runs NONE of the checks.
+# This workflow recomputes the same checks on GitHub regardless of how the
+# commit was made, so a broken fmt/clippy/test can't reach a release unnoticed.
+#
+# Windows-only by design — the product is pure Win32 + WASAPI + Slint. Mirrors
+# the local gate's 5 layers (fmt --check, clippy -D warnings, FULL cargo test —
+# NOT --lib, so the tests/ guard tests run) for BOTH standalone crates.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+# A newer push to the same ref cancels the in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable + rustfmt + clippy)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      # Cache each crate's target dir (no root workspace → two separate ones).
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            overlay-backend
+            slint-experiment
+
+      # ---- overlay-backend (shared logic) ----
+      - name: backend fmt --check
+        run: cargo fmt --manifest-path overlay-backend/Cargo.toml --all -- --check
+      - name: backend clippy -D warnings
+        run: cargo clippy --manifest-path overlay-backend/Cargo.toml --all-targets -- -D warnings
+      - name: backend test (full suite, incl. tests/)
+        run: cargo test --manifest-path overlay-backend/Cargo.toml
+
+      # ---- slint-experiment (overlay-host binary + UI) ----
+      - name: slint fmt --check
+        run: cargo fmt --manifest-path slint-experiment/Cargo.toml --all -- --check
+      - name: slint clippy -D warnings
+        run: cargo clippy --manifest-path slint-experiment/Cargo.toml --all-targets -- -D warnings
+      - name: slint test (full suite, incl. i18n + reset + version guards)
+        run: cargo test --manifest-path slint-experiment/Cargo.toml

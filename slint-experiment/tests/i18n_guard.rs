@@ -8,6 +8,7 @@
 //! If this fails: either add the `msgid`/`msgstr` pair to
 //! `translations/ru/LC_MESSAGES/slint-replay.po`, or (rarely) the string is a
 //! deliberate non-translatable token — then it shouldn't be wrapped in `@tr`.
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)] // test asserts
 
 use std::collections::HashSet;
 use std::fs;
