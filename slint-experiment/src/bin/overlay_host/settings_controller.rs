@@ -685,6 +685,21 @@ pub(crate) fn open_settings(
         });
     }
     {
+        // The config.json hint path is clickable → open the data folder
+        // (%APPDATA%\suflyor) in Explorer. Mirrors the recordings opener;
+        // create_dir_all so it works before the first save. NOTE: Explorer is a
+        // normal window (not stealth-excluded) — fine for config-time use.
+        win.on_open_data_folder_clicked(move || match overlay_backend::paths::data_root() {
+            Some(dir) => {
+                let _ = std::fs::create_dir_all(&dir);
+                if let Err(e) = std::process::Command::new("explorer").arg(&dir).spawn() {
+                    eprintln!("[overlay-host] open data folder failed: {e}");
+                }
+            }
+            None => eprintln!("[overlay-host] cannot resolve data folder"),
+        });
+    }
+    {
         let cfg_c = cfg.clone();
         win.on_auto_tiles_enabled_changed(move |on| {
             let mut c = cfg_c.write();

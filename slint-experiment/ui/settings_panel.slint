@@ -465,6 +465,7 @@ export component SettingsWindow inherits Window {
     in-out property <string> journal-mb-value: "500";
     callback journal-retention-changed(string, string);
     callback open-recordings-clicked();
+    callback open-data-folder-clicked();
     in-out property <bool> auto-tiles-enabled: true;
     callback auto-tiles-enabled-changed(bool);
     in-out property <string> trigger-keywords-input: "";
@@ -1776,11 +1777,17 @@ export component SettingsWindow inherits Window {
                         }
 
                         Rectangle { background: Theme.border; height: 1px; }
-                        Text {
-                            text: @tr("Tip: Save writes to %APPDATA%\\suflyor\\config.json. Restart binary to re-load.");
-                            font-size: 10px;
-                            color: Theme.text-muted;
-                            wrap: word-wrap;
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.open-data-folder-clicked(); }
+                            Text {
+                                // Click opens the data folder in Explorer (path
+                                // is now %APPDATA%\suflyor after the v0.18.4 rename).
+                                text: @tr("Tip: Save writes to %APPDATA%\\suflyor\\config.json. Restart binary to re-load.");
+                                font-size: 10px;
+                                color: Theme.accent;
+                                wrap: word-wrap;
+                            }
                         }
 
                         // ===================== VISION (screenshots · F8) =====================
@@ -2064,11 +2071,17 @@ export component SettingsWindow inherits Window {
                             }
                         }
 
-                        Text {
-                            text: @tr("Tip: Save writes to %APPDATA%\\suflyor\\config.json. Restart binary to re-load.");
-                            font-size: 10px;
-                            color: Theme.text-muted;
-                            wrap: word-wrap;
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.open-data-folder-clicked(); }
+                            Text {
+                                // Click opens the data folder in Explorer (path
+                                // is now %APPDATA%\suflyor after the v0.18.4 rename).
+                                text: @tr("Tip: Save writes to %APPDATA%\\suflyor\\config.json. Restart binary to re-load.");
+                                font-size: 10px;
+                                color: Theme.accent;
+                                wrap: word-wrap;
+                            }
                         }
                     }
 
