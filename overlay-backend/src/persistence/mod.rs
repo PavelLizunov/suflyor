@@ -6,8 +6,16 @@
 //! - JSONL ([`crate::journal`]) stays the primary append-only event log — cheap,
 //!   crash-proof, human-readable, the source of truth.
 //! - SQLite ([`Store`]) is a queryable PROJECTION for the session archive +
-//!   search. It can be deleted and rebuilt from the journals with no data loss,
-//!   so the live audio / AI pipeline never depends on its speed.
+//!   search, so the live audio / AI pipeline never depends on its speed. It is
+//!   rebuilt by re-indexing the journals — but NOTE (fs-audit #2): the indexer
+//!   is additive (it never deletes session rows on its own), so once a journal
+//!   is pruned from disk under journal retention, its catalog row becomes the
+//!   LAST surviving copy of that session's transcript + AI turns. The catalog
+//!   therefore deliberately preserves archive history PAST the raw-journal
+//!   retention; manually deleting `catalog.sqlite` and rebuilding would drop
+//!   those pruned-journal sessions (their journals are already gone). This is a
+//!   feature, not drift — the ~few-MB catalog is the long-term searchable
+//!   history while the bulky raw journals/audio rotate out.
 //!
 //! Callers see only owned row types ([`Session`] / [`Utterance`] / [`AiTurn`])
 //! and [`Store`] — no `rusqlite` types or raw SQL leak out. The JSONL→SQLite

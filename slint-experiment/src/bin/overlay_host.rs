@@ -822,6 +822,20 @@ fn main() -> Result<(), slint::PlatformError> {
         let overlay_w = overlay.as_weak();
         std::thread::spawn(move || {
             let root = overlay_backend::local_ai::default_root();
+            // fs-audit #1 — GC orphaned engine-update leftovers (a crashed
+            // mid-update's `.llama-staging-update` + stale rollback backups) so
+            // they don't accumulate when the user stops updating. Held UNDER the
+            // lifecycle lock so it can't race a manual "Update engine" worker
+            // (which also takes the lock + owns `.llama-staging-update`); any
+            // staging dir present while we hold the lock is by definition orphaned.
+            {
+                let lifecycle_lock = {
+                    let s = state_w.lock().unwrap_or_else(|p| p.into_inner());
+                    s.local_ai_lock.clone()
+                };
+                let _g = lifecycle_lock.lock().unwrap_or_else(|p| p.into_inner());
+                overlay_backend::local_ai::sweep_orphaned_engine_artifacts(&root);
+            }
             // Bring the local servers UP FIRST (on the CURRENT engine) so AI + STT
             // are available immediately; the throttled engine refresh further down
             // then runs BEHIND the running servers, so a slow ~160 MB download can

@@ -233,12 +233,13 @@ fn start_session_inner(
     // One atomic snapshot — the enabled flag + both retention bounds are read
     // under a SINGLE lock so a concurrent Settings save can't split the
     // decision across two config states (review v0.15.0).
-    let (record_enabled, keep_sessions, keep_days) = {
+    let (record_enabled, keep_sessions, keep_days, max_total_mb) = {
         let c = cfg.read();
         (
             c.record_audio_enabled,
             c.record_retention_sessions as usize,
             c.record_retention_days,
+            c.record_max_total_mb,
         )
     };
     let stt_audio_rx = if record_enabled {
@@ -250,6 +251,7 @@ fn start_session_inner(
             &session_id,
             keep_sessions,
             keep_days,
+            max_total_mb,
         ) {
             Ok(recorder) => {
                 log_info(&format!("audio recording → {}", recorder.dir().display()));

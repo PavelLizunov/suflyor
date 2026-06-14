@@ -70,7 +70,12 @@ impl SessionRecorder {
     /// Returns Err if the recordings directory can't be created or the writer
     /// thread can't be spawned. Callers treat this as "record disabled this
     /// session" — it must NOT abort the session.
-    pub fn start(session_id: &str, keep_sessions: usize, keep_days: u32) -> Result<Self> {
+    pub fn start(
+        session_id: &str,
+        keep_sessions: usize,
+        keep_days: u32,
+        max_total_mb: u32,
+    ) -> Result<Self> {
         let root = recordings_dir()?;
         // Best-effort: a fixup failure must not block opening the recorder. The
         // 30s grace skips a prior session still finalising after a rapid restart.
@@ -94,6 +99,19 @@ impl SessionRecorder {
             }
             Ok(_) => {}
             Err(e) => log::warn!("recorder: age prune failed (non-fatal): {e:#}"),
+        }
+        // Byte-budget backstop (fs-audit #5): applies even when count/age are 0
+        // ("keep all"), so raw audio can never fill the disk. 0 = unlimited.
+        match prune_recordings_over_total_in(
+            &root,
+            max_total_mb,
+            std::time::Duration::from_secs(30),
+        ) {
+            Ok(n) if n > 0 => {
+                log::info!("recorder: size-pruned {n} recording(s) to stay under {max_total_mb} MB")
+            }
+            Ok(_) => {}
+            Err(e) => log::warn!("recorder: size prune failed (non-fatal): {e:#}"),
         }
         Ok(rec)
     }
@@ -381,6 +399,82 @@ fn prune_recordings_older_than_at(
     Ok(removed)
 }
 
+/// fs-audit #5 — total-size retention: after the count/age prunes, delete the
+/// OLDEST `recordings\<id>\` dirs (by mtime) until the recordings tree is under
+/// `max_total_mb`. This is the byte-budget backstop the journal already has
+/// (`journal_max_total_mb`) but raw audio lacked — so even the "all (no limit)"
+/// count/age choice can't fill the disk. `max_total_mb == 0` means unbounded
+/// (no-op). The same `min_age` grace as the other prunes protects the
+/// just-created / still-finalising current dir. Best-effort: an undeletable dir
+/// is skipped, not fatal.
+///
+/// # Errors
+/// Returns Err only if `root` exists but can't be enumerated.
+pub fn prune_recordings_over_total_in(
+    root: &Path,
+    max_total_mb: u32,
+    min_age: std::time::Duration,
+) -> Result<usize> {
+    if max_total_mb == 0 || !root.exists() {
+        return Ok(0);
+    }
+    let budget = u64::from(max_total_mb) * 1024 * 1024;
+    let now = std::time::SystemTime::now();
+    let mut dirs: Vec<(std::time::SystemTime, u64, PathBuf)> = std::fs::read_dir(root)
+        .with_context(|| format!("read {}", root.display()))?
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .filter_map(|e| {
+            let p = e.path();
+            let mtime = e.metadata().ok()?.modified().ok()?;
+            Some((mtime, dir_size_bytes(&p), p))
+        })
+        .collect();
+    let total: u64 = dirs.iter().map(|d| d.1).sum();
+    if total <= budget {
+        return Ok(0);
+    }
+    dirs.sort_by_key(|d| d.0); // oldest first — delete oldest until under budget
+    let mut freed = 0u64;
+    let mut removed = 0usize;
+    for (mtime, size, p) in dirs {
+        if total.saturating_sub(freed) <= budget {
+            break;
+        }
+        // Too-recent / future-dated dir → may still be recording; skip.
+        if now
+            .duration_since(mtime)
+            .map(|age| age < min_age)
+            .unwrap_or(true)
+        {
+            continue;
+        }
+        match std::fs::remove_dir_all(&p) {
+            Ok(()) => {
+                removed += 1;
+                freed += size;
+                log::info!("recorder: size-pruned recording {}", p.display());
+            }
+            Err(e) => log::warn!("recorder: cannot size-prune {}: {e}", p.display()),
+        }
+    }
+    Ok(removed)
+}
+
+/// Shallow sum of file sizes directly under `dir` (recordings dirs hold only the
+/// flat `mic.wav` / `system.wav`, no nesting). Unreadable entries count as 0.
+fn dir_size_bytes(dir: &Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .filter_map(|e| e.metadata().ok())
+        .filter(std::fs::Metadata::is_file)
+        .map(|m| m.len())
+        .sum()
+}
+
 /// Sweep `root/*/*.wav` and patch any header whose stored `data` size doesn't
 /// match the file length (a crash-truncated, never-finalised recording),
 /// rewriting the RIFF + `data` chunk sizes from the actual file size so the WAV
@@ -501,6 +595,37 @@ mod tests {
             pcm_i16: samples.to_vec(),
             timestamp_ms: 0,
         }
+    }
+
+    #[test]
+    fn size_cap_prunes_oldest_until_under_budget() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        // 6 session dirs × 256 KB = 1.5 MB total (creation order = mtime order).
+        for i in 0..6 {
+            let d = root.join(format!("2026-06-1{i}_00-00-00_aaaa{i}"));
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(d.join("mic.wav"), vec![0u8; 256 * 1024]).unwrap();
+        }
+        let zero = std::time::Duration::ZERO; // fresh dirs eligible (no grace)
+
+        // 0 = unlimited → never prunes.
+        assert_eq!(prune_recordings_over_total_in(root, 0, zero).unwrap(), 0);
+        // Budget >= total → no-op.
+        assert_eq!(prune_recordings_over_total_in(root, 100, zero).unwrap(), 0);
+        // 1 MB budget vs 1.5 MB total → free 0.5 MB = delete the 2 oldest dirs.
+        assert_eq!(prune_recordings_over_total_in(root, 1, zero).unwrap(), 2);
+        // The tree is now within budget, 4 dirs left.
+        let remaining: u64 = std::fs::read_dir(root)
+            .unwrap()
+            .flatten()
+            .map(|e| dir_size_bytes(&e.path()))
+            .sum();
+        assert!(
+            remaining <= 1024 * 1024,
+            "remaining {remaining} bytes must be <= 1 MB budget"
+        );
+        assert_eq!(std::fs::read_dir(root).unwrap().count(), 4);
     }
 
     #[test]

@@ -1140,6 +1140,10 @@ pub fn update_llama_engine(
         .context("swap engine binaries")?;
     let _ = std::fs::remove_dir_all(&staging);
     write_build_stamp(&llama_dir, &rel.tag_name);
+    // fs-audit #1 — verify-before-swap means only the immediately-previous
+    // engine is ever a rollback candidate, so keep just the newest backup; the
+    // rest accumulated unbounded (~150-300 MB each) before this.
+    let _ = prune_engine_backups(root, 1);
 
     Ok(EngineUpdate::Updated {
         from: installed,
@@ -1252,6 +1256,78 @@ fn swap_engine_binaries(staging: &Path, live: &Path, backup: &Path) -> Result<()
             .with_context(|| format!("install engine file {}", name.to_string_lossy()))?;
     }
     Ok(())
+}
+
+/// Keep the newest `keep` engine rollback backups, removing older ones. The
+/// updater names each backup after the PREVIOUS build (`llama.cpp.backup-b<N>`,
+/// or `llama.cpp.backup-prev` when the old build had no stamp), so they are
+/// uniquely named and accumulated forever before this. Only the updater's OWN
+/// naming is pruned — a hand-made `llama.cpp.backup-*` that doesn't match
+/// `-b<N>` / `-prev` (e.g. a manual `-may` snapshot) is deliberately left alone.
+/// Best-effort; returns the number of backup dirs removed.
+fn prune_engine_backups(root: &Path, keep: usize) -> usize {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return 0;
+    };
+    let mut backups: Vec<(std::time::SystemTime, PathBuf)> = entries
+        .flatten()
+        .filter_map(|e| {
+            let p = e.path();
+            if !p.is_dir() {
+                return None;
+            }
+            let name = p.file_name()?.to_str()?;
+            // Match ONLY the updater's own scheme: `llama.cpp.backup-b<digits>`
+            // (the previous build number) or exactly `llama.cpp.backup-prev`. The
+            // digit check (not a bare `starts_with("…-b")`) means a hand-made
+            // `llama.cpp.backup-baseline` / `-may` snapshot is never pruned.
+            let ours = name == "llama.cpp.backup-prev"
+                || name.strip_prefix("llama.cpp.backup-b").is_some_and(|rest| {
+                    !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit())
+                });
+            if !ours {
+                return None;
+            }
+            let mtime = e.metadata().ok()?.modified().ok()?;
+            Some((mtime, p))
+        })
+        .collect();
+    if backups.len() <= keep {
+        return 0;
+    }
+    backups.sort_by_key(|b| std::cmp::Reverse(b.0)); // newest first
+    let mut removed = 0usize;
+    for (_, p) in backups.into_iter().skip(keep) {
+        match std::fs::remove_dir_all(&p) {
+            Ok(()) => {
+                removed += 1;
+                log::info!("local AI: pruned old engine backup {}", p.display());
+            }
+            Err(e) => log::warn!("local AI: cannot prune engine backup {}: {e}", p.display()),
+        }
+    }
+    removed
+}
+
+/// Idempotent boot-time GC of orphaned engine-update artifacts: a
+/// `.llama-staging-update` dir left by a crashed/killed mid-update (the updater
+/// otherwise only reclaims it on the NEXT attempt — which may never come if the
+/// user stops updating or switches to cloud AI), plus stale rollback backups
+/// beyond the newest one. Safe to call unconditionally at boot: a live update
+/// holds `local_ai_lock`, so any staging dir present here is by definition
+/// orphaned. Best-effort. (fs-audit #1.)
+pub fn sweep_orphaned_engine_artifacts(root: &Path) {
+    let staging = root.join(".llama-staging-update");
+    if staging.exists() {
+        match std::fs::remove_dir_all(&staging) {
+            Ok(()) => log::info!("local AI: swept orphaned engine staging dir"),
+            Err(e) => log::warn!("local AI: cannot sweep engine staging dir: {e}"),
+        }
+    }
+    let pruned = prune_engine_backups(root, 1);
+    if pruned > 0 {
+        log::info!("local AI: swept {pruned} stale engine backup(s) at boot");
+    }
 }
 
 /// On launch, start the local servers the config points at but that aren't
@@ -2201,6 +2277,38 @@ mod tests {
         );
         assert_eq!(std::fs::read(backup.join("ggml.dll")).unwrap(), b"OLD-DLL");
         assert!(!backup.join("gemma.gguf").exists());
+    }
+
+    #[test]
+    fn prune_engine_backups_keeps_count_and_spares_manual_and_live() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        for name in [
+            "llama.cpp.backup-b9000",    // updater-made (ours)
+            "llama.cpp.backup-b9100",    // updater-made (ours)
+            "llama.cpp.backup-prev",     // updater-made, no-stamp variant (ours)
+            "llama.cpp.backup-may",      // a MANUAL snapshot — must be spared
+            "llama.cpp.backup-baseline", // manual, starts with -b but NOT digits
+            "llama.cpp",                 // the live engine dir — must be spared
+        ] {
+            std::fs::create_dir_all(root.join(name)).unwrap();
+        }
+        // keep >= count of ours → no-op.
+        assert_eq!(prune_engine_backups(root, 10), 0);
+        // keep 0 → all THREE updater backups removed; manual + live untouched.
+        assert_eq!(prune_engine_backups(root, 0), 3);
+        assert!(!root.join("llama.cpp.backup-b9000").exists());
+        assert!(!root.join("llama.cpp.backup-b9100").exists());
+        assert!(!root.join("llama.cpp.backup-prev").exists());
+        assert!(
+            root.join("llama.cpp.backup-may").exists(),
+            "manual backup spared"
+        );
+        assert!(
+            root.join("llama.cpp.backup-baseline").exists(),
+            "manual `-b…`-but-not-digits backup spared"
+        );
+        assert!(root.join("llama.cpp").exists(), "live engine dir spared");
     }
 
     /// v0.10.2 — the GigaAM vocab is BUNDLED (include_bytes) so the install never

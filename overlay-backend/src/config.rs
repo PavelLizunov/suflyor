@@ -240,6 +240,16 @@ pub struct Config {
     #[serde(default = "default_journal_max_total_mb")]
     pub journal_max_total_mb: u32,
 
+    /// fs-audit #5 — total disk budget for raw audio recordings, in MB. After
+    /// the count/age prunes, oldest `recordings\<id>\` dirs are deleted until the
+    /// recordings tree is under this budget. Applies REGARDLESS of the count/age
+    /// policy (mirrors `journal_max_total_mb`, which caps journals even in
+    /// "keep all" mode), so even the "all (no limit)" retention choice can't fill
+    /// the disk. 0 = truly unlimited. Default 20 GB (~87 h of dual-channel audio)
+    /// — a safety backstop a normal user never reaches.
+    #[serde(default = "default_record_max_total_mb")]
+    pub record_max_total_mb: u32,
+
     /// P2 — index finished JSONL sessions into the local SQLite archive
     /// (searchable interview history). ON by default; the JSONL journals stay the
     /// source of truth either way, and the catalog can be deleted + rebuilt.
@@ -524,6 +534,7 @@ impl Config {
             record_retention_days: 0,
             journal_retention_sessions: default_journal_retention_sessions(),
             journal_max_total_mb: default_journal_max_total_mb(),
+            record_max_total_mb: default_record_max_total_mb(),
             session_archive_enabled: default_session_archive_enabled(),
             auto_export_on_quit: false,
             max_session_cost_usd: default_max_session_cost_usd(),
@@ -871,6 +882,10 @@ fn default_journal_retention_sessions() -> u32 {
 
 fn default_journal_max_total_mb() -> u32 {
     500 // matches the pre-v0.15 hard-coded journal::MAX_TOTAL_BYTES
+}
+
+fn default_record_max_total_mb() -> u32 {
+    20_000 // ~20 GB backstop on raw audio even in "keep all" mode; 0 = unlimited
 }
 
 fn default_session_archive_enabled() -> bool {
@@ -3115,6 +3130,7 @@ mod tests {
         assert_eq!(cfg.record_retention_days, 0);
         assert_eq!(cfg.journal_retention_sessions, 100);
         assert_eq!(cfg.journal_max_total_mb, 500);
+        assert_eq!(cfg.record_max_total_mb, 20_000);
         // And the explicit "unlimited" spelling round-trips.
         let cfg: Config = serde_json::from_str(
             r#"{"record_retention_sessions":0,"record_retention_days":30,
