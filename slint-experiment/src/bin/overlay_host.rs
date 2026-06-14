@@ -1399,7 +1399,9 @@ fn main() -> Result<(), slint::PlatformError> {
                     continue;
                 }
             };
-            tile.set_tile_title(SharedString::from(req.spec.question.clone()));
+            tile.set_tile_title(SharedString::from(
+                slint_replay::app_state::tile_title_line(&req.spec.question),
+            ));
             // Phase E6 fix — auto-increment sequence so tile labels
             // show #1, #2, #3 instead of all #0. Use Relaxed because
             // poll-Timer is single-threaded (UI thread).

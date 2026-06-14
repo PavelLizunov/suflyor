@@ -149,6 +149,20 @@ pub fn format_timer(secs: u64) -> String {
     }
 }
 
+/// Collapse a free-text tile title to a SINGLE line for the tile header.
+///
+/// The header `Text` uses `overflow: elide`, which truncates each line by width
+/// but does NOT collapse embedded newlines — so a multi-line question / recognised
+/// transcript fed as the title rendered as several cramped elided lines that
+/// overlapped the chrome buttons (tester-reported). This flattens every run of
+/// whitespace (incl. `\n` / `\t`) to a single space and trims, so the header is
+/// always one line and `elide` handles the width. Fixed-label titles (already one
+/// line) pass through unchanged.
+#[must_use]
+pub fn tile_title_line(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 /// Plain-Rust shape produced by the palette adapter before wrapping
 /// in the Slint `PaletteResult` struct. Lifted out of `overlay_host`
 /// so the per-row preview/fallback logic gets unit-test coverage
@@ -256,6 +270,21 @@ mod tests {
         assert!(g3.is_some(), "after release the next op can acquire");
         drop(g3);
         assert!(!flag.load(Ordering::Acquire), "drop releases again");
+    }
+
+    #[test]
+    fn tile_title_line_collapses_to_one_line() {
+        // The bug: a multi-line transcript title rendered as cramped header lines.
+        assert_eq!(
+            tile_title_line("вот этот домик\nтоп-топ-топ\nидём туда"),
+            "вот этот домик топ-топ-топ идём туда"
+        );
+        assert_eq!(
+            tile_title_line("  leading\t\tand   inner \n trailing  "),
+            "leading and inner trailing"
+        );
+        assert_eq!(tile_title_line("already one line"), "already one line");
+        assert_eq!(tile_title_line(""), "");
     }
 
     /// Strengthened invariant: every next_model output must be

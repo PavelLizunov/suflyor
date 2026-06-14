@@ -306,7 +306,9 @@ pub(crate) fn fire_ptt_ask(
             let w = weak_for_title.clone();
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(t) = w.upgrade() {
-                    t.set_tile_title(SharedString::from(q));
+                    t.set_tile_title(SharedString::from(
+                        slint_replay::app_state::tile_title_line(&q),
+                    ));
                     t.set_source_label(SharedString::from("ai · asking…"));
                 }
             });
