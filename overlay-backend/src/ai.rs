@@ -193,9 +193,13 @@ pub async fn test_connection(base_url: String, bearer: String, model: String) ->
     if status.is_success() {
         Ok(format!("HTTP {}", status.as_u16()))
     } else {
+        // The body can echo the local base_url / a prompt / server internals — log
+        // it but return ONLY the status, so the screen-shared Settings result
+        // field can't leak it (audit Q7 / the generic-AI-error-message policy).
         let txt = resp.text().await.unwrap_or_default();
-        let snippet: String = txt.chars().take(100).collect();
-        Err(anyhow!("HTTP {} — {}", status.as_u16(), snippet))
+        let snippet: String = txt.chars().take(200).collect();
+        log::warn!("AI bridge test HTTP {}: {snippet}", status.as_u16());
+        Err(anyhow!("HTTP {}", status.as_u16()))
     }
 }
 
@@ -215,9 +219,12 @@ pub async fn list_models(base_url: &str, bearer: &str) -> Result<Vec<String>> {
     let resp = req.send().await.context("GET models")?;
     let status = resp.status();
     if !status.is_success() {
+        // Log the body, return only the status (same screen-share-leak guard as
+        // test_connection — this error reaches the Settings model-dropdown area).
         let txt = resp.text().await.unwrap_or_default();
-        let snippet: String = txt.chars().take(100).collect();
-        return Err(anyhow!("HTTP {} — {}", status.as_u16(), snippet));
+        let snippet: String = txt.chars().take(200).collect();
+        log::warn!("list_models HTTP {}: {snippet}", status.as_u16());
+        return Err(anyhow!("HTTP {}", status.as_u16()));
     }
     let v: Value = resp.json().await.context("parse models json")?;
     let ids: Vec<String> = v

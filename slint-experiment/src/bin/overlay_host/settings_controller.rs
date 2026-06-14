@@ -1061,6 +1061,13 @@ pub(crate) fn populate_token_status(
     win.set_profile_io_result(blank());
     win.set_server_preview_ready(false);
     win.set_update_status(blank());
+    // Q2 — clear the updater's transient state too, else the "⬇ Update now"
+    // button + its stale download URL survive a reopen while the status text was
+    // already cleared above (reused-window state-truth gap). The user just
+    // re-checks; nothing persists a half-finished check across opens.
+    win.set_update_available(false);
+    win.set_update_download_url(blank());
+    win.set_update_checking(false);
     win.set_memory_status(blank());
     win.set_ai_prompt_cache(c.ai_prompt_cache);
     win.set_ai_provider_index(i32::from(c.ai_provider == "local"));

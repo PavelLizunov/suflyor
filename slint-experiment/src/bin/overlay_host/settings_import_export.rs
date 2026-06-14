@@ -66,7 +66,12 @@ pub(crate) fn wire_import_export(
                 Some(path) => {
                     match overlay_backend::config::export_server_settings_to(&path, &snapshot) {
                         Ok(()) => format!("[ok] server settings exported to {}", path.display()),
-                        Err(e) => format!("[err] {e:#}"),
+                        Err(e) => {
+                            // Generic + log: the error chain can carry a path /
+                            // internals into this screen-shared field (audit Q8).
+                            eprintln!("[overlay-host] server export failed: {e:#}");
+                            "[err] export failed (see log)".to_string()
+                        }
                     }
                 }
             };
@@ -108,7 +113,10 @@ pub(crate) fn wire_import_export(
                 Err(e) => {
                     *pending.borrow_mut() = None;
                     w.set_server_preview_ready(false);
-                    w.set_profile_io_result(SharedString::from(format!("[err] {e:#}")));
+                    eprintln!("[overlay-host] server import preview failed: {e:#}");
+                    w.set_profile_io_result(SharedString::from(
+                        "[err] could not read file (see log)",
+                    ));
                 }
             }
         });
@@ -140,7 +148,10 @@ pub(crate) fn wire_import_export(
                     let _ = msg_refresh_after_import(&w, &cfg_c);
                     "[ok] server settings applied (AI/STT providers, URLs, models, keys). Local profiles, devices, UI and snippets kept; the local GigaAM model path was kept from this PC. Restart for full effect.".to_string()
                 }
-                Err(e) => format!("[err] {e:#}"),
+                Err(e) => {
+                    eprintln!("[overlay-host] server settings apply/save failed: {e:#}");
+                    "[err] apply failed (see log)".to_string()
+                }
             };
             w.set_profile_io_result(SharedString::from(msg));
         });

@@ -1706,7 +1706,7 @@ export component SettingsWindow inherits Window {
                                 spacing: 6px;
                                 Button {
                                     text: root.local-ai-installing ? @tr("Installing…") : @tr("Install local AI");
-                                    enabled: !root.local-ai-installing && !root.quality-downloading && !root.model-switching;
+                                    enabled: !root.local-ai-installing && !root.quality-downloading && !root.model-switching && !root.engine-updating && !root.vision12b-downloading;
                                     clicked => {
                                         root.install-local-ai-clicked();
                                     }

@@ -235,9 +235,13 @@ pub async fn test_connection(base_url: String, bearer: String, model: String) ->
     if status.is_success() {
         Ok(format!("HTTP {}", status.as_u16()))
     } else {
+        // Log the body, return ONLY the status — the snippet can carry the local
+        // vision base_url / server internals into the screen-shared Settings /
+        // Diagnostics result field (audit Q7).
         let txt = resp.text().await.unwrap_or_default();
-        let snippet: String = txt.chars().take(100).collect();
-        Err(anyhow!("HTTP {} — {}", status.as_u16(), snippet))
+        let snippet: String = txt.chars().take(200).collect();
+        log::warn!("vision endpoint test HTTP {}: {snippet}", status.as_u16());
+        Err(anyhow!("HTTP {}", status.as_u16()))
     }
 }
 
