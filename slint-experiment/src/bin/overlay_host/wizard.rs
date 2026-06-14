@@ -27,7 +27,7 @@
 //! explicitly below.
 use super::{
     apply_scheme_wizard, config, focus_window, global_scheme, global_stealth, grab_hwnd,
-    present_window_stealth_aware, release_mic, set_global_stealth, set_skip_taskbar, set_stealth,
+    present_window_stealth_aware, set_global_stealth, set_skip_taskbar, set_stealth,
     try_acquire_mic, ComponentHandle, OverlayBarWindow, Rc, RefCell, SettingsWindow, SharedString,
     WindowRegistry, WizardWindow,
 };
@@ -232,14 +232,15 @@ pub(crate) fn wire_wizard_steps(
             let dev = cfg_c.read().mic_device.clone();
             let wr = w.as_weak();
             std::thread::spawn(move || {
-                let (lvl, msg): (i32, String) = if !try_acquire_mic() {
+                let mic_guard = try_acquire_mic();
+                let (lvl, msg): (i32, String) = if mic_guard.is_none() {
                     (
                         4,
                         "[!] mic busy — close PTT / dictation and retry".to_string(),
                     )
                 } else {
                     let r = overlay_backend::audio::record_mic_blocking(3000, dev);
-                    release_mic();
+                    drop(mic_guard); // release before processing (RAII: also on panic)
                     match r {
                         Ok(s) if s.is_empty() => (4, "[!] no audio captured".to_string()),
                         Ok(s) => {
@@ -364,7 +365,13 @@ pub(crate) fn wire_wizard_steps(
             {
                 let mut c = cfg_c.write();
                 c.stealth_enabled = on;
-                let _ = config::save(&c);
+                // Security-relevant: a silent save-fail means stealth won't persist
+                // across restart (bar visible to capture); log it (audit Q4).
+                if let Err(e) = config::save(&c) {
+                    eprintln!(
+                        "[overlay-host] wizard stealth save failed (will not persist): {e:#}"
+                    );
+                }
             }
             if let Some(o) = ow.upgrade() {
                 o.set_stealth_active(on);

@@ -42,14 +42,24 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// one `release` in the worker's completion path. (Same pattern as `MIC_BUSY`.)
 static RETRANSCRIBE_BUSY: AtomicBool = AtomicBool::new(false);
 
-fn try_acquire_retranscribe() -> bool {
+/// RAII release for the retranscribe latch. Dropping it — on ANY exit of the
+/// spawned task, including a panic unwinding the awaited re-STT/Summary future —
+/// frees the latch, so a panic in the heaviest job in the app can't leave the
+/// "↻ Summary" button dead for the rest of the process (audit Q1). The `()`
+/// field is private so only `try_acquire_retranscribe` can mint one.
+struct RetranscribeGuard(());
+
+impl Drop for RetranscribeGuard {
+    fn drop(&mut self) {
+        RETRANSCRIBE_BUSY.store(false, Ordering::Release);
+    }
+}
+
+fn try_acquire_retranscribe() -> Option<RetranscribeGuard> {
     RETRANSCRIBE_BUSY
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_ok()
-}
-
-fn release_retranscribe() {
-    RETRANSCRIBE_BUSY.store(false, Ordering::Release);
+        .then(|| RetranscribeGuard(()))
 }
 
 /// v0.10.1 — format the active profile/persona for the text-ask header so the
@@ -582,10 +592,11 @@ pub(crate) fn open_archive(
             // PROCESS-GLOBAL latch (not the per-window property): blocks a second
             // job even after this archive was closed+reopened mid-run (a fresh
             // window's `retranscribe-busy` starts false). Silently no-op while a
-            // job runs, like MIC_BUSY. Released in the worker's completion below.
-            if !try_acquire_retranscribe() {
+            // job runs, like MIC_BUSY. RAII guard moved into the task below frees
+            // it on every exit incl. an awaited-future panic.
+            let Some(rt_guard) = try_acquire_retranscribe() else {
                 return;
-            }
+            };
             let sid = row.id.to_string();
             p.set_retranscribe_busy(true);
             p.set_retranscribe_status(SharedString::from("starting…"));
@@ -635,7 +646,8 @@ pub(crate) fn open_archive(
                 }
                 // Release the PROCESS-GLOBAL latch first (survives even if this
                 // window was closed mid-job and the weak upgrade below fails).
-                release_retranscribe();
+                // RAII: also released if the awaited future above panicked.
+                drop(rt_guard);
                 let weak_done = weak_job.clone();
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(win) = weak_done.upgrade() {

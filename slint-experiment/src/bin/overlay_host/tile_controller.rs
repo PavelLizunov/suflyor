@@ -228,11 +228,14 @@ impl RuntimeEvents for PttStreamSink {
         match evt {
             ai::AiEvent::Start { .. } => self.bridge.inc_ai_in_flight(),
             ai::AiEvent::Delta { text } => {
-                let body = {
+                // Accumulate the (cheap) push FIRST, then throttle, then clone the
+                // O(n) body ONLY when we're actually going to render (audit P2).
+                // The 50ms throttle drops ~80% of token deltas; building the full
+                // answer string before the check wasted an O(n) copy on each.
+                {
                     let mut st = self.state.lock().unwrap_or_else(|p| p.into_inner());
                     st.accumulated.push_str(&text);
-                    st.accumulated.clone()
-                };
+                }
                 {
                     let now = std::time::Instant::now();
                     let mut last = self.last_render.lock().unwrap_or_else(|p| p.into_inner());
@@ -241,6 +244,10 @@ impl RuntimeEvents for PttStreamSink {
                     }
                     *last = now;
                 }
+                let body = {
+                    let st = self.state.lock().unwrap_or_else(|p| p.into_inner());
+                    st.accumulated.clone()
+                };
                 let weak = self.tile.clone();
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(t) = weak.upgrade() {
@@ -470,7 +477,11 @@ impl OverlayBarBridge {
         };
         match evt {
             ai::AiEvent::Delta { text } => {
-                let (weak, body) = {
+                // Accumulate the (cheap) push FIRST, throttle, then build the O(n)
+                // `prefix+accumulated` body ONLY when we actually render (audit P2).
+                // ~80% of token deltas are dropped by the 50ms throttle; the old
+                // order paid a full format!() copy on every dropped delta.
+                {
                     let mut slot = match self.current_streaming.lock() {
                         Ok(g) => g,
                         Err(p) => p.into_inner(),
@@ -479,12 +490,7 @@ impl OverlayBarBridge {
                         return; // No active stream; drop the delta.
                     };
                     stream.accumulated.push_str(&text);
-                    // Render prior thread + the live answer (continue-dialog):
-                    // `prefix` is empty for the first answer, non-empty after
-                    // a follow-up so the new answer appends below the thread.
-                    let body = format!("{}{}", stream.prefix, stream.accumulated);
-                    (stream.weak.clone(), body)
-                };
+                }
                 // Throttle the full-answer re-parse to ~50ms. The text is
                 // already accumulated above; a skipped delta just defers its
                 // repaint, and the terminal Done render shows the full answer.
@@ -499,6 +505,25 @@ impl OverlayBarBridge {
                     }
                     *last = now;
                 }
+                // Past the throttle — snapshot the tile handle AND body together
+                // under ONE lock so a concurrent stream swapping the slot can't
+                // pair stream-A's tile with stream-B's body (review NIT). `prefix`
+                // is empty for the first answer, non-empty after a follow-up. The
+                // stream may have just finished (Done took the slot) between locks
+                // → skip; Done renders the final.
+                let (weak, body) = {
+                    let slot = match self.current_streaming.lock() {
+                        Ok(g) => g,
+                        Err(p) => p.into_inner(),
+                    };
+                    let Some(stream) = slot.as_ref() else {
+                        return;
+                    };
+                    (
+                        stream.weak.clone(),
+                        format!("{}{}", stream.prefix, stream.accumulated),
+                    )
+                };
                 let _ = slint::invoke_from_event_loop(move || {
                     let Some(tile) = weak.upgrade() else {
                         return;

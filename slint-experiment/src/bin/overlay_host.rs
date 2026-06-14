@@ -366,14 +366,30 @@ pub(crate) fn to_md_blocks(md: &str) -> Vec<MarkdownBlock> {
 /// pairs with exactly one release.
 static MIC_BUSY: AtomicBool = AtomicBool::new(false);
 
-pub(crate) fn try_acquire_mic() -> bool {
+/// RAII release for the single-mic lock. Dropping this — on ANY exit path,
+/// including a panic unwinding the record thread (WASAPI/COM fault, USB mic
+/// yanked mid-capture) — frees the mic. Replaces the old bare `release_mic()`
+/// statement, which a panic would skip, leaving every mic consumer permanently
+/// reporting "занят" until an app restart (audit Q1). The `()` field is private,
+/// so only `try_acquire_mic` can mint one.
+pub(crate) struct MicGuard(());
+
+impl Drop for MicGuard {
+    fn drop(&mut self) {
+        MIC_BUSY.store(false, Ordering::Release);
+    }
+}
+
+/// Take the single-mic lock. `Some(guard)` = acquired (the mic is ours until the
+/// guard drops); `None` = another recorder holds it. Acquire on the UI thread,
+/// then MOVE the guard into the record worker so it releases on every exit incl.
+/// unwind; `drop(guard)` right after recording to free the mic before
+/// transcription (which never touches the device).
+pub(crate) fn try_acquire_mic() -> Option<MicGuard> {
     MIC_BUSY
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_ok()
-}
-
-pub(crate) fn release_mic() {
-    MIC_BUSY.store(false, Ordering::Release);
+        .then(|| MicGuard(()))
 }
 
 // ===== Tuning constants — extracted from inline literals 2026-05-27 =====
@@ -1919,9 +1935,9 @@ fn main() -> Result<(), slint::PlatformError> {
                 return; // one PTT at a time
             }
             // M2 — single-mic guard (shared with voice follow-up + dictation).
-            if !try_acquire_mic() {
+            let Some(mic_guard) = try_acquire_mic() else {
                 return; // mic held by a tile voice follow-up / dictation
-            }
+            };
             let stop = Arc::new(AtomicBool::new(false));
             *ptt_state.borrow_mut() = Some(PttRec {
                 is_mic: true,
@@ -1948,7 +1964,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     eprintln!("[overlay-host] PTT mic record failed: {e:#}");
                     Vec::new()
                 });
-                release_mic(); // M2 — free the mic before transcription
+                drop(mic_guard); // M2 — free the mic before transcription (RAII: also released on a record-thread panic)
                 let _ = tx.send((audio::AudioSource::Mic, id, pcm));
             });
             eprintln!("[overlay-host] PTT mic — recording (hold)…");
@@ -2146,7 +2162,12 @@ fn main() -> Result<(), slint::PlatformError> {
             {
                 let mut c = cfg_stealth.write();
                 c.stealth_enabled = new_stealth;
-                let _ = config::save(&c);
+                // Security-relevant: a silent save-fail means next launch starts
+                // with stealth OFF → the bar is visible to screen capture with no
+                // log line to explain it. Log so the failure is diagnosable (Q4).
+                if let Err(e) = config::save(&c) {
+                    eprintln!("[overlay-host] stealth save failed (will not persist across restart): {e:#}");
+                }
             }
             // Apply to overlay + light the bar 🎯 chip. The bar stays inline (NOT
             // in the registry): it also drops its taskbar button under stealth so

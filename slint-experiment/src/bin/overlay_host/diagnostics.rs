@@ -20,7 +20,7 @@
 //! NOTE (§7): the parent crate-root symbols this module references are imported
 //! explicitly below.
 use super::{
-    active_stack_label, hotkey_diag_row, release_mic, try_acquire_mic, ComponentHandle, Duration,
+    active_stack_label, hotkey_diag_row, try_acquire_mic, ComponentHandle, Duration,
     SettingsWindow, SharedString, Timer,
 };
 
@@ -308,14 +308,15 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                 // M-1: guard the diagnostics mic probe with the single-mic lock
                 // too, so "Проверить всё" during an active session reports busy
                 // instead of fighting PTT/voice/dictation for the device.
-                let (mic_level, mic_msg): (i32, String) = if !try_acquire_mic() {
+                let mic_guard = try_acquire_mic();
+                let (mic_level, mic_msg): (i32, String) = if mic_guard.is_none() {
                     (
                         4,
                         "[!] mic busy — close PTT / dictation and retry".to_string(),
                     )
                 } else {
                     let r = overlay_backend::audio::record_mic_blocking(3000, mic_device);
-                    release_mic();
+                    drop(mic_guard); // release before processing (RAII: also on panic)
                     match r {
                         Ok(s) if s.is_empty() => (4, "[!] no audio captured".to_string()),
                         Ok(s) => {

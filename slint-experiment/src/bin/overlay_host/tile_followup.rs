@@ -14,8 +14,8 @@
 //!
 //! NOTE (§7): the crate-root symbols this module uses are imported below.
 use super::{
-    ai, audio, gated_events, install_streaming_tile, journal, message_text, release_mic,
-    spawn_ptt_watchdog, strip_followup_directives, stt, to_md_blocks, tokio_mpsc, try_acquire_mic,
+    ai, audio, gated_events, install_streaming_tile, journal, message_text, spawn_ptt_watchdog,
+    strip_followup_directives, stt, to_md_blocks, tokio_mpsc, try_acquire_mic,
     warn_if_over_cost_cap, Arc, AskRoute, AtomicBool, ComponentHandle, LiveRoute, ModelRc,
     Ordering, OverlayBarBridge, Rc, RefCell, RuntimeEvents, SharedSlintRuntime, SharedString,
     StreamingTile, TileWindow, VecModel,
@@ -255,10 +255,10 @@ pub(crate) fn wire_voice_followup(
             return;
         };
         // M2 — only one mic capture at a time across all recorders.
-        if !try_acquire_mic() {
+        let Some(mic_guard) = try_acquire_mic() else {
             t.set_source_label(SharedString::from("stt · микрофон занят"));
             return;
-        }
+        };
         let stop = Arc::new(AtomicBool::new(false));
         *voice_stop.borrow_mut() = Some(stop.clone());
         spawn_ptt_watchdog(stop.clone());
@@ -275,8 +275,9 @@ pub(crate) fn wire_voice_followup(
                     Vec::new()
                 });
             // M2 — free the mic the instant recording ends (before STT, which
-            // doesn't touch the device) so the next recorder can start.
-            release_mic();
+            // doesn't touch the device) so the next recorder can start. RAII:
+            // dropping the guard also releases on a record-thread panic.
+            drop(mic_guard);
             let text = if pcm.len() < 4800 {
                 String::new()
             } else {

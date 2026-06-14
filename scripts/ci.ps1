@@ -45,8 +45,9 @@ Run-Step "slint fmt --check" {
 Run-Step "slint clippy -D warnings" {
     & $cargoExe clippy --manifest-path slint-experiment/Cargo.toml --all-targets -- -D warnings
 }
-Run-Step "slint test --lib" {
-    & $cargoExe test --manifest-path slint-experiment/Cargo.toml --lib --quiet
+# NOT --lib: it skips tests/ (i18n_guard + any guard test). Run the full suite.
+Run-Step "slint test" {
+    & $cargoExe test --manifest-path slint-experiment/Cargo.toml --quiet
 }
 
 # --- overlay-backend (shared logic) ---
@@ -56,8 +57,8 @@ Run-Step "backend fmt --check" {
 Run-Step "backend clippy -D warnings" {
     & $cargoExe clippy --manifest-path overlay-backend/Cargo.toml --all-targets -- -D warnings
 }
-Run-Step "backend test --lib" {
-    & $cargoExe test --manifest-path overlay-backend/Cargo.toml --lib --quiet
+Run-Step "backend test" {
+    & $cargoExe test --manifest-path overlay-backend/Cargo.toml --quiet
 }
 
 Write-Host ""

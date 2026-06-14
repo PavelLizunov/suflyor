@@ -47,13 +47,12 @@
 use super::{
     active_stack_label, ai, apply_scheme_bar, apply_scheme_settings, audio, clamp_scheme, config,
     drag_begin, drag_update, fetch_models, grab_hwnd, make_transparent_tile, open_wizard,
-    populate_diagnostics, present_window_stealth_aware, release_mic, set_always_on_top,
-    set_global_scheme, set_global_stealth, set_global_tile_opacity, set_stealth,
-    spawn_ptt_watchdog, stt, try_acquire_mic, wire_ai_settings, wire_diagnostics,
-    wire_import_export, wire_local_ai, wire_memory, wire_stt_settings, wire_updates,
-    wire_vision_settings, Arc, AtomicBool, ComponentHandle, ModelRc, ModelTarget, Ordering,
-    OverlayBarWindow, Rc, RefCell, SettingsWindow, SharedString, TileWindows, VecModel,
-    WindowRegistry,
+    populate_diagnostics, present_window_stealth_aware, set_always_on_top, set_global_scheme,
+    set_global_stealth, set_global_tile_opacity, set_stealth, spawn_ptt_watchdog, stt,
+    try_acquire_mic, wire_ai_settings, wire_diagnostics, wire_import_export, wire_local_ai,
+    wire_memory, wire_stt_settings, wire_updates, wire_vision_settings, Arc, AtomicBool,
+    ComponentHandle, ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell, SettingsWindow,
+    SharedString, TileWindows, VecModel, WindowRegistry,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -202,11 +201,12 @@ pub(crate) fn open_settings(
                 // M-1: take the single-mic guard so this test can't collide with
                 // PTT / voice follow-up / dictation (a 2nd WASAPI open garbles
                 // both). Report busy instead of recording.
-                let msg = if !try_acquire_mic() {
+                let mic_guard = try_acquire_mic();
+                let msg = if mic_guard.is_none() {
                     "[!] mic busy — close PTT / dictation and retry".to_string()
                 } else {
                     let result = overlay_backend::audio::record_mic_blocking(3000, device);
-                    release_mic();
+                    drop(mic_guard); // release before processing (RAII: also on panic)
                     match result {
                         Ok(samples) if samples.is_empty() => "no audio captured".to_string(),
                         Ok(samples) => {
@@ -522,7 +522,9 @@ pub(crate) fn open_settings(
             }
             let mut c = cfg_c.write();
             c.select_profile(idx as usize);
-            let _ = overlay_backend::config::save(&c);
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] profile select save failed: {e:#}");
+            }
             if let Some(w) = weak.upgrade() {
                 refresh_profiles(&w, &c);
             }
@@ -533,16 +535,21 @@ pub(crate) fn open_settings(
         let weak = win.as_weak();
         win.on_profile_add(move |name| {
             let mut c = cfg_c.write();
-            let ok = c.add_profile(name.as_str()).is_some();
-            if ok {
-                let _ = overlay_backend::config::save(&c);
-            }
+            let added = c.add_profile(name.as_str()).is_some();
+            let saved = if added {
+                overlay_backend::config::save(&c)
+            } else {
+                Ok(())
+            };
             if let Some(w) = weak.upgrade() {
                 refresh_profiles(&w, &c);
-                w.set_meeting_context_result(SharedString::from(if ok {
-                    "[ok] профиль добавлен"
-                } else {
+                w.set_meeting_context_result(SharedString::from(if !added {
                     "[--] пустое или занятое имя"
+                } else if let Err(e) = &saved {
+                    eprintln!("[overlay-host] profile add save failed: {e:#}");
+                    "[err] не удалось сохранить — проверьте диск"
+                } else {
+                    "[ok] профиль добавлен"
                 }));
             }
         });
@@ -553,15 +560,20 @@ pub(crate) fn open_settings(
         win.on_profile_rename(move |name| {
             let mut c = cfg_c.write();
             let ok = c.rename_active_profile(name.as_str());
-            if ok {
-                let _ = overlay_backend::config::save(&c);
-            }
+            let saved = if ok {
+                overlay_backend::config::save(&c)
+            } else {
+                Ok(())
+            };
             if let Some(w) = weak.upgrade() {
                 refresh_profiles(&w, &c);
-                w.set_meeting_context_result(SharedString::from(if ok {
-                    "[ok] переименовано"
-                } else {
+                w.set_meeting_context_result(SharedString::from(if !ok {
                     "[--] пустое или занятое имя"
+                } else if let Err(e) = &saved {
+                    eprintln!("[overlay-host] profile rename save failed: {e:#}");
+                    "[err] не удалось сохранить — проверьте диск"
+                } else {
+                    "[ok] переименовано"
                 }));
             }
         });
@@ -572,10 +584,19 @@ pub(crate) fn open_settings(
         win.on_profile_delete(move || {
             let mut c = cfg_c.write();
             c.delete_active_profile();
-            let _ = overlay_backend::config::save(&c);
+            // Confirm-without-verify was the v0.18 "Готово when not done" class:
+            // report success ONLY if the save actually persisted, else the profile
+            // reappears on next launch with a green status (audit Q3).
+            let saved = overlay_backend::config::save(&c);
             if let Some(w) = weak.upgrade() {
                 refresh_profiles(&w, &c);
-                w.set_meeting_context_result(SharedString::from("[ok] профиль удалён"));
+                w.set_meeting_context_result(SharedString::from(match &saved {
+                    Ok(()) => "[ok] профиль удалён",
+                    Err(e) => {
+                        eprintln!("[overlay-host] profile delete save failed: {e:#}");
+                        "[err] не удалось сохранить — проверьте диск"
+                    }
+                }));
             }
         });
     }
@@ -818,10 +839,10 @@ pub(crate) fn open_settings(
                 return;
             }
             // M2 — single-mic guard (shared with PTT-mic + voice follow-up).
-            if !try_acquire_mic() {
+            let Some(mic_guard) = try_acquire_mic() else {
                 w.set_meeting_context_result(SharedString::from("[--] микрофон занят"));
                 return;
-            }
+            };
             let stop = Arc::new(AtomicBool::new(false));
             *dictate_stop.borrow_mut() = Some(stop.clone());
             spawn_ptt_watchdog(stop.clone());
@@ -835,7 +856,7 @@ pub(crate) fn open_settings(
                             eprintln!("[overlay-host] dictation record failed: {e:#}");
                             Vec::new()
                         });
-                release_mic(); // M2 — free the mic before transcription
+                drop(mic_guard); // M2 — free the mic before transcription (RAII: also released on a record-thread panic)
                 let text = if pcm.len() < 4800 {
                     String::new()
                 } else {

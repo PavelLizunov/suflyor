@@ -34,7 +34,9 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
         win.on_memory_approve(move |id| {
             if let Some(w) = weak.upgrade() {
                 if let Ok(mut store) = open_default_store() {
-                    let _ = store.approve_candidate(i64::from(id), now_ms());
+                    if let Err(e) = store.approve_candidate(i64::from(id), now_ms()) {
+                        eprintln!("[overlay-host] memory approve failed: {e:#}");
+                    }
                 }
                 reload_memory(&w);
             }
@@ -45,7 +47,9 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
         win.on_memory_reject(move |id| {
             if let Some(w) = weak.upgrade() {
                 if let Ok(mut store) = open_default_store() {
-                    let _ = store.set_candidate_status(i64::from(id), "rejected");
+                    if let Err(e) = store.set_candidate_status(i64::from(id), "rejected") {
+                        eprintln!("[overlay-host] memory reject failed: {e:#}");
+                    }
                 }
                 reload_memory(&w);
             }
@@ -56,7 +60,9 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
         win.on_memory_delete_item(move |id| {
             if let Some(w) = weak.upgrade() {
                 if let Ok(mut store) = open_default_store() {
-                    let _ = store.delete_memory_item(i64::from(id));
+                    if let Err(e) = store.delete_memory_item(i64::from(id)) {
+                        eprintln!("[overlay-host] memory delete failed: {e:#}");
+                    }
                 }
                 reload_memory(&w);
             }
@@ -83,19 +89,36 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
             if trimmed.is_empty() {
                 return;
             }
-            if let Ok(mut store) = open_default_store() {
-                let _ = store.insert_memory_item(
-                    &NewMemoryItem {
-                        profile_id: PROFILE.into(),
-                        kind: "note".into(),
-                        text: trimmed.to_string(),
-                        source_session_id: None,
-                    },
-                    now_ms(),
-                );
+            let outcome = match open_default_store() {
+                Ok(mut store) => store
+                    .insert_memory_item(
+                        &NewMemoryItem {
+                            profile_id: PROFILE.into(),
+                            kind: "note".into(),
+                            text: trimmed.to_string(),
+                            source_session_id: None,
+                        },
+                        now_ms(),
+                    )
+                    .map(|_| ())
+                    .map_err(|e| format!("{e:#}")),
+                Err(e) => Err(format!("{e:#}")),
+            };
+            match outcome {
+                Ok(()) => {
+                    // Clear the input ONLY on a confirmed write — otherwise a DB
+                    // failure silently discarded the user's typed fact (audit Q5).
+                    w.set_memory_add_text(SharedString::default());
+                    w.set_memory_status(SharedString::from("➕ факт добавлен"));
+                    reload_memory(&w);
+                }
+                Err(e) => {
+                    eprintln!("[overlay-host] memory add-fact failed: {e}");
+                    w.set_memory_status(SharedString::from(
+                        "[err] не удалось сохранить факт — попробуйте ещё раз",
+                    ));
+                }
             }
-            w.set_memory_add_text(SharedString::default());
-            reload_memory(&w);
         });
     }
 }

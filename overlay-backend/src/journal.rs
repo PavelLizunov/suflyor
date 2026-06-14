@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 use parking_lot::Mutex;
 use serde::Serialize;
 use std::fs::OpenOptions;
-use std::io::Write;
+use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -164,7 +164,7 @@ impl Journal {
         let rand: u32 = (now_unix_ms() & 0xFFFFFF) as u32;
         let path = dir.join(format!("{stamp}_{rand:06x}.jsonl"));
 
-        let mut file = OpenOptions::new()
+        let file = OpenOptions::new()
             .create(true)
             .append(true)
             .open(&path)
@@ -196,16 +196,31 @@ impl Journal {
         std::thread::Builder::new()
             .name("journal-writer".into())
             .spawn(move || {
+                // BufWriter so a burst of events collapses into ONE write syscall
+                // instead of one-per-line (audit P4). We flush after draining each
+                // batch (below), so durability matches the old unbuffered writer:
+                // no line ever sits unflushed while the thread is parked on recv.
+                let mut file = BufWriter::new(file);
                 while let Some(line) = rx.blocking_recv() {
+                    // A single transient write error (disk full, AV lock,
+                    // network-drive hiccup) must NOT kill journaling for the rest
+                    // of the session: `break` here left the unbounded sender open
+                    // (silent data loss + the channel grows forever under
+                    // aggressive mode). Keep draining; at worst we lose the one
+                    // failed line and recover when disk does.
                     if let Err(e) = writeln!(file, "{line}") {
-                        // A single transient write error (disk full, AV lock,
-                        // network-drive hiccup) must NOT kill journaling for the
-                        // rest of the session: `break` here left the unbounded
-                        // sender open (silent data loss + the channel grows
-                        // forever under aggressive mode). Keep draining; at worst
-                        // we lose the one failed line and recover when disk does.
                         log::warn!("journal write failed (continuing): {e}");
-                        continue;
+                    }
+                    // Drain any further already-queued lines WITHOUT blocking, so a
+                    // 30-50 events/min burst becomes a single flush, then flush so
+                    // the batch is durable before we park again.
+                    while let Ok(line) = rx.try_recv() {
+                        if let Err(e) = writeln!(file, "{line}") {
+                            log::warn!("journal write failed (continuing): {e}");
+                        }
+                    }
+                    if let Err(e) = file.flush() {
+                        log::warn!("journal flush failed (continuing): {e}");
                     }
                 }
                 let _ = file.flush();

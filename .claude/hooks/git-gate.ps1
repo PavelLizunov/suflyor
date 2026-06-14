@@ -119,7 +119,10 @@ $slintManifest = "slint-experiment/Cargo.toml"
 if (Test-Path (Join-Path $projectRoot $slintManifest)) {
     Invoke-Gate "slint fmt --check"        $cargoExe @("fmt", "--manifest-path", $slintManifest, "--all", "--", "--check")
     Invoke-Gate "slint clippy -D warnings" $cargoExe @("clippy", "--manifest-path", $slintManifest, "--all-targets", "--", "-D", "warnings")
-    Invoke-Gate "slint cargo test --lib"   $cargoExe @("test", "--manifest-path", $slintManifest, "--workspace", "--lib", "--quiet")
+    # NOT --lib: --lib silently SKIPS everything under tests/, so the i18n_guard
+    # (and any future guard test) never ran in the gate despite the docs claiming
+    # it did. Full `cargo test` runs lib + bins + integration tests/. (audit G2)
+    Invoke-Gate "slint cargo test"         $cargoExe @("test", "--manifest-path", $slintManifest, "--quiet")
 }
 
 # overlay-backend (Phase B1) — extracted shared business logic crate.
@@ -131,7 +134,8 @@ $backendManifest = "overlay-backend/Cargo.toml"
 if (Test-Path (Join-Path $projectRoot $backendManifest)) {
     Invoke-Gate "backend fmt --check"        $cargoExe @("fmt", "--manifest-path", $backendManifest, "--all", "--", "--check")
     Invoke-Gate "backend clippy -D warnings" $cargoExe @("clippy", "--manifest-path", $backendManifest, "--all-targets", "--", "-D", "warnings")
-    Invoke-Gate "backend cargo test --lib"   $cargoExe @("test", "--manifest-path", $backendManifest, "--lib", "--quiet")
+    # NOT --lib — run the integration tests (tests/archive_cycle.rs) too. (audit G2)
+    Invoke-Gate "backend cargo test"         $cargoExe @("test", "--manifest-path", $backendManifest, "--quiet")
 }
 
 # (Phase 7 cut: the push-only block ran src-tauri integration tests +
