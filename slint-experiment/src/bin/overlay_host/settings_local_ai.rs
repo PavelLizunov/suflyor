@@ -56,8 +56,18 @@ pub(crate) fn wire_local_ai(
         win.on_install_local_ai_clicked(move || {
             let Some(w) = weak.upgrade() else { return };
             if w.get_local_ai_installing() {
-                return; // re-entry guard
+                return; // re-entry guard (same window)
             }
+            // B3 — process-global dedup: the per-window bool above resets when
+            // Settings is closed+reopened, so a 2nd click on a fresh window could
+            // spawn a 2nd worker. This flag survives window reuse; the guard frees
+            // it on every worker exit incl. panic.
+            let Some(busy_guard) = slint_replay::app_state::LocalAiBusyGuard::try_acquire({
+                let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
+                s.local_ai_busy.clone()
+            }) else {
+                return; // another local-AI op is already running
+            };
             w.set_local_ai_installing(true);
             w.set_local_ai_progress(0.0);
             w.set_local_ai_gpu(SharedString::from(""));
@@ -74,6 +84,7 @@ pub(crate) fn wire_local_ai(
             };
             cancel.store(false, std::sync::atomic::Ordering::Relaxed);
             std::thread::spawn(move || {
+                let _busy_guard = busy_guard; // frees local_ai_busy on exit incl. panic
                 let on = {
                     let weak_p = weak_t.clone();
                     move |p: overlay_backend::local_ai::Progress| {
@@ -249,6 +260,13 @@ pub(crate) fn wire_local_ai(
             // is NOT running, while the status says "не выполнено". We commit
             // the flip (config + UI) ONLY on a confirmed Switched outcome below;
             // until then the UI keeps showing the previous (still-running) model.
+            // B3 — process-global dedup (survives Settings reopen) + RAII release.
+            let Some(busy_guard) = slint_replay::app_state::LocalAiBusyGuard::try_acquire({
+                let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
+                s.local_ai_busy.clone()
+            }) else {
+                return; // another local-AI op is already running
+            };
             w.set_model_switching(true);
             w.set_quality_status(SharedString::from(if want_quality {
                 "Переключаю на умную модель (12B)…"
@@ -260,6 +278,7 @@ pub(crate) fn wire_local_ai(
             let overlay_t = overlay_c.clone();
             let weak_t = w.as_weak();
             std::thread::spawn(move || {
+                let _busy_guard = busy_guard; // frees local_ai_busy on exit incl. panic
                 let root = overlay_backend::local_ai::default_root();
                 // Own the local-AI lifecycle lock for the whole switch so the
                 // boot/watchdog auto-recovery can't race our free+relaunch of
@@ -360,8 +379,15 @@ pub(crate) fn wire_local_ai(
         win.on_download_quality_clicked(move || {
             let Some(w) = weak.upgrade() else { return };
             if w.get_quality_downloading() {
-                return; // re-entry guard
+                return; // re-entry guard (same window)
             }
+            // B3 — process-global dedup (survives Settings reopen) + RAII release.
+            let Some(busy_guard) = slint_replay::app_state::LocalAiBusyGuard::try_acquire({
+                let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
+                s.local_ai_busy.clone()
+            }) else {
+                return; // another local-AI op is already running
+            };
             w.set_quality_downloading(true);
             w.set_quality_progress(0.0);
             w.set_quality_status(SharedString::from("Подготовка…"));
@@ -372,6 +398,7 @@ pub(crate) fn wire_local_ai(
             cancel.store(false, std::sync::atomic::Ordering::Relaxed);
             let weak_t = w.as_weak();
             std::thread::spawn(move || {
+                let _busy_guard = busy_guard; // frees local_ai_busy on exit incl. panic
                 let on = {
                     let weak_p = weak_t.clone();
                     move |p: overlay_backend::local_ai::Progress| {
@@ -448,8 +475,15 @@ pub(crate) fn wire_local_ai(
         win.on_download_vision12b_clicked(move || {
             let Some(w) = weak.upgrade() else { return };
             if w.get_vision12b_downloading() {
-                return; // re-entry guard
+                return; // re-entry guard (same window)
             }
+            // B3 — process-global dedup (survives Settings reopen) + RAII release.
+            let Some(busy_guard) = slint_replay::app_state::LocalAiBusyGuard::try_acquire({
+                let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
+                s.local_ai_busy.clone()
+            }) else {
+                return; // another local-AI op is already running
+            };
             w.set_vision12b_downloading(true);
             w.set_vision12b_status(SharedString::from("Подготовка…"));
             let cancel = {
@@ -461,6 +495,7 @@ pub(crate) fn wire_local_ai(
             let state_t = state_c.clone();
             let weak_t = w.as_weak();
             std::thread::spawn(move || {
+                let _busy_guard = busy_guard; // frees local_ai_busy on exit incl. panic
                 let on = {
                     let weak_p = weak_t.clone();
                     move |p: overlay_backend::local_ai::Progress| {
@@ -563,8 +598,15 @@ pub(crate) fn wire_local_ai(
         win.on_update_engine_clicked(move || {
             let Some(w) = weak.upgrade() else { return };
             if w.get_engine_updating() {
-                return; // re-entry guard
+                return; // re-entry guard (same window)
             }
+            // B3 — process-global dedup (survives Settings reopen) + RAII release.
+            let Some(busy_guard) = slint_replay::app_state::LocalAiBusyGuard::try_acquire({
+                let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
+                s.local_ai_busy.clone()
+            }) else {
+                return; // another local-AI op is already running
+            };
             w.set_engine_updating(true);
             w.set_engine_update_status(SharedString::from("Проверяю обновление движка…"));
             let cancel = {
@@ -576,6 +618,7 @@ pub(crate) fn wire_local_ai(
             let state_t = state_c.clone();
             let weak_t = w.as_weak();
             std::thread::spawn(move || {
+                let _busy_guard = busy_guard; // frees local_ai_busy on exit incl. panic
                 let on = {
                     let weak_p = weak_t.clone();
                     move |p: overlay_backend::local_ai::Progress| {

@@ -63,6 +63,49 @@ pub struct AppState {
     /// to serialize. RAII release also means a panic in any holder can't wedge
     /// the lock (a poisoned mutex is recovered via `into_inner`).
     pub local_ai_lock: std::sync::Arc<std::sync::Mutex<()>>,
+    /// Process-global "a local-AI op is running" dedup flag (audit B3). The 5
+    /// Settings local-AI ops — install / 12B download / vision-projector download
+    /// / model switch / engine update — each guard re-entry with their PER-WINDOW
+    /// Slint `*_installing`/`*_downloading`/… boolean. But the Settings window is
+    /// REUSED: closing + reopening it mid-op resets that boolean to false, so a
+    /// second click would spawn a SECOND worker. This flag is process-global and
+    /// claimed via [`LocalAiBusyGuard::try_acquire`] before any op spawns, so the
+    /// ops are mutually exclusive regardless of window lifecycle; the guard's Drop
+    /// frees it on EVERY worker exit including a panic, so a panicked worker can't
+    /// permanently block new ops. (Mutual exclusion also means the single
+    /// `local_ai_cancel` only ever applies to the one running op.)
+    pub local_ai_busy: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+/// RAII guard for [`AppState::local_ai_busy`]. Dropping it — on every worker exit
+/// path including a panic unwind — frees the flag so the next local-AI op can run.
+pub struct LocalAiBusyGuard(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+impl LocalAiBusyGuard {
+    /// Claim the global local-AI-busy flag. `Some(guard)` = acquired (no other
+    /// local-AI op was running — proceed and MOVE the guard into the worker so it
+    /// releases on exit incl. panic); `None` = an op is already running, so the
+    /// caller must NOT start a second worker.
+    #[must_use]
+    pub fn try_acquire(flag: std::sync::Arc<std::sync::atomic::AtomicBool>) -> Option<Self> {
+        // LAZY `then` (not `then_some`): on a FAILED acquire we must NOT construct
+        // a guard — its Drop would store(false) and free the op that actually
+        // holds the flag.
+        flag.compare_exchange(
+            false,
+            true,
+            std::sync::atomic::Ordering::AcqRel,
+            std::sync::atomic::Ordering::Acquire,
+        )
+        .is_ok()
+        .then(|| LocalAiBusyGuard(flag))
+    }
+}
+
+impl Drop for LocalAiBusyGuard {
+    fn drop(&mut self) {
+        self.0.store(false, std::sync::atomic::Ordering::Release);
+    }
 }
 
 /// Convenience alias used by all window-spawning callbacks.
