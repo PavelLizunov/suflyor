@@ -90,5 +90,17 @@ Section "Uninstall"
   Delete "$SMPROGRAMS\suflyor-slint\suflyor (Slint).lnk"
   RMDir "$SMPROGRAMS\suflyor-slint"
   Delete "$DESKTOP\suflyor (Slint).lnk"
+
+  ; fs-audit — offer to remove user data + downloaded AI models. Opt-in so a
+  ; reinstall/upgrade keeps the user's sessions by default. $APPDATA / $PROFILE
+  ; are per-user (RequestExecutionLevel user), so no elevation is needed. Covers
+  ; the brand data dir AND the legacy "overlay-mvp" name (in case the build was
+  ; uninstalled before ever launching the renamed version), plus the model tree.
+  MessageBox MB_YESNO|MB_ICONQUESTION "Удалить также ваши данные (настройки, история сессий, записи) и скачанные модели ИИ?$\n$\nДа — стереть всё с диска. Нет — оставить данные (на случай переустановки)." IDNO uninst_keep_data
+    RMDir /r "$APPDATA\suflyor"
+    RMDir /r "$APPDATA\overlay-mvp"
+    RMDir /r "$PROFILE\suflyor-local-ai"
+  uninst_keep_data:
+
   DeleteRegKey HKCU "${PRODUCT_UNINST_KEY}"
 SectionEnd

@@ -22,11 +22,12 @@ pub struct Store {
 }
 
 impl Store {
-    /// Default catalog location: `%APPDATA%\overlay-mvp\catalog.sqlite`, next to
-    /// the `sessions/` JSONL dir. `None` if the OS config dir can't be resolved.
+    /// Default catalog location: `%APPDATA%\suflyor\catalog.sqlite` (legacy
+    /// `overlay-mvp` until migrated), next to the `sessions/` JSONL dir. `None`
+    /// if the OS config dir can't be resolved.
     #[must_use]
     pub fn default_path() -> Option<PathBuf> {
-        dirs::config_dir().map(|d| d.join("overlay-mvp").join("catalog.sqlite"))
+        crate::paths::data_root().map(|r| r.join("catalog.sqlite"))
     }
 
     /// Open (creating if absent) the on-disk catalog: ensure the parent dir,

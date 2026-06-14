@@ -54,9 +54,13 @@ impl log::Log for FacadeLogger {
 
 static FACADE_LOGGER: FacadeLogger = FacadeLogger;
 
-/// `%APPDATA%\overlay-mvp\overlay-host.log` — same dir as `config.json`.
+/// `%APPDATA%\suflyor\overlay-host.log` (legacy `overlay-mvp` until migrated) —
+/// same dir as `config.json`, resolved via the shared data-root so it follows
+/// the one-time rename. NOTE: `main()` runs `paths::migrate_data_root()` BEFORE
+/// `logging::init()`, so by the time this opens the log the dir is already the
+/// brand name.
 fn log_path() -> Option<PathBuf> {
-    dirs::config_dir().map(|d| d.join("overlay-mvp").join("overlay-host.log"))
+    overlay_backend::paths::data_root().map(|r| r.join("overlay-host.log"))
 }
 
 /// Open the log file (append), rotate it if large, and install a panic

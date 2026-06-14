@@ -36,10 +36,12 @@ pub use sqlite_store::Store;
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 
-/// `%APPDATA%\overlay-mvp\sessions` — where the JSONL journals are written.
+/// `%APPDATA%\suflyor\sessions` (legacy `overlay-mvp` until migrated) — where the
+/// JSONL journals are written. Routed through [`crate::paths::data_root`] so it
+/// stays in lock-step with the writer's `journal::sessions_dir`.
 #[must_use]
 pub fn sessions_dir() -> Option<PathBuf> {
-    dirs::config_dir().map(|d| d.join("overlay-mvp").join("sessions"))
+    crate::paths::data_root().map(|r| r.join("sessions"))
 }
 
 /// One-call startup entry point: open the default catalog and idempotently index

@@ -18,11 +18,11 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
-/// `%APPDATA%\overlay-mvp\sessions\` on Windows. Mirrors
-/// `journal::sessions_dir()` in src-tauri.
+/// `%APPDATA%\suflyor\sessions\` (legacy `overlay-mvp` until migrated). Mirrors
+/// `journal::sessions_dir()` via the shared data-root resolver.
 pub fn sessions_dir() -> Result<PathBuf> {
-    let base = dirs::config_dir().context("no config dir")?;
-    Ok(base.join("overlay-mvp").join("sessions"))
+    let root = overlay_backend::paths::data_root().context("no config dir")?;
+    Ok(root.join("sessions"))
 }
 
 /// One row in the session combobox.

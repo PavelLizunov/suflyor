@@ -282,8 +282,8 @@ fn writer_loop(rx: &Receiver<RecMsg>, dir: &Path) {
 /// # Errors
 /// Returns Err if the platform config dir can't be resolved.
 pub fn recordings_dir() -> Result<PathBuf> {
-    let base = dirs::config_dir().context("no config dir")?;
-    Ok(base.join("overlay-mvp").join("recordings"))
+    let root = crate::paths::data_root().context("no config dir")?;
+    Ok(root.join("recordings"))
 }
 
 /// Keep the newest `keep` session sub-directories of `root` (by directory

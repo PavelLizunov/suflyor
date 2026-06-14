@@ -2072,8 +2072,7 @@ fn default_snippets() -> Vec<Snippet> {
 }
 
 pub fn config_path() -> Result<PathBuf> {
-    let base = dirs::config_dir().context("no config dir")?;
-    let dir = base.join("overlay-mvp");
+    let dir = crate::paths::data_root().context("no config dir")?;
     std::fs::create_dir_all(&dir)
         .with_context(|| format!("create config dir {}", dir.display()))?;
     Ok(dir.join("config.json"))

@@ -316,8 +316,8 @@ fn bump_counters(c: &mut SessionCounters, event: &JournalEvent<'_>) {
 }
 
 pub fn sessions_dir() -> Result<PathBuf> {
-    let base = dirs::config_dir().context("no config dir")?;
-    Ok(base.join("overlay-mvp").join("sessions"))
+    let root = crate::paths::data_root().context("no config dir")?;
+    Ok(root.join("sessions"))
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1697,10 +1697,8 @@ mod tests {
 pub fn append_bookmark(question: &str, answer: &str) -> Result<PathBuf> {
     use std::fs::OpenOptions;
     use std::io::Write;
-    let dir = dirs::config_dir()
-        .context("no config dir")?
-        .join("overlay-mvp");
-    std::fs::create_dir_all(&dir).context("create overlay-mvp dir")?;
+    let dir = crate::paths::data_root().context("no config dir")?;
+    std::fs::create_dir_all(&dir).context("create data dir")?;
     let path = dir.join("bookmarks.md");
     let is_new = !path.exists();
     let mut f = OpenOptions::new()

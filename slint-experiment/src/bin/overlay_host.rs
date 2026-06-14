@@ -493,10 +493,26 @@ const AI_MAX_TOKENS: u32 = 600;
 pub(crate) const AI_STREAM_MAX_TOKENS: u32 = 4096;
 
 fn main() -> Result<(), slint::PlatformError> {
+    // fs-audit — one-time, fail-safe rename of the data dir from the legacy
+    // Tauri name `overlay-mvp` to the brand `suflyor`. MUST run BEFORE logging /
+    // config touch the data dir (they resolve through `paths::data_root`). Atomic
+    // rename; on any failure the legacy dir is kept and still used, so no data is
+    // lost. Outcome is logged once the log is open (just below).
+    let data_migration = overlay_backend::paths::migrate_data_root();
+
     // Open the diagnostics log + install the panic hook FIRST so any
     // early failure (config, tokio, window create) is captured even in a
     // release build that has no console.
     slint_replay::logging::init();
+    match &data_migration {
+        overlay_backend::paths::DataMigration::Migrated => {
+            eprintln!("[overlay-host] data dir migrated: overlay-mvp -> suflyor");
+        }
+        overlay_backend::paths::DataMigration::Failed(e) => {
+            eprintln!("[overlay-host] data dir migration failed (staying on overlay-mvp): {e}");
+        }
+        _ => {}
+    }
 
     // V0.8.0 (Поток B) — single-instance guard for the emergency-restart (⟳)
     // flow. A `--relaunch` child was spawned by a quitting parent; it must wait

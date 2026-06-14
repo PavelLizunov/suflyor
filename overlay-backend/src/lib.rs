@@ -13,6 +13,7 @@ pub mod journal;
 pub mod kb;
 pub mod local_ai;
 pub mod memory;
+pub mod paths;
 pub mod persistence;
 pub mod re_transcribe;
 pub mod recorder;
