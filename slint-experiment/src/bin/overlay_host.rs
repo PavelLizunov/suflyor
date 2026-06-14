@@ -3265,3 +3265,48 @@ mod watchdog_tests {
         assert!(wd.should_restart(t0 + Duration::from_secs(31), COOLDOWN, MAX));
     }
 }
+
+#[cfg(test)]
+mod mic_guard_tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)] // test asserts
+    use super::try_acquire_mic;
+
+    /// The single-mic latch is shared by all six mic consumers (PTT mic, per-tile
+    /// 🎤 voice follow-up, dictation toggle, diagnostics check, wizard mic-test,
+    /// Settings mic-test). No live test exercises those call sites, so this pins
+    /// the primitive: one holder at a time, a rejected acquire does NOT free the
+    /// holder (the `then` vs `then_some` bug — an eager guard ctor on the failed
+    /// branch would `Drop` and clear `MIC_BUSY`), and the mic frees on drop.
+    ///
+    /// `MIC_BUSY` is a process-global static, so this is the ONLY test that may
+    /// touch it; it leaves the latch free on exit for any later-running test.
+    #[test]
+    fn mic_guard_is_a_single_latch() {
+        let g1 = try_acquire_mic();
+        assert!(g1.is_some(), "first acquire on a free mic must succeed");
+
+        let g2 = try_acquire_mic();
+        assert!(g2.is_none(), "a second acquire while held must fail");
+
+        // The failed g2 must not have released g1's lock: a third attempt while
+        // g1 is still alive must STILL fail. With a `then_some` bug, g2's eager
+        // temporary guard would have dropped and freed the mic, so this would
+        // wrongly succeed.
+        let g3 = try_acquire_mic();
+        assert!(
+            g3.is_none(),
+            "a FAILED acquire must NOT free the held mic (then vs then_some)"
+        );
+
+        drop(g1);
+        let g4 = try_acquire_mic();
+        assert!(g4.is_some(), "after the holder drops, the mic is reusable");
+        drop(g4);
+
+        // Leave the global latch free (and re-confirm release worked).
+        assert!(
+            try_acquire_mic().is_some(),
+            "the latch is free again at end of test"
+        );
+    }
+}

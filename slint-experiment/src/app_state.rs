@@ -219,6 +219,45 @@ pub fn classify_ai_error(msg: &str) -> &'static str {
 mod tests {
     use super::*;
 
+    /// `local_ai_busy` is the process-global mutual-exclusion latch for the five
+    /// Settings local-AI ops (install / quality-switch / download-12B /
+    /// download-vision / engine-update). There is no live UI test for it, so this
+    /// pins the primitive directly: a second acquire while one is held must FAIL
+    /// *without disturbing the holder's flag*, and the flag frees only on the
+    /// holder's drop. The "without disturbing" half is the real regression guard —
+    /// the acquire uses a LAZY `then` (not `then_some`); a `then_some` would
+    /// eagerly construct a guard on the failed branch, whose `Drop` would
+    /// `store(false)` and wrongly free the op that actually holds the flag.
+    #[test]
+    fn local_ai_busy_guard_is_a_single_latch() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        let flag = Arc::new(AtomicBool::new(false));
+
+        let g1 = LocalAiBusyGuard::try_acquire(flag.clone());
+        assert!(g1.is_some(), "first acquire on a free flag must succeed");
+        assert!(flag.load(Ordering::Acquire), "the flag is now held");
+
+        let g2 = LocalAiBusyGuard::try_acquire(flag.clone());
+        assert!(g2.is_none(), "a second acquire while held must fail");
+        assert!(
+            flag.load(Ordering::Acquire),
+            "a FAILED acquire must NOT release the holder's flag (then vs then_some)"
+        );
+
+        drop(g1);
+        assert!(
+            !flag.load(Ordering::Acquire),
+            "dropping the holder frees the flag"
+        );
+
+        let g3 = LocalAiBusyGuard::try_acquire(flag.clone());
+        assert!(g3.is_some(), "after release the next op can acquire");
+        drop(g3);
+        assert!(!flag.load(Ordering::Acquire), "drop releases again");
+    }
+
     /// Strengthened invariant: every next_model output must be
     /// recognized by `overlay_backend::ai::pricing_per_million` —
     /// NOT just present in a local hardcoded list. The earlier

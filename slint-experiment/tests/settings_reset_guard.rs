@@ -120,3 +120,39 @@ fn parser_finds_the_known_transient_props() {
         "expected engine-update-status among the transient props; got {props:?}"
     );
 }
+
+/// The Updates tab's "a check found a release" state is bool/url, NOT a
+/// `*-status`/`*-result` string, so the scan above deliberately skips it. But it
+/// is the SAME stale-on-reopen class (CLAUDE.md recurring bug #1): if a check
+/// surfaced "⬇ Update now" and the user reopens Settings, populate_token_status
+/// must clear `update-available` / `update-checking` / `update-download-url`, or
+/// the reused window shows a stale offer for a release whose URL it may no longer
+/// hold, or a check button stuck on "Checking…" (audit Q2). Unlike the in-flight
+/// worker bools (`*_downloading`/`*_updating`, reset by their worker callback),
+/// these three are check-RESULT state and must be reset by populate. This is a
+/// fixed, named list (not the generic scan) because these specific props are the
+/// known gap the string-convention scan can't see.
+#[test]
+fn updates_tab_check_result_is_reset_on_reopen() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let rs = fs::read_to_string(root.join("src/bin/overlay_host/settings_controller.rs"))
+        .expect("read settings_controller.rs");
+    let body = populate_body(&rs);
+
+    let missing: Vec<&str> = [
+        "set_update_available(",
+        "set_update_checking(",
+        "set_update_download_url(",
+    ]
+    .into_iter()
+    .filter(|setter| !body.contains(setter))
+    .collect();
+
+    assert!(
+        missing.is_empty(),
+        "Updates-tab check result NOT reset on reopen — a stale \"⬇ Update now\" \
+         button / \"Checking…\" state will survive the next Settings open (same \
+         class as the user's lingering \"Готово\"). Add to populate_token_status: \
+         {missing:?}"
+    );
+}
