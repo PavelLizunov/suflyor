@@ -432,4 +432,54 @@ mod tests {
             "line exceeded width cap: {t:?}"
         );
     }
+
+    /// Micro-bench for audit P1: the tile re-`parse`s the WHOLE accumulated answer
+    /// on every throttled (~50ms) streaming delta, which is O(n²) in answer length
+    /// over a stream. This measures whether the PARSE itself is the bottleneck (vs
+    /// the Slint VecModel rebuild + relayout, which a bench can't reach). Run:
+    ///   cargo test --manifest-path slint-experiment/Cargo.toml -- --ignored --nocapture parse_streaming_cost
+    #[test]
+    #[ignore = "perf micro-bench — run explicitly with --ignored --nocapture"]
+    fn parse_streaming_cost() {
+        // A representative ~5 KB answer: headings, prose, a bullet list, a fenced
+        // code block, inline code — the mix a 12B/Sonnet answer produces.
+        let unit = "## Section\n\nHere is a paragraph of explanation with some \
+            `inline code` and a [link](https://example.com/page) that the parser \
+            must handle.\n\n- first bullet point about the topic\n- second bullet \
+            with more detail\n- third\n\n```rust\nfn demo() -> i32 {\n    let x = 42;\n    x + 1\n}\n```\n\n";
+        let mut answer = String::new();
+        while answer.len() < 5000 {
+            answer.push_str(unit);
+        }
+        let answer = &answer[..5000];
+
+        // Simulate a 50ms-throttled stream of a 5000-char answer ≈ 200 renders,
+        // each re-parsing the growing prefix (the current O(n²) behavior).
+        const RENDERS: usize = 200;
+        let t0 = std::time::Instant::now();
+        let mut total_blocks = 0usize;
+        for i in 1..=RENDERS {
+            let end = (i * answer.len() / RENDERS).min(answer.len());
+            // Slice on a char boundary so parse gets valid UTF-8.
+            let end = (0..=end)
+                .rev()
+                .find(|&e| answer.is_char_boundary(e))
+                .unwrap_or(0);
+            total_blocks += parse(&answer[..end]).len();
+        }
+        let elapsed = t0.elapsed();
+        // Also time ONE full parse of the final answer for reference.
+        let t1 = std::time::Instant::now();
+        let one = parse(answer).len();
+        let one_elapsed = t1.elapsed();
+
+        eprintln!(
+            "P1 bench: {RENDERS} streamed re-parses of a {}-char answer = {:?} total \
+             ({:?}/render avg); ONE full parse = {:?} ({one} blocks, {total_blocks} block-parses)",
+            answer.len(),
+            elapsed,
+            elapsed / RENDERS as u32,
+            one_elapsed,
+        );
+    }
 }
