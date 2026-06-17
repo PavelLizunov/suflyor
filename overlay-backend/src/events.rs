@@ -97,6 +97,13 @@ pub struct TileSpec {
     /// auto-tile flow without forcing a separate
     /// `spawn_tile_with_highlights` trait method.
     pub highlights: Vec<String>,
+    /// v0.18.6 — the meeting-summary session id this tile belongs to, when any.
+    /// Set ONLY on Summary / summary-Error tiles (the resumable-summary path);
+    /// `None` for every other tile kind. On an Error tile a `Some` value makes
+    /// the UI show a working «Повторить» button wired to
+    /// `runtime::retry_meeting_summary`, which resumes from the persisted
+    /// conspect instead of re-mapping or asking the user to paste anything.
+    pub summary_session: Option<String>,
 }
 
 /// Tile kind — discriminates the chrome glyph, journal
@@ -271,6 +278,7 @@ mod tests {
             source: "ai".into(),
             is_translation: false,
             highlights: vec![],
+            summary_session: None,
         });
         let id2 = sink.spawn_tile(TileSpec {
             question: "abc".into(),
@@ -278,6 +286,7 @@ mod tests {
             source: "kb".into(),
             is_translation: false,
             highlights: vec![],
+            summary_session: None,
         });
         // Stable-per-question-len: both have len=3 → same id (noop is
         // deterministic by design; real impls assign unique ids).
@@ -320,6 +329,7 @@ mod tests {
             source: "ai".into(),
             is_translation: false,
             highlights: vec![],
+            summary_session: None,
         };
         let id_ai = sink
             .spawn_tile_full(spec.clone(), MonitorHint::Auto, false, TileKind::Ai)
@@ -362,6 +372,7 @@ mod tests {
                     source: "debrief".into(),
                     is_translation: false,
                     highlights: vec![],
+                    summary_session: None,
                 },
                 MonitorHint::Named("\\\\.\\DISPLAY2".into()),
                 true,
@@ -391,6 +402,7 @@ mod tests {
                     source: "ai".into(),
                     is_translation: false,
                     highlights: vec![],
+                    summary_session: None,
                 },
                 MonitorHint::Auto,
                 false,

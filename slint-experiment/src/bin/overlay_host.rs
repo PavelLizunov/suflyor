@@ -1673,6 +1673,63 @@ fn main() -> Result<(), slint::PlatformError> {
                     );
                 }
             }
+            // v0.18.6 — a summary Error tile that carries a session id gets a
+            // working «Повторить» button. It resumes from the PERSISTED conspect
+            // (re-maps only the parts that failed, then re-runs the cheap reduce)
+            // instead of re-mapping everything or asking the user to paste the
+            // conspect — the fix for the tester's "empty window / begs for the
+            // conspect text" bugs. Error tiles are not conversational, so this is
+            // their only wired action besides close.
+            if matches!(req.kind, TileKind::Error) {
+                if let Some(session_id) = req.spec.summary_session.clone() {
+                    tile.set_can_retry(true);
+                    let weak_retry = tile.as_weak();
+                    let vec_for_retry = tiles_for_poll.clone();
+                    let weak_overlay_retry = weak_overlay_poll.clone();
+                    let events_retry = events_for_poll.clone();
+                    let cfg_retry = cfg_for_poll.clone();
+                    let rt_handle_retry = rt_handle_for_poll.clone();
+                    tile.on_retry_clicked(move || {
+                        // One summary at a time — reuse the bar's busy latch so a
+                        // retry can't stack with a bar press or a second retry.
+                        if let Some(o) = weak_overlay_retry.upgrade() {
+                            if o.get_summary_busy() {
+                                eprintln!(
+                                    "[overlay-host] summary retry ignored — already in flight"
+                                );
+                                return;
+                            }
+                            o.set_summary_busy(true);
+                        }
+                        // Dismiss the error tile (drop it from the live Vec like
+                        // the close handler) — the resume spawns a fresh tile.
+                        if let Some(t) = weak_retry.upgrade() {
+                            let close_hwnd = grab_hwnd(t.window()).ok();
+                            let _ = t.hide();
+                            if let Some(target) = close_hwnd {
+                                vec_for_retry
+                                    .borrow_mut()
+                                    .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
+                                refresh_open_tiles(&weak_overlay_retry, &vec_for_retry);
+                            }
+                        }
+                        let events_c = events_retry.clone();
+                        let cfg_c = cfg_retry.clone();
+                        let sid = session_id.clone();
+                        let weak_done = weak_overlay_retry.clone();
+                        eprintln!("[overlay-host] summary retry requested");
+                        rt_handle_retry.spawn(async move {
+                            overlay_backend::runtime::retry_meeting_summary(events_c, cfg_c, sid)
+                                .await;
+                            let _ = slint::invoke_from_event_loop(move || {
+                                if let Some(o) = weak_done.upgrade() {
+                                    o.set_summary_busy(false);
+                                }
+                            });
+                        });
+                    });
+                }
+            }
             // (monitor placement applied via apply_tile_hwnd_with_monitor.)
             present_tile_window(&tile);
             apply_tile_hwnd_with_monitor(&tile);
@@ -2647,11 +2704,15 @@ fn main() -> Result<(), slint::PlatformError> {
                 eprintln!("[overlay-host] summary already in flight — click ignored");
                 return;
             }
-            let (transcript, truncated) = {
+            let (transcript, truncated, session_id) = {
                 let s = slint_replay::runtime_state::lock(&rt_for_summary);
                 (
                     s.full_transcript.iter().cloned().collect::<Vec<_>>(),
                     s.full_transcript_truncated,
+                    // Key the persisted conspect by this session so a re-press /
+                    // retry resumes it. Empty = ephemeral (no session yet) — the
+                    // backend then runs without persistence.
+                    s.current_session_id.clone().unwrap_or_default(),
                 )
             };
             if let Err(reason) = overlay_backend::runtime::summary_gate(&transcript) {
@@ -2695,6 +2756,8 @@ fn main() -> Result<(), slint::PlatformError> {
                         source: "summary".into(),
                         is_translation: false,
                         highlights: vec![],
+                        // No transcript yet → nothing to resume, so no retry.
+                        summary_session: None,
                     },
                     hint,
                     stealth,
@@ -2720,7 +2783,10 @@ fn main() -> Result<(), slint::PlatformError> {
             let cfg_c = cfg_for_summary.clone();
             let weak_done = weak_for_summary.clone();
             rt_handle_for_summary.spawn(async move {
-                overlay_backend::runtime::run_meeting_summary(events_c, cfg_c, transcript).await;
+                overlay_backend::runtime::run_meeting_summary(
+                    events_c, cfg_c, transcript, session_id,
+                )
+                .await;
                 // Success OR error — run_meeting_summary spawned a tile
                 // either way; just release the busy latch on the UI thread.
                 let _ = slint::invoke_from_event_loop(move || {

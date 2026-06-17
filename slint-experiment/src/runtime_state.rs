@@ -70,6 +70,14 @@ pub struct SlintRuntime {
     /// into transcript-forwarder + per-port `*Inputs` snapshots.
     pub journal: Option<Journal>,
 
+    /// v0.18.6 — the current session's id (the journal-file stem), set at
+    /// session start and — like `full_transcript` — deliberately kept across
+    /// Стоп until the next Старт overwrites it. The Summary button keys the
+    /// persisted conspect by this id so a re-press / retry resumes the SAME
+    /// session's summary instead of re-mapping or starting over. `None` only
+    /// before the first session of the run.
+    pub current_session_id: Option<String>,
+
     /// Health-signals Arc shared with audio + STT + AI pipelines.
     /// Each subsystem bumps its `last_*_ok_ms` atomic on success;
     /// the 2-second health-emitter task snapshots + emits to UI.

@@ -267,7 +267,9 @@ pub async fn retranscribe_and_summarize(
     let transcript = transcribe_session(&cfg, session_id, on_progress).await?;
     let n = transcript.len();
     on_progress(Progress::Step("Building summary…".to_string()));
-    crate::runtime::run_meeting_summary(events, cfg, transcript).await;
+    // Pass the archive session id so the conspect persists under it — a failed
+    // reduce can then be retried from the saved parts without re-running STT.
+    crate::runtime::run_meeting_summary(events, cfg, transcript, session_id.to_string()).await;
     Ok(n)
 }
 

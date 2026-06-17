@@ -638,6 +638,8 @@ pub(crate) fn open_archive(
                             source: "summary".into(),
                             is_translation: false,
                             highlights: vec![],
+                            // Re-STT failed before any conspect — nothing to resume.
+                            summary_session: None,
                         },
                         overlay_backend::events::MonitorHint::Auto,
                         stealth,

@@ -75,11 +75,21 @@ pub fn set_local_no_think(on: bool) {
     LOCAL_NO_THINK.store(on, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// If the no-think toggle is on, attach `chat_template_kwargs.enable_thinking
-/// = false` (a llama.cpp / OpenAI-compat extension). Servers that don't know
-/// the field ignore it, so this is safe. No-op when off.
-fn apply_local_no_think(body: &mut Value) {
-    if !LOCAL_NO_THINK.load(std::sync::atomic::Ordering::Relaxed) {
+/// If the no-think toggle is on (OR `force` is set), attach
+/// `chat_template_kwargs.enable_thinking = false` (a llama.cpp / OpenAI-compat
+/// extension). Servers that don't know the field ignore it, so this is safe.
+/// No-op when off and not forced.
+///
+/// `force` is the structuring override: meeting summaries / debrief / profile
+/// structuring go through [`complete`] and MUST always run no-think for the
+/// LOCAL model — a hybrid "thinking" Gemma that reasons over a long map/reduce
+/// either overflows its `-c 8192` window (→ "model unavailable") or emits
+/// reasoning text in place of the conspectus, which then makes the reduce model
+/// beg for the part text. The user's `ai_local_thinking` toggle controls only
+/// the LIVE-answer streaming path; it must never decide whether a structuring
+/// pass thinks. So [`complete`] passes `force = true` regardless of the global.
+fn apply_local_no_think(body: &mut Value, force: bool) {
+    if !force && !LOCAL_NO_THINK.load(std::sync::atomic::Ordering::Relaxed) {
         return;
     }
     if let Some(obj) = body.as_object_mut() {
@@ -257,7 +267,9 @@ async fn stream_inner(
         "max_tokens": max_tokens,
     });
     apply_prompt_cache(&mut body);
-    apply_local_no_think(&mut body);
+    // Live-answer streaming path: honor the user's `ai_local_thinking` toggle
+    // (force = false). Structuring goes through the non-streaming `complete`.
+    apply_local_no_think(&mut body, false);
 
     // SECURITY: do NOT log the full URL — the configured ai_base_url often
     // contains the user's LAN IP / proxy port (network topology leak in
@@ -485,10 +497,34 @@ pub async fn complete_with_usage(
     messages: Vec<ChatMessage>,
     max_tokens: u32,
 ) -> Result<(String, TokenUsage)> {
+    // Live-answer entry point: honor the user's `ai_local_thinking` toggle
+    // (force_no_think = false). The structuring entry point is `complete`.
+    complete_with_usage_inner(base_url, bearer, model, messages, max_tokens, false).await
+}
+
+/// Shared retry wrapper. `force_no_think` is threaded down to `complete_once`:
+/// `true` for structuring (summary/debrief/profile), `false` for live answers.
+async fn complete_with_usage_inner(
+    base_url: &str,
+    bearer: &str,
+    model: &str,
+    messages: Vec<ChatMessage>,
+    max_tokens: u32,
+    force_no_think: bool,
+) -> Result<(String, TokenUsage)> {
     const MAX_ATTEMPTS: u32 = 3;
     let mut last_err: Option<anyhow::Error> = None;
     for attempt in 1..=MAX_ATTEMPTS {
-        match complete_once(base_url, bearer, model, messages.clone(), max_tokens).await {
+        match complete_once(
+            base_url,
+            bearer,
+            model,
+            messages.clone(),
+            max_tokens,
+            force_no_think,
+        )
+        .await
+        {
             Ok(ok) => {
                 if attempt > 1 {
                     log::info!(
@@ -551,6 +587,7 @@ async fn complete_once(
     model: &str,
     messages: Vec<ChatMessage>,
     max_tokens: u32,
+    force_no_think: bool,
 ) -> Result<(String, TokenUsage)> {
     let client = http_client();
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
@@ -561,7 +598,7 @@ async fn complete_once(
         "max_tokens": max_tokens,
     });
     apply_prompt_cache(&mut body);
-    apply_local_no_think(&mut body);
+    apply_local_no_think(&mut body, force_no_think);
 
     // SECURITY: don't log the host portion of the URL (LAN IP/topology). See
     // the matching comment on stream_chat above for the rationale.
@@ -622,6 +659,12 @@ async fn complete_once(
     Ok((text, usage))
 }
 
+/// Non-streaming completion — the STRUCTURING entry point (meeting summary
+/// map + reduce, debrief, profile structuring). For the LOCAL model this ALWAYS
+/// runs no-think regardless of the user's `ai_local_thinking` toggle: a thinking
+/// pass over a long structuring prompt overflows the local `-c 8192` window or
+/// substitutes reasoning for the requested output. The toggle governs only the
+/// live-answer streaming path (`stream_chat` / `complete_with_usage`).
 pub async fn complete(
     base_url: &str,
     bearer: &str,
@@ -629,7 +672,8 @@ pub async fn complete(
     messages: Vec<ChatMessage>,
     max_tokens: u32,
 ) -> Result<String> {
-    let (text, _usage) = complete_with_usage(base_url, bearer, model, messages, max_tokens).await?;
+    let (text, _usage) =
+        complete_with_usage_inner(base_url, bearer, model, messages, max_tokens, true).await?;
     Ok(text)
 }
 
@@ -767,6 +811,42 @@ pub fn build_request(
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
+
+    /// Structuring (`force = true`) must disable local thinking REGARDLESS of the
+    /// global `ai_local_thinking` toggle — this is the v0.18.6 fix for the tester
+    /// bug where "режим рассуждение" ON broke the meeting summary. The live-answer
+    /// path (`force = false`) must keep honoring the toggle.
+    #[test]
+    fn force_no_think_overrides_global_toggle() {
+        fn thinking_disabled(body: &Value) -> bool {
+            body.get("chat_template_kwargs")
+                .and_then(|k| k.get("enable_thinking"))
+                .and_then(serde_json::Value::as_bool)
+                == Some(false)
+        }
+        // Global OFF (the default): live answers think, structuring does NOT.
+        set_local_no_think(false);
+        let mut live = json!({});
+        apply_local_no_think(&mut live, false);
+        assert!(
+            !thinking_disabled(&live),
+            "live answer with global-off must not force no-think"
+        );
+        let mut structuring = json!({});
+        apply_local_no_think(&mut structuring, true);
+        assert!(
+            thinking_disabled(&structuring),
+            "structuring must force no-think even when the global toggle is off"
+        );
+
+        // Global ON (user disabled thinking): both paths disable it.
+        set_local_no_think(true);
+        let mut live2 = json!({});
+        apply_local_no_think(&mut live2, false);
+        assert!(thinking_disabled(&live2));
+        // Restore the default so other tests / process state aren't perturbed.
+        set_local_no_think(false);
+    }
 
     // ── Regression: P0 bug — UTF-8 split across network chunks must NOT panic ──
 

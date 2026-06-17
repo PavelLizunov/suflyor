@@ -35,6 +35,7 @@
 use crate::ai;
 use crate::audio::{AudioSource, TranscriptLine};
 use crate::config::SharedConfig;
+use crate::conspect::{self, Conspect};
 use crate::events::{MonitorHint, RuntimeEvents, TileKind, TileSpec};
 use crate::health::HealthSignals;
 use crate::journal::{Journal, JournalEvent};
@@ -145,6 +146,7 @@ pub async fn run_post_meeting_debrief(
             source: "debrief".into(),
             is_translation: false,
             highlights: vec![],
+            summary_session: None,
         },
         monitor_hint,
         stealth,
@@ -576,16 +578,14 @@ pub async fn run_meeting_summary(
     events: Arc<dyn RuntimeEvents>,
     cfg: SharedConfig,
     transcript: Vec<TranscriptLine>,
+    session_id: String,
 ) {
-    let (base_url, bearer, model, response_language, preferred_monitor, stealth, is_local) = {
+    let (response_language, preferred_monitor, stealth, is_local) = {
         let c = cfg.read();
         // Same endpoint policy as the debrief: prep=true picks the
         // structuring model (local honors ai_local_prep_model).
         let ep = c.ai_endpoint(true);
         (
-            ep.base_url,
-            ep.bearer,
-            ep.model,
             c.response_language.clone(),
             c.tile_monitor_name.clone(),
             c.stealth_enabled,
@@ -593,41 +593,59 @@ pub async fn run_meeting_summary(
         )
     };
     let is_ru = response_language == "ru";
+    let tile_title = summary_tile_title(is_ru);
+    let monitor_hint = monitor_hint_from(preferred_monitor.as_deref());
     let formatted = format_transcript_for_summary(&transcript, is_ru);
-    // v0.16.0 — keyword-gated memory reference: facts whose terms came up in
-    // this transcript decode internal names for the secretary. None (the
-    // common case) keeps the request byte-identical to a no-memory build.
-    let memory_ref = crate::memory::summary_reference_for_transcript(&formatted);
-    if memory_ref.is_some() {
-        log::info!("meeting summary: keyword-gated memory reference attached");
+    let fp = conspect::fingerprint(&formatted);
+
+    // v0.18.6 — reuse a saved conspect when the transcript is UNCHANGED (a
+    // re-press after stop, or a re-request right after an error). This is what
+    // kills the tester bug where re-requesting a summary made the model beg for
+    // the conspect text: we never re-send a reduce with empty parts — we resume
+    // the persisted one. A changed transcript (fingerprint differs) rebuilds.
+    if let Some(saved) = conspect::load(&session_id) {
+        if saved.fingerprint == fp {
+            if let Some(answer) = saved.final_summary.clone() {
+                log::info!("meeting summary: transcript unchanged — returning the saved recap");
+                spawn_summary_tile(
+                    &events,
+                    tile_title,
+                    answer,
+                    monitor_hint,
+                    stealth,
+                    session_id,
+                );
+                return;
+            }
+            if saved.single_pass || saved.has_usable_parts() {
+                log::info!("meeting summary: transcript unchanged — resuming the saved conspect");
+                finish_summary_from_conspect(
+                    &events,
+                    &cfg,
+                    saved,
+                    tile_title,
+                    monitor_hint,
+                    stealth,
+                )
+                .await;
+                return;
+            }
+        }
     }
-    let tile_title = if is_ru {
-        "Summary созвона".to_string()
-    } else {
-        "Meeting summary".to_string()
-    };
-    let monitor_hint = match preferred_monitor.as_deref() {
-        Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
-        _ => MonitorHint::Auto,
-    };
+
+    // Build a fresh conspect. The part SOURCES are recorded up front and
+    // persisted BEFORE any AI call, so a crash / error mid-map keeps them.
     let budget = if is_local {
         SUMMARY_INPUT_BUDGET_LOCAL_CHARS
     } else {
         SUMMARY_INPUT_BUDGET_CLOUD_CHARS
     };
-    // Within budget → the single pass, byte-identical to pre-v0.17 (and the
-    // same pair the tile seeds its conversation with, so 🔄/🧠 rebuild it).
-    // Over budget → map-reduce (v0.17.0, план B): the pre-v0.17 behavior was
-    // a middle truncation that DROPPED most of a long day; now each part gets
-    // its own conspectus and the final pass merges them. The tile's 🔄 rebuild
-    // for over-budget transcripts still uses the truncated single pass (it
-    // can't replay N map calls from a seeded pair) — a documented degraded
-    // rebuild; the bar/archive path is the quality path.
-    let messages = if formatted.chars().count() <= budget {
-        // from_formatted: `formatted` is already computed above for the
-        // memory_ref keyword-gating — no second format pass (v0.17.1 audit).
-        build_summary_seed_from_formatted(&formatted, is_ru, is_local, memory_ref.as_deref())
+    let cs = if formatted.chars().count() <= budget {
+        // Within budget → single pass; the one "source" is the whole transcript.
+        Conspect::new(session_id, is_ru, fp, true, vec![formatted])
     } else {
+        // Over budget → map-reduce (v0.17.0, план B): each part gets its own
+        // conspectus and the reduce merges them. Record one source per slice.
         let cap = budget.saturating_mul(SUMMARY_MAX_MAP_PARTS);
         let (bounded, hard_truncated) = truncate_transcript_middle(&formatted, cap, is_ru);
         if hard_truncated {
@@ -638,12 +656,93 @@ pub async fn run_meeting_summary(
             );
         }
         let parts = split_transcript_for_map(&bounded, budget);
-        let total = parts.len();
-        log::info!("meeting summary: map-reduce over {total} part(s)");
-        let mut partials: Vec<String> = Vec::with_capacity(total);
-        let mut ok_parts = 0usize;
-        for (i, part) in parts.iter().enumerate() {
-            let n = i + 1;
+        log::info!("meeting summary: map-reduce over {} part(s)", parts.len());
+        Conspect::new(session_id, is_ru, fp, false, parts)
+    };
+    conspect::save(&cs);
+    finish_summary_from_conspect(&events, &cfg, cs, tile_title, monitor_hint, stealth).await;
+}
+
+/// Retry a summary that errored, REUSING its persisted conspect — the action
+/// behind the error tile's «Повторить» button (v0.18.6). Loads the saved
+/// conspect by session id, re-maps only the parts that failed, then re-runs the
+/// cheap reduce. No re-STT, no re-summarising the parts that already succeeded,
+/// and — critically — never a reduce over empty parts. Reads the CURRENT config
+/// for the endpoint, so a user who fixed the error by switching AI provider in
+/// Settings gets the retry on the new endpoint.
+pub async fn retry_meeting_summary(
+    events: Arc<dyn RuntimeEvents>,
+    cfg: SharedConfig,
+    session_id: String,
+) {
+    let (response_language, preferred_monitor, stealth) = {
+        let c = cfg.read();
+        (
+            c.response_language.clone(),
+            c.tile_monitor_name.clone(),
+            c.stealth_enabled,
+        )
+    };
+    let is_ru = response_language == "ru";
+    let tile_title = summary_tile_title(is_ru);
+    let monitor_hint = monitor_hint_from(preferred_monitor.as_deref());
+    let Some(cs) = conspect::load(&session_id) else {
+        // Nothing to resume (old session predating persistence, or the very
+        // first part never saved). Show the failure WITHOUT a retry button so
+        // the user isn't stuck re-pressing a no-op.
+        log::warn!("meeting summary retry: no saved conspect for this session");
+        spawn_summary_error_tile(&events, tile_title, monitor_hint, stealth, is_ru, None);
+        return;
+    };
+    if let Some(answer) = cs.final_summary.clone() {
+        // A prior attempt already finished — just show it.
+        spawn_summary_tile(
+            &events,
+            tile_title,
+            answer,
+            monitor_hint,
+            stealth,
+            session_id,
+        );
+        return;
+    }
+    finish_summary_from_conspect(&events, &cfg, cs, tile_title, monitor_hint, stealth).await;
+}
+
+/// Drive a conspect to completion: map any parts still missing a summary, then
+/// reduce the part conspectuses into the final recap — persisting after every
+/// step so an error at any point leaves a resumable artifact. Shared by the
+/// fresh build, the unchanged-transcript resume, and the explicit retry.
+async fn finish_summary_from_conspect(
+    events: &Arc<dyn RuntimeEvents>,
+    cfg: &SharedConfig,
+    mut cs: Conspect,
+    tile_title: String,
+    monitor_hint: MonitorHint,
+    stealth: bool,
+) {
+    let (base_url, bearer, model, is_local) = {
+        let c = cfg.read();
+        let ep = c.ai_endpoint(true);
+        (ep.base_url, ep.bearer, ep.model, ep.is_local)
+    };
+    let is_ru = cs.is_ru;
+
+    // MAP — fill any part still missing its conspectus (no-op for a single pass
+    // or an already-mapped conspect). A part that fails again stays None; the
+    // reduce then runs over the parts that DID succeed (it never sees a blank).
+    if !cs.single_pass {
+        let total = cs.parts.len();
+        let missing = cs.missing_part_indices();
+        if !missing.is_empty() {
+            log::info!(
+                "meeting summary: mapping {} of {total} part(s)",
+                missing.len()
+            );
+        }
+        for idx in missing {
+            let n = idx + 1;
+            let source = cs.parts[idx].source.clone();
             let msgs = vec![
                 ai::ChatMessage {
                     role: "system".into(),
@@ -651,72 +750,143 @@ pub async fn run_meeting_summary(
                 },
                 ai::ChatMessage {
                     role: "user".into(),
-                    content: ai::MessageContent::Text(part.clone()),
+                    content: ai::MessageContent::Text(source),
                 },
             ];
             match ai::complete(&base_url, &bearer, &model, msgs, SUMMARY_PARTIAL_MAX_TOKENS).await {
                 Ok(t) => {
                     log::info!("meeting summary: part {n}/{total} done ({} chars)", t.len());
-                    partials.push(t);
-                    ok_parts += 1;
+                    cs.parts[idx].summary = Some(t);
+                    conspect::save(&cs); // persist each completed part immediately
                 }
                 Err(e) => {
-                    // One failed slice degrades the recap, it doesn't kill it.
+                    // One failed slice degrades the recap, it doesn't kill it —
+                    // and the retry button can re-map exactly this part later.
                     log::warn!("meeting summary: part {n}/{total} failed: {e:#}");
-                    partials.push(
-                        if is_ru {
-                            "(эту часть законспектировать не удалось — ошибка AI)"
-                        } else {
-                            "(this part could not be summarised — AI error)"
-                        }
-                        .to_string(),
-                    );
                 }
             }
         }
-        if ok_parts == 0 {
-            // Endpoint is down — go straight to the same generic error tile
-            // the single-pass failure path shows (no point in a final call).
-            log::warn!("meeting summary: ALL {total} map parts failed — endpoint down?");
-            spawn_summary_error_tile(&events, tile_title, monitor_hint, stealth, is_ru);
+    }
+
+    // v0.16.0 — keyword-gated memory reference, computed from the reconstructed
+    // transcript. None (the common case) keeps the request byte-identical to a
+    // no-memory build. (For a single pass the one source IS the transcript.)
+    let joined = cs
+        .parts
+        .iter()
+        .map(|p| p.source.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let memory_ref = crate::memory::summary_reference_for_transcript(&joined);
+    if memory_ref.is_some() {
+        log::info!("meeting summary: keyword-gated memory reference attached");
+    }
+
+    let messages = if cs.single_pass {
+        build_summary_seed_from_formatted(&joined, is_ru, is_local, memory_ref.as_deref())
+    } else {
+        let summaries = cs.usable_summaries();
+        if summaries.is_empty() {
+            // Every map part failed — endpoint down. Error tile WITH retry, so
+            // the user can resume from the saved sources once it's back.
+            log::warn!("meeting summary: no part could be conspected — endpoint down?");
+            spawn_summary_error_tile(
+                events,
+                tile_title,
+                monitor_hint,
+                stealth,
+                is_ru,
+                Some(cs.session_id),
+            );
             return;
         }
-        build_summary_reduce_seed(&partials, is_ru, is_local, memory_ref.as_deref())
+        build_summary_reduce_seed(&summaries, is_ru, is_local, memory_ref.as_deref())
     };
+
     match ai::complete(&base_url, &bearer, &model, messages, SUMMARY_MAX_TOKENS).await {
         Ok(answer) => {
             log::info!("meeting summary landed: {} chars", answer.len());
-            if let Err(e) = events.spawn_tile_full(
-                TileSpec {
-                    question: tile_title,
-                    answer,
-                    source: "summary".into(),
-                    is_translation: false,
-                    highlights: vec![],
-                },
+            cs.final_summary = Some(answer.clone());
+            conspect::save(&cs);
+            spawn_summary_tile(
+                events,
+                tile_title,
+                answer,
                 monitor_hint,
                 stealth,
-                TileKind::Summary,
-            ) {
-                log::warn!("meeting summary tile spawn failed: {e}");
-            }
+                cs.session_id,
+            );
         }
         Err(e) => {
-            log::warn!("meeting summary AI call failed: {e:#}");
-            spawn_summary_error_tile(&events, tile_title, monitor_hint, stealth, is_ru);
+            log::warn!("meeting summary reduce failed: {e:#}");
+            spawn_summary_error_tile(
+                events,
+                tile_title,
+                monitor_hint,
+                stealth,
+                is_ru,
+                Some(cs.session_id),
+            );
         }
     }
 }
 
-/// Spawn the GENERIC summary-failure tile (no error chain / base_url — the
-/// full chain goes to the log only). Shared by the single-pass Err arm and
-/// the map-reduce all-parts-failed short-circuit.
+/// The localized Summary tile title.
+fn summary_tile_title(is_ru: bool) -> String {
+    if is_ru {
+        "Summary созвона".to_string()
+    } else {
+        "Meeting summary".to_string()
+    }
+}
+
+/// Map a configured monitor name to a placement hint (Named when set, else Auto).
+fn monitor_hint_from(preferred_monitor: Option<&str>) -> MonitorHint {
+    match preferred_monitor {
+        Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
+        _ => MonitorHint::Auto,
+    }
+}
+
+/// Spawn the successful Summary tile. Carries `summary_session` so the tile's
+/// future rebuilds can resume from the persisted conspect. An empty
+/// `session_id` (the "ephemeral, not persisted" sentinel) carries `None`.
+fn spawn_summary_tile(
+    events: &Arc<dyn RuntimeEvents>,
+    tile_title: String,
+    answer: String,
+    monitor_hint: MonitorHint,
+    stealth: bool,
+    session_id: String,
+) {
+    if let Err(e) = events.spawn_tile_full(
+        TileSpec {
+            question: tile_title,
+            answer,
+            source: "summary".into(),
+            is_translation: false,
+            highlights: vec![],
+            summary_session: Some(session_id).filter(|s| !s.is_empty()),
+        },
+        monitor_hint,
+        stealth,
+        TileKind::Summary,
+    ) {
+        log::warn!("meeting summary tile spawn failed: {e}");
+    }
+}
+
+/// Spawn the GENERIC summary-failure tile (no error chain / base_url — the full
+/// chain goes to the log only). When `session_id` is `Some`, the tile shows a
+/// working «Повторить» button wired to [`retry_meeting_summary`] for that
+/// session; `None` means "nothing to resume" (no button, avoids a no-op loop).
 fn spawn_summary_error_tile(
     events: &Arc<dyn RuntimeEvents>,
     tile_title: String,
     monitor_hint: MonitorHint,
     stealth: bool,
     is_ru: bool,
+    session_id: Option<String>,
 ) {
     let msg = if is_ru {
         "Не получилось составить summary — AI недоступен. \
@@ -732,6 +902,8 @@ fn spawn_summary_error_tile(
             source: "summary".into(),
             is_translation: false,
             highlights: vec![],
+            // Empty id = nothing to resume → no retry button.
+            summary_session: session_id.filter(|s| !s.is_empty()),
         },
         monitor_hint,
         stealth,
@@ -1256,6 +1428,7 @@ pub async fn reask_last(
                         source: "reask".into(),
                         is_translation: false,
                         highlights: vec![],
+                        summary_session: None,
                     },
                     match preferred_monitor.as_deref() {
                         Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
@@ -1309,6 +1482,7 @@ pub async fn reask_last(
             source: "reask".into(),
             is_translation: false,
             highlights: vec![],
+            summary_session: None,
         },
         match preferred_monitor.as_deref() {
             Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
@@ -1434,6 +1608,7 @@ pub async fn manual_spawn_tile(
                 source: "manual_spawn".into(),
                 is_translation: false,
                 highlights: vec![],
+                summary_session: None,
             },
             monitor_hint.clone(),
             stealth,
@@ -1518,6 +1693,7 @@ pub async fn manual_spawn_tile(
                         source: "manual_spawn".into(),
                         is_translation: false,
                         highlights: vec![],
+                        summary_session: None,
                     },
                     monitor_hint.clone(),
                     stealth,
@@ -1564,6 +1740,7 @@ pub async fn manual_spawn_tile(
             source: "manual_spawn".into(),
             is_translation: false,
             highlights: vec![],
+            summary_session: None,
         },
         monitor_hint,
         stealth,
@@ -2093,7 +2270,46 @@ mod tests {
             line(AudioSource::System, "согласен, делаем", 1),
         ];
         let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
-        run_meeting_summary(sink, cfg, transcript).await;
+        // Empty session id = the "ephemeral / don't persist" sentinel, so the
+        // conspect sidecar is never touched and the test stays hermetic (no
+        // write to the real %APPDATA%).
+        run_meeting_summary(sink, cfg, transcript, String::new()).await;
+    }
+
+    /// v0.18.6 invariant: a conspect carries the part SUMMARIES the reduce needs,
+    /// and the resumable pipeline reduces ONLY over non-empty summaries — it must
+    /// never send the model a reduce whose parts are blank (that is exactly what
+    /// made the model beg "предоставьте текст конспектов части 1/3…"). This pins
+    /// both the filtering and that a real reduce seed embeds the part text.
+    #[test]
+    fn reduce_only_runs_over_non_empty_part_summaries() {
+        let mut cs = Conspect::new(
+            "sess".into(),
+            true,
+            conspect::fingerprint("t"),
+            false,
+            vec!["src a".into(), "src b".into(), "src c".into()],
+        );
+        cs.parts[0].summary = Some("- решили выкатить в пятницу".into());
+        cs.parts[1].summary = None; // this part's map failed
+        cs.parts[2].summary = Some("   ".into()); // blank → not usable
+        let summaries = cs.usable_summaries();
+        assert_eq!(
+            summaries,
+            vec!["- решили выкатить в пятницу".to_string()],
+            "only the real conspectus survives"
+        );
+        // The reduce seed built from it actually carries the part text — so the
+        // model is never handed an empty input that it would answer by asking
+        // for the conspect.
+        let seed = build_summary_reduce_seed(&summaries, true, true, None);
+        let user = match &seed[1].content {
+            ai::MessageContent::Text(t) => t.clone(),
+            ai::MessageContent::Parts(_) => String::new(),
+        };
+        assert!(user.contains("решили выкатить в пятницу"));
+        // And the missing-part bookkeeping points the retry at the failed slice.
+        assert_eq!(cs.missing_part_indices(), vec![1, 2]);
     }
 
     // ── Prompt-builder battery (moved from src-tauri Phase B2 port #2) ──

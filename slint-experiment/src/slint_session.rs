@@ -217,6 +217,16 @@ fn start_session_inner(
     }
     lock(&rt).journal = Some(journal.clone());
 
+    // v0.18.6 — derive + record the session id (the journal-file stem) up front
+    // so the Summary button can key its persisted conspect by it EVEN WHEN audio
+    // recording is off. Falls back to a timestamp if the stem is unreadable.
+    // Kept across Стоп (like full_transcript); the next Старт overwrites it.
+    let session_id = journal
+        .current_path()
+        .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
+        .unwrap_or_else(|| format!("session_{}", now_unix_ms()));
+    lock(&rt).current_session_id = Some(session_id.clone());
+
     // ===== 4. Spawn audio capture =====
     let (audio_rx, capture_handle) = audio::start_capture(mic_dev, sys_dev)
         .context("audio::start_capture failed (check mic / system audio devices in Settings)")?;
@@ -243,10 +253,8 @@ fn start_session_inner(
         )
     };
     let stt_audio_rx = if record_enabled {
-        let session_id = journal
-            .current_path()
-            .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
-            .unwrap_or_else(|| format!("session_{}", now_unix_ms()));
+        // Reuse the session id derived above (the conspect + the recordings dir
+        // share one key, so a re-Summary from the archive lines up with both).
         match overlay_backend::recorder::SessionRecorder::start(
             &session_id,
             keep_sessions,
@@ -694,6 +702,7 @@ async fn maybe_spawn_auto_tile(
                 source: "auto_tile_cached".into(),
                 is_translation: false,
                 highlights: highlights_for_spec,
+                summary_session: None,
             },
             monitor_hint,
             stealth,
@@ -850,6 +859,7 @@ async fn maybe_spawn_auto_tile(
                             source: "ai_error".into(),
                             is_translation: false,
                             highlights: vec!["AI error".into()],
+                            summary_session: None,
                         },
                         MonitorHint::Auto,
                         stealth,
@@ -948,6 +958,7 @@ async fn maybe_spawn_auto_tile(
             source: "auto_tile".into(),
             is_translation: false,
             highlights: highlights_for_spec,
+            summary_session: None,
         },
         monitor_hint,
         stealth,
