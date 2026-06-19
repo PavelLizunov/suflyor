@@ -1050,12 +1050,30 @@ fn main() -> Result<(), slint::PlatformError> {
                     )
                 };
                 if want_llama {
-                    let started = overlay_backend::local_ai::ensure_servers(
-                        &root,
-                        true,
-                        false,
-                        prefer_quality,
-                    );
+                    // Cold boot: any server already on :8080 is necessarily from
+                    // a PREVIOUS process — typically a stale orphan an in-place
+                    // upgrade or force-kill left squatting the port. Bare
+                    // `ensure_servers` would TRUST that occupant and never
+                    // replace it (the "local AI is dead until I press Install"
+                    // report). Do the SAME owner-aware free + relaunch +
+                    // readiness-poll that the Install button does, so the first
+                    // launch always brings up OUR fresh, confirmed server.
+                    // `free_llama_port` only kills listeners under our root, so a
+                    // foreign :8080 is left untouched (→ PortBusy, no relaunch).
+                    // (Forward-looking: the Job Object in local_ai means our own
+                    // servers no longer outlive us, so on a clean quit the port
+                    // is already free here and this just launches fresh.)
+                    // Held under the lifecycle lock (same as the engine-update
+                    // block below) so this destructive free+relaunch can't race a
+                    // user pressing "Install local AI" in the first second of boot.
+                    let lifecycle_lock = {
+                        let s = state_w.lock().unwrap_or_else(|p| p.into_inner());
+                        s.local_ai_lock.clone()
+                    };
+                    let guard = lifecycle_lock.lock().unwrap_or_else(|p| p.into_inner());
+                    let (_outcome, started) =
+                        overlay_backend::local_ai::switch_local_model(&root, prefer_quality, false);
+                    drop(guard);
                     if !started.is_empty() {
                         state_w
                             .lock()

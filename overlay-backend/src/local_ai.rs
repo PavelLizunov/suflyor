@@ -2081,7 +2081,69 @@ fn spawn_hidden(exe: &str, args: &[&str]) -> Result<Child> {
 /// Launch a hidden server process (kept alive; returned to the caller).
 fn launch_hidden(exe: &Path, args: &[&str]) -> Result<Child> {
     let exe_s = exe.to_string_lossy().to_string();
-    spawn_hidden(&exe_s, args)
+    let child = spawn_hidden(&exe_s, args)?;
+    // Tie the server's lifetime to ours so a hard exit of THIS process can't
+    // orphan it on :8080 (see `assign_to_lifetime_job`).
+    #[cfg(windows)]
+    assign_to_lifetime_job(&child);
+    Ok(child)
+}
+
+/// Assign a spawned child to a process-wide Windows Job Object configured with
+/// `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. The job handle is created once and held
+/// for the whole process lifetime, so when this process exits — INCLUDING a hard
+/// `TerminateProcess` (Task Manager, or an in-place upgrade that replaces the
+/// exe) — the OS closes our last handle to the job and terminates every server
+/// we put in it.
+///
+/// Without this, a force-killed/upgraded app orphans `llama-server` still
+/// squatting :8080; the next launch's `ensure_servers` then sees the port
+/// "reachable" and never relaunches, so local AI looks dead until the user hits
+/// Settings → "Install local AI" (the only path that force-frees the port).
+/// Best-effort: any Win32 failure is logged and the child behaves as before.
+#[cfg(windows)]
+fn assign_to_lifetime_job(child: &Child) {
+    use std::os::windows::io::AsRawHandle;
+    use std::sync::OnceLock;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+        SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
+    // Raw handle stored as usize so the OnceLock is Send+Sync. 0 = unavailable.
+    static JOB: OnceLock<usize> = OnceLock::new();
+    let raw = *JOB.get_or_init(|| unsafe {
+        let handle = match CreateJobObjectW(None, windows::core::PCWSTR::null()) {
+            Ok(h) => h,
+            Err(e) => {
+                log::warn!("CreateJobObject failed: {e}; local-AI servers may orphan on kill");
+                return 0;
+            }
+        };
+        let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if let Err(e) = SetInformationJobObject(
+            handle,
+            JobObjectExtendedLimitInformation,
+            std::ptr::addr_of!(info).cast(),
+            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        ) {
+            log::warn!("SetInformationJobObject failed: {e}; local-AI servers may orphan on kill");
+            return 0;
+        }
+        handle.0 as usize
+    });
+    if raw == 0 {
+        return;
+    }
+    let job = HANDLE(raw as *mut std::ffi::c_void);
+    let proc = HANDLE(child.as_raw_handle());
+    unsafe {
+        if let Err(e) = AssignProcessToJobObject(job, proc) {
+            log::warn!("AssignProcessToJobObject failed: {e}");
+        }
+    }
 }
 
 /// Run a hidden command to completion, returning its exit status.

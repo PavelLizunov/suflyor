@@ -58,6 +58,15 @@ windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_System_Com",
     "Win32_Media_Speech",
+    # Job Object so spawned local-AI servers (llama-server / whisper) are killed
+    # when THIS process dies — even via TerminateProcess (Task Manager / an
+    # in-place upgrade) — instead of orphaning a server that squats :8080.
+    # JobObjects needs Threading (JOBOBJECT_EXTENDED_LIMIT_INFORMATION) + Security
+    # (CreateJobObjectW's SECURITY_ATTRIBUTES) — declared explicitly so the build
+    # doesn't depend on another dep (wasapi) happening to enable them.
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+    "Win32_Security",
 ] }
 
 # Neural TTS (read-aloud) runs in the `suflyor-tts` SIDECAR process — sherpa-onnx
