@@ -14,7 +14,7 @@
 ; and bump the upgrade GUID so it overwrites v0.1.1 cleanly.
 
 !define PRODUCT_NAME "suflyor"
-!define PRODUCT_VERSION "0.18.6"
+!define PRODUCT_VERSION "0.20.0"
 !define PRODUCT_PUBLISHER "x3d_mutant"
 !define PRODUCT_EXE "overlay-host.exe"
 !define PRODUCT_INSTALL_DIR "$LOCALAPPDATA\suflyor-slint"
@@ -37,6 +37,11 @@ UninstPage instfiles
 Section "Main" SEC_MAIN
   SetOutPath "$INSTDIR"
   File "..\slint-experiment\target\release\${PRODUCT_EXE}"
+  ; Read-aloud (TTS) sidecar — a separate process so its neural-TTS onnxruntime
+  ; never shares a binary with the app's ort/GigaAM STT (two static onnxruntimes
+  ; crash). overlay-host spawns it from beside itself. The voices themselves are
+  ; NOT bundled (too large) — installed on demand from Settings -> "Озвучка".
+  File "..\slint-experiment\target\release\suflyor-tts.exe"
   ; onnxruntime (GigaAM STT) is STATICALLY linked into the exe (ort 2.0
   ; download-binaries, no load-dynamic) -> no onnxruntime.dll to ship.
   ; We deliberately DO NOT ship DirectML.dll: the GigaAM GPU (DirectML) path
@@ -77,6 +82,7 @@ SectionEnd
 
 Section "Uninstall"
   Delete "$INSTDIR\${PRODUCT_EXE}"
+  Delete "$INSTDIR\suflyor-tts.exe"
   ; legacy: older builds shipped a DirectML.dll next to the exe; remove it so an
   ; upgrade from such a build doesn't leave a stub shadowing System32.
   Delete "$INSTDIR\DirectML.dll"

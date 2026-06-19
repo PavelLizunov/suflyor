@@ -51,6 +51,21 @@ pub fn translate_prompt(phonetics: bool) -> String {
     }
 }
 
+/// OCR / read-aloud capture prompt (read-aloud feature, Stage A). Produces a
+/// FAITHFUL VERBATIM transcription of the on-screen text — the opposite of
+/// [`TRANSLATE_VISION_PROMPT`] (which rewrites into RU) and
+/// [`DEFAULT_VISION_PROMPT`] (which summarizes). It keeps the SOURCE language,
+/// preserves line order + punctuation, and emits ONLY the text (no description,
+/// no translation, no markdown fences) so the result can be fed straight to
+/// text-to-speech. Deliberately profile-FREE (a persona must never bend the
+/// transcription) — the dispatch uses [`build_vision_request`], never the
+/// context-carrying [`build_vision_request_with_context`].
+pub const OCR_VISION_PROMPT: &str = "Перепиши ДОСЛОВНО весь видимый текст с \
+     изображения — в точности как написано, на ЯЗЫКЕ ОРИГИНАЛА (НЕ переводи). \
+     Сохрани порядок строк и знаки препинания. Выведи ТОЛЬКО сам текст: без \
+     описаний, комментариев, заголовков и markdown-ограждений. Нечитаемый символ \
+     заменяй на «□». Если текста на изображении нет — напиши: (текста нет).";
+
 /// Build a one-shot vision request: a single user turn with the prompt text +
 /// the screenshot as an image part. No transcript/KB — this is the standalone
 /// capture channel, NOT the F9 interview-answer flow ([`crate::ai::build_request`]).
@@ -112,13 +127,16 @@ pub fn build_vision_request_with_context(
 
 /// Which answer shape a capture produces. Describe = the default "what's on
 /// screen / solve it" prompt; Translate = rewrite the text in RU; TestPractice =
-/// study/self-check helper for a PRACTICE question (answer + short why). The
-/// capture mode is chosen by the F8/Shift+F8 trigger + the Settings toggle.
+/// study/self-check helper for a PRACTICE question (answer + short why); Ocr =
+/// faithful VERBATIM transcription of the on-screen text (read-aloud feature —
+/// the text is fed to text-to-speech). The capture mode is chosen by the
+/// F8/Shift+F8/Ctrl+F8 trigger + the Settings toggle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VisionMode {
     Describe,
     Translate,
     TestPractice,
+    Ocr,
 }
 
 /// System instruction for [`VisionMode::TestPractice`]. This is a STUDY /
@@ -387,6 +405,32 @@ mod tests {
             plain.contains("НЕ выводи английский") && with.contains("НЕ выводи английский"),
             "translate prompt must forbid echoing the English source"
         );
+    }
+
+    #[test]
+    fn ocr_prompt_demands_verbatim_and_forbids_translation() {
+        // The OCR/read-aloud prompt is the ANTI-Translate: it must transcribe
+        // the source language verbatim, never translate or describe — otherwise
+        // text-to-speech would read a mangled/translated string. Pin those
+        // properties so a future edit can't silently turn OCR into a summary.
+        let p = OCR_VISION_PROMPT;
+        assert!(
+            p.contains("ДОСЛОВНО"),
+            "must demand a verbatim transcription"
+        );
+        assert!(
+            p.contains("НЕ переводи") && p.contains("ЯЗЫКЕ ОРИГИНАЛА"),
+            "must keep the source language, not translate"
+        );
+        assert!(
+            p.contains("ТОЛЬКО сам текст"),
+            "must emit only the text (no description/commentary)"
+        );
+        // It round-trips through the plain (profile-free) request builder as a
+        // single text+image user turn — never the context-carrying builder.
+        let msgs = build_vision_request("data:image/jpeg;base64,AAAA", OCR_VISION_PROMPT);
+        assert_eq!(msgs.len(), 1);
+        assert!(matches!(&msgs[0].content, MessageContent::Parts(p) if p.len() == 2));
     }
 
     #[test]

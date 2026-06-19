@@ -173,4 +173,55 @@ pub(crate) fn wire_vision_settings(
             });
         });
     }
+
+    // ===== OCR engine (Tesseract) — download-on-demand install button =====
+    // Mirrors the voice installer: download + SHA-verify + extract on a worker
+    // thread (the ~53 MB engine is NOT bundled). On success the OCR path
+    // (Shift+Alt+2 / Ctrl+F8) starts using Tesseract instead of the VLM.
+    {
+        let weak = win.as_weak();
+        win.on_ocr_install_clicked(move || {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            if w.get_ocr_installing() {
+                return;
+            }
+            w.set_ocr_installing(true);
+            w.set_ocr_install_status(SharedString::from("Подготовка…"));
+            let weak_done = w.as_weak();
+            std::thread::spawn(move || {
+                let weak_cb = weak_done.clone();
+                let on = move |p: overlay_backend::ocr_install::OcrProgress| {
+                    let overlay_backend::ocr_install::OcrProgress::Step(s) = p;
+                    let weak_in = weak_cb.clone();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(w) = weak_in.upgrade() {
+                            w.set_ocr_install_status(SharedString::from(s));
+                        }
+                    });
+                };
+                let result = overlay_backend::ocr_install::install(&on);
+                if let Err(e) = &result {
+                    diag!("[overlay-host] OCR install failed: {e:#}");
+                }
+                let _ = slint::invoke_from_event_loop(move || {
+                    let Some(w) = weak_done.upgrade() else {
+                        return;
+                    };
+                    w.set_ocr_installing(false);
+                    if result.is_err() {
+                        w.set_ocr_install_status(SharedString::from(
+                            "Не удалось установить распознавание — проверьте интернет и повторите.",
+                        ));
+                    } else {
+                        // Final status was set by install() via the progress
+                        // callback; just flip the installed flag so the button
+                        // disappears.
+                        w.set_ocr_installed(true);
+                    }
+                });
+            });
+        });
+    }
 }

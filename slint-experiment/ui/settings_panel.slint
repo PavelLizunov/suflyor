@@ -275,6 +275,25 @@ export component SettingsWindow inherits Window {
     callback vision-local-bearer-save(string);
     callback vision-local-model-save(string);
     callback vision-test-clicked();
+
+    // Read-aloud (Озвучка) — voice chooser + speed preset + a test button.
+    in-out property <[string]> tts-voice-names;
+    in-out property <int> tts-voice-index: 0;
+    in-out property <int> tts-rate-index: 1; // 0..4 preset, default «1.0×»
+    in-out property <bool> tts-available: false;
+    in-out property <bool> tts-installing: false;
+    in-out property <string> tts-install-status;
+    callback tts-voice-changed(int);
+    callback tts-rate-changed(int);
+    callback tts-test-clicked();
+    callback tts-install-clicked();
+
+    // Text recognition (OCR) engine — local Tesseract for Shift+Alt+2 / Ctrl+F8,
+    // installed on demand (not bundled).
+    in-out property <bool> ocr-installed: false;
+    in-out property <bool> ocr-installing: false;
+    in-out property <string> ocr-install-status;
+    callback ocr-install-clicked();
     in-out property <string> ai-local-base-url-input: "";
     // Phase E10.1 — model dropdown populated from GET {base_url}/models so the
     // user picks a loaded model instead of typing its id.
@@ -602,6 +621,11 @@ export component SettingsWindow inherits Window {
                 NavItem {
                     label: @tr("STT"); icon: @image-url("../assets/icons/stt.svg"); tab-index: 12;
                     active: root.active-tab == 12;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
+                }
+                NavItem {
+                    label: @tr("TTS"); icon: @image-url("../assets/icons/speaker.svg"); tab-index: 5;
+                    active: root.active-tab == 5;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
@@ -943,6 +967,80 @@ export component SettingsWindow inherits Window {
                             Button {
                                 text: @tr("🪄 Run setup wizard");
                                 clicked => { root.open-wizard-clicked(); }
+                            }
+                        }
+                    }
+                    if root.active-tab == 5 : VerticalLayout {
+                        spacing: 8px;
+                        Text {
+                            text: @tr("Read selected text (Shift+Alt+1) or a screen region (Shift+Alt+2) aloud. Pause or resume with Shift+Alt+3.");
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        // Voice chooser — only when at least one voice is installed.
+                        if root.tts-available : HorizontalLayout {
+                            spacing: 8px;
+                            Text {
+                                text: @tr("Voice:");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                vertical-alignment: center;
+                            }
+                            ComboBox {
+                                model: root.tts-voice-names;
+                                current-index: root.tts-voice-index;
+                                selected => { root.tts-voice-changed(self.current-index); }
+                            }
+                        }
+                        // No voices yet → offer the download (like the local-AI
+                        // model installer — heavy data installs via a button, not
+                        // bundled in the app installer).
+                        if !root.tts-available : VerticalLayout {
+                            spacing: 6px;
+                            Text {
+                                text: @tr("Neural voices aren't installed yet — download them (Irina + Ruslan, ~130 MB).");
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                alignment: start;
+                                Button {
+                                    text: root.tts-installing ? @tr("Installing…") : @tr("⬇ Install voices");
+                                    enabled: !root.tts-installing;
+                                    clicked => { root.tts-install-clicked(); }
+                                }
+                            }
+                        }
+                        if root.tts-install-status != "" : Text {
+                            text: root.tts-install-status;
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
+                        // Speed preset (multipliers are language-neutral, untranslated).
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Text {
+                                text: @tr("Speed:");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                vertical-alignment: center;
+                            }
+                            ComboBox {
+                                model: ["0.75×", "1.0×", "1.3×", "1.5×", "2.0×"];
+                                current-index: root.tts-rate-index;
+                                selected => { root.tts-rate-changed(self.current-index); }
+                            }
+                        }
+                        // Quick test of the current voice + speed.
+                        HorizontalLayout {
+                            alignment: start;
+                            Button {
+                                text: @tr("🔊 Test voice");
+                                enabled: root.tts-available;
+                                clicked => { root.tts-test-clicked(); }
                             }
                         }
                     }
@@ -1804,6 +1902,35 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
+                        // Local OCR engine (Tesseract) for Shift+Alt+2 / Ctrl+F8
+                        // text recognition. Installed on demand (~53 MB), not
+                        // bundled in the app installer.
+                        Text {
+                            text: @tr("Text recognition (OCR) — Shift+Alt+2 reads on-screen text aloud / copies it via a local engine. Without it, OCR falls back to the slower vision model.");
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        if !root.ocr-installed : HorizontalLayout {
+                            alignment: start;
+                            Button {
+                                text: root.ocr-installing ? @tr("Installing…") : @tr("⬇ Install text recognition (OCR)");
+                                enabled: !root.ocr-installing;
+                                clicked => { root.ocr-install-clicked(); }
+                            }
+                        }
+                        if root.ocr-installed && root.ocr-install-status == "" : Text {
+                            text: @tr("Text recognition is installed.");
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                        }
+                        if root.ocr-install-status != "" : Text {
+                            text: root.ocr-install-status;
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
+                        Rectangle { background: Theme.border; height: 1px; }
                         ComboBox {
                             model: [@tr("Off"), @tr("Same as text model above"), @tr("Cloud (Sonnet via bridge)"), @tr("Local (2nd vision server)")];
                             current-index: root.vision-provider-index;
@@ -2230,6 +2357,7 @@ export component SettingsWindow inherits Window {
                idx == 2 ? @tr("Hotkeys") :
                idx == 3 ? @tr("Interface") :
                idx == 4 ? @tr("Updates") :
+               idx == 5 ? @tr("TTS") :
                idx == 6 ? @tr("Audio") :
                idx == 7 ? @tr("Auto-tiles") :
                idx == 9 ? @tr("Knowledge base") :

@@ -1,0 +1,30 @@
+# suflyor-tts — the neural read-aloud SIDECAR.
+#
+# A tiny standalone process that links sherpa-onnx (TTS) ONLY. It deliberately
+# does NOT depend on overlay-backend / ort: two onnxruntimes statically linked
+# into one binary collide (native access-violation on the 2nd model load), so
+# the TTS engine MUST live in its own process. The main app (overlay-host) keeps
+# ort/GigaAM on the GPU; this child synthesizes + plays audio and takes simple
+# line commands on stdin (SPEAK/PAUSE/RESUME/STOP/VOICE/RATE).
+[package]
+name = "suflyor-tts"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "suflyor-tts"
+path = "src/main.rs"
+
+[dependencies]
+sherpa-onnx = "1.13"          # static (default) — safe here: no ort in this crate
+wasapi = "0.23"
+anyhow = "1"
+base64 = "0.22"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+
+[profile.release]
+opt-level = 2

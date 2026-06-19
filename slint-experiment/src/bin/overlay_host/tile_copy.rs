@@ -223,6 +223,115 @@ pub(crate) fn wire_copy(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayBa
     });
 }
 
+/// Text for the 🔊 read-aloud: the LATEST assistant answer only — never the user
+/// prompts / transcript / earlier turns. (The 📋 copy deliberately includes the
+/// whole labelled thread; read-aloud must NOT, or it speaks your own questions
+/// back at you — the bug the tester hit.) Falls back to the rendered body
+/// mid-stream, before an assistant turn is recorded.
+pub(crate) fn convo_speak_text(bridge: &OverlayBarBridge, convo_id: i32) -> String {
+    let convos = bridge
+        .conversations
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    match convos.get(&convo_id) {
+        Some(c) => speak_answer_text(&c.messages, &c.rendered),
+        None => String::new(),
+    }
+}
+
+/// Pure: the latest assistant turn's text, or the rendered body if none yet.
+pub(crate) fn speak_answer_text(messages: &[ai::ChatMessage], rendered: &str) -> String {
+    messages
+        .iter()
+        .rev()
+        .find(|m| m.role == "assistant")
+        .map(|m| message_text(&m.content).trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| rendered.trim().to_string())
+}
+
+// Which tile is currently being read aloud. TTS is process-global +
+// one-utterance-at-a-time, so we remember the convo_id that started the current
+// speech: closing THAT tile (or the app) stops it; a new speak re-points it.
+static SPEAKING_CONVO: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(i64::MIN);
+
+/// Record that `convo_id` started the current read-aloud.
+pub(crate) fn mark_speaking(convo_id: i32) {
+    SPEAKING_CONVO.store(convo_id as i64, std::sync::atomic::Ordering::Release);
+}
+
+/// Stop the read-aloud iff `convo_id` is the tile currently being spoken — called
+/// from each tile's close handler so closing the speaking tile silences it.
+pub(crate) fn stop_if_speaking(convo_id: i32) {
+    if SPEAKING_CONVO.load(std::sync::atomic::Ordering::Acquire) == convo_id as i64 {
+        overlay_backend::tts::stop();
+        SPEAKING_CONVO.store(i64::MIN, std::sync::atomic::Ordering::Release);
+    }
+}
+
+/// The convo_id currently being read aloud, or -1 if none.
+pub(crate) fn current_speaking_convo() -> i32 {
+    let v = SPEAKING_CONVO.load(std::sync::atomic::Ordering::Acquire);
+    if v == i64::MIN {
+        -1
+    } else {
+        v as i32
+    }
+}
+
+// Process-global pause latch, shared by the tile ⏯ button AND the Shift+Alt+3
+// hotkey so they stay coherent (TTS is global + one-at-a-time). false = playing.
+static SPEAK_PAUSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Toggle pause/resume of the current read-aloud; returns the NEW paused state.
+pub(crate) fn toggle_pause() -> bool {
+    let now_paused = !SPEAK_PAUSED.fetch_xor(true, std::sync::atomic::Ordering::SeqCst);
+    if now_paused {
+        overlay_backend::tts::pause();
+    } else {
+        overlay_backend::tts::resume();
+    }
+    now_paused
+}
+
+/// Reset the latch to "playing" — called when a fresh utterance starts.
+pub(crate) fn reset_pause() {
+    SPEAK_PAUSED.store(false, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Read-aloud — wire a tile's 🔊 «Озвучить» + ⏯ pause/resume controls to the
+/// process-global neural TTS sidecar. Speaks ONLY the latest answer (never the
+/// prompts / earlier turns). Purely local — no network egress — so it stays safe
+/// under screen-share / stealth.
+pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayBarBridge>) {
+    tile.set_can_speak(true);
+    let bridge_speak = bridge.clone();
+    {
+        let weak = tile.as_weak();
+        tile.on_speak_clicked(move || {
+            let text = convo_speak_text(&bridge_speak, convo_id);
+            if text.trim().is_empty() {
+                return;
+            }
+            reset_pause();
+            if let Some(t) = weak.upgrade() {
+                t.set_speak_paused(false);
+            }
+            mark_speaking(convo_id);
+            overlay_backend::tts::speak(&text);
+        });
+    }
+    let weak_p = tile.as_weak();
+    tile.on_speak_pause_clicked(move || {
+        // Shared global latch so this ⏯ button and the Shift+Alt+3 hotkey stay
+        // coherent (one TTS engine, one utterance at a time).
+        let now_paused = toggle_pause();
+        if let Some(t) = weak_p.upgrade() {
+            t.set_speak_paused(now_paused);
+        }
+    });
+}
+
 #[cfg(test)]
 mod copy_tests {
     //! Locks the 📋-copy text derivation — the exact area the user hit live:
@@ -376,6 +485,33 @@ mod copy_tests {
     #[test]
     fn empty_conversation_falls_back_to_rendered() {
         assert_eq!(format_convo_copy(&[], "RENDERED"), "RENDERED");
+    }
+
+    #[test]
+    fn speak_reads_latest_answer_only_not_prompts_or_old_turns() {
+        // The tester bug: 🔊 on a multi-turn tile read the prompts + every
+        // message. Read-aloud must speak ONLY the latest answer.
+        let msgs = vec![
+            msg("system", "ты ассистент"),
+            msg("user", "Помоги ответить: вопрос 1"),
+            msg("assistant", "ответ один"),
+            msg("user", &format!("{FOLLOWUP_DIRECTIVE}вопрос 2")),
+            msg("assistant", "ответ два"),
+        ];
+        let spoken = speak_answer_text(&msgs, "RENDERED");
+        assert_eq!(spoken, "ответ два");
+        assert!(!spoken.contains("вопрос"));
+        assert!(!spoken.contains("ответ один"));
+    }
+
+    #[test]
+    fn speak_falls_back_to_rendered_before_any_answer() {
+        let msgs = vec![msg("user", "Помоги ответить: q")];
+        assert_eq!(
+            speak_answer_text(&msgs, "частичный ответ"),
+            "частичный ответ"
+        );
+        assert_eq!(speak_answer_text(&[], "RENDERED"), "RENDERED");
     }
 
     #[test]

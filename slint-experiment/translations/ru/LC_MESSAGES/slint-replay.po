@@ -1063,3 +1063,39 @@ msgstr "Одобренная память ({})"
 
 msgid "No approved memory yet."
 msgstr "Пока нет одобренной памяти."
+
+msgid "TTS"
+msgstr "TTS"
+
+msgid "Read selected text (Shift+Alt+1) or a screen region (Shift+Alt+2) aloud. Pause or resume with Shift+Alt+3."
+msgstr "Озвучивание выделенного текста (Shift+Alt+1) или области экрана (Shift+Alt+2). Пауза/продолжение — Shift+Alt+3."
+
+msgid "Voice:"
+msgstr "Голос:"
+
+msgid "No voices installed yet."
+msgstr "Голоса ещё не установлены."
+
+msgid "Speed:"
+msgstr "Скорость:"
+
+msgid "🔊 Test voice"
+msgstr "🔊 Проверить голос"
+
+msgid "Neural voices aren't installed yet — download them (Irina + Ruslan, ~130 MB)."
+msgstr "Нейронные голоса ещё не установлены — скачайте их (Ирина + Руслан, ~130 МБ)."
+
+msgid "Installing…"
+msgstr "Устанавливаю…"
+
+msgid "⬇ Install voices"
+msgstr "⬇ Установить голоса"
+
+msgid "Text recognition (OCR) — Shift+Alt+2 reads on-screen text aloud / copies it via a local engine. Without it, OCR falls back to the slower vision model."
+msgstr "Распознавание текста (OCR) — Shift+Alt+2 озвучивает текст с экрана / копирует его локальным движком. Без него OCR откатывается на более медленную модель зрения."
+
+msgid "⬇ Install text recognition (OCR)"
+msgstr "⬇ Установить распознавание текста (OCR)"
+
+msgid "Text recognition is installed."
+msgstr "Распознавание текста установлено."

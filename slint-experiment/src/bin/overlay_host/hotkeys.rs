@@ -73,8 +73,14 @@ pub(crate) struct RegisteredHotkeys {
     pub f7_id: u32,
     pub f8_id: u32,
     pub sf8_id: u32,
+    /// Ctrl+F8 — region capture in OCR / read-aloud mode (read-aloud feature).
+    pub cf8_id: u32,
     pub f9_id: u32,
     pub sf9_id: u32,
+    /// Shift+Alt+1/2/3 — read selection / OCR region / pause-stop (read-aloud).
+    pub sa1_id: u32,
+    pub sa2_id: u32,
+    pub sa3_id: u32,
 }
 
 /// ===== Global hotkeys (Phase D2 + B3 extra) =====
@@ -125,6 +131,27 @@ pub(crate) fn register_hotkeys() -> RegisteredHotkeys {
         Some(global_hotkey::hotkey::Modifiers::SHIFT),
         global_hotkey::hotkey::Code::F8,
     );
+    // Read-aloud feature — Ctrl+F8 = the SAME region capture but in OCR mode:
+    // transcribe the selected text verbatim (later: read it aloud via TTS).
+    let cf8_hotkey = global_hotkey::hotkey::HotKey::new(
+        Some(global_hotkey::hotkey::Modifiers::CONTROL),
+        global_hotkey::hotkey::Code::F8,
+    );
+    // Read-aloud one-handed shortcuts: Shift+Alt+1 = read SELECTED text (clipboard),
+    // Shift+Alt+2 = OCR a region + read, Shift+Alt+3 = pause/stop. Digit codes;
+    // bare Shift+Alt is the OS layout-switch chord (no digit) so it doesn't clash.
+    let sa1_hotkey = global_hotkey::hotkey::HotKey::new(
+        Some(global_hotkey::hotkey::Modifiers::SHIFT | global_hotkey::hotkey::Modifiers::ALT),
+        global_hotkey::hotkey::Code::Digit1,
+    );
+    let sa2_hotkey = global_hotkey::hotkey::HotKey::new(
+        Some(global_hotkey::hotkey::Modifiers::SHIFT | global_hotkey::hotkey::Modifiers::ALT),
+        global_hotkey::hotkey::Code::Digit2,
+    );
+    let sa3_hotkey = global_hotkey::hotkey::HotKey::new(
+        Some(global_hotkey::hotkey::Modifiers::SHIFT | global_hotkey::hotkey::Modifiers::ALT),
+        global_hotkey::hotkey::Code::Digit3,
+    );
     // V0.8.4 — F1 opens the 🆘 help (toggle, like F4).
     let f1_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F1);
     // Phase 3a — F7 opens the 🗄 session archive (toggle, like F4/F1).
@@ -137,7 +164,11 @@ pub(crate) fn register_hotkeys() -> RegisteredHotkeys {
     let sf9_id = sf9_hotkey.id();
     let f8_id = f8_hotkey.id();
     let sf8_id = sf8_hotkey.id();
+    let cf8_id = cf8_hotkey.id();
     let f1_id = f1_hotkey.id();
+    let sa1_id = sa1_hotkey.id();
+    let sa2_id = sa2_hotkey.id();
+    let sa3_id = sa3_hotkey.id();
     {
         // P1.2 — capture per-key registration so the Diagnostics tab can name a
         // conflicting key instead of a blanket "hotkeys disabled" (audit P1.2).
@@ -151,9 +182,13 @@ pub(crate) fn register_hotkeys() -> RegisteredHotkeys {
                 ("F7", f7_hotkey),
                 ("F8", f8_hotkey),
                 ("Shift+F8", sf8_hotkey),
+                ("Ctrl+F8", cf8_hotkey),
                 ("F9", f9_hotkey),
                 ("Shift+F9", sf9_hotkey),
                 ("F1", f1_hotkey),
+                ("Shift+Alt+1", sa1_hotkey),
+                ("Shift+Alt+2", sa2_hotkey),
+                ("Shift+Alt+3", sa3_hotkey),
             ] {
                 match m.register(hk) {
                     Ok(()) => {
@@ -183,7 +218,11 @@ pub(crate) fn register_hotkeys() -> RegisteredHotkeys {
         f7_id,
         f8_id,
         sf8_id,
+        cf8_id,
         f9_id,
         sf9_id,
+        sa1_id,
+        sa2_id,
+        sa3_id,
     }
 }

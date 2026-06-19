@@ -4013,6 +4013,7 @@ name = "overlay-backend"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64",
  "bytes",
  "dirs",
  "futures-util",
@@ -4029,6 +4030,7 @@ dependencies = [
  "tokio",
  "transcribe-rs",
  "wasapi",
+ "windows 0.62.2",
 ]
 
 [[package]]
@@ -5396,7 +5398,7 @@ dependencies = [
 
 [[package]]
 name = "slint-replay"
-version = "0.18.6"
+version = "0.20.0"
 dependencies = [
  "anyhow",
  "base64",

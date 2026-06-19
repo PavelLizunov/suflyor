@@ -34,6 +34,25 @@ if (-not (Test-Path $exe)) {
     exit 11
 }
 
+# Read-aloud TTS sidecar (separate process — its onnxruntime can't share a
+# binary with the app's ort/GigaAM STT). Build it into the SAME target dir so it
+# lands beside overlay-host.exe (CARGO_TARGET_DIR reuses the cached sherpa lib).
+Write-Host "[build-slint-release] cargo build --release suflyor-tts (read-aloud sidecar)" -ForegroundColor Cyan
+$env:CARGO_TARGET_DIR = Join-Path $crate "target"
+& cargo build --release --manifest-path (Join-Path $projectRoot "suflyor-tts\Cargo.toml")
+$sidecarExit = $LASTEXITCODE
+Remove-Item Env:\CARGO_TARGET_DIR -ErrorAction SilentlyContinue
+if ($sidecarExit -ne 0) {
+    Write-Host "sidecar build failed: exit $sidecarExit" -ForegroundColor Red
+    exit $sidecarExit
+}
+$sidecar = Join-Path $crate "target\release\suflyor-tts.exe"
+if (-not (Test-Path $sidecar)) {
+    Write-Host "ERROR: sidecar build succeeded but $sidecar missing" -ForegroundColor Red
+    exit 12
+}
+Write-Host "  sidecar: $sidecar" -ForegroundColor Green
+
 # DirectML EP (GigaAM GPU): ort drops a DirectML.dll SYMLINK to a 0-byte
 # placeholder into target\release. We must NOT ship a DirectML.dll next to the
 # exe at all: verified on this box that ANY local DirectML.dll (the empty stub

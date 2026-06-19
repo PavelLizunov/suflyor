@@ -49,6 +49,24 @@ transcribe-rs = { version = "0.3.11", default-features = false, features = ["onn
 # Audio capture (audio.rs)
 wasapi = "0.23"
 
+# Text-to-speech (tts.rs, read-aloud feature) — Windows SAPI 5 ISpVoice via the
+# official Win32 binding, feature-gated to just the Speech + COM namespaces it
+# needs. ISpVoice gives engine-level async speak + PAUSE/RESUME + live SetRate +
+# voice enumeration (incl. OneCore "Irina"); chosen over the `tts` crate (whose
+# WinRT backend can't pause/resume). Same 0.62 the slint binary already links.
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_Media_Speech",
+] }
+
+# Neural TTS (read-aloud) runs in the `suflyor-tts` SIDECAR process — sherpa-onnx
+# is deliberately NOT linked here. It bundles its own onnxruntime, which crashes
+# natively when static-linked into the same binary as the `ort`/GigaAM STT
+# runtime above (two onnxruntimes collide on the 2nd model load). This crate only
+# needs base64 to frame text for the sidecar's stdin command protocol.
+base64 = "0.22"
+
 # Filesystem paths (config, journal)
 dirs = "6"
 

@@ -357,7 +357,22 @@ pub fn spawn(
                         dur_sec
                     );
                 }
-                if to_send.had_voice && dur_sec >= MIN_UTTERANCE_SEC && speech_like {
+                // Anti-feedback: drop EITHER source while the read-aloud plays.
+                // The system loopback hears the TTS directly; the MIC picks up the
+                // speakers' acoustic echo (the tester saw read-aloud text appear on
+                // the bar — the mic path was previously ungated). Both would be
+                // transcribed (shown on the bar / answered by the AI). The user is
+                // listening to the read-aloud, not talking, so suppressing both is
+                // correct; `is_speaking` clears shortly after playback ends.
+                let tts_feedback = crate::tts::is_speaking();
+                if tts_feedback {
+                    log::info!(
+                        "dropped {:?} buffer ({dur_sec:.1}s) — read-aloud is playing",
+                        chunk.source
+                    );
+                }
+                if to_send.had_voice && dur_sec >= MIN_UTTERANCE_SEC && speech_like && !tts_feedback
+                {
                     let tx = tx.clone();
                     let src = chunk.source;
                     let sample_count = to_send.samples.len();

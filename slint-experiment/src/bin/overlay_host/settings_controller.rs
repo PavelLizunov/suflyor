@@ -47,12 +47,13 @@
 use super::{
     active_stack_label, ai, apply_scheme_bar, apply_scheme_settings, audio, clamp_scheme, config,
     drag_begin, drag_update, fetch_models, grab_hwnd, make_transparent_tile, open_wizard,
-    populate_diagnostics, present_window_stealth_aware, set_always_on_top, set_global_scheme,
-    set_global_stealth, set_global_tile_opacity, set_stealth, spawn_ptt_watchdog, stt,
-    try_acquire_mic, wire_ai_settings, wire_diagnostics, wire_import_export, wire_local_ai,
-    wire_memory, wire_stt_settings, wire_updates, wire_vision_settings, Arc, AtomicBool,
-    ComponentHandle, ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell, SettingsWindow,
-    SharedString, TileWindows, VecModel, WindowRegistry,
+    populate_diagnostics, present_window_stealth_aware, preset_for_tts_rate, set_always_on_top,
+    set_global_scheme, set_global_stealth, set_global_tile_opacity, set_stealth,
+    spawn_ptt_watchdog, stt, try_acquire_mic, wire_ai_settings, wire_diagnostics,
+    wire_import_export, wire_local_ai, wire_memory, wire_stt_settings, wire_updates,
+    wire_vision_settings, wire_voice_settings, Arc, AtomicBool, ComponentHandle, ModelRc,
+    ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell, SettingsWindow, SharedString,
+    TileWindows, VecModel, WindowRegistry,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -308,6 +309,9 @@ pub(crate) fn open_settings(
     // ===== V4 — vision (screenshot) channel: provider switch + field saves + test =====
     // Extracted to settings_vision.rs (P1 domain split) — wired verbatim there.
     wire_vision_settings(&win, cfg);
+
+    // ===== Read-aloud (Озвучка): voice chooser + speed preset + test =====
+    wire_voice_settings(&win, cfg);
 
     // ===== Local AI: one-click in-app installer (download pipeline + Cancel) =====
     // Extracted to settings_local_ai.rs (P1 domain split) — wired verbatim there.
@@ -1056,6 +1060,12 @@ pub(crate) fn populate_token_status(
     win.set_vision_local_base_url_input(SharedString::from(c.vision_local_base_url.clone()));
     win.set_vision_local_model_input(SharedString::from(c.vision_local_model.clone()));
     win.set_vision_test_result(SharedString::from(""));
+    // OCR engine (Tesseract) install state — re-checked each open (the data dir
+    // is user-writable + the installer button writes it). Transient install
+    // status reset so a stale "Готово…" can't survive a reopen.
+    win.set_ocr_installed(overlay_backend::ocr_install::is_installed());
+    win.set_ocr_installing(false);
+    win.set_ocr_install_status(SharedString::from(""));
     // UI-audit 2026-06-13 (CRITICAL): the Settings window is REUSED, not
     // recreated, so every transient one-shot status string survived from the
     // previous open and described a STALE action (the user caught a lingering
@@ -1105,6 +1115,32 @@ pub(crate) fn populate_token_status(
     win.set_ai_local_vision(c.ai_local_vision);
     win.set_vision_phonetics(c.vision_phonetics);
     win.set_vision_test_practice(c.vision_test_practice);
+    // Read-aloud (Озвучка): build the installed-voice dropdown + reflect the
+    // saved voice/speed. The neural voices live in `%APPDATA%\suflyor\tts`;
+    // `tts::voices()` scans them (empty until the user installs one → the panel
+    // shows a "no voices" hint and disables the Test button).
+    {
+        let voices = overlay_backend::tts::voices();
+        let names: Vec<SharedString> = voices
+            .iter()
+            .map(|v| SharedString::from(v.name.as_str()))
+            .collect();
+        // Show the voice the ENGINE actually resolves to, not blindly voices[0]:
+        // for an empty/uninstalled `tts_voice`, `pick_voice_id` mirrors the
+        // sidecar's preference (Irina → any Piper → any RU → first), so the
+        // dropdown label matches the voice that Test / read-aloud will play.
+        let vidx = overlay_backend::tts::pick_voice_id(&voices, &c.tts_voice)
+            .and_then(|id| voices.iter().position(|v| v.id == id))
+            .unwrap_or(0) as i32;
+        win.set_tts_available(!voices.is_empty());
+        win.set_tts_voice_names(ModelRc::new(VecModel::from(names)));
+        win.set_tts_voice_index(vidx);
+        win.set_tts_rate_index(preset_for_tts_rate(c.tts_rate));
+        // Reset the transient install state on (re)open — the Settings window is
+        // reused, so a leftover "Готово…" / progress string must not survive.
+        win.set_tts_installing(false);
+        win.set_tts_install_status(SharedString::from(""));
+    }
     win.set_ai_local_thinking(c.ai_local_thinking);
     // v0.18.0 — local model size choice + whether the 12B is downloaded yet.
     win.set_ai_local_quality(c.ai_local_quality);

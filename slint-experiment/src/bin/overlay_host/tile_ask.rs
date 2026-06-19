@@ -43,10 +43,10 @@ use super::{
     ai, apply_tile_hwnd_with_monitor, cost_cap_reason, fire_followup_ask, fire_regenerate,
     gated_events, grab_hwnd, install_streaming_tile, journal, live_route, markdown,
     present_tile_window, refresh_open_tiles, select_recent_labeled, toggle_tile_maximize,
-    wire_copy, wire_escalate, wire_tile_drag, wire_voice_followup, Arc, AskRoute, ComponentHandle,
-    MarkdownBlock, ModelRc, Ordering, OverlayBarBridge, OverlayBarWindow, RuntimeEvents,
-    SharedSlintRuntime, SharedString, StreamingTile, TileWindow, TileWindows, VecModel,
-    AI_STREAM_MAX_TOKENS, CONVO_SEQ, TILE_DISPLAY_SEQ,
+    wire_copy, wire_escalate, wire_speak, wire_tile_drag, wire_voice_followup, Arc, AskRoute,
+    ComponentHandle, MarkdownBlock, ModelRc, Ordering, OverlayBarBridge, OverlayBarWindow,
+    RuntimeEvents, SharedSlintRuntime, SharedString, StreamingTile, TileWindow, TileWindows,
+    VecModel, AI_STREAM_MAX_TOKENS, CONVO_SEQ, TILE_DISPLAY_SEQ,
 };
 
 /// Phase E3 slice 3 — F3 reask handler.
@@ -251,6 +251,8 @@ pub(crate) fn fire_f9_ask(
     tile.on_close_clicked(move || {
         eprintln!("[overlay-host] tile (F9) close_clicked fired");
         if let Some(t) = weak_close.upgrade() {
+            // Closing the tile that's being read aloud must silence it.
+            super::stop_if_speaking(t.get_convo_id());
             // FIX #8 — prune this tile's conversation (no-op if none).
             bridge_for_close.drop_conversation(t.get_convo_id());
             let close_hwnd = grab_hwnd(t.window()).ok();
@@ -337,6 +339,7 @@ pub(crate) fn fire_f9_ask(
     // V5 — 🎤 voice follow-up. Reads the live route (sticky-cloud aware).
     wire_voice_followup(&tile, convo_id, live.clone(), cfg);
     wire_copy(&tile, convo_id, bridge);
+    wire_speak(&tile, convo_id, bridge);
     // V0.8.0 (Поток D) — 🧠 escalate to cloud (only shown if the answer is local).
     // V0.8.1 — also flips `live` to Cloud so the rest of the dialog stays cloud.
     wire_escalate(

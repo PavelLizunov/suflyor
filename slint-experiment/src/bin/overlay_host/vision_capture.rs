@@ -37,7 +37,7 @@
 use super::{
     ai, apply_tile_hwnd_with_monitor, fire_followup_ask, fire_regenerate, grab_hwnd, journal,
     live_route, markdown, present_tile_window, ptt_tile_error, refresh_open_tiles,
-    set_always_on_top, toggle_tile_maximize, vision, wire_copy, wire_tile_drag,
+    set_always_on_top, toggle_tile_maximize, vision, wire_copy, wire_speak, wire_tile_drag,
     wire_voice_followup, Arc, AskRoute, CaptureOverlay, ComponentHandle, MarkdownBlock, ModelRc,
     Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink, Rc, RefCell, RuntimeEvents,
     SharedSlintRuntime, SharedString, TileWindow, TileWindows, VecModel, CONVO_SEQ,
@@ -93,10 +93,17 @@ pub(crate) fn fire_f8_vision_capture(
             }
         }
     }
-    let Some(ep) = cfg.read().vision_endpoint() else {
-        diag!("[overlay-host] F8: vision provider is 'off' (Settings -> Vision) — skipping");
+    // The VLM modes need a configured vision endpoint. OCR (read-aloud) runs on
+    // the LOCAL Tesseract child process, so it must work even when Vision is
+    // "off" — as long as the engine is installed. In that case `ep` is `None`
+    // (no endpoint needed) and `launch_vision_for_bgra` takes the Tesseract
+    // branch; a non-OCR mode always has `Some`.
+    let ocr_ready = matches!(mode, vision::VisionMode::Ocr) && overlay_backend::ocr::is_available();
+    let ep = cfg.read().vision_endpoint();
+    if ep.is_none() && !ocr_ready {
+        diag!("[overlay-host] F8: vision off and no local OCR — skipping");
         return;
-    };
+    }
 
     // Freeze the WHOLE virtual desktop (ALL monitors) so the user can select on
     // either screen. The earlier "shrunk" bug was NOT DPI — it was the geometry
@@ -166,8 +173,12 @@ pub(crate) fn fire_f8_vision_capture(
             // Read the overlay's mode BEFORE hiding it (Shift+F8 seeds it; the
             // on-overlay Describe/Translate toggle can override before drag).
             let mode = if let Some(w) = weak_self.upgrade() {
-                // translate-mode takes precedence: a tap on the overlay toggles it.
-                let m = if w.get_translate_mode() {
+                // OCR (Ctrl+F8 read-aloud) is NOT an on-overlay toggle — the
+                // requested mode wins so a tap can't collapse it to Describe.
+                // Otherwise translate-mode takes precedence (a tap toggles it).
+                let m = if matches!(mode, vision::VisionMode::Ocr) {
+                    vision::VisionMode::Ocr
+                } else if w.get_translate_mode() {
                     vision::VisionMode::Translate
                 } else if w.get_practice_mode() {
                     vision::VisionMode::TestPractice
@@ -178,7 +189,7 @@ pub(crate) fn fire_f8_vision_capture(
                 let _ = w.hide();
                 m
             } else {
-                vision::VisionMode::Describe
+                mode
             };
             // logical px × scale = image px.
             let to_px = |v: f32| (v * scale).round().max(0.0) as u32;
@@ -239,12 +250,17 @@ pub(crate) fn fire_f8_vision_capture(
 
 /// Spawn a vision tile for a captured BGRA frame and stream the answer into it
 /// via the SEPARATE vision endpoint. Shared entry for the F8 region capture.
-/// No follow-up (a follow-up would route to the text endpoint), so the tile
-/// uses `convo_id = -1`.
+///
+/// `ep` is `Some` for the VLM modes (Describe / Translate / TestPractice) and
+/// for an OCR request that may need to fall back to the VLM; it is `None` only
+/// for a local-OCR request made while Vision is "off" (the Tesseract path needs
+/// no endpoint). If a non-OCR path is reached with `ep == None` — only possible
+/// if the OCR engine vanished between the `is_available()` checks (TOCTOU) — a
+/// generic "OCR недоступен" tile is shown instead of a network call.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn launch_vision_for_bgra(
     shot: slint_replay::capture::CapturedBgra,
-    ep: overlay_backend::config::AiEndpoint,
+    ep: Option<overlay_backend::config::AiEndpoint>,
     mode: vision::VisionMode,
     bridge: &Arc<OverlayBarBridge>,
     events: &Arc<dyn RuntimeEvents>,
@@ -289,6 +305,12 @@ pub(crate) fn launch_vision_for_bgra(
             "📷 F8 vision",
             "⏳ Распознаю экран…",
         ),
+        vision::VisionMode::Ocr => (
+            "🔊 Текст с экрана",
+            "vision · текст…",
+            "🔊 Ctrl+F8 текст",
+            "⏳ Распознаю текст…",
+        ),
     };
     tile.set_tile_title(SharedString::from(title_s));
     tile.set_source_label(SharedString::from(source_s));
@@ -308,6 +330,8 @@ pub(crate) fn launch_vision_for_bgra(
     let bridge_for_close = bridge.clone();
     tile.on_close_clicked(move || {
         if let Some(t) = weak_close.upgrade() {
+            // Closing the tile that's being read aloud must silence it.
+            super::stop_if_speaking(t.get_convo_id());
             // FIX #8 — prune this tile's conversation (no-op if none).
             bridge_for_close.drop_conversation(t.get_convo_id());
             let close_hwnd = grab_hwnd(t.window()).ok();
@@ -387,12 +411,59 @@ pub(crate) fn launch_vision_for_bgra(
     // escalatable (wire_escalate isn't called), so this route stays Vision.
     wire_voice_followup(&tile, convo_id, live_route(AskRoute::Vision), cfg);
     wire_copy(&tile, convo_id, bridge);
+    wire_speak(&tile, convo_id, bridge);
     present_tile_window(&tile);
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
     let weak_for_title = tile.as_weak();
     tiles.borrow_mut().push(tile);
     refresh_open_tiles(weak_overlay, tiles);
+
+    // ===== OCR (read-aloud) — local Tesseract, NOT the VLM =====
+    // VisionMode::Ocr transcribes the region with the bundled Tesseract child
+    // process: deterministic, never loops/hallucinates like the small VLM did.
+    // Run it off-thread, then fill THIS tile + auto-read on the UI thread. If
+    // Tesseract isn't installed (`is_available()` false), fall through to the
+    // VLM streaming path below so a tester without the OCR pack still gets a
+    // result.
+    if matches!(mode, vision::VisionMode::Ocr) && overlay_backend::ocr::is_available() {
+        let weak_ocr = weak_for_stream.clone();
+        let bridge_ocr = bridge.clone();
+        let lang = overlay_backend::ocr::DEFAULT_OCR_LANG;
+        let (bgra, w, h) = (shot.bgra, shot.width, shot.height);
+        rt_handle.spawn(async move {
+            let res = tokio::task::spawn_blocking(move || {
+                overlay_backend::ocr::run_ocr(&bgra, w, h, lang)
+            })
+            .await;
+            let text = match res {
+                Ok(Ok(t)) => t,
+                Ok(Err(e)) => {
+                    // Detail to the local log only; the tile stays generic.
+                    diag!("[overlay-host] OCR failed: {e:#}");
+                    String::new()
+                }
+                Err(e) => {
+                    diag!("[overlay-host] OCR task join error: {e}");
+                    String::new()
+                }
+            };
+            let _ = slint::invoke_from_event_loop(move || {
+                super::fill_ocr_tile(weak_ocr, convo_id, &bridge_ocr, &text);
+            });
+        });
+        return;
+    }
+
+    // Past the OCR branch we need a real endpoint. It is `Some` for every VLM
+    // mode; it is `None` only for an OCR request whose engine vanished after the
+    // `fire_f8` check (TOCTOU — e.g. an AV quarantine of the user-writable
+    // engine dir mid-drag). Show a generic tile instead of calling the VLM with
+    // empty credentials.
+    let Some(ep) = ep else {
+        ptt_tile_error(weak_for_title.clone(), "OCR недоступен.");
+        return;
+    };
 
     // ===== 4. Snapshot what the streaming task needs =====
     let model = ep.model.clone();
@@ -409,6 +480,7 @@ pub(crate) fn launch_vision_for_bgra(
         vision::VisionMode::Translate => vision::translate_prompt(cfg.read().vision_phonetics),
         vision::VisionMode::TestPractice => String::new(),
         vision::VisionMode::Describe => vision::DEFAULT_VISION_PROMPT.to_string(),
+        vision::VisionMode::Ocr => vision::OCR_VISION_PROMPT.to_string(),
     };
     // Profile/persona applies ONLY to Describe (v0.10.5). Translate is a pure
     // translation task; TestPractice is a factual answer — a persona would

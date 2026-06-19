@@ -3,7 +3,7 @@
 # the sibling overlay-backend crate for audio/STT/AI/journal/KB/config.
 [package]
 name = "slint-replay"
-version = "0.18.6"
+version = "0.20.0"
 edition = "2021"
 description = "suflyor — AI-interview overlay (Slint UI + orchestration)"
 publish = false

@@ -817,3 +817,85 @@ pub fn acquire_singleton(wait_ms: u32) -> Result<SingletonGuard, Box<dyn std::er
         }
     }
 }
+
+// ===== Read-aloud helpers: copy-the-selection + clipboard text =====
+
+/// Read the current clipboard as UTF-8 text (None if empty / not text).
+pub fn clipboard_read_text() -> Option<String> {
+    clipboard_win::get_clipboard_string()
+        .ok()
+        .filter(|s| !s.is_empty())
+}
+
+/// Replace the clipboard text — used to restore the user's clipboard after a
+/// programmatic copy.
+pub fn clipboard_write_text(text: &str) {
+    let _ = clipboard_win::set_clipboard_string(text);
+}
+
+/// Plant an empty sentinel so a subsequent Ctrl+C tells us whether anything was
+/// actually selected (still empty afterwards = nothing was highlighted).
+pub fn clipboard_clear() {
+    let _ = clipboard_win::set_clipboard_string("");
+}
+
+/// Synthesize Ctrl+C to the FOREGROUND window. The overlay is click-through and
+/// never focused, so the keystroke lands in whatever app the user is looking at,
+/// copying their current selection. All four key events go in ONE `SendInput` so
+/// Ctrl is reliably released (a stuck Ctrl would mangle the user's next keys).
+///
+/// Each event carries its real hardware SCAN CODE (via `MapVirtualKeyW`), not
+/// just the virtual key: some apps — notably Telegram Desktop and other Qt
+/// builds — read the scan code and IGNORE a synthetic keystroke whose `wScan`
+/// is 0, so a bare-vk Ctrl+C copied nothing there. Right-Alt is an extended key,
+/// flagged so its scan code is interpreted correctly.
+pub fn send_ctrl_c() {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        MapVirtualKeyW, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
+        KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, MAPVK_VK_TO_VSC, VIRTUAL_KEY, VK_CONTROL, VK_LMENU,
+        VK_LSHIFT, VK_MENU, VK_RMENU, VK_RSHIFT, VK_SHIFT,
+    };
+    let vk_c = VIRTUAL_KEY(0x43); // 'C'
+    let ev = |vk: VIRTUAL_KEY, up: bool| {
+        let scan = unsafe { MapVirtualKeyW(u32::from(vk.0), MAPVK_VK_TO_VSC) } as u16;
+        let mut flags = if up {
+            KEYEVENTF_KEYUP
+        } else {
+            KEYBD_EVENT_FLAGS(0)
+        };
+        if vk == VK_RMENU {
+            flags |= KEYEVENTF_EXTENDEDKEY; // right-Alt is an extended key
+        }
+        INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: vk,
+                    wScan: scan,
+                    dwFlags: flags,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        }
+    };
+    // CRITICAL: the Shift+Alt that fired the hotkey are still physically DOWN, so
+    // a bare Ctrl+C injection reads as Shift+Alt+Ctrl+C (NOT copy). Release both
+    // modifiers (all L/R variants) first, in the same atomic SendInput batch, so
+    // the Ctrl+C lands clean and actually copies the selection.
+    let inputs = [
+        ev(VK_LMENU, true),
+        ev(VK_RMENU, true),
+        ev(VK_MENU, true),
+        ev(VK_LSHIFT, true),
+        ev(VK_RSHIFT, true),
+        ev(VK_SHIFT, true),
+        ev(VK_CONTROL, false),
+        ev(vk_c, false),
+        ev(vk_c, true),
+        ev(VK_CONTROL, true),
+    ];
+    unsafe {
+        SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
+    }
+}

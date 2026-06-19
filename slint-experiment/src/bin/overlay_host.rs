@@ -255,6 +255,10 @@ use settings_controller::*;
 #[path = "overlay_host/settings_vision.rs"]
 mod settings_vision;
 use settings_vision::*;
+// Read-aloud (Озвучка) Settings-tab callbacks — voice chooser + speed + test.
+#[path = "overlay_host/settings_voice.rs"]
+mod settings_voice;
+use settings_voice::*;
 
 // The STT (speech-to-text) Settings-tab callbacks (provider switch + GigaAM GPU
 // toggle + GigaAM/Whisper field saves + the live connection test) live in their
@@ -336,6 +340,152 @@ mod aux_windows;
 use aux_windows::*;
 
 pub(crate) type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
+
+/// Spawn a conversational tile that DISPLAYS `text` and immediately reads it
+/// aloud — no AI/vision call. Used by the Shift+Alt+1 "read selection" path so
+/// the user SEES what's being read and gets the 🔊/⏯/📋/✕ controls. The
+/// conversation map is seeded directly (there is no `AiEvent::Done` to seed it),
+/// so `wire_speak`/`convo_speak_text` find the text.
+fn spawn_text_tile(
+    text: &str,
+    title: &str,
+    trigger: &str,
+    bridge: &Arc<OverlayBarBridge>,
+    tiles: &TileWindows,
+    weak_overlay: &slint::Weak<OverlayBarWindow>,
+) {
+    let tile = match TileWindow::new() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("[overlay-host] spawn_text_tile: TileWindow::new failed: {e}");
+            return;
+        }
+    };
+    let seq = TILE_DISPLAY_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
+    let convo_id = CONVO_SEQ.fetch_add(1, Ordering::Relaxed) as i32;
+    tile.set_sequence(seq as i32);
+    tile.set_tile_title(SharedString::from(title));
+    tile.set_source_label(SharedString::from("read-aloud"));
+    tile.set_trigger_label(SharedString::from(trigger));
+    tile.set_trigger_color(slint::Color::from_rgb_u8(0x22, 0xd3, 0xee));
+    tile.set_convo_id(convo_id);
+    tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(text))));
+    wire_tile_drag(&tile);
+
+    // Seed the conversation directly — there's no AI call to do it, and
+    // wire_speak/wire_copy read the text from here (NOT from tile.blocks).
+    bridge.store_conversation(
+        convo_id,
+        ConvoState {
+            messages: vec![ai::ChatMessage {
+                role: "assistant".to_string(),
+                content: ai::MessageContent::Text(text.to_string()),
+            }],
+            rendered: text.to_string(),
+        },
+    );
+
+    {
+        let weak_close = tile.as_weak();
+        let vec_for_close = tiles.clone();
+        let weak_overlay_close = weak_overlay.clone();
+        let bridge_for_close = bridge.clone();
+        tile.on_close_clicked(move || {
+            if let Some(t) = weak_close.upgrade() {
+                stop_if_speaking(t.get_convo_id());
+                bridge_for_close.drop_conversation(t.get_convo_id());
+                let close_hwnd = grab_hwnd(t.window()).ok();
+                let _ = t.hide();
+                if let Some(target) = close_hwnd {
+                    vec_for_close
+                        .borrow_mut()
+                        .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
+                    refresh_open_tiles(&weak_overlay_close, &vec_for_close);
+                }
+            }
+        });
+    }
+    {
+        let weak_pin = tile.as_weak();
+        tile.on_pin_clicked(move || {
+            if let Some(t) = weak_pin.upgrade() {
+                let new = !t.get_pinned();
+                t.set_pinned(new);
+            }
+        });
+    }
+    {
+        let weak_max = tile.as_weak();
+        tile.on_maximize_clicked(move || {
+            if let Some(t) = weak_max.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(t.window()) {
+                    toggle_tile_maximize(hwnd, &t);
+                }
+            }
+        });
+    }
+    wire_copy(&tile, convo_id, bridge);
+    wire_speak(&tile, convo_id, bridge);
+    present_tile_window(&tile);
+    apply_tile_hwnd_with_monitor(&tile);
+    tiles.borrow_mut().push(tile);
+    refresh_open_tiles(weak_overlay, tiles);
+
+    // Auto-start the read (mirror wire_speak's click handler).
+    reset_pause();
+    mark_speaking(convo_id);
+    overlay_backend::tts::speak(text);
+}
+
+/// Fill an already-spawned OCR placeholder tile with the recognized text and
+/// read it aloud — the Ctrl+F8 / Shift+Alt+2 Tesseract path. The capture flow
+/// (`launch_vision_for_bgra`) creates the tile with a "⏳ Распознаю…"
+/// placeholder, runs Tesseract off-thread, then marshals the result here on the
+/// Slint UI thread. Mirrors the tail of `spawn_text_tile` (seed conversation →
+/// auto-read), but the tile already exists.
+pub(crate) fn fill_ocr_tile(
+    weak: slint::Weak<TileWindow>,
+    convo_id: i32,
+    bridge: &Arc<OverlayBarBridge>,
+    text: &str,
+) {
+    let Some(tile) = weak.upgrade() else {
+        return;
+    };
+    tile.set_followup_busy(false);
+    // OCR output isn't regeneratable (no model call to vary) — hide 🔄.
+    tile.set_can_regenerate(false);
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(
+            "*(текст не распознан)*",
+        ))));
+        tile.set_source_label(SharedString::from("OCR · пусто"));
+        // Nothing to read or copy — don't present no-op 🔊/📋 controls (the
+        // conversation is never seeded on this path, so they'd be dead anyway).
+        tile.set_can_speak(false);
+        tile.set_can_copy(false);
+        return;
+    }
+    tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(trimmed))));
+    tile.set_source_label(SharedString::from("OCR · Tesseract"));
+    // Seed the conversation so wire_speak / wire_copy read THIS text (they read
+    // from the conversation store, NOT tile.blocks).
+    bridge.store_conversation(
+        convo_id,
+        ConvoState {
+            messages: vec![ai::ChatMessage {
+                role: "assistant".to_string(),
+                content: ai::MessageContent::Text(trimmed.to_string()),
+            }],
+            rendered: trimmed.to_string(),
+        },
+    );
+    // Auto-read (mirror spawn_text_tile's tail).
+    reset_pause();
+    mark_speaking(convo_id);
+    overlay_backend::tts::speak(trimmed);
+}
 
 /// Parse markdown source into the Slint `MarkdownBlock` rows a tile body
 /// renders. Shared by the streaming Delta/Error paths + follow-ups.
@@ -586,6 +736,20 @@ fn main() -> Result<(), slint::PlatformError> {
     // Phase C — load config once at startup. SharedConfig (Arc<RwLock>)
     // because Settings tab will eventually mutate it.
     let cfg = config::shared();
+
+    // Read-aloud — initialize the process-global SAPI TTS engine once (voice +
+    // rate from config; empty voice = auto-pick a Russian voice). The COM init +
+    // voice enumeration run on the engine's own worker thread.
+    {
+        let c = cfg.read();
+        let voice = if c.tts_voice.trim().is_empty() {
+            None
+        } else {
+            Some(c.tts_voice.clone())
+        };
+        overlay_backend::tts::init(voice, c.tts_rate);
+    }
+
     // P2 — build the local session archive (SQLite catalog) OFF the hot path:
     // idempotently index the finished JSONL journals so the interview history is
     // searchable. On by default; the JSONL journals stay the source of truth, and
@@ -1660,6 +1824,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 }
                 wire_voice_followup(&tile, convo_id, live.clone(), &cfg_for_poll);
                 wire_copy(&tile, convo_id, &bridge_for_poll);
+                wire_speak(&tile, convo_id, &bridge_for_poll);
                 if allow_reask {
                     wire_escalate(
                         &tile,
@@ -1866,8 +2031,12 @@ fn main() -> Result<(), slint::PlatformError> {
         f7_id,
         f8_id,
         sf8_id,
+        cf8_id,
         f9_id,
         sf9_id,
+        sa1_id,
+        sa2_id,
+        sa3_id,
     } = register_hotkeys();
 
     let hotkey_poll = Timer::default();
@@ -2036,6 +2205,84 @@ fn main() -> Result<(), slint::PlatformError> {
                         &hp_capture_overlay,
                         overlay_backend::vision::VisionMode::Translate,
                     );
+                } else if event.id == cf8_id {
+                    // Read-aloud feature — Ctrl+F8: same region capture, OCR mode
+                    // (verbatim transcription of the selected text → later TTS).
+                    diag!("[overlay-host] Ctrl+F8 pressed — OCR / read-aloud capture");
+                    fire_f8_vision_capture(
+                        &hp_bridge,
+                        &hp_events,
+                        &hp_cfg,
+                        &hp_rt,
+                        &hp_rt_handle,
+                        &hp_tiles,
+                        &hp_weak_overlay,
+                        &hp_capture_overlay,
+                        overlay_backend::vision::VisionMode::Ocr,
+                    );
+                } else if event.id == sa1_id {
+                    // Shift+Alt+1 — read the SELECTED text: copy the foreground
+                    // selection, then read the clipboard aloud (zero OCR artifacts).
+                    diag!("[overlay-host] Shift+Alt+1 — read selection (clipboard)");
+                    let saved = slint_replay::win32::clipboard_read_text();
+                    slint_replay::win32::clipboard_clear();
+                    slint_replay::win32::send_ctrl_c();
+                    let bridge_sa1 = hp_bridge.clone();
+                    let tiles_sa1 = hp_tiles.clone();
+                    let overlay_sa1 = hp_weak_overlay.clone();
+                    // Ctrl+C is async — the foreground app writes the clipboard on
+                    // its own message loop; read after a short delay, off the press.
+                    Timer::single_shot(std::time::Duration::from_millis(140), move || {
+                        let copied = slint_replay::win32::clipboard_read_text();
+                        diag!(
+                            "[overlay-host] sa1: copied {} chars from selection",
+                            copied.as_ref().map(|s| s.chars().count()).unwrap_or(0)
+                        );
+                        match &saved {
+                            Some(s) => slint_replay::win32::clipboard_write_text(s),
+                            None => slint_replay::win32::clipboard_clear(),
+                        }
+                        if let Some(text) = copied {
+                            // Spawn a visible tile showing the text + 🔊/⏯/📋/✕,
+                            // which auto-starts the read-aloud.
+                            spawn_text_tile(
+                                &text,
+                                "🔊 Выделенный текст",
+                                "Shift+Alt+1",
+                                &bridge_sa1,
+                                &tiles_sa1,
+                                &overlay_sa1,
+                            );
+                        }
+                    });
+                } else if event.id == sa2_id {
+                    // Shift+Alt+2 — OCR a screen region and read it. Reuses the
+                    // region capture; the OCR engine swaps to Tesseract next.
+                    diag!("[overlay-host] Shift+Alt+2 — OCR region + read");
+                    fire_f8_vision_capture(
+                        &hp_bridge,
+                        &hp_events,
+                        &hp_cfg,
+                        &hp_rt,
+                        &hp_rt_handle,
+                        &hp_tiles,
+                        &hp_weak_overlay,
+                        &hp_capture_overlay,
+                        overlay_backend::vision::VisionMode::Ocr,
+                    );
+                } else if event.id == sa3_id {
+                    // Shift+Alt+3 — pause / resume the current read-aloud (shares
+                    // the latch with the tile's ⏯, and syncs that tile's icon).
+                    diag!("[overlay-host] Shift+Alt+3 — pause/resume read-aloud");
+                    let paused = toggle_pause();
+                    let target = current_speaking_convo();
+                    if target >= 0 {
+                        for t in hp_tiles.borrow().iter() {
+                            if t.get_convo_id() == target {
+                                t.set_speak_paused(paused);
+                            }
+                        }
+                    }
                 }
             }
         },

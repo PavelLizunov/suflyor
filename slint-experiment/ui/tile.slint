@@ -74,6 +74,11 @@ export component TileWindow inherits Window {
     // session id. Resumes the summary from the persisted conspect (re-maps only
     // the failed parts, then re-runs the reduce) — see retry_meeting_summary.
     in-out property <bool> can-retry: false;
+    // Read-aloud (TTS): show the speaker + pause/resume controls on a tile whose
+    // text can be spoken (OCR / answer / summary). `speak-paused` flips the
+    // second button's icon between pause (playing) and play (paused).
+    in-out property <bool> can-speak: false;
+    in-out property <bool> speak-paused: false;
     // Bound to the follow-up LineEdit so do-submit() can read + clear it.
     in-out property <string> followup-text;
 
@@ -88,6 +93,9 @@ export component TileWindow inherits Window {
     callback copy-clicked();
     // v0.18.6 — retry a failed meeting summary from its persisted conspect.
     callback retry-clicked();
+    // Read-aloud — speak the tile's text aloud / toggle pause-resume.
+    callback speak-clicked();
+    callback speak-pause-clicked();
     // Phase E6 v22 — manual cursor-delta drag. drag-start-requested
     // fires on pointer-down (records anchor), drag-moved fires on
     // each move while pressed (moves window by delta). Replaces the
@@ -290,6 +298,49 @@ export component TileWindow inherits Window {
                     Image {
                         source: @image-url("../assets/icons/refresh.svg");
                         colorize: Theme.accent;
+                        width: 16px;
+                        height: 16px;
+                        image-fit: contain;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                    }
+                }
+                // Read-aloud — 🔊 speak the tile text aloud; ⏯ pause/resume.
+                if root.can-speak: Rectangle {
+                    width: 30px;
+                    height: 30px;
+                    background: speak-touch.has-hover ? Theme.border-strong : Theme.border;
+                    border-radius: 6px;
+                    border-width: 1px;
+                    border-color: Theme.border-strong;
+                    speak-touch := TouchArea {
+                        clicked => { root.speak-clicked(); }
+                    }
+                    Image {
+                        source: @image-url("../assets/icons/speaker.svg");
+                        colorize: Theme.text-secondary;
+                        width: 16px;
+                        height: 16px;
+                        image-fit: contain;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                    }
+                }
+                if root.can-speak: Rectangle {
+                    width: 30px;
+                    height: 30px;
+                    background: pausespk-touch.has-hover ? Theme.border-strong : Theme.border;
+                    border-radius: 6px;
+                    border-width: 1px;
+                    border-color: Theme.border-strong;
+                    pausespk-touch := TouchArea {
+                        clicked => { root.speak-pause-clicked(); }
+                    }
+                    Image {
+                        source: root.speak-paused
+                            ? @image-url("../assets/icons/play.svg")
+                            : @image-url("../assets/icons/pause.svg");
+                        colorize: Theme.text-secondary;
                         width: 16px;
                         height: 16px;
                         image-fit: contain;

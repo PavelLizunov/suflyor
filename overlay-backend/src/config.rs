@@ -136,6 +136,17 @@ pub struct Config {
     #[serde(default)]
     pub vision_test_practice: bool,
 
+    /// Read-aloud (TTS, read-aloud feature): the SAPI voice id to speak with.
+    /// Empty = auto-pick a Russian voice. A machine-local OUTPUT preference
+    /// (like `vision_phonetics`) — deliberately NOT transferred on a
+    /// server-settings import.
+    #[serde(default)]
+    pub tts_voice: String,
+
+    /// Read-aloud speech rate (SAPI range −10…+10, 0 = normal). Machine-local.
+    #[serde(default)]
+    pub tts_rate: i32,
+
     /// Language tag (ISO 639-1) the assistant should ALWAYS respond in.
     /// Injected into the system prompt at runtime.
     pub response_language: String, // e.g. "ru"
@@ -510,6 +521,8 @@ impl Config {
             vision_local_model: String::new(),
             vision_phonetics: false,
             vision_test_practice: false,
+            tts_voice: String::new(),
+            tts_rate: 0,
             response_language: "ru".into(),
             groq_api_key: String::new(),
             stt_language: Some("ru".into()),

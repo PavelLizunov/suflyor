@@ -10,11 +10,11 @@
 use super::{
     ai, apply_tile_hwnd_with_monitor, audio, classify_ai_error, fire_followup_ask, fire_regenerate,
     grab_hwnd, journal, live_route, markdown, present_tile_window, refresh_open_tiles, stt,
-    toggle_tile_maximize, wire_copy, wire_escalate, wire_tile_drag, wire_voice_followup, Arc,
-    AskRoute, AtomicBool, ComponentHandle, Duration, MarkdownBlock, ModelRc, Ordering,
-    OverlayBarBridge, OverlayBarWindow, PttStreamSink, RuntimeEvents, SharedSlintRuntime,
-    SharedString, TileWindow, TileWindows, VecModel, AI_STREAM_MAX_TOKENS, CONVO_SEQ,
-    TILE_DISPLAY_SEQ,
+    toggle_tile_maximize, wire_copy, wire_escalate, wire_speak, wire_tile_drag,
+    wire_voice_followup, Arc, AskRoute, AtomicBool, ComponentHandle, Duration, MarkdownBlock,
+    ModelRc, Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink, RuntimeEvents,
+    SharedSlintRuntime, SharedString, TileWindow, TileWindows, VecModel, AI_STREAM_MAX_TOKENS,
+    CONVO_SEQ, TILE_DISPLAY_SEQ,
 };
 /// Phase E6 v42 — hard cap on a push-to-record hold (30 s). Backstop for a
 /// lost pointer-up (alt-tab / focus loss mid-hold): without it the record
@@ -123,6 +123,8 @@ pub(crate) fn fire_ptt_ask(
     let bridge_for_close = bridge.clone();
     tile.on_close_clicked(move || {
         if let Some(t) = weak_close.upgrade() {
+            // Closing the tile that's being read aloud must silence it.
+            super::stop_if_speaking(t.get_convo_id());
             // FIX #8 — prune this tile's conversation (no-op if none).
             bridge_for_close.drop_conversation(t.get_convo_id());
             let close_hwnd = grab_hwnd(t.window()).ok();
@@ -202,6 +204,7 @@ pub(crate) fn fire_ptt_ask(
     // V5 — 🎤 voice follow-up. Reads the live route (sticky-cloud aware).
     wire_voice_followup(&tile, convo_id, live.clone(), cfg);
     wire_copy(&tile, convo_id, bridge);
+    wire_speak(&tile, convo_id, bridge);
     // V0.8.0 (Поток D) — 🧠 escalate to cloud; V0.8.1 — flips `live` to Cloud.
     wire_escalate(
         &tile, convo_id, &live, bridge, events, cfg, slint_rt, rt_handle,
