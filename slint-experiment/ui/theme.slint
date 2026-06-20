@@ -31,6 +31,16 @@ export global Theme {
     // ---- Accent ----
     out property <color> accent: scheme == 1 ? #2DD4BF : scheme == 2 ? #A98BFA : scheme == 3 ? #1A63CC : #4C8DFF;
     out property <color> accent-hover: scheme == 1 ? #4FE3CF : scheme == 2 ? #C0A8FF : scheme == 3 ? #134FA6 : #6FA3FF;
+    // Redesign «Glacier»: legible text/glyph colour ON an accent FILL (filled
+    // buttons, badges). Hand-picked per scheme for WCAG-AA on THAT accent:
+    // the bright teal/violet (schemes 1/2) and the mid Glacier blue (default)
+    // are light enough to want DARK text; the darker Light-Frost blue (scheme 3)
+    // wants near-white.
+    out property <color> on-accent: scheme == 1 ? #0A0906 : scheme == 2 ? #06070E : scheme == 3 ? #F7F9FB : #06101F;
+    // Redesign «Glacier»: tinted-accent SURFACE for active / selected rows,
+    // chips, badges (~12-15% accent over that scheme's bg-surface, as a fixed
+    // literal so contrast stays controlled — replaces ad-hoc accent.with-alpha).
+    out property <color> accent-subtle: scheme == 1 ? #15211D : scheme == 2 ? #1F1D30 : scheme == 3 ? #DCE7F5 : #13233D;
 
     // ---- Statuses (recognisable across all schemes) ----
     out property <color> success: scheme == 1 ? #4ABE6E : scheme == 2 ? #3FB97A : scheme == 3 ? #1E7E3C : #3FB950;

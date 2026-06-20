@@ -41,6 +41,10 @@ export global Metrics {
     out property <length> radius-control: 10px;  // chips/pills — bar Chip/LiveChip/RecordBtn + palette recent chip `border-radius: 10px`
     out property <length> radius-panel: 12px;    // panel/card wrapper — bar + palette + replay chips + settings card `border-radius: 12px`
     out property <length> radius-window: 12px;   // frameless window card outer radius (same step as panel today)
+    // Redesign «Glacier» radii — NEW visual values (NOT harvested): consume
+    // surface-by-surface with a visual check; these CHANGE the look vs today.
+    out property <length> radius-pill: 999px;    // fully-round pills / icon-buttons / status dots (redesign .pill / .ib)
+    out property <length> radius-field: 8px;     // form fields + small action buttons (redesign .inp / .ibtn / tile-foot)
 
     // ---- Control size ----
     // Fixed heights keep "same element = same height" (§4 Геометрия). Bar
@@ -49,6 +53,12 @@ export global Metrics {
     out property <length> control-md: 22px;       // bar chip height — Chip/LiveChip/RecordBtn/status pill + replay chip `height: 22px`
     out property <length> control-lg: 28px;       // header / icon-button row height — tile chrome buttons + help header `height: 28px`
     out property <length> icon-button-size: 30px; // square icon-button width — tile copy/regen/escalate/close `width: 30px`
+    // Redesign «Glacier» control scale 28 / 36 / 44 (extends the harvested
+    // 20/22/28 above; 28 == control-lg). NEW visual values — consume per surface
+    // with a check, and NEVER feed one into apply_bar_size / a window preferred-
+    // size without the paired Rust change (window sizes are Slint↔Rust-synced).
+    out property <length> control-xl: 36px;       // fields, search rows, archive rows, segmented control (redesign .inp/.ibtn h36)
+    out property <length> control-xxl: 44px;      // large primary actions (top of the redesign 28/36/44 scale)
 
     // ---- Typography (SIZES only) ----
     // The font FAMILY stays in Theme.font-sans / Theme.font-mono; these are the
