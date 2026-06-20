@@ -221,10 +221,10 @@ export component SettingsWindow inherits Window {
     icon: @image-url("../assets/icon.svg");
     no-frame: true;
     preferred-width: 720px;
-    // Phase E6 v39 — taller (480→560) to fit the grouped sidebar
-    // (3 section headers + 13 items) borrowed from the design bundle
-    // without clipping the bottom-pinned Close button.
-    preferred-height: 560px;
+    // Phase E6 v39 — taller (480→560) to fit the grouped sidebar; v0.22 → 600
+    // for the extra «Компоненты» nav item. The sidebar nav is now ALSO inside a
+    // ScrollView, so Close stays pinned even below this height.
+    preferred-height: 600px;
     min-width: 480px;
     min-height: 320px;
     // Phase E6 v26 — transparent window so the inner rounded Rectangle's
@@ -629,6 +629,14 @@ export component SettingsWindow inherits Window {
                 // content panes + tab-selected wiring are untouched; only
                 // the visual order + section grouping changes. Labels
                 // reuse the existing emoji+text @tr msgids verbatim.
+                // Scrollable nav so the «X Close» button below ALWAYS stays
+                // visible no matter how many items the sidebar holds. The new
+                // «Компоненты» item tipped the fixed list past the window height,
+                // pushing Close off the bottom (design review #2).
+                ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        spacing: 2px;
                 NavGroupHeader { label: @tr("SESSION"); }
                 NavItem {
                     label: @tr("Profile + context"); icon: @image-url("../assets/icons/user.svg"); tab-index: 10;
@@ -709,8 +717,8 @@ export component SettingsWindow inherits Window {
                     active: root.active-tab == 14;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
-
-                Rectangle { vertical-stretch: 1; }
+                    }
+                }
                 Button {
                     // ASCII X — Unicode ✕ U+2715 renders as missing-glyph
                     // box on Slint+skia font fallback (same fix as quit
