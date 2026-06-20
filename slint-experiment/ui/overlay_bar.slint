@@ -936,13 +936,23 @@ export component OverlayBarWindow inherits Window {
             spacing: 6px;
             Rectangle {
                 // Left plaque — fills the remaining width; the WHOLE plaque is the
-                // drag zone (no separate grip). Restrained neutral surface.
-                background: Theme.bg-elevated;
-                border-color: Theme.border-strong;
+                // drag zone. «Glacier» state = colour (mockup .tts-pill): NEUTRAL
+                // at rest (готово), green while reading, amber on pause, red on
+                // error — the whole pill tints, with a smooth fade (no jumps on
+                // status change). Idle stays neutral (not flooded with accent).
+                background: root.tts-status-kind == 1 ? Theme.success.with-alpha(0.10)
+                    : root.tts-status-kind == 2 ? Theme.warning.with-alpha(0.10)
+                    : root.tts-status-kind == 3 ? Theme.danger.with-alpha(0.10)
+                    : Theme.bg-elevated;
+                border-color: root.tts-status-kind == 1 ? Theme.success.with-alpha(0.55)
+                    : root.tts-status-kind == 2 ? Theme.warning.with-alpha(0.55)
+                    : root.tts-status-kind == 3 ? Theme.danger.with-alpha(0.55)
+                    : Theme.border-strong;
                 border-width: 1px;
                 border-radius: 10px;
                 height: 30px;
                 horizontal-stretch: 1;
+                animate background, border-color { duration: 200ms; }
                 TouchArea {
                     mouse-cursor: grab;
                     pointer-event(ev) => {
