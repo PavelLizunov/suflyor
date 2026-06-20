@@ -1236,7 +1236,6 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
     overlay.set_stealth_active(cfg.read().stealth_enabled);
-    overlay.set_cost_label(SharedString::from("$0.000"));
     overlay.set_timer_label(SharedString::from("00:00"));
     // v0.13.1 — the mic is LIVE (not muted) by default; the chip shows it lit.
     overlay.set_mic_active(true);
@@ -2823,7 +2822,6 @@ fn main() -> Result<(), slint::PlatformError> {
             let question_for_task = question.clone();
             let heading_for_task = heading.clone();
             let slint_rt_cost = slint_rt_c.clone();
-            let weak_overlay_cost = weak.clone();
             rt.spawn(async move {
                 let messages = vec![ai::ChatMessage {
                     role: "user".to_string(),
@@ -2871,20 +2869,14 @@ fn main() -> Result<(), slint::PlatformError> {
                             // Bill the session like F6/F9 so the cost cap can see
                             // "+ tile" spend. This was a silent hole: cloud
                             // "+ tile" clicks never accumulated into the session
-                            // meter, so max_session_cost_usd never tripped and the
-                            // bar $ label stayed frozen. Refresh it to the new
-                            // session total (matches the cost:update consumer).
-                            let session_total = {
+                            // meter, so max_session_cost_usd never tripped. (The
+                            // bar's $ label was removed in the Glacier redesign;
+                            // the accumulation stays — the cost cap still reads it.)
+                            {
                                 let mut st =
                                     slint_replay::runtime_state::lock(&slint_rt_cost);
                                 st.session_cost_microcents =
                                     st.session_cost_microcents.saturating_add(cost_micro);
-                                (st.session_cost_microcents as f64) / 100_000_000.0
-                            };
-                            if let Some(ov) = weak_overlay_cost.upgrade() {
-                                ov.set_cost_label(SharedString::from(format!(
-                                    "${session_total:.3}"
-                                )));
                             }
                         }
                         Err(e) => {

@@ -11,6 +11,7 @@
 
 import { Button, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { Metrics } from "metrics.slint";
 
 // ===== Reusable chip primitives =====
 
@@ -68,6 +69,9 @@ component Chip inherits Rectangle {
     in property <string> a11y;
     in property <bool> active: false;
     in property <color> accent: Theme.accent;
+    // Render the label in the mono font (Cascadia) — for the session timer so
+    // the ticking digits don't shift width frame to frame.
+    in property <bool> mono: false;
 
     callback clicked();
 
@@ -86,7 +90,7 @@ component Chip inherits Rectangle {
             : (ta.has-hover ? Theme.border-strong.with-alpha(0.22) : transparent));
     border-color: active ? accent : (ta.has-hover ? accent.with-alpha(0.6) : Theme.border-strong);
     border-width: 1px;
-    border-radius: 10px;
+    border-radius: Metrics.radius-control;
     height: 22px;
     horizontal-stretch: 0;
     animate background { duration: 80ms; }
@@ -105,6 +109,7 @@ component Chip inherits Rectangle {
         }
         if root.label != "" : Text {
             text: label;
+            font-family: root.mono ? Theme.font-mono : "";
             font-size: 11px;
             color: active ? accent : Theme.text-secondary;
             vertical-alignment: center;
@@ -136,7 +141,7 @@ component LiveChip inherits Rectangle {
     background: active ? accent.with-alpha(0.18) : transparent;
     border-color: active ? accent : Theme.border-strong;
     border-width: 1px;
-    border-radius: 10px;
+    border-radius: Metrics.radius-control;
     height: 22px;
 
     HorizontalLayout {
@@ -206,7 +211,7 @@ component RecordBtn inherits Rectangle {
     background: recording ? Theme.danger.with-alpha(0.2) : transparent;
     border-color: recording ? Theme.danger : Theme.border-strong;
     border-width: 1px;
-    border-radius: 10px;
+    border-radius: Metrics.radius-control;
     height: 22px;
     horizontal-stretch: 0;
     animate background, border-color { duration: 120ms; }
@@ -372,9 +377,6 @@ export component OverlayBarWindow inherits Window {
     // icon. So the user can tell at a glance what's transcribing + answering.
     in-out property <string> active-stack: "";
 
-    // Cumulative session cost (formatted by Rust, e.g. "$0.024").
-    in-out property <string> cost-label: "$0.000";
-
     // Tile counter for the "+ Tile" button.
     in-out property <int> tiles-spawned: 0;
 
@@ -513,7 +515,7 @@ export component OverlayBarWindow inherits Window {
                 background: root.status-color.with-alpha(0.18);
                 border-color: root.status-color;
                 border-width: 1px;
-                border-radius: 10px;
+                border-radius: Metrics.radius-control;
                 height: 22px;
                 horizontal-stretch: 0;
                 // Drag handle — press-and-drag to move the whole bar.
@@ -610,7 +612,7 @@ export component OverlayBarWindow inherits Window {
 
             VDivider { }
 
-            // ── Session info (timer / model / cost) ──
+            // ── Session info (timer) ──
             Chip {
                 icon: root.timer-active
                     ? @image-url("../assets/icons/stop.svg")
@@ -619,12 +621,8 @@ export component OverlayBarWindow inherits Window {
                 label: root.timer-active ? root.timer-label : @tr("start");
                 active: root.timer-active;
                 accent: #fbbf24;
+                mono: true;
                 clicked => { root.timer-toggle-clicked(); }
-            }
-            Chip {
-                label: root.cost-label;
-                accent: #f59e0b;
-                clicked => { /* no-op for now */ }
             }
 
             VDivider { }
@@ -900,7 +898,7 @@ export component OverlayBarWindow inherits Window {
                     background: root.status-color.with-alpha(0.18);
                     border-color: root.status-color;
                     border-width: 1px;
-                    border-radius: 10px;
+                    border-radius: Metrics.radius-control;
                     height: 22px;
                     // Natural width like the full bar pill (NOT stretched) so the
                     // pill is the SAME length in both modes; the spring spacer
@@ -993,6 +991,7 @@ export component OverlayBarWindow inherits Window {
                     label: root.timer-active ? root.timer-label : @tr("start");
                     active: root.timer-active;
                     accent: #fbbf24;
+                    mono: true;
                     clicked => { root.timer-toggle-clicked(); }
                 }
                 // Spring — absorbs the slack so the status pill stays natural-

@@ -765,11 +765,6 @@ impl SlintUiBridge for OverlayBarBridge {
                 return;
             };
             match channel.as_str() {
-                "cost:update" => {
-                    if let Some(usd) = payload.get("session_usd").and_then(|v| v.as_f64()) {
-                        o.set_cost_label(SharedString::from(format!("${usd:.3}")));
-                    }
-                }
                 "session:started" => {
                     o.set_timer_active(true);
                     o.set_status_text(SharedString::from("recording"));
