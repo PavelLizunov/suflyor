@@ -224,7 +224,7 @@ export component ArchiveWindow inherits Window {
                             horizontal-alignment: center;
                         }
                         for row[i] in root.results : Rectangle {
-                            background: i == root.selected-index ? Theme.bg-elevated : transparent;
+                            background: i == root.selected-index ? Theme.accent-subtle : transparent;
                             border-radius: 4px;
                             border-color: i == root.selected-index ? Theme.accent : transparent;
                             border-width: Metrics.border-thin;
@@ -280,7 +280,7 @@ export component ArchiveWindow inherits Window {
                                     border-radius: Metrics.radius-control;
                                     border-width: Metrics.border-thin;
                                     border-color: Theme.accent;
-                                    background: touch.has-hover ? Theme.accent.with-alpha(0.18) : transparent;
+                                    background: touch.has-hover ? Theme.accent.with-alpha(0.28) : Theme.accent-subtle;
                                     // SVG refresh icon (not a "↻" glyph — the bundled
                                     // Skia font has no U+21BB, it renders as tofu).
                                     // v0.17.1 — the icon is wrapped in a centering
