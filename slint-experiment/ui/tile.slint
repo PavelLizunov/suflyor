@@ -16,6 +16,42 @@ export struct MarkdownBlock {
     lang: string,
 }
 
+// One row in a tile's «⋯» overflow popup — icon + label, hover-highlighted.
+component TileMenuRow inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    callback clicked();
+    height: 30px;
+    border-radius: 6px;
+    background: rowta.has-hover ? Theme.bg-elevated : transparent;
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 12px;
+        spacing: 8px;
+        alignment: start;
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: root.icon;
+                colorize: Theme.text-secondary;
+                width: 14px;
+                height: 14px;
+                image-fit: contain;
+            }
+        }
+        Text {
+            text: root.label;
+            font-size: 11px;
+            color: Theme.text-secondary;
+            vertical-alignment: center;
+        }
+    }
+    rowta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
 export component TileWindow inherits Window {
     // Phase 4 — keep std-widgets (follow-up LineEdit, ScrollView) dark with
     // the active scheme instead of Slint's light fluent default.
@@ -236,48 +272,65 @@ export component TileWindow inherits Window {
                         y: (parent.height - self.height) / 2;
                     }
                 }
-                // V5 — 🔄 regenerate (only on tiles that support it, e.g. F8
-                // vision). Re-runs the last request for a longer / different answer.
-                if root.can-regenerate: Rectangle {
+                // «⋯» overflow — 🔄 regenerate + 🧠 escalate moved off the
+                // always-on header into a popup menu (Glacier Этап 6). The button
+                // shows only when at least one is available; the callbacks and the
+                // followup-busy guards are unchanged.
+                if (root.can-regenerate || root.can-escalate): Rectangle {
                     width: 30px;
                     height: 30px;
-                    background: regen-touch.has-hover ? Theme.border-strong : Theme.border;
+                    background: more-touch.has-hover ? Theme.border-strong : Theme.border;
                     border-radius: 6px;
                     border-width: 1px;
                     border-color: Theme.border-strong;
-                    regen-touch := TouchArea {
-                        clicked => { if (!root.followup-busy) { root.regenerate-clicked(); } }
+                    more-touch := TouchArea {
+                        clicked => { overflow-popup.show(); }
                     }
                     Image {
-                        source: @image-url("../assets/icons/refresh.svg");
-                        colorize: root.followup-busy ? Theme.text-muted : Theme.text-secondary;
+                        source: @image-url("../assets/icons/more.svg");
+                        colorize: Theme.text-secondary;
                         width: 16px;
                         height: 16px;
                         image-fit: contain;
                         x: (parent.width - self.width) / 2;
                         y: (parent.height - self.height) / 2;
                     }
-                }
-                // V0.8.0 (Поток D) — 🧠 escalate this answer to the smart cloud
-                // model (one-shot). Shown when the answer came from local AI.
-                if root.can-escalate: Rectangle {
-                    width: 30px;
-                    height: 30px;
-                    background: esc-touch.has-hover ? Theme.border-strong : Theme.border;
-                    border-radius: 6px;
-                    border-width: 1px;
-                    border-color: Theme.border-strong;
-                    esc-touch := TouchArea {
-                        clicked => { if (!root.followup-busy) { root.escalate-clicked(); } }
-                    }
-                    Image {
-                        source: @image-url("../assets/icons/brain.svg");
-                        colorize: Theme.accent;
-                        width: 16px;
-                        height: 16px;
-                        image-fit: contain;
-                        x: (parent.width - self.width) / 2;
-                        y: (parent.height - self.height) / 2;
+                    overflow-popup := PopupWindow {
+                        // Right-align the 168px menu under the 30px button, just
+                        // below the header row.
+                        x: 30px - 168px;
+                        y: parent.height + 4px;
+                        Rectangle {
+                            width: 168px;
+                            background: Theme.bg-elevated;
+                            border-color: Theme.border-strong;
+                            border-width: 1px;
+                            border-radius: 8px;
+                            VerticalLayout {
+                                padding: 4px;
+                                spacing: 2px;
+                                if root.can-regenerate: TileMenuRow {
+                                    icon: @image-url("../assets/icons/refresh.svg");
+                                    label: @tr("Regenerate");
+                                    clicked => {
+                                        overflow-popup.close();
+                                        if (!root.followup-busy) {
+                                            root.regenerate-clicked();
+                                        }
+                                    }
+                                }
+                                if root.can-escalate: TileMenuRow {
+                                    icon: @image-url("../assets/icons/brain.svg");
+                                    label: @tr("Smart cloud");
+                                    clicked => {
+                                        overflow-popup.close();
+                                        if (!root.followup-busy) {
+                                            root.escalate-clicked();
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 // v0.18.6 — «Повторить» on a summary-failure tile. Accent-colored

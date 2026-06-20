@@ -1123,3 +1123,9 @@ msgstr "Установить"
 
 msgid "Open"
 msgstr "Открыть"
+
+msgid "Regenerate"
+msgstr "Перегенерировать"
+
+msgid "Smart cloud"
+msgstr "Умное облако"
