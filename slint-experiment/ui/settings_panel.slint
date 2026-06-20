@@ -723,7 +723,13 @@ export component SettingsWindow inherits Window {
             horizontal-stretch: 1;
             background: Theme.bg-surface;
             clip: true;
-            Image {
+            // Watermark only on the AIRY tabs — hidden on the dense ones (AI
+            // bridge 11 / Auto-tiles 7 / Hotkeys 2 / Memory 14) where it bled
+            // through behind fields, cards and lists (design review #3). Gated
+            // with an `if`-element (not `visible:`, which rendered nothing at
+            // all here) — the same reliable per-tab pattern used below.
+            if root.active-tab != 11 && root.active-tab != 7
+                && root.active-tab != 2 && root.active-tab != 14 : Image {
                 source: Theme.is-light
                     ? @image-url("../assets/brand-mark.png")
                     : @image-url("../assets/brand-mark-light.png");
@@ -733,12 +739,6 @@ export component SettingsWindow inherits Window {
                 image-fit: contain;
                 x: parent.width - self.width - 18px;
                 y: parent.height - self.height - 22px;
-                // Hidden on the DENSE tabs (AI bridge 11 / Auto-tiles 7 /
-                // Hotkeys 2 / Memory 14) where the watermark shows through behind
-                // fields, cards and lists (design review #3). Kept on the airy
-                // tabs where it reads as a tasteful brand mark.
-                visible: root.active-tab != 11 && root.active-tab != 7
-                    && root.active-tab != 2 && root.active-tab != 14;
             }
             ScrollView {
                 VerticalLayout {
@@ -1002,7 +1002,7 @@ export component SettingsWindow inherits Window {
                         HorizontalLayout {
                             alignment: start;
                             Button {
-                                text: @tr("🪄 Run setup wizard");
+                                text: @tr("Run setup wizard");
                                 clicked => { root.open-wizard-clicked(); }
                             }
                         }
@@ -1044,7 +1044,7 @@ export component SettingsWindow inherits Window {
                             HorizontalLayout {
                                 alignment: start;
                                 Button {
-                                    text: root.tts-installing ? @tr("Installing…") : @tr("⬇ Install voices");
+                                    text: root.tts-installing ? @tr("Installing…") : @tr("Install voices");
                                     enabled: !root.tts-installing;
                                     clicked => { root.tts-install-clicked(); }
                                 }
@@ -1075,7 +1075,7 @@ export component SettingsWindow inherits Window {
                         HorizontalLayout {
                             alignment: start;
                             Button {
-                                text: @tr("🔊 Test voice");
+                                text: @tr("Test voice");
                                 enabled: root.tts-available;
                                 clicked => { root.tts-test-clicked(); }
                             }
@@ -1102,7 +1102,7 @@ export component SettingsWindow inherits Window {
                             }
                             // Shown only when a newer release was found.
                             if root.update-available : Button {
-                                text: @tr("⬇ Update now");
+                                text: @tr("Update now");
                                 enabled: !root.update-checking;
                                 clicked => {
                                     root.install-update-clicked();
@@ -2046,7 +2046,7 @@ export component SettingsWindow inherits Window {
                         if !root.ocr-installed : HorizontalLayout {
                             alignment: start;
                             Button {
-                                text: root.ocr-installing ? @tr("Installing…") : @tr("⬇ Install text recognition (OCR)");
+                                text: root.ocr-installing ? @tr("Installing…") : @tr("Install text recognition (OCR)");
                                 enabled: !root.ocr-installing;
                                 clicked => { root.ocr-install-clicked(); }
                             }

@@ -201,8 +201,8 @@ export component CaptureOverlay inherits Window {
         border-width: 1px;
         border-color: #22d3ee;
         modehint := Text {
-            text: root.translate-mode ? @tr("🌐 Translate — tap to Describe")
-                : (root.practice-mode ? @tr("🎓 Test Practice (self-check)") : @tr("📖 Describe — tap to Translate"));
+            text: root.translate-mode ? @tr("Translate — tap to Describe")
+                : (root.practice-mode ? @tr("Test Practice (self-check)") : @tr("Describe — tap to Translate"));
             color: #e8e8ec;
             font-size: 12px;
             horizontal-alignment: center;
