@@ -382,7 +382,10 @@ export component OverlayBarWindow inherits Window {
     // v0.12.0 — 1160 → 1200 to absorb the new 📝 Summary chip (icon-only,
     // ≈ 30 px) with the same RU worst-case slack (review-agent finding).
     preferred-width: 1200px;
-    preferred-height: 86px;
+    // 64px (was 86) — the chip row is only 22px, so 86 left a wide empty band
+    // around one status line (design review #1). Kept in sync with apply_bar_size
+    // in overlay_host.rs.
+    preferred-height: 64px;
     // Relax the min-width in compact "reader" mode so the runtime set_size(340)
     // isn't clamped back up (Slint propagates min-width to the OS as a minimum
     // inner size). Full bar keeps 720 so its chip row never collapses.

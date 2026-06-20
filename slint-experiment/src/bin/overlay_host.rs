@@ -3483,7 +3483,9 @@ fn apply_bar_size(overlay: &OverlayBarWindow, compact: bool) {
     let (w, h) = if compact {
         (340.0_f32, 46.0_f32)
     } else {
-        (1200.0_f32, 86.0_f32)
+        // 64 (was 86) — matches overlay_bar.slint preferred-height; trims the
+        // empty vertical band around the 22px chip row (design review #1).
+        (1200.0_f32, 64.0_f32)
     };
     overlay.window().set_size(slint::LogicalSize::new(w, h));
     recenter_when_sized(overlay.as_weak(), w, 0);
