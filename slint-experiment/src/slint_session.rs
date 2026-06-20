@@ -523,6 +523,13 @@ async fn maybe_spawn_auto_tile(
     text: String,
     session_gen: u64,
 ) {
+    // "Reader mode" tile mute (config.suppress_tiles): skip auto-detected AI
+    // tiles entirely so the user can record + just listen without tiles
+    // popping up. Manual asks (F6/F9/PTT), KB, summary, and error tiles use
+    // other paths and are unaffected.
+    if cfg.read().suppress_tiles {
+        return;
+    }
     let (
         enabled,
         every_line,

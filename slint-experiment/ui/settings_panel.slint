@@ -68,6 +68,16 @@ export struct MemoryRow {
     reason: string,
 }
 
+// Onboarding «Компоненты» hub — one row per on-demand component (engine /
+// local model / STT / voices / OCR). Built in Rust from
+// `overlay_backend::components::status`.
+export struct ComponentRow {
+    name: string,
+    detail: string,
+    installed: bool,
+    hint: string,
+}
+
 // Phase E6 v40 — toggle SWITCH (borrowed from the Claude Design bundle:
 // "SwitchRow вместо чекбоксов"). Was a custom square checkbox (v24, to
 // dodge the std CheckBox's near-invisible unchecked label on Theme.bg-surface).
@@ -221,6 +231,8 @@ export component SettingsWindow inherits Window {
     // approved memory. `id` flows back through the callbacks.
     in-out property <[MemoryRow]> memory-candidates: [];
     in-out property <[MemoryRow]> memory-items: [];
+    // Onboarding «Компоненты» readiness rows (set by the controller on open).
+    in-out property <[ComponentRow]> component-rows: [];
     in-out property <string> memory-status: "";
     callback memory-approve(int);
     callback memory-reject(int);
@@ -487,6 +499,10 @@ export component SettingsWindow inherits Window {
     callback open-data-folder-clicked();
     in-out property <bool> auto-tiles-enabled: true;
     callback auto-tiles-enabled-changed(bool);
+    // "Listening mode" — mute auto-detected AI tiles (TileKind::Ai) so the user
+    // can record + just listen without tiles popping up.
+    in-out property <bool> suppress-tiles: false;
+    callback suppress-tiles-changed(bool);
     in-out property <string> trigger-keywords-input: "";
     callback trigger-keywords-save(string);
     // Phase E6 v43 — "Structure via AI" button: sends the current context
@@ -613,6 +629,11 @@ export component SettingsWindow inherits Window {
                 }
 
                 NavGroupHeader { label: "AI"; }
+                NavItem {
+                    label: @tr("Components"); icon: @image-url("../assets/icons/update.svg"); tab-index: 15;
+                    active: root.active-tab == 15;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
+                }
                 NavItem {
                     label: @tr("AI bridge"); icon: @image-url("../assets/icons/ai.svg"); tab-index: 11;
                     active: root.active-tab == 11;
@@ -1322,6 +1343,61 @@ export component SettingsWindow inherits Window {
                             wrap: word-wrap;
                         }
                     }
+                    // ===== Components (onboarding readiness hub, tab 15) =====
+                    if root.active-tab == 15 : VerticalLayout {
+                        spacing: 8px;
+                        Text {
+                            text: @tr("What's installed for offline AI — one place to see what's ready. Each piece is downloaded on demand from its own tab (shown below each item).");
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        for row in root.component-rows : Rectangle {
+                            background: Theme.bg-surface;
+                            border-radius: 8px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            height: 50px;
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                spacing: 10px;
+                                Rectangle {
+                                    width: 10px;
+                                    height: 10px;
+                                    border-radius: 5px;
+                                    y: (parent.height - self.height) / 2;
+                                    background: row.installed ? Theme.success : Theme.border-strong;
+                                }
+                                VerticalLayout {
+                                    alignment: center;
+                                    horizontal-stretch: 1;
+                                    Text {
+                                        text: row.name;
+                                        font-size: 12px;
+                                        font-weight: 600;
+                                        color: Theme.text-primary;
+                                    }
+                                    Text {
+                                        text: row.installed
+                                            ? (row.detail != "" ? row.detail : @tr("installed"))
+                                            : row.hint;
+                                        font-size: 10px;
+                                        color: Theme.text-muted;
+                                        wrap: word-wrap;
+                                    }
+                                }
+                                Text {
+                                    text: row.installed ? @tr("installed") : @tr("not installed");
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    color: row.installed ? Theme.success : Theme.text-muted;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 0;
+                                }
+                            }
+                        }
+                    }
                     if root.active-tab == 7 : VerticalLayout {
                         spacing: 8px;
                         Text {
@@ -1336,6 +1412,19 @@ export component SettingsWindow inherits Window {
                             toggled(v) => {
                                 root.auto-tiles-enabled-changed(v);
                             }
+                        }
+                        DarkCheck {
+                            text: @tr("Listening mode — don't show tiles");
+                            checked <=> root.suppress-tiles;
+                            toggled(v) => {
+                                root.suppress-tiles-changed(v);
+                            }
+                        }
+                        Text {
+                            text: @tr("Mutes auto-detected AI tiles so you can record and just listen. Manual asks (F6/F9), the knowledge base, and summaries still appear.");
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
                         }
                         Text {
                             text: @tr("Trigger keywords (space-separated). A sentence ending in '?' also triggers.");
@@ -2352,7 +2441,8 @@ export component SettingsWindow inherits Window {
     } // rounded root Rectangle
 
     pure function tab-name-for(idx: int) -> string {
-        return idx == 0 ? @tr("Stealth") :
+        return idx == 15 ? @tr("Components") :
+               idx == 0 ? @tr("Stealth") :
                idx == 1 ? @tr("Coaching") :
                idx == 2 ? @tr("Hotkeys") :
                idx == 3 ? @tr("Interface") :

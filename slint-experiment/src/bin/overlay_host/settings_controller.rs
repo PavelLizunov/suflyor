@@ -51,8 +51,8 @@ use super::{
     set_global_scheme, set_global_stealth, set_global_tile_opacity, set_stealth,
     spawn_ptt_watchdog, stt, try_acquire_mic, wire_ai_settings, wire_diagnostics,
     wire_import_export, wire_local_ai, wire_memory, wire_stt_settings, wire_updates,
-    wire_vision_settings, wire_voice_settings, Arc, AtomicBool, ComponentHandle, ModelRc,
-    ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell, SettingsWindow, SharedString,
+    wire_vision_settings, wire_voice_settings, Arc, AtomicBool, ComponentHandle, ComponentRow,
+    ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell, SettingsWindow, SharedString,
     TileWindows, VecModel, WindowRegistry,
 };
 
@@ -83,6 +83,7 @@ pub(crate) fn open_settings(
         {
             let snap = cfg.read();
             refresh_profiles(existing, &snap);
+            populate_component_rows(existing, &snap);
         }
         let _ = existing.show();
         // The F8 / capture-chip flow hides EVERY app window via Win32 SW_HIDE
@@ -122,6 +123,7 @@ pub(crate) fn open_settings(
         win.set_coaching_debrief(snap.post_meeting_debrief_enabled);
         win.set_record_audio(snap.record_audio_enabled);
         win.set_auto_tiles_enabled(snap.auto_tiles_enabled);
+        win.set_suppress_tiles(snap.suppress_tiles);
         win.set_trigger_keywords_input(SharedString::from(snap.trigger_keywords.as_str()));
         // v0.15.0 — seed the storage/retention controls. Days wins the display
         // when both bounds are set (hand-edited config); saving from the UI
@@ -139,6 +141,10 @@ pub(crate) fn open_settings(
             snap.journal_retention_sessions.to_string(),
         ));
         win.set_journal_mb_value(SharedString::from(snap.journal_max_total_mb.to_string()));
+
+        // Onboarding «Компоненты» — readiness rows, refreshed on EVERY open
+        // (see populate_component_rows; also called on the reused-window path).
+        populate_component_rows(&win, &snap);
     }
 
     // Phase E6 v23 — populate the Audio tab's mic dropdown from real
@@ -713,6 +719,14 @@ pub(crate) fn open_settings(
     }
     {
         let cfg_c = cfg.clone();
+        win.on_suppress_tiles_changed(move |on| {
+            let mut c = cfg_c.write();
+            c.suppress_tiles = on;
+            let _ = overlay_backend::config::save(&c);
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
         win.on_trigger_keywords_save(move |text| {
             // Clamp: these keywords prepend to EVERY STT prompt, so a huge paste
             // would balloon every transcription. Trim + cap (cf. kb::search's
@@ -990,6 +1004,50 @@ pub(crate) fn msg_refresh_after_import(
 ) -> String {
     populate_token_status(win, cfg);
     "[ok] imported — restart binary for full effect".to_string()
+}
+
+/// Push the onboarding «Компоненты» readiness rows (engine / model / STT /
+/// voices / OCR) into the Settings UI, built from the backend's single source of
+/// truth so the hub can never disagree with the real install state. Called on
+/// EVERY Settings open — both the fresh-window seed AND the reused-window
+/// refresh path — so the status reflects reality after the user installs a
+/// component (mirrors populate_token_status / refresh_profiles). RU names + a
+/// where-to-install hint are dynamic content, like the archive labels.
+pub(crate) fn populate_component_rows(
+    win: &SettingsWindow,
+    snap: &overlay_backend::config::Config,
+) {
+    use overlay_backend::components::{status, ComponentKind};
+    let rows: Vec<ComponentRow> = status(snap)
+        .into_iter()
+        .map(|c| {
+            let (name, hint) = match c.kind {
+                ComponentKind::Engine => (
+                    "Движок (llama.cpp)",
+                    "Настройки → AI → AI мост → «Обновить движок»",
+                ),
+                ComponentKind::LocalModel => (
+                    "Локальная модель ИИ",
+                    "Настройки → AI → AI мост → «Установить локальный ИИ»",
+                ),
+                ComponentKind::Stt => ("Распознавание речи (STT)", "Настройки → AI → STT"),
+                ComponentKind::Voices => {
+                    ("Голоса (TTS)", "Настройки → AI → TTS → «Установить голоса»")
+                }
+                ComponentKind::Ocr => (
+                    "Распознавание текста (OCR)",
+                    "Настройки → AI → AI мост → Vision → «Установить OCR»",
+                ),
+            };
+            ComponentRow {
+                name: SharedString::from(name),
+                detail: SharedString::from(c.detail.as_str()),
+                installed: c.installed,
+                hint: SharedString::from(hint),
+            }
+        })
+        .collect();
+    win.set_component_rows(ModelRc::new(VecModel::from(rows)));
 }
 
 /// Push the multi-profile state into the Settings UI: the profile-name list, the

@@ -60,7 +60,7 @@ mod ui {
 }
 
 use ui::{
-    ArchiveRow, ArchiveWindow, CaptureOverlay, HelpWindow, MarkdownBlock, MemoryRow,
+    ArchiveRow, ArchiveWindow, CaptureOverlay, ComponentRow, HelpWindow, MarkdownBlock, MemoryRow,
     OverlayBarWindow, PaletteResult, PaletteWindow, RecoverOfferWindow, SettingsWindow,
     TextAskWindow, TileWindow, WizardWindow,
 };
@@ -3112,6 +3112,44 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // ===== Compact "reader mode" toggle =====
+    // Collapse the wide bar to a small read-aloud pill (+ resize the window so
+    // it stops eating the screen) for using the app purely as a TTS reader.
+    // Persisted via cfg.compact_bar; the global Shift+Alt+1/2/3 read-aloud
+    // hotkeys keep working regardless of the bar size.
+    {
+        let cfg_for_compact = cfg.clone();
+        let weak_for_compact = overlay.as_weak();
+        // Sync initial state + window size from cfg (the bar may reopen compact).
+        if let Some(o) = weak_for_compact.upgrade() {
+            let compact = cfg_for_compact.read().compact_bar;
+            o.set_compact_bar(compact);
+            if compact {
+                apply_bar_size(&o, true);
+            }
+        }
+        overlay.on_compact_toggle_clicked(move || {
+            let now_compact = {
+                let mut c = cfg_for_compact.write();
+                c.compact_bar = !c.compact_bar;
+                let _ = overlay_backend::config::save(&c);
+                c.compact_bar
+            };
+            eprintln!("[overlay-host] compact bar -> {now_compact}");
+            if let Some(o) = weak_for_compact.upgrade() {
+                o.set_compact_bar(now_compact);
+                apply_bar_size(&o, now_compact);
+            }
+        });
+    }
+
+    // Compact pill — ⏹ Stop read-aloud (stops the TTS sidecar + clears the
+    // Shift+Alt+3 pause latch so the next read starts clean).
+    overlay.on_tts_stop_clicked(|| {
+        overlay_backend::tts::stop();
+        reset_pause();
+    });
+
     // ===== Bar drag-to-move (Phase E6 v22 — manual cursor-delta) =====
     // drag-start-requested (pointer-down on status pill) records the
     // anchor; drag-moved (move while pressed) moves the window by the
@@ -3433,6 +3471,52 @@ fn spawn_relaunch() -> bool {
             false
         }
     }
+}
+
+/// Resize the bar window for compact "reader mode" (a small read-aloud pill)
+/// vs the full bar, then re-center it on the primary monitor for the new width.
+/// LogicalSize matches the `.slint` preferred sizes (Slint DPI-scales it). The
+/// re-pin is deferred a frame because `set_size` is processed on the next event-
+/// loop cycle — reading the window rect immediately would still see the old
+/// width and mis-center.
+fn apply_bar_size(overlay: &OverlayBarWindow, compact: bool) {
+    let (w, h) = if compact {
+        (340.0_f32, 46.0_f32)
+    } else {
+        (1200.0_f32, 86.0_f32)
+    };
+    overlay.window().set_size(slint::LogicalSize::new(w, h));
+    recenter_when_sized(overlay.as_weak(), w, 0);
+}
+
+/// Re-center the bar on the primary monitor for its NEW width — but only once the
+/// OS window has actually reached that size. `set_size` is applied on a later
+/// event-loop cycle, and at STARTUP the HWND isn't realized for ~200 ms, so a
+/// single fixed delay raced the resize/pin (it left a startup-compact bar
+/// left-of-centre). Poll every 50 ms (≤ ~0.6 s) until the rect width matches the
+/// requested logical size (DPI-scaled), then center by the ACTUAL width.
+fn recenter_when_sized(weak: slint::Weak<OverlayBarWindow>, target_w_logical: f32, attempt: u32) {
+    Timer::single_shot(Duration::from_millis(50), move || {
+        let Some(o) = weak.upgrade() else { return };
+        let Ok(hwnd) = grab_hwnd(o.window()) else {
+            if attempt < 12 {
+                recenter_when_sized(weak.clone(), target_w_logical, attempt + 1);
+            }
+            return;
+        };
+        let target_px = (target_w_logical * o.window().scale_factor()).round() as i32;
+        let cur_w = get_window_rect(hwnd).map(|(_, _, bw, _)| bw).unwrap_or(0);
+        if (cur_w - target_px).abs() > 24 && attempt < 12 {
+            recenter_when_sized(weak.clone(), target_w_logical, attempt + 1);
+            return;
+        }
+        let primary = enum_monitors().into_iter().find(|m| m.is_primary);
+        let (x, y) = match primary {
+            Some(p) => (p.left + ((p.width() - cur_w) / 2).max(0), p.top + 24),
+            None => (60, 24),
+        };
+        let _ = move_window_pos_only(hwnd, x, y);
+    });
 }
 
 fn apply_overlay_hwnd(overlay: &OverlayBarWindow) {

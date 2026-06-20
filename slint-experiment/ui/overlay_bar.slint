@@ -74,12 +74,22 @@ component Chip inherits Rectangle {
     accessible-role: button;
     accessible-label: label != "" ? label : a11y;
 
-    background: active ? accent.with-alpha(0.18) : transparent;
-    border-color: active ? accent : Theme.border-strong;
+    // Hover + press feedback so a click is visibly registered. Action chips
+    // (Stop / Expand / X …) had NO feedback at all — only the persistent
+    // `active` toggle changed the background — so a click looked like nothing
+    // happened (reported for the compact Stop). `active` still wins; otherwise
+    // pressed flashes the accent, hover lifts a subtle fill.
+    background: active
+        ? accent.with-alpha(0.18)
+        : (ta.pressed
+            ? accent.with-alpha(0.34)
+            : (ta.has-hover ? Theme.border-strong.with-alpha(0.22) : transparent));
+    border-color: active ? accent : (ta.has-hover ? accent.with-alpha(0.6) : Theme.border-strong);
     border-width: 1px;
     border-radius: 10px;
     height: 22px;
     horizontal-stretch: 0;
+    animate background { duration: 80ms; }
 
     HorizontalLayout {
         padding-left: 8px;
@@ -100,7 +110,10 @@ component Chip inherits Rectangle {
             vertical-alignment: center;
         }
     }
-    TouchArea { clicked => { root.clicked(); } }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
 }
 
 // Active-indicator chip: chip with a small pulsing dot prefix that
@@ -328,7 +341,10 @@ export component OverlayBarWindow inherits Window {
     // ≈ 30 px) with the same RU worst-case slack (review-agent finding).
     preferred-width: 1200px;
     preferred-height: 86px;
-    min-width: 720px;
+    // Relax the min-width in compact "reader" mode so the runtime set_size(340)
+    // isn't clamped back up (Slint propagates min-width to the OS as a minimum
+    // inner size). Full bar keeps 720 so its chip row never collapses.
+    min-width: root.compact-bar ? 300px : 720px;
 
     // Status pill text (idle / recording / etc).
     in-out property <string> status-text: "idle";
@@ -418,6 +434,15 @@ export component OverlayBarWindow inherits Window {
     // not stack parallel summary calls).
     in-out property <bool> summary-busy: false;
 
+    // ===== Compact "reader mode" =====
+    // Collapse the wide bar to a small read-aloud pill (status + Stop + Expand)
+    // for using the app purely as a text-to-speech reader. Persisted via
+    // config.compact_bar; Rust resizes the bar window on toggle.
+    in-out property <bool> compact-bar: false;
+    // Label shown in the compact pill. Static "TTS" reader-mode marker for now;
+    // live speaking/paused status (set from Rust) is a planned follow-up.
+    in-out property <string> tts-status: "TTS";
+
     // ===== Callbacks =====
     callback mic-toggle-clicked();
     callback sys-toggle-clicked();
@@ -450,6 +475,9 @@ export component OverlayBarWindow inherits Window {
     // drag-start-requested (anchor), move-while-pressed → drag-moved.
     callback drag-start-requested();
     callback drag-moved();
+    // Compact "reader mode": collapse/expand the bar; ⏹ stop read-aloud.
+    callback compact-toggle-clicked();
+    callback tts-stop-clicked();
 
     Rectangle {
         background: Theme.bg-surface.with-alpha(0.92);
@@ -466,7 +494,7 @@ export component OverlayBarWindow inherits Window {
         // сразу стал не кликабельным". Now only the ~80px status
         // pill is the drag zone; every chip is freely clickable.
 
-        VerticalLayout {
+        if !root.compact-bar : VerticalLayout {
             padding: 6px;
             spacing: 4px;
 
@@ -725,6 +753,18 @@ export component OverlayBarWindow inherits Window {
                     clicked => { root.restart-cancel(); }
                 }
             }
+            // Compact "reader mode" — collapse the bar to a small read-aloud
+            // pill. Lives with the window controls (left of Quit), where a
+            // minimize/collapse affordance is expected. Hidden during a quit/
+            // restart confirm so the inline buttons stay inside the bar.
+            if !root.confirming : Chip {
+                icon: @image-url("../assets/icons/minimize.svg");
+                has-icon: true;
+                a11y: "Compact reader mode";
+                active: root.compact-bar;
+                accent: #38bdf8;
+                clicked => { root.compact-toggle-clicked(); }
+            }
             // Quit — two-step. Idle: a single ASCII "X" (Unicode ✕ renders
             // as a missing-glyph box on the Slint+skia fallback). Armed:
             // inline "Quit? [Yes] [No]" so a stray click can't kill the app.
@@ -830,6 +870,71 @@ export component OverlayBarWindow inherits Window {
                 }
             }
         }
+        }
+
+        // ===== Compact "reader mode" pill =====
+        // When collapsed, the whole bar is just: read-aloud status (also the
+        // drag handle) + Stop + Expand. Rust resizes the window to ~340px on
+        // toggle so it stops eating the screen. The global Shift+Alt+1/2/3
+        // read-aloud hotkeys work regardless of this layout.
+        if root.compact-bar : HorizontalLayout {
+            padding: 6px;
+            spacing: 6px;
+            Rectangle {
+                background: root.status-color.with-alpha(0.18);
+                border-color: root.status-color;
+                border-width: 1px;
+                border-radius: 10px;
+                height: 30px;
+                horizontal-stretch: 1;
+                TouchArea {
+                    mouse-cursor: grab;
+                    pointer-event(ev) => {
+                        if (ev.button == PointerEventButton.left
+                            && ev.kind == PointerEventKind.down) {
+                            root.drag-start-requested();
+                        }
+                    }
+                    moved => {
+                        if (self.pressed) { root.drag-moved(); }
+                    }
+                }
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: 6px;
+                    BrandStateMark {
+                        assistant-active: root.ai-streaming;
+                        mark-size: 20px;
+                    }
+                    // Drag affordance — same 6-dot grip as the full bar, so the
+                    // user can see (and the help mentions) where to drag.
+                    IconSlot {
+                        icon: @image-url("../assets/icons/grip.svg");
+                    }
+                    Text {
+                        text: root.tts-status;
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: root.status-color;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                }
+            }
+            Chip {
+                icon: @image-url("../assets/icons/stop.svg");
+                has-icon: true;
+                a11y: "Stop reading aloud";
+                accent: #ef4444;
+                clicked => { root.tts-stop-clicked(); }
+            }
+            Chip {
+                icon: @image-url("../assets/icons/maximize.svg");
+                has-icon: true;
+                a11y: "Expand the bar";
+                clicked => { root.compact-toggle-clicked(); }
+            }
         }
     }
 }

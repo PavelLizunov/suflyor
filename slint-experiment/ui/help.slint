@@ -277,6 +277,9 @@ export component HelpWindow inherits Window {
                         ["F6", "Ручной тайл из последней строки транскрипта"],
                         ["F7", "Архив сессий (просмотр и поиск)"],
                         ["Shift+F8", "Скриншот -> перевод текста (Vision-AI)"],
+                        ["Shift+Alt+1", "Озвучить выделенный текст (TTS)"],
+                        ["Shift+Alt+2", "Распознать текст с области экрана (OCR) и озвучить"],
+                        ["Shift+Alt+3", "Пауза / продолжение озвучки"],
                     ] : TableRow {
                         key-row: true;
                         glyph: row[0];
@@ -307,6 +310,21 @@ export component HelpWindow inherits Window {
                     Rectangle { height: 8px; }
                     Text {
                         text: "Локальная AI-модель: Быстрее (4B) или Умнее (12B) — выбор в Настройки -> AI. Если локальный AI отвалится, overlay перезапустит сервер сам. Язык распознавания (Авто/Русский/English) — там же, в Настройки -> Речь. Зрение (F8) работает на модели 4B.";
+                        font-size: Metrics.font-label;
+                        color: Theme.text-secondary;
+                        wrap: word-wrap;
+                    }
+
+                    Rectangle { height: 18px; }
+                    Text {
+                        text: "Озвучка · распознавание · компактный режим";
+                        font-weight: 700;
+                        font-size: Metrics.font-body;
+                        color: Theme.accent;
+                    }
+                    Rectangle { height: 8px; }
+                    Text {
+                        text: "Shift+Alt+1 — озвучить выделенный текст; Shift+Alt+2 — распознать текст с области экрана (OCR) и озвучить; Shift+Alt+3 — пауза/продолжение. Голоса (TTS) и движок распознавания (OCR) ставятся кнопкой в Настройки -> AI (TTS и Vision). Компактный режим «читалки»: чип свернуть на баре превращает бар в маленькую пилюлю только для озвучки. «Режим прослушивания» (Настройки -> Авто-тайлы) глушит авто-тайлы, чтобы просто записывать и слушать.";
                         font-size: Metrics.font-label;
                         color: Theme.text-secondary;
                         wrap: word-wrap;

@@ -1099,3 +1099,21 @@ msgstr "⬇ Установить распознавание текста (OCR)"
 
 msgid "Text recognition is installed."
 msgstr "Распознавание текста установлено."
+
+msgid "Listening mode — don't show tiles"
+msgstr "Режим прослушивания — не показывать тайлы"
+
+msgid "Mutes auto-detected AI tiles so you can record and just listen. Manual asks (F6/F9), the knowledge base, and summaries still appear."
+msgstr "Глушит авто-тайлы (ответы на распознанные вопросы), чтобы можно было записывать и просто слушать. Ручные запросы (F6/F9), база знаний и сводки по-прежнему показываются."
+
+msgid "Components"
+msgstr "Компоненты"
+
+msgid "installed"
+msgstr "установлено"
+
+msgid "not installed"
+msgstr "не установлено"
+
+msgid "What's installed for offline AI — one place to see what's ready. Each piece is downloaded on demand from its own tab (shown below each item)."
+msgstr "Что установлено для офлайн-ИИ — в одном месте видно, что готово. Каждый компонент скачивается по необходимости в своей вкладке (показана под каждым пунктом)."
