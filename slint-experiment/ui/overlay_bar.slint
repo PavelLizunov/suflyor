@@ -116,11 +116,12 @@ component Chip inherits Rectangle {
     }
 }
 
-// Compact reader-mode action button (design review #5). A 30×30 square icon
-// button matching the status-plaque height so the compact pill has ONE control
-// height (the shared 22px Chip read as smaller + had a tiny hit-target). `tint`
-// is the RESTING icon colour: Stop passes red so it reads as STOP at a glance,
-// not only on hover.
+// Compact reader-mode action button — the SAME visual language as the bar
+// `Chip` (radius 10, the identical transparent→hover→pressed bg/border formula,
+// all semantic tokens), just a bigger 30×30 hit-target so the compact pill has
+// one control height. `tint` is the RESTING icon colour (Stop = Theme.danger so
+// it reads as STOP at rest; Expand = text-secondary, like a resting chip);
+// `accent` drives the hover/press bg + border, like a chip's accent.
 component CompactIconBtn inherits Rectangle {
     in property <image> icon;
     in property <string> a11y;
@@ -132,7 +133,7 @@ component CompactIconBtn inherits Rectangle {
     accessible-label: a11y;
     width: 30px;
     height: 30px;
-    border-radius: 8px;
+    border-radius: 10px;
     border-width: 1px;
     border-color: cta.has-hover ? root.accent.with-alpha(0.6) : Theme.border-strong;
     background: cta.pressed
@@ -143,9 +144,10 @@ component CompactIconBtn inherits Rectangle {
 
     Image {
         source: root.icon;
-        // Hover brightens toward `accent`; otherwise the resting `tint` (red for
-        // Stop) so the colour is meaningful without interaction.
-        colorize: cta.has-hover ? root.accent : root.tint;
+        // Constant resting tint — the bg/border carry the hover/press feedback,
+        // exactly like the bar Chip (whose icon colour only flips on the
+        // persistent `active`, never on hover).
+        colorize: root.tint;
         width: 16px;
         height: 16px;
         image-fit: contain;
@@ -926,11 +928,12 @@ export component OverlayBarWindow inherits Window {
             padding: 6px;
             spacing: 6px;
             Rectangle {
-                // Reader-mode plaque colour is FIXED accent — was tied to
-                // status-color, which turns yellow while recording; confusing on
-                // what is a TTS/read-aloud pill (design review #5).
-                background: Theme.accent.with-alpha(0.16);
-                border-color: Theme.accent.with-alpha(0.7);
+                // Reader-mode plaque — restrained NEUTRAL surface (semantic
+                // tokens, not a flood of accent): bg-elevated + border-strong,
+                // matching the bar's calm palette. Decoupled from status-color so
+                // it doesn't turn yellow while recording (it's a TTS pill).
+                background: Theme.bg-elevated;
+                border-color: Theme.border-strong;
                 border-width: 1px;
                 border-radius: 10px;
                 height: 30px;
@@ -964,19 +967,19 @@ export component OverlayBarWindow inherits Window {
                         text: root.tts-status;
                         font-size: 12px;
                         font-weight: 600;
-                        color: Theme.accent;
+                        color: Theme.text-secondary;
                         vertical-alignment: center;
                         horizontal-stretch: 1;
                     }
                 }
             }
-            // 30×30 to match the plaque height + a real hit-target; Stop is
-            // always red (resting tint) so it reads as STOP without hovering.
+            // 30×30 chip-language button; Stop uses the semantic Theme.danger as
+            // its resting tint so it reads as STOP at rest (no raw hex — §3.1).
             CompactIconBtn {
                 icon: @image-url("../assets/icons/stop.svg");
                 a11y: "Stop reading aloud";
-                tint: #ef4444;
-                accent: #ef4444;
+                tint: Theme.danger;
+                accent: Theme.danger;
                 clicked => { root.tts-stop-clicked(); }
             }
             CompactIconBtn {
