@@ -6,6 +6,7 @@
 
 pub mod ai;
 pub mod audio;
+pub mod components;
 pub mod config;
 pub mod conspect;
 pub mod events;

@@ -829,6 +829,33 @@ pub fn quality_model_present(root: &Path) -> bool {
     file_len(&quality_gguf_path(root)) >= GEMMA12_SIZE
 }
 
+/// True when the base E4B model is downloaded + complete (size matches the pin).
+/// This is the MINIMUM for local AI to answer; `quality_model_present` is the
+/// optional 12B on top. Mirrors `quality_model_present`; used by the components
+/// readiness API (a truncated file reads as absent, so the user is re-offered
+/// the download).
+#[must_use]
+pub fn base_model_present(root: &Path) -> bool {
+    file_len(&root.join("llama.cpp").join(GEMMA_FILE)) >= GEMMA_SIZE
+}
+
+/// The conventional GigaAM model directory under the local-AI root
+/// (`<root>/gigaam-v3`) — the SAME location the installer writes to. The
+/// readiness API uses this when `config.stt_gigaam_dir` is unset, so it agrees
+/// with where a fresh install lands (single source of truth for the path).
+#[must_use]
+pub fn gigaam_default_dir(root: &Path) -> PathBuf {
+    root.join("gigaam-v3")
+}
+
+/// True when a complete GigaAM model lives in `dir` (`model.int8.onnx` present
+/// at the pinned size). Mirrors the installer's own "needs download?" size check
+/// so the readiness API can't disagree with it; a truncated file reads as absent.
+#[must_use]
+pub fn gigaam_model_present(dir: &Path) -> bool {
+    file_len(&dir.join("model.int8.onnx")) >= GIGAAM_MODEL_SIZE
+}
+
 /// True when the 12B's OWN vision projector is downloaded AND complete. The UI
 /// uses it to show "download 12B vision" vs "vision ready". A truncated file
 /// reads as absent (the launch only attaches a present projector).

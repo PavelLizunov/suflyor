@@ -331,6 +331,21 @@ pub struct Config {
     #[serde(default)]
     pub auto_tile_every_line: bool,
 
+    /// "Reader mode" tile mute — suppress AUTO-detected AI tiles (the
+    /// `TileKind::Ai` answers the detector spawns on each transcript line) so
+    /// the user can record + just listen without tiles popping up. Manual asks
+    /// (F6/F9/PTT), KB/snippets, summaries, and error tiles are NOT affected.
+    /// Default OFF.
+    #[serde(default)]
+    pub suppress_tiles: bool,
+
+    /// Collapse the wide (~1200px) overlay bar to a compact read-aloud pill
+    /// (read-aloud status + Stop + Expand). For using the app purely as a
+    /// text-to-speech reader. Persisted so the bar reopens in the chosen size.
+    /// Default OFF (full bar).
+    #[serde(default)]
+    pub compact_bar: bool,
+
     // NOTE: the legacy `hotkey_*` (F9/F10/F11/F12) and `manual_ask_mode` and
     // `custom_css` fields were REMOVED (P1.3). They were dead config that never
     // matched runtime behaviour — the app uses FIXED hotkeys (F1/F3/F4/F6/F8/F9/
@@ -553,6 +568,8 @@ impl Config {
             max_session_cost_usd: default_max_session_cost_usd(),
             detector_skip_mic: default_detector_skip_mic(),
             auto_tile_every_line: false,
+            suppress_tiles: false,
+            compact_bar: false,
             tile_body_opacity: default_tile_body_opacity(),
         }
     }
