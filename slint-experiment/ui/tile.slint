@@ -312,21 +312,25 @@ export component TileWindow inherits Window {
                                 if root.can-regenerate: TileMenuRow {
                                     icon: @image-url("../assets/icons/refresh.svg");
                                     label: @tr("Regenerate");
+                                    // Fire the action FIRST, then close — calling
+                                    // close() before the callback tears down the
+                                    // popup subtree and drops the rest of the
+                                    // handler (Slint PopupWindow gotcha).
                                     clicked => {
-                                        overflow-popup.close();
                                         if (!root.followup-busy) {
                                             root.regenerate-clicked();
                                         }
+                                        overflow-popup.close();
                                     }
                                 }
                                 if root.can-escalate: TileMenuRow {
                                     icon: @image-url("../assets/icons/brain.svg");
                                     label: @tr("Smart cloud");
                                     clicked => {
-                                        overflow-popup.close();
                                         if (!root.followup-busy) {
                                             root.escalate-clicked();
                                         }
+                                        overflow-popup.close();
                                     }
                                 }
                             }
