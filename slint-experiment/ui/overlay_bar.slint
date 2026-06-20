@@ -486,9 +486,12 @@ export component OverlayBarWindow inherits Window {
     // for using the app purely as a text-to-speech reader. Persisted via
     // config.compact_bar; Rust resizes the bar window on toggle.
     in-out property <bool> compact-bar: false;
-    // Label shown in the compact pill. Static "TTS" reader-mode marker for now;
-    // live speaking/paused status (set from Rust) is a planned follow-up.
+    // Label shown in the compact pill. "TTS"/"Готово" neutral; Rust updates it to
+    // "Читает" / "Пауза" / error with a matching `tts-status-color`.
     in-out property <string> tts-status: "TTS";
+    // Status colour for the compact pill text (neutral by default; Rust sets
+    // green/blue=reading, warning=paused, danger=error per state).
+    in-out property <brush> tts-status-color: Theme.text-secondary;
 
     // ===== Callbacks =====
     callback mic-toggle-clicked();
@@ -925,13 +928,14 @@ export component OverlayBarWindow inherits Window {
         // toggle so it stops eating the screen. The global Shift+Alt+1/2/3
         // read-aloud hotkeys work regardless of this layout.
         if root.compact-bar : HorizontalLayout {
-            padding: 6px;
+            // 6px horizontal outer padding; the 30px elements centre vertically
+            // in the 46px window. spacing 6px; scheme: [девочка+пингвин · статус] [Stop] [Expand].
+            padding-left: 6px;
+            padding-right: 6px;
             spacing: 6px;
             Rectangle {
-                // Reader-mode plaque — restrained NEUTRAL surface (semantic
-                // tokens, not a flood of accent): bg-elevated + border-strong,
-                // matching the bar's calm palette. Decoupled from status-color so
-                // it doesn't turn yellow while recording (it's a TTS pill).
+                // Left plaque — fills the remaining width; the WHOLE plaque is the
+                // drag zone (no separate grip). Restrained neutral surface.
                 background: Theme.bg-elevated;
                 border-color: Theme.border-strong;
                 border-width: 1px;
@@ -952,28 +956,33 @@ export component OverlayBarWindow inherits Window {
                 }
                 HorizontalLayout {
                     padding-left: 8px;
-                    padding-right: 8px;
-                    spacing: 6px;
-                    BrandStateMark {
-                        assistant-active: root.ai-streaming;
-                        mark-size: 20px;
-                    }
-                    // Drag affordance — same 6-dot grip as the full bar, so the
-                    // user can see (and the help mentions) where to drag.
-                    IconSlot {
-                        icon: @image-url("../assets/icons/grip.svg");
+                    padding-right: 10px;
+                    spacing: 8px;
+                    // Brand mark: girl + penguin together (brand-duo-compact),
+                    // 24×24, contain (no crop), tinted per theme via colorize
+                    // (light on dark themes / dark on light).
+                    VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 0;
+                        Image {
+                            source: @image-url("../assets/brand-duo-compact.svg");
+                            colorize: Theme.text-primary;
+                            width: 24px;
+                            height: 24px;
+                            image-fit: contain;
+                        }
                     }
                     Text {
                         text: root.tts-status;
                         font-size: 12px;
                         font-weight: 600;
-                        color: Theme.text-secondary;
+                        color: root.tts-status-color;
                         vertical-alignment: center;
                         horizontal-stretch: 1;
                     }
                 }
             }
-            // 30×30 chip-language button; Stop uses the semantic Theme.danger as
+            // 30×30 chip-language buttons; Stop uses the semantic Theme.danger as
             // its resting tint so it reads as STOP at rest (no raw hex — §3.1).
             CompactIconBtn {
                 icon: @image-url("../assets/icons/stop.svg");
