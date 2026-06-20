@@ -3505,7 +3505,12 @@ fn spawn_relaunch() -> bool {
 /// width and mis-center.
 fn apply_bar_size(overlay: &OverlayBarWindow, compact: bool) {
     let (w, h) = if compact {
-        (340.0_f32, 46.0_f32)
+        // Narrow SESSION strip (Glacier redesign): status pill + спросить +
+        // захватить + timer + expand in one row, over the live-status footer —
+        // two 22px rows like the full bar, just fewer chips. 500×64 fits that
+        // row without crowding; kept in sync with overlay_bar.slint's compact
+        // min-width (480) + preferred-height (64).
+        (500.0_f32, 64.0_f32)
     } else {
         // 64 (was 86) — matches overlay_bar.slint preferred-height; trims the
         // empty vertical band around the 22px chip row (design review #1).

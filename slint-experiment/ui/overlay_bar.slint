@@ -116,50 +116,6 @@ component Chip inherits Rectangle {
     }
 }
 
-// Compact reader-mode action button — the SAME visual language as the bar
-// `Chip` (radius 10, the identical transparent→hover→pressed bg/border formula,
-// all semantic tokens), just a bigger 30×30 hit-target so the compact pill has
-// one control height. `tint` is the RESTING icon colour (Stop = Theme.danger so
-// it reads as STOP at rest; Expand = text-secondary, like a resting chip);
-// `accent` drives the hover/press bg + border, like a chip's accent.
-component CompactIconBtn inherits Rectangle {
-    in property <image> icon;
-    in property <string> a11y;
-    in property <color> tint: Theme.text-secondary;
-    in property <color> accent: Theme.accent;
-    callback clicked();
-
-    accessible-role: button;
-    accessible-label: a11y;
-    width: 30px;
-    height: 30px;
-    border-radius: 10px;
-    border-width: 1px;
-    border-color: cta.has-hover ? root.accent.with-alpha(0.6) : Theme.border-strong;
-    background: cta.pressed
-        ? root.accent.with-alpha(0.34)
-        : (cta.has-hover ? Theme.border-strong.with-alpha(0.22) : transparent);
-    horizontal-stretch: 0;
-    animate background { duration: 80ms; }
-
-    Image {
-        source: root.icon;
-        // Constant resting tint — the bg/border carry the hover/press feedback,
-        // exactly like the bar Chip (whose icon colour only flips on the
-        // persistent `active`, never on hover).
-        colorize: root.tint;
-        width: 16px;
-        height: 16px;
-        image-fit: contain;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-    }
-    cta := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.clicked(); }
-    }
-}
-
 // Active-indicator chip: chip with a small pulsing dot prefix that
 // represents an "active" / "live" capture state. Used for mic + sys.
 component LiveChip inherits Rectangle {
@@ -388,10 +344,13 @@ export component OverlayBarWindow inherits Window {
     // around one status line (design review #1). Kept in sync with apply_bar_size
     // in overlay_host.rs.
     preferred-height: 64px;
-    // Relax the min-width in compact "reader" mode so the runtime set_size(340)
-    // isn't clamped back up (Slint propagates min-width to the OS as a minimum
-    // inner size). Full bar keeps 720 so its chip row never collapses.
-    min-width: root.compact-bar ? 300px : 720px;
+    // Relax the min-width in compact "narrow session" mode so the runtime
+    // set_size(500) isn't clamped back up (Slint propagates min-width to the OS
+    // as a minimum inner size). Compact still needs room for status + спросить +
+    // захватить + timer + expand in one row, so 480 (not the old 300 reader
+    // pill). Full bar keeps 720 so its chip row never collapses. Kept in sync
+    // with apply_bar_size in overlay_host.rs.
+    min-width: root.compact-bar ? 480px : 720px;
 
     // Status pill text (idle / recording / etc).
     in-out property <string> status-text: "idle";
@@ -923,94 +882,173 @@ export component OverlayBarWindow inherits Window {
         }
         }
 
-        // ===== Compact "reader mode" pill =====
-        // When collapsed, the whole bar is just: read-aloud status (also the
-        // drag handle) + Stop + Expand. Rust resizes the window to ~340px on
-        // toggle so it stops eating the screen. The global Shift+Alt+1/2/3
-        // read-aloud hotkeys work regardless of this layout.
-        if root.compact-bar : HorizontalLayout {
-            // 6px horizontal outer padding; the 30px elements centre vertically
-            // in the 46px window. spacing 6px; scheme: [девочка+пингвин · статус] [Stop] [Expand].
-            padding-left: 6px;
-            padding-right: 6px;
-            spacing: 6px;
-            Rectangle {
-                // Left plaque — fills the remaining width; the WHOLE plaque is the
-                // drag zone. «Glacier» state = colour (mockup .tts-pill): NEUTRAL
-                // at rest (готово), green while reading, amber on pause, red on
-                // error — the whole pill tints, with a smooth fade (no jumps on
-                // status change). Idle stays neutral (not flooded with accent).
-                background: root.tts-status-kind == 1 ? Theme.success.with-alpha(0.10)
-                    : root.tts-status-kind == 2 ? Theme.warning.with-alpha(0.10)
-                    : root.tts-status-kind == 3 ? Theme.danger.with-alpha(0.10)
-                    : Theme.bg-elevated;
-                border-color: root.tts-status-kind == 1 ? Theme.success.with-alpha(0.55)
-                    : root.tts-status-kind == 2 ? Theme.warning.with-alpha(0.55)
-                    : root.tts-status-kind == 3 ? Theme.danger.with-alpha(0.55)
-                    : Theme.border-strong;
-                border-width: 1px;
-                border-radius: 10px;
-                height: 30px;
-                horizontal-stretch: 1;
-                animate background, border-color { duration: 200ms; }
-                TouchArea {
-                    mouse-cursor: grab;
-                    pointer-event(ev) => {
-                        if (ev.button == PointerEventButton.left
-                            && ev.kind == PointerEventKind.down) {
-                            root.drag-start-requested();
+        // ===== Compact bar — narrow session strip =====
+        // Per the «Glacier» redesign reference, compact is "the same bar with its
+        // groups collapsed" (one window, the `compact` flag) — NOT a TTS reader.
+        // It keeps the session status pill (drag handle) + the two key push-to-
+        // record actions (спросить = your mic, захватить = system audio) + the
+        // session timer + an Expand button, over the same live-status footer as
+        // the full bar. The full action set returns on Expand. Read-aloud is
+        // unaffected — the global Shift+Alt+1/2/3 hotkeys work regardless of this
+        // layout (there is no on-bar Stop here, by design).
+        if root.compact-bar : VerticalLayout {
+            padding: 6px;
+            spacing: 4px;
+
+            // ── Action row: status (drag) · спросить · захватить · таймер · развернуть ──
+            HorizontalLayout {
+                padding-left: 2px;
+                padding-right: 2px;
+                spacing: 6px;
+
+                // Status pill — DOUBLES AS DRAG HANDLE (same pattern as the full
+                // bar: only the pill is the drag zone, so it can't shadow the
+                // sibling buttons' TouchAreas). Tinted by the live session state.
+                Rectangle {
+                    background: root.status-color.with-alpha(0.18);
+                    border-color: root.status-color;
+                    border-width: 1px;
+                    border-radius: 10px;
+                    height: 22px;
+                    // Natural width like the full bar pill (NOT stretched) so the
+                    // pill is the SAME length in both modes; the spring spacer
+                    // below absorbs the slack and pushes Expand to the right edge.
+                    horizontal-stretch: 0;
+                    // Cap the pill so an unusually long / error status elides (…)
+                    // instead of growing past the narrow 500px compact window and
+                    // clipping the right-edge chips. Short statuses stay well under
+                    // this, so the normal look is unchanged (full bar has 1200px,
+                    // so it never needs the cap).
+                    max-width: 150px;
+                    TouchArea {
+                        mouse-cursor: grab;
+                        pointer-event(ev) => {
+                            if (ev.button == PointerEventButton.left
+                                && ev.kind == PointerEventKind.down) {
+                                root.drag-start-requested();
+                            }
+                        }
+                        moved => {
+                            if (self.pressed) { root.drag-moved(); }
                         }
                     }
-                    moved => {
-                        if (self.pressed) { root.drag-moved(); }
-                    }
-                }
-                HorizontalLayout {
-                    padding-left: 8px;
-                    padding-right: 10px;
-                    spacing: 8px;
-                    // Brand mark: girl + penguin together (brand-duo-compact),
-                    // 24×24, contain (no crop), tinted per theme via colorize
-                    // (light on dark themes / dark on light).
-                    VerticalLayout {
-                        alignment: center;
-                        horizontal-stretch: 0;
-                        Image {
-                            source: @image-url("../assets/brand-duo-compact.svg");
-                            colorize: Theme.text-primary;
-                            width: 24px;
-                            height: 24px;
-                            image-fit: contain;
+                    HorizontalLayout {
+                        // PIXEL-IDENTICAL to the full bar's status pill — same
+                        // brand mark, grip, order and padding/spacing — so the
+                        // left brand+grip block doesn't change at all on the
+                        // compact toggle (no icon difference between modes).
+                        padding-left: 4px;
+                        padding-right: 8px;
+                        spacing: 4px;
+                        // Brand state mark — the SAME element the full bar uses
+                        // (was a separate дуо icon; unified for zero visual diff;
+                        // pulses on ai-streaming exactly like the full bar).
+                        BrandStateMark {
+                            assistant-active: root.ai-streaming;
+                            mark-size: 22px;
+                        }
+                        // Grip — AFTER the brand mark, mirroring the full bar's
+                        // [brand · grip · status] order (constraint #2: keep it).
+                        IconSlot {
+                            icon: @image-url("../assets/icons/grip.svg");
+                            tint: Theme.accent;
+                            glyph-size: 12px;
+                            slot-width: 12px;
+                            slot-height: 22px;
+                        }
+                        Text {
+                            text: root.status-text;
+                            font-size: 11px;
+                            font-weight: 600;
+                            color: root.status-color;
+                            vertical-alignment: center;
+                            // Elide a long status within the capped pill so it can
+                            // never overflow the narrow compact window. Short
+                            // statuses are well under the cap, so no visible change.
+                            overflow: elide;
+                            horizontal-stretch: 1;
                         }
                     }
-                    Text {
-                        text: root.tts-status;
-                        font-size: 12px;
-                        font-weight: 600;
-                        // kind → Theme colour: 1 reading=accent, 2 paused=warning,
-                        // 3 error=danger, else neutral.
-                        color: root.tts-status-kind == 1 ? Theme.accent
-                            : root.tts-status-kind == 2 ? Theme.warning
-                            : root.tts-status-kind == 3 ? Theme.danger
-                            : Theme.text-secondary;
-                        vertical-alignment: center;
-                        horizontal-stretch: 1;
-                    }
+                }
+
+                // спросить — hold to record YOUR voice (mic) → STT → AI. Same
+                // callbacks as the full bar's push-to-record button.
+                RecordBtn {
+                    icon: @image-url("../assets/icons/mic.svg");
+                    has-icon: true;
+                    label: @tr("ask");
+                    accent: Theme.success;
+                    recording: root.mic-recording;
+                    pressed => { root.ptt-mic-pressed(); }
+                    released => { root.ptt-mic-released(); }
+                }
+                // захватить — hold to record THEM (system audio) → STT → AI.
+                RecordBtn {
+                    icon: @image-url("../assets/icons/speaker.svg");
+                    has-icon: true;
+                    label: @tr("grab");
+                    accent: Theme.accent;
+                    recording: root.sys-recording;
+                    pressed => { root.ptt-sys-pressed(); }
+                    released => { root.ptt-sys-released(); }
+                }
+                // Timer — start/stop the session; shows the running clock in session.
+                Chip {
+                    icon: root.timer-active
+                        ? @image-url("../assets/icons/stop.svg")
+                        : @image-url("../assets/icons/play.svg");
+                    has-icon: true;
+                    label: root.timer-active ? root.timer-label : @tr("start");
+                    active: root.timer-active;
+                    accent: #fbbf24;
+                    clicked => { root.timer-toggle-clicked(); }
+                }
+                // Spring — absorbs the slack so the status pill stays natural-
+                // width (identical to the full bar) and Expand sits at the right
+                // edge, mirroring the full bar's window-control placement.
+                Rectangle { horizontal-stretch: 1; min-width: 8px; }
+                // Expand — restore the full bar (full action set).
+                Chip {
+                    icon: @image-url("../assets/icons/maximize.svg");
+                    has-icon: true;
+                    a11y: "Expand the bar";
+                    accent: #38bdf8;
+                    clicked => { root.compact-toggle-clicked(); }
                 }
             }
-            // 30×30 chip-language buttons; Stop uses the semantic Theme.danger as
-            // its resting tint so it reads as STOP at rest (no raw hex — §3.1).
-            CompactIconBtn {
-                icon: @image-url("../assets/icons/stop.svg");
-                a11y: "Stop reading aloud";
-                tint: Theme.danger;
-                accent: Theme.danger;
-                clicked => { root.tts-stop-clicked(); }
-            }
-            CompactIconBtn {
-                icon: @image-url("../assets/icons/maximize.svg");
-                a11y: "Expand the bar";
-                clicked => { root.compact-toggle-clicked(); }
+
+            // ── Live-status footer — same readout as the full bar's bottom row. ──
+            HorizontalLayout {
+                padding-left: 4px;
+                padding-right: 4px;
+                spacing: 6px;
+                Text {
+                    text: root.active-stack;
+                    font-size: 10px;
+                    font-weight: 600;
+                    color: Theme.accent;
+                    vertical-alignment: center;
+                    horizontal-stretch: 0;
+                }
+                Rectangle {
+                    width: 8px;
+                    height: 8px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 4px;
+                    background: root.last-transcript-source == "mic"
+                        ? Theme.success
+                        : (root.last-transcript-source == "sys" ? Theme.accent : Theme.border-strong);
+                }
+                Text {
+                    text: root.last-transcript-line == ""
+                        ? @tr("waiting for transcript... (mic/sys → STT)")
+                        : root.last-transcript-line;
+                    font-size: 11px;
+                    color: root.last-transcript-line == "" ? Theme.text-muted : Theme.text-secondary;
+                    overflow: elide;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
             }
         }
     }
