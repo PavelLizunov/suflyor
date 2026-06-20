@@ -1243,6 +1243,13 @@ pub(crate) fn populate_token_status(
     win.set_update_download_url(blank());
     win.set_update_checking(false);
     win.set_memory_status(blank());
+    // «Компоненты» tab — the per-row install progress (busy index + status text)
+    // is transient (set by the install worker). Reset BOTH so a reopened Settings
+    // can't show a stale "Подготовка…" on a row whose install already finished
+    // (the project's #1 reused-window stale-status class — caught by
+    // settings_reset_guard).
+    win.set_component_busy_status(blank());
+    win.set_component_busy_index(-1);
     win.set_ai_prompt_cache(c.ai_prompt_cache);
     win.set_ai_provider_index(i32::from(c.ai_provider == "local"));
     win.set_ai_local_base_url_input(SharedString::from(c.ai_local_base_url.clone()));
