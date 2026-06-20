@@ -116,6 +116,48 @@ component Chip inherits Rectangle {
     }
 }
 
+// Compact reader-mode action button (design review #5). A 30×30 square icon
+// button matching the status-plaque height so the compact pill has ONE control
+// height (the shared 22px Chip read as smaller + had a tiny hit-target). `tint`
+// is the RESTING icon colour: Stop passes red so it reads as STOP at a glance,
+// not only on hover.
+component CompactIconBtn inherits Rectangle {
+    in property <image> icon;
+    in property <string> a11y;
+    in property <color> tint: Theme.text-secondary;
+    in property <color> accent: Theme.accent;
+    callback clicked();
+
+    accessible-role: button;
+    accessible-label: a11y;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: cta.has-hover ? root.accent.with-alpha(0.6) : Theme.border-strong;
+    background: cta.pressed
+        ? root.accent.with-alpha(0.34)
+        : (cta.has-hover ? Theme.border-strong.with-alpha(0.22) : transparent);
+    horizontal-stretch: 0;
+    animate background { duration: 80ms; }
+
+    Image {
+        source: root.icon;
+        // Hover brightens toward `accent`; otherwise the resting `tint` (red for
+        // Stop) so the colour is meaningful without interaction.
+        colorize: cta.has-hover ? root.accent : root.tint;
+        width: 16px;
+        height: 16px;
+        image-fit: contain;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+    cta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
 // Active-indicator chip: chip with a small pulsing dot prefix that
 // represents an "active" / "live" capture state. Used for mic + sys.
 component LiveChip inherits Rectangle {
@@ -881,8 +923,11 @@ export component OverlayBarWindow inherits Window {
             padding: 6px;
             spacing: 6px;
             Rectangle {
-                background: root.status-color.with-alpha(0.18);
-                border-color: root.status-color;
+                // Reader-mode plaque colour is FIXED accent — was tied to
+                // status-color, which turns yellow while recording; confusing on
+                // what is a TTS/read-aloud pill (design review #5).
+                background: Theme.accent.with-alpha(0.16);
+                border-color: Theme.accent.with-alpha(0.7);
                 border-width: 1px;
                 border-radius: 10px;
                 height: 30px;
@@ -916,22 +961,23 @@ export component OverlayBarWindow inherits Window {
                         text: root.tts-status;
                         font-size: 12px;
                         font-weight: 600;
-                        color: root.status-color;
+                        color: Theme.accent;
                         vertical-alignment: center;
                         horizontal-stretch: 1;
                     }
                 }
             }
-            Chip {
+            // 30×30 to match the plaque height + a real hit-target; Stop is
+            // always red (resting tint) so it reads as STOP without hovering.
+            CompactIconBtn {
                 icon: @image-url("../assets/icons/stop.svg");
-                has-icon: true;
                 a11y: "Stop reading aloud";
+                tint: #ef4444;
                 accent: #ef4444;
                 clicked => { root.tts-stop-clicked(); }
             }
-            Chip {
+            CompactIconBtn {
                 icon: @image-url("../assets/icons/maximize.svg");
-                has-icon: true;
                 a11y: "Expand the bar";
                 clicked => { root.compact-toggle-clicked(); }
             }

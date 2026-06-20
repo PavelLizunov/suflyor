@@ -733,6 +733,12 @@ export component SettingsWindow inherits Window {
                 image-fit: contain;
                 x: parent.width - self.width - 18px;
                 y: parent.height - self.height - 22px;
+                // Hidden on the DENSE tabs (AI bridge 11 / Auto-tiles 7 /
+                // Hotkeys 2 / Memory 14) where the watermark shows through behind
+                // fields, cards and lists (design review #3). Kept on the airy
+                // tabs where it reads as a tasteful brand mark.
+                visible: root.active-tab != 11 && root.active-tab != 7
+                    && root.active-tab != 2 && root.active-tab != 14;
             }
             ScrollView {
                 VerticalLayout {
@@ -1367,10 +1373,16 @@ export component SettingsWindow inherits Window {
                             border-radius: 8px;
                             border-width: 1px;
                             border-color: Theme.border;
-                            height: 50px;
+                            // min-height (not fixed) so a long where-to-install
+                            // hint that wraps to 2 lines grows the card instead of
+                            // clipping (design review #8). Vertical padding keeps
+                            // wrapped text off the borders.
+                            min-height: 50px;
                             HorizontalLayout {
                                 padding-left: 12px;
                                 padding-right: 12px;
+                                padding-top: 8px;
+                                padding-bottom: 8px;
                                 spacing: 10px;
                                 Rectangle {
                                     width: 10px;
