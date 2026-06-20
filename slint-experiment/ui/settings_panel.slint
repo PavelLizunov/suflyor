@@ -168,7 +168,7 @@ component NavItem inherits Rectangle {
     height: 26px;
     border-radius: 4px;
     background: root.active
-        ? Theme.accent.with-alpha(0.13)
+        ? Theme.accent-subtle
         : (ta.has-hover ? Theme.bg-elevated : transparent);
     animate background { duration: 120ms; }
     // active left-accent bar
