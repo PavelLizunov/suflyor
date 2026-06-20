@@ -1120,3 +1120,6 @@ msgstr "Что установлено для офлайн-ИИ — в одном
 
 msgid "Install"
 msgstr "Установить"
+
+msgid "Open"
+msgstr "Открыть"

@@ -1103,6 +1103,13 @@ pub(crate) fn populate_component_rows(
         .map(|c| {
             // Light, single-call installers wired inline in the hub.
             let installable = matches!(c.kind, ComponentKind::Voices | ComponentKind::Ocr);
+            // «Открыть» jump target for the heavy components (their full installer
+            // with progress + cancel lives in a dedicated panel); -1 = inline.
+            let jump_tab: i32 = match c.kind {
+                ComponentKind::Engine | ComponentKind::LocalModel => 11, // AI мост
+                ComponentKind::Stt => 12,                                // STT
+                ComponentKind::Voices | ComponentKind::Ocr => -1,
+            };
             let (name, hint) = match c.kind {
                 ComponentKind::Engine => (
                     "Движок (llama.cpp)",
@@ -1127,6 +1134,7 @@ pub(crate) fn populate_component_rows(
                 installed: c.installed,
                 hint: SharedString::from(hint),
                 installable,
+                jump_tab,
             }
         })
         .collect();

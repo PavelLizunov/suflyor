@@ -80,6 +80,9 @@ export struct ComponentRow {
     // (voices / OCR). The heavy ones (engine / model / STT) keep their dedicated
     // panels with progress + cancel, so this is false for them.
     installable: bool,
+    // Settings tab-index this card jumps to via «Открыть ›» (engine/model → AI
+    // мост 11, STT → STT 12). -1 = no jump (voices/OCR install inline instead).
+    jump-tab: int,
 }
 
 // Phase E6 v40 — toggle SWITCH (borrowed from the Claude Design bundle:
@@ -1430,7 +1433,24 @@ export component SettingsWindow inherits Window {
                                         }
                                     }
                                 }
-                                if idx != root.component-busy-index && (!row.installable || row.installed) : Text {
+                                // Heavy components (engine / model / STT) → jump to
+                                // their dedicated panel where the full installer
+                                // (progress + cancel) lives, so every card is
+                                // actionable. The status dot still shows installed-ness.
+                                if idx != root.component-busy-index
+                                    && !(row.installable && !row.installed)
+                                    && row.jump-tab >= 0 : VerticalLayout {
+                                    alignment: center;
+                                    horizontal-stretch: 0;
+                                    Button {
+                                        text: @tr("Open");
+                                        clicked => {
+                                            root.active-tab = row.jump-tab;
+                                            root.tab-selected(row.jump-tab);
+                                        }
+                                    }
+                                }
+                                if idx != root.component-busy-index && (!row.installable || row.installed) && row.jump-tab < 0 : Text {
                                     text: row.installed ? @tr("installed") : @tr("not installed");
                                     font-size: 11px;
                                     font-weight: 600;
