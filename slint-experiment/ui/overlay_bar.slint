@@ -441,17 +441,10 @@ export component OverlayBarWindow inherits Window {
     in-out property <bool> summary-busy: false;
 
     // ===== Compact "reader mode" =====
-    // Collapse the wide bar to a small read-aloud pill (status + Stop + Expand)
-    // for using the app purely as a text-to-speech reader. Persisted via
-    // config.compact_bar; Rust resizes the bar window on toggle.
+    // Collapse the wide bar to a narrow session strip (status pill + спросить /
+    // захватить + timer + Expand). Persisted via config.compact_bar; Rust resizes
+    // the bar window on toggle.
     in-out property <bool> compact-bar: false;
-    // Label shown in the compact pill. "TTS"/"Готово" neutral; Rust updates it to
-    // "Читает" / "Пауза" with a matching `tts-status-kind`.
-    in-out property <string> tts-status: "TTS";
-    // Status KIND set from Rust (0 neutral, 1 reading, 2 paused, 3 error). The
-    // .slint maps it to a Theme colour (scheme-aware) so Rust never touches raw
-    // colours.
-    in-out property <int> tts-status-kind: 0;
 
     // ===== Callbacks =====
     callback mic-toggle-clicked();
@@ -485,9 +478,8 @@ export component OverlayBarWindow inherits Window {
     // drag-start-requested (anchor), move-while-pressed → drag-moved.
     callback drag-start-requested();
     callback drag-moved();
-    // Compact "reader mode": collapse/expand the bar; ⏹ stop read-aloud.
+    // Compact mode: collapse/expand the bar.
     callback compact-toggle-clicked();
-    callback tts-stop-clicked();
 
     Rectangle {
         background: Theme.bg-surface.with-alpha(0.92);

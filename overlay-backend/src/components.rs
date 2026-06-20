@@ -109,15 +109,6 @@ pub fn status(cfg: &Config) -> Vec<ComponentStatus> {
     vec![engine, local_model, stt, voices, ocr]
 }
 
-/// True when at least one core component (engine OR model) is missing — the
-/// readiness dashboard uses this to decide whether to nag the user on launch.
-#[must_use]
-pub fn any_core_missing(cfg: &Config) -> bool {
-    status(cfg).iter().any(|c| {
-        matches!(c.kind, ComponentKind::Engine | ComponentKind::LocalModel) && !c.installed
-    })
-}
-
 /// Pure: engine detail from the optional build number.
 fn engine_detail(build: Option<u32>) -> String {
     build.map(|b| format!("b{b}")).unwrap_or_default()
