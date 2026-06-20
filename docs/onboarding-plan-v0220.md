@@ -38,9 +38,9 @@ Each O-phase: own 5-layer gate + adversarial review + live smoke. Release v0.22.
 
 ## BACKLOG (consolidated 2026-06-20) — single source of truth for what's left
 
-### Onboarding (functional) — IN PROGRESS
-- **O2-full** (after slice 1 `effb9da`): per-card «Открыть ›» jump on engine/model/STT cards (set active-tab to their settings tab — engine/model→AI мост 11, STT→STT 12) so every card is actionable; then **slim «AI мост»** tab (move readiness clutter out; keep provider/model/vision/Test). ← **STARTING NOW.**
-- **O3** — readiness dashboard at launch: if `components::any_core_missing(cfg)` (already built), show a «Готовность» panel/wizard step (installed-vs-needed) + «Открыть Компоненты». `wizard.slint` scaffold exists.
+### Onboarding (functional)
+- **O2-full ✅ DONE**: jump-buttons (`<commit>` "Открыть jump") — every «Компоненты» card actionable: voices/OCR inline install (`effb9da`), engine/model/STT «Открыть» → their tab (engine/model→AI мост 11, STT→STT 12). `ComponentRow.jump-tab`; 4-way action area. **"Slim AI мост" reclassified → P2 #7 density**: the heavy installers must STAY in AI мост (that's where «Открыть» lands), so it's a layout-declutter (subjective, user's eye), not a removal.
+- **O3 — readiness dashboard at launch (NEXT, needs a UX decision)**: `components::any_core_missing(cfg)` is built. The trap: engine/model missing is NORMAL for a cloud-only user (local AI is optional), so an unconditional nag is wrong. Proposed gate: prompt ONLY when `cfg.ai_provider == "local"` (user chose local) AND core missing. Surface options: (a) one-time dismissible info-tile (reuse tile infra + a `readiness_notice_shown` config flag) — least intrusive; (b) auto-open Settings→Компоненты once; (c) mirror `recover_offer.slint` as a small offer window. First-run already auto-opens the wizard (overlay_host.rs:3318). **Recommend (a).** Implement fresh — needs the config flag + startup hook + the anti-annoyance gate, best with a clear head + a quick user nod on aggressiveness.
 - **O4** — wizard step → Компоненты; keep extending F1 as features land.
 - **O5** — process guard → promote to CLAUDE.md (new shortcut ⇒ update help.slint; new install ⇒ add to Компоненты hub + wizard).
 
