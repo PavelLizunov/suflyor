@@ -1117,3 +1117,6 @@ msgstr "не установлено"
 
 msgid "What's installed for offline AI — one place to see what's ready. Each piece is downloaded on demand from its own tab (shown below each item)."
 msgstr "Что установлено для офлайн-ИИ — в одном месте видно, что готово. Каждый компонент скачивается по необходимости в своей вкладке (показана под каждым пунктом)."
+
+msgid "Install"
+msgstr "Установить"

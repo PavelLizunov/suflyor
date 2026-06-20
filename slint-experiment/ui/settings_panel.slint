@@ -76,6 +76,10 @@ export struct ComponentRow {
     detail: string,
     installed: bool,
     hint: string,
+    // True for the light, single-call installers wired INLINE in the hub
+    // (voices / OCR). The heavy ones (engine / model / STT) keep their dedicated
+    // panels with progress + cancel, so this is false for them.
+    installable: bool,
 }
 
 // Phase E6 v40 — toggle SWITCH (borrowed from the Claude Design bundle:
@@ -233,6 +237,12 @@ export component SettingsWindow inherits Window {
     in-out property <[MemoryRow]> memory-items: [];
     // Onboarding «Компоненты» readiness rows (set by the controller on open).
     in-out property <[ComponentRow]> component-rows: [];
+    // Index of the row whose inline install is running (-1 = none) + its status
+    // line. The controller sets these while a hub install worker runs.
+    in-out property <int> component-busy-index: -1;
+    in-out property <string> component-busy-status;
+    // Fired when the user clicks a card's inline «Установить» (passes the row index).
+    callback component-install(int);
     in-out property <string> memory-status: "";
     callback memory-approve(int);
     callback memory-reject(int);
@@ -1352,7 +1362,7 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
-                        for row in root.component-rows : Rectangle {
+                        for row[idx] in root.component-rows : Rectangle {
                             background: Theme.bg-surface;
                             border-radius: 8px;
                             border-width: 1px;
@@ -1387,7 +1397,28 @@ export component SettingsWindow inherits Window {
                                         wrap: word-wrap;
                                     }
                                 }
-                                Text {
+                                // Action / status (right). Install in progress for
+                                // THIS row → live status; light installer not yet
+                                // installed → inline «Установить»; otherwise the
+                                // installed / not-installed label.
+                                if idx == root.component-busy-index : Text {
+                                    text: root.component-busy-status;
+                                    font-size: 11px;
+                                    color: Theme.accent;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 0;
+                                }
+                                if idx != root.component-busy-index && row.installable && !row.installed : VerticalLayout {
+                                    alignment: center;
+                                    horizontal-stretch: 0;
+                                    Button {
+                                        text: @tr("Install");
+                                        clicked => {
+                                            root.component-install(idx);
+                                        }
+                                    }
+                                }
+                                if idx != root.component-busy-index && (!row.installable || row.installed) : Text {
                                     text: row.installed ? @tr("installed") : @tr("not installed");
                                     font-size: 11px;
                                     font-weight: 600;

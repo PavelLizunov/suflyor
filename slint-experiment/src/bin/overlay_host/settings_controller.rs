@@ -147,6 +147,83 @@ pub(crate) fn open_settings(
         populate_component_rows(&win, &snap);
     }
 
+    // Onboarding «Компоненты» — inline install for the LIGHT, single-call
+    // installers (voices / OCR). The heavy ones (engine / model / STT) keep their
+    // dedicated panels with progress + cancel, so they have no inline button.
+    // Wired ONCE on the fresh window (the callback persists across reopens).
+    {
+        let weak = win.as_weak();
+        let cfg_inst = cfg.clone();
+        win.on_component_install(move |idx| {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            if w.get_component_busy_index() != -1 {
+                return; // one inline install at a time
+            }
+            w.set_component_busy_index(idx);
+            w.set_component_busy_status(SharedString::from("Подготовка…"));
+            let weak_done = w.as_weak();
+            let cfg_t = cfg_inst.clone();
+            std::thread::spawn(move || {
+                // Row order from components::status(): 0=engine 1=model 2=stt
+                // 3=voices 4=ocr. Only 3/4 are inline-installable here.
+                let result: std::result::Result<(), String> = match idx {
+                    3 => {
+                        let cancel = std::sync::atomic::AtomicBool::new(false);
+                        let weak_cb = weak_done.clone();
+                        let on = move |p: overlay_backend::tts_install::VoiceProgress| {
+                            let overlay_backend::tts_install::VoiceProgress::Step(s) = p;
+                            let weak_in = weak_cb.clone();
+                            let _ = slint::invoke_from_event_loop(move || {
+                                if let Some(w) = weak_in.upgrade() {
+                                    w.set_component_busy_status(SharedString::from(s));
+                                }
+                            });
+                        };
+                        overlay_backend::tts_install::install_voices(&cancel, &on)
+                            .map_err(|e| format!("{e:#}"))
+                    }
+                    4 => {
+                        let weak_cb = weak_done.clone();
+                        let on = move |p: overlay_backend::ocr_install::OcrProgress| {
+                            let overlay_backend::ocr_install::OcrProgress::Step(s) = p;
+                            let weak_in = weak_cb.clone();
+                            let _ = slint::invoke_from_event_loop(move || {
+                                if let Some(w) = weak_in.upgrade() {
+                                    w.set_component_busy_status(SharedString::from(s));
+                                }
+                            });
+                        };
+                        overlay_backend::ocr_install::install(&on).map_err(|e| format!("{e:#}"))
+                    }
+                    _ => Ok(()),
+                };
+                if let Err(e) = &result {
+                    // Log detail locally; the UI line stays generic (screen-shareable).
+                    diag!("[overlay-host] component install (idx={idx}) failed: {e}");
+                }
+                let failed = result.is_err();
+                let _ = slint::invoke_from_event_loop(move || {
+                    let Some(w) = weak_done.upgrade() else {
+                        return;
+                    };
+                    if failed {
+                        // Keep the row marked busy so the generic message shows; the
+                        // next Settings open clears it (populate resets busy-index).
+                        w.set_component_busy_status(SharedString::from(
+                            "Не удалось установить — проверьте интернет и повторите.",
+                        ));
+                    } else {
+                        // Refresh from live state — the just-installed row goes green.
+                        let snap = cfg_t.read();
+                        populate_component_rows(&w, &snap);
+                    }
+                });
+            });
+        });
+    }
+
     // Phase E6 v23 — populate the Audio tab's mic dropdown from real
     // WASAPI capture endpoints + select the saved device. User: "Audio
     // не подгружает реальные микрофоны".
@@ -1018,9 +1095,14 @@ pub(crate) fn populate_component_rows(
     snap: &overlay_backend::config::Config,
 ) {
     use overlay_backend::components::{status, ComponentKind};
+    // Clear any stuck inline-install busy state so a reopened window never shows
+    // a stale "Устанавливается…"/error from a previous open.
+    win.set_component_busy_index(-1);
     let rows: Vec<ComponentRow> = status(snap)
         .into_iter()
         .map(|c| {
+            // Light, single-call installers wired inline in the hub.
+            let installable = matches!(c.kind, ComponentKind::Voices | ComponentKind::Ocr);
             let (name, hint) = match c.kind {
                 ComponentKind::Engine => (
                     "Движок (llama.cpp)",
@@ -1044,6 +1126,7 @@ pub(crate) fn populate_component_rows(
                 detail: SharedString::from(c.detail.as_str()),
                 installed: c.installed,
                 hint: SharedString::from(hint),
+                installable,
             }
         })
         .collect();
