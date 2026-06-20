@@ -36,5 +36,20 @@ Gates: per-commit git-gate hook (fmt+clippy both crates) green; backend 332 test
 
 Each O-phase: own 5-layer gate + adversarial review + live smoke. Release v0.22.0 only on «релизь».
 
+## BACKLOG (consolidated 2026-06-20) — single source of truth for what's left
+
+### Onboarding (functional) — IN PROGRESS
+- **O2-full** (after slice 1 `effb9da`): per-card «Открыть ›» jump on engine/model/STT cards (set active-tab to their settings tab — engine/model→AI мост 11, STT→STT 12) so every card is actionable; then **slim «AI мост»** tab (move readiness clutter out; keep provider/model/vision/Test). ← **STARTING NOW.**
+- **O3** — readiness dashboard at launch: if `components::any_core_missing(cfg)` (already built), show a «Готовность» panel/wizard step (installed-vs-needed) + «Открыть Компоненты». `wizard.slint` scaffold exists.
+- **O4** — wizard step → Компоненты; keep extending F1 as features land.
+- **O5** — process guard → promote to CLAUDE.md (new shortcut ⇒ update help.slint; new install ⇒ add to Компоненты hub + wizard).
+
+### Design audit (docs/design-review-2026-06-20.md) — remaining
+- **#4 emoji → SVG (Rust-side)**: memory category glyphs (📝🔁⚙⭐📌 in `settings_memory.rs:200-205`, prefix every memory row — most visible), the ➕ memory statuses (`settings_memory.rs:76,112`), tile statuses (⏳ etc. in `tile_ask.rs`/`tile_ptt.rs`), bar 🔄 restart chip. NEEDS a style decision: SVG asset vs uniform «•» vs short text-tag vs keep. (Settings + capture-overlay emoji already cleaned in `7c8cf3f`.)
+- **P2 polish (subjective, taste + live-verify on user's monitor)**: #6 form label grid (TTS/Interface fixed label column 64-72px); #7 tab density (airy tabs → compact cards, dense → more height/ScrollView); #9 palette empty-state too big (shrink until results); #10 9-10px text → 11-12 for instructions; #11 bar chip click height 22px → 28-30 (NB conflicts with the new 64px bar height — re-measure); #12 tile header overloaded (3-4 persistent actions + overflow); #13 unify spacing to 4/8/12/16 grid. Take ONE at a time with the user's eye.
+
+### Older pending (pre-existing, low-pri)
+- `#135` F9/follow-up per-tile streams + lifecycle resets (deferred). `#145` audit minor correctness nits. `#180` P1.7 server-settings export+import preview. `#76` Settings Card/Row titled sections.
+
 ## Release protocol
 NEVER auto-publish. Build + self-gate + review + live smoke → show user evidence → wait for explicit «релизь» → then commit+push+`gh release`. Accumulate; no marathons. config.json holds live secrets — never print.
