@@ -487,11 +487,12 @@ export component OverlayBarWindow inherits Window {
     // config.compact_bar; Rust resizes the bar window on toggle.
     in-out property <bool> compact-bar: false;
     // Label shown in the compact pill. "TTS"/"Готово" neutral; Rust updates it to
-    // "Читает" / "Пауза" / error with a matching `tts-status-color`.
+    // "Читает" / "Пауза" with a matching `tts-status-kind`.
     in-out property <string> tts-status: "TTS";
-    // Status colour for the compact pill text (neutral by default; Rust sets
-    // green/blue=reading, warning=paused, danger=error per state).
-    in-out property <brush> tts-status-color: Theme.text-secondary;
+    // Status KIND set from Rust (0 neutral, 1 reading, 2 paused, 3 error). The
+    // .slint maps it to a Theme colour (scheme-aware) so Rust never touches raw
+    // colours.
+    in-out property <int> tts-status-kind: 0;
 
     // ===== Callbacks =====
     callback mic-toggle-clicked();
@@ -976,7 +977,12 @@ export component OverlayBarWindow inherits Window {
                         text: root.tts-status;
                         font-size: 12px;
                         font-weight: 600;
-                        color: root.tts-status-color;
+                        // kind → Theme colour: 1 reading=accent, 2 paused=warning,
+                        // 3 error=danger, else neutral.
+                        color: root.tts-status-kind == 1 ? Theme.accent
+                            : root.tts-status-kind == 2 ? Theme.warning
+                            : root.tts-status-kind == 3 ? Theme.danger
+                            : Theme.text-secondary;
                         vertical-alignment: center;
                         horizontal-stretch: 1;
                     }

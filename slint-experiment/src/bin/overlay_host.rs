@@ -1533,6 +1533,30 @@ fn main() -> Result<(), slint::PlatformError> {
     let events_for_poll = events.clone();
     let slint_rt_for_poll = slint_rt.clone();
     let rt_handle_for_poll = rt_handle.clone();
+    // Compact reader pill — live TTS status (Читает / Пауза / TTS) + colour kind.
+    // Polls the speaking estimate (tts::is_speaking) + the pause latch on a light
+    // 300 ms timer, so the pill reflects state without wiring every speak/pause/
+    // stop site. Only visible in compact mode; the guarded property set is cheap.
+    let weak_overlay_tts = overlay.as_weak();
+    let tts_status_timer = Timer::default();
+    tts_status_timer.start(TimerMode::Repeated, Duration::from_millis(300), move || {
+        let Some(ov) = weak_overlay_tts.upgrade() else {
+            return;
+        };
+        let (txt, kind): (&str, i32) = if is_paused() {
+            ("Пауза", 2)
+        } else if overlay_backend::tts::is_speaking() {
+            ("Читает", 1)
+        } else {
+            ("TTS", 0)
+        };
+        // Set only on change — txt + kind move together, so guard on kind.
+        if ov.get_tts_status_kind() != kind {
+            ov.set_tts_status_kind(kind);
+            ov.set_tts_status(SharedString::from(txt));
+        }
+    });
+
     let spawn_poll_timer = Timer::default();
     spawn_poll_timer.start(TimerMode::Repeated, Duration::from_millis(50), move || {
         // Phase E6 v19 — process at most 1 spawn request per 50 ms

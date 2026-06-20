@@ -299,6 +299,12 @@ pub(crate) fn reset_pause() {
     SPEAK_PAUSED.store(false, std::sync::atomic::Ordering::SeqCst);
 }
 
+/// Current pause latch (true = read-aloud paused). Drives the compact pill's
+/// live status ("Пауза") alongside `tts::is_speaking`.
+pub(crate) fn is_paused() -> bool {
+    SPEAK_PAUSED.load(std::sync::atomic::Ordering::SeqCst)
+}
+
 /// Read-aloud — wire a tile's 🔊 «Озвучить» + ⏯ pause/resume controls to the
 /// process-global neural TTS sidecar. Speaks ONLY the latest answer (never the
 /// prompts / earlier turns). Purely local — no network egress — so it stays safe
