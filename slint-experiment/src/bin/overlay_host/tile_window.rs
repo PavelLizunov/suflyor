@@ -56,8 +56,7 @@ pub(crate) static TILE_DISPLAY_SEQ: std::sync::atomic::AtomicUsize =
 /// time — keying the registry on it silently DROPPED the registration, and a
 /// closed/evicted tile's request was never cancelled (the user's "+ tile" spam
 /// kept the GPU busy + the queue full after close-all). A counter is ready now.
-pub(crate) static TILE_ID_SEQ: std::sync::atomic::AtomicI32 =
-    std::sync::atomic::AtomicI32::new(0);
+pub(crate) static TILE_ID_SEQ: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
 /// Next synchronous tile id (set on the TileWindow's `tile-id` property AND used
 /// as the abort-registry key).
@@ -154,7 +153,10 @@ mod cascade_tests {
         // edge (1400), y_base 100. x-room 1392 -> max_cycle_x 43; y-room 612 ->
         // max_cycle_y 25; tighter axis = 25.
         // A runaway raw_seq must PIN at 25, not march off-screen.
-        assert_eq!(cascade_cycle(100_000, 10, 1400, 100, 0, 1080, 360, dx, dy), 25);
+        assert_eq!(
+            cascade_cycle(100_000, 10, 1400, 100, 0, 1080, 360, dx, dy),
+            25
+        );
         // raw_seq below total_slots -> first batch, cycle 0.
         assert_eq!(cascade_cycle(5, 10, 1400, 100, 0, 1080, 360, dx, dy), 0);
         // Mid-range raw_seq stays at its natural (in-band) cycle.

@@ -1132,3 +1132,32 @@ msgstr "Умное облако"
 
 msgid "Close"
 msgstr "Закрыть"
+
+msgid "Window behaviour"
+msgstr "Поведение окна"
+
+msgid "Tile opacity"
+msgstr "Прозрачность тайла"
+
+# === Glacier SettingsCard section titles (E6 cycle 41) ===
+
+msgid "Language"
+msgstr "Язык"
+
+msgid "Colour scheme"
+msgstr "Цветовая схема"
+
+msgid "Setup"
+msgstr "Настройка"
+
+msgid "Read aloud"
+msgstr "Озвучка"
+
+msgid "Recording"
+msgstr "Запись"
+
+msgid "Storage"
+msgstr "Хранение"
+
+msgid "Personal memory"
+msgstr "Личная память"
