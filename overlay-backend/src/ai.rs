@@ -142,6 +142,15 @@ pub struct ImageUrl {
 }
 
 /// Streaming chat completion. Returns a Receiver that emits AiEvents.
+/// Caps how many AI requests touch the backend (local llama / cloud bridge) at
+/// once. A spam burst of "+ tile" used to fire the whole batch concurrently and
+/// — when the resulting overload made llama return connection errors — each
+/// request retried 3×, hammering the GPU long after the tiles were closed. Now
+/// at most this many run; the rest wait their turn (and are abortable before
+/// they ever send). 2 keeps a little concurrency (e.g. an auto-tile + a manual
+/// ask) without flooding a single GPU; a lone request still gets full speed.
+static AI_SEMAPHORE: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
+
 pub fn stream_chat(
     base_url: String,
     bearer: String,
@@ -152,6 +161,10 @@ pub fn stream_chat(
     let (tx, rx) = mpsc::channel::<AiEvent>(64);
 
     tokio::spawn(async move {
+        // Wait for a concurrency permit before touching the model so a spam burst
+        // can't flood the GPU. Held for the whole stream; dropped (freeing the
+        // slot) when the producer ends or is torn down by a closed receiver.
+        let _permit = AI_SEMAPHORE.acquire().await.ok();
         if let Err(e) =
             stream_inner(base_url, bearer, model, messages, max_tokens, tx.clone()).await
         {
@@ -522,6 +535,10 @@ async fn complete_with_usage_inner(
     max_tokens: u32,
     force_no_think: bool,
 ) -> Result<(String, TokenUsage)> {
+    // Hold a concurrency permit for the whole request (incl. retries) so a spam
+    // burst of "+ tile" / auto requests can't flood the GPU and self-amplify via
+    // the retry loop. Covers the live-answer AND structuring (summary) paths.
+    let _permit = AI_SEMAPHORE.acquire().await.ok();
     const MAX_ATTEMPTS: u32 = 3;
     let mut last_err: Option<anyhow::Error> = None;
     for attempt in 1..=MAX_ATTEMPTS {
