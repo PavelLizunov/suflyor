@@ -41,13 +41,104 @@ use super::{
 /// Atomic counter for tile-slot index — increments per spawn so
 /// successive tiles distribute across a 2-column grid on the right
 /// half of the chosen monitor.
-static TILE_SLOT_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+pub(crate) static TILE_SLOT_COUNTER: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
 
 /// Monotonic counter for the tile-title #N badge. Increments per
 /// spawn (never wraps) so the user can tell tiles apart in a busy
 /// session. Reset only at process restart.
 pub(crate) static TILE_DISPLAY_SEQ: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
+
+thread_local! {
+    /// Per-tile AI-task abort handles, keyed by the tile window's HWND (as
+    /// isize). A tile close / "close all" / cap-eviction aborts its in-flight
+    /// llama request so the GPU isn't left generating for a CLOSED tile — the
+    /// stress-test bug where spamming + closing tiles left the model "thinking"
+    /// and the GPU loaded. UI-thread only (every tile spawn + close path runs on
+    /// the Slint main thread), so a plain thread_local + RefCell is race-free.
+    ///
+    /// SCOPE: only the non-streaming "+ tile" path registers here (its discarded
+    /// JoinHandle was the worst leak — the user's spam repro). Streaming tiles
+    /// (F9 / auto / PTT / followup) instead stop via the receiver-drop check in
+    /// `ai::stream_inner`; hard-aborting those on close is a separate follow-up.
+    static TILE_STREAMS: std::cell::RefCell<
+        std::collections::HashMap<isize, tokio::task::AbortHandle>,
+    > = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Register a tile's in-flight AI task so closing the tile can abort it. Keyed
+/// by the tile window's HWND (`hwnd.0 as isize`). Replaces (and aborts) any
+/// previous handle for the same HWND — a tile only has one request at a time.
+pub(crate) fn register_tile_stream(hwnd_key: isize, handle: tokio::task::AbortHandle) {
+    TILE_STREAMS.with(|m| {
+        if let Some(old) = m.borrow_mut().insert(hwnd_key, handle) {
+            old.abort();
+        }
+    });
+}
+
+/// Abort + forget the AI task for ONE tile (call from its close handler or on
+/// cap-eviction). No-op if the tile had no in-flight request.
+pub(crate) fn abort_tile_stream(hwnd_key: isize) {
+    TILE_STREAMS.with(|m| {
+        if let Some(h) = m.borrow_mut().remove(&hwnd_key) {
+            h.abort();
+        }
+    });
+}
+
+/// Abort + forget EVERY registered tile AI task (call from "close all"). Frees
+/// the GPU the moment the screen is cleared instead of letting orphaned
+/// requests drain to completion.
+pub(crate) fn abort_all_tile_streams() {
+    TILE_STREAMS.with(|m| {
+        for (_, h) in m.borrow_mut().drain() {
+            h.abort();
+        }
+    });
+}
+
+/// Pure cascade-generation clamp: how many cascade steps a tile may take before
+/// pinning at the last in-band position, so a runaway `raw_seq` (long session /
+/// spam burst — raw_seq climbs even while MAX_LIVE_TILES caps the OPEN count) can
+/// never march a tile off the work-area's left/bottom edge. Extracted pure for
+/// the `cascade_clamp_pins_in_band` test (guards the stress-test regression).
+#[allow(clippy::too_many_arguments)]
+fn cascade_cycle(
+    raw_seq: usize,
+    total_slots: usize,
+    x_base: i32,
+    y_base: i32,
+    mon_left: i32,
+    mon_bottom: i32,
+    real_h: i32,
+    cascade_dx: i32,
+    cascade_dy: i32,
+) -> usize {
+    let max_cycle_x = ((x_base - (mon_left + 8)).max(0) / cascade_dx) as usize;
+    let max_cycle_y = ((mon_bottom - real_h - 8 - y_base).max(0) / cascade_dy) as usize;
+    (raw_seq / total_slots.max(1)).min(max_cycle_x.min(max_cycle_y))
+}
+
+#[cfg(test)]
+mod cascade_tests {
+    use super::cascade_cycle;
+
+    #[test]
+    fn cascade_clamp_pins_in_band() {
+        let (dx, dy) = (32, 24);
+        // 1920×1080 primary, mon_left=0, tile 360 tall, x_base near the right
+        // edge (1400), y_base 100. x-room 1392 -> max_cycle_x 43; y-room 612 ->
+        // max_cycle_y 25; tighter axis = 25.
+        // A runaway raw_seq must PIN at 25, not march off-screen.
+        assert_eq!(cascade_cycle(100_000, 10, 1400, 100, 0, 1080, 360, dx, dy), 25);
+        // raw_seq below total_slots -> first batch, cycle 0.
+        assert_eq!(cascade_cycle(5, 10, 1400, 100, 0, 1080, 360, dx, dy), 0);
+        // Mid-range raw_seq stays at its natural (in-band) cycle.
+        assert_eq!(cascade_cycle(25, 10, 1400, 100, 0, 1080, 360, dx, dy), 2);
+    }
+}
 
 /// Phase E6 v17 — maximize toggle helper. User: "нет функционала
 /// развернуть, нужно отдельной кнопкой или даб-кликом". Maximized
@@ -236,7 +327,6 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
             // Hard clamps still prevent off-screen.
             let raw_seq = TILE_SLOT_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let slot = raw_seq % total_slots;
-            let cycle = raw_seq / total_slots; // 0 for first batch, 1 for second, etc.
             let cascade_dx: i32 = 32;
             let cascade_dy: i32 = 24;
             let row = slot / cols;
@@ -247,9 +337,27 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
             let x_base = if col == 0 { x_inner } else { x_outer };
             let y_base = mon.top + top_margin + (row as i32) * (real_h + gap_y);
 
-            // Cascade offset grows leftward + downward so wrapped tiles
-            // peek out from under their first-cycle siblings. Negative
-            // dx on x because the right-cluster is already at right edge.
+            // Cascade offset grows leftward + downward so wrapped tiles peek out
+            // from under their first-cycle siblings (negative dx because the
+            // right cluster is already at the right edge). The cascade GENERATION
+            // is clamped to the room that actually fits the work-area, so a long
+            // session or a spam burst (raw_seq keeps climbing even while
+            // MAX_LIVE_TILES caps the OPEN count) can never march a tile off the
+            // left/bottom edge — it pins at the last in-band step. Cross-burst
+            // marching is separately fixed by resetting TILE_SLOT_COUNTER when the
+            // last tile closes (see refresh_open_tiles).
+            let cycle = cascade_cycle(
+                raw_seq,
+                total_slots,
+                x_base,
+                y_base,
+                mon.left,
+                mon.bottom,
+                real_h,
+                cascade_dx,
+                cascade_dy,
+            );
+
             let x = x_base - (cycle as i32) * cascade_dx;
             let y = y_base + (cycle as i32) * cascade_dy;
 

@@ -231,8 +231,15 @@ where
 /// (and in the close-all handler). Distinct from `tiles_spawned`, which is a
 /// monotonic display counter for the per-tile #N badge and must not change.
 pub(crate) fn refresh_open_tiles(weak: &slint::Weak<OverlayBarWindow>, tiles: &TileWindows) {
+    let n = tiles.borrow().len();
     if let Some(o) = weak.upgrade() {
-        o.set_open_tiles(tiles.borrow().len() as i32);
+        o.set_open_tiles(n as i32);
+    }
+    // When the screen is cleared, reset the cascade-placement counter so the
+    // NEXT tile starts from the top-right cluster again instead of marching
+    // further left on every close-all -> respawn cycle (stress-test bug).
+    if n == 0 {
+        super::tile_window::TILE_SLOT_COUNTER.store(0, std::sync::atomic::Ordering::Relaxed);
     }
 }
 

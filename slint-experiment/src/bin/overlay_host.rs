@@ -1559,6 +1559,11 @@ fn main() -> Result<(), slint::PlatformError> {
             // the native window when the Strong refcount hits 0.
             while tiles_for_poll.borrow().len() >= MAX_LIVE_TILES {
                 let dropped = tiles_for_poll.borrow_mut().remove(0);
+                // Abort the evicted tile's in-flight AI request so a force-evict
+                // frees the GPU just like a manual close (stress-test leak).
+                if let Ok(h) = grab_hwnd(dropped.window()) {
+                    abort_tile_stream(h.0 as isize);
+                }
                 // FIX #8 — prune this tile's conversation too (no-op if it had
                 // none), so the map doesn't outlive the force-evicted tile.
                 bridge_for_poll.drop_conversation(dropped.get_convo_id());
@@ -2599,6 +2604,14 @@ fn main() -> Result<(), slint::PlatformError> {
         // Phase 1 (§5.1) — refresh the bar's open-tile chip through the registry.
         let registry_close_all = registry.clone();
         overlay.on_close_all_tiles_clicked(move || {
+            // Abort every tile's in-flight AI request so bulk-close frees the
+            // GPU instead of leaving the model generating for closed tiles.
+            abort_all_tile_streams();
+            // Reset cascade placement — close-all clears the screen, so the next
+            // tile must restart from the top-right cluster. This bulk path calls
+            // refresh_tiles_chip (NOT refresh_open_tiles), so it would otherwise
+            // miss the n==0 reset and keep marching left — the user's exact repro.
+            TILE_SLOT_COUNTER.store(0, std::sync::atomic::Ordering::Relaxed);
             let n = {
                 let mut v = tiles_ref.borrow_mut();
                 let count = v.len();
@@ -2753,6 +2766,9 @@ fn main() -> Result<(), slint::PlatformError> {
                     let close_hwnd = grab_hwnd(tw.window()).ok();
                     let _ = tw.hide();
                     if let Some(target) = close_hwnd {
+                        // Abort this tile's in-flight AI request so the GPU isn't
+                        // left generating for a closed tile (stress-test leak).
+                        abort_tile_stream(target.0 as isize);
                         vec_for_close.borrow_mut().retain(|item| {
                             grab_hwnd(item.window()).ok() != Some(target)
                         });
@@ -2822,7 +2838,14 @@ fn main() -> Result<(), slint::PlatformError> {
             let question_for_task = question.clone();
             let heading_for_task = heading.clone();
             let slint_rt_cost = slint_rt_c.clone();
-            rt.spawn(async move {
+            // Key this tile's request by its HWND so close / close-all / evict
+            // can abort it and free the GPU (stress-test leak: the discarded
+            // JoinHandle meant a closed "+ tile" kept llama generating).
+            let tile_stream_key = weak_for_ai
+                .upgrade()
+                .and_then(|tw| grab_hwnd(tw.window()).ok())
+                .map(|h| h.0 as isize);
+            let tile_spawn_handle = rt.spawn(async move {
                 let messages = vec![ai::ChatMessage {
                     role: "user".to_string(),
                     content: ai::MessageContent::Text(question_for_task.clone()),
@@ -2904,6 +2927,9 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                 });
             });
+            if let Some(k) = tile_stream_key {
+                register_tile_stream(k, tile_spawn_handle.abort_handle());
+            }
         });
     }
 

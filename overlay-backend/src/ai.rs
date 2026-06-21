@@ -368,11 +368,21 @@ async fn stream_inner(
                             if let Some(content) = delta.get("content").and_then(|c| c.as_str()) {
                                 if !content.is_empty() {
                                     delta_count += 1;
-                                    let _ = tx
+                                    // If the receiver is gone (tile closed /
+                                    // consumer aborted), STOP pulling from llama
+                                    // instead of draining the SSE body to
+                                    // completion — returning here drops the
+                                    // response, closing the HTTP connection so
+                                    // llama.cpp aborts the slot and frees the GPU.
+                                    if tx
                                         .send(AiEvent::Delta {
                                             text: content.to_string(),
                                         })
-                                        .await;
+                                        .await
+                                        .is_err()
+                                    {
+                                        return Ok(());
+                                    }
                                 }
                             }
                         }
