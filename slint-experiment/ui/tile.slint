@@ -430,7 +430,9 @@ export component TileWindow inherits Window {
                 Rectangle {
                     width: 30px;
                     height: 30px;
-                    background: close-touch.has-hover ? #5a2a2a : Theme.border;
+                    // Danger token on hover (was hard-coded #5a2a2a) so every
+                    // close button across the app tints with the same colour.
+                    background: close-touch.has-hover ? Theme.danger.with-alpha(0.30) : Theme.border;
                     border-radius: 6px;
                     border-width: 1px;
                     border-color: Theme.border-strong;

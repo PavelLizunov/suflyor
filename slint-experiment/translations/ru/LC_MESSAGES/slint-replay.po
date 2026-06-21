@@ -1129,3 +1129,6 @@ msgstr "Перегенерировать"
 
 msgid "Smart cloud"
 msgstr "Умное облако"
+
+msgid "Close"
+msgstr "Закрыть"
