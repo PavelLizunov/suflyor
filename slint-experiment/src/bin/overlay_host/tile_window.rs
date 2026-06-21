@@ -50,39 +50,61 @@ pub(crate) static TILE_SLOT_COUNTER: std::sync::atomic::AtomicUsize =
 pub(crate) static TILE_DISPLAY_SEQ: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
+/// Monotonic per-tile id, assigned synchronously at tile creation. Used as the
+/// abort-registry key INSTEAD of the HWND: `apply_tile_hwnd_with_monitor` grabs
+/// the HWND on a deferred single-shot Timer, so `grab_hwnd` returns Err at spawn
+/// time — keying the registry on it silently DROPPED the registration, and a
+/// closed/evicted tile's request was never cancelled (the user's "+ tile" spam
+/// kept the GPU busy + the queue full after close-all). A counter is ready now.
+pub(crate) static TILE_ID_SEQ: std::sync::atomic::AtomicI32 =
+    std::sync::atomic::AtomicI32::new(0);
+
+/// Next synchronous tile id (set on the TileWindow's `tile-id` property AND used
+/// as the abort-registry key).
+pub(crate) fn next_tile_id() -> i32 {
+    TILE_ID_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
 thread_local! {
-    /// Per-tile AI-task abort handles, keyed by the tile window's HWND (as
-    /// isize). A tile close / "close all" / cap-eviction aborts its in-flight
-    /// llama request so the GPU isn't left generating for a CLOSED tile — the
-    /// stress-test bug where spamming + closing tiles left the model "thinking"
-    /// and the GPU loaded. UI-thread only (every tile spawn + close path runs on
-    /// the Slint main thread), so a plain thread_local + RefCell is race-free.
+    /// Per-tile AI-task abort handles, keyed by the synchronous `tile-id` (NOT
+    /// the HWND — that isn't realized yet at spawn time). A tile close / "close
+    /// all" / cap-eviction aborts its in-flight llama request so the GPU isn't
+    /// left generating for a CLOSED tile — the stress-test bug where spamming +
+    /// closing tiles left the model "thinking". UI-thread only (every tile spawn
+    /// + close path runs on the Slint main thread), so a plain thread_local +
+    /// RefCell is race-free.
     ///
     /// SCOPE: only the non-streaming "+ tile" path registers here (its discarded
     /// JoinHandle was the worst leak — the user's spam repro). Streaming tiles
     /// (F9 / auto / PTT / followup) instead stop via the receiver-drop check in
     /// `ai::stream_inner`; hard-aborting those on close is a separate follow-up.
     static TILE_STREAMS: std::cell::RefCell<
-        std::collections::HashMap<isize, tokio::task::AbortHandle>,
+        std::collections::HashMap<i32, tokio::task::AbortHandle>,
     > = std::cell::RefCell::new(std::collections::HashMap::new());
 }
 
 /// Register a tile's in-flight AI task so closing the tile can abort it. Keyed
-/// by the tile window's HWND (`hwnd.0 as isize`). Replaces (and aborts) any
-/// previous handle for the same HWND — a tile only has one request at a time.
-pub(crate) fn register_tile_stream(hwnd_key: isize, handle: tokio::task::AbortHandle) {
+/// by the synchronous `tile-id`. Replaces (and aborts) any previous handle for
+/// the same id — a tile only has one request at a time. No-op for an unset id.
+pub(crate) fn register_tile_stream(tile_id: i32, handle: tokio::task::AbortHandle) {
+    if tile_id < 0 {
+        return;
+    }
     TILE_STREAMS.with(|m| {
-        if let Some(old) = m.borrow_mut().insert(hwnd_key, handle) {
+        if let Some(old) = m.borrow_mut().insert(tile_id, handle) {
             old.abort();
         }
     });
 }
 
-/// Abort + forget the AI task for ONE tile (call from its close handler or on
-/// cap-eviction). No-op if the tile had no in-flight request.
-pub(crate) fn abort_tile_stream(hwnd_key: isize) {
+/// Abort + forget the AI task for ONE tile (its close handler / cap-eviction).
+/// No-op for an unset id (-1) or a tile with no in-flight request.
+pub(crate) fn abort_tile_stream(tile_id: i32) {
+    if tile_id < 0 {
+        return;
+    }
     TILE_STREAMS.with(|m| {
-        if let Some(h) = m.borrow_mut().remove(&hwnd_key) {
+        if let Some(h) = m.borrow_mut().remove(&tile_id) {
             h.abort();
         }
     });

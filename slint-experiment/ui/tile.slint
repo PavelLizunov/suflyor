@@ -91,6 +91,11 @@ export component TileWindow inherits Window {
     // >= 0 means the tile supports follow-up questions (the input row at
     // the bottom is shown). -1 = no dialog (KB / snippet / auto tiles).
     in-out property <int> convo-id: -1;
+    // Synchronous per-tile id (set at creation) — the abort-registry key, so a
+    // closed/evicted tile can cancel its in-flight AI request even before its
+    // HWND is realized (the HWND grab is deferred, which is why keying on it
+    // silently lost the registration and aborts missed under spam).
+    in-out property <int> tile-id: -1;
     // True while an answer is streaming — disables the follow-up input.
     in-out property <bool> followup-busy: false;
     // V5 — true while the 🎤 voice follow-up is recording the mic (toggles the
