@@ -97,14 +97,20 @@ component DarkCheck inherits Rectangle {
     in property <string> text;
     in-out property <bool> checked: false;
     callback toggled(bool);
-    height: 24px;
+    // min-height (not a fixed height) so the row can GROW when a long label wraps
+    // to a 2nd line instead of being clipped vertically. horizontal-stretch:1 fills
+    // the card width.
+    min-height: 24px;
     horizontal-stretch: 1;
     HorizontalLayout {
         spacing: 9px;
-        alignment: start;
+        // No alignment:start — the label Text must receive the REMAINING width so
+        // word-wrap engages (alignment:start froze it at one-line width and ran
+        // long labels off the card edge — the GPU DirectML / Test-Practice toggles).
         // Track + knob. Knob slides right & turns green when ON.
         Rectangle {
             width: 38px;
+            horizontal-stretch: 0;
             height: 22px;
             y: (parent.height - self.height) / 2;
             border-radius: 11px;
@@ -127,6 +133,8 @@ component DarkCheck inherits Rectangle {
             font-size: 12px;
             color: Theme.text-primary;
             vertical-alignment: center;
+            wrap: word-wrap;
+            horizontal-stretch: 1;
         }
     }
     TouchArea {
@@ -143,10 +151,19 @@ component DarkCheck inherits Rectangle {
 // dense tabs read as grouped panels instead of a flat stack of controls.
 component SettingsCard inherits Rectangle {
     in property <string> title;
+    // FILL the content-pane width instead of growing to the content's preferred
+    // width — without this a card whose only content is a long wrapping Text (no
+    // stretch:1 control like a DarkCheck/Slider to anchor the width) pushed the
+    // tab's VerticalLayout — and the ScrollView — into a HORIZONTAL scroll, so
+    // the card border ran off-screen and text spilled past the (off-screen)
+    // border. `clip` is a belt-and-braces guard so nothing can render outside the
+    // rounded border even if a child reports an over-wide min-width.
+    horizontal-stretch: 1;
     background: Theme.bg-elevated;
     border-radius: 10px;
     border-width: 1px;
     border-color: Theme.border;
+    clip: true;
     VerticalLayout {
         padding: 12px;
         spacing: 8px;
@@ -257,6 +274,11 @@ export component SettingsWindow inherits Window {
     background: transparent;
 
     in-out property <int> active-tab: 0;
+    // Tile-placement monitor picker (tab 0). Items + selected index are filled by
+    // the Rust controller from enum_monitors() on open; the card hides when there
+    // is only one display.
+    in-out property <[string]> tile-monitors: [];
+    in-out property <int> tile-monitor-index: 0;
     // Phase 3b.3 — 💭 Memory tab data (built in Rust by settings_memory.rs over
     // the SQLite memory tables). Candidates = pending suggestions; items =
     // approved memory. `id` flows back through the callbacks.
@@ -402,6 +424,7 @@ export component SettingsWindow inherits Window {
 
     callback always-on-top-changed(bool);
     callback stealth-changed(bool);
+    callback tile-monitor-changed(int);
     callback open-wizard-clicked();
     callback close-clicked();
     callback tab-selected(int);
@@ -861,6 +884,22 @@ export component SettingsWindow inherits Window {
                                 changed(v) => { root.tile-body-opacity-changed(v); }
                             }
                         }
+                        // Tile-placement monitor picker — only meaningful with 2+
+                        // displays, so the whole card hides on a single monitor.
+                        if root.tile-monitors.length > 1 : SettingsCard {
+                            title: @tr("Tile placement");
+                            Text {
+                                text: @tr("Which monitor new answer tiles appear on.");
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            ComboBox {
+                                model: root.tile-monitors;
+                                current-index <=> root.tile-monitor-index;
+                                selected(v) => { root.tile-monitor-changed(self.current-index); }
+                            }
+                        }
                     }
                     if root.active-tab == 1 : VerticalLayout {
                         spacing: 10px;
@@ -897,10 +936,17 @@ export component SettingsWindow inherits Window {
                             for entry in [
                                 ["F9",  @tr("Ask AI now (streams the answer into a tile)")],
                                 ["Shift+F9", @tr("Ask AI escalated to the smart cloud model (one-shot; tile shows a cloud badge)")],
-                                ["F8",  @tr("Screenshot → AI vision (drag a region; Esc cancels)")],
                                 ["F3",  @tr("Re-ask the last question with fresh context")],
-                                ["F4",  @tr("Knowledge-base palette (open / close)")],
                                 ["F6",  @tr("Manual tile from the last transcript line")],
+                                ["F8",  @tr("Screenshot → AI vision (drag a region; Esc cancels)")],
+                                ["Shift+F8", @tr("Screenshot → translate only (no screen description)")],
+                                ["Ctrl+F8", @tr("Screenshot → OCR the text, then read it aloud")],
+                                ["Shift+Alt+1", @tr("Read the selected text aloud")],
+                                ["Shift+Alt+2", @tr("OCR a screen region and read it aloud")],
+                                ["Shift+Alt+3", @tr("Pause / stop reading aloud")],
+                                ["F4",  @tr("Knowledge-base palette (open / close)")],
+                                ["F1",  @tr("Help (open / close)")],
+                                ["F7",  @tr("Session archive (open / close)")],
                             ] : HorizontalLayout {
                                 padding: 4px;
                                 spacing: 12px;
@@ -909,7 +955,7 @@ export component SettingsWindow inherits Window {
                                     font-size: 11px;
                                     font-weight: 700;
                                     color: Theme.accent;
-                                    width: 72px;
+                                    width: 92px;
                                 }
                                 Text {
                                     text: entry[1];
@@ -1209,25 +1255,23 @@ export component SettingsWindow inherits Window {
                             text: @tr("Version: {} (suflyor / Slint)", root.app-version);
                             font-size: 10px;
                             color: Theme.text-muted;
+                            wrap: word-wrap;
                         }
                         }
 
                         SettingsCard {
                             title: @tr("Backup / transfer settings");
                         // Phase E6 v28 — full-profile import/export.
-                        Text {
-                            text: @tr("Backup / transfer settings");
-                            font-size: 12px;
-                            font-weight: 700;
-                            color: Theme.text-primary;
-                        }
+                        // (duplicate heading removed — the SettingsCard title already shows it)
                         Text {
                             text: @tr("Exports the WHOLE config to a .json file you choose — INCLUDING the Claude bearer + Groq API key. Keep the file private. Import overwrites current settings (restart to apply).");
                             font-size: 10px;
                             color: Theme.warning;
                             wrap: word-wrap;
                         }
-                        HorizontalLayout {
+                        // Stacked (not a row): the two RU labels side by side ran
+                        // past the ~480px card edge. One button per row never clips.
+                        VerticalLayout {
                             spacing: 6px;
                             Button {
                                 text: @tr("Export settings (incl. keys)…");
@@ -1247,9 +1291,10 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
-                        HorizontalLayout {
+                        // Stacked (not a row): the two long RU server labels side by
+                        // side overflowed the card. One button per row never clips.
+                        VerticalLayout {
                             spacing: 6px;
-                            alignment: start;
                             Button {
                                 text: @tr("Export server settings…");
                                 clicked => { root.export-server-settings-clicked(); }
@@ -1499,6 +1544,7 @@ export component SettingsWindow inherits Window {
                                         font-size: 12px;
                                         font-weight: 600;
                                         color: Theme.text-primary;
+                                        wrap: word-wrap;
                                     }
                                     Text {
                                         text: row.installed
@@ -1737,6 +1783,8 @@ export component SettingsWindow inherits Window {
                                 font-size: 11px;
                                 color: Theme.accent;
                                 vertical-alignment: center;
+                                wrap: word-wrap;
+                                horizontal-stretch: 1;
                             }
                         }
                         }
@@ -1775,6 +1823,7 @@ export component SettingsWindow inherits Window {
                                 text: @tr("Bearer token:") + " " + root.ai-bearer-status;
                                 font-size: 11px;
                                 color: Theme.text-secondary;
+                                wrap: word-wrap;
                             }
                             HorizontalLayout {
                                 spacing: 6px;
@@ -1796,6 +1845,7 @@ export component SettingsWindow inherits Window {
                                 text: @tr("Base URL (Claude bridge endpoint):");
                                 font-size: 11px;
                                 color: Theme.text-secondary;
+                                wrap: word-wrap;
                             }
                             HorizontalLayout {
                                 spacing: 6px;
@@ -1815,6 +1865,7 @@ export component SettingsWindow inherits Window {
                                 text: @tr("AI model (Claude full ID):");
                                 font-size: 11px;
                                 color: Theme.text-secondary;
+                                wrap: word-wrap;
                             }
                             HorizontalLayout {
                                 spacing: 6px;
@@ -2086,6 +2137,8 @@ export component SettingsWindow inherits Window {
                                     font-size: 11px;
                                     color: root.local-ai-on-gpu ? Theme.success : Theme.warning;
                                     vertical-alignment: center;
+                                    wrap: word-wrap;
+                                    horizontal-stretch: 1;
                                 }
                             }
                             if root.local-ai-status != "" : Text {
@@ -2140,16 +2193,20 @@ export component SettingsWindow inherits Window {
                         }
 
                         Rectangle { background: Theme.border; height: 1px; }
-                        TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => { root.open-data-folder-clicked(); }
-                            Text {
-                                // Click opens the data folder in Explorer (path
-                                // is now %APPDATA%\suflyor after the v0.18.4 rename).
-                                text: @tr("Tip: Save writes to %APPDATA%\\suflyor\\config.json. Restart binary to re-load.");
-                                font-size: 10px;
-                                color: Theme.accent;
-                                wrap: word-wrap;
+                        // Text OUTER + TouchArea INNER: a TouchArea is NOT a layout
+                        // and doesn't constrain its child's width, so the old
+                        // TouchArea>Text rendered this hint on ONE line that ran off
+                        // the card edge (clipped — "…перезагрузк"). With the Text
+                        // outer, the card's VerticalLayout constrains its width and
+                        // word-wrap finally kicks in.
+                        Text {
+                            text: @tr("Tip: Save writes to %APPDATA%\\suflyor\\config.json. Restart binary to re-load.");
+                            font-size: 10px;
+                            color: Theme.accent;
+                            wrap: word-wrap;
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.open-data-folder-clicked(); }
                             }
                         }
 
@@ -2431,6 +2488,7 @@ export component SettingsWindow inherits Window {
                             text: @tr("Groq API key:") + " " + root.groq-api-key-status;
                             font-size: 11px;
                             color: Theme.text-secondary;
+                            wrap: word-wrap;
                         }
                         HorizontalLayout {
                             spacing: 6px;
@@ -2466,16 +2524,20 @@ export component SettingsWindow inherits Window {
                             }
                         }
 
-                        TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => { root.open-data-folder-clicked(); }
-                            Text {
-                                // Click opens the data folder in Explorer (path
-                                // is now %APPDATA%\suflyor after the v0.18.4 rename).
-                                text: @tr("Tip: Save writes to %APPDATA%\\suflyor\\config.json. Restart binary to re-load.");
-                                font-size: 10px;
-                                color: Theme.accent;
-                                wrap: word-wrap;
+                        // Text OUTER + TouchArea INNER: a TouchArea is NOT a layout
+                        // and doesn't constrain its child's width, so the old
+                        // TouchArea>Text rendered this hint on ONE line that ran off
+                        // the card edge (clipped — "…перезагрузк"). With the Text
+                        // outer, the card's VerticalLayout constrains its width and
+                        // word-wrap finally kicks in.
+                        Text {
+                            text: @tr("Tip: Save writes to %APPDATA%\\suflyor\\config.json. Restart binary to re-load.");
+                            font-size: 10px;
+                            color: Theme.accent;
+                            wrap: word-wrap;
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.open-data-folder-clicked(); }
                             }
                         }
                         }

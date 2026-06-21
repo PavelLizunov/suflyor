@@ -1161,3 +1161,60 @@ msgstr "Хранение"
 
 msgid "Personal memory"
 msgstr "Личная память"
+
+# === Wizard Glacier redesign (rail labels + mode option cards) ===
+
+msgid "Mode"
+msgstr "Режим"
+
+msgid "Overlay"
+msgstr "Оверлей"
+
+msgid "Cloud"
+msgstr "Облако"
+
+msgid "Groq STT + Claude bridge — fast start, needs keys + internet."
+msgstr "Groq STT + мост Claude — быстрый старт, нужны ключи + интернет."
+
+msgid "Fully local"
+msgstr "Полностью локально"
+
+msgid "Local AI + local STT — nothing leaves the machine, needs models."
+msgstr "Локальный AI + локальный STT — ничего не покидает ПК, нужны модели."
+
+msgid "Mixed"
+msgstr "Смешанный"
+
+msgid "e.g. local STT + cloud AI — configure manually."
+msgstr "напр. локальный STT + облачный AI — настроить вручную."
+
+# === Hotkeys tab — full list (added F1/F7/Shift+F8/Ctrl+F8/Shift+Alt+1..3) ===
+
+msgid "Screenshot → translate only (no screen description)"
+msgstr "Скриншот → только перевод (без описания экрана)"
+
+msgid "Screenshot → OCR the text, then read it aloud"
+msgstr "Скриншот → OCR текста, затем озвучить"
+
+msgid "Read the selected text aloud"
+msgstr "Озвучить выделенный текст"
+
+msgid "OCR a screen region and read it aloud"
+msgstr "OCR области экрана и озвучить"
+
+msgid "Pause / stop reading aloud"
+msgstr "Пауза / стоп озвучки"
+
+msgid "Help (open / close)"
+msgstr "Справка (открыть / закрыть)"
+
+msgid "Session archive (open / close)"
+msgstr "Архив сессий (открыть / закрыть)"
+
+# === Tile-placement monitor picker (tab 0) ===
+
+msgid "Tile placement"
+msgstr "Размещение тайлов"
+
+msgid "Which monitor new answer tiles appear on."
+msgstr "На каком мониторе появляются новые тайлы-ответы."
