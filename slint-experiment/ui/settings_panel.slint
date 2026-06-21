@@ -103,18 +103,18 @@ component DarkCheck inherits Rectangle {
         alignment: start;
         // Track + knob. Knob slides right & turns green when ON.
         Rectangle {
-            width: 34px;
-            height: 18px;
+            width: 38px;
+            height: 22px;
             y: (parent.height - self.height) / 2;
-            border-radius: 9px;
+            border-radius: 11px;
             border-width: 1px;
             border-color: root.checked ? Theme.accent : Theme.border;
             background: root.checked ? Theme.accent.with-alpha(0.2) : #ffffff0f;
             animate background, border-color { duration: 140ms; }
             Rectangle {
-                width: 12px;
-                height: 12px;
-                border-radius: 6px;
+                width: 16px;
+                height: 16px;
+                border-radius: 8px;
                 y: (parent.height - self.height) / 2;
                 x: root.checked ? parent.width - self.width - 3px : 3px;
                 background: root.checked ? Theme.accent : Theme.text-muted;
