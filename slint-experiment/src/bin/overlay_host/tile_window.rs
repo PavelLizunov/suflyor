@@ -33,9 +33,10 @@
 //! explicitly below.
 use super::{
     apply_scheme_tile, drag_begin, drag_update, enum_monitors, get_window_rect, global_scheme,
-    global_stealth, global_tile_opacity, grab_hwnd, make_transparent_tile, move_window_pos_only,
-    pick_monitor, set_always_on_top, set_stealth, work_area_for_window, ComponentHandle, Duration,
-    TileWindow, Timer, HWND_GRAB_DELAY_MS, TILE_DEFAULT_H, TILE_DEFAULT_W,
+    global_stealth, global_tile_monitor, global_tile_opacity, grab_hwnd, make_transparent_tile,
+    move_window_pos_only, pick_monitor, set_always_on_top, set_stealth, work_area_for_window,
+    ComponentHandle, Duration, TileWindow, Timer, HWND_GRAB_DELAY_MS, TILE_DEFAULT_H,
+    TILE_DEFAULT_W,
 };
 
 /// Atomic counter for tile-slot index — increments per spawn so
@@ -330,7 +331,12 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
             get_window_rect(hwnd).unwrap_or((0, 0, TILE_DEFAULT_W, TILE_DEFAULT_H));
 
         let monitors = enum_monitors();
-        if let Some(mon) = pick_monitor(&monitors) {
+        // Honour the user's monitor pin (Settings ▸ tile placement) by matching
+        // its saved top-left; fall back to pick_monitor (auto) when unset or the
+        // pinned display is unplugged (not found) — never an off-screen tile.
+        let pinned = global_tile_monitor()
+            .and_then(|(l, t)| monitors.iter().find(|m| m.left == l && m.top == t).copied());
+        if let Some(mon) = pinned.or_else(|| pick_monitor(&monitors)) {
             let gap_x: i32 = 12;
             let gap_y: i32 = 12;
             let top_margin: i32 = 80;

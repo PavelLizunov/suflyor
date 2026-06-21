@@ -47,13 +47,13 @@
 use super::{
     active_stack_label, ai, apply_scheme_bar, apply_scheme_settings, audio, clamp_scheme, config,
     drag_begin, drag_update, fetch_models, grab_hwnd, make_transparent_tile, open_wizard,
-    populate_diagnostics, present_window_stealth_aware, preset_for_tts_rate, set_always_on_top,
-    set_global_scheme, set_global_stealth, set_global_tile_opacity, set_stealth,
-    spawn_ptt_watchdog, stt, try_acquire_mic, wire_ai_settings, wire_diagnostics,
-    wire_import_export, wire_local_ai, wire_memory, wire_stt_settings, wire_updates,
-    wire_vision_settings, wire_voice_settings, Arc, AtomicBool, ComponentHandle, ComponentRow,
-    ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell, SettingsWindow, SharedString,
-    TileWindows, VecModel, WindowRegistry,
+    parse_tile_monitor_pin, populate_diagnostics, present_window_stealth_aware,
+    preset_for_tts_rate, set_always_on_top, set_global_scheme, set_global_stealth,
+    set_global_tile_monitor, set_global_tile_opacity, set_stealth, spawn_ptt_watchdog, stt,
+    try_acquire_mic, wire_ai_settings, wire_diagnostics, wire_import_export, wire_local_ai,
+    wire_memory, wire_stt_settings, wire_updates, wire_vision_settings, wire_voice_settings, Arc,
+    AtomicBool, ComponentHandle, ComponentRow, ModelRc, ModelTarget, Ordering, OverlayBarWindow,
+    Rc, RefCell, SettingsWindow, SharedString, TileWindows, VecModel, WindowRegistry,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -429,6 +429,35 @@ pub(crate) fn open_settings(
         });
     }
 
+    // Tile-placement monitor picker. Index 0 = Auto (pick_monitor); index i>0 =
+    // the (i-1)-th live monitor. Persists its top-left signature (survives a
+    // monitor reorder) and updates the process-global so every future tile
+    // honours the choice immediately.
+    {
+        let cfg_m = cfg.clone();
+        win.on_tile_monitor_changed(move |idx| {
+            let pin = if idx <= 0 {
+                None
+            } else {
+                slint_replay::win32::enum_monitors()
+                    .get((idx - 1) as usize)
+                    .map(|m| (m.left, m.top))
+            };
+            // Apply to the runtime FIRST so new tiles honour the choice even if
+            // persisting config later fails — the dropdown never lies about where
+            // tiles will spawn. Saving config.json is best-effort.
+            set_global_tile_monitor(pin);
+            {
+                let mut c = cfg_m.write();
+                c.tile_monitor_name = pin.map(|(l, t)| format!("{l},{t}"));
+                if let Err(e) = overlay_backend::config::save(&c) {
+                    eprintln!("[overlay-host] tile_monitor save failed: {e:#}");
+                }
+            }
+            eprintln!("[overlay-host] tile_monitor -> {pin:?}");
+        });
+    }
+
     // Phase E6 v38 — interface-language switch. Selecting Русский/English
     // in the Interface tab switches the bundled translation LIVE (Slint
     // re-evaluates every @tr() binding) and persists ui_language so the
@@ -437,16 +466,24 @@ pub(crate) fn open_settings(
     // the UI look English even though "ru" was nominally selected.
     {
         let cfg_lang = cfg.clone();
+        let win_lang = win.as_weak();
         win.on_language_selected(move |idx| {
             let lang = if idx == 1 { "en" } else { "ru" };
             match slint::select_bundled_translation(lang) {
                 Ok(()) => eprintln!("[overlay-host] UI language -> {lang}"),
                 Err(e) => eprintln!("[overlay-host] language {lang} not available: {e}"),
             }
-            let mut c = cfg_lang.write();
-            c.ui_language = lang.to_string();
-            if let Err(e) = overlay_backend::config::save(&c) {
-                eprintln!("[overlay-host] ui_language save failed: {e:#}");
+            {
+                let mut c = cfg_lang.write();
+                c.ui_language = lang.to_string();
+                if let Err(e) = overlay_backend::config::save(&c) {
+                    eprintln!("[overlay-host] ui_language save failed: {e:#}");
+                }
+            }
+            // The @tr() bindings re-evaluate automatically; the Rust-built monitor
+            // dropdown labels do not — rebuild them in the new language.
+            if let Some(w) = win_lang.upgrade() {
+                populate_tile_monitors(&w, &cfg_lang.read());
             }
         });
     }
@@ -1163,6 +1200,48 @@ pub(crate) fn refresh_profiles(win: &SettingsWindow, c: &overlay_backend::config
     win.set_meeting_context_input(SharedString::from(c.meeting_context.as_str()));
 }
 
+/// Build the tile-placement monitor dropdown from the LIVE displays. Item 0 =
+/// Auto; the saved pin (`cfg.tile_monitor_name`) preselects its monitor when it
+/// still matches a current display. Labels are language-dependent
+/// (`cfg.ui_language`) — call this on Settings open AND on a live language
+/// switch. The `.slint` card hides itself when there is only one display.
+pub(crate) fn populate_tile_monitors(win: &SettingsWindow, c: &overlay_backend::config::Config) {
+    let monitors = slint_replay::win32::enum_monitors();
+    let ru = c.ui_language == "ru";
+    let mon_word = if ru { "Монитор" } else { "Monitor" };
+    let primary_tag = if ru {
+        " · основной"
+    } else {
+        " · primary"
+    };
+    let mut labels: Vec<SharedString> = vec![SharedString::from(if ru {
+        "Авто (рекомендуется)"
+    } else {
+        "Auto (recommended)"
+    })];
+    let pin = c
+        .tile_monitor_name
+        .as_deref()
+        .and_then(parse_tile_monitor_pin);
+    let mut sel: i32 = 0;
+    for (i, m) in monitors.iter().enumerate() {
+        let tag = if m.is_primary { primary_tag } else { "" };
+        labels.push(SharedString::from(format!(
+            "{} {} · {}×{}{}",
+            mon_word,
+            i + 1,
+            m.width(),
+            m.height(),
+            tag
+        )));
+        if pin == Some((m.left, m.top)) {
+            sel = (i + 1) as i32;
+        }
+    }
+    win.set_tile_monitors(ModelRc::new(VecModel::from(labels)));
+    win.set_tile_monitor_index(sel);
+}
+
 /// Populate the Settings window's token-status display properties
 /// from the current `cfg`. Phase E6 — gives the user a way to SEE
 /// whether ai_bearer / groq_api_key are configured without leaking
@@ -1195,6 +1274,9 @@ pub(crate) fn populate_token_status(
     // Phase E6 v20 — load tile opacity from config so the slider
     // reflects the saved value on Settings re-open.
     win.set_tile_body_opacity(c.tile_body_opacity);
+    // Tile-placement monitor dropdown — rebuilt here AND on a live language
+    // switch (Rust-built labels don't auto-refresh like @tr bindings do).
+    populate_tile_monitors(win, &c);
     win.set_ai_base_url_input(SharedString::from(c.ai_base_url.clone()));
     // V4 — vision section: provider index + non-secret fields (bearers stay blank
     // on screen; saving a blank field is a no-op the user controls).

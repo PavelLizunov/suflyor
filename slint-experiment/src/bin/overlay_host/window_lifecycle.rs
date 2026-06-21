@@ -61,6 +61,46 @@ pub(crate) fn global_stealth() -> bool {
     STEALTH_ON.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// Process-global tile-monitor PIN — the `(left, top)` of the display the user
+/// chose for new tiles, packed `(left << 32) | (top as u32)` into an AtomicI64
+/// (lock-free, mirror of `global_tile_opacity`). `TILE_MONITOR_AUTO` (the
+/// sentinel) means "auto" → `apply_tile_hwnd_with_monitor` falls back to
+/// `pick_monitor`. Seeded from `cfg.tile_monitor_name` at startup, updated live
+/// by the Settings monitor dropdown. Matching by top-left (not an index)
+/// survives a monitor reorder, and an unplugged pinned monitor simply isn't
+/// found in `enum_monitors()` → auto fallback (never an off-screen tile).
+const TILE_MONITOR_AUTO: i64 = i64::MIN;
+static TILE_MONITOR_PIN: std::sync::atomic::AtomicI64 =
+    std::sync::atomic::AtomicI64::new(TILE_MONITOR_AUTO);
+
+/// Pin new tiles to the monitor whose top-left is `(left, top)`, or `None` for
+/// auto (let `pick_monitor` decide).
+pub(crate) fn set_global_tile_monitor(pin: Option<(i32, i32)>) {
+    let packed = match pin {
+        Some((left, top)) => (i64::from(left) << 32) | i64::from(top as u32),
+        None => TILE_MONITOR_AUTO,
+    };
+    TILE_MONITOR_PIN.store(packed, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Read the tile-monitor pin as `(left, top)`, or `None` when auto.
+pub(crate) fn global_tile_monitor() -> Option<(i32, i32)> {
+    let packed = TILE_MONITOR_PIN.load(std::sync::atomic::Ordering::Relaxed);
+    if packed == TILE_MONITOR_AUTO {
+        None
+    } else {
+        Some(((packed >> 32) as i32, (packed & 0xFFFF_FFFF) as u32 as i32))
+    }
+}
+
+/// Parse a `cfg.tile_monitor_name` pin string (`"{left},{top}"`) into coords;
+/// empty / malformed → `None` (auto). Shared by the startup seed and the
+/// Settings dropdown handler so the encode/decode lives in one place.
+pub(crate) fn parse_tile_monitor_pin(s: &str) -> Option<(i32, i32)> {
+    let (l, t) = s.split_once(',')?;
+    Some((l.trim().parse().ok()?, t.trim().parse().ok()?))
+}
+
 /// Process-global colour scheme (0=Glacier..3=Light Frost), mirror of
 /// `global_stealth`: tiles are spawned from 5 scattered sites and are
 /// ephemeral, so rather than thread the value through every call site we

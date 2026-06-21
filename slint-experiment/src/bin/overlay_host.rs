@@ -831,6 +831,15 @@ fn main() -> Result<(), slint::PlatformError> {
     // the very first tile spawned (before the Settings panel is ever
     // opened) already honours the saved transparency.
     set_global_tile_opacity(cfg.read().tile_body_opacity);
+    // Seed the tile-monitor pin (Settings ▸ tile placement) the same way, so the
+    // first tile honours the saved display even before Settings opens; unset or
+    // an unplugged display → pick_monitor (auto).
+    set_global_tile_monitor(
+        cfg.read()
+            .tile_monitor_name
+            .as_deref()
+            .and_then(parse_tile_monitor_pin),
+    );
     // E9 — seed the experimental prompt-cache toggle from config.
     ai::set_prompt_cache(cfg.read().ai_prompt_cache);
     // E10 — disable local-model "thinking" for fast answers unless the user
