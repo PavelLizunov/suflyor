@@ -14,6 +14,7 @@
 
 import { LineEdit, Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { CloseButton } from "controls.slint";
 import { Metrics } from "metrics.slint";
 
 component IconSlot inherits Rectangle {
@@ -101,31 +102,9 @@ export component TextAskWindow inherits Window {
                     horizontal-stretch: 1;
                     overflow: elide;
                 }
-                // V0.8.4 — explicit close (= Esc). Unified x.svg icon button
-                // (matches the bar Quit, tile X, archive X, Settings Close)
-                // instead of the old ASCII "X".
-                Rectangle {
-                    width: Metrics.control-md;
-                    height: Metrics.control-md;
-                    border-radius: Metrics.radius-control;
-                    border-width: Metrics.border-thin;
-                    border-color: xta.has-hover ? Theme.danger.with-alpha(0.55) : Theme.border-strong;
-                    background: xta.has-hover ? Theme.danger.with-alpha(0.13) : transparent;
-                    animate background, border-color { duration: 120ms; }
-                    horizontal-stretch: 0;
-                    Image {
-                        source: @image-url("../assets/icons/x.svg");
-                        colorize: Theme.text-secondary;
-                        width: 12px;
-                        height: 12px;
-                        image-fit: contain;
-                        x: (parent.width - self.width) / 2;
-                        y: (parent.height - self.height) / 2;
-                    }
-                    xta := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { root.cancelled(); }
-                    }
+                // V0.8.4 — explicit close (= Esc). Shared CloseButton.
+                CloseButton {
+                    clicked => { root.cancelled(); }
                 }
             }
             HorizontalLayout {

@@ -1,5 +1,6 @@
-import { Button, ScrollView } from "std-widgets.slint";
+import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { CloseButton } from "controls.slint";
 import { Metrics } from "metrics.slint";
 
 component IconSlot inherits Rectangle {
@@ -212,8 +213,7 @@ export component HelpWindow inherits Window {
                         }
                     }
                 }
-                Button {
-                    text: "X";
+                CloseButton {
                     clicked => { root.cancelled(); }
                 }
             }

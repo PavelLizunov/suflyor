@@ -20,6 +20,7 @@
 
 import { Button, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { CloseButton } from "controls.slint";
 import { Metrics } from "metrics.slint";
 
 export component RecoverOfferWindow inherits Window {
@@ -74,8 +75,7 @@ export component RecoverOfferWindow inherits Window {
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                 }
-                Button {
-                    text: "X";
+                CloseButton {
                     clicked => { root.dismissed(); }
                 }
             }

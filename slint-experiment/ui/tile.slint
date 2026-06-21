@@ -7,6 +7,7 @@
 
 import { Button, LineEdit, ScrollView, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { CloseButton } from "controls.slint";
 
 // MarkdownBlock is shared with markdown_spike — defined here in the
 // canonical location and re-exported through index.slint.
@@ -427,27 +428,10 @@ export component TileWindow inherits Window {
                         y: (parent.height - self.height) / 2;
                     }
                 }
-                Rectangle {
-                    width: 30px;
-                    height: 30px;
-                    // Danger token on hover (was hard-coded #5a2a2a) so every
-                    // close button across the app tints with the same colour.
-                    background: close-touch.has-hover ? Theme.danger.with-alpha(0.30) : Theme.border;
-                    border-radius: 6px;
-                    border-width: 1px;
-                    border-color: Theme.border-strong;
-                    close-touch := TouchArea {
-                        clicked => { root.close-clicked(); }
-                    }
-                    Image {
-                        source: @image-url("../assets/icons/x.svg");
-                        colorize: Theme.text-primary;
-                        width: 16px;
-                        height: 16px;
-                        image-fit: contain;
-                        x: (parent.width - self.width) / 2;
-                        y: (parent.height - self.height) / 2;
-                    }
+                CloseButton {
+                    box: 30px;
+                    glyph: 16px;
+                    clicked => { root.close-clicked(); }
                 }
             }
 

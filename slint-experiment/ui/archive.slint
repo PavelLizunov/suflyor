@@ -15,6 +15,7 @@
 
 import { LineEdit, ScrollView, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { CloseButton } from "controls.slint";
 import { Metrics } from "metrics.slint";
 
 // One archive row — a past SESSION or a SEARCH HIT (the Rust side fills both
@@ -143,23 +144,8 @@ export component ArchiveWindow inherits Window {
                             }
                         }
                     }
-                    Rectangle {
-                        width: Metrics.control-md;
-                        height: Metrics.control-md;
-                        border-radius: Metrics.radius-control;
-                        border-width: Metrics.border-thin;
-                        border-color: Theme.border-strong;
-                        horizontal-stretch: 0;
-                        Image {
-                            source: @image-url("../assets/icons/x.svg");
-                            colorize: Theme.text-secondary;
-                            width: 13px;
-                            height: 13px;
-                            image-fit: contain;
-                            x: (parent.width - self.width) / 2;
-                            y: (parent.height - self.height) / 2;
-                        }
-                        TouchArea { clicked => { root.close-requested(); } }
+                    CloseButton {
+                        clicked => { root.close-requested(); }
                     }
                 }
 

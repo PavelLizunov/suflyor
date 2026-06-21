@@ -1,0 +1,48 @@
+// Shared UI controls.
+//
+// CloseButton — the ONE window-corner close button used by every window that
+// has a corner/​header dismiss "X" (tile, archive, "Написать", help, recover
+// offer). Goal: they are pixel-identical instead of five hand-rolled variants.
+//
+// Look: a clean x.svg glyph in an outlined box — transparent fill at rest
+// (NOT a grey-filled box), a 1px border-strong outline, and a uniform
+// Theme.danger tint on hover (fill + border + glyph all shift to danger). Size
+// defaults to 30×30 with a 16px glyph (the tile-chrome size, the largest /
+// reference close); `box` + `glyph` can be overridden only where a row's
+// geometry genuinely demands a different size.
+//
+// NOT used by: the overlay BAR quit (it is one chip in a chip toolbar — must
+// match its 8 sibling chips, not a 30px box) and the SETTINGS close (a labelled
+// full-width action at the bottom of the nav, not a corner). Those two stay in
+// their own contexts but share the same x.svg + danger-hover language.
+import { Theme } from "theme.slint";
+
+export component CloseButton inherits Rectangle {
+    in property <length> box: 30px;
+    in property <length> glyph: 16px;
+    callback clicked();
+
+    width: root.box;
+    height: root.box;
+    horizontal-stretch: 0;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: cbta.has-hover ? Theme.danger.with-alpha(0.55) : Theme.border-strong;
+    background: cbta.has-hover ? Theme.danger.with-alpha(0.16) : transparent;
+    animate background, border-color { duration: 120ms; }
+
+    Image {
+        source: @image-url("../assets/icons/x.svg");
+        colorize: cbta.has-hover ? Theme.danger : Theme.text-secondary;
+        width: root.glyph;
+        height: root.glyph;
+        image-fit: contain;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+
+    cbta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
