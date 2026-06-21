@@ -376,6 +376,10 @@ export component OverlayBarWindow inherits Window {
     // which AI model are actually live, with a 🟢 local / ☁ cloud / ◐ mixed
     // icon. So the user can tell at a glance what's transcribing + answering.
     in-out property <string> active-stack: "";
+    // Rolling generation throughput (" · 42 tok/s", or "" when unknown), polled
+    // from the backend EWMA and appended to the active-stack footer so a speed
+    // drop is visible at a glance.
+    in-out property <string> tok-per-sec: "";
 
     // Tile counter for the "+ Tile" button.
     in-out property <int> tiles-spawned: 0;
@@ -810,7 +814,7 @@ export component OverlayBarWindow inherits Window {
             // Active-stack readout (read-only) — moved here from the top row
             // so Settings + quit fit. Shows local/cloud/mixed · STT · AI model.
             Text {
-                text: root.active-stack;
+                text: root.active-stack + root.tok-per-sec;
                 font-size: 10px;
                 font-weight: 600;
                 color: Theme.accent;
@@ -1014,7 +1018,7 @@ export component OverlayBarWindow inherits Window {
                 padding-right: 4px;
                 spacing: 6px;
                 Text {
-                    text: root.active-stack;
+                    text: root.active-stack + root.tok-per-sec;
                     font-size: 10px;
                     font-weight: 600;
                     color: Theme.accent;

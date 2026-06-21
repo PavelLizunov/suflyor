@@ -335,6 +335,9 @@ async fn stream_inner(
     let mut stream = resp.bytes_stream();
     let mut id_sent = false;
     let mut delta_count: u32 = 0;
+    // Time of the first content token — tok/s is measured over the GENERATION
+    // window (first token -> done), excluding prompt-processing latency.
+    let mut first_delta_at: Option<std::time::Instant> = None;
 
     while let Some(chunk_res) = stream.next().await {
         let chunk = chunk_res.context("read sse chunk")?;
@@ -355,6 +358,7 @@ async fn stream_inner(
                 let payload = line["data:".len()..].trim();
                 if payload == "[DONE]" {
                     log::info!("AI stream got [DONE]: deltas={}", delta_count);
+                    record_stream_tps(delta_count, first_delta_at);
                     let _ = tx
                         .send(AiEvent::Done {
                             reason: "stop".into(),
@@ -380,6 +384,9 @@ async fn stream_inner(
                         if let Some(delta) = choice.get("delta") {
                             if let Some(content) = delta.get("content").and_then(|c| c.as_str()) {
                                 if !content.is_empty() {
+                                    if first_delta_at.is_none() {
+                                        first_delta_at = Some(std::time::Instant::now());
+                                    }
                                     delta_count += 1;
                                     // If the receiver is gone (tile closed /
                                     // consumer aborted), STOP pulling from llama
@@ -405,6 +412,7 @@ async fn stream_inner(
                                 reason,
                                 delta_count
                             );
+                            record_stream_tps(delta_count, first_delta_at);
                             let _ = tx
                                 .send(AiEvent::Done {
                                     reason: reason.to_string(),
@@ -425,6 +433,7 @@ async fn stream_inner(
     // "exactly one terminal event per stream" contract; otherwise the bar's
     // "AI working" pulse and the follow-up "busy" state stay stuck on).
     log::info!("AI stream ended without [DONE]/finish_reason: deltas={delta_count}");
+    record_stream_tps(delta_count, first_delta_at);
     let _ = tx
         .send(AiEvent::Done {
             reason: "eof".into(),
@@ -497,6 +506,52 @@ pub fn cost_microcents(model: &str, input_tokens: u64, output_tokens: u64) -> u6
 pub struct TokenUsage {
     pub input: u64,
     pub output: u64,
+    /// Generation throughput in tokens/second for THIS request — llama's own
+    /// `timings.predicted_per_second` when present, else completion_tokens over
+    /// the wall-clock request time. 0.0 if unknown. Feeds the per-tile label.
+    pub tok_per_sec: f64,
+}
+
+/// Rolling tokens/sec across recent AI requests (streaming + non-streaming both
+/// feed it). EWMA so the bar can show an at-a-glance "is generation slower than
+/// usual?" trend without a chart. `record_tps` is called by the backend on each
+/// completed request; the bar polls `avg_tps` on its refresh timer.
+static TPS_EWMA: std::sync::Mutex<f64> = std::sync::Mutex::new(0.0);
+
+/// Fold one request's tok/s into the rolling average. Ignores non-positive /
+/// non-finite values (failed or zero-length generations).
+pub fn record_tps(v: f64) {
+    if !(v.is_finite() && v > 0.0) {
+        return;
+    }
+    let mut g = match TPS_EWMA.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    // alpha 0.3 — responsive to a real slowdown without being jumpy per-token.
+    *g = if *g <= 0.0 { v } else { 0.3 * v + 0.7 * *g };
+}
+
+/// Current rolling tok/s, or None if no request has completed yet this run.
+pub fn avg_tps() -> Option<f64> {
+    let g = match TPS_EWMA.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    (*g > 0.0).then_some(*g)
+}
+
+/// Fold a streamed generation's throughput into the rolling tok/s. `delta_count`
+/// ≈ completion tokens (llama streams ~one content chunk per token); measured
+/// over the generation window (first token → done) so prompt-processing latency
+/// doesn't drag the number down.
+fn record_stream_tps(delta_count: u32, first_delta_at: Option<std::time::Instant>) {
+    if let Some(t) = first_delta_at {
+        let secs = t.elapsed().as_secs_f64();
+        if secs > 0.0 && delta_count > 0 {
+            record_tps(delta_count as f64 / secs);
+        }
+    }
 }
 
 /// Non-streaming completion — used for prep-context structuring where we
@@ -616,6 +671,7 @@ async fn complete_once(
     max_tokens: u32,
     force_no_think: bool,
 ) -> Result<(String, TokenUsage)> {
+    let t0 = std::time::Instant::now();
     let client = http_client();
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
     let mut body = serde_json::json!({
@@ -671,17 +727,36 @@ async fn complete_once(
         .and_then(|c| c.as_str())
         .unwrap_or("")
         .to_string();
+    let input = v
+        .get("usage")
+        .and_then(|u| u.get("prompt_tokens"))
+        .and_then(|n| n.as_u64())
+        .unwrap_or(0);
+    let output = v
+        .get("usage")
+        .and_then(|u| u.get("completion_tokens"))
+        .and_then(|n| n.as_u64())
+        .unwrap_or(0);
+    // Prefer llama.cpp's own server-side timing (excludes our network + queue);
+    // fall back to completion_tokens over the wall-clock request time.
+    let tok_per_sec = v
+        .get("timings")
+        .and_then(|t| t.get("predicted_per_second"))
+        .and_then(|n| n.as_f64())
+        .filter(|x| x.is_finite() && *x > 0.0)
+        .unwrap_or_else(|| {
+            let secs = t0.elapsed().as_secs_f64();
+            if secs > 0.0 && output > 0 {
+                output as f64 / secs
+            } else {
+                0.0
+            }
+        });
+    record_tps(tok_per_sec);
     let usage = TokenUsage {
-        input: v
-            .get("usage")
-            .and_then(|u| u.get("prompt_tokens"))
-            .and_then(|n| n.as_u64())
-            .unwrap_or(0),
-        output: v
-            .get("usage")
-            .and_then(|u| u.get("completion_tokens"))
-            .and_then(|n| n.as_u64())
-            .unwrap_or(0),
+        input,
+        output,
+        tok_per_sec,
     };
     Ok((text, usage))
 }

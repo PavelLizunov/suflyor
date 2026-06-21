@@ -977,6 +977,28 @@ fn main() -> Result<(), slint::PlatformError> {
     overlay.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
     overlay.set_active_stack(SharedString::from(active_stack_label(&cfg.read())));
 
+    // Poll the rolling tok/s into the bar footer (~1.5s). Decoupled from the AI
+    // event flow: the backend folds each request's throughput into an EWMA
+    // (ai::record_tps); the bar just reads ai::avg_tps() here. Held for the whole
+    // run via the named binding so the Timer keeps firing.
+    let _tps_timer = slint::Timer::default();
+    {
+        let weak_tps = overlay.as_weak();
+        _tps_timer.start(
+            slint::TimerMode::Repeated,
+            std::time::Duration::from_millis(1500),
+            move || {
+                if let Some(o) = weak_tps.upgrade() {
+                    let label = match ai::avg_tps() {
+                        Some(t) => format!(" · {t:.0} tok/s"),
+                        None => String::new(),
+                    };
+                    o.set_tok_per_sec(SharedString::from(label));
+                }
+            },
+        );
+    }
+
     // ===== Local-AI boot + watchdog (E10.5, hardened 2026-06-13) =====
     // The local servers ARE the user's AI/STT brain. Previously boot did a
     // fire-and-forget `ensure_servers` launch: if llama-server crashed on spawn
@@ -2885,10 +2907,15 @@ fn main() -> Result<(), slint::PlatformError> {
                                 })
                                 .collect();
                             tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
-                            tile.set_source_label(SharedString::from(format!(
-                                "ai · {} · ${:.4}",
-                                model, cost_usd
-                            )));
+                            let label = if usage.tok_per_sec > 0.0 {
+                                format!(
+                                    "ai · {} · ${:.4} · {:.0} tok/s",
+                                    model, cost_usd, usage.tok_per_sec
+                                )
+                            } else {
+                                format!("ai · {} · ${:.4}", model, cost_usd)
+                            };
+                            tile.set_source_label(SharedString::from(label));
                             // Bill the session like F6/F9 so the cost cap can see
                             // "+ tile" spend. This was a silent hole: cloud
                             // "+ tile" clicks never accumulated into the session
