@@ -18,6 +18,7 @@
 
 import { Button, LineEdit, ScrollView, SpinBox, ComboBox, Slider, TextEdit, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { CloseButton } from "controls.slint";
 
 component IconSlot inherits Rectangle {
     in property <image> icon;
@@ -2542,6 +2543,17 @@ export component SettingsWindow inherits Window {
             }
         }
         } // HorizontalLayout
+
+        // Frameless-window close at the TOP-RIGHT corner — mirrors the corner X
+        // in every other window (tile / archive / help / …). Declared AFTER the
+        // HorizontalLayout so it floats on top; inset 12px to clear the 12px
+        // rounded corner. The familiar labelled "Close" at the bottom of the nav
+        // stays too — the tester is used to it, so both close affordances coexist.
+        CloseButton {
+            x: parent.width - self.width - 12px;
+            y: 12px;
+            clicked => { root.close-clicked(); }
+        }
     } // rounded root Rectangle
 
     pure function tab-name-for(idx: int) -> string {
