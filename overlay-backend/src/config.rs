@@ -11,6 +11,7 @@ use std::sync::Arc;
 /// in its own file to keep this module navigable; `default_snippets` is the
 /// only item it exposes. Unit tests live in `config/tests.rs` (declared at the
 /// bottom of this file).
+mod repair;
 mod snippets;
 use snippets::default_snippets;
 
@@ -1117,6 +1118,25 @@ pub fn load() -> Config {
         }
     };
     let mut dirty = false;
+    // Heal an externally-mangled config: a non-UTF-8 tool (Notepad "ANSI" save,
+    // PowerShell without -Encoding utf8, a cp1252 paste) can round-trip
+    // config.json through Windows-1252, leaving the profile context as
+    // valid-UTF-8 mojibake ("**Ð Ð¾Ð»ÑŒ:**" = "**Роль:**") that strict-UTF-8 load
+    // then accepts. Detect that exact signature and reverse it so the user never
+    // sees garbled Cyrillic. Conservative — only repairs strings that reconstruct
+    // to valid UTF-8 GAINING Cyrillic, so legitimate text is untouched.
+    if let Some(fixed) = repair::repair_cp1252_mojibake(&cfg.meeting_context) {
+        log::warn!("config: repaired cp1252-mojibaked meeting_context on load");
+        cfg.meeting_context = fixed;
+        dirty = true;
+    }
+    for prof in &mut cfg.context_profiles {
+        if let Some(fixed) = repair::repair_cp1252_mojibake(&prof.context) {
+            log::warn!("config: repaired cp1252-mojibaked context for a profile");
+            prof.context = fixed;
+            dirty = true;
+        }
+    }
     // NB: we deliberately do NOT re-seed default snippets when the list is
     // empty. A fresh install already gets them via Config::defaults() on the
     // error arms above; re-seeding on every empty list clobbered a user who had
