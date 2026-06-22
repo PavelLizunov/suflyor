@@ -22,6 +22,7 @@ pub mod persistence;
 pub mod re_transcribe;
 pub mod recorder;
 pub mod runtime;
+pub mod session_names;
 pub mod stt;
 pub mod tts;
 pub mod tts_install;

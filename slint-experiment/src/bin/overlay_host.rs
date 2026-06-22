@@ -396,6 +396,7 @@ fn spawn_text_tile(
                 bridge_for_close.drop_conversation(t.get_convo_id());
                 let close_hwnd = grab_hwnd(t.window()).ok();
                 let _ = t.hide();
+                slint_replay::win32::force_hide(t.window());
                 if let Some(target) = close_hwnd {
                     vec_for_close
                         .borrow_mut()
@@ -1452,6 +1453,44 @@ fn main() -> Result<(), slint::PlatformError> {
     // the diagnostic appears via the bridge's tile:error path
     // (currently logged; UI toast comes in a follow-up).
     //
+    // ── Pause / Resume (v0.22.0) — the bar chip next to the timer. Toggles
+    // SlintRuntime.paused (the flag the audio + transcript forwarders gate on),
+    // mirrors it into AppState for the timer-freeze, and flips the chip icon +
+    // status pill. The chip is only shown while a session runs, so this fires
+    // only mid-session. Resume keeps the SAME session (same recording + id).
+    {
+        let s = state.clone();
+        let weak = overlay.as_weak();
+        let slint_rt_pause = slint_rt.clone();
+        overlay.on_pause_toggle_clicked(move || {
+            let paused = {
+                let mut rt = slint_replay::runtime_state::lock(&slint_rt_pause);
+                rt.paused = !rt.paused;
+                rt.paused
+            };
+            {
+                let mut st = match s.lock() {
+                    Ok(g) => g,
+                    Err(p) => p.into_inner(),
+                };
+                st.paused = paused;
+            }
+            if let Some(o) = weak.upgrade() {
+                o.set_session_paused(paused);
+                if paused {
+                    o.set_status_text(SharedString::from("paused"));
+                    o.set_status_color(slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24));
+                } else {
+                    refresh_status(&o, get_mic_active(&s), get_sys_active(&s));
+                }
+            }
+            eprintln!(
+                "[overlay-host] session {}",
+                if paused { "PAUSED" } else { "RESUMED" }
+            );
+        });
+    }
+
     // The chip's local AppState.timer_active flag tracks the user's
     // INTENT (toggle on / toggle off). The real session lifecycle
     // (capture handle, tasks) lives in SlintRuntime — they're kept
@@ -1464,12 +1503,18 @@ fn main() -> Result<(), slint::PlatformError> {
         let rt_for_timer = slint_rt.clone();
         let rt_handle_for_timer = rt_handle.clone();
         overlay.on_timer_toggle_clicked(move || {
+            // v0.22.0 — every Start/Stop toggle clears any paused state: a new
+            // session starts recording, and a Stop ends it outright. The audio
+            // pipeline's own flag is reset here too (start_session also resets
+            // it, but a Stop-while-paused must clear it now).
+            slint_replay::runtime_state::lock(&rt_for_timer).paused = false;
             let new_active = {
                 let mut st = match s.lock() {
                     Ok(g) => g,
                     Err(p) => p.into_inner(),
                 };
                 st.timer_active = !st.timer_active;
+                st.paused = false;
                 if !st.timer_active {
                     st.session_secs = 0;
                 }
@@ -1477,8 +1522,15 @@ fn main() -> Result<(), slint::PlatformError> {
             };
             if let Some(o) = weak.upgrade() {
                 o.set_timer_active(new_active);
+                o.set_session_paused(false);
                 if !new_active {
                     o.set_timer_label(SharedString::from("00:00"));
+                    // v0.22.0 — clear the auto-name so a stopped session shows none.
+                    o.set_session_name(SharedString::from(""));
+                    // Clear any "paused"/"recording" status back to idle so a
+                    // Stop-while-paused doesn't leave a stale pill.
+                    o.set_status_text(SharedString::from("idle"));
+                    o.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
                 }
             }
 
@@ -1597,6 +1649,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 // none), so the map doesn't outlive the force-evicted tile.
                 bridge_for_poll.drop_conversation(dropped.get_convo_id());
                 let _ = dropped.hide();
+                slint_replay::win32::force_hide(dropped.window());
                 eprintln!(
                     "[overlay-host] live tile cap hit (>= {MAX_LIVE_TILES}) — dropping oldest"
                 );
@@ -1672,6 +1725,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     bridge_for_close.drop_conversation(t.get_convo_id());
                     let close_hwnd = grab_hwnd(t.window()).ok();
                     let _ = t.hide();
+                    slint_replay::win32::force_hide(t.window());
                     if let Some(target) = close_hwnd {
                         let before = vec_for_close.borrow().len();
                         vec_for_close
@@ -1922,6 +1976,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         if let Some(t) = weak_retry.upgrade() {
                             let close_hwnd = grab_hwnd(t.window()).ok();
                             let _ = t.hide();
+                            slint_replay::win32::force_hide(t.window());
                             if let Some(target) = close_hwnd {
                                 vec_for_retry
                                     .borrow_mut()
@@ -1959,6 +2014,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // pattern.
     let tick_state = state.clone();
     let tick_weak = overlay.as_weak();
+    let tick_slint_rt = slint_rt.clone();
     let tick_timer = Timer::default();
     tick_timer.start(
         TimerMode::Repeated,
@@ -1969,7 +2025,9 @@ fn main() -> Result<(), slint::PlatformError> {
                     Ok(g) => g,
                     Err(p) => p.into_inner(),
                 };
-                if st.timer_active {
+                // v0.22.0 — freeze the clock while paused: the timer reflects
+                // RECORDED time, not wall-clock. Resume continues counting.
+                if st.timer_active && !st.paused {
                     st.session_secs += 1;
                 }
                 (st.timer_active, st.session_secs)
@@ -1977,6 +2035,17 @@ fn main() -> Result<(), slint::PlatformError> {
             if active {
                 if let Some(o) = tick_weak.upgrade() {
                     o.set_timer_label(SharedString::from(format_timer(secs)));
+                    // v0.22.0 — mirror the (background) auto-name onto the bar.
+                    // Reading rt each tick is cheap (1 s cadence); the compare
+                    // skips a redundant set + repaint when the name is unchanged.
+                    let want = {
+                        let s = slint_replay::runtime_state::lock(&tick_slint_rt);
+                        let full = s.session_name.clone().unwrap_or_default();
+                        SharedString::from(slint_replay::session_namer::bar_label(&full))
+                    };
+                    if o.get_session_name() != want {
+                        o.set_session_name(want);
+                    }
                 }
             }
         },
@@ -2647,6 +2716,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 for t in v.iter() {
                     bridge_for_close_all.drop_conversation(t.get_convo_id());
                     let _ = t.hide();
+                    slint_replay::win32::force_hide(t.window());
                 }
                 v.clear();
                 count
@@ -2798,6 +2868,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 if let Some(tw) = weak_tile.upgrade() {
                     let close_hwnd = grab_hwnd(tw.window()).ok();
                     let _ = tw.hide();
+                    slint_replay::win32::force_hide(tw.window());
                     if let Some(target) = close_hwnd {
                         // Abort this tile's in-flight AI request so the GPU isn't
                         // left generating for a closed tile (keyed by tile-id).

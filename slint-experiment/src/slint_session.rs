@@ -89,6 +89,16 @@ fn start_session_inner(
         // next Старт.
         s.full_transcript.clear();
         s.full_transcript_truncated = false;
+        // A fresh session always starts un-paused (the bar's Pause chip resets
+        // its own AppState flag in the timer handler).
+        s.paused = false;
+        // v0.22.0 — clear the previous session's auto-name + its latches/throttle.
+        s.session_name = None;
+        s.session_name_requested = false;
+        s.session_name_inflight = false;
+        s.session_name_at_ms = 0;
+        s.session_name_at_len = 0;
+        s.last_transcript_ms = 0;
         s.session_cost_microcents = 0;
         // New session generation — invalidates any in-flight auto-tile task
         // from a prior session (it bails post-AI-call on the gen mismatch).
@@ -205,10 +215,16 @@ fn start_session_inner(
     };
     {
         let c = cfg.read();
+        // v0.22.x — record the RESOLVED live-answer model, not the raw cloud
+        // `ai_model` field: on a LOCAL session the latter is the unused cloud
+        // default (e.g. claude-sonnet-4-6), which then mislabeled the session in
+        // the archive. The per-turn AiRequest already logs this resolved
+        // `ep.model`; recording it here keeps the session headline in lock-step.
+        let live_model = c.ai_endpoint(false).model;
         journal.write(&JournalEvent::SessionStart {
             unix_ms: now_unix_ms(),
             meeting_context_chars: c.meeting_context.len(),
-            ai_model: &c.ai_model,
+            ai_model: &live_model,
             prep_model: &c.prep_model,
             stt_language: c.stt_language.as_deref(),
             response_language: &c.response_language,
@@ -277,6 +293,14 @@ fn start_session_inner(
                     // ends, i.e. when capture stops and src_rx closes.
                     let recorder = recorder;
                     while let Some(chunk) = src_rx.recv().await {
+                        // Pause (v0.22.0) — drop the chunk whole: the recorder is
+                        // NOT fed (its WAVs stop growing but are NOT finalised, so
+                        // Resume appends to the SAME files) and nothing reaches
+                        // STT (no transcript, no auto-tiles). The session stays
+                        // live; only Стоп finalises.
+                        if lock(&rt_for_rec).paused {
+                            continue;
+                        }
                         // v0.13.1 — when the mic chip is muted, do NOT write mic
                         // audio to the recording (system audio still records). The
                         // transcript forwarder drops mic transcript lines on the
@@ -378,6 +402,15 @@ async fn transcript_forwarder(
     journal: Journal,
 ) {
     while let Some(ev) = stt_rx.recv().await {
+        // Pause (v0.22.0) — drop any STT event that lands while paused. This is
+        // the gate for the recording-OFF path (no forwarder tees its chunks);
+        // with recording ON the chunk was already dropped upstream, so here it
+        // is cheap belt-and-braces. No transcript line, journal write, or
+        // auto-tile fires while paused. Manual F9 still reads the accumulated
+        // transcript, so it keeps working — by design.
+        if lock(&rt).paused {
+            continue;
+        }
         // Phase E6 diagnostic — log every STT event so we can debug
         // "mic transcript not working" complaints. Truncate text to
         // 80 chars to keep stderr readable.
@@ -400,6 +433,10 @@ async fn transcript_forwarder(
             let mut s = lock(&rt);
             push_transcript_line(&mut s, line.clone());
         }
+        // v0.22.0 — drive the background session-namer: first-shot once enough
+        // transcript lands, then throttled re-gen as the topic grows (local-only;
+        // a cheap no-op on most calls).
+        crate::session_namer::maybe_spawn_namer(&rt, &cfg, now_unix_ms());
         journal.write(&JournalEvent::TranscriptLine {
             unix_ms: now_unix_ms(),
             source: match line.source {

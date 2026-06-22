@@ -100,6 +100,41 @@ pub struct SlintRuntime {
     /// System audio remains unaffected. Toggled by the mic chip.
     pub mic_muted: bool,
 
+    /// v0.22.0 — true while the session is PAUSED. The audio forwarder + the
+    /// transcript forwarder drop their input while set, so nothing is recorded
+    /// or transcribed and no auto-tiles fire — but the session stays LIVE: the
+    /// recorder WAVs are NOT finalised (Resume appends to the SAME files), the
+    /// journal stays open, and `current_session_id` is kept, so Resume
+    /// continues the SAME session rather than starting a new one. Manual F9
+    /// still answers from the accumulated transcript (by design). Reset to
+    /// false on session start; toggled by the bar Pause chip.
+    pub paused: bool,
+
+    /// v0.22.0 — the session's auto-generated short title (or user-edited
+    /// later), or `None` until the namer produces one. The bar's tick poll
+    /// mirrors this into the `session-name` UI property. Reset on session start.
+    pub session_name: Option<String>,
+
+    /// v0.22.0 — one-shot latch so the FIRST session name fires at most once.
+    /// Set when claimed; reset on session start.
+    pub session_name_requested: bool,
+
+    /// v0.22.0 — unix-ms of the most recent transcript line. The auto-namer's
+    /// re-gen path reads the gap before a line (a lull) to time a refresh.
+    pub last_transcript_ms: u128,
+
+    /// v0.22.0 — unix-ms when the name was last (re)generated; 0 before the
+    /// first name. The re-gen throttle measures its interval from here.
+    pub session_name_at_ms: u128,
+
+    /// v0.22.0 — `full_transcript` length when the name was last (re)generated;
+    /// the re-gen gate requires meaningful growth past this.
+    pub session_name_at_len: usize,
+
+    /// v0.22.0 — true while a namer task (first-shot or re-gen) is in flight, so
+    /// at most one runs at a time.
+    pub session_name_inflight: bool,
+
     /// Sliding window of recent tile-spawn timestamps for the
     /// auto-detector rate-limit (drops triggers exceeding
     /// `MAX_TILES_PER_MIN` in the last 60s).

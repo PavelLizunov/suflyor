@@ -22,10 +22,41 @@ import { Metrics } from "metrics.slint";
 // shapes into this struct; the UI renders them identically).
 export struct ArchiveRow {
     id: string,        // session id (file stem) — passed back on activation
-    title: string,     // session: "✓ 2026-06-04 10:00:00"; hit: "🔎 …"
+    title: string,     // session: "Обзор функций" or "2026-06-04 10:00:00"; hit: the snippet header
     subtitle: string,  // session: "💬 12 · 🤖 3 · model"; hit: the matched snippet
     meta: string,      // session: cost (e.g. "$0.024"); hit: kind emoji
     has-recordings: bool, // v0.14.0 — recordings/<id>/ exists → show "↻ Summary"
+    name: string,      // v0.22.0 — the raw editable session name ("" if unnamed) — pre-fills the inline rename field
+}
+
+// v0.22.0 — a compact 24px icon action button for archive rows (rename ✎,
+// confirm ✓, cancel ✗). Sits ON TOP of the row's activation TouchArea.
+component RowIcon inherits Rectangle {
+    in property <image> icon;
+    in property <string> a11y;
+    callback clicked();
+    width: 24px;
+    height: 24px;
+    border-radius: 5px;
+    background: t.has-hover ? Theme.accent.with-alpha(0.20) : transparent;
+    accessible-role: button;
+    accessible-label: root.a11y;
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            Image {
+                source: root.icon;
+                colorize: Theme.text-secondary;
+                width: 13px;
+                height: 13px;
+                image-fit: contain;
+            }
+        }
+    }
+    t := TouchArea {
+        clicked => { root.clicked(); }
+    }
 }
 
 export component ArchiveWindow inherits Window {
@@ -67,9 +98,22 @@ export component ArchiveWindow inherits Window {
     // (mirrors the Vision panel's "Screenshots are sent to the cloud." note).
     in-out property <bool> stt-is-cloud: false;
 
+    // v0.22.0 — inline session rename. `renaming-index` is the row being edited
+    // (-1 = none); `rename-text` is the editable buffer (Rust pre-fills it from
+    // the row's `name` when ✎ is clicked).
+    in-out property <int> renaming-index: -1;
+    in-out property <string> rename-text: "";
+
     callback query-changed(string);
     callback result-activated(int);
     callback retranscribe-requested(int);
+    // v0.22.0 — rename: ✎ opens the field (Rust sets renaming-index + rename-text
+    // from the current name); ✓ / Enter confirms; ✗ cancels. Regen re-asks the
+    // local model for a fresh title from the saved transcript.
+    callback rename-requested(int, string);
+    callback rename-confirmed(int);
+    callback rename-cancelled();
+    callback regen-name-requested(int);
     callback close-requested();
     // v0.17.1 — frameless window drag by the header (mirrors the tile drag:
     // pointer-down records the anchor, moved-while-pressed moves the HWND).
@@ -92,6 +136,12 @@ export component ArchiveWindow inherits Window {
             height: 100%;
             key-pressed(event) => {
                 if (event.text == Key.Escape) {
+                    // v0.22.0 — Esc cancels an in-progress rename first; a second
+                    // Esc (nothing being edited) closes the window.
+                    if (root.renaming-index != -1) {
+                        root.rename-cancelled();
+                        return accept;
+                    }
                     root.close-requested();
                     return accept;
                 }
@@ -235,7 +285,25 @@ export component ArchiveWindow inherits Window {
                                     spacing: 1px;
                                     HorizontalLayout {
                                         spacing: Metrics.space-sm;
-                                        Text {
+                                        // ── Inline rename (v0.22.0): field + ✓ / ✗ for THIS row ──
+                                        if root.renaming-index == i : LineEdit {
+                                            text <=> root.rename-text;
+                                            placeholder-text: @tr("Session name");
+                                            horizontal-stretch: 1;
+                                            accepted => { root.rename-confirmed(i); }
+                                        }
+                                        if root.renaming-index == i : RowIcon {
+                                            icon: @image-url("../assets/icons/check.svg");
+                                            a11y: "Save name";
+                                            clicked => { root.rename-confirmed(i); }
+                                        }
+                                        if root.renaming-index == i : RowIcon {
+                                            icon: @image-url("../assets/icons/x.svg");
+                                            a11y: "Cancel rename";
+                                            clicked => { root.rename-cancelled(); }
+                                        }
+                                        // ── Normal: title + meta + ✎ rename ──
+                                        if root.renaming-index != i : Text {
                                             text: row.title;
                                             font-size: Metrics.font-body;
                                             font-weight: 700;
@@ -244,11 +312,21 @@ export component ArchiveWindow inherits Window {
                                             horizontal-stretch: 1;
                                             overflow: elide;
                                         }
-                                        Text {
+                                        if root.renaming-index != i : Text {
                                             text: row.meta;
                                             font-size: Metrics.font-caption;
                                             color: Theme.text-muted;
                                             vertical-alignment: center;
+                                        }
+                                        if root.renaming-index != i : RowIcon {
+                                            icon: @image-url("../assets/icons/pencil.svg");
+                                            a11y: "Rename session";
+                                            clicked => { root.rename-requested(i, row.name); }
+                                        }
+                                        if root.renaming-index != i : RowIcon {
+                                            icon: @image-url("../assets/icons/ai.svg");
+                                            a11y: "Regenerate name from transcript";
+                                            clicked => { root.regen-name-requested(i); }
                                         }
                                     }
                                     Text {

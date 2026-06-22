@@ -53,7 +53,14 @@ pub fn reindex_default(skip_active: Option<&str>) -> Result<IndexStats> {
     let db = Store::default_path().context("resolve catalog path")?;
     let sessions = sessions_dir().context("resolve sessions dir")?;
     let mut store = Store::open(&db)?;
-    index_all(&mut store, &sessions, skip_active)
+    let stats = index_all(&mut store, &sessions, skip_active)?;
+    // v0.22.x — recompute every session's headline model from what its AI turns
+    // actually ran on (a turnless session → NULL → "—"). Best-effort: a stale
+    // model is cosmetic, never fail the catalog refresh over it. Idempotent.
+    if let Err(e) = store.backfill_session_models() {
+        log::warn!("reindex: session-model backfill failed: {e:#}");
+    }
+    Ok(stats)
 }
 
 /// Open the default on-disk catalog (the same `catalog.sqlite` the startup

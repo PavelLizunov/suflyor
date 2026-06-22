@@ -210,6 +210,32 @@ impl Store {
             .context("count ai_turns")
     }
 
+    /// v0.22.x — recompute each session's headline `ai_model` from the model its
+    /// AI turns ACTUALLY ran on: the most-frequent non-empty `ai_turns.model`
+    /// (ties broken toward the most recent). The per-turn model is the resolved
+    /// local/cloud endpoint, so this corrects rows whose `SessionStart` logged the
+    /// raw cloud `ai_model` config field — a local session that showed e.g.
+    /// `claude-sonnet-4-6` now reflects its real local model.
+    ///
+    /// A session with NO AI turns has no model to attribute: the correlated
+    /// subquery returns no row → `ai_model` is cleared to NULL, which the archive
+    /// renders as "—" (an honest "no AI was used here", not the stale configured
+    /// default it was journaled with). Idempotent; returns the rows touched.
+    pub fn backfill_session_models(&self) -> Result<usize> {
+        self.conn
+            .execute(
+                "UPDATE sessions SET ai_model = ( \
+                     SELECT t.model FROM ai_turns t \
+                     WHERE t.session_id = sessions.id AND t.model <> '' \
+                     GROUP BY t.model \
+                     ORDER BY COUNT(*) DESC, MAX(t.unix_ms) DESC \
+                     LIMIT 1 \
+                 )",
+                [],
+            )
+            .context("backfill session models")
+    }
+
     /// The set of session ids already in the catalog — lets the indexer skip
     /// immutable, already-indexed journals.
     pub fn indexed_session_ids(&self) -> Result<std::collections::HashSet<String>> {
@@ -618,6 +644,107 @@ mod tests {
         assert_eq!(got, s);
         assert_eq!(store.count_utterances(&s.id).unwrap(), 2);
         assert_eq!(store.count_ai_turns(&s.id).unwrap(), 1);
+    }
+
+    #[test]
+    fn backfill_sets_headline_to_turn_mode() {
+        let mut store = Store::open_in_memory().unwrap();
+        // A session journaled with the WRONG cloud headline (the historical bug:
+        // SessionStart logged the raw cloud `ai_model` even on a local session)…
+        let mut s = sample_session("sess-backfill");
+        s.ai_model = Some("claude-sonnet-4-6".into());
+        // …but whose turns actually ran on a local model (gemma twice → mode).
+        let turns = vec![
+            AiTurn {
+                session_id: s.id.clone(),
+                unix_ms: 10,
+                purpose: "live_ask".into(),
+                model: "gemma-4-12B".into(),
+                question: "q1".into(),
+                answer: "a1".into(),
+                latency_ms: None,
+                attached_screenshot: false,
+            },
+            AiTurn {
+                session_id: s.id.clone(),
+                unix_ms: 20,
+                purpose: "summary".into(),
+                model: "gemma-4-12B".into(),
+                question: String::new(),
+                answer: "a2".into(),
+                latency_ms: None,
+                attached_screenshot: false,
+            },
+        ];
+        store.replace_session(&s, &[], &turns).unwrap();
+
+        let n = store.backfill_session_models().unwrap();
+        assert!(n >= 1);
+        let got = store.get_session(&s.id).unwrap().unwrap();
+        assert_eq!(got.ai_model.as_deref(), Some("gemma-4-12B"));
+    }
+
+    #[test]
+    fn backfill_nulls_turnless_sessions() {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut s = sample_session("sess-noturns");
+        s.ai_model = Some("claude-sonnet-4-6".into());
+        store.replace_session(&s, &[], &[]).unwrap();
+        store.backfill_session_models().unwrap();
+        let got = store.get_session(&s.id).unwrap().unwrap();
+        // No AI turns → no model to attribute → headline cleared (archive "—"),
+        // not the stale cloud default it was journaled with.
+        assert_eq!(got.ai_model, None);
+    }
+
+    #[test]
+    fn backfill_mode_wins_and_ignores_empty() {
+        let mut store = Store::open_in_memory().unwrap();
+        let s = sample_session("sess-mode");
+        let mk = |ms: i64, model: &str| AiTurn {
+            session_id: s.id.clone(),
+            unix_ms: ms,
+            purpose: "live_ask".into(),
+            model: model.into(),
+            question: String::new(),
+            answer: "a".into(),
+            latency_ms: None,
+            attached_screenshot: false,
+        };
+        // gemma ×2 beats a lone cloud escalation; the empty-model turn is ignored.
+        let turns = vec![
+            mk(10, "gemma-4-12B"),
+            mk(20, "claude-sonnet-4-6"),
+            mk(30, "gemma-4-12B"),
+            mk(40, ""),
+        ];
+        store.replace_session(&s, &[], &turns).unwrap();
+        store.backfill_session_models().unwrap();
+        let got = store.get_session(&s.id).unwrap().unwrap();
+        assert_eq!(got.ai_model.as_deref(), Some("gemma-4-12B"));
+    }
+
+    #[test]
+    fn backfill_tie_breaks_toward_most_recent() {
+        let mut store = Store::open_in_memory().unwrap();
+        let s = sample_session("sess-tie");
+        let mk = |ms: i64, model: &str| AiTurn {
+            session_id: s.id.clone(),
+            unix_ms: ms,
+            purpose: "live_ask".into(),
+            model: model.into(),
+            question: String::new(),
+            answer: "a".into(),
+            latency_ms: None,
+            attached_screenshot: false,
+        };
+        // One turn each → a 1–1 tie; `ORDER BY COUNT(*) DESC, MAX(unix_ms) DESC`
+        // breaks it toward the model used most recently.
+        let turns = vec![mk(10, "older-model"), mk(20, "newer-model")];
+        store.replace_session(&s, &[], &turns).unwrap();
+        store.backfill_session_models().unwrap();
+        let got = store.get_session(&s.id).unwrap().unwrap();
+        assert_eq!(got.ai_model.as_deref(), Some("newer-model"));
     }
 
     #[test]

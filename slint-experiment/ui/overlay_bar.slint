@@ -371,6 +371,13 @@ export component OverlayBarWindow inherits Window {
     // Session timer label (formatted by Rust, e.g. "03:42").
     in-out property <string> timer-label: "00:00";
     in-out property <bool> timer-active: false;
+    // v0.22.0 — true while the running session is PAUSED. Drives the Pause
+    // chip's play/pause icon + the frozen timer; set by Rust.
+    in-out property <bool> session-paused: false;
+    // v0.22.0 — the active session's short title (auto-named, later editable).
+    // Shown next to the timer while a session runs; empty until the namer fills
+    // it. Set by Rust (the bar tick mirrors SlintRuntime.session_name).
+    in-out property <string> session-name: "";
 
     // Phase E10.2 — read-only "active stack" readout: which STT engine +
     // which AI model are actually live, with a 🟢 local / ☁ cloud / ◐ mixed
@@ -461,6 +468,8 @@ export component OverlayBarWindow inherits Window {
     callback ptt-sys-pressed();
     callback ptt-sys-released();
     callback timer-toggle-clicked();
+    // v0.22.0 — Pause/Resume the running session (keeps the SAME session).
+    callback pause-toggle-clicked();
     callback spawn-tile-clicked();
     // V0.8.3 — "Написать": open the typed-question input window.
     callback text-ask-clicked();
@@ -627,6 +636,20 @@ export component OverlayBarWindow inherits Window {
                 accent: #fbbf24;
                 mono: true;
                 clicked => { root.timer-toggle-clicked(); }
+            }
+
+            // ── Pause / Resume (v0.22.0) — visible only while a session runs.
+            // Pauses recording + transcript + auto-tiles but keeps the SAME
+            // session alive; Resume continues it. Manual F9 still works.
+            if root.timer-active : Chip {
+                icon: root.session-paused
+                    ? @image-url("../assets/icons/play.svg")
+                    : @image-url("../assets/icons/pause.svg");
+                has-icon: true;
+                a11y: root.session-paused ? "Resume the session" : "Pause the session";
+                active: root.session-paused;
+                accent: #fbbf24;
+                clicked => { root.pause-toggle-clicked(); }
             }
 
             VDivider { }
@@ -811,6 +834,24 @@ export component OverlayBarWindow inherits Window {
             padding-left: 4px;
             padding-right: 4px;
             spacing: 6px;
+            // Session name (v0.22.0) — relocated here from the top chip row so it
+            // no longer pushes the action chips; a small 10px left anchor with a
+            // muted dot before the model-stack readout.
+            if root.timer-active && root.session-name != "" : Text {
+                text: root.session-name;
+                font-size: 10px;
+                font-weight: 600;
+                color: Theme.success;
+                vertical-alignment: center;
+                horizontal-stretch: 0;
+            }
+            if root.timer-active && root.session-name != "" : Text {
+                text: "·";
+                font-size: 10px;
+                color: Theme.text-muted;
+                vertical-alignment: center;
+                horizontal-stretch: 0;
+            }
             // Active-stack readout (read-only) — moved here from the top row
             // so Settings + quit fit. Shows local/cloud/mixed · STT · AI model.
             Text {
@@ -997,6 +1038,17 @@ export component OverlayBarWindow inherits Window {
                     accent: #fbbf24;
                     mono: true;
                     clicked => { root.timer-toggle-clicked(); }
+                }
+                // ── Pause / Resume (v0.22.0) — only while a session runs.
+                if root.timer-active : Chip {
+                    icon: root.session-paused
+                        ? @image-url("../assets/icons/play.svg")
+                        : @image-url("../assets/icons/pause.svg");
+                    has-icon: true;
+                    a11y: root.session-paused ? "Resume the session" : "Pause the session";
+                    active: root.session-paused;
+                    accent: #fbbf24;
+                    clicked => { root.pause-toggle-clicked(); }
                 }
                 // Spring — absorbs the slack so the status pill stays natural-
                 // width (identical to the full bar) and Expand sits at the right

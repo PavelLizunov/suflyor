@@ -12,6 +12,7 @@ pub mod capture;
 pub mod logging;
 pub mod markdown;
 pub mod runtime_state;
+pub mod session_namer;
 pub mod slint_events;
 pub mod slint_session;
 pub mod win32;

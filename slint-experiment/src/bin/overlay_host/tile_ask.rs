@@ -257,6 +257,7 @@ pub(crate) fn fire_f9_ask(
             bridge_for_close.drop_conversation(t.get_convo_id());
             let close_hwnd = grab_hwnd(t.window()).ok();
             let _ = t.hide();
+            slint_replay::win32::force_hide(t.window());
             if let Some(target) = close_hwnd {
                 vec_for_close
                     .borrow_mut()

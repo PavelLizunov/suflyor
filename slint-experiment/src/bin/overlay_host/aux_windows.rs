@@ -529,6 +529,10 @@ pub(crate) fn open_archive(
                         .collect()
                 }
             };
+            // v0.22.0 — a list rebuild invalidates the index-keyed rename state,
+            // so cancel any in-progress edit (else ✓ would persist to whatever
+            // session now occupies that row index — a silent mis-rename).
+            p.set_renaming_index(-1);
             p.set_results(ModelRc::new(VecModel::from(rows)));
         });
     }
@@ -561,9 +565,112 @@ pub(crate) fn open_archive(
                     st.session_ai_turns(&sid).unwrap_or_default(),
                 )
             };
-            let title = archive_time_label(session.as_ref().and_then(|s| s.started_at_ms), &sid);
+            let title = session_title(session.as_ref().and_then(|s| s.started_at_ms), &sid);
             let md = build_session_markdown(session.as_ref(), &utts, &turns);
             spawn_content_tile(&title, "archive", &md, &tiles_c, &state_c, &wov);
+        });
+    }
+
+    // v0.22.0 — inline rename: ✎ pre-fills the field from the row's current
+    // name; ✓ / Enter persists to the session_names sidecar + refreshes the
+    // list; ✗ cancels. Clearing the field reverts the row to the time label.
+    {
+        let weak = win.as_weak();
+        win.on_rename_requested(move |idx, name| {
+            if let Some(p) = weak.upgrade() {
+                p.set_renaming_index(idx);
+                p.set_rename_text(name);
+            }
+        });
+    }
+    {
+        let weak = win.as_weak();
+        win.on_rename_cancelled(move || {
+            if let Some(p) = weak.upgrade() {
+                p.set_renaming_index(-1);
+            }
+        });
+    }
+    {
+        let weak = win.as_weak();
+        win.on_rename_confirmed(move |idx| {
+            let Some(p) = weak.upgrade() else {
+                return;
+            };
+            let new_name = p.get_rename_text().trim().to_string();
+            let results = p.get_results();
+            if let Some(row) = archive_row_at(&results, idx) {
+                let sid = row.id.to_string();
+                if !sid.is_empty() {
+                    overlay_backend::session_names::set(
+                        &sid,
+                        &new_name,
+                        overlay_backend::journal::now_unix_ms(),
+                    );
+                }
+            }
+            p.set_renaming_index(-1);
+            // Re-run the query handler so the row title reflects the new name.
+            let q = p.get_query();
+            p.invoke_query_changed(q);
+        });
+    }
+
+    // v0.22.0 — ↻ regen: re-ask the LOCAL model for a fresh title from the
+    // session's saved transcript, persist + refresh. Local-only + best-effort
+    // (a cloud-only config simply does nothing — no egress, no cost).
+    {
+        let weak = win.as_weak();
+        let store_g = store.clone();
+        let cfg_g = cfg.clone();
+        let rth_g = rt_handle.clone();
+        win.on_regen_name_requested(move |idx| {
+            let Some(p) = weak.upgrade() else {
+                return;
+            };
+            let Some(store_rc) = store_g.as_ref() else {
+                return;
+            };
+            let results = p.get_results();
+            let Some(row) = archive_row_at(&results, idx) else {
+                return;
+            };
+            let sid = row.id.to_string();
+            if sid.is_empty() {
+                return;
+            }
+            let lines: Vec<String> = store_rc
+                .borrow()
+                .session_utterances(&sid)
+                .unwrap_or_default()
+                .iter()
+                .map(|u| u.text.clone())
+                .collect();
+            if lines.is_empty() {
+                return;
+            }
+            let ep = cfg_g.read().ai_endpoint(true);
+            if !ep.is_local {
+                return; // local-only naming — never spend cloud money on a title
+            }
+            let weak2 = weak.clone();
+            rth_g.spawn(async move {
+                let Some(name) = slint_replay::session_namer::generate_name(&ep, &lines).await
+                else {
+                    return;
+                };
+                overlay_backend::session_names::set(
+                    &sid,
+                    &name,
+                    overlay_backend::journal::now_unix_ms(),
+                );
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(p) = weak2.upgrade() {
+                        let q = p.get_query();
+                        p.invoke_query_changed(q);
+                    }
+                });
+            });
         });
     }
 
@@ -763,6 +870,7 @@ pub(crate) fn spawn_content_tile(
         if let Some(t) = weak_tile.upgrade() {
             let close_hwnd = grab_hwnd(t.window()).ok();
             let _ = t.hide();
+            slint_replay::win32::force_hide(t.window());
             if let Some(target) = close_hwnd {
                 vec_for_close
                     .borrow_mut()
@@ -849,13 +957,14 @@ fn archive_time_label(started_at_ms: Option<i64>, id: &str) -> String {
     }
 }
 
-/// Status → a compact language-neutral label for the row title.
+/// Status → a compact prefix for the row title. The COMPLETED case (the normal
+/// 99%) gets NO prefix so a named/timed title reads clean; only the abnormal
+/// states are flagged (so "done Обзор функций" → just "Обзор функций").
 fn status_glyph(status: &str) -> &'static str {
     match status {
-        "completed" => "done",
         "crashed" => "crashed",
         "active" => "active",
-        _ => "session",
+        _ => "", // completed / unknown — clean title, no prefix
     }
 }
 
@@ -878,27 +987,51 @@ fn recording_ids_snapshot() -> std::collections::HashSet<String> {
         .unwrap_or_default()
 }
 
+/// The archive display title for a session: the persisted session NAME (v0.22.0
+/// `session_names` sidecar) if any, else the МСК time label.
+fn session_title(started_at_ms: Option<i64>, id: &str) -> String {
+    overlay_backend::session_names::get(id).unwrap_or_else(|| archive_time_label(started_at_ms, id))
+}
+
 /// Map an indexed [`Session`] to an archive list row. Counts are emoji-coded
 /// as plain text counts so the row needs no per-language string;
 /// the cost shows only when non-zero (local runs are $0 → blank).
 fn session_to_row(s: &Session, recordings: &std::collections::HashSet<String>) -> ArchiveRow {
-    let label = archive_time_label(s.started_at_ms, &s.id);
+    let time = archive_time_label(s.started_at_ms, &s.id);
+    let name = overlay_backend::session_names::get(&s.id);
+    // Prefer the session NAME (v0.22.0) as the row title; fall back to the time.
+    let label = name.clone().unwrap_or_else(|| time.clone());
     let model = s.ai_model.as_deref().unwrap_or("—");
-    let subtitle = format!(
-        "lines {} · ai {} · {model}",
-        s.transcript_lines, s.ai_turns_count
-    );
+    // When a name is the title, keep the time visible in the subtitle.
+    let subtitle = if name.is_some() {
+        format!(
+            "{time} · lines {} · ai {} · {model}",
+            s.transcript_lines, s.ai_turns_count
+        )
+    } else {
+        format!(
+            "lines {} · ai {} · {model}",
+            s.transcript_lines, s.ai_turns_count
+        )
+    };
     let meta = if s.total_cost_microcents > 0 {
         format!("${:.3}", (s.total_cost_microcents as f64) / 100_000_000.0)
     } else {
         String::new()
     };
+    let glyph = status_glyph(&s.status);
+    let title = if glyph.is_empty() {
+        label
+    } else {
+        format!("{glyph} {label}")
+    };
     ArchiveRow {
         id: SharedString::from(s.id.clone()),
-        title: SharedString::from(format!("{} {label}", status_glyph(&s.status))),
+        title: SharedString::from(title),
         subtitle: SharedString::from(subtitle),
         meta: SharedString::from(meta),
         has_recordings: recordings.contains(&s.id),
+        name: SharedString::from(name.unwrap_or_default()),
     }
 }
 
@@ -906,7 +1039,13 @@ fn session_to_row(s: &Session, recordings: &std::collections::HashSet<String>) -
 /// whitespace-collapsed, length-capped snippet of the matched body, tagged with
 /// the hit kind (question · answer · utterance).
 fn hit_to_row(h: &SearchHit, recordings: &std::collections::HashSet<String>) -> ArchiveRow {
-    let label = archive_time_label(None, &h.session_id);
+    // Prefer the session NAME (v0.22.0) so a named session reads the same in
+    // search results as in the full list; fall back to the МСК time. Keep the
+    // raw name too, to pre-fill the inline rename field.
+    let name = overlay_backend::session_names::get(&h.session_id);
+    let label = name
+        .clone()
+        .unwrap_or_else(|| archive_time_label(None, &h.session_id));
     let kind_glyph = match h.kind.as_str() {
         "question" => "question",
         "answer" => "answer",
@@ -926,6 +1065,7 @@ fn hit_to_row(h: &SearchHit, recordings: &std::collections::HashSet<String>) -> 
         subtitle: SharedString::from(snippet),
         meta: SharedString::from(kind_glyph),
         has_recordings: recordings.contains(&h.session_id),
+        name: SharedString::from(name.unwrap_or_default()),
     }
 }
 
@@ -939,11 +1079,7 @@ fn build_session_markdown(
 ) -> String {
     let mut out = String::new();
     if let Some(s) = session {
-        out.push_str(&format!(
-            "# {} {}\n\n",
-            status_glyph(&s.status),
-            archive_time_label(s.started_at_ms, &s.id)
-        ));
+        out.push_str(&format!("# {}\n\n", session_title(s.started_at_ms, &s.id)));
         let model = s.ai_model.as_deref().unwrap_or("—");
         out.push_str(&format!(
             "lines {} · ai {} · {model}",
@@ -1051,10 +1187,10 @@ mod tests {
     fn session_row_uses_plain_counts() {
         let row = session_to_row(&sample_session(), &no_recordings());
         // v0.17.2 — the label is МСК wall-clock from started_at_ms, not the UTC id.
+        // v0.22.0 — a COMPLETED session has no status prefix (the "done " was
+        // dropped so a named/timed title reads clean).
         assert!(
-            row.title
-                .as_str()
-                .starts_with("done 24.05.2026 03:00:00 (МСК)"),
+            row.title.as_str().starts_with("24.05.2026 03:00:00 (МСК)"),
             "got {:?}",
             row.title
         );

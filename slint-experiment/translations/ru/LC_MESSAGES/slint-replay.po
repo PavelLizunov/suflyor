@@ -464,6 +464,9 @@ msgstr "Изменения хранения применяются при сле
 msgid "Summary"
 msgstr "Сводка"
 
+msgid "Session name"
+msgstr "Имя сессии"
+
 msgid "Re-Summary uploads this session's saved audio to the cloud STT."
 msgstr "Ре-Summary отправит сохранённое аудио этой сессии в облачный STT."
 

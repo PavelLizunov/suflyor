@@ -33,6 +33,11 @@ pub struct AppState {
     pub sys_active: bool,
     /// True when the session timer is running.
     pub timer_active: bool,
+    /// v0.22.0 — true while the running session is PAUSED. Freezes the timer
+    /// tick (the clock reflects RECORDED time, not wall-clock) and drives the
+    /// bar Pause chip's play/pause icon. Mirrors `SlintRuntime.paused`, which
+    /// is the flag the audio pipeline actually gates on.
+    pub paused: bool,
     /// Elapsed session seconds (formatted to MM:SS by overlay bar).
     pub session_secs: u64,
     /// Cumulative session cost in USD.

@@ -59,6 +59,23 @@ pub fn grab_hwnd(window: &slint::Window) -> Result<HWND, Box<dyn std::error::Err
     }
 }
 
+/// Force-hide `window` at the Win32 level (`ShowWindow(SW_HIDE)`). Slint's own
+/// `Window::hide()` does NOT reliably clear an overlay window that lives on a
+/// NON-PRIMARY monitor — its pixels can linger until that monitor repaints —
+/// but an explicit `SW_HIDE` does (the same call `hide_own_windows` uses for
+/// the F8 capture-hide). The tile close paths call this in ADDITION to
+/// `hide()` so "close all" actually clears tiles the user moved to a second
+/// screen. No-op if the HWND can't be resolved.
+pub fn force_hide(window: &slint::Window) {
+    if let Ok(hwnd) = grab_hwnd(window) {
+        // SAFETY: a live top-level window owned by this process; SW_HIDE only
+        // toggles visibility — no lifetime or threading hazard.
+        unsafe {
+            let _ = ShowWindow(hwnd, SW_HIDE);
+        }
+    }
+}
+
 /// Apply the overlay flag combination + DWM transparency wiring.
 ///
 /// After this call:
