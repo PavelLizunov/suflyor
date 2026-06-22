@@ -884,22 +884,6 @@ export component SettingsWindow inherits Window {
                                 changed(v) => { root.tile-body-opacity-changed(v); }
                             }
                         }
-                        // Tile-placement monitor picker — only meaningful with 2+
-                        // displays, so the whole card hides on a single monitor.
-                        if root.tile-monitors.length > 1 : SettingsCard {
-                            title: @tr("Tile placement");
-                            Text {
-                                text: @tr("Which monitor new answer tiles appear on.");
-                                font-size: 11px;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
-                            ComboBox {
-                                model: root.tile-monitors;
-                                current-index <=> root.tile-monitor-index;
-                                selected(v) => { root.tile-monitor-changed(self.current-index); }
-                            }
-                        }
                     }
                     if root.active-tab == 1 : VerticalLayout {
                         spacing: 10px;
@@ -1085,6 +1069,24 @@ export component SettingsWindow inherits Window {
                                         root.language-selected(self.current-index);
                                     }
                                 }
+                            }
+                        }
+                        // Tile-placement monitor picker — only meaningful with 2+
+                        // displays, so the whole card hides on a single monitor.
+                        // Lives in Interface (next to display/language) as the
+                        // natural home for "which screen do tiles appear on".
+                        if root.tile-monitors.length > 1 : SettingsCard {
+                            title: @tr("Tile placement");
+                            Text {
+                                text: @tr("Which monitor new answer tiles appear on.");
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            ComboBox {
+                                model: root.tile-monitors;
+                                current-index <=> root.tile-monitor-index;
+                                selected(v) => { root.tile-monitor-changed(self.current-index); }
                             }
                         }
                         SettingsCard {
