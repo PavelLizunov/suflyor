@@ -29,11 +29,11 @@ jobs:
         crate: [overlay-backend, slint-experiment, suflyor-tts]
     steps:
       - uses: actions/checkout@v4
-      # advisories + bans + sources (NOT licenses yet — see deny.toml).
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: taiki-e/install-action@v2
         with:
-          manifest-path: ${{ matrix.crate }}/Cargo.toml
-          # Per-crate runs don't auto-find the repo-root deny.toml — point at it
-          # explicitly (relative to the workspace CWD) so the advisory ignores apply.
-          arguments: --config deny.toml
-          command: check advisories bans sources
+          tool: cargo-deny
+      # Manual invocation (not the action) for full arg-order control: `--config`
+      # is a `check` SUBCOMMAND option (not global), and a per-crate manifest does
+      # NOT auto-find the repo-root deny.toml. advisories + bans + sources
+      # (licenses left out for now — see deny.toml).
+      - run: cargo deny --manifest-path ${{ matrix.crate }}/Cargo.toml check --config deny.toml advisories bans sources
