@@ -1,0 +1,40 @@
+# cargo-deny — supply-chain gate for an app that does network egress AND
+# downloads-and-runs an installer. Per-crate (no workspace): run
+#   cargo deny --manifest-path <crate>/Cargo.toml check advisories bans sources
+# CI runs the same in .github/workflows/security.yml. `licenses` is left out of
+# the CI command for now (warn-only locally) — flip it on once the dep-tree
+# licenses are reviewed against the allow-list below.
+
+[advisories]
+yanked = "deny"
+# RUSTSEC vulnerabilities + unmaintained crates are denied by default in
+# modern cargo-deny; the advisory DB is fetched at check time.
+
+[bans]
+multiple-versions = "warn"
+wildcards = "warn"
+# Surface a second TLS stack or a duplicate native runtime sneaking in:
+deny = []
+
+[licenses]
+# Permissive allow-list — anything outside it fails `check licenses`, which is
+# the point (it surfaces a surprising license). Tighten/extend after review.
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  "Unicode-3.0",
+  "Unicode-DFS-2016",
+  "MPL-2.0",
+  "CC0-1.0",
+  "0BSD",
+]
+confidence-threshold = 0.8
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

@@ -15,6 +15,13 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $projectRoot
 
+# Disk hygiene (added 2026-06-19): skip incremental for gate builds. clippy
+# --all-targets + test spawn many target/debug/incremental/<hash> dirs that
+# cargo never GCs; they reached 281 GB by 2026-06-19. The gate isn't an edit
+# loop, so incremental is pure waste here. Interactive `cargo run` (no env)
+# keeps incremental. Mirror of the same line in .claude/hooks/git-gate.ps1.
+$env:CARGO_INCREMENTAL = "0"
+
 $cargoExe = "$env:USERPROFILE\.cargo\bin\cargo.exe"
 if (-not (Test-Path $cargoExe)) {
     Write-Host "ERROR: cargo not found at $cargoExe" -ForegroundColor Red
@@ -60,6 +67,21 @@ Run-Step "backend clippy -D warnings" {
 Run-Step "backend test" {
     & $cargoExe test --manifest-path overlay-backend/Cargo.toml --quiet
 }
+
+# --- suflyor-tts (read-aloud sidecar — shipped in the installer) ---
+# Build into the shared slint target dir so the cached sherpa-onnx native lib is
+# reused (a cold suflyor-tts/target build re-downloads it from GitHub).
+$env:CARGO_TARGET_DIR = Join-Path $projectRoot "slint-experiment\target"
+Run-Step "tts fmt --check" {
+    & $cargoExe fmt --manifest-path suflyor-tts/Cargo.toml --all -- --check
+}
+Run-Step "tts clippy -D warnings" {
+    & $cargoExe clippy --manifest-path suflyor-tts/Cargo.toml --all-targets -- -D warnings
+}
+Run-Step "tts test" {
+    & $cargoExe test --manifest-path suflyor-tts/Cargo.toml --quiet
+}
+Remove-Item Env:\CARGO_TARGET_DIR -ErrorAction SilentlyContinue
 
 Write-Host ""
 Write-Host "All gating layers green." -ForegroundColor Green

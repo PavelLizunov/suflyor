@@ -1,0 +1,36 @@
+# Supply-chain + secret scanning. Separate from ci.yml (the fmt/clippy/test
+# build gate) so a slow advisory-DB fetch never blocks fast build feedback.
+name: security
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    - cron: "0 6 * * 1" # weekly — catch a freshly-disclosed advisory between releases
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  cargo-deny:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: [overlay-backend, slint-experiment, suflyor-tts]
+    steps:
+      - uses: actions/checkout@v4
+      # advisories + bans + sources (NOT licenses yet — see deny.toml).
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: ${{ matrix.crate }}/Cargo.toml
+          command: check advisories bans sources

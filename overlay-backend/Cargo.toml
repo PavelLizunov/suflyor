@@ -6,6 +6,7 @@ name = "overlay-backend"
 version = "0.1.0"
 edition = "2021"
 publish = false
+license = "GPL-3.0-or-later"
 description = "Shared backend for suflyor — audio, STT, AI, journal, KB, config, runtime"
 
 [lib]

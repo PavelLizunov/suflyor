@@ -39,6 +39,7 @@ jobs:
           workspaces: |
             overlay-backend
             slint-experiment
+            suflyor-tts
 
       # ---- overlay-backend (shared logic) ----
       - name: backend fmt --check
@@ -55,3 +56,12 @@ jobs:
         run: cargo clippy --manifest-path slint-experiment/Cargo.toml --all-targets -- -D warnings
       - name: slint test (full suite, incl. i18n + reset + version guards)
         run: cargo test --manifest-path slint-experiment/Cargo.toml
+
+      # ---- suflyor-tts (read-aloud sidecar — SHIPPED in the installer) ----
+      # It declares deny-lints that were never enforced; gate it like the rest.
+      - name: tts fmt --check
+        run: cargo fmt --manifest-path suflyor-tts/Cargo.toml --all -- --check
+      - name: tts clippy -D warnings
+        run: cargo clippy --manifest-path suflyor-tts/Cargo.toml --all-targets -- -D warnings
+      - name: tts test
+        run: cargo test --manifest-path suflyor-tts/Cargo.toml

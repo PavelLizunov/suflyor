@@ -73,6 +73,18 @@ if (-not (Test-Path $cargoExe)) {
 
 Set-Location $projectRoot
 
+# Disk hygiene (added 2026-06-19): this gate runs `clippy --all-targets` +
+# `cargo test` on BOTH crates on every commit/push. clippy --all-targets
+# compiles every bin/example/test target (overlay_host, slint_replay,
+# markdown_spike, overlay_spike, ...), each spawning its own
+# target/debug/incremental/<crate>-<hash> dir — and a FRESH hash whenever the
+# build context shifts. cargo's GC only prunes sessions WITHIN a live dir, never
+# the orphaned per-hash dirs, so they snowballed to 281 GB (943 dirs) by
+# 2026-06-19. The gate is not an interactive edit loop, so incremental buys it
+# nothing — disable it for gate builds. Interactive `cargo run` (no env set)
+# still uses incremental for fast rebuilds.
+$env:CARGO_INCREMENTAL = "0"
+
 # --- Run a gate command. Uses Start-Process to capture stderr cleanly
 # without the PS 5.1 `2>&1` NativeCommandError trap (see CLAUDE.md
 # Operational gotchas). stdout+stderr both go to a tempfile, only the
@@ -136,6 +148,21 @@ if (Test-Path (Join-Path $projectRoot $backendManifest)) {
     Invoke-Gate "backend clippy -D warnings" $cargoExe @("clippy", "--manifest-path", $backendManifest, "--all-targets", "--", "-D", "warnings")
     # NOT --lib — run the integration tests (tests/archive_cycle.rs) too. (audit G2)
     Invoke-Gate "backend cargo test"         $cargoExe @("test", "--manifest-path", $backendManifest, "--quiet")
+}
+
+# suflyor-tts (read-aloud sidecar — SHIPPED in the installer; declares deny-lints
+# that were never enforced before this). Build into the SHARED slint target dir
+# so the cached sherpa-onnx native lib is reused: a cold suflyor-tts/target build
+# re-DOWNLOADS sherpa from GitHub, and a flaky network would then BLOCK the
+# commit. (audit, v0.22.x — takes effect next Claude session: settings watcher
+# doesn't reload hooks mid-session.)
+$ttsManifest = "suflyor-tts/Cargo.toml"
+if (Test-Path (Join-Path $projectRoot $ttsManifest)) {
+    $env:CARGO_TARGET_DIR = Join-Path $projectRoot "slint-experiment\target"
+    Invoke-Gate "tts fmt --check"        $cargoExe @("fmt", "--manifest-path", $ttsManifest, "--all", "--", "--check")
+    Invoke-Gate "tts clippy -D warnings" $cargoExe @("clippy", "--manifest-path", $ttsManifest, "--all-targets", "--", "-D", "warnings")
+    Invoke-Gate "tts cargo test"         $cargoExe @("test", "--manifest-path", $ttsManifest, "--quiet")
+    Remove-Item Env:\CARGO_TARGET_DIR -ErrorAction SilentlyContinue
 }
 
 # (Phase 7 cut: the push-only block ran src-tauri integration tests +

@@ -6,6 +6,7 @@ name = "slint-replay"
 version = "0.22.0"
 edition = "2021"
 description = "suflyor — AI-interview overlay (Slint UI + orchestration)"
+license = "GPL-3.0-or-later"
 publish = false
 
 [lib]
@@ -156,3 +157,11 @@ i-slint-backend-testing = "1.16"
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
+
+# Shipped binary — optimize the release build (audit, v0.22.x): thin LTO + one
+# codegen unit + symbol strip = smaller, faster exe. `panic = "abort"` is
+# deliberately NOT set — GigaAM's mutex-poison recovery relies on unwinding.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

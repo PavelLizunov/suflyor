@@ -1,0 +1,28 @@
+# Machine-independent line endings (added after the v0.22.x CRLF-churn audit).
+# Tracked text is normalized to LF in the repo; Windows-only scripts + the NSIS
+# installer keep CRLF in the working tree; binaries are never touched.
+#
+# After adding this file, run once to normalize the existing tree:
+#   git add --renormalize .
+* text=auto eol=lf
+
+# Windows-only: keep CRLF on checkout (PowerShell/NSIS/cmd).
+*.ps1   text eol=crlf
+*.psm1  text eol=crlf
+*.cmd   text eol=crlf
+*.bat   text eol=crlf
+*.nsi   text eol=crlf
+*.nsh   text eol=crlf
+
+# Binary — never line-ending-converted, never diffed as text.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.ico   binary
+*.gif   binary
+*.exe   binary
+*.dll   binary
+*.onnx  binary
+*.gguf  binary
+*.wav   binary
+*.mo    binary

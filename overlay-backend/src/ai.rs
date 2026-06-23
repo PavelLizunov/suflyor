@@ -469,15 +469,19 @@ fn drain_complete_frames(byte_buf: &mut Vec<u8>) -> String {
     }
 }
 
-/// USD price per 1M tokens for each model. Source: anthropic.com pricing
-/// page as of 2026-05. Update when prices change.
+/// USD price per 1M tokens for each model. Source: the `claude-api` skill
+/// pricing table (verified 2026-06-23). Re-verify on each model launch.
 pub fn pricing_per_million(model: &str) -> (f64, f64) {
     // (input, output)
     match model {
         "claude-haiku-4-5" => (1.0, 5.0),
         "claude-sonnet-4-5" | "claude-sonnet-4-6" => (3.0, 15.0),
-        "claude-opus-4-7" => (15.0, 75.0),
-        _ => (3.0, 15.0), // safe upper-bound default
+        // Opus 4.6/4.7/4.8 are all $5/$25 — the old (15,75) over-billed 3×.
+        "claude-opus-4-5" | "claude-opus-4-6" | "claude-opus-4-7" | "claude-opus-4-8" => {
+            (5.0, 25.0)
+        }
+        "claude-fable-5" | "claude-mythos-5" => (10.0, 50.0),
+        _ => (3.0, 15.0), // safe default for an unknown model
     }
 }
 

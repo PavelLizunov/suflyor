@@ -1,0 +1,20 @@
+# gitleaks — block real secrets from entering TRACKED files. This is the one
+# secret path the runtime config.json redaction does NOT cover: a key committed
+# by hand (git add -f, a key pasted into a commit message or a doc). The default
+# ruleset catches Groq/OpenAI/AWS/GitHub-style tokens; the allowlist below keeps
+# the codebase's own test fixtures + placeholders from false-positiving.
+title = "suflyor"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures and placeholders, not real secrets"
+regexes = [
+  '''gsk_SECRET''',
+  '''gsk_test''',
+  '''OLD-bearer''',
+  '''BRIDGE_SECRET''',
+  '''your-api-key''',
+  '''<current access token>''',
+]

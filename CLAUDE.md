@@ -35,16 +35,27 @@ starting any autonomous session.
 
 The product is **pure Rust + Slint** (Phase 7 cut, 2026-05-28 removed the
 old React/Tauri/WebView2 surface). No browser engine, no Node, no
-TypeScript. Two standalone crates, NO root workspace:
+TypeScript. **THREE** standalone crates, NO root workspace:
 
 - **`slint-experiment/`** — the `overlay-host` binary. UI in `ui/*.slint`
   (compiled into the binary at build time via `build.rs` + `slint-build`);
-  orchestration in `src/bin/overlay_host.rs`; Win32 HWND helpers in
-  `src/win32.rs`; session/event/state glue in `src/{slint_session,
-  slint_events,runtime_state,app_state,markdown,logging}.rs`.
-- **`overlay-backend/`** — the no-UI shared crate (audio / stt / ai /
-  local_ai / config / runtime / events / journal / kb / health / update).
+  Win32 HWND helpers in `src/win32.rs`; session/event/state glue in
+  `src/{slint_session,slint_events,runtime_state,app_state,session_namer,
+  markdown,logging}.rs`. **NOTE:** `src/bin/overlay_host.rs` is a THIN
+  entrypoint — the real host logic is a ~25-module DIRECTORY
+  `src/bin/overlay_host/` (`hotkeys`, `settings_*`, `tile_*`, `aux_windows`,
+  `vision_capture`, `recovery`, `wizard`, `diagnostics`, …). Grep the directory,
+  not just the file.
+- **`overlay-backend/`** — the no-UI shared crate. `lib.rs` exports 24 modules:
+  ai, audio, components, config, conspect, events, health, journal, kb,
+  local_ai, memory, ocr, ocr_install, paths, persistence, re_transcribe,
+  recorder, runtime, session_names, stt, tts, tts_install, update, vision.
   `slint-experiment` depends on it via a path dep.
+- **`suflyor-tts/`** — the neural read-aloud SIDECAR (`suflyor-tts.exe`, shipped
+  beside overlay-host in the installer). Links sherpa-onnx (TTS) ONLY and MUST
+  stay a separate process: two onnxruntimes in one binary crash on the 2nd model
+  load (the app keeps `ort`/GigaAM STT). DO NOT merge it back into
+  overlay-backend. Takes stdin line-commands (SPEAK/PAUSE/RESUME/STOP/VOICE/RATE).
 
 Run/build from `slint-experiment/`:
 ```pwsh
@@ -227,7 +238,7 @@ Strings live in the `.slint` source as **English `@tr("…")`** — the source
 string IS the English msgid. The Russian translation is in
 `slint-experiment/translations/ru/LC_MESSAGES/slint-replay.po` (plain
 `msgid`/`msgstr`, no `msgctxt`). `slint::select_bundled_translation("en"|"ru")`
-switches live; `ui_language` in `%APPDATA%\overlay-mvp\config.json` persists
+switches live; `ui_language` in `%APPDATA%\suflyor\config.json` persists
 it (en falls back to the msgid = English).
 
 Adding a user-facing string: wrap it in `@tr("English…")`, append the
@@ -238,7 +249,7 @@ are separate Slint windows in the same process; they get their text from
 
 ## Knowledge base
 
-Embedded reference in `overlay-backend/src/kb.rs` (~1700 glossary / commands /
+Embedded reference in `overlay-backend/src/kb.rs` (~1600 glossary / commands /
 patterns entries, pre-lowercased). Accessed directly via `kb::search` /
 `kb::get` (no IPC layer). The overlay's **F4** palette is the inline search
 surface. Hyphenated keys (`kubectl-debug`) match via token-set check.
@@ -251,6 +262,34 @@ surface. Hyphenated keys (`kubectl-debug`) match via token-set check.
 - **Post-meeting debrief**: opt-in. On `stop_session`, the mic transcript + a
   3-point ask → a tile labeled "🎯 Debrief". Skip conditions: <30s session,
   <5 mic lines, empty AI bearer.
+
+## Hotkeys (global — `src/bin/overlay_host/hotkeys.rs` is the source of truth)
+
+| Key | Action |
+|---|---|
+| **F1** | Help window |
+| **F3** | Re-ask the last question |
+| **F4** | KB palette (inline `kb::search`) |
+| **F6** | Manual "+ tile" (free-form AI tile) |
+| **F7** | Session archive |
+| **F9** / **Shift+F9** | Ask (main) / ask variant |
+| **F8** / **Shift+F8** / **Ctrl+F8** | Vision capture: full-monitor / drag-region / variant |
+| **Shift+Alt+1 / +2 / +3** | Read-aloud: read selection / OCR-region / pause (see below) |
+
+Each registration logs `"<label> hotkey registered"` at boot (the cheapest smoke
+signal). Dropping the `GlobalHotKeyManager` unregisters everything — `main` keeps
+it alive for the process lifetime.
+
+## Read-aloud (TTS + OCR) — since v0.20.0
+
+On-screen / selected text → speech. Neural TTS (Piper Irina/Ruslan via
+sherpa-onnx) runs in the **`suflyor-tts.exe` SIDECAR**, NOT in-process (see Stack
+— two onnxruntimes crash in one binary). Tesseract OCR (a separate engine) reads
+a screen region. Both engines install via buttons in **Settings → AI**
+(SHA-pinned downloads). Hotkeys: **Shift+Alt+1** read selection, **+2**
+OCR-region, **+3** pause; built-in anti-feedback so it never reads its own output.
+Backend: `tts.rs` (SAPI live fallback) + `tts_install.rs` + `ocr.rs` +
+`ocr_install.rs`. Full state in `docs/read-aloud-status.md`.
 
 ## Security boundaries
 
@@ -270,7 +309,7 @@ surface. Hyphenated keys (`kubectl-debug`) match via token-set check.
 
 ## Security reminders
 
-- `config.json` at `%APPDATA%\overlay-mvp\config.json` contains live
+- `config.json` at `%APPDATA%\suflyor\config.json` contains live
   `groq_api_key` + `ai_bearer`. NEVER print these to chat or logs, and never
   include them in journal entries.
 - `nini-context-backup.txt` (repo root) is the user's personal interview-prep

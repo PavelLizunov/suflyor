@@ -10,6 +10,7 @@
 name = "suflyor-tts"
 version = "0.1.0"
 edition = "2021"
+license = "GPL-3.0-or-later"
 
 [[bin]]
 name = "suflyor-tts"
@@ -25,6 +26,3 @@ base64 = "0.22"
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
-
-[profile.release]
-opt-level = 2

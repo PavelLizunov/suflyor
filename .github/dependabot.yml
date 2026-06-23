@@ -1,0 +1,36 @@
+# Dependabot — cargo only, GROUPED into one PR per crate per week so updates
+# arrive as a reviewable batch (green CI) instead of a swarm. This replaces the
+# manual "safe dep bumps" chore. The github-actions ecosystem is intentionally
+# omitted (few actions, pinned by major tag, low churn) — add it if you start
+# pinning actions by full SHA.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/overlay-backend"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      backend-deps:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: cargo
+    directory: "/slint-experiment"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      slint-deps:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: cargo
+    directory: "/suflyor-tts"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    groups:
+      tts-deps:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
