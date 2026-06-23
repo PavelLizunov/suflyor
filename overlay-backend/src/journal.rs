@@ -5,7 +5,7 @@
 //! call `write()` from any thread/async context — it just `try_send`s a serialized
 //! line and returns immediately. File I/O never blocks tokio worker threads.
 //!
-//! File: `%APPDATA%\overlay-mvp\sessions\<YYYY-MM-DD_HH-MM-SS>_<rand>.jsonl`
+//! File: `%APPDATA%\suflyor\sessions\<YYYY-MM-DD_HH-MM-SS>_<rand>.jsonl`
 
 use anyhow::{Context, Result};
 use parking_lot::Mutex;
@@ -1682,7 +1682,7 @@ mod tests {
     }
 }
 
-/// Append a Q&A pair to `%APPDATA%\overlay-mvp\bookmarks.md`.
+/// Append a Q&A pair to `%APPDATA%\suflyor\bookmarks.md`.
 /// Mirrors the React `bookmark_last_answer` Tauri command. Creates
 /// the file on first call with a brief header; subsequent calls
 /// append a separator + timestamped entry. Returns the bookmarks
@@ -1709,7 +1709,7 @@ pub fn append_bookmark(question: &str, answer: &str) -> Result<PathBuf> {
     if is_new {
         writeln!(
             f,
-            "# overlay-mvp bookmarks\n\nQ/A snippets bookmarked from the overlay bar chip.\n"
+            "# suflyor bookmarks\n\nQ/A snippets bookmarked from the overlay bar chip.\n"
         )
         .context("write bookmarks header")?;
     }
@@ -1754,13 +1754,13 @@ mod bookmark_tests {
                 .open(&path)
                 .unwrap();
             if is_new {
-                writeln!(f, "# overlay-mvp bookmarks\n").unwrap();
+                writeln!(f, "# suflyor bookmarks\n").unwrap();
             }
             writeln!(f, "## Q1\nA1\n").unwrap();
             writeln!(f, "## Q2\nA2\n").unwrap();
         }
         let content = std::fs::read_to_string(&path).unwrap();
-        assert!(content.starts_with("# overlay-mvp bookmarks"));
+        assert!(content.starts_with("# suflyor bookmarks"));
         assert!(content.contains("## Q1"));
         assert!(content.contains("## Q2"));
     }

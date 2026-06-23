@@ -2,7 +2,7 @@
 //!
 //! Tees the live 16 kHz mono i16 PCM `AudioChunk` stream to per-channel WAV
 //! files — `mic.wav` + `system.wav` — under
-//! `%APPDATA%\overlay-mvp\recordings\<session_id>\`. Keeping the two channels
+//! `%APPDATA%\suflyor\recordings\<session_id>\`. Keeping the two channels
 //! SEPARATE preserves "who spoke" at the audio level (the user vs the other
 //! side) and is what a future offline re-transcribe / re-summary flow consumes.
 //!
@@ -275,7 +275,7 @@ fn writer_loop(rx: &Receiver<RecMsg>, dir: &Path) {
     log::debug!("audio-recorder thread exit: {}", dir.display());
 }
 
-/// Per-user recordings root: `<config_dir>/overlay-mvp/recordings`. Sibling of
+/// Per-user recordings root: `<config_dir>/suflyor/recordings`. Sibling of
 /// the journal's `sessions/` dir so `recordings/<id>/` pairs with
 /// `sessions/<id>.jsonl` for a future re-summary flow.
 ///

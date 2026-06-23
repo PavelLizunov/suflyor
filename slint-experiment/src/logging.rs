@@ -4,7 +4,7 @@
 //! console window — see the crate-attribute in `bin/overlay_host.rs`), so
 //! `eprintln!` would normally go nowhere. To keep diagnostics available for
 //! testers, `init()` opens a log file next to `config.json`
-//! (`%APPDATA%\overlay-mvp\overlay-host.log`), installs a panic hook that
+//! (`%APPDATA%\suflyor\overlay-host.log`), installs a panic hook that
 //! records crashes there, and — IN RELEASE — redirects the process stderr to
 //! that file via `SetStdHandle`, so EVERY `eprintln!` across the binary (~170
 //! of them) is captured (v0.9.3 — before this, the log held only `line()`

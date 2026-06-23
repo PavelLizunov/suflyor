@@ -1,5 +1,5 @@
 //! User config persisted as JSON in OS data dir.
-//! Path: %APPDATA%\overlay-mvp\config.json
+//! Path: %APPDATA%\suflyor\config.json
 
 use anyhow::{Context, Result};
 use parking_lot::RwLock;
@@ -222,7 +222,7 @@ pub struct Config {
     pub post_meeting_debrief_enabled: bool,
 
     /// v0.13.0 — record the raw session audio (mic + system, separate 16 kHz
-    /// mono WAVs) under `%APPDATA%\overlay-mvp\recordings\<session_id>\`. Kept
+    /// mono WAVs) under `%APPDATA%\suflyor\recordings\<session_id>\`. Kept
     /// locally; nothing is uploaded. Enables a future "re-transcribe + re-summary
     /// from the archive" flow (the live STT transcript is real-time-bounded;
     /// re-running offline over the saved audio yields a better transcript).

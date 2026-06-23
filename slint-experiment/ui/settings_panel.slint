@@ -253,7 +253,7 @@ export component SettingsWindow inherits Window {
     property <bool> widgets-light: Theme.is-light;
     init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
-    title: @tr("overlay-mvp settings (Slint)");
+    title: @tr("suflyor settings (Slint)");
     // Phase E6 v25 — frameless. User: "хедер, он нам разве нужен?".
     // Native title bar removed; drag via the "Settings" sidebar header
     // (drag-start-requested + drag-moved → win32 cursor-delta drag,

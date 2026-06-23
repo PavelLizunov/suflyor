@@ -126,7 +126,7 @@ bad commits. Setup:
 **computer-use screenshots MIS-RENDER the transparent overlay's COLOURS**
 (they showed the bar dark when the active theme is light). Ground truth =
 **`CopyFromScreen` at the window's HWND rect** (Win32 `EnumWindows` +
-`GetWindowRect`, filter by pid + window title `overlay-mvp (Slint)`), saved
+`GetWindowRect`, filter by pid + window title `suflyor (Slint)`), saved
 to PNG and `Read`. Layout/text read fine in computer-use; colour does not.
 Alternative: the embedded Slint MCP server — run the binary with
 `SLINT_EMIT_DEBUG_INFO=1 SLINT_MCP_PORT=N` to inspect the UI tree / click /

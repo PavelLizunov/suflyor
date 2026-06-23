@@ -1,5 +1,5 @@
 param([double]$Value = 0.5)
-$path = Join-Path $env:APPDATA "overlay-mvp\config.json"
+$path = Join-Path $env:APPDATA "suflyor\config.json"
 if (-not (Test-Path $path)) { Write-Output "config not found: $path"; exit 1 }
 $json = Get-Content $path -Raw | ConvertFrom-Json
 $json.tile_body_opacity = $Value

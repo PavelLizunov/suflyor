@@ -3,7 +3,7 @@
 # / transparent Slint windows are captured as composited (PrintWindow
 # fails on skia-rendered layered windows).
 param(
-  [string]$TitleLike = "overlay-mvp (Slint)",
+  [string]$TitleLike = "suflyor (Slint)",
   [string]$Out = "C:\Users\x3d_mutant\Natively\overlay-mvp\slint-experiment\verify.png",
   [int]$Margin = 8
 )

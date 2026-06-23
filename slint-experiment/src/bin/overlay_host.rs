@@ -1,7 +1,7 @@
 // Release builds run without a console window (no black cmd window on
 // launch — user feedback). Debug builds KEEP the console so `eprintln!`
 // tracing is visible during development. Diagnostics in release go to
-// %APPDATA%\overlay-mvp\overlay-host.log via `slint_replay::logging`.
+// %APPDATA%\suflyor\overlay-host.log via `slint_replay::logging`.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 //! Phase 1 Day 2 + Phase 3 — multi-window manager with real overlay bar.
 //!
@@ -36,7 +36,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc as tokio_mpsc;
 
-/// Diagnostic log line → `%APPDATA%\overlay-mvp\overlay-host.log` AND
+/// Diagnostic log line → `%APPDATA%\suflyor\overlay-host.log` AND
 /// stderr (debug builds keep a console; release has none). Use for
 /// lifecycle + error events worth keeping for tester debugging. NEVER
 /// pass secrets (API keys) — log presence booleans, not values.

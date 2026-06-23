@@ -92,8 +92,8 @@ msgstr "Нет результатов: «{}»."
 
 # --- Window chrome ---
 
-msgid "overlay-mvp settings (Slint)"
-msgstr "Настройки overlay-mvp (Slint)"
+msgid "suflyor settings (Slint)"
+msgstr "Настройки suflyor (Slint)"
 
 msgid "Settings"
 msgstr "Настройки"

@@ -21,7 +21,7 @@
 #
 # -----------------------------------------------------------------------------
 # AUTOMATED COVERAGE (what this script captures on its own)
-#   - The overlay BAR (always up at startup; title "overlay-mvp (Slint)").
+#   - The overlay BAR (always up at startup; title "suflyor (Slint)").
 #   - Every other top-level overlay-host window currently visible, by PID.
 #   - Surfaces openable via the registered GLOBAL HOTKEYS (read from
 #     overlay_host.rs): F4 = KB palette, F1 = Help. (F8 = capture overlay is
@@ -249,12 +249,12 @@ Write-Host "target pids: $($pidArr -join ', ')"
 
 # Best-effort DPI of the primary screen via the device caps the .NET Graphics
 # exposes; the live colour scheme isn't readable from here (it's in
-# %APPDATA%\overlay-mvp\config.json color_scheme) so we record where to look.
+# %APPDATA%\suflyor\config.json color_scheme) so we record where to look.
 $dpi = try {
     $gfx = [System.Drawing.Graphics]::FromHwnd([IntPtr]::Zero)
     $d = [int]$gfx.DpiX; $gfx.Dispose(); $d
 } catch { 'unknown' }
-$cfgPath = Join-Path $env:APPDATA 'overlay-mvp/config.json'
+$cfgPath = Join-Path $env:APPDATA 'suflyor/config.json'
 
 $manifest = New-Object System.Collections.ArrayList
 [void]$manifest.Add("# Этап 0 reference-shot manifest")

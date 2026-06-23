@@ -2,7 +2,7 @@
 //!
 //! Day 1: scaffold + placeholder data.
 //! Day 2: real backend wired via `replay_backend` module. Lists session
-//!        journals from `%APPDATA%\overlay-mvp\sessions\`, auto-loads
+//!        journals from `%APPDATA%\suflyor\sessions\`, auto-loads
 //!        the newest, renders events with kind-coded accents, filter
 //!        chips toggle visibility.
 //!

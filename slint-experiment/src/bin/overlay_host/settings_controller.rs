@@ -552,7 +552,7 @@ pub(crate) fn open_settings(
         win.on_export_profile_clicked(move || {
             let snapshot = cfg_c.read().clone();
             let picked = rfd::FileDialog::new()
-                .set_title("Export overlay-mvp settings (contains API keys)")
+                .set_title("Export suflyor settings (contains API keys)")
                 .set_file_name("suflyor-settings.json")
                 .add_filter("JSON", &["json"])
                 .save_file();
@@ -577,7 +577,7 @@ pub(crate) fn open_settings(
         let weak = win.as_weak();
         win.on_import_profile_clicked(move || {
             let picked = rfd::FileDialog::new()
-                .set_title("Import overlay-mvp settings")
+                .set_title("Import suflyor settings")
                 .add_filter("JSON", &["json"])
                 .pick_file();
             let Some(w) = weak.upgrade() else { return };
