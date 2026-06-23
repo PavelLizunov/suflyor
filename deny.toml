@@ -7,8 +7,15 @@
 
 [advisories]
 yanked = "deny"
-# RUSTSEC vulnerabilities + unmaintained crates are denied by default in
-# modern cargo-deny; the advisory DB is fetched at check time.
+# RUSTSEC vulnerabilities are denied by default (the advisory DB is fetched at
+# check time). The ignores below are UNMAINTAINED notices — not vulnerabilities —
+# on transitive crates pulled by slint/winit that we don't control and can't
+# replace. CI still fails on a real advisory; it just won't nag about a
+# dependency's maintenance status. Re-check when bumping slint.
+ignore = [
+    "RUSTSEC-2024-0014", # generational-arena — archived/unmaintained (via slint)
+    "RUSTSEC-2024-0436", # paste — no longer maintained (via slint/winit)
+]
 
 [bans]
 multiple-versions = "warn"

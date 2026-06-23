@@ -1,8 +1,0 @@
-# Pin the toolchain channel + components so the gate is reproducible: a fresh
-# `stable` can introduce a clippy lint that flips `-D warnings` red between two
-# runs (or local vs CI) with no code change. `components` also guarantees rustfmt
-# + clippy are present. Pin an exact version (e.g. "1.XX.0") instead of "stable"
-# if you want to freeze the version too — bump deliberately.
-[toolchain]
-channel = "stable"
-components = ["rustfmt", "clippy"]

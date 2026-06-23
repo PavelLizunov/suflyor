@@ -33,4 +33,7 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           manifest-path: ${{ matrix.crate }}/Cargo.toml
+          # Per-crate runs don't auto-find the repo-root deny.toml — point at it
+          # explicitly (relative to the workspace CWD) so the advisory ignores apply.
+          arguments: --config deny.toml
           command: check advisories bans sources
