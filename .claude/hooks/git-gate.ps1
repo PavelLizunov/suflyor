@@ -85,6 +85,14 @@ Set-Location $projectRoot
 # still uses incremental for fast rebuilds.
 $env:CARGO_INCREMENTAL = "0"
 
+# Memory hygiene (2026-06-23): also cap parallel rustc jobs. A COLD gate build
+# (toolchain bump / cargo clean / target-dir GC empties the cache) codegens the
+# 4 heavy Slint bins at once and OOMs at the default job count (rustc-LLVM out
+# of memory) — which would BLOCK the commit. -j2 fits. NB: like every change to
+# this file, it only takes effect after a Claude Code restart (the settings
+# watcher snapshots hooks at session start). Warm cache = no compile = no cost.
+$env:CARGO_BUILD_JOBS = "2"
+
 # --- Run a gate command. Uses Start-Process to capture stderr cleanly
 # without the PS 5.1 `2>&1` NativeCommandError trap (see CLAUDE.md
 # Operational gotchas). stdout+stderr both go to a tempfile, only the

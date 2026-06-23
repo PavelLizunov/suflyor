@@ -22,6 +22,15 @@ Set-Location $projectRoot
 # keeps incremental. Mirror of the same line in .claude/hooks/git-gate.ps1.
 $env:CARGO_INCREMENTAL = "0"
 
+# Memory hygiene (2026-06-23): cap parallel rustc jobs for the gate. A COLD
+# `cargo test` (e.g. right after a toolchain bump / cargo clean, when the
+# artifact cache is empty) codegens the 4 heavy Slint bins (overlay-host,
+# slint-replay, overlay-spike, markdown-spike) at once; at the default job
+# count that exhausts RAM (rustc-LLVM ERROR: out of memory). -j2 fits. This
+# only constrains the gate — interactive `cargo run`/`build` (no env set) keeps
+# full parallelism, and it never hits this because it rebuilds ONE crate.
+$env:CARGO_BUILD_JOBS = "2"
+
 $cargoExe = "$env:USERPROFILE\.cargo\bin\cargo.exe"
 if (-not (Test-Path $cargoExe)) {
     Write-Host "ERROR: cargo not found at $cargoExe" -ForegroundColor Red
