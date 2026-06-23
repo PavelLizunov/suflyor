@@ -143,28 +143,6 @@ fn cascade_cycle(
     (raw_seq / total_slots.max(1)).min(max_cycle_x.min(max_cycle_y))
 }
 
-#[cfg(test)]
-mod cascade_tests {
-    use super::cascade_cycle;
-
-    #[test]
-    fn cascade_clamp_pins_in_band() {
-        let (dx, dy) = (32, 24);
-        // 1920×1080 primary, mon_left=0, tile 360 tall, x_base near the right
-        // edge (1400), y_base 100. x-room 1392 -> max_cycle_x 43; y-room 612 ->
-        // max_cycle_y 25; tighter axis = 25.
-        // A runaway raw_seq must PIN at 25, not march off-screen.
-        assert_eq!(
-            cascade_cycle(100_000, 10, 1400, 100, 0, 1080, 360, dx, dy),
-            25
-        );
-        // raw_seq below total_slots -> first batch, cycle 0.
-        assert_eq!(cascade_cycle(5, 10, 1400, 100, 0, 1080, 360, dx, dy), 0);
-        // Mid-range raw_seq stays at its natural (in-band) cycle.
-        assert_eq!(cascade_cycle(25, 10, 1400, 100, 0, 1080, 360, dx, dy), 2);
-    }
-}
-
 /// Phase E6 v17 — maximize toggle helper. User: "нет функционала
 /// развернуть, нужно отдельной кнопкой или даб-кликом". Maximized
 /// tile is 800×600 (~1.7× default); restored back to 460×360. Uses
@@ -422,4 +400,29 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
             eprintln!("[overlay-host] tile placement: no monitor from pick_monitor — fallback to (100, 100)");
         }
     });
+}
+
+// Tests live at the END of the module (clippy::items_after_test_module, denied
+// under -D warnings on clippy 1.96+): a `#[cfg(test)] mod` must not be followed
+// by production items.
+#[cfg(test)]
+mod cascade_tests {
+    use super::cascade_cycle;
+
+    #[test]
+    fn cascade_clamp_pins_in_band() {
+        let (dx, dy) = (32, 24);
+        // 1920×1080 primary, mon_left=0, tile 360 tall, x_base near the right
+        // edge (1400), y_base 100. x-room 1392 -> max_cycle_x 43; y-room 612 ->
+        // max_cycle_y 25; tighter axis = 25.
+        // A runaway raw_seq must PIN at 25, not march off-screen.
+        assert_eq!(
+            cascade_cycle(100_000, 10, 1400, 100, 0, 1080, 360, dx, dy),
+            25
+        );
+        // raw_seq below total_slots -> first batch, cycle 0.
+        assert_eq!(cascade_cycle(5, 10, 1400, 100, 0, 1080, 360, dx, dy), 0);
+        // Mid-range raw_seq stays at its natural (in-band) cycle.
+        assert_eq!(cascade_cycle(25, 10, 1400, 100, 0, 1080, 360, dx, dy), 2);
+    }
 }
