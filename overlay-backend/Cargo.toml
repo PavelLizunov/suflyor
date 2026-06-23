@@ -87,7 +87,7 @@ anyhow = "1"
 
 # SHA-256 — verify the downloaded updater installer against the GitHub release
 # API digest before executing it (update.rs).
-sha2 = "0.10"
+sha2 = "0.11"
 rusqlite = { version = "0.40.0", features = ["bundled"] }
 
 # WAV encode/decode (recorder.rs — session audio recording, v0.13.0). Was a
