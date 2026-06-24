@@ -25,6 +25,7 @@ pub mod runtime;
 pub mod session_admin;
 pub mod session_names;
 pub mod stt;
+pub mod summary_source;
 pub mod tts;
 pub mod tts_install;
 pub mod update;
