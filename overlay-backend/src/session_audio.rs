@@ -1,0 +1,114 @@
+//! Load + downmix a session's saved recordings for in-app playback (ТЗ2b).
+//!
+//! The recorder writes two per-channel WAVs (`mic.wav` + `system.wav`, 16 kHz
+//! mono i16, both aligned to session t=0). The player needs ONE stream seeked to
+//! a clicked line's timecode (decision: mix on the fly, no channel toggle), so we
+//! sum the channels into a single buffer here — pure + testable; the player feeds
+//! the result to the audio engine. Same sample rate + shared t=0 ⇒ sample index
+//! IS time, so no resampling/alignment is needed.
+
+use anyhow::{bail, Result};
+use std::path::Path;
+
+/// Sum two i16 PCM channels into one (clamped to i16), padding the shorter with
+/// silence so the mix is as long as the longer channel.
+#[must_use]
+pub fn mix_pcm(a: &[i16], b: &[i16]) -> Vec<i16> {
+    let n = a.len().max(b.len());
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let s =
+            i32::from(a.get(i).copied().unwrap_or(0)) + i32::from(b.get(i).copied().unwrap_or(0));
+        out.push(s.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16);
+    }
+    out
+}
+
+/// Read one 16-bit WAV into PCM + its sample rate; `None` if absent/unreadable.
+/// Lenient on a torn trailing sample (playback can tolerate one dropped frame).
+fn read_wav_i16(path: &Path) -> Option<(Vec<i16>, u32)> {
+    let reader = hound::WavReader::open(path).ok()?;
+    let sr = reader.spec().sample_rate;
+    let samples: Vec<i16> = reader
+        .into_samples::<i16>()
+        .filter_map(Result::ok)
+        .collect();
+    Some((samples, sr))
+}
+
+/// Mixed playback PCM for a session's recordings dir (`<dir>/mic.wav` +
+/// `<dir>/system.wav`). Either channel may be absent (→ silence); at least one
+/// must exist. Returns (mixed i16 PCM, sample_rate). Test seam for
+/// [`load_mixed_session_audio`].
+///
+/// # Errors
+/// When neither channel WAV is present/readable.
+pub fn load_mixed_from_dir(session_dir: &Path) -> Result<(Vec<i16>, u32)> {
+    let mic = read_wav_i16(&session_dir.join("mic.wav"));
+    let sys = read_wav_i16(&session_dir.join("system.wav"));
+    let Some(sample_rate) = mic.as_ref().or(sys.as_ref()).map(|(_, r)| *r) else {
+        bail!("no recordings to play in {}", session_dir.display());
+    };
+    let mic_pcm = mic.map(|(s, _)| s).unwrap_or_default();
+    let sys_pcm = sys.map(|(s, _)| s).unwrap_or_default();
+    Ok((mix_pcm(&mic_pcm, &sys_pcm), sample_rate))
+}
+
+/// Mixed playback PCM for an archived session by id (its `recordings/<id>/`).
+///
+/// # Errors
+/// When the recordings dir can't be resolved or neither channel exists.
+pub fn load_mixed_session_audio(session_id: &str) -> Result<(Vec<i16>, u32)> {
+    let dir = crate::recorder::recordings_dir()?.join(session_id);
+    load_mixed_from_dir(&dir)
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+    use super::*;
+
+    #[test]
+    fn mix_clamps_and_pads() {
+        assert_eq!(mix_pcm(&[100, 200], &[100, 200]), vec![200, 400]);
+        assert_eq!(mix_pcm(&[30000], &[30000]), vec![i16::MAX]); // clamp +
+        assert_eq!(mix_pcm(&[-30000], &[-30000]), vec![i16::MIN]); // clamp -
+        assert_eq!(mix_pcm(&[100], &[100, 50, 25]), vec![200, 50, 25]); // pad
+        assert_eq!(mix_pcm(&[], &[]), Vec::<i16>::new());
+    }
+
+    fn write_wav(path: &Path, samples: &[i16]) {
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: 16_000,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+        let mut w = hound::WavWriter::create(path, spec).unwrap();
+        for &s in samples {
+            w.write_sample(s).unwrap();
+        }
+        w.finalize().unwrap();
+    }
+
+    #[test]
+    fn load_mixed_sums_channels_and_errors_when_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        assert!(load_mixed_from_dir(dir).is_err()); // neither channel → Err
+        write_wav(&dir.join("mic.wav"), &[100, 200]);
+        write_wav(&dir.join("system.wav"), &[10, 20, 30]);
+        let (pcm, sr) = load_mixed_from_dir(dir).unwrap();
+        assert_eq!(sr, 16_000);
+        assert_eq!(pcm, vec![110, 220, 30]); // summed + padded
+    }
+
+    #[test]
+    fn load_mixed_one_channel_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        write_wav(&dir.join("mic.wav"), &[5, 6, 7]);
+        let (pcm, _) = load_mixed_from_dir(dir).unwrap();
+        assert_eq!(pcm, vec![5, 6, 7]); // system silent → mic passes through
+    }
+}

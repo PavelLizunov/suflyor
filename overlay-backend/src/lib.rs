@@ -23,6 +23,7 @@ pub mod re_transcribe;
 pub mod recorder;
 pub mod runtime;
 pub mod session_admin;
+pub mod session_audio;
 pub mod session_names;
 pub mod stt;
 pub mod summary_source;
