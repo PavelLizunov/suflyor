@@ -226,6 +226,24 @@ fn load_in(dir: &Path, session_id: &str) -> Option<Conspect> {
     }
 }
 
+/// Delete a session's conspect sidecar (and any stale `.tmp`). Idempotent +
+/// safe-stem guarded; returns true if the main `.json` was removed.
+pub fn delete(session_id: &str) -> bool {
+    match conspects_dir() {
+        Some(dir) => delete_in(&dir, session_id),
+        None => false,
+    }
+}
+
+/// Pure delete (test seam).
+fn delete_in(dir: &Path, session_id: &str) -> bool {
+    let Some(stem) = safe_stem(session_id) else {
+        return false;
+    };
+    let _ = std::fs::remove_file(dir.join(format!("{stem}.json.tmp")));
+    std::fs::remove_file(dir.join(format!("{stem}.json"))).is_ok()
+}
+
 /// Keep the newest `keep` `*.json` conspects by mtime (falling back to name
 /// order when mtime is unreadable); delete the rest. Best-effort, never panics.
 fn prune_in(dir: &Path, keep: usize) {
@@ -312,6 +330,17 @@ mod tests {
         assert!(safe_stem("a\\b").is_none());
         assert!(safe_stem("c:evil").is_none());
         assert!(safe_stem("   ").is_none());
+    }
+
+    #[test]
+    fn delete_in_removes_json_and_is_idempotent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        std::fs::write(dir.join("S1.json"), b"{}").unwrap();
+        assert!(delete_in(dir, "S1")); // removed
+        assert!(!dir.join("S1.json").exists());
+        assert!(!delete_in(dir, "S1")); // already gone → false, no panic
+        assert!(!delete_in(dir, "../escape")); // unsafe id rejected
     }
 
     #[test]

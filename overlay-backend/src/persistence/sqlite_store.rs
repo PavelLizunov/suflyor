@@ -147,6 +147,23 @@ impl Store {
         Ok(())
     }
 
+    /// Hard-delete a session from the catalog: its row (ON DELETE CASCADE drops
+    /// the utterances / ai_turns) plus its FTS rows (cleared explicitly — the
+    /// FTS5 index isn't FK-cascaded, same as `replace_session`). Idempotent:
+    /// deleting an absent session affects 0 rows and still commits.
+    pub fn delete_session(&mut self, session_id: &str) -> Result<()> {
+        let tx = self.conn.transaction().context("begin delete tx")?;
+        tx.execute(
+            "DELETE FROM search_index WHERE session_id = ?1",
+            params![session_id],
+        )
+        .context("clear search rows")?;
+        tx.execute("DELETE FROM sessions WHERE id = ?1", params![session_id])
+            .context("delete session row")?;
+        tx.commit().context("commit delete tx")?;
+        Ok(())
+    }
+
     /// All sessions, newest first (by `started_at_ms`, NULLs last). Powers the
     /// archive list.
     pub fn list_sessions(&self) -> Result<Vec<Session>> {
@@ -608,6 +625,24 @@ mod tests {
             source: source.into(),
             text: text.into(),
         }
+    }
+
+    #[test]
+    fn delete_session_removes_row_children_and_search() {
+        let mut store = Store::open_in_memory().unwrap();
+        let s = sample_session("2026-06-04_10-00-00_ab12");
+        store
+            .replace_session(&s, &[utt(&s.id, 1, "mic", "hash map lookup")], &[])
+            .unwrap();
+        assert_eq!(store.count_utterances(&s.id).unwrap(), 1);
+        assert!(!store.search("hash", 10).unwrap().is_empty());
+
+        store.delete_session(&s.id).unwrap();
+        assert_eq!(store.count_utterances(&s.id).unwrap(), 0); // FK cascade
+        assert!(store.search("hash", 10).unwrap().is_empty()); // FTS cleared
+        assert!(store.session_utterances(&s.id).unwrap().is_empty());
+        // Idempotent: deleting an absent session is a no-op.
+        store.delete_session(&s.id).unwrap();
     }
 
     #[test]
