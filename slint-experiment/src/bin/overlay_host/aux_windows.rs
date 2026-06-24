@@ -1069,6 +1069,17 @@ fn hit_to_row(h: &SearchHit, recordings: &std::collections::HashSet<String>) -> 
     }
 }
 
+/// Format a session-relative offset (ms) as `mm:ss`, or `h:mm:ss` past an hour.
+fn fmt_offset(offset_ms: i64) -> String {
+    let secs = (offset_ms / 1000).max(0);
+    let (h, m, s) = (secs / 3600, (secs % 3600) / 60, secs % 60);
+    if h > 0 {
+        format!("{h}:{m:02}:{s:02}")
+    } else {
+        format!("{m:02}:{s:02}")
+    }
+}
+
 /// Render a session's content as the markdown body of a read-only tile:
 /// a heading (status + label + counts), the transcript, then the AI Q&A.
 /// Pure → unit-tested.
@@ -1093,9 +1104,28 @@ fn build_session_markdown(
         }
         out.push_str("\n\n");
     }
-    for u in utterances {
-        let label = if u.source == "mic" { "Mic" } else { "System" };
-        out.push_str(&format!("{label}: {}\n\n", u.text.trim()));
+    // Transcript region — chronological, with a session-relative timecode
+    // (derived from the session start) and the two-way channel label.
+    let session_start = session.and_then(|s| s.started_at_ms).filter(|&ms| ms > 0);
+    if utterances.is_empty() {
+        out.push_str("_Транскрипт не сохранён_\n\n");
+    } else {
+        for u in utterances {
+            let label = if u.source == "mic" {
+                "Микрофон"
+            } else {
+                "Система"
+            };
+            // Collapse internal whitespace/newlines so one utterance = one line.
+            let text = u.text.split_whitespace().collect::<Vec<_>>().join(" ");
+            match session_start {
+                Some(start) => {
+                    let off = fmt_offset((u.unix_ms - start).max(0));
+                    out.push_str(&format!("[{off}] {label}: {text}\n\n"));
+                }
+                None => out.push_str(&format!("{label}: {text}\n\n")),
+            }
+        }
     }
     if !ai_turns.is_empty() {
         out.push_str("---\n\n");
@@ -1107,9 +1137,6 @@ fn build_session_markdown(
                 out.push_str(&format!("Answer: {}\n\n", t.answer.trim()));
             }
         }
-    }
-    if utterances.is_empty() && ai_turns.is_empty() {
-        out.push_str("—\n");
     }
     out
 }
@@ -1248,14 +1275,45 @@ mod tests {
             attached_screenshot: false,
         }];
         let md = build_session_markdown(None, &utts, &turns);
-        assert!(md.contains("Mic: hello there"));
+        assert!(md.contains("Микрофон: hello there")); // session None → no timecode
         assert!(md.contains("Question: **what is it?**"));
         assert!(md.contains("Answer: an answer."));
     }
 
     #[test]
-    fn session_markdown_empty_is_graceful() {
+    fn session_markdown_transcript_has_timecodes_and_ru_labels() {
+        let s = sample_session(); // started_at_ms = Some(1_779_580_800_000)
+        let start = 1_779_580_800_000_i64;
+        let utts = vec![
+            Utterance {
+                session_id: "s".into(),
+                unix_ms: start,
+                source: "system".into(),
+                text: "привет".into(),
+            },
+            Utterance {
+                session_id: "s".into(),
+                unix_ms: start + 135_000, // 02:15
+                source: "mic".into(),
+                text: "да   слышу".into(), // internal whitespace collapses to one space
+            },
+        ];
+        let md = build_session_markdown(Some(&s), &utts, &[]);
+        assert!(md.contains("[00:00] Система: привет"), "got: {md}");
+        assert!(md.contains("[02:15] Микрофон: да слышу"), "got: {md}");
+    }
+
+    #[test]
+    fn session_markdown_empty_shows_not_saved_notice() {
         let md = build_session_markdown(None, &[], &[]);
-        assert_eq!(md, "—\n");
+        assert!(md.contains("Транскрипт не сохранён"), "got: {md}");
+    }
+
+    #[test]
+    fn fmt_offset_mm_ss_and_h_mm_ss() {
+        assert_eq!(fmt_offset(0), "00:00");
+        assert_eq!(fmt_offset(135_000), "02:15");
+        assert_eq!(fmt_offset(3_661_000), "1:01:01");
+        assert_eq!(fmt_offset(-5), "00:00"); // negative clamps
     }
 }
