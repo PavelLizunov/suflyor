@@ -448,12 +448,14 @@ pub(crate) fn open_archive(
     // can't be frozen mid-write as "crashed".
     // Gated on the same toggle as the launch sweep + stop-index, so disabling
     // the archive in Settings really stops ALL catalog writes (review #2).
+    // Live session id — skipped by reindex AND guarded from delete (ТЗ2a). One
+    // compute, reused by both.
+    let active_id = slint_replay::runtime_state::lock(slint_rt)
+        .journal
+        .as_ref()
+        .and_then(overlay_backend::journal::Journal::current_path)
+        .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()));
     if cfg.read().session_archive_enabled {
-        let active_id = slint_replay::runtime_state::lock(slint_rt)
-            .journal
-            .as_ref()
-            .and_then(overlay_backend::journal::Journal::current_path)
-            .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()));
         match overlay_backend::persistence::reindex_default(active_id.as_deref()) {
             Ok(st) => eprintln!(
                 "[overlay-host] archive: reindex on open — {} new, {} skipped, {} failed",
@@ -671,6 +673,64 @@ pub(crate) fn open_archive(
                     }
                 });
             });
+        });
+    }
+
+    // ТЗ2a — 🗑 delete: confirm via a native modal, then hard-delete every
+    // artifact (journal / audio / conspect / catalog row, cascading) and refresh
+    // the list. The live session is guarded; a locked-file failure keeps the row
+    // listed for an idempotent retry (the backend never half-deletes).
+    {
+        let weak = win.as_weak();
+        let store_d = store.clone();
+        let active_del = active_id.clone();
+        win.on_delete_requested(move |idx| {
+            let Some(p) = weak.upgrade() else {
+                return;
+            };
+            let Some(store_rc) = store_d.as_ref() else {
+                return;
+            };
+            let results = p.get_results();
+            let Some(row) = archive_row_at(&results, idx) else {
+                return;
+            };
+            let sid = row.id.to_string();
+            if sid.is_empty() {
+                return;
+            }
+            if active_del.as_deref() == Some(sid.as_str()) {
+                p.set_retranscribe_status(SharedString::from("Активную сессию удалить нельзя"));
+                return;
+            }
+            let title = row.title.to_string();
+            let confirmed = rfd::MessageDialog::new()
+                .set_level(rfd::MessageLevel::Warning)
+                .set_title("Удалить сессию?")
+                .set_description(format!(
+                    "«{title}» будет удалена безвозвратно (стенограмма, аудио, сводка)."
+                ))
+                .set_buttons(rfd::MessageButtons::YesNo)
+                .show();
+            if confirmed != rfd::MessageDialogResult::Yes {
+                return;
+            }
+            match overlay_backend::session_admin::delete_session_everywhere(
+                &mut store_rc.borrow_mut(),
+                &sid,
+            ) {
+                Ok(()) => {
+                    // Rebuild the list (the row is gone); also resets edit-state.
+                    let q = p.get_query();
+                    p.invoke_query_changed(q);
+                }
+                Err(e) => {
+                    eprintln!("[overlay-host] archive: delete {sid} failed: {e:#}");
+                    p.set_retranscribe_status(SharedString::from(
+                        "Удаление не удалось (файл занят?) — повторите",
+                    ));
+                }
+            }
         });
     }
 

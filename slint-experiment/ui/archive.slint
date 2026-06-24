@@ -114,6 +114,9 @@ export component ArchiveWindow inherits Window {
     callback rename-confirmed(int);
     callback rename-cancelled();
     callback regen-name-requested(int);
+    // ТЗ2a — 🗑 delete: confirmed in Rust via a native modal, then a hard-delete
+    // of every artifact + list refresh. The live session is guarded Rust-side.
+    callback delete-requested(int);
     callback close-requested();
     // v0.17.1 — frameless window drag by the header (mirrors the tile drag:
     // pointer-down records the anchor, moved-while-pressed moves the HWND).
@@ -327,6 +330,11 @@ export component ArchiveWindow inherits Window {
                                             icon: @image-url("../assets/icons/ai.svg");
                                             a11y: "Regenerate name from transcript";
                                             clicked => { root.regen-name-requested(i); }
+                                        }
+                                        if root.renaming-index != i : RowIcon {
+                                            icon: @image-url("../assets/icons/trash.svg");
+                                            a11y: "Delete session";
+                                            clicked => { root.delete-requested(i); }
                                         }
                                     }
                                     Text {
