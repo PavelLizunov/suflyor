@@ -423,6 +423,7 @@ pub(crate) fn open_archive(
     {
         let slot = archive_ref.borrow();
         if let Some(existing) = slot.as_ref() {
+            existing.set_confirm_delete_index(-1); // F2: never reopen onto a stale confirm overlay
             let _ = existing.show();
             if let Ok(hwnd) = grab_hwnd(existing.window()) {
                 focus_window(hwnd);
@@ -680,49 +681,67 @@ pub(crate) fn open_archive(
         });
     }
 
-    // ТЗ2a — 🗑 delete: confirm via a native modal, then hard-delete every
-    // artifact (journal / audio / conspect / catalog row, cascading) and refresh
-    // the list. The live session is guarded; a locked-file failure keeps the row
-    // listed for an idempotent retry (the backend never half-deletes).
+    // ТЗ2a / F2 — 🗑 delete. The 🗑 button only VALIDATES (active-session guard) and
+    // shows the in-app confirm overlay (a native rfd::MessageDialog crashed nested in
+    // the Slint event loop — the tester hit it). The hard-delete itself runs in
+    // `delete-confirmed`; `delete-cancelled` just dismisses. The backend never
+    // half-deletes, so a locked-file failure keeps the row listed for an idempotent
+    // retry.
     {
         let weak = win.as_weak();
-        let store_d = store.clone();
         let active_del = active_id.clone();
         win.on_delete_requested(move |idx| {
             let Some(p) = weak.upgrade() else {
-                return;
-            };
-            let Some(store_rc) = store_d.as_ref() else {
                 return;
             };
             let results = p.get_results();
             let Some(row) = archive_row_at(&results, idx) else {
                 return;
             };
-            let sid = row.id.to_string();
-            if sid.is_empty() {
+            if row.id.is_empty() {
                 return;
             }
-            if active_del.as_deref() == Some(sid.as_str()) {
+            if active_del.as_deref() == Some(row.id.as_str()) {
                 p.set_retranscribe_status(SharedString::from("Активную сессию удалить нельзя"));
                 return;
             }
-            let title = row.title.to_string();
-            let confirmed = rfd::MessageDialog::new()
-                .set_level(rfd::MessageLevel::Warning)
-                .set_title("Удалить сессию?")
-                .set_description(format!(
-                    "«{title}» будет удалена безвозвратно (стенограмма, аудио, сводка)."
-                ))
-                .set_buttons(rfd::MessageButtons::YesNo)
-                .show();
-            if confirmed != rfd::MessageDialogResult::Yes {
+            // Show the in-app confirm overlay; the actual delete is in delete-confirmed.
+            p.set_confirm_delete_title(row.title);
+            p.set_confirm_delete_index(idx);
+        });
+    }
+    {
+        let weak = win.as_weak();
+        let store_d = store.clone();
+        let active_del = active_id.clone();
+        win.on_delete_confirmed(move |idx| {
+            let Some(p) = weak.upgrade() else {
+                return;
+            };
+            p.set_confirm_delete_index(-1); // dismiss the overlay
+            let Some(store_rc) = store_d.as_ref() else {
+                return;
+            };
+            // Re-fetch + re-validate by index (the list can't change behind the modal
+            // scrim, but stay defensive).
+            let results = p.get_results();
+            let Some(row) = archive_row_at(&results, idx) else {
+                return;
+            };
+            let sid = row.id.to_string();
+            if sid.is_empty() || active_del.as_deref() == Some(sid.as_str()) {
                 return;
             }
-            match overlay_backend::session_admin::delete_session_everywhere(
-                &mut store_rc.borrow_mut(),
-                &sid,
-            ) {
+            // CRITICAL: drop the store borrow BEFORE rebuilding. invoke_query_changed
+            // dispatches the search handler SYNCHRONOUSLY (Slint callbacks run inline),
+            // and that handler borrows the SAME RefCell — holding borrow_mut across it
+            // double-borrows → panic. (Latent in the original ТЗ2a code; the native
+            // modal crashed first, so this path was never reached.)
+            let outcome = {
+                let mut st = store_rc.borrow_mut();
+                overlay_backend::session_admin::delete_session_everywhere(&mut st, &sid)
+            };
+            match outcome {
                 Ok(()) => {
                     // Rebuild the list (the row is gone); also resets edit-state.
                     let q = p.get_query();
@@ -734,6 +753,14 @@ pub(crate) fn open_archive(
                         "Удаление не удалось (файл занят?) — повторите",
                     ));
                 }
+            }
+        });
+    }
+    {
+        let weak = win.as_weak();
+        win.on_delete_cancelled(move || {
+            if let Some(p) = weak.upgrade() {
+                p.set_confirm_delete_index(-1);
             }
         });
     }

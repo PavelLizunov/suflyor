@@ -114,9 +114,15 @@ export component ArchiveWindow inherits Window {
     callback rename-confirmed(int);
     callback rename-cancelled();
     callback regen-name-requested(int);
-    // ТЗ2a — 🗑 delete: confirmed in Rust via a native modal, then a hard-delete
-    // of every artifact + list refresh. The live session is guarded Rust-side.
+    // ТЗ2a — 🗑 delete: Rust validates (active-session guard), then shows the in-app
+    // confirm overlay below. F2: a native modal crashed nested in the event loop.
     callback delete-requested(int);
+    // F2 — in-app delete confirmation. Rust sets confirm-delete-index (+ -title) to
+    // show the overlay; its buttons fire delete-confirmed(idx) / delete-cancelled.
+    in-out property <int> confirm-delete-index: -1;
+    in-out property <string> confirm-delete-title: "";
+    callback delete-confirmed(int);
+    callback delete-cancelled();
     // ТЗ1 — 📄 opens the structured read-only transcript window for this session.
     callback transcript-requested(int);
     callback close-requested();
@@ -141,8 +147,12 @@ export component ArchiveWindow inherits Window {
             height: 100%;
             key-pressed(event) => {
                 if (event.text == Key.Escape) {
-                    // v0.22.0 — Esc cancels an in-progress rename first; a second
-                    // Esc (nothing being edited) closes the window.
+                    // F2 — Esc dismisses an open delete-confirm first, then an
+                    // in-progress rename, then (nothing pending) closes the window.
+                    if (root.confirm-delete-index != -1) {
+                        root.delete-cancelled();
+                        return accept;
+                    }
                     if (root.renaming-index != -1) {
                         root.rename-cancelled();
                         return accept;
@@ -409,6 +419,96 @@ export component ArchiveWindow inherits Window {
                     font-size: 9px;
                     color: Theme.text-muted;
                     horizontal-alignment: center;
+                }
+            }
+        }
+
+        // F2 — in-app delete confirmation (replaces the native modal that crashed
+        // nested in the event loop). Scrim blocks + dims the window; the card is
+        // centered; scrim-click / Cancel / Esc dismiss, Delete confirms.
+        if root.confirm-delete-index != -1 : Rectangle {
+            width: 100%;
+            height: 100%;
+            background: Theme.scrim;
+            TouchArea {
+                clicked => { root.delete-cancelled(); }
+            }
+            Rectangle {
+                width: 380px;
+                height: 184px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                background: Theme.bg-surface;
+                border-radius: Metrics.radius-panel;
+                border-width: Metrics.border-thin;
+                border-color: Theme.border-strong;
+                // Swallow clicks on the card so they don't reach the scrim (cancel).
+                TouchArea { }
+                VerticalLayout {
+                    padding: Metrics.space-md;
+                    spacing: Metrics.space-sm;
+                    Text {
+                        text: @tr("Delete session?");
+                        font-size: Metrics.font-heading;
+                        font-weight: 700;
+                        color: Theme.text-primary;
+                        horizontal-alignment: center;
+                    }
+                    Text {
+                        text: root.confirm-delete-title;
+                        font-size: Metrics.font-caption;
+                        color: Theme.text-muted;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: @tr("Irreversible — transcript, audio and summary are erased.");
+                        font-size: Metrics.font-caption;
+                        color: Theme.warning;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        spacing: Metrics.space-sm;
+                        alignment: center;
+                        Rectangle {
+                            width: 132px;
+                            height: 32px;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.border-strong;
+                            background: cancel-ta.has-hover ? Theme.bg-elevated : transparent;
+                            cancel-ta := TouchArea {
+                                clicked => { root.delete-cancelled(); }
+                            }
+                            Text {
+                                text: @tr("Cancel");
+                                color: Theme.text-primary;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                        Rectangle {
+                            width: 132px;
+                            height: 32px;
+                            border-radius: 6px;
+                            background: del-ta.pressed
+                                ? Theme.danger.with-alpha(0.7)
+                                : del-ta.has-hover ? Theme.danger : Theme.danger.with-alpha(0.88);
+                            del-ta := TouchArea {
+                                clicked => {
+                                    root.delete-confirmed(root.confirm-delete-index);
+                                }
+                            }
+                            Text {
+                                text: @tr("Delete");
+                                color: #ffffff;
+                                font-weight: 600;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
                 }
             }
         }

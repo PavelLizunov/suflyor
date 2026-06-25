@@ -121,6 +121,12 @@ msgstr "выделить все"
 msgid "Audio not saved"
 msgstr "Аудио не сохранено"
 
+msgid "Delete session?"
+msgstr "Удалить сессию?"
+
+msgid "Irreversible — transcript, audio and summary are erased."
+msgstr "Безвозвратно — стенограмма, аудио и сводка будут стёрты."
+
 msgid "Settings"
 msgstr "Настройки"
 
