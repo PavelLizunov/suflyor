@@ -172,7 +172,7 @@ pub fn format_summary_reference(matched: &[&MemoryItem]) -> String {
 pub fn summary_reference_for_transcript(transcript: &str) -> Option<String> {
     let items = open_default_store()
         .ok()?
-        .list_memory_items("default", false)
+        .list_memory_items("default", false, -1)
         .unwrap_or_default();
     if items.is_empty() {
         return None;

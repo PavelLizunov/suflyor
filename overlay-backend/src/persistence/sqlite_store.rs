@@ -373,17 +373,28 @@ impl Store {
     }
 
     /// Candidates for a profile in a status (e.g. `pending`), newest first.
-    pub fn list_candidates(&self, profile_id: &str, status: &str) -> Result<Vec<MemoryCandidate>> {
+    /// `limit` caps the rows (a NEGATIVE value = unlimited, SQLite `LIMIT`
+    /// semantics): the review UI passes a small cap so a huge backlog can't freeze
+    /// or blow up the tab (F8), while callers needing the full set pass -1. The
+    /// rendered text columns are COALESCE'd to '' so a corrupt NULL row degrades to
+    /// blank instead of failing the whole query.
+    pub fn list_candidates(
+        &self,
+        profile_id: &str,
+        status: &str,
+        limit: i64,
+    ) -> Result<Vec<MemoryCandidate>> {
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT id, profile_id, source_session_id, kind, text, reason, status, \
-                 created_at_ms FROM memory_candidates WHERE profile_id = ?1 AND status = ?2 \
-                 ORDER BY created_at_ms DESC, id DESC",
+                "SELECT id, profile_id, source_session_id, COALESCE(kind, ''), \
+                 COALESCE(text, ''), COALESCE(reason, ''), status, created_at_ms \
+                 FROM memory_candidates WHERE profile_id = ?1 AND status = ?2 \
+                 ORDER BY created_at_ms DESC, id DESC LIMIT ?3",
             )
             .context("prepare list_candidates")?;
         let rows = stmt
-            .query_map(params![profile_id, status], row_to_candidate)
+            .query_map(params![profile_id, status, limit], row_to_candidate)
             .context("query list_candidates")?;
         let mut out = Vec::new();
         for r in rows {
@@ -477,25 +488,31 @@ impl Store {
 
     /// Memory items for a profile, newest first. By default ACTIVE only;
     /// `include_archived` adds the soft-deleted ones.
+    /// `limit` caps the rows (NEGATIVE = unlimited, SQLite `LIMIT` semantics): the
+    /// review UI passes a small cap (F8); the AI-context callers pass -1. Text
+    /// columns are COALESCE'd so a corrupt NULL row degrades to blank.
     pub fn list_memory_items(
         &self,
         profile_id: &str,
         include_archived: bool,
+        limit: i64,
     ) -> Result<Vec<MemoryItem>> {
         let mut stmt = self
             .conn
             .prepare(if include_archived {
-                "SELECT id, profile_id, kind, text, source_session_id, approved_at_ms, \
-                 archived_at_ms, embedding_status FROM memory_items WHERE profile_id = ?1 \
-                 ORDER BY approved_at_ms DESC, id DESC"
+                "SELECT id, profile_id, COALESCE(kind, ''), COALESCE(text, ''), \
+                 source_session_id, approved_at_ms, archived_at_ms, embedding_status \
+                 FROM memory_items WHERE profile_id = ?1 \
+                 ORDER BY approved_at_ms DESC, id DESC LIMIT ?2"
             } else {
-                "SELECT id, profile_id, kind, text, source_session_id, approved_at_ms, \
-                 archived_at_ms, embedding_status FROM memory_items WHERE profile_id = ?1 \
-                 AND archived_at_ms IS NULL ORDER BY approved_at_ms DESC, id DESC"
+                "SELECT id, profile_id, COALESCE(kind, ''), COALESCE(text, ''), \
+                 source_session_id, approved_at_ms, archived_at_ms, embedding_status \
+                 FROM memory_items WHERE profile_id = ?1 \
+                 AND archived_at_ms IS NULL ORDER BY approved_at_ms DESC, id DESC LIMIT ?2"
             })
             .context("prepare list_memory_items")?;
         let rows = stmt
-            .query_map(params![profile_id], row_to_item)
+            .query_map(params![profile_id, limit], row_to_item)
             .context("query list_memory_items")?;
         let mut out = Vec::new();
         for r in rows {
@@ -936,11 +953,27 @@ mod tests {
             .insert_candidate(&new_cand("explain B-trees"), 100)
             .unwrap();
         assert!(id > 0);
-        let pending = store.list_candidates("default", "pending").unwrap();
+        let pending = store.list_candidates("default", "pending", -1).unwrap();
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].text, "explain B-trees");
         assert_eq!(pending[0].status, "pending");
         assert_eq!(store.count_candidates("default", "pending").unwrap(), 1);
+    }
+
+    #[test]
+    fn list_candidates_respects_limit_newest_first() {
+        // F8 — the review tab caps how many rows it loads: a positive limit returns
+        // the newest N (created_at_ms DESC); a negative limit returns all.
+        let mut store = Store::open_in_memory().unwrap();
+        store.insert_candidate(&new_cand("oldest"), 100).unwrap();
+        store.insert_candidate(&new_cand("middle"), 200).unwrap();
+        store.insert_candidate(&new_cand("newest"), 300).unwrap();
+        let capped = store.list_candidates("default", "pending", 2).unwrap();
+        assert_eq!(capped.len(), 2); // capped
+        assert_eq!(capped[0].text, "newest"); // newest first
+        assert_eq!(capped[1].text, "middle");
+        let all = store.list_candidates("default", "pending", -1).unwrap();
+        assert_eq!(all.len(), 3); // negative = unlimited
     }
 
     #[test]
@@ -951,7 +984,7 @@ mod tests {
         assert_eq!(store.count_candidates("default", "pending").unwrap(), 0);
         assert_eq!(store.count_candidates("default", "rejected").unwrap(), 1);
         assert!(store
-            .list_memory_items("default", false)
+            .list_memory_items("default", false, -1)
             .unwrap()
             .is_empty());
     }
@@ -966,7 +999,7 @@ mod tests {
         assert!(item_id > 0);
         assert_eq!(store.count_candidates("default", "pending").unwrap(), 0);
         assert_eq!(store.count_candidates("default", "approved").unwrap(), 1);
-        let items = store.list_memory_items("default", false).unwrap();
+        let items = store.list_memory_items("default", false, -1).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].text, "use a hash map");
         assert_eq!(items[0].kind, "answer");
@@ -980,7 +1013,10 @@ mod tests {
         let mut store = Store::open_in_memory().unwrap();
         assert!(store.approve_candidate(999, 1).is_err());
         // The failed transaction left no item behind.
-        assert!(store.list_memory_items("default", true).unwrap().is_empty());
+        assert!(store
+            .list_memory_items("default", true, -1)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -989,7 +1025,7 @@ mod tests {
         let cid = store.insert_candidate(&new_cand("raw"), 1).unwrap();
         store.update_candidate_text(cid, "refined").unwrap();
         store.approve_candidate(cid, 2).unwrap();
-        let items = store.list_memory_items("default", false).unwrap();
+        let items = store.list_memory_items("default", false, -1).unwrap();
         assert_eq!(items[0].text, "refined");
     }
 
@@ -1000,10 +1036,10 @@ mod tests {
         let item_id = store.approve_candidate(cid, 2).unwrap();
         store.archive_memory_item(item_id, 99).unwrap();
         assert!(store
-            .list_memory_items("default", false)
+            .list_memory_items("default", false, -1)
             .unwrap()
             .is_empty());
-        let all = store.list_memory_items("default", true).unwrap();
+        let all = store.list_memory_items("default", true, -1).unwrap();
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].archived_at_ms, Some(99));
     }
@@ -1022,8 +1058,14 @@ mod tests {
                 10,
             )
             .unwrap();
-        assert_eq!(store.list_memory_items("default", true).unwrap().len(), 1);
+        assert_eq!(
+            store.list_memory_items("default", true, -1).unwrap().len(),
+            1
+        );
         store.delete_memory_item(item_id).unwrap();
-        assert!(store.list_memory_items("default", true).unwrap().is_empty());
+        assert!(store
+            .list_memory_items("default", true, -1)
+            .unwrap()
+            .is_empty());
     }
 }

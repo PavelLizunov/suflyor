@@ -83,7 +83,7 @@ pub fn context_for_meeting(base: &str) -> String {
     let block = match open_default_store() {
         Ok(store) => {
             let items = store
-                .list_memory_items("default", false)
+                .list_memory_items("default", false, -1)
                 .unwrap_or_default();
             format_memory_block(&items)
         }

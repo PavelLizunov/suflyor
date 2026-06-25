@@ -23,6 +23,11 @@ use super::{ComponentHandle, MemoryRow, ModelRc, SettingsWindow, SharedString, V
 const PROFILE: &str = "default";
 /// How many of the most-recent sessions the Extract action mines.
 const EXTRACT_RECENT_SESSIONS: usize = 12;
+/// F8 — cap on rows loaded into the review tab: the newest N candidates / items.
+/// A DISPLAY bound only — the DB keeps everything and the AI context reads the full
+/// set; this stops a huge backlog from freezing / crashing the tab (the rows render
+/// in un-virtualized lists, so an unbounded count blew up the UI thread).
+const MEMORY_TAB_CAP: i64 = 200;
 
 /// Wire the 💭 Memory tab: load the candidate + item lists and bind the
 /// approve / reject / delete / extract callbacks.
@@ -130,9 +135,11 @@ fn reload_memory(win: &SettingsWindow) {
     let (cands, items) = match open_default_store() {
         Ok(store) => (
             store
-                .list_candidates(PROFILE, "pending")
+                .list_candidates(PROFILE, "pending", MEMORY_TAB_CAP)
                 .unwrap_or_default(),
-            store.list_memory_items(PROFILE, false).unwrap_or_default(),
+            store
+                .list_memory_items(PROFILE, false, MEMORY_TAB_CAP)
+                .unwrap_or_default(),
         ),
         Err(_) => (Vec::new(), Vec::new()),
     };
@@ -152,7 +159,7 @@ fn run_extract() -> usize {
     // Existing candidate texts across ALL statuses → never re-suggest one.
     let mut seen: HashSet<String> = HashSet::new();
     for status in ["pending", "approved", "rejected"] {
-        if let Ok(cs) = store.list_candidates(PROFILE, status) {
+        if let Ok(cs) = store.list_candidates(PROFILE, status, -1) {
             for c in cs {
                 seen.insert(c.text);
             }
