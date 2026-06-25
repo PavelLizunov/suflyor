@@ -337,6 +337,9 @@ use settings_local_ai::*;
 // crate-root scope.
 #[path = "overlay_host/aux_windows.rs"]
 mod aux_windows;
+/// ТЗ2b — rodio-backed playback engine for the transcript window's mini-player.
+#[path = "overlay_host/transcript_player.rs"]
+mod transcript_player;
 use aux_windows::*;
 
 pub(crate) type TileWindows = Rc<RefCell<Vec<TileWindow>>>;

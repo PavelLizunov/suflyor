@@ -130,6 +130,13 @@ base64 = "0.22"
 # `set_clipboard_string`. Windows-only, which matches this app.
 clipboard-win = "5"
 
+# ТЗ2b — playback engine for the session-transcript player (decision #4: rodio
+# for seek/pause/position out of the box; new dep gated by cargo-deny). We feed
+# the already-mixed i16 PCM (overlay_backend::session_audio) as a raw SamplesBuffer
+# and implement SEEK by re-slicing the buffer, so NO file decoders are needed —
+# default-features off keeps the dep tree (and the cargo-deny surface) lean.
+rodio = { version = "0.20", default-features = false }
+
 # overlay-backend — the shared no-UI crate (audio, STT, AI, journal,
 # KB, screenshot, config, runtime + health.rs). This binary is its
 # only consumer, via path dep.
