@@ -64,11 +64,9 @@ pub(crate) fn message_text(content: &ai::MessageContent) -> String {
 /// transcript (decision #1: Система / Микрофон) and `build_session_markdown`;
 /// internal whitespace is collapsed so one utterance = one line. Pure → tested.
 ///
-/// No production caller yet — the ТЗ1 "Copy all / Copy selected" buttons wire it
-/// next (the unit test already exercises it). `allow` not `expect`: the test
-/// target DOES use it, so `expect(dead_code)` is unfulfilled there. Drop this
-/// attribute when the copy button lands.
-#[allow(dead_code)]
+/// Wired by the ТЗ1 transcript window's "Copy all" button
+/// (`aux_windows::wire_transcript_copy`); the per-line "Copy selected" path will
+/// pass a populated `selected` set in a later sub-increment.
 pub(crate) fn format_transcript_for_copy(
     utts: &[overlay_backend::persistence::Utterance],
     session_start_ms: Option<i64>,

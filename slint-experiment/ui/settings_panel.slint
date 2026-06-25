@@ -93,7 +93,7 @@ export struct ComponentRow {
 // on/off read. NAME kept as `DarkCheck` so all call sites + the
 // `checked`/`toggled` API stay untouched (pure visual swap). Green
 // (Theme.accent) = ON, neutral grey = OFF; font-independent (no glyphs).
-component DarkCheck inherits Rectangle {
+export component DarkCheck inherits Rectangle {
     in property <string> text;
     in-out property <bool> checked: false;
     callback toggled(bool);

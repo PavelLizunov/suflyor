@@ -1212,6 +1212,43 @@ pub(crate) fn fmt_offset(offset_ms: i64) -> String {
     }
 }
 
+/// Wire the transcript window's "Copy all" button (ТЗ1, decision #7): format the
+/// CURRENT session's utterances via `tile_copy::format_transcript_for_copy`
+/// (honouring the in-window "with timecodes" toggle), put them on the clipboard,
+/// and flash a 1.5s "copied" confirmation. Re-wired on EVERY open so the captured
+/// utterances always match the session currently shown (the window is reused).
+/// Copy is purely local — no egress — so it stays safe under stealth.
+fn wire_transcript_copy(win: &TranscriptWindow, utts: &[Utterance], session_start: Option<i64>) {
+    let utts_owned: Vec<Utterance> = utts.to_vec();
+    let weak = win.as_weak();
+    win.on_copy_all_requested(move || {
+        let Some(w) = weak.upgrade() else {
+            return;
+        };
+        if utts_owned.is_empty() {
+            return;
+        }
+        let with_tc = w.get_with_timecodes();
+        let text =
+            super::tile_copy::format_transcript_for_copy(&utts_owned, session_start, None, with_tc);
+        if text.is_empty() {
+            return;
+        }
+        match clipboard_win::set_clipboard_string(&text) {
+            Ok(()) => {
+                w.set_copied(true);
+                let w2 = w.as_weak();
+                slint::Timer::single_shot(std::time::Duration::from_millis(1500), move || {
+                    if let Some(w) = w2.upgrade() {
+                        w.set_copied(false);
+                    }
+                });
+            }
+            Err(e) => eprintln!("[overlay-host] transcript copy failed: {e}"),
+        }
+    });
+}
+
 /// Open a READ-ONLY structured transcript window for a session (ТЗ1). Reuses the
 /// slot if already open; otherwise builds the per-line model from the session's
 /// utterances and presents the window stealth-aware. The model is (re)built on
@@ -1251,6 +1288,7 @@ pub(crate) fn open_transcript(
         win.set_heading(SharedString::from(heading));
         win.set_empty(utts.is_empty());
         win.set_lines(ModelRc::new(VecModel::from(lines)));
+        wire_transcript_copy(win, utts, session_start);
         let _ = win.show();
         if let Ok(hwnd) = grab_hwnd(win.window()) {
             focus_window(hwnd);
@@ -1271,6 +1309,7 @@ pub(crate) fn open_transcript(
     win.set_heading(SharedString::from(heading));
     win.set_empty(utts.is_empty());
     win.set_lines(ModelRc::new(VecModel::from(lines)));
+    wire_transcript_copy(&win, utts, session_start);
 
     {
         let slot_c = slot.clone();

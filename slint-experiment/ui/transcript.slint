@@ -12,6 +12,7 @@ import { ScrollView, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { CloseButton } from "controls.slint";
 import { Metrics } from "metrics.slint";
+import { DarkCheck } from "settings_panel.slint";
 
 // One transcript row, built in Rust from a session's utterances.
 export struct TranscriptLine {
@@ -41,7 +42,12 @@ export component TranscriptWindow inherits Window {
     in-out property <string> heading: "";
     in-out property <[TranscriptLine]> lines: [];
     in-out property <bool> empty: false;
+    // ТЗ1 copy (decision #7): "Copy all" honours the "with timecodes" toggle;
+    // `copied` flashes a 1.5s confirmation on the button (set from Rust).
+    in-out property <bool> with-timecodes: false;
+    in-out property <bool> copied: false;
 
+    callback copy-all-requested();
     callback close-requested();
     callback drag-start-requested();
     callback drag-moved();
@@ -118,6 +124,41 @@ export component TranscriptWindow inherits Window {
                 Rectangle {
                     background: Theme.border;
                     height: Metrics.border-thin;
+                }
+
+                // ── Toolbar: copy the whole transcript (ТЗ1, decision #7) ──
+                if !root.empty : HorizontalLayout {
+                    spacing: Metrics.space-sm;
+                    Rectangle {
+                        width: 138px;
+                        height: 28px;
+                        horizontal-stretch: 0;
+                        border-radius: 6px;
+                        background: copy-ta.pressed
+                            ? Theme.accent.with-alpha(0.7)
+                            : copy-ta.has-hover ? Theme.accent : Theme.accent.with-alpha(0.85);
+                        animate background { duration: 120ms; }
+                        copy-ta := TouchArea {
+                            clicked => {
+                                root.copy-all-requested();
+                            }
+                        }
+                        Text {
+                            text: root.copied ? @tr("Copied ✓") : @tr("Copy all");
+                            // Per-scheme WCAG-AA text colour on the accent fill (white
+                            // fails on the bright mint scheme); matches every other
+                            // filled-accent control.
+                            color: Theme.on-accent;
+                            font-size: Metrics.font-label;
+                            font-weight: 600;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                    DarkCheck {
+                        text: @tr("with timecodes [mm:ss]");
+                        checked <=> root.with-timecodes;
+                    }
                 }
 
                 // ── Empty: no saved transcript ──

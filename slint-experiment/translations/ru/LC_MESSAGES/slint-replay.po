@@ -103,6 +103,15 @@ msgstr "Стенограмма"
 msgid "Transcript not saved"
 msgstr "Транскрипт не сохранён"
 
+msgid "Copy all"
+msgstr "Копировать всё"
+
+msgid "Copied ✓"
+msgstr "Скопировано ✓"
+
+msgid "with timecodes [mm:ss]"
+msgstr "с таймкодами [mm:ss]"
+
 msgid "Settings"
 msgstr "Настройки"
 
