@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>suflyor v0.22.2 — повторная проверка фиксов F1–F8</title>
+<style>
+  :root {
+    --bg:#f5f7fa; --card:#fff; --ink:#1a1f29; --muted:#6b7480; --border:#e2e6ec;
+    --accent:#2563eb; --accent-soft:#eaf1ff;
+    --ok:#15924b; --ok-bg:#e6f6ec; --bug:#d12f3f; --bug-bg:#fdeaec;
+    --warn:#b8860b; --warn-bg:#fbf3df; --skip:#8a93a0; --skip-bg:#eef1f4;
+    --shadow:0 1px 3px rgba(16,24,40,.06),0 1px 2px rgba(16,24,40,.04);
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#14171c; --card:#1c2027; --ink:#e6e9ee; --muted:#9aa3b0; --border:#2b313a;
+    --accent:#5b8cff; --accent-soft:#1e2940;
+    --ok:#4ade80; --ok-bg:#143524; --bug:#f87a86; --bug-bg:#3a1b20;
+    --warn:#e6c15a; --warn-bg:#382f14; --skip:#8a93a0; --skip-bg:#262b33; --shadow:none;}}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.55 -apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:84px;}
+  .wrap{max-width:880px;margin:0 auto;padding:0 18px;}
+  header{position:sticky;top:0;z-index:10;background:var(--bg);
+    border-bottom:1px solid var(--border);padding:14px 0 12px;backdrop-filter:blur(6px);}
+  h1{font-size:20px;margin:0 0 4px;} .sub{color:var(--muted);font-size:13px;margin:0 0 10px;}
+  .meta{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+  .meta label{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:3px;}
+  .meta input{font:inherit;padding:5px 8px;border:1px solid var(--border);border-radius:7px;
+    background:var(--card);color:var(--ink);min-width:150px;}
+  .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .prog{font-size:13px;color:var(--muted);margin-right:auto;}
+  button{font:inherit;font-weight:600;cursor:pointer;border:1px solid var(--border);
+    background:var(--card);color:var(--ink);padding:8px 14px;border-radius:8px;}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  button:active{transform:translateY(1px);}
+  details.guide{background:var(--card);border:1px solid var(--border);border-radius:12px;
+    box-shadow:var(--shadow);margin:18px 0;padding:0 16px;}
+  details.guide>summary{font-size:16px;font-weight:700;cursor:pointer;padding:14px 0;list-style:none;}
+  details.guide>summary::before{content:"▸ ";color:var(--accent);}
+  details.guide[open]>summary::before{content:"▾ ";}
+  .guide-body{padding:0 0 16px;}
+  .guide-body h3{font-size:14px;margin:16px 0 6px;}
+  .guide-body ol,.guide-body ul{margin:6px 0;padding-left:22px;} .guide-body li{margin:3px 0;}
+  .guide-body p{margin:7px 0;}
+  kbd{background:var(--skip-bg);border:1px solid var(--border);border-radius:5px;padding:1px 6px;
+    font:600 12px ui-monospace,Consolas,monospace;}
+  .note{background:var(--warn-bg);border:1px solid var(--warn);border-radius:9px;padding:9px 12px;
+    color:var(--ink);font-size:13px;margin:10px 0;}
+  .note b{color:var(--warn);}
+  .mocks{display:flex;gap:14px;flex-wrap:wrap;margin:12px 0;}
+  .mock{flex:1;min-width:280px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg);}
+  .mock .tt{background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:12px;padding:6px 10px;}
+  .mock .body{padding:8px 10px;font-size:12.5px;}
+  .row{display:flex;align-items:center;gap:8px;padding:5px 4px;border-bottom:1px dashed var(--border);}
+  .row:last-child{border-bottom:none;}
+  .row .when{color:var(--muted);white-space:nowrap;}
+  .row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .chips{display:flex;gap:4px;}
+  .chip{height:20px;min-width:20px;padding:0 4px;display:grid;place-items:center;border-radius:5px;
+    background:var(--card);border:1px solid var(--border);font-size:12px;}
+  .chip.hl{outline:2px solid var(--accent);outline-offset:1px;}
+  .chip.svg{color:var(--accent);font-weight:700;}
+  .chip.dis{opacity:.45;font-size:10px;}
+  .callout{color:var(--accent);font-weight:600;font-size:11.5px;margin:4px 0 0;}
+  .tline{display:flex;gap:6px;padding:3px 2px;align-items:center;}
+  .tline .cb{width:14px;height:14px;border:1px solid var(--accent);border-radius:3px;display:inline-grid;
+    place-items:center;font-size:10px;color:#fff;background:transparent;}
+  .tline .cb.on{background:var(--accent);}
+  .tline .tc{color:var(--muted);} .tline .sp{font-weight:700;color:var(--accent);}
+  .tline.hl{background:var(--accent-soft);border-radius:5px;}
+  .player{display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);}
+  .player .pp{width:30px;height:20px;display:grid;place-items:center;background:var(--accent);
+    color:#fff;border-radius:5px;}
+  .player .seek{flex:1;height:5px;border-radius:3px;background:var(--border);position:relative;}
+  .player .seek::after{content:"";position:absolute;left:0;top:0;height:100%;width:35%;
+    background:var(--accent);border-radius:3px;}
+  .player .tm{color:var(--muted);white-space:nowrap;}
+  .confirm{border:1px solid var(--border);border-radius:9px;padding:10px;background:var(--card);text-align:center;margin-top:6px;}
+  .confirm .ti{font-weight:700;margin-bottom:3px;}
+  .confirm .bs{display:flex;gap:8px;justify-content:center;margin-top:8px;}
+  .confirm .bs span{padding:4px 12px;border-radius:6px;border:1px solid var(--border);font-size:11px;}
+  .confirm .bs .yes{background:var(--accent);color:#fff;border-color:var(--accent);}
+  section{margin:20px 0;} section>h2{font-size:16px;margin:0 0 10px;}
+  .item{background:var(--card);border:1px solid var(--border);border-radius:10px;
+    box-shadow:var(--shadow);padding:12px 14px;margin-bottom:10px;}
+  .item.touched{border-left:3px solid var(--accent);}
+  .item .top{display:flex;gap:8px;align-items:baseline;}
+  .id{font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .desc{flex:1;} .hint{color:var(--muted);font-size:12.5px;margin:3px 0 0 30px;}
+  .opts{display:flex;gap:6px;flex-wrap:wrap;margin:9px 0 8px;}
+  .opt{font-size:13px;font-weight:600;padding:5px 11px;border-radius:999px;border:1px solid var(--border);
+    background:var(--card);color:var(--muted);cursor:pointer;user-select:none;}
+  .opt[data-on="ok"].active{background:var(--ok-bg);color:var(--ok);border-color:var(--ok);}
+  .opt[data-on="bug"].active{background:var(--bug-bg);color:var(--bug);border-color:var(--bug);}
+  .opt[data-on="q"].active{background:var(--warn-bg);color:var(--warn);border-color:var(--warn);}
+  .opt[data-on="skip"].active{background:var(--skip-bg);color:var(--skip);border-color:var(--skip);}
+  .cmt{width:100%;font:inherit;padding:7px 9px;border:1px solid var(--border);border-radius:8px;
+    background:var(--bg);color:var(--ink);resize:vertical;min-height:34px;}
+  footer{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--border);padding:10px 0;}
+  footer .wrap{display:flex;gap:10px;align-items:center;}
+  dialog{border:1px solid var(--border);border-radius:12px;padding:0;max-width:760px;width:92%;
+    background:var(--card);color:var(--ink);}
+  dialog .pad{padding:16px;}
+  dialog textarea{width:100%;height:320px;font:13px/1.4 ui-monospace,Consolas,monospace;
+    border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--ink);padding:10px;}
+  .toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:var(--ok);color:#fff;
+    padding:8px 16px;border-radius:8px;font-weight:600;opacity:0;transition:opacity .2s;pointer-events:none;}
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <h1>Повторная проверка: фиксы F1–F8 · suflyor <b>v0.22.2</b></h1>
+  <p class="sub">Установи новую сборку v0.22.2. Сначала прочитай инструкцию ↓, потом отмечай каждый пункт.</p>
+  <div class="meta">
+    <label>Кто проверял<input id="m-who" placeholder="имя"></label>
+    <label>Дата<input id="m-date" placeholder="дд.мм.2026"></label>
+    <label>Версия из «О программе»<input id="m-ver" placeholder="0.22.2"></label>
+    <label>Тема<input id="m-theme" placeholder="светлая / тёмная"></label>
+  </div>
+  <div class="bar">
+    <span class="prog" id="prog">0 / 0 заполнено</span>
+    <button onclick="resetAll()">Очистить</button>
+    <button class="primary" onclick="buildReport()">Собрать отчёт</button>
+  </div>
+</div></header>
+
+<main class="wrap">
+
+<details class="guide" open>
+  <summary>📖 Инструкция — обязательно прочитай (что менялось и как проверять)</summary>
+  <div class="guide-body">
+    <p><b>suflyor</b> — оверлей: узкая плашка («бар») вверху экрана. Это <b>повторная</b> проверка после
+    исправлений по твоему прошлому отчёту. Установи сборку <b>v0.22.2</b> и проверь каждый блок.</p>
+
+    <div class="note"><b>САМОЕ ВАЖНОЕ (F1):</b> точность плеера чинилась только для <b>НОВЫХ записей</b>.
+    Старые созвоны (записанные до этой сборки) останутся приблизительными — это нормально.
+    Поэтому для блока F1 <b>сделай новый созвон с записью</b> (хотя бы 1–2 минуты речи) и проверяй на нём.
+    Допустимо смещение в <b>доли секунды</b>; если звук уезжает на <b>секунды</b> или на следующую реплику — это БАГ.</p>
+
+    <h3>Как открыть нужные окна</h3>
+    <ol>
+      <li><kbd>F7</kbd> на баре → окно <b>«Архив созвонов»</b> (список; одна строка = один созвон).</li>
+      <li>В строке справа иконки: <b>✎</b> переименовать · <b>🤖</b> авто-имя · <b>🗑</b> удалить ·
+          <b>💬</b> (облачко) открыть стенограмму · <b>↻ Summary</b> пересоздать резюме.</li>
+      <li>Клик по <b>💬</b> → окно <b>«Стенограмма»</b> (реплики + плеер внизу).</li>
+      <li>Шестерёнка на баре → <b>«Настройки»</b> → вкладка <b>«Память»</b> (для блока F8).</li>
+    </ol>
+
+    <div class="mocks">
+      <div class="mock">
+        <div class="tt">Стенограмма — плеер и чекбоксы теперь SVG (F5)</div>
+        <div class="body">
+          <div class="tline"><span class="cb on">✓</span><span class="tc">[00:00]</span><span class="sp">Система:</span> привет…</div>
+          <div class="tline hl"><span class="cb"></span><span class="tc">[00:04]</span><span class="sp">Микрофон:</span> да…</div>
+          <p class="callout">↑ галочка выбора = SVG-значок (не текст «✓»)</p>
+          <div class="player"><span class="pp">▶</span><span class="seek"></span><span class="tm">00:04 / 12:30</span></div>
+          <p class="callout">↑ ▶ / ⏸ = SVG-иконки (как в главном баре), не эмодзи</p>
+        </div>
+      </div>
+      <div class="mock">
+        <div class="tt">↻ Summary: подтверждение (F3) и «нет данных» (F4)</div>
+        <div class="body">
+          <div class="confirm">
+            <div class="ti">Пересоздать сводку?</div>
+            <div style="color:var(--muted);font-size:11px">Сводка уже есть — пересоздать?</div>
+            <div class="bs"><span>Отмена</span><span class="yes">Пересоздать</span></div>
+          </div>
+          <p class="callout">↑ F3: появляется, только если резюме уже есть. <kbd>Esc</kbd> закрывает ТОЛЬКО это окно.</p>
+          <div class="row" style="margin-top:8px"><span class="when">старый</span><span class="nm">Пустой созвон…</span>
+            <span class="chips"><span class="chip dis">Недостаточно&nbsp;данных</span></span></div>
+          <p class="callout">↑ F4: у созвона без данных вместо кнопки ↻ — серая надпись «Недостаточно данных».</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>Какой созвон брать</h3>
+    <ul>
+      <li><b>F1 (плеер):</b> <b>новый</b> созвон с записью (сделай специально).</li>
+      <li><b>F3 (пересоздание):</b> созвон, у которого <b>уже есть резюме</b> (сначала сделай резюме через ↻, потом жми ↻ ещё раз).</li>
+      <li><b>F4 (нет данных):</b> самый <b>пустой/старый</b> созвон (без записи и без текста).</li>
+      <li><b>F6:</b> нужен созвон <b>с текстом, но без записи</b> (где транскрипт есть, а аудио нет).</li>
+      <li><b>F2 (удаление):</b> только <b>НЕНУЖНЫЙ</b> созвон — стирается безвозвратно!</li>
+    </ul>
+
+    <h3>Как отмечать</h3>
+    <p>По каждому пункту: <b style="color:var(--ok)">OK</b> · <b style="color:var(--bug)">БАГ</b> ·
+    <b style="color:var(--warn)">?</b> (непонятно/не нашёл) · <b style="color:var(--skip)">скип</b>.
+    В поле — что именно не так (на БАГ — приложи скриншот отдельно). В конце нажми
+    <b>«Собрать отчёт»</b> → «Копировать» или «Скачать .md» и верни мне.</p>
+  </div>
+</details>
+
+<div id="app"></div>
+
+<section>
+  <h2>Общее впечатление / прочие баги / что ещё доделать</h2>
+  <div class="item"><textarea class="cmt" id="general" style="min-height:90px" placeholder="свободный текст…"></textarea></div>
+</section>
+</main>
+
+<footer><div class="wrap">
+  <span class="prog" id="prog2"></span>
+  <button class="primary" style="margin-left:auto" onclick="buildReport()">Собрать отчёт</button>
+</div></footer>
+
+<div class="toast" id="toast">Скопировано ✓</div>
+
+<dialog id="dlg"><div class="pad">
+  <p style="margin:0 0 10px"><b>Отчёт готов.</b> «Копировать» или «Скачать .md» и верни мне.</p>
+  <textarea id="out" readonly></textarea>
+  <div style="display:flex;gap:10px;margin-top:12px">
+    <button class="primary" onclick="copyOut()">Копировать</button>
+    <button onclick="downloadOut()">Скачать .md</button>
+    <button onclick="document.getElementById('dlg').close()">Закрыть</button>
+  </div>
+</div></dialog>
+
+<script>
+const DATA = [
+  ["F1 · Плеер: ТОЧНЫЙ seek — проверять НА СЛУХ, на СВЕЖЕЙ записи (сделай новый созвон с записью!)", [
+    ["F1.1","Клик по ПЕРВОЙ реплике → звук с её ПЕРВОГО слова (а не на секунды позже / не следующая реплика)","Старые созвоны остаются приблизительными — бери НОВУЮ запись. Доли секунды — норма; секунды/др. реплика — БАГ."],
+    ["F1.2","Первая реплика показывает ~[00:00] (старт записи), а не время её конца (раньше было ~[00:29])",""],
+    ["F1.3","Клик по разным репликам → каждый раз звук с начала именно этой реплики (±доли секунды)","Проверь минимум на 2 свежих созвонах с записью."],
+    ["F1.4","Таймкод у реплики совпадает с позицией в плеере, где она реально звучит",""],
+    ["F1.5","«Копировать с таймкодами» → таймкоды те же, что в окне",""],
+  ]],
+  ["F2 · Удаление 🗑 (был КРАШ) — на НЕНУЖНОМ созвоне", [
+    ["F2.1","🗑 → окно подтверждения, БЕЗ вылета; «Отмена» → ничего не удалено",""],
+    ["F2.2","«Удалить» → созвон исчез из списка + файлы стёрты, без вылета; повтор не ломает",""],
+  ]],
+  ["F3 · ↻ Summary: подтверждение пересоздания (нужен созвон с УЖЕ готовым резюме)", [
+    ["F3.1","У созвона, где резюме УЖЕ делали → ↻ → окно «Пересоздать сводку?» (НЕ пересоздаёт молча)","Сначала сделай резюме (↻ один раз), затем ↻ ещё раз — должно спросить."],
+    ["F3.2","«Отмена» → резюме не трогается, ничего не запускается",""],
+    ["F3.3","«Пересоздать» → строит заново (виден прогресс), появляется новый тайл-резюме",""],
+    ["F3.4","<kbd>Esc</kbd> в окне подтверждения → закрывает ТОЛЬКО диалог, архив остаётся открыт","Важно: Esc не должен закрывать весь архив."],
+    ["F3.5","У созвона БЕЗ резюме → ↻ строит сразу, без вопроса (вопрос только при существующем резюме)",""],
+  ]],
+  ["F4 · ↻ неактивна у пустых созвонов", [
+    ["F4.1","Созвон БЕЗ данных (нет записи И нет текста/Q&A) → вместо кнопки ↻ серая надпись «Недостаточно данных», не нажимается","Самый старый/пустой созвон."],
+    ["F4.2","Созвон С данными (запись, или текст, или Q&A) → ↻ активна как обычно",""],
+  ]],
+  ["F5 · SVG-иконки вместо эмодзи (открой 💬 у созвона с записью)", [
+    ["F5.1","▶ / ⏸ в плеере — аккуратные SVG-иконки (как старт/пауза в главном баре), НЕ эмодзи",""],
+    ["F5.2","Галочка выбора у реплики — SVG-галочка (при включении), не текстовый «✓» и не пустой квадрат","Поставь галочку у реплики — должна быть нарисованная галочка на заливке."],
+    ["F5.3","И в светлой, и в тёмной теме иконки/галочка видны и не режут глаз","Если можешь переключить тему — проверь обе."],
+  ]],
+  ["F6 · «Аудио не сохранено» vs «Транскрипт не сохранён» — различать правильно", [
+    ["F6.1","Созвон С транскриптом, но БЕЗ записи → внизу окна «Аудио не сохранено» (плеера нет)","Нужен созвон, где текст есть, а запись не велась/очищена."],
+    ["F6.2","Созвон БЕЗ транскрипта → «Транскрипт не сохранён» (как раньше)",""],
+  ]],
+  ["F7 · Скорость появления окон (это RELEASE-сборка)", [
+    ["F7.1","Архив / стенограмма / настройки открываются быстро, без 1–3 c пустой обводки до контента","Раньше тестилось на медленной debug-сборке; на release задержки быть не должно. Если есть — опиши какие окна и сколько секунд."],
+  ]],
+  ["F8 · Настройки → «Память» (тормозила / у кого-то падала)", [
+    ["F8.1","Настройки → вкладка «Память» открывается быстро, БЕЗ вылета","Бар → шестерёнка → «Память»."],
+    ["F8.2","Списки «предложений» и «памяти» отображаются","Если их очень много — показываются последние 200 (это специально, данные не теряются, ИИ видит все)."],
+    ["F8.3","Кнопки Approve / Reject / Delete / «Извлечь» / «добавить факт» работают без подвисаний и вылета",""],
+  ]],
+];
+const LABEL={ok:"OK",bug:"БАГ",q:"?",skip:"скип"};
+const KEY="suflyor-retest-v0222";
+let state={}; try{state=JSON.parse(localStorage.getItem(KEY)||"{}");}catch(e){state={};}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}}
+function st(id){return state[id]||(state[id]={s:"",c:""});}
+function render(){
+  const app=document.getElementById("app"); app.innerHTML="";
+  for(const [sec,items] of DATA){
+    const s=document.createElement("section"); const h=document.createElement("h2"); h.textContent=sec; s.appendChild(h);
+    for(const it of items){
+      const [id,desc,hint]=it; const cur=st(id);
+      const div=document.createElement("div");
+      div.className="item"+(cur.s||cur.c?" touched":"");
+      div.innerHTML=
+        `<div class="top"><span class="id">${id}</span><span class="desc">${desc}</span></div>`+
+        (hint?`<div class="hint">${hint}</div>`:"")+
+        `<div class="opts">${["ok","bug","q","skip"].map(o=>
+          `<span class="opt${cur.s===o?" active":""}" data-on="${o}" data-id="${id}">${LABEL[o]}</span>`).join("")}</div>`+
+        `<textarea class="cmt" data-cid="${id}" placeholder="комментарий…">${cur.c||""}</textarea>`;
+      s.appendChild(div);
+    }
+    app.appendChild(s);
+  }
+  document.getElementById("general").value=state.__general||"";
+  document.getElementById("m-who").value=state.__who||"";
+  document.getElementById("m-date").value=state.__date||"";
+  document.getElementById("m-ver").value=state.__ver||"";
+  document.getElementById("m-theme").value=state.__theme||"";
+  updateProg();
+}
+document.addEventListener("click",e=>{
+  const opt=e.target.closest(".opt"); if(!opt)return;
+  const id=opt.dataset.id,o=opt.dataset.on,cur=st(id);
+  cur.s=(cur.s===o)?"":o; save(); render();
+});
+document.addEventListener("input",e=>{
+  const t=e.target;
+  if(t.dataset.cid){st(t.dataset.cid).c=t.value;save();updateProg();const it=t.closest(".item");if(it)it.classList.add("touched");}
+  else if(t.id==="general"){state.__general=t.value;save();}
+  else if(t.id==="m-who"){state.__who=t.value;save();}
+  else if(t.id==="m-date"){state.__date=t.value;save();}
+  else if(t.id==="m-ver"){state.__ver=t.value;save();}
+  else if(t.id==="m-theme"){state.__theme=t.value;save();}
+});
+function total(){let n=0;for(const [,items] of DATA)n+=items.length;return n;}
+function filled(){let n=0;for(const k in state){if(k.startsWith("__"))continue;const v=state[k];if(v.s||(v.c&&v.c.trim()))n++;}return n;}
+function updateProg(){const txt=`${filled()} / ${total()} заполнено`;
+  document.getElementById("prog").textContent=txt;document.getElementById("prog2").textContent=txt;}
+function resetAll(){if(!confirm("Очистить все ответы?"))return;state={};save();render();}
+function reportText(){
+  let out=`# suflyor v0.22.2 — повторная проверка фиксов F1–F8\n`;
+  out+=`Кто: ${state.__who||"—"} · Дата: ${state.__date||"—"} · Версия: ${state.__ver||"—"} · Тема: ${state.__theme||"—"}\n`;
+  out+=`Заполнено: ${filled()} / ${total()}\n`;
+  for(const [sec,items] of DATA){
+    out+=`\n## ${sec}\n`;
+    for(const it of items){const [id,desc]=it;const v=st(id);
+      out+=`${id} [${v.s?LABEL[v.s]:"—"}] ${desc}`;
+      if(v.c&&v.c.trim())out+=`  — ${v.c.trim()}`; out+=`\n`;}
+  }
+  if(state.__general&&state.__general.trim())out+=`\n## Общее / прочее\n${state.__general.trim()}\n`;
+  return out;
+}
+function buildReport(){document.getElementById("out").value=reportText();document.getElementById("dlg").showModal();}
+function copyOut(){const ta=document.getElementById("out");
+  navigator.clipboard.writeText(ta.value).then(showToast,()=>{ta.select();document.execCommand("copy");showToast();});}
+function downloadOut(){
+  const blob=new Blob([reportText()],{type:"text/markdown"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download=`suflyor-v0.22.2-retest-${(state.__who||"tester").replace(/\s+/g,"_")}.md`;
+  document.body.appendChild(a);a.click();a.remove();showToast();
+}
+function showToast(){const t=document.getElementById("toast");t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1500);}
+render();
+</script>
+</body>
+</html>
