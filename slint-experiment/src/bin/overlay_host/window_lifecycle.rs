@@ -17,9 +17,9 @@
 //! explicitly below.
 use super::{
     enum_monitors, get_window_rect, grab_hwnd, move_window_pos_only, pick_monitor, set_stealth, ui,
-    ComponentHandle, Duration, HelpWindow, OverlayBarWindow, PaletteWindow, Rc, RecoverOfferWindow,
-    RefCell, SettingsWindow, TextAskWindow, TileWindow, TileWindows, Timer, TranscriptWindow,
-    WizardWindow, HWND_GRAB_DELAY_MS, HWND_REVEAL_FAST_MS,
+    ArchiveWindow, ComponentHandle, Duration, HelpWindow, OverlayBarWindow, PaletteWindow, Rc,
+    RecoverOfferWindow, RefCell, SettingsWindow, TextAskWindow, TileWindow, TileWindows, Timer,
+    TranscriptWindow, WizardWindow, HWND_GRAB_DELAY_MS, HWND_REVEAL_FAST_MS,
 };
 
 /// Phase E6 v36 — process-global tile body opacity (raw f32 bits in an
@@ -316,6 +316,9 @@ pub(crate) fn apply_scheme_recover_offer(w: &RecoverOfferWindow, scheme: i32) {
 pub(crate) fn apply_scheme_transcript(w: &TranscriptWindow, scheme: i32) {
     w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
 }
+pub(crate) fn apply_scheme_archive(w: &ArchiveWindow, scheme: i32) {
+    w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
+}
 
 /// Single owner of the on-demand overlay windows whose stealth + theme must
 /// stay in lock-step (§5.1). Every field is an `Rc<RefCell<…>>` clone of the
@@ -338,12 +341,18 @@ pub(crate) struct WindowRegistry {
     /// sensitive surface (every utterance verbatim), so it MUST re-stealth on a
     /// live toggle like every other on-demand window.
     pub transcript: Rc<RefCell<Option<TranscriptWindow>>>,
+    /// 🗄 Session-archive browser (F7 / 🗄 chip). Shows session titles + FTS
+    /// search snippets that include transcript text, so — like the transcript
+    /// viewer — it MUST re-stealth on an OFF→ON toggle; otherwise an archive
+    /// opened while stealth was off stays captured after stealth is turned on.
+    pub archive: Rc<RefCell<Option<ArchiveWindow>>>,
 }
 
 impl WindowRegistry {
     /// Apply the WDA_EXCLUDEFROMCAPTURE flag to EVERY open registry window
-    /// (tiles + Settings + palette + text-ask + wizard + Help + recover-offer)
-    /// in one call. This replaces the three near-identical hand-written loops
+    /// (tiles + Settings + palette + text-ask + wizard + Help + recover-offer +
+    /// transcript + archive) in one call. This replaces the three near-identical
+    /// hand-written loops
     /// in the bar / wizard / Settings stealth handlers; the per-window blocks
     /// below mirror those loops exactly (same `grab_hwnd` + `set_stealth`
     /// pattern, same UI-property echoes), so the only behavioural change is
@@ -403,6 +412,15 @@ impl WindowRegistry {
                 let _ = set_stealth(hwnd, on);
             }
         }
+        // 🗄 Session archive — session titles + FTS snippets carry transcript
+        // text. Setting the capture-exclusion flag is content-agnostic, so a
+        // re-transcribe / Summary job in flight here is unaffected (only the
+        // HWND affinity changes, not the window's data).
+        if let Some(a) = self.archive.borrow().as_ref() {
+            if let Ok(hwnd) = grab_hwnd(a.window()) {
+                let _ = set_stealth(hwnd, on);
+            }
+        }
     }
 
     /// Re-skin EVERY open registry window to `scheme` (Theme is a per-window
@@ -433,6 +451,9 @@ impl WindowRegistry {
         }
         if let Some(t) = self.transcript.borrow().as_ref() {
             apply_scheme_transcript(t, scheme);
+        }
+        if let Some(a) = self.archive.borrow().as_ref() {
+            apply_scheme_archive(a, scheme);
         }
     }
 

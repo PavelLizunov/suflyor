@@ -2096,6 +2096,7 @@ fn main() -> Result<(), slint::PlatformError> {
         help: help.clone(),
         recover_offer: recover_offer.clone(),
         transcript: transcript.clone(),
+        archive: archive.clone(),
     };
     // V3 — the Lightshot capture overlay. PERSISTENT + pre-stealthed so F8 shows
     // it flash-free: WDA_EXCLUDEFROMCAPTURE keeps it off any screen-share from the
