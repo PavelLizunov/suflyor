@@ -62,7 +62,7 @@ mod ui {
 use ui::{
     ArchiveRow, ArchiveWindow, CaptureOverlay, ComponentRow, HelpWindow, MarkdownBlock, MemoryRow,
     OverlayBarWindow, PaletteResult, PaletteWindow, RecoverOfferWindow, SettingsWindow,
-    TextAskWindow, TileWindow, WizardWindow,
+    TextAskWindow, TileWindow, TranscriptLine, TranscriptWindow, WizardWindow,
 };
 
 // Phase 1 of the modularization (docs/overlay-host-modularization-plan.md §5.1):
@@ -2070,6 +2070,10 @@ fn main() -> Result<(), slint::PlatformError> {
     // 🗄 Session-archive browser (F7 + 🗄 bar chip), created on demand like the
     // palette/help. Phase 3a — browse + FTS-search the SQLite session catalog.
     let archive: Rc<RefCell<Option<ArchiveWindow>>> = Rc::new(RefCell::new(None));
+    // ТЗ1 — process-lifetime slot for the read-only transcript viewer so it
+    // (a) survives the archive closing, like session tiles, and (b) sits in the
+    // registry below, so a live stealth toggle re-applies WDA to it too.
+    let transcript: Rc<RefCell<Option<TranscriptWindow>>> = Rc::new(RefCell::new(None));
     // Memory Phase 1 — crash-recovery offer, shown once a beat after startup if
     // the newest journal looks unfinished (see the delayed-open below).
     let recover_offer: Rc<RefCell<Option<RecoverOfferWindow>>> = Rc::new(RefCell::new(None));
@@ -2088,6 +2092,7 @@ fn main() -> Result<(), slint::PlatformError> {
         wizard: wizard.clone(),
         help: help.clone(),
         recover_offer: recover_offer.clone(),
+        transcript: transcript.clone(),
     };
     // V3 — the Lightshot capture overlay. PERSISTENT + pre-stealthed so F8 shows
     // it flash-free: WDA_EXCLUDEFROMCAPTURE keeps it off any screen-share from the
@@ -2163,6 +2168,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let hp_palette = palette.clone();
     let hp_help = help.clone();
     let hp_archive = archive.clone();
+    let hp_transcript = transcript.clone();
     let hp_capture_overlay = capture_overlay.clone();
     let hp_tiles = tiles.clone();
     let hp_state = state.clone();
@@ -2234,6 +2240,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         eprintln!("[overlay-host] F7 pressed — opening archive");
                         open_archive(
                             &hp_archive,
+                            &hp_transcript,
                             &hp_tiles,
                             &hp_state,
                             &hp_weak_overlay,
@@ -3045,6 +3052,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // ===== 🗄 Session archive (F7 / 🗄 chip) =====
     {
         let archive_ref = archive.clone();
+        let transcript_ref = transcript.clone();
         let tiles_ref = tiles.clone();
         let state_ref = state.clone();
         let ow = overlay.as_weak();
@@ -3055,6 +3063,7 @@ fn main() -> Result<(), slint::PlatformError> {
         overlay.on_archive_clicked(move || {
             open_archive(
                 &archive_ref,
+                &transcript_ref,
                 &tiles_ref,
                 &state_ref,
                 &ow,

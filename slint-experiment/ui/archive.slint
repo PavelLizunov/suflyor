@@ -117,6 +117,8 @@ export component ArchiveWindow inherits Window {
     // ТЗ2a — 🗑 delete: confirmed in Rust via a native modal, then a hard-delete
     // of every artifact + list refresh. The live session is guarded Rust-side.
     callback delete-requested(int);
+    // ТЗ1 — 📄 opens the structured read-only transcript window for this session.
+    callback transcript-requested(int);
     callback close-requested();
     // v0.17.1 — frameless window drag by the header (mirrors the tile drag:
     // pointer-down records the anchor, moved-while-pressed moves the HWND).
@@ -335,6 +337,11 @@ export component ArchiveWindow inherits Window {
                                             icon: @image-url("../assets/icons/trash.svg");
                                             a11y: "Delete session";
                                             clicked => { root.delete-requested(i); }
+                                        }
+                                        if root.renaming-index != i : RowIcon {
+                                            icon: @image-url("../assets/icons/bubble.svg");
+                                            a11y: "View transcript";
+                                            clicked => { root.transcript-requested(i); }
                                         }
                                     }
                                     Text {

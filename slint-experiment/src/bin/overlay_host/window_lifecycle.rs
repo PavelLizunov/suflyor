@@ -18,8 +18,8 @@
 use super::{
     enum_monitors, get_window_rect, grab_hwnd, move_window_pos_only, pick_monitor, set_stealth, ui,
     ComponentHandle, Duration, HelpWindow, OverlayBarWindow, PaletteWindow, Rc, RecoverOfferWindow,
-    RefCell, SettingsWindow, TextAskWindow, TileWindow, TileWindows, Timer, WizardWindow,
-    HWND_GRAB_DELAY_MS, HWND_REVEAL_FAST_MS,
+    RefCell, SettingsWindow, TextAskWindow, TileWindow, TileWindows, Timer, TranscriptWindow,
+    WizardWindow, HWND_GRAB_DELAY_MS, HWND_REVEAL_FAST_MS,
 };
 
 /// Phase E6 v36 — process-global tile body opacity (raw f32 bits in an
@@ -313,6 +313,9 @@ pub(crate) fn apply_scheme_help(w: &HelpWindow, scheme: i32) {
 pub(crate) fn apply_scheme_recover_offer(w: &RecoverOfferWindow, scheme: i32) {
     w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
 }
+pub(crate) fn apply_scheme_transcript(w: &TranscriptWindow, scheme: i32) {
+    w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
+}
 
 /// Single owner of the on-demand overlay windows whose stealth + theme must
 /// stay in lock-step (§5.1). Every field is an `Rc<RefCell<…>>` clone of the
@@ -331,6 +334,10 @@ pub(crate) struct WindowRegistry {
     pub wizard: Rc<RefCell<Option<WizardWindow>>>,
     pub help: Rc<RefCell<Option<HelpWindow>>>,
     pub recover_offer: Rc<RefCell<Option<RecoverOfferWindow>>>,
+    /// ТЗ1 — the read-only transcript viewer (opened from the archive). The most
+    /// sensitive surface (every utterance verbatim), so it MUST re-stealth on a
+    /// live toggle like every other on-demand window.
+    pub transcript: Rc<RefCell<Option<TranscriptWindow>>>,
 }
 
 impl WindowRegistry {
@@ -389,6 +396,13 @@ impl WindowRegistry {
                 let _ = set_stealth(hwnd, on);
             }
         }
+        // ТЗ1 transcript viewer — verbatim meeting transcript, the most sensitive
+        // surface; must never stay captured after an OFF→ON toggle.
+        if let Some(t) = self.transcript.borrow().as_ref() {
+            if let Ok(hwnd) = grab_hwnd(t.window()) {
+                let _ = set_stealth(hwnd, on);
+            }
+        }
     }
 
     /// Re-skin EVERY open registry window to `scheme` (Theme is a per-window
@@ -416,6 +430,9 @@ impl WindowRegistry {
         }
         if let Some(ro) = self.recover_offer.borrow().as_ref() {
             apply_scheme_recover_offer(ro, scheme);
+        }
+        if let Some(t) = self.transcript.borrow().as_ref() {
+            apply_scheme_transcript(t, scheme);
         }
     }
 

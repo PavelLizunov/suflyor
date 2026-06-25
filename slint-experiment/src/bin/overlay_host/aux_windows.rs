@@ -23,7 +23,7 @@ use super::{
     ui, wire_tile_drag, Arc, ArchiveRow, ArchiveWindow, AskRoute, ComponentHandle, HelpWindow,
     MarkdownBlock, ModelRc, OverlayBarBridge, OverlayBarWindow, PaletteResult, PaletteWindow, Rc,
     RefCell, RuntimeEvents, SharedSlintRuntime, SharedString, TextAskWindow, TileWindow,
-    TileWindows, VecModel,
+    TileWindows, TranscriptLine, TranscriptWindow, VecModel,
 };
 use overlay_backend::persistence::{
     open_default_store, AiTurn, SearchHit, Session, Store, Utterance,
@@ -408,6 +408,7 @@ impl PaletteResultExt for PaletteResult {
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn open_archive(
     archive_ref: &Rc<RefCell<Option<ArchiveWindow>>>,
+    transcript_slot: &Rc<RefCell<Option<TranscriptWindow>>>,
     tiles_ref: &TileWindows,
     state: &slint_replay::app_state::SharedState,
     weak_overlay: &slint::Weak<OverlayBarWindow>,
@@ -731,6 +732,39 @@ pub(crate) fn open_archive(
                     ));
                 }
             }
+        });
+    }
+
+    // ТЗ1 — 📄 opens the structured read-only transcript window for a row's
+    // session. The slot is process-lifetime (passed in + registry-held) so the
+    // transcript survives the archive closing and is re-stealthed on a toggle.
+    {
+        let weak = win.as_weak();
+        let store_t = store.clone();
+        let tslot = transcript_slot.clone();
+        win.on_transcript_requested(move |idx| {
+            let Some(p) = weak.upgrade() else {
+                return;
+            };
+            let Some(store_rc) = store_t.as_ref() else {
+                return;
+            };
+            let results = p.get_results();
+            let Some(row) = archive_row_at(&results, idx) else {
+                return;
+            };
+            let sid = row.id.to_string();
+            if sid.is_empty() {
+                return;
+            }
+            let (session, utts) = {
+                let st = store_rc.borrow();
+                (
+                    st.get_session(&sid).ok().flatten(),
+                    st.session_utterances(&sid).unwrap_or_default(),
+                )
+            };
+            open_transcript(&tslot, session.as_ref(), &utts);
         });
     }
 
@@ -1176,6 +1210,104 @@ pub(crate) fn fmt_offset(offset_ms: i64) -> String {
     } else {
         format!("{m:02}:{s:02}")
     }
+}
+
+/// Open a READ-ONLY structured transcript window for a session (ТЗ1). Reuses the
+/// slot if already open; otherwise builds the per-line model from the session's
+/// utterances and presents the window stealth-aware. The model is (re)built on
+/// EVERY open so a reused window never shows a prior session.
+pub(crate) fn open_transcript(
+    slot: &Rc<RefCell<Option<TranscriptWindow>>>,
+    session: Option<&Session>,
+    utts: &[Utterance],
+) {
+    // Build the model once — shared by the reuse + first-open paths.
+    let session_start = session.and_then(|s| s.started_at_ms).filter(|&ms| ms > 0);
+    let heading = session
+        .map(|s| session_title(s.started_at_ms, &s.id))
+        .unwrap_or_default();
+    let lines: Vec<TranscriptLine> = utts
+        .iter()
+        .map(|u| TranscriptLine {
+            offset_label: session_start
+                .map(|s| fmt_offset((u.unix_ms - s).max(0)))
+                .unwrap_or_default()
+                .into(),
+            speaker: SharedString::from(if u.source == "mic" {
+                "Микрофон"
+            } else {
+                "Система"
+            }),
+            text: SharedString::from(u.text.split_whitespace().collect::<Vec<_>>().join(" ")),
+        })
+        .collect();
+
+    // Reuse if already open — repopulate (a reused window must show THIS session)
+    // and re-focus via the borrowed strong handle. Slint handles are NOT `Clone`,
+    // so the single strong handle stays in the slot and closures use weak handles.
+    if let Some(win) = slot.borrow().as_ref() {
+        win.global::<ui::Theme>()
+            .set_scheme(clamp_scheme(global_scheme()));
+        win.set_heading(SharedString::from(heading));
+        win.set_empty(utts.is_empty());
+        win.set_lines(ModelRc::new(VecModel::from(lines)));
+        let _ = win.show();
+        if let Ok(hwnd) = grab_hwnd(win.window()) {
+            focus_window(hwnd);
+        }
+        return;
+    }
+
+    // First open: create, populate, wire (weak closures), present, then store.
+    let win = match TranscriptWindow::new() {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln!("[overlay-host] TranscriptWindow::new failed: {e}");
+            return;
+        }
+    };
+    win.global::<ui::Theme>()
+        .set_scheme(clamp_scheme(global_scheme()));
+    win.set_heading(SharedString::from(heading));
+    win.set_empty(utts.is_empty());
+    win.set_lines(ModelRc::new(VecModel::from(lines)));
+
+    {
+        let slot_c = slot.clone();
+        let weak = win.as_weak();
+        win.on_close_requested(move || {
+            if let Some(w) = weak.upgrade() {
+                let _ = w.hide();
+            }
+            *slot_c.borrow_mut() = None;
+        });
+    }
+    {
+        let weak = win.as_weak();
+        win.on_drag_start_requested(move || {
+            if let Some(w) = weak.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(w.window()) {
+                    drag_begin(hwnd);
+                }
+            }
+        });
+    }
+    {
+        let weak = win.as_weak();
+        win.on_drag_moved(move || {
+            if let Some(w) = weak.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(w.window()) {
+                    drag_update(hwnd);
+                }
+            }
+        });
+    }
+    present_window_stealth_aware(&win, |hwnd| {
+        let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
+        slint_replay::win32::set_round_corners(hwnd);
+        focus_window(hwnd);
+    });
+    *slot.borrow_mut() = Some(win);
 }
 
 /// Render a session's content as the markdown body of a read-only tile:

@@ -95,6 +95,14 @@ msgstr "Нет результатов: «{}»."
 msgid "suflyor settings (Slint)"
 msgstr "Настройки suflyor (Slint)"
 
+# === transcript.slint (ТЗ1 — transcript viewer) ===
+
+msgid "Transcript"
+msgstr "Стенограмма"
+
+msgid "Transcript not saved"
+msgstr "Транскрипт не сохранён"
+
 msgid "Settings"
 msgstr "Настройки"
 
