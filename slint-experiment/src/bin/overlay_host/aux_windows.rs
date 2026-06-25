@@ -1451,19 +1451,23 @@ pub(crate) fn open_transcript(
         .unwrap_or_default();
     let lines: Vec<TranscriptLine> = utts
         .iter()
-        .map(|u| TranscriptLine {
-            offset_label: session_start
-                .map(|s| fmt_offset((u.unix_ms - s).max(0)))
-                .unwrap_or_default()
-                .into(),
-            speaker: SharedString::from(if u.source == "mic" {
-                "Микрофон"
-            } else {
-                "Система"
-            }),
-            text: SharedString::from(u.text.split_whitespace().collect::<Vec<_>>().join(" ")),
-            checked: false,
-            start_ms: session_start.map(|s| (u.unix_ms - s).max(0)).unwrap_or(0) as i32,
+        .enumerate()
+        .map(|(i, u)| {
+            // F1: a line's START = the PREVIOUS line's timestamp (utterances are
+            // stamped at finalize ≈ their end); the first line = the session origin.
+            // The SAME offset drives the shown timecode AND the player seek.
+            let off = overlay_backend::session_audio::line_start_offset_ms(utts, i, session_start);
+            TranscriptLine {
+                offset_label: off.map(fmt_offset).unwrap_or_default().into(),
+                speaker: SharedString::from(if u.source == "mic" {
+                    "Микрофон"
+                } else {
+                    "Система"
+                }),
+                text: SharedString::from(u.text.split_whitespace().collect::<Vec<_>>().join(" ")),
+                checked: false,
+                start_ms: off.unwrap_or(0) as i32,
+            }
         })
         .collect();
     let session_id = session.map(|s| s.id.clone()).unwrap_or_default();
@@ -1576,7 +1580,7 @@ fn build_session_markdown(
     if utterances.is_empty() {
         out.push_str("_Транскрипт не сохранён_\n\n");
     } else {
-        for u in utterances {
+        for (i, u) in utterances.iter().enumerate() {
             let label = if u.source == "mic" {
                 "Микрофон"
             } else {
@@ -1584,9 +1588,11 @@ fn build_session_markdown(
             };
             // Collapse internal whitespace/newlines so one utterance = one line.
             let text = u.text.split_whitespace().collect::<Vec<_>>().join(" ");
-            match session_start {
-                Some(start) => {
-                    let off = fmt_offset((u.unix_ms - start).max(0));
+            // F1: start = previous line's timestamp (first = origin); see session_audio.
+            match overlay_backend::session_audio::line_start_offset_ms(utterances, i, session_start)
+            {
+                Some(off) => {
+                    let off = fmt_offset(off);
                     out.push_str(&format!("[{off}] {label}: {text}\n\n"));
                 }
                 None => out.push_str(&format!("{label}: {text}\n\n")),
@@ -1753,20 +1759,22 @@ mod tests {
         let utts = vec![
             Utterance {
                 session_id: "s".into(),
-                unix_ms: start,
+                unix_ms: start + 29_000, // finalized 00:29 in (≈ its end)
                 source: "system".into(),
                 text: "привет".into(),
             },
             Utterance {
                 session_id: "s".into(),
-                unix_ms: start + 135_000, // 02:15
+                unix_ms: start + 135_000,
                 source: "mic".into(),
                 text: "да   слышу".into(), // internal whitespace collapses to one space
             },
         ];
         let md = build_session_markdown(Some(&s), &utts, &[]);
+        // F1: a line's START = the PREVIOUS line's timestamp; the FIRST line is 00:00
+        // (NOT its own finalize time 00:29), so line 2 starts where line 1 ended (00:29).
         assert!(md.contains("[00:00] Система: привет"), "got: {md}");
-        assert!(md.contains("[02:15] Микрофон: да слышу"), "got: {md}");
+        assert!(md.contains("[00:29] Микрофон: да слышу"), "got: {md}");
     }
 
     #[test]

@@ -73,7 +73,6 @@ pub(crate) fn format_transcript_for_copy(
     selected: Option<&std::collections::HashSet<usize>>,
     with_timecodes: bool,
 ) -> String {
-    let start = session_start_ms.filter(|&ms| ms > 0);
     let mut out = String::new();
     for (i, u) in utts.iter().enumerate() {
         if selected.is_some_and(|sel| !sel.contains(&i)) {
@@ -85,14 +84,11 @@ pub(crate) fn format_transcript_for_copy(
             "Система"
         };
         let text = u.text.split_whitespace().collect::<Vec<_>>().join(" ");
+        // F1: timecode = the line's START (previous line's timestamp; first = origin),
+        // matching the on-screen transcript + the player seek.
         let prefix = if with_timecodes {
-            start
-                .map(|s| {
-                    format!(
-                        "[{}] ",
-                        super::aux_windows::fmt_offset((u.unix_ms - s).max(0))
-                    )
-                })
+            overlay_backend::session_audio::line_start_offset_ms(utts, i, session_start_ms)
+                .map(|off| format!("[{}] ", super::aux_windows::fmt_offset(off)))
                 .unwrap_or_default()
         } else {
             String::new()
@@ -395,13 +391,13 @@ mod copy_tests {
         let utts = vec![
             Utterance {
                 session_id: "s".into(),
-                unix_ms: start,
+                unix_ms: start + 29_000, // finalized ~00:29 into the session (≈ its end)
                 source: "system".into(),
                 text: "привет  мир".into(), // double space collapses
             },
             Utterance {
                 session_id: "s".into(),
-                unix_ms: start + 135_000, // 02:15
+                unix_ms: start + 135_000,
                 source: "mic".into(),
                 text: "да".into(),
             },
@@ -411,10 +407,12 @@ mod copy_tests {
             format_transcript_for_copy(&utts, Some(start), None, false),
             "Система: привет мир\nМикрофон: да"
         );
-        // With timecodes.
+        // With timecodes — F1: a line's START = the PREVIOUS line's timestamp; the
+        // FIRST line is 00:00 (NOT its own finalize time 00:29), so line 2 starts
+        // where line 1 ended (00:29).
         assert_eq!(
             format_transcript_for_copy(&utts, Some(start), None, true),
-            "[00:00] Система: привет мир\n[02:15] Микрофон: да"
+            "[00:00] Система: привет мир\n[00:29] Микрофон: да"
         );
         // Selected subset (only row 1), chronological order.
         let mut sel = std::collections::HashSet::new();

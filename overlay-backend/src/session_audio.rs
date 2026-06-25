@@ -101,10 +101,52 @@ pub fn ms_for_sample(sample: usize, sample_rate: u32) -> i64 {
     (sample as i128 * 1000 / i128::from(sample_rate)) as i64
 }
 
+/// Session-relative START offset (ms) of utterance `i`, per decision #6. Utterances
+/// are timestamped at FINALIZE — `slint_session` writes the `transcript_line` with
+/// `now_unix_ms()` when STT returns, i.e. ≈ the line's END — so a line's START is the
+/// PREVIOUS line's timestamp, and the first line starts at the session origin.
+/// Returns `None` when the session has no usable start (old/crashed) → the caller
+/// shows no timecode and seeks to 0. `utts` must be the full chronological slice;
+/// `i` indexes into it.
+#[must_use]
+pub fn line_start_offset_ms(
+    utts: &[crate::persistence::Utterance],
+    i: usize,
+    session_start_ms: Option<i64>,
+) -> Option<i64> {
+    let origin = session_start_ms.filter(|&ms| ms > 0)?;
+    if i == 0 {
+        Some(0)
+    } else {
+        Some((utts[i - 1].unix_ms - origin).max(0))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
+
+    #[test]
+    fn line_start_offset_uses_previous_timestamp() {
+        use crate::persistence::Utterance;
+        let u = |ms: i64| Utterance {
+            session_id: "s".into(),
+            unix_ms: ms,
+            source: "system".into(),
+            text: String::new(),
+        };
+        let utts = vec![u(30_000), u(135_000), u(140_000)];
+        let start = Some(1_000);
+        // First line → session origin (00:00), NOT its own finalize time (29s).
+        assert_eq!(line_start_offset_ms(&utts, 0, start), Some(0));
+        // Line i → previous line's finalize time − origin (its start ≈ prev end).
+        assert_eq!(line_start_offset_ms(&utts, 1, start), Some(29_000));
+        assert_eq!(line_start_offset_ms(&utts, 2, start), Some(134_000));
+        // No usable origin → None (caller shows no timecode + seeks 0).
+        assert_eq!(line_start_offset_ms(&utts, 1, None), None);
+        assert_eq!(line_start_offset_ms(&utts, 1, Some(0)), None);
+    }
 
     #[test]
     fn sample_ms_mapping_roundtrips_and_clamps() {
