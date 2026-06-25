@@ -34,13 +34,20 @@ component Tick inherits Rectangle {
     border-color: root.checked ? Theme.accent : Theme.border;
     background: root.checked ? Theme.accent : transparent;
     animate background, border-color { duration: 100ms; }
-    Text {
-        text: root.checked ? "✓" : "";
-        color: Theme.on-accent;
-        font-size: 11px;
-        font-weight: 700;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    // F5 — SVG check (project standard) instead of a text "✓". Centered via the
+    // same fill+center layout the archive RowIcon uses (a bare Image won't center).
+    if root.checked : VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            Image {
+                source: @image-url("../assets/icons/check.svg");
+                colorize: Theme.on-accent;
+                width: 11px;
+                height: 11px;
+                image-fit: contain;
+            }
+        }
     }
     TouchArea {
         clicked => {
@@ -335,12 +342,22 @@ export component TranscriptWindow inherits Window {
                                 root.toggle-play();
                             }
                         }
-                        Text {
-                            text: root.playing ? "⏸" : "▶";
-                            color: Theme.on-accent;
-                            font-size: Metrics.font-label;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
+                        // F5 — SVG play/pause (the main bar's icons) instead of the
+                        // ▶/⏸ emoji; centered via fill+center layout.
+                        VerticalLayout {
+                            alignment: center;
+                            HorizontalLayout {
+                                alignment: center;
+                                Image {
+                                    source: root.playing
+                                        ? @image-url("../assets/icons/pause.svg")
+                                        : @image-url("../assets/icons/play.svg");
+                                    colorize: Theme.on-accent;
+                                    width: 14px;
+                                    height: 14px;
+                                    image-fit: contain;
+                                }
+                            }
                         }
                     }
                     // Seek-bar: click anywhere to jump to that fraction.

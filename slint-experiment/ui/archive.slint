@@ -27,6 +27,7 @@ export struct ArchiveRow {
     meta: string,      // session: cost (e.g. "$0.024"); hit: kind emoji
     has-recordings: bool, // v0.14.0 — recordings/<id>/ exists → show "↻ Summary"
     name: string,      // v0.22.0 — the raw editable session name ("" if unnamed) — pre-fills the inline rename field
+    has-data: bool,    // F4 — has a saved transcript OR recording → "↻ Summary" is actionable
 }
 
 // v0.22.0 — a compact 24px icon action button for archive rows (rename ✎,
@@ -123,6 +124,13 @@ export component ArchiveWindow inherits Window {
     in-out property <string> confirm-delete-title: "";
     callback delete-confirmed(int);
     callback delete-cancelled();
+    // F3 — re-create-summary confirmation (mirrors the delete confirm). Rust sets
+    // confirm-resummary-index (+ -title) when a summary already exists (a conspect on
+    // disk); the overlay's buttons fire resummary-confirmed(idx) / resummary-cancelled.
+    in-out property <int> confirm-resummary-index: -1;
+    in-out property <string> confirm-resummary-title: "";
+    callback resummary-confirmed(int);
+    callback resummary-cancelled();
     // ТЗ1 — 📄 opens the structured read-only transcript window for this session.
     callback transcript-requested(int);
     callback close-requested();
@@ -147,8 +155,13 @@ export component ArchiveWindow inherits Window {
             height: 100%;
             key-pressed(event) => {
                 if (event.text == Key.Escape) {
-                    // F2 — Esc dismisses an open delete-confirm first, then an
-                    // in-progress rename, then (nothing pending) closes the window.
+                    // Esc dismisses an open confirm / in-progress rename first, then
+                    // (nothing pending) closes the window. F3 resummary-confirm and
+                    // F2 delete-confirm both just cancel; symmetry with the buttons.
+                    if (root.confirm-resummary-index != -1) {
+                        root.resummary-cancelled();
+                        return accept;
+                    }
                     if (root.confirm-delete-index != -1) {
                         root.delete-cancelled();
                         return accept;
@@ -367,7 +380,9 @@ export component ArchiveWindow inherits Window {
                                 //    WITH recordings re-STT the saved audio; those
                                 //    without summarize from the saved transcript /
                                 //    journal prompts (ТЗ3).
-                                if !root.retranscribe-busy : VerticalLayout {
+                                // F4 — actionable only with data (a transcript or a
+                                // recording); see the inert hint sibling below.
+                                if !root.retranscribe-busy && row.has-data : VerticalLayout {
                                     // Center the 26px pill vertically in the 50px row
                                     // (it used to ride the top of the cell).
                                     alignment: center;
@@ -407,6 +422,21 @@ export component ArchiveWindow inherits Window {
                                     touch := TouchArea {
                                         clicked => { root.retranscribe-requested(i); }
                                     }
+                                    }
+                                }
+                                // F4 — no transcript AND no recording: nothing to
+                                // summarize, so an inert hint instead of a dead button.
+                                if !root.retranscribe-busy && !row.has-data : VerticalLayout {
+                                    alignment: center;
+                                    horizontal-stretch: 0;
+                                    Text {
+                                        width: 96px;
+                                        text: @tr("Not enough data");
+                                        font-size: Metrics.font-caption;
+                                        color: Theme.text-muted;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        wrap: word-wrap;
                                     }
                                 }
                             }
@@ -503,6 +533,96 @@ export component ArchiveWindow inherits Window {
                             Text {
                                 text: @tr("Delete");
                                 color: #ffffff;
+                                font-weight: 600;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // F3 — re-create-summary confirmation (mirrors the delete confirm above).
+        // Shown when a summary already exists (a conspect on disk): Recreate
+        // overwrites it, Cancel / scrim-click / Esc leave it untouched.
+        if root.confirm-resummary-index != -1 : Rectangle {
+            width: 100%;
+            height: 100%;
+            background: Theme.scrim;
+            TouchArea {
+                clicked => { root.resummary-cancelled(); }
+            }
+            Rectangle {
+                width: 380px;
+                height: 184px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                background: Theme.bg-surface;
+                border-radius: Metrics.radius-panel;
+                border-width: Metrics.border-thin;
+                border-color: Theme.border-strong;
+                // Swallow clicks on the card so they don't reach the scrim (cancel).
+                TouchArea { }
+                VerticalLayout {
+                    padding: Metrics.space-md;
+                    spacing: Metrics.space-sm;
+                    Text {
+                        text: @tr("Recreate summary?");
+                        font-size: Metrics.font-heading;
+                        font-weight: 700;
+                        color: Theme.text-primary;
+                        horizontal-alignment: center;
+                    }
+                    Text {
+                        text: root.confirm-resummary-title;
+                        font-size: Metrics.font-caption;
+                        color: Theme.text-muted;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: @tr("A summary already exists — recreate it?");
+                        font-size: Metrics.font-caption;
+                        color: Theme.text-muted;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        spacing: Metrics.space-sm;
+                        alignment: center;
+                        Rectangle {
+                            width: 132px;
+                            height: 32px;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.border-strong;
+                            background: rs-cancel-ta.has-hover ? Theme.bg-elevated : transparent;
+                            rs-cancel-ta := TouchArea {
+                                clicked => { root.resummary-cancelled(); }
+                            }
+                            Text {
+                                text: @tr("Cancel");
+                                color: Theme.text-primary;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                        Rectangle {
+                            width: 132px;
+                            height: 32px;
+                            border-radius: 6px;
+                            background: rs-ok-ta.pressed
+                                ? Theme.accent.with-alpha(0.7)
+                                : rs-ok-ta.has-hover ? Theme.accent : Theme.accent.with-alpha(0.88);
+                            rs-ok-ta := TouchArea {
+                                clicked => {
+                                    root.resummary-confirmed(root.confirm-resummary-index);
+                                }
+                            }
+                            Text {
+                                text: @tr("Recreate");
+                                color: Theme.on-accent;
                                 font-weight: 600;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;

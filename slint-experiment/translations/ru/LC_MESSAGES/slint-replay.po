@@ -127,6 +127,18 @@ msgstr "Удалить сессию?"
 msgid "Irreversible — transcript, audio and summary are erased."
 msgstr "Безвозвратно — стенограмма, аудио и сводка будут стёрты."
 
+msgid "Recreate summary?"
+msgstr "Пересоздать сводку?"
+
+msgid "A summary already exists — recreate it?"
+msgstr "Сводка уже есть — пересоздать?"
+
+msgid "Recreate"
+msgstr "Пересоздать"
+
+msgid "Not enough data"
+msgstr "Недостаточно данных"
+
 msgid "Settings"
 msgstr "Настройки"
 

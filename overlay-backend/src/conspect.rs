@@ -226,6 +226,23 @@ fn load_in(dir: &Path, session_id: &str) -> Option<Conspect> {
     }
 }
 
+/// True if a session has a saved conspect sidecar — a CHEAP path check (no read /
+/// parse). Used to gate the "re-create summary?" confirm (F3): a present file
+/// means a summary was already built, so overwriting needs confirmation. A
+/// corrupt-but-present file still counts (the user saw a summary).
+#[must_use]
+pub fn exists(session_id: &str) -> bool {
+    conspects_dir().is_some_and(|dir| exists_in(&dir, session_id))
+}
+
+/// Pure existence check (test seam).
+fn exists_in(dir: &Path, session_id: &str) -> bool {
+    match safe_stem(session_id) {
+        Some(stem) => dir.join(format!("{stem}.json")).exists(),
+        None => false,
+    }
+}
+
 /// Delete a session's conspect sidecar (and any stale `.tmp`). Idempotent +
 /// safe-stem guarded; returns true if the main `.json` was removed.
 pub fn delete(session_id: &str) -> bool {
@@ -304,6 +321,16 @@ mod tests {
     fn load_missing_is_none() {
         let tmp = tempfile::tempdir().unwrap();
         assert!(load_in(tmp.path(), "nope").is_none());
+    }
+
+    #[test]
+    fn exists_in_reflects_file_presence() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(!exists_in(tmp.path(), "session_123")); // absent → false
+        save_in(tmp.path(), &sample("session_123")).unwrap();
+        assert!(exists_in(tmp.path(), "session_123")); // present → true
+        assert!(!exists_in(tmp.path(), "other")); // a different id → false
+        assert!(!exists_in(tmp.path(), "../escape")); // unsafe stem → false
     }
 
     #[test]

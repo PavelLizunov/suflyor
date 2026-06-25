@@ -804,13 +804,17 @@ pub(crate) fn open_archive(
     // progress; run_meeting_summary spawns its own Summary tile, and the archive
     // stays open. A transcribe failure (no recordings / STT down) shows a generic
     // (non-leaking) error tile.
-    {
+    // F3 — if a summary was already built (a conspect sidecar exists on disk), the
+    // ↻ click first asks for confirmation before overwriting; with no prior summary
+    // it runs straight away. The job itself is factored into `start_resummary` so
+    // both the direct path and the post-confirm path share it verbatim.
+    let start_resummary: std::rc::Rc<dyn Fn(i32)> = {
         let weak = win.as_weak();
         let cfg_c = cfg.clone();
         let events_c = events.clone();
         let rt = rt_handle.clone();
         let store_s = store.clone();
-        win.on_retranscribe_requested(move |idx| {
+        std::rc::Rc::new(move |idx: i32| {
             let Some(p) = weak.upgrade() else {
                 return;
             };
@@ -925,6 +929,50 @@ pub(crate) fn open_archive(
                     }
                 });
             });
+        })
+    };
+    {
+        let weak = win.as_weak();
+        let sr = start_resummary.clone();
+        win.on_retranscribe_requested(move |idx| {
+            let Some(p) = weak.upgrade() else {
+                return;
+            };
+            let results = p.get_results();
+            let Some(row) = archive_row_at(&results, idx) else {
+                return;
+            };
+            let sid = row.id.to_string();
+            if sid.is_empty() {
+                return;
+            }
+            let title = row.title.clone();
+            // F3 — overwriting an existing summary asks first; with no prior summary
+            // (no conspect on disk) it runs straight away.
+            if overlay_backend::conspect::exists(&sid) {
+                p.set_confirm_resummary_index(idx);
+                p.set_confirm_resummary_title(title);
+                return;
+            }
+            sr(idx);
+        });
+    }
+    {
+        let weak = win.as_weak();
+        let sr = start_resummary.clone();
+        win.on_resummary_confirmed(move |idx| {
+            if let Some(p) = weak.upgrade() {
+                p.set_confirm_resummary_index(-1);
+            }
+            sr(idx);
+        });
+    }
+    {
+        let weak = win.as_weak();
+        win.on_resummary_cancelled(move || {
+            if let Some(p) = weak.upgrade() {
+                p.set_confirm_resummary_index(-1);
+            }
         });
     }
 
@@ -1192,6 +1240,12 @@ fn session_to_row(s: &Session, recordings: &std::collections::HashSet<String>) -
         meta: SharedString::from(meta),
         has_recordings: recordings.contains(&s.id),
         name: SharedString::from(name.unwrap_or_default()),
+        // F4 — "↻ Summary" needs SOMETHING to summarize, matching start_resummary's
+        // source chain: a saved recording (re-STT), indexed transcript lines (catalog
+        // source), or journal AI Q&A prompts (the from_jsonl_prompts fallback, tracked
+        // by ai_turns_count). None → the button is inert, so gate it off and show a
+        // "not enough data" hint instead.
+        has_data: recordings.contains(&s.id) || s.transcript_lines > 0 || s.ai_turns_count > 0,
     }
 }
 
@@ -1226,6 +1280,9 @@ fn hit_to_row(h: &SearchHit, recordings: &std::collections::HashSet<String>) -> 
         meta: SharedString::from(kind_glyph),
         has_recordings: recordings.contains(&h.session_id),
         name: SharedString::from(name.unwrap_or_default()),
+        // An FTS hit exists only because transcript / AI text matched → always
+        // has a summary source.
+        has_data: true,
     }
 }
 
@@ -1480,9 +1537,9 @@ pub(crate) fn open_transcript(
         .iter()
         .enumerate()
         .map(|(i, u)| {
-            // F1: a line's START = the PREVIOUS line's timestamp (utterances are
-            // stamped at finalize ≈ their end); the first line = the session origin.
-            // The SAME offset drives the shown timecode AND the player seek.
+            // F1: prefer the persisted per-line audio offset (audio_ms) for BOTH the
+            // shown timecode AND the player seek; old sessions (no audio_ms) fall back
+            // to the prev-line wall-clock approximation. See line_start_offset_ms.
             let off = overlay_backend::session_audio::line_start_offset_ms(utts, i, session_start);
             TranscriptLine {
                 offset_label: off.map(fmt_offset).unwrap_or_default().into(),
