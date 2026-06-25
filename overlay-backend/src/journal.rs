@@ -71,6 +71,10 @@ pub enum JournalEvent<'a> {
         unix_ms: u128,
         source: &'a str, // "system" | "mic"
         text: &'a str,
+        /// ms from the RECORDING start (the line's audio offset) — drives the
+        /// transcript player's seek. Distinct from `unix_ms` (the STT-finalize
+        /// wall-clock). Absent in journals written before this field (F1).
+        audio_ms: u64,
     },
     DetectorDecision {
         unix_ms: u128,
@@ -808,6 +812,7 @@ mod tests {
             unix_ms: 12345,
             source: "system",
             text: "hello",
+            audio_ms: 0,
         };
         let s = serde_json::to_string(&ev).unwrap();
         assert!(s.contains(r#""kind":"transcript_line""#));
@@ -1038,6 +1043,7 @@ mod tests {
                 unix_ms: 0,
                 source: "mic",
                 text: "",
+                audio_ms: 0,
             },
         );
         bump_counters(
@@ -1046,6 +1052,7 @@ mod tests {
                 unix_ms: 0,
                 source: "system",
                 text: "",
+                audio_ms: 0,
             },
         );
         bump_counters(
@@ -1054,6 +1061,7 @@ mod tests {
                 unix_ms: 0,
                 source: "mic",
                 text: "",
+                audio_ms: 0,
             },
         );
         assert_eq!(c.transcript_mic, 2);
@@ -1069,6 +1077,7 @@ mod tests {
                 unix_ms: 0,
                 source: "weird",
                 text: "",
+                audio_ms: 0,
             },
         );
         assert_eq!(c.transcript_mic, 0);
@@ -1217,6 +1226,7 @@ mod tests {
                 unix_ms: 1,
                 source: "mic",
                 text: "a",
+                audio_ms: 0,
             },
         );
         bump_counters(
@@ -1225,6 +1235,7 @@ mod tests {
                 unix_ms: 2,
                 source: "mic",
                 text: "b",
+                audio_ms: 0,
             },
         );
         bump_counters(
@@ -1233,6 +1244,7 @@ mod tests {
                 unix_ms: 3,
                 source: "system",
                 text: "c?",
+                audio_ms: 0,
             },
         );
         bump_counters(
@@ -1315,6 +1327,7 @@ mod tests {
                 unix_ms: 0,
                 source: "mic",
                 text: "",
+                audio_ms: 0,
             },
         );
         let snap = c.clone();
@@ -1324,6 +1337,7 @@ mod tests {
                 unix_ms: 0,
                 source: "mic",
                 text: "",
+                audio_ms: 0,
             },
         );
         assert_eq!(snap.transcript_mic, 1, "snapshot frozen at 1");

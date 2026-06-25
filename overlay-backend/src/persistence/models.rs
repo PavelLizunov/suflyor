@@ -32,6 +32,11 @@ pub struct Utterance {
     /// `mic` | `system`.
     pub source: String,
     pub text: String,
+    /// ms from the RECORDING start (the line's audio offset) — drives the player
+    /// seek + the on-screen/copy timecodes. `None` for sessions indexed before the
+    /// `audio_ms` migration (old journals didn't store it) → the caller falls back
+    /// to the prev-line wall-clock approximation. (F1.)
+    pub audio_ms: Option<i64>,
 }
 
 /// One AI question→answer turn within a session (an `ai_request` paired with

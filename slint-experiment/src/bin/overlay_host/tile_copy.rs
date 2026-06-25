@@ -394,12 +394,14 @@ mod copy_tests {
                 unix_ms: start + 29_000, // finalized ~00:29 into the session (≈ its end)
                 source: "system".into(),
                 text: "привет  мир".into(), // double space collapses
+                audio_ms: None,
             },
             Utterance {
                 session_id: "s".into(),
                 unix_ms: start + 135_000,
                 source: "mic".into(),
                 text: "да".into(),
+                audio_ms: None,
             },
         ];
         // Default: "Спикер: текст", no timecodes, all lines, no trailing newline.

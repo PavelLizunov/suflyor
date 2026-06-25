@@ -124,12 +124,14 @@ mod tests {
                 unix_ms: 1100,
                 source: "mic".into(),
                 text: "привет".into(),
+                audio_ms: None,
             },
             Utterance {
                 session_id: "S1".into(),
                 unix_ms: 1200,
                 source: "system".into(),
                 text: "здравствуйте".into(),
+                audio_ms: None,
             },
         ];
         store.replace_session(&sess("S1"), &utts, &[]).unwrap();

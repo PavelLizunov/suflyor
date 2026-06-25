@@ -68,6 +68,9 @@ pub fn index_journal_file(store: &mut Store, path: &Path) -> Result<Session> {
                 unix_ms: num(&v, "unix_ms").unwrap_or(0),
                 source: text(&v, "source"),
                 text: text(&v, "text"),
+                // F1: audio offset (ms from recording start); None for old journals
+                // that never wrote it → player falls back to the wall-clock approx.
+                audio_ms: num(&v, "audio_ms"),
             }),
             "ai_request" => {
                 // A new request before the prior one got a response → flush the

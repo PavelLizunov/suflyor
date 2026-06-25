@@ -439,6 +439,9 @@ async fn transcript_forwarder(
         crate::session_namer::maybe_spawn_namer(&rt, &cfg, now_unix_ms());
         journal.write(&JournalEvent::TranscriptLine {
             unix_ms: now_unix_ms(),
+            // F1: the line's AUDIO offset (ms from capture start) — distinct from the
+            // finalize wall-clock above; drives accurate click-to-seek in the player.
+            audio_ms: line.timestamp_ms,
             source: match line.source {
                 AudioSource::System => "system",
                 AudioSource::Mic => "mic",

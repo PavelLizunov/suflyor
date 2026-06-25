@@ -117,11 +117,17 @@ impl Store {
         .context("insert session")?;
         {
             let mut stmt = tx
-                .prepare("INSERT INTO utterances (session_id, unix_ms, source, text) VALUES (?1, ?2, ?3, ?4)")
+                .prepare("INSERT INTO utterances (session_id, unix_ms, source, text, audio_ms) VALUES (?1, ?2, ?3, ?4, ?5)")
                 .context("prepare utterance insert")?;
             for u in utterances {
-                stmt.execute(params![u.session_id, u.unix_ms, u.source, u.text])
-                    .context("insert utterance")?;
+                stmt.execute(params![
+                    u.session_id,
+                    u.unix_ms,
+                    u.source,
+                    u.text,
+                    u.audio_ms
+                ])
+                .context("insert utterance")?;
             }
         }
         {
@@ -275,7 +281,7 @@ impl Store {
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT session_id, unix_ms, source, text FROM utterances \
+                "SELECT session_id, unix_ms, source, text, audio_ms FROM utterances \
                  WHERE session_id = ?1 ORDER BY unix_ms ASC, id ASC",
             )
             .context("prepare session_utterances")?;
@@ -553,6 +559,7 @@ fn row_to_utterance(row: &Row) -> rusqlite::Result<Utterance> {
         unix_ms: row.get(1)?,
         source: row.get(2)?,
         text: row.get(3)?,
+        audio_ms: row.get(4)?,
     })
 }
 
@@ -624,6 +631,7 @@ mod tests {
             unix_ms: ms,
             source: source.into(),
             text: text.into(),
+            audio_ms: None,
         }
     }
 
@@ -679,6 +687,26 @@ mod tests {
         assert_eq!(got, s);
         assert_eq!(store.count_utterances(&s.id).unwrap(), 2);
         assert_eq!(store.count_ai_turns(&s.id).unwrap(), 1);
+    }
+
+    #[test]
+    fn utterance_audio_ms_round_trips() {
+        // F1: the per-line audio offset survives insert→select; NULL (old lines)
+        // round-trips as None.
+        let mut store = Store::open_in_memory().unwrap();
+        let s = sample_session("2026-06-25_10-00-00_aud0");
+        let mut u0 = utt(&s.id, 10, "mic", "first");
+        u0.audio_ms = Some(0);
+        let mut u1 = utt(&s.id, 20, "system", "second");
+        u1.audio_ms = Some(4_200);
+        let u2 = utt(&s.id, 30, "mic", "third"); // audio_ms stays None
+        store.replace_session(&s, &[u0, u1, u2], &[]).unwrap();
+
+        let got = store.session_utterances(&s.id).unwrap();
+        assert_eq!(got.len(), 3);
+        assert_eq!(got[0].audio_ms, Some(0));
+        assert_eq!(got[1].audio_ms, Some(4_200));
+        assert_eq!(got[2].audio_ms, None);
     }
 
     #[test]
@@ -889,14 +917,16 @@ mod tests {
     }
 
     #[test]
-    fn memory_migration_is_v3() {
+    fn latest_migration_version_is_4() {
         let store = Store::open_in_memory().unwrap();
         let v: i32 = store
             .conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(v, migrations::LATEST_VERSION);
-        assert_eq!(v, 3);
+        // Literal pin — bump deliberately when adding a migration (now incl. 0004
+        // utterances.audio_ms, F1).
+        assert_eq!(v, 4);
     }
 
     #[test]

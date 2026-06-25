@@ -1762,6 +1762,7 @@ mod tests {
             unix_ms: 1,
             source: "mic".into(),
             text: "hello there".into(),
+            audio_ms: None,
         }];
         let turns = vec![AiTurn {
             session_id: "s".into(),
@@ -1789,12 +1790,14 @@ mod tests {
                 unix_ms: start + 29_000, // finalized 00:29 in (≈ its end)
                 source: "system".into(),
                 text: "привет".into(),
+                audio_ms: None,
             },
             Utterance {
                 session_id: "s".into(),
                 unix_ms: start + 135_000,
                 source: "mic".into(),
                 text: "да   слышу".into(), // internal whitespace collapses to one space
+                audio_ms: None,
             },
         ];
         let md = build_session_markdown(Some(&s), &utts, &[]);

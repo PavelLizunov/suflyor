@@ -1,11 +1,15 @@
 //! Load + downmix a session's saved recordings for in-app playback (ТЗ2b).
 //!
 //! The recorder writes two per-channel WAVs (`mic.wav` + `system.wav`, 16 kHz
-//! mono i16, both aligned to session t=0). The player needs ONE stream seeked to
-//! a clicked line's timecode (decision: mix on the fly, no channel toggle), so we
-//! sum the channels into a single buffer here — pure + testable; the player feeds
-//! the result to the audio engine. Same sample rate + shared t=0 ⇒ sample index
-//! IS time, so no resampling/alignment is needed.
+//! mono i16), each appended contiguously from its FIRST captured chunk — so they
+//! are APPROXIMATELY (not sample-perfectly) co-aligned: a sub-second per-channel
+//! skew is possible (independent WASAPI device bring-up; no shared epoch is
+//! stamped). The player needs ONE stream seeked to a clicked line's timecode
+//! (decision: mix on the fly, no channel toggle), so we sum the channels into a
+//! single buffer here — pure + testable; the player feeds the result to the audio
+//! engine. Same sample rate ⇒ sample index ≈ time (within that sub-second skew),
+//! so no resampling is needed. True sample-accuracy (a shared capture epoch +
+//! per-channel WAV padding) is deferred — see F1 notes / line_start_offset_ms.
 
 use anyhow::{bail, Result};
 use std::path::Path;
@@ -80,8 +84,8 @@ pub fn load_mixed_session_audio(session_id: &str) -> Result<(Vec<i16>, u32)> {
 
 /// Sample index for a session-relative offset (ms) at `sample_rate`, clamped to
 /// `[0, total]` so a click past the end seeks to the end, never out of bounds
-/// (ТЗ2b: "таймкод за пределами — clamp"). Sample index IS time here — both
-/// channels share t=0 and one sample rate, so no alignment is needed.
+/// (ТЗ2b: "таймкод за пределами — clamp"). Sample index ≈ time here — one sample
+/// rate; channels co-align only to ~sub-second (see the module header).
 #[must_use]
 pub fn sample_for_ms(ms: i64, sample_rate: u32, total: usize) -> usize {
     if ms <= 0 {
@@ -101,24 +105,36 @@ pub fn ms_for_sample(sample: usize, sample_rate: u32) -> i64 {
     (sample as i128 * 1000 / i128::from(sample_rate)) as i64
 }
 
-/// Session-relative START offset (ms) of utterance `i`, per decision #6. Utterances
-/// are timestamped at FINALIZE — `slint_session` writes the `transcript_line` with
-/// `now_unix_ms()` when STT returns, i.e. ≈ the line's END — so a line's START is the
-/// PREVIOUS line's timestamp, and the first line starts at the session origin.
-/// Returns `None` when the session has no usable start (old/crashed) → the caller
-/// shows no timecode and seeks to 0. `utts` must be the full chronological slice;
-/// `i` indexes into it.
+/// Session-relative START offset (ms) of utterance `i`. PREFERS the persisted
+/// per-line `audio_ms` (ms from audio-capture start, on sessions recorded after
+/// the audio_ms migration) — this removes the STT-FINALIZE lag that made the old
+/// wall-clock basis SECONDS late. NOT sample-perfect: a sub-second residual remains
+/// (chunk granularity ~200ms + per-channel capture skew — the recorder appends from
+/// its first chunk, not a shared epoch), so it's "much closer", within the
+/// «доли секунды» tolerance; true sample-accuracy would need a recording-epoch +
+/// WAV-padding change to the live capture pipeline (deferred — see F1 notes).
+/// When `audio_ms` is absent (old sessions), falls back to a wall-clock
+/// approximation: utterances are stamped at FINALIZE (≈ the line's END), so a
+/// line's START ≈ the PREVIOUS line's timestamp and the first line = the session
+/// origin. Returns `None` only when NEITHER is available (no audio_ms AND no usable
+/// session start) → the caller shows no timecode and seeks to 0. `utts` is the full
+/// chronological slice; `i` indexes it.
 #[must_use]
 pub fn line_start_offset_ms(
     utts: &[crate::persistence::Utterance],
     i: usize,
     session_start_ms: Option<i64>,
 ) -> Option<i64> {
+    // Accurate: the stored audio offset for this line.
+    if let Some(Some(a)) = utts.get(i).map(|u| u.audio_ms) {
+        return Some(a.max(0));
+    }
+    // Fallback (old sessions, no audio_ms): prev-line finalize wall-clock; first
+    // line = the session origin.
     let origin = session_start_ms.filter(|&ms| ms > 0)?;
-    if i == 0 {
-        Some(0)
-    } else {
-        Some((utts[i - 1].unix_ms - origin).max(0))
+    match i {
+        0 => Some(0),
+        _ => utts.get(i - 1).map(|p| (p.unix_ms - origin).max(0)),
     }
 }
 
@@ -128,24 +144,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn line_start_offset_uses_previous_timestamp() {
+    fn line_start_offset_prefers_audio_ms_else_prev_timestamp() {
         use crate::persistence::Utterance;
-        let u = |ms: i64| Utterance {
+        let mk = |ms: i64, audio: Option<i64>| Utterance {
             session_id: "s".into(),
             unix_ms: ms,
             source: "system".into(),
             text: String::new(),
+            audio_ms: audio,
         };
-        let utts = vec![u(30_000), u(135_000), u(140_000)];
+        // ACCURATE path: audio_ms present → returned directly (clamped ≥0),
+        // regardless of unix_ms / session start.
+        let rec = vec![
+            mk(30_000, Some(0)),
+            mk(135_000, Some(4_200)),
+            mk(140_000, Some(9_900)),
+        ];
+        assert_eq!(line_start_offset_ms(&rec, 0, Some(1_000)), Some(0));
+        assert_eq!(line_start_offset_ms(&rec, 1, Some(1_000)), Some(4_200));
+        assert_eq!(line_start_offset_ms(&rec, 2, Some(1_000)), Some(9_900));
+
+        // FALLBACK (old sessions, audio_ms None): prev-line finalize − origin;
+        // first line = origin (00:00), NOT its own 29s finalize.
+        let old = vec![mk(30_000, None), mk(135_000, None), mk(140_000, None)];
         let start = Some(1_000);
-        // First line → session origin (00:00), NOT its own finalize time (29s).
-        assert_eq!(line_start_offset_ms(&utts, 0, start), Some(0));
-        // Line i → previous line's finalize time − origin (its start ≈ prev end).
-        assert_eq!(line_start_offset_ms(&utts, 1, start), Some(29_000));
-        assert_eq!(line_start_offset_ms(&utts, 2, start), Some(134_000));
-        // No usable origin → None (caller shows no timecode + seeks 0).
-        assert_eq!(line_start_offset_ms(&utts, 1, None), None);
-        assert_eq!(line_start_offset_ms(&utts, 1, Some(0)), None);
+        assert_eq!(line_start_offset_ms(&old, 0, start), Some(0));
+        assert_eq!(line_start_offset_ms(&old, 1, start), Some(29_000));
+        assert_eq!(line_start_offset_ms(&old, 2, start), Some(134_000));
+        // Neither audio_ms nor a usable origin → None (no timecode, seek 0).
+        assert_eq!(line_start_offset_ms(&old, 1, None), None);
+        assert_eq!(line_start_offset_ms(&old, 1, Some(0)), None);
     }
 
     #[test]
