@@ -260,7 +260,7 @@ const DATA = [
   ]],
 ];
 const LABEL={ok:"OK",bug:"БАГ",q:"?",skip:"скип"};
-const KEY="suflyor-retest-v0222";
+const KEY="suflyor-retest-v0222"; // gitleaks:allow — localStorage key slug, not a secret
 let state={}; try{state=JSON.parse(localStorage.getItem(KEY)||"{}");}catch(e){state={};}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}}
 function st(id){return state[id]||(state[id]={s:"",c:""});}
