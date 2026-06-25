@@ -745,6 +745,7 @@ pub(crate) fn open_archive(
         let cfg_c = cfg.clone();
         let events_c = events.clone();
         let rt = rt_handle.clone();
+        let store_s = store.clone();
         win.on_retranscribe_requested(move |idx| {
             let Some(p) = weak.upgrade() else {
                 return;
@@ -753,7 +754,8 @@ pub(crate) fn open_archive(
             let Some(row) = archive_row_at(&results, idx) else {
                 return;
             };
-            if !row.has_recordings {
+            let sid = row.id.to_string();
+            if sid.is_empty() {
                 return;
             }
             // PROCESS-GLOBAL latch (not the per-window property): blocks a second
@@ -764,8 +766,42 @@ pub(crate) fn open_archive(
             let Some(rt_guard) = try_acquire_retranscribe() else {
                 return;
             };
-            let sid = row.id.to_string();
             p.set_retranscribe_busy(true);
+            // ТЗ3 — a session with NO saved recordings can't be re-STT'd, so
+            // summarize from the saved catalog transcript, else the journal's
+            // ai_request prompts (summary_source). run_meeting_summary spawns its
+            // own Summary tile, exactly like the re-STT path below. Additive: the
+            // has-recordings path past this branch is unchanged.
+            if !row.has_recordings {
+                let src = store_s
+                    .as_ref()
+                    .and_then(|s| overlay_backend::summary_source::from_catalog(&s.borrow(), &sid))
+                    .or_else(|| overlay_backend::summary_source::from_jsonl_prompts(&sid));
+                let Some(transcript) = src else {
+                    drop(rt_guard);
+                    p.set_retranscribe_busy(false);
+                    p.set_retranscribe_status(SharedString::from("Недостаточно данных для сводки"));
+                    return;
+                };
+                p.set_retranscribe_status(SharedString::from("Building summary…"));
+                let weak_done = weak.clone();
+                let cfg_job = cfg_c.clone();
+                let events_job = events_c.clone();
+                rt.spawn(async move {
+                    let _guard = rt_guard; // RAII: latch freed on task end (incl. panic)
+                    overlay_backend::runtime::run_meeting_summary(
+                        events_job, cfg_job, transcript, sid,
+                    )
+                    .await;
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(win) = weak_done.upgrade() {
+                            win.set_retranscribe_busy(false);
+                            win.set_retranscribe_status(SharedString::from(""));
+                        }
+                    });
+                });
+                return;
+            }
             p.set_retranscribe_status(SharedString::from("starting…"));
             let weak_job = weak.clone();
             let cfg_job = cfg_c.clone();

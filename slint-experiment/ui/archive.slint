@@ -345,9 +345,12 @@ export component ArchiveWindow inherits Window {
                                     }
                                 }
 
-                                // ── "↻ Summary" — only for sessions with saved
-                                //    recordings, and only when no job is running.
-                                if row.has-recordings && !root.retranscribe-busy : VerticalLayout {
+                                // ── "↻ Summary" — generate/regenerate the session
+                                //    summary (shown when no job is running). Sessions
+                                //    WITH recordings re-STT the saved audio; those
+                                //    without summarize from the saved transcript /
+                                //    journal prompts (ТЗ3).
+                                if !root.retranscribe-busy : VerticalLayout {
                                     // Center the 26px pill vertically in the 50px row
                                     // (it used to ride the top of the cell).
                                     alignment: center;
