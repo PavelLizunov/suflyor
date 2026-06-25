@@ -63,10 +63,50 @@ pub fn load_mixed_session_audio(session_id: &str) -> Result<(Vec<i16>, u32)> {
     load_mixed_from_dir(&dir)
 }
 
+/// Sample index for a session-relative offset (ms) at `sample_rate`, clamped to
+/// `[0, total]` so a click past the end seeks to the end, never out of bounds
+/// (ТЗ2b: "таймкод за пределами — clamp"). Sample index IS time here — both
+/// channels share t=0 and one sample rate, so no alignment is needed.
+#[must_use]
+pub fn sample_for_ms(ms: i64, sample_rate: u32, total: usize) -> usize {
+    if ms <= 0 {
+        return 0;
+    }
+    let s = (i128::from(ms) * i128::from(sample_rate) / 1000) as usize;
+    s.min(total)
+}
+
+/// Session-relative offset (ms) for a sample index at `sample_rate` (0 → 0). The
+/// inverse of [`sample_for_ms`]; drives the player's current-time readout.
+#[must_use]
+pub fn ms_for_sample(sample: usize, sample_rate: u32) -> i64 {
+    if sample_rate == 0 {
+        return 0;
+    }
+    (sample as i128 * 1000 / i128::from(sample_rate)) as i64
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
+
+    #[test]
+    fn sample_ms_mapping_roundtrips_and_clamps() {
+        let sr = 16_000;
+        assert_eq!(sample_for_ms(0, sr, 100_000), 0);
+        assert_eq!(sample_for_ms(-5, sr, 100_000), 0); // negative offset → start
+        assert_eq!(sample_for_ms(1000, sr, 100_000), 16_000); // 1s = sr samples
+        assert_eq!(sample_for_ms(1000, sr, 8_000), 8_000); // past end → clamp to total
+        assert_eq!(ms_for_sample(16_000, sr), 1000);
+        assert_eq!(ms_for_sample(0, sr), 0);
+        assert_eq!(ms_for_sample(8_000, 0), 0); // sample_rate guard
+        for &ms in &[0_i64, 250, 1500, 37_000] {
+            // round-trips for offsets that divide evenly at 16 kHz
+            let s = sample_for_ms(ms, sr, usize::MAX);
+            assert_eq!(ms_for_sample(s, sr), ms);
+        }
+    }
 
     #[test]
     fn mix_clamps_and_pads() {
