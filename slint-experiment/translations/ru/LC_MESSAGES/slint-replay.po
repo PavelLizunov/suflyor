@@ -139,6 +139,12 @@ msgstr "Пересоздать"
 msgid "Not enough data"
 msgstr "Недостаточно данных"
 
+msgid "View"
+msgstr "Просмотреть"
+
+msgid "Generate"
+msgstr "Сформировать"
+
 msgid "Settings"
 msgstr "Настройки"
 

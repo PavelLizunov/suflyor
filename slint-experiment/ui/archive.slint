@@ -28,6 +28,7 @@ export struct ArchiveRow {
     has-recordings: bool, // v0.14.0 — recordings/<id>/ exists → show "↻ Summary"
     name: string,      // v0.22.0 — the raw editable session name ("" if unnamed) — pre-fills the inline rename field
     has-data: bool,    // F4 — has a saved transcript OR recording → "↻ Summary" is actionable
+    has-summary: bool, // a conspect sidecar exists → row offers "Просмотреть", else "Сформировать"
 }
 
 // v0.22.0 — a compact 24px icon action button for archive rows (rename ✎,
@@ -108,6 +109,9 @@ export component ArchiveWindow inherits Window {
     callback query-changed(string);
     callback result-activated(int);
     callback retranscribe-requested(int);
+    // A row WITH a saved summary opens it READ-ONLY (re-shown as a tile, no AI
+    // call) via this; regeneration stays the (confirmed) retranscribe-requested.
+    callback view-summary-requested(int);
     // v0.22.0 — rename: ✎ opens the field (Rust sets renaming-index + rename-text
     // from the current name); ✓ / Enter confirms; ✗ cancels. Regen re-asks the
     // local model for a fresh title from the saved transcript.
@@ -382,46 +386,79 @@ export component ArchiveWindow inherits Window {
                                 //    journal prompts (ТЗ3).
                                 // F4 — actionable only with data (a transcript or a
                                 // recording); see the inert hint sibling below.
-                                if !root.retranscribe-busy && row.has-data : VerticalLayout {
-                                    // Center the 26px pill vertically in the 50px row
-                                    // (it used to ride the top of the cell).
+                                // Summary action (3-state): has a summary → "View"
+                                // (re-show the saved recap as a tile, NO AI) + a
+                                // secondary ↻ (regenerate, confirmed); has data but no
+                                // summary → "Generate"; no data → the inert hint (F4).
+                                if !root.retranscribe-busy && row.has-data : HorizontalLayout {
                                     alignment: center;
+                                    spacing: 4px;
                                     horizontal-stretch: 0;
                                     Rectangle {
-                                    width: 96px;
-                                    height: 26px;
-                                    border-radius: Metrics.radius-control;
-                                    border-width: Metrics.border-thin;
-                                    border-color: Theme.accent;
-                                    background: touch.has-hover ? Theme.accent.with-alpha(0.28) : Theme.accent-subtle;
-                                    // SVG refresh icon (not a "↻" glyph — the bundled
-                                    // Skia font has no U+21BB, it renders as tofu).
-                                    // v0.17.1 — the icon is wrapped in a centering
-                                    // VerticalLayout so it sits on the text baseline
-                                    // (it used to ride the top of the row cell).
-                                    HorizontalLayout {
-                                        alignment: center;
-                                        spacing: 5px;
-                                        VerticalLayout {
+                                        width: 96px;
+                                        height: 26px;
+                                        border-radius: Metrics.radius-control;
+                                        border-width: Metrics.border-thin;
+                                        border-color: Theme.accent;
+                                        background: pill-ta.has-hover ? Theme.accent.with-alpha(0.28) : Theme.accent-subtle;
+                                        HorizontalLayout {
                                             alignment: center;
-                                            Image {
-                                                source: @image-url("../assets/icons/refresh.svg");
-                                                colorize: Theme.accent;
-                                                width: 13px;
-                                                height: 13px;
-                                                image-fit: contain;
+                                            spacing: 5px;
+                                            VerticalLayout {
+                                                alignment: center;
+                                                Image {
+                                                    source: row.has-summary
+                                                        ? @image-url("../assets/icons/summary.svg")
+                                                        : @image-url("../assets/icons/refresh.svg");
+                                                    colorize: Theme.accent;
+                                                    width: 13px;
+                                                    height: 13px;
+                                                    image-fit: contain;
+                                                }
+                                            }
+                                            Text {
+                                                text: row.has-summary ? @tr("View") : @tr("Generate");
+                                                font-size: Metrics.font-caption;
+                                                color: Theme.accent;
+                                                vertical-alignment: center;
                                             }
                                         }
-                                        Text {
-                                            text: @tr("Summary");
-                                            font-size: Metrics.font-caption;
-                                            color: Theme.accent;
-                                            vertical-alignment: center;
+                                        pill-ta := TouchArea {
+                                            clicked => {
+                                                if (row.has-summary) {
+                                                    root.view-summary-requested(i);
+                                                } else {
+                                                    root.retranscribe-requested(i);
+                                                }
+                                            }
                                         }
                                     }
-                                    touch := TouchArea {
-                                        clicked => { root.retranscribe-requested(i); }
-                                    }
+                                    // Secondary ↻ — regenerate an EXISTING summary
+                                    // (confirmed via the resummary overlay). Shown only
+                                    // when there's a summary to overwrite.
+                                    if row.has-summary : Rectangle {
+                                        width: 26px;
+                                        height: 26px;
+                                        border-radius: Metrics.radius-control;
+                                        border-width: Metrics.border-thin;
+                                        border-color: Theme.border;
+                                        background: redo-ta.has-hover ? Theme.accent.with-alpha(0.18) : transparent;
+                                        VerticalLayout {
+                                            alignment: center;
+                                            HorizontalLayout {
+                                                alignment: center;
+                                                Image {
+                                                    source: @image-url("../assets/icons/refresh.svg");
+                                                    colorize: Theme.text-secondary;
+                                                    width: 13px;
+                                                    height: 13px;
+                                                    image-fit: contain;
+                                                }
+                                            }
+                                        }
+                                        redo-ta := TouchArea {
+                                            clicked => { root.retranscribe-requested(i); }
+                                        }
                                     }
                                 }
                                 // F4 — no transcript AND no recording: nothing to

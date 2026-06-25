@@ -483,6 +483,7 @@ pub(crate) fn open_archive(
     // One recordings snapshot for this browse session (v0.17.1 — was a
     // filesystem stat PER ROW per rebuild; see recording_ids_snapshot).
     let recordings = Rc::new(recording_ids_snapshot());
+    let conspects = Rc::new(overlay_backend::conspect::session_ids());
 
     match store.as_ref() {
         Some(store_rc) => {
@@ -491,7 +492,7 @@ pub(crate) fn open_archive(
             win.set_summary(SharedString::from(sessions.len().to_string()));
             let rows: Vec<ArchiveRow> = sessions
                 .iter()
-                .map(|s| session_to_row(s, &recordings))
+                .map(|s| session_to_row(s, &recordings, &conspects))
                 .collect();
             win.set_results(ModelRc::new(VecModel::from(rows)));
         }
@@ -506,6 +507,7 @@ pub(crate) fn open_archive(
         let weak = win.as_weak();
         let store_q = store.clone();
         let recordings_q = recordings.clone();
+        let conspects_q = conspects.clone();
         win.on_query_changed(move |q| {
             let Some(p) = weak.upgrade() else {
                 return;
@@ -520,7 +522,7 @@ pub(crate) fn open_archive(
                     .list_sessions()
                     .unwrap_or_default()
                     .iter()
-                    .map(|s| session_to_row(s, &recordings_q))
+                    .map(|s| session_to_row(s, &recordings_q, &conspects_q))
                     .collect()
             } else {
                 let fts = fts_query(trimmed);
@@ -532,7 +534,7 @@ pub(crate) fn open_archive(
                         .search(&fts, 60)
                         .unwrap_or_default()
                         .iter()
-                        .map(|h| hit_to_row(h, &recordings_q))
+                        .map(|h| hit_to_row(h, &recordings_q, &conspects_q))
                         .collect()
                 }
             };
@@ -975,6 +977,48 @@ pub(crate) fn open_archive(
             }
         });
     }
+    // "Просмотреть" — re-show a session's SAVED summary as a tile (NO AI call),
+    // reusing the normal summary-tile rendering (markdown + copy). An absent/empty
+    // recap → a brief status (the row's ↻ regenerates).
+    {
+        let weak = win.as_weak();
+        let events_c = events.clone();
+        let cfg_c = cfg.clone();
+        win.on_view_summary_requested(move |idx| {
+            let Some(p) = weak.upgrade() else {
+                return;
+            };
+            let results = p.get_results();
+            let Some(row) = archive_row_at(&results, idx) else {
+                return;
+            };
+            let sid = row.id.to_string();
+            if sid.is_empty() {
+                return;
+            }
+            match overlay_backend::conspect::load(&sid).and_then(|c| c.final_summary) {
+                Some(text) if !text.trim().is_empty() => {
+                    let stealth = cfg_c.read().stealth_enabled;
+                    let _ = events_c.spawn_tile_full(
+                        overlay_backend::events::TileSpec {
+                            question: format!("Сводка · {}", row.title),
+                            answer: text,
+                            source: "summary".into(),
+                            is_translation: false,
+                            highlights: vec![],
+                            summary_session: Some(sid),
+                        },
+                        overlay_backend::events::MonitorHint::Auto,
+                        stealth,
+                        overlay_backend::events::TileKind::Summary,
+                    );
+                }
+                _ => {
+                    p.set_retranscribe_status(SharedString::from("Сводка пуста — нажмите ↻"));
+                }
+            }
+        });
+    }
 
     {
         let weak = win.as_weak();
@@ -1204,7 +1248,11 @@ fn session_title(started_at_ms: Option<i64>, id: &str) -> String {
 /// Map an indexed [`Session`] to an archive list row. Counts are emoji-coded
 /// as plain text counts so the row needs no per-language string;
 /// the cost shows only when non-zero (local runs are $0 → blank).
-fn session_to_row(s: &Session, recordings: &std::collections::HashSet<String>) -> ArchiveRow {
+fn session_to_row(
+    s: &Session,
+    recordings: &std::collections::HashSet<String>,
+    conspects: &std::collections::HashSet<String>,
+) -> ArchiveRow {
     let time = archive_time_label(s.started_at_ms, &s.id);
     let name = overlay_backend::session_names::get(&s.id);
     // Prefer the session NAME (v0.22.0) as the row title; fall back to the time.
@@ -1246,13 +1294,18 @@ fn session_to_row(s: &Session, recordings: &std::collections::HashSet<String>) -
         // by ai_turns_count). None → the button is inert, so gate it off and show a
         // "not enough data" hint instead.
         has_data: recordings.contains(&s.id) || s.transcript_lines > 0 || s.ai_turns_count > 0,
+        has_summary: conspects.contains(&s.id),
     }
 }
 
 /// Map an FTS [`SearchHit`] to an archive list row: the session label + a
 /// whitespace-collapsed, length-capped snippet of the matched body, tagged with
 /// the hit kind (question · answer · utterance).
-fn hit_to_row(h: &SearchHit, recordings: &std::collections::HashSet<String>) -> ArchiveRow {
+fn hit_to_row(
+    h: &SearchHit,
+    recordings: &std::collections::HashSet<String>,
+    conspects: &std::collections::HashSet<String>,
+) -> ArchiveRow {
     // Prefer the session NAME (v0.22.0) so a named session reads the same in
     // search results as in the full list; fall back to the МСК time. Keep the
     // raw name too, to pre-fill the inline rename field.
@@ -1283,6 +1336,7 @@ fn hit_to_row(h: &SearchHit, recordings: &std::collections::HashSet<String>) -> 
         // An FTS hit exists only because transcript / AI text matched → always
         // has a summary source.
         has_data: true,
+        has_summary: conspects.contains(&h.session_id),
     }
 }
 
@@ -1768,7 +1822,7 @@ mod tests {
 
     #[test]
     fn session_row_uses_plain_counts() {
-        let row = session_to_row(&sample_session(), &no_recordings());
+        let row = session_to_row(&sample_session(), &no_recordings(), &no_recordings());
         // v0.17.2 — the label is МСК wall-clock from started_at_ms, not the UTC id.
         // v0.22.0 — a COMPLETED session has no status prefix (the "done " was
         // dropped so a named/timed title reads clean).
@@ -1786,7 +1840,7 @@ mod tests {
     fn session_row_shows_cost_when_nonzero() {
         let mut s = sample_session();
         s.total_cost_microcents = 2_400_000; // $0.024
-        let row = session_to_row(&s, &no_recordings());
+        let row = session_to_row(&s, &no_recordings(), &no_recordings());
         assert_eq!(row.meta.as_str(), "$0.024");
     }
 
@@ -1799,7 +1853,7 @@ mod tests {
             body: "a   key value   structure".into(),
             rank: -1.0,
         };
-        let row = hit_to_row(&h, &no_recordings());
+        let row = hit_to_row(&h, &no_recordings(), &no_recordings());
         // Hits carry only the UTC id stamp → parsed + shifted to МСК (+3h).
         assert!(
             row.title

@@ -243,6 +243,29 @@ fn exists_in(dir: &Path, session_id: &str) -> bool {
     }
 }
 
+/// Session ids that have a conspect sidecar on disk — a CHEAP single dir listing
+/// (the `*.json` stems), so the archive can gate per-row "has a summary" without a
+/// stat per row. The caller still `load`s to get the final text, which may be
+/// absent (built but reduce never finished) → the viewer shows an empty-state.
+#[must_use]
+pub fn session_ids() -> std::collections::HashSet<String> {
+    conspects_dir()
+        .and_then(|dir| std::fs::read_dir(dir).ok())
+        .map(|rd| {
+            rd.flatten()
+                .filter_map(|e| {
+                    let p = e.path();
+                    if p.extension().is_some_and(|x| x == "json") {
+                        p.file_stem().map(|s| s.to_string_lossy().into_owned())
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Delete a session's conspect sidecar (and any stale `.tmp`). Idempotent +
 /// safe-stem guarded; returns true if the main `.json` was removed.
 pub fn delete(session_id: &str) -> bool {
