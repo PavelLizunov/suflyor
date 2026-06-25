@@ -54,6 +54,21 @@ pub fn load_mixed_from_dir(session_dir: &Path) -> Result<(Vec<i16>, u32)> {
     Ok((mix_pcm(&mic_pcm, &sys_pcm), sample_rate))
 }
 
+/// True if the session has at least one saved recording channel — a CHEAP fs
+/// check (two `exists()` stats, no audio load), used to show/hide the player UI
+/// vs. the "Аудио не сохранено" note (ТЗ2b). Empty id → false.
+#[must_use]
+pub fn session_has_recordings(session_id: &str) -> bool {
+    if session_id.is_empty() {
+        return false;
+    }
+    let Ok(dir) = crate::recorder::recordings_dir() else {
+        return false;
+    };
+    let d = dir.join(session_id);
+    d.join("mic.wav").exists() || d.join("system.wav").exists()
+}
+
 /// Mixed playback PCM for an archived session by id (its `recordings/<id>/`).
 ///
 /// # Errors

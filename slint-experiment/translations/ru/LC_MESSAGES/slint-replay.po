@@ -118,6 +118,9 @@ msgstr "Копировать выбранное"
 msgid "select all"
 msgstr "выделить все"
 
+msgid "Audio not saved"
+msgstr "Аудио не сохранено"
+
 msgid "Settings"
 msgstr "Настройки"
 

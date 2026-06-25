@@ -12,14 +12,9 @@
 //! SECURITY: playback is LOCAL output only — no network egress — so it is safe
 //! under stealth / screen-share, like the clipboard copy.
 
-// TEMPORARY: the mini-player UI (next ТЗ2b sub-increment) is the engine's caller;
-// until it lands these pub(crate) methods have no production call site in this
-// bin (the engine can't be unit-tested — `new()` needs an audio device). Removed
-// when the UI wires play/pause/seek/position.
-#![allow(dead_code)]
-
 use overlay_backend::session_audio::{ms_for_sample, sample_for_ms};
 use rodio::{OutputStream, OutputStreamHandle, Sink};
+use std::cell::RefCell;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -195,4 +190,123 @@ impl TranscriptPlayer {
         }
         Ok(())
     }
+}
+
+// ── UI-thread control surface ────────────────────────────────────────────────
+// rodio's OutputStream is !Send + must live on the UI thread, and only ONE
+// transcript window exists at a time, so the live player + its poll timer are
+// thread-locals the window's Slint callbacks drive through these free fns (no
+// param-threading). All access is on the Slint event loop, sequentially, so the
+// RefCell borrows never overlap.
+
+thread_local! {
+    /// The single live transcript player. Cleared on window close / before
+    /// loading another session.
+    static PLAYER: RefCell<Option<TranscriptPlayer>> = const { RefCell::new(None) };
+    /// The repeating position-poll timer driving the seek-bar / time / active
+    /// line — held so it outlives the wiring call; dropped by `reset`.
+    static POLL_TIMER: RefCell<Option<slint::Timer>> = const { RefCell::new(None) };
+}
+
+/// Stop playback + polling and drop the loaded audio. Called on the transcript
+/// window's close and before (re)loading a different session.
+pub(crate) fn reset() {
+    PLAYER.with(|p| *p.borrow_mut() = None);
+    POLL_TIMER.with(|t| *t.borrow_mut() = None);
+}
+
+/// Lazily load the player for `session_id`'s mixed recording. Returns false when
+/// there is no audio (recordings absent/unreadable) so the caller hides controls.
+pub(crate) fn ensure(session_id: &str) -> bool {
+    PLAYER.with(|p| {
+        if p.borrow().is_some() {
+            return true;
+        }
+        match overlay_backend::session_audio::load_mixed_session_audio(session_id) {
+            Ok((pcm, sr)) => match TranscriptPlayer::new(pcm, sr) {
+                Ok(player) => {
+                    *p.borrow_mut() = Some(player);
+                    true
+                }
+                Err(e) => {
+                    eprintln!("[overlay-host] transcript player init failed: {e}");
+                    false
+                }
+            },
+            Err(_) => false, // no recordings for this session
+        }
+    })
+}
+
+/// True while audio is actually advancing.
+pub(crate) fn is_playing() -> bool {
+    PLAYER.with(|p| {
+        p.borrow()
+            .as_ref()
+            .is_some_and(TranscriptPlayer::is_playing)
+    })
+}
+
+/// Play/pause toggle (no-op if no player is loaded).
+pub(crate) fn toggle() {
+    PLAYER.with(|p| {
+        if let Some(pl) = p.borrow_mut().as_mut() {
+            if let Err(e) = pl.toggle() {
+                eprintln!("[overlay-host] transcript player toggle failed: {e}");
+            }
+        }
+    });
+}
+
+/// Seek to a session-relative offset (ms) and ensure playback is running
+/// (click-on-line). No-op if no player is loaded.
+pub(crate) fn seek_and_play(ms: i64) {
+    PLAYER.with(|p| {
+        if let Some(pl) = p.borrow_mut().as_mut() {
+            if let Err(e) = pl.seek_ms(ms) {
+                eprintln!("[overlay-host] transcript player seek failed: {e}");
+                return;
+            }
+            if !pl.is_playing() {
+                if let Err(e) = pl.play() {
+                    eprintln!("[overlay-host] transcript player play failed: {e}");
+                }
+            }
+        }
+    });
+}
+
+/// Seek to a fraction (0..1) of the total duration (seek-bar click).
+pub(crate) fn seek_fraction(frac: f32) {
+    PLAYER.with(|p| {
+        if let Some(pl) = p.borrow_mut().as_mut() {
+            let total = pl.total_ms();
+            let ms = (f64::from(frac.clamp(0.0, 1.0)) * total as f64) as i64;
+            if let Err(e) = pl.seek_ms(ms) {
+                eprintln!("[overlay-host] transcript player seek failed: {e}");
+            }
+        }
+    });
+}
+
+/// Snapshot for the position poll: (progress 0..1, position ms, total ms,
+/// playing). `None` when no player is loaded.
+pub(crate) fn snapshot() -> Option<(f32, i64, i64, bool)> {
+    PLAYER.with(|p| {
+        p.borrow().as_ref().map(|pl| {
+            let total = pl.total_ms();
+            let pos = pl.position_ms();
+            let progress = if total > 0 {
+                (pos as f64 / total as f64).clamp(0.0, 1.0) as f32
+            } else {
+                0.0
+            };
+            (progress, pos, total, pl.is_playing())
+        })
+    })
+}
+
+/// Store the repeating poll timer so it outlives the wiring call.
+pub(crate) fn set_poll_timer(timer: slint::Timer) {
+    POLL_TIMER.with(|t| *t.borrow_mut() = Some(timer));
 }

@@ -19,6 +19,7 @@ export struct TranscriptLine {
     speaker: string,      // "Система" | "Микрофон"
     text: string,
     checked: bool,        // ТЗ1 — per-line selection for "Copy selected"
+    start-ms: int,        // ТЗ2b — session-relative ms, for click-to-seek + active line
 }
 
 // A compact square checkbox (reused for per-line selection + "select all").
@@ -75,7 +76,17 @@ export component TranscriptWindow inherits Window {
     in-out property <bool> with-timecodes: false;
     in-out property <bool> copied: false;
     in-out property <bool> all-selected: false;
+    // ТЗ2b player: `has-audio` gates the mini-player; the rest are polled from
+    // Rust — progress 0..1, "mm:ss / mm:ss" time, the active line index, play state.
+    in-out property <bool> has-audio: false;
+    in-out property <bool> playing: false;
+    in-out property <float> progress: 0;
+    in-out property <string> time-text: "";
+    in-out property <int> active-line: -1;
 
+    callback toggle-play();
+    callback play-line(int);
+    callback seek-fraction(float);
     callback copy-all-requested();
     callback copy-selected-requested();
     callback toggle-line(int);
@@ -252,44 +263,121 @@ export component TranscriptWindow inherits Window {
                 if !root.empty : ScrollView {
                     vertical-stretch: 1;
                     VerticalLayout {
-                        spacing: 3px;
-                        for line[i] in root.lines : HorizontalLayout {
-                            spacing: Metrics.space-sm;
-                            padding-left: 4px;
-                            padding-right: 4px;
-                            Tick {
-                                checked: line.checked;
+                        spacing: 2px;
+                        for line[i] in root.lines : Rectangle {
+                            // Active-line highlight (ТЗ2b) — the row whose timecode
+                            // contains the current playback position.
+                            background: i == root.active-line
+                                ? Theme.accent.with-alpha(0.14)
+                                : transparent;
+                            border-radius: 4px;
+                            // Clicking the row (anywhere but the checkbox) plays the
+                            // mix from this line's moment (ТЗ2b). The Tick's own
+                            // TouchArea below intercepts checkbox clicks first.
+                            TouchArea {
                                 clicked => {
-                                    root.toggle-line(i);
+                                    root.play-line(i);
                                 }
                             }
-                            // Omit the time column entirely when the session start
-                            // is unknown (matches the markdown view, which drops the
-                            // timecode rather than showing an empty gutter).
-                            if line.offset-label != "" : Text {
-                                text: line.offset-label;
-                                font-size: Metrics.font-caption;
-                                color: Theme.text-muted;
-                                vertical-alignment: top;
-                                width: 52px;
-                            }
-                            Text {
-                                text: line.speaker;
-                                font-size: Metrics.font-caption;
-                                font-weight: 700;
-                                color: Theme.accent;
-                                vertical-alignment: top;
-                                width: 84px;
-                            }
-                            Text {
-                                text: line.text;
-                                font-size: Metrics.font-body;
-                                color: Theme.text-secondary;
-                                horizontal-stretch: 1;
-                                wrap: word-wrap;
+                            HorizontalLayout {
+                                spacing: Metrics.space-sm;
+                                padding-left: 4px;
+                                padding-right: 4px;
+                                padding-top: 1px;
+                                padding-bottom: 1px;
+                                Tick {
+                                    checked: line.checked;
+                                    clicked => {
+                                        root.toggle-line(i);
+                                    }
+                                }
+                                // Omit the time column entirely when the session
+                                // start is unknown (matches the markdown view).
+                                if line.offset-label != "" : Text {
+                                    text: line.offset-label;
+                                    font-size: Metrics.font-caption;
+                                    color: Theme.text-muted;
+                                    vertical-alignment: top;
+                                    width: 52px;
+                                }
+                                Text {
+                                    text: line.speaker;
+                                    font-size: Metrics.font-caption;
+                                    font-weight: 700;
+                                    color: Theme.accent;
+                                    vertical-alignment: top;
+                                    width: 84px;
+                                }
+                                Text {
+                                    text: line.text;
+                                    font-size: Metrics.font-body;
+                                    color: Theme.text-secondary;
+                                    horizontal-stretch: 1;
+                                    wrap: word-wrap;
+                                }
                             }
                         }
                     }
+                }
+
+                // ── Mini-player (ТЗ2b): play/pause · seek-bar · time ──
+                if root.has-audio : HorizontalLayout {
+                    spacing: Metrics.space-sm;
+                    Rectangle {
+                        width: 40px;
+                        height: 28px;
+                        horizontal-stretch: 0;
+                        border-radius: 6px;
+                        background: pp-ta.has-hover ? Theme.accent : Theme.accent.with-alpha(0.85);
+                        animate background { duration: 120ms; }
+                        pp-ta := TouchArea {
+                            clicked => {
+                                root.toggle-play();
+                            }
+                        }
+                        Text {
+                            text: root.playing ? "⏸" : "▶";
+                            color: Theme.on-accent;
+                            font-size: Metrics.font-label;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                    // Seek-bar: click anywhere to jump to that fraction.
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        height: 28px;
+                        seek-ta := TouchArea {
+                            clicked => {
+                                root.seek-fraction(self.mouse-x / self.width);
+                            }
+                        }
+                        Rectangle {
+                            y: (parent.height - self.height) / 2;
+                            height: 6px;
+                            border-radius: 3px;
+                            background: Theme.border;
+                            Rectangle {
+                                x: 0;
+                                width: parent.width * root.progress;
+                                height: 100%;
+                                border-radius: 3px;
+                                background: Theme.accent;
+                            }
+                        }
+                    }
+                    Text {
+                        text: root.time-text;
+                        font-size: Metrics.font-caption;
+                        color: Theme.text-muted;
+                        vertical-alignment: center;
+                    }
+                }
+                if root.empty == false && root.has-audio == false : Text {
+                    text: @tr("Audio not saved");
+                    font-size: Metrics.font-caption;
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
                 }
             }
         }

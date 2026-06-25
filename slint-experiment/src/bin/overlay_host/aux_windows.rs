@@ -16,6 +16,7 @@
 //!
 //! NOTE (§7): the parent crate-root symbols are imported explicitly below;
 //! `diag!` is reached by textual macro scope (defined before the `mod` decl).
+use super::transcript_player;
 use super::{
     apply_scheme_palette, apply_scheme_text_ask, apply_tile_hwnd_with_monitor, clamp_scheme,
     drag_begin, drag_update, fire_f9_ask, focus_window, global_scheme, grab_hwnd, kb, markdown,
@@ -1339,6 +1340,101 @@ fn wire_transcript_actions(
     }
 }
 
+/// Index of the line whose timecode contains `pos_ms` (the last line whose start
+/// is ≤ pos); -1 before the first line. Lines are chronological, so stop at the
+/// first start past `pos`.
+fn active_line_for_ms(model: &Rc<VecModel<TranscriptLine>>, pos_ms: i64) -> i32 {
+    let mut active = -1_i32;
+    for j in 0..model.row_count() {
+        let Some(row) = model.row_data(j) else {
+            break;
+        };
+        if i64::from(row.start_ms) <= pos_ms {
+            active = j as i32;
+        } else {
+            break;
+        }
+    }
+    active
+}
+
+/// Wire the ТЗ2b mini-player: play/pause, click-line → seek+play, seek-bar, and a
+/// 200 ms poll pushing position / active-line / play-state into the window.
+/// Re-wired on EVERY open with the current session id + model (the window is
+/// reused; `open_transcript` already reset any prior session's player). The audio
+/// engine lives in the `transcript_player` UI-thread thread-local.
+fn wire_transcript_player(
+    win: &TranscriptWindow,
+    session_id: &str,
+    model: &Rc<VecModel<TranscriptLine>>,
+) {
+    let has_audio = overlay_backend::session_audio::session_has_recordings(session_id);
+    win.set_has_audio(has_audio);
+    win.set_playing(false);
+    win.set_progress(0.0);
+    win.set_time_text(SharedString::default());
+    win.set_active_line(-1);
+    if !has_audio {
+        return;
+    }
+
+    let id = session_id.to_string();
+    {
+        let weak = win.as_weak();
+        let id = id.clone();
+        win.on_toggle_play(move || {
+            if transcript_player::ensure(&id) {
+                transcript_player::toggle();
+                if let Some(w) = weak.upgrade() {
+                    w.set_playing(transcript_player::is_playing());
+                }
+            }
+        });
+    }
+    {
+        let weak = win.as_weak();
+        let id = id.clone();
+        let m = model.clone();
+        win.on_play_line(move |idx| {
+            let Some(row) = m.row_data(idx.max(0) as usize) else {
+                return;
+            };
+            if transcript_player::ensure(&id) {
+                transcript_player::seek_and_play(i64::from(row.start_ms));
+                if let Some(w) = weak.upgrade() {
+                    w.set_playing(transcript_player::is_playing());
+                }
+            }
+        });
+    }
+    win.on_seek_fraction(transcript_player::seek_fraction);
+
+    // 200 ms position poll → seek-bar / time / active-line / play state.
+    let weak = win.as_weak();
+    let m = model.clone();
+    let timer = slint::Timer::default();
+    timer.start(
+        slint::TimerMode::Repeated,
+        std::time::Duration::from_millis(200),
+        move || {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            if let Some((progress, pos_ms, total_ms, playing)) = transcript_player::snapshot() {
+                w.set_progress(progress);
+                w.set_playing(playing);
+                w.set_time_text(SharedString::from(format!(
+                    "{} / {}",
+                    fmt_offset(pos_ms),
+                    fmt_offset(total_ms)
+                )));
+                w.set_active_line(active_line_for_ms(&m, pos_ms));
+            }
+        },
+    );
+    transcript_player::set_poll_timer(timer);
+}
+
 /// Open a READ-ONLY structured transcript window for a session (ТЗ1). Reuses the
 /// slot if already open; otherwise builds the per-line model from the session's
 /// utterances and presents the window stealth-aware. The model is (re)built on
@@ -1367,8 +1463,13 @@ pub(crate) fn open_transcript(
             }),
             text: SharedString::from(u.text.split_whitespace().collect::<Vec<_>>().join(" ")),
             checked: false,
+            start_ms: session_start.map(|s| (u.unix_ms - s).max(0)).unwrap_or(0) as i32,
         })
         .collect();
+    let session_id = session.map(|s| s.id.clone()).unwrap_or_default();
+    // Drop any prior session's player + poll timer — the window is reused, so a
+    // fresh open must not keep the previous session's audio playing (ТЗ2b).
+    transcript_player::reset();
 
     // Reuse if already open — repopulate (a reused window must show THIS session)
     // and re-focus via the borrowed strong handle. Slint handles are NOT `Clone`,
@@ -1381,6 +1482,7 @@ pub(crate) fn open_transcript(
         let model = Rc::new(VecModel::from(lines));
         win.set_lines(ModelRc::from(model.clone()));
         wire_transcript_actions(win, &model, utts, session_start);
+        wire_transcript_player(win, &session_id, &model);
         let _ = win.show();
         if let Ok(hwnd) = grab_hwnd(win.window()) {
             focus_window(hwnd);
@@ -1403,11 +1505,13 @@ pub(crate) fn open_transcript(
     let model = Rc::new(VecModel::from(lines));
     win.set_lines(ModelRc::from(model.clone()));
     wire_transcript_actions(&win, &model, utts, session_start);
+    wire_transcript_player(&win, &session_id, &model);
 
     {
         let slot_c = slot.clone();
         let weak = win.as_weak();
         win.on_close_requested(move || {
+            transcript_player::reset(); // stop audio + poll timer when the window closes
             if let Some(w) = weak.upgrade() {
                 let _ = w.hide();
             }
