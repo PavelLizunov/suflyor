@@ -56,6 +56,57 @@ pub(crate) fn message_text(content: &ai::MessageContent) -> String {
     }
 }
 
+/// Build the clipboard text for the transcript "Copy all / Copy selected" (ТЗ1,
+/// decision #7). One reply per line as `Спикер: текст`; with `with_timecodes`,
+/// prefixed `[mm:ss] ` (session-relative, derived from `session_start_ms` — only
+/// when it is `> 0`). When `selected` is `Some`, only those row indices are
+/// included, in chronological (vector) order. Labels match the on-screen
+/// transcript (decision #1: Система / Микрофон) and `build_session_markdown`;
+/// internal whitespace is collapsed so one utterance = one line. Pure → tested.
+///
+/// No production caller yet — the ТЗ1 "Copy all / Copy selected" buttons wire it
+/// next (the unit test already exercises it). `allow` not `expect`: the test
+/// target DOES use it, so `expect(dead_code)` is unfulfilled there. Drop this
+/// attribute when the copy button lands.
+#[allow(dead_code)]
+pub(crate) fn format_transcript_for_copy(
+    utts: &[overlay_backend::persistence::Utterance],
+    session_start_ms: Option<i64>,
+    selected: Option<&std::collections::HashSet<usize>>,
+    with_timecodes: bool,
+) -> String {
+    let start = session_start_ms.filter(|&ms| ms > 0);
+    let mut out = String::new();
+    for (i, u) in utts.iter().enumerate() {
+        if selected.is_some_and(|sel| !sel.contains(&i)) {
+            continue;
+        }
+        let label = if u.source == "mic" {
+            "Микрофон"
+        } else {
+            "Система"
+        };
+        let text = u.text.split_whitespace().collect::<Vec<_>>().join(" ");
+        let prefix = if with_timecodes {
+            start
+                .map(|s| {
+                    format!(
+                        "[{}] ",
+                        super::aux_windows::fmt_offset((u.unix_ms - s).max(0))
+                    )
+                })
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
+        out.push_str(&format!("{prefix}{label}: {text}\n"));
+    }
+    if out.ends_with('\n') {
+        out.pop();
+    }
+    out
+}
+
 /// Strip the `build_request` wrapper from a user turn for the 📋 copy, leaving
 /// the actual question. The F9/auto ask bundles the live transcript as AI
 /// context ("Транскрипт последних реплик…\n\nПомоги ответить: <q>"), so the real
@@ -338,6 +389,53 @@ mod copy_tests {
     //! copy pulling in the raw Mic/System transcript, and follow-ups being
     //! re-answered as the original question. Pure: no bridge, no UI, no network.
     use super::*;
+
+    #[test]
+    fn transcript_copy_format() {
+        use overlay_backend::persistence::Utterance;
+        let start = 1000_i64;
+        let utts = vec![
+            Utterance {
+                session_id: "s".into(),
+                unix_ms: start,
+                source: "system".into(),
+                text: "привет  мир".into(), // double space collapses
+            },
+            Utterance {
+                session_id: "s".into(),
+                unix_ms: start + 135_000, // 02:15
+                source: "mic".into(),
+                text: "да".into(),
+            },
+        ];
+        // Default: "Спикер: текст", no timecodes, all lines, no trailing newline.
+        assert_eq!(
+            format_transcript_for_copy(&utts, Some(start), None, false),
+            "Система: привет мир\nМикрофон: да"
+        );
+        // With timecodes.
+        assert_eq!(
+            format_transcript_for_copy(&utts, Some(start), None, true),
+            "[00:00] Система: привет мир\n[02:15] Микрофон: да"
+        );
+        // Selected subset (only row 1), chronological order.
+        let mut sel = std::collections::HashSet::new();
+        sel.insert(1_usize);
+        assert_eq!(
+            format_transcript_for_copy(&utts, Some(start), Some(&sel), false),
+            "Микрофон: да"
+        );
+        // Empty transcript → empty string.
+        assert_eq!(
+            format_transcript_for_copy(&[], Some(start), None, false),
+            ""
+        );
+        // with_timecodes but no session start → no prefix.
+        assert_eq!(
+            format_transcript_for_copy(&utts[..1], None, None, true),
+            "Система: привет мир"
+        );
+    }
 
     fn msg(role: &str, text: &str) -> ai::ChatMessage {
         ai::ChatMessage {

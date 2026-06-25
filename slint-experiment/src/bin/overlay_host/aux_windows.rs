@@ -1166,7 +1166,9 @@ fn hit_to_row(h: &SearchHit, recordings: &std::collections::HashSet<String>) -> 
 }
 
 /// Format a session-relative offset (ms) as `mm:ss`, or `h:mm:ss` past an hour.
-fn fmt_offset(offset_ms: i64) -> String {
+/// `pub(crate)` so `tile_copy::format_transcript_for_copy` reuses the SAME
+/// formatter the transcript view uses (ТЗ1) — body unchanged.
+pub(crate) fn fmt_offset(offset_ms: i64) -> String {
     let secs = (offset_ms / 1000).max(0);
     let (h, m, s) = (secs / 3600, (secs % 3600) / 60, secs % 60);
     if h > 0 {
