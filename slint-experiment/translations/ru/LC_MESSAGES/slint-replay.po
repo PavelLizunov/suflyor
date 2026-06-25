@@ -112,6 +112,12 @@ msgstr "Скопировано ✓"
 msgid "with timecodes [mm:ss]"
 msgstr "с таймкодами [mm:ss]"
 
+msgid "Copy selected"
+msgstr "Копировать выбранное"
+
+msgid "select all"
+msgstr "выделить все"
+
 msgid "Settings"
 msgstr "Настройки"
 

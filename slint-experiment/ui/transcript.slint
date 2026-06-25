@@ -1,7 +1,6 @@
 // Session transcript viewer (ТЗ1) — a structured, READ-ONLY chronological list of
 // a session's utterances (time · speaker · text), opened from the archive via the
-// 📄 row button. Sibling of archive.slint; per-line checkboxes + "Copy all/selected"
-// land in later ТЗ1 increments (the copy-format core is already in tile_copy.rs).
+// 📄 row button. Per-line checkboxes + "Copy all / Copy selected" (decision #7).
 // Chrome (frameless / opaque / always-on-top, header drag, CloseButton, Esc)
 // mirrors archive.slint verbatim — incl. the opaque-bg trap note there.
 //
@@ -19,6 +18,34 @@ export struct TranscriptLine {
     offset-label: string, // "02:15" session-relative, or "" if start unknown
     speaker: string,      // "Система" | "Микрофон"
     text: string,
+    checked: bool,        // ТЗ1 — per-line selection for "Copy selected"
+}
+
+// A compact square checkbox (reused for per-line selection + "select all").
+// DarkCheck is a big toggle SWITCH — too heavy per row — so this is a small tick.
+component Tick inherits Rectangle {
+    in property <bool> checked;
+    callback clicked();
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border-width: 1px;
+    border-color: root.checked ? Theme.accent : Theme.border;
+    background: root.checked ? Theme.accent : transparent;
+    animate background, border-color { duration: 100ms; }
+    Text {
+        text: root.checked ? "✓" : "";
+        color: Theme.on-accent;
+        font-size: 11px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
 }
 
 export component TranscriptWindow inherits Window {
@@ -42,12 +69,17 @@ export component TranscriptWindow inherits Window {
     in-out property <string> heading: "";
     in-out property <[TranscriptLine]> lines: [];
     in-out property <bool> empty: false;
-    // ТЗ1 copy (decision #7): "Copy all" honours the "with timecodes" toggle;
-    // `copied` flashes a 1.5s confirmation on the button (set from Rust).
+    // ТЗ1 copy (decision #7): "Copy all / selected" honour the "with timecodes"
+    // toggle; `copied` flashes a 1.5s confirmation on the buttons (set from Rust).
+    // `all-selected` mirrors the per-line checkboxes (kept in sync by Rust).
     in-out property <bool> with-timecodes: false;
     in-out property <bool> copied: false;
+    in-out property <bool> all-selected: false;
 
     callback copy-all-requested();
+    callback copy-selected-requested();
+    callback toggle-line(int);
+    callback toggle-all(bool);
     callback close-requested();
     callback drag-start-requested();
     callback drag-moved();
@@ -126,11 +158,11 @@ export component TranscriptWindow inherits Window {
                     height: Metrics.border-thin;
                 }
 
-                // ── Toolbar: copy the whole transcript (ТЗ1, decision #7) ──
+                // ── Toolbar: copy all / copy selected + timecode toggle (ТЗ1 #7) ──
                 if !root.empty : HorizontalLayout {
                     spacing: Metrics.space-sm;
                     Rectangle {
-                        width: 138px;
+                        width: 124px;
                         height: 28px;
                         horizontal-stretch: 0;
                         border-radius: 6px;
@@ -144,11 +176,36 @@ export component TranscriptWindow inherits Window {
                             }
                         }
                         Text {
-                            text: root.copied ? @tr("Copied ✓") : @tr("Copy all");
                             // Per-scheme WCAG-AA text colour on the accent fill (white
                             // fails on the bright mint scheme); matches every other
                             // filled-accent control.
+                            text: root.copied ? @tr("Copied ✓") : @tr("Copy all");
                             color: Theme.on-accent;
+                            font-size: Metrics.font-label;
+                            font-weight: 600;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                    Rectangle {
+                        width: 150px;
+                        height: 28px;
+                        horizontal-stretch: 0;
+                        border-radius: 6px;
+                        border-width: 1px;
+                        border-color: Theme.accent;
+                        background: sel-ta.pressed
+                            ? Theme.accent.with-alpha(0.22)
+                            : sel-ta.has-hover ? Theme.accent.with-alpha(0.14) : transparent;
+                        animate background { duration: 120ms; }
+                        sel-ta := TouchArea {
+                            clicked => {
+                                root.copy-selected-requested();
+                            }
+                        }
+                        Text {
+                            text: root.copied ? @tr("Copied ✓") : @tr("Copy selected");
+                            color: Theme.accent;
                             font-size: Metrics.font-label;
                             font-weight: 600;
                             horizontal-alignment: center;
@@ -158,6 +215,25 @@ export component TranscriptWindow inherits Window {
                     DarkCheck {
                         text: @tr("with timecodes [mm:ss]");
                         checked <=> root.with-timecodes;
+                    }
+                }
+
+                // ── "Select all" header above the list ──
+                if !root.empty : HorizontalLayout {
+                    spacing: Metrics.space-sm;
+                    padding-left: 4px;
+                    Tick {
+                        checked: root.all-selected;
+                        clicked => {
+                            root.toggle-all(!root.all-selected);
+                        }
+                    }
+                    Text {
+                        text: @tr("select all");
+                        font-size: Metrics.font-caption;
+                        color: Theme.text-muted;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
                     }
                 }
 
@@ -177,10 +253,16 @@ export component TranscriptWindow inherits Window {
                     vertical-stretch: 1;
                     VerticalLayout {
                         spacing: 3px;
-                        for line in root.lines : HorizontalLayout {
+                        for line[i] in root.lines : HorizontalLayout {
                             spacing: Metrics.space-sm;
                             padding-left: 4px;
                             padding-right: 4px;
+                            Tick {
+                                checked: line.checked;
+                                clicked => {
+                                    root.toggle-line(i);
+                                }
+                            }
                             // Omit the time column entirely when the session start
                             // is unknown (matches the markdown view, which drops the
                             // timecode rather than showing an empty gutter).

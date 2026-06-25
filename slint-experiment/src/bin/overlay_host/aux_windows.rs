@@ -28,6 +28,8 @@ use super::{
 use overlay_backend::persistence::{
     open_default_store, AiTurn, SearchHit, Session, Store, Utterance,
 };
+// `Model` brings row_data / set_row_data / row_count for the transcript VecModel.
+use slint::Model;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// v0.14.0 — PROCESS-GLOBAL one-job-at-a-time guard for archive re-transcription.
@@ -1212,41 +1214,129 @@ pub(crate) fn fmt_offset(offset_ms: i64) -> String {
     }
 }
 
-/// Wire the transcript window's "Copy all" button (ТЗ1, decision #7): format the
-/// CURRENT session's utterances via `tile_copy::format_transcript_for_copy`
-/// (honouring the in-window "with timecodes" toggle), put them on the clipboard,
-/// and flash a 1.5s "copied" confirmation. Re-wired on EVERY open so the captured
-/// utterances always match the session currently shown (the window is reused).
-/// Copy is purely local — no egress — so it stays safe under stealth.
-fn wire_transcript_copy(win: &TranscriptWindow, utts: &[Utterance], session_start: Option<i64>) {
+/// Copy `text` to the LOCAL clipboard (no egress → stealth-safe) and flash the
+/// window's 1.5s "copied" badge. Empty `text` is a no-op (nothing selected).
+fn copy_to_clipboard_and_flash(w: &TranscriptWindow, text: &str) {
+    if text.is_empty() {
+        return;
+    }
+    match clipboard_win::set_clipboard_string(text) {
+        Ok(()) => {
+            w.set_copied(true);
+            let w2 = w.as_weak();
+            slint::Timer::single_shot(std::time::Duration::from_millis(1500), move || {
+                if let Some(w) = w2.upgrade() {
+                    w.set_copied(false);
+                }
+            });
+        }
+        Err(e) => eprintln!("[overlay-host] transcript copy failed: {e}"),
+    }
+}
+
+/// Wire the transcript window's copy + selection actions (ТЗ1, decision #7):
+/// "Copy all" / "Copy selected" (the latter honours the per-line checkboxes), the
+/// per-line toggle, and "select all". The selection lives IN the row model
+/// (`checked` per row), mutated via `set_row_data` so it survives scrolling, and
+/// is read back at copy time. Re-wired on EVERY open (fresh model + utterances)
+/// so a reused window always acts on the session currently shown. Copy formats
+/// via the pure `tile_copy::format_transcript_for_copy` and is purely local.
+fn wire_transcript_actions(
+    win: &TranscriptWindow,
+    model: &Rc<VecModel<TranscriptLine>>,
+    utts: &[Utterance],
+    session_start: Option<i64>,
+) {
+    // Reset transient UI state — the window is reused across sessions, so a fresh
+    // open must not inherit the prior session's "select all" tick or "copied"
+    // flash (the fresh model already starts all-unchecked).
+    win.set_all_selected(false);
+    win.set_copied(false);
     let utts_owned: Vec<Utterance> = utts.to_vec();
-    let weak = win.as_weak();
-    win.on_copy_all_requested(move || {
-        let Some(w) = weak.upgrade() else {
-            return;
-        };
-        if utts_owned.is_empty() {
-            return;
-        }
-        let with_tc = w.get_with_timecodes();
-        let text =
-            super::tile_copy::format_transcript_for_copy(&utts_owned, session_start, None, with_tc);
-        if text.is_empty() {
-            return;
-        }
-        match clipboard_win::set_clipboard_string(&text) {
-            Ok(()) => {
-                w.set_copied(true);
-                let w2 = w.as_weak();
-                slint::Timer::single_shot(std::time::Duration::from_millis(1500), move || {
-                    if let Some(w) = w2.upgrade() {
-                        w.set_copied(false);
-                    }
-                });
+
+    // Toggle one line; keep "select all" in sync (ON iff EVERY row is checked).
+    {
+        let m = model.clone();
+        let weak = win.as_weak();
+        win.on_toggle_line(move |idx| {
+            let i = idx.max(0) as usize;
+            let Some(mut row) = m.row_data(i) else {
+                return;
+            };
+            row.checked = !row.checked;
+            m.set_row_data(i, row);
+            if let Some(w) = weak.upgrade() {
+                let all = m.row_count() > 0
+                    && (0..m.row_count()).all(|j| m.row_data(j).is_some_and(|r| r.checked));
+                w.set_all_selected(all);
             }
-            Err(e) => eprintln!("[overlay-host] transcript copy failed: {e}"),
-        }
-    });
+        });
+    }
+
+    // Select / deselect every line.
+    {
+        let m = model.clone();
+        let weak = win.as_weak();
+        win.on_toggle_all(move |on| {
+            for j in 0..m.row_count() {
+                if let Some(mut row) = m.row_data(j) {
+                    row.checked = on;
+                    m.set_row_data(j, row);
+                }
+            }
+            if let Some(w) = weak.upgrade() {
+                w.set_all_selected(on);
+            }
+        });
+    }
+
+    // Copy ALL lines (selected = None).
+    {
+        let utts_c = utts_owned.clone();
+        let weak = win.as_weak();
+        win.on_copy_all_requested(move || {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            if utts_c.is_empty() {
+                return;
+            }
+            let with_tc = w.get_with_timecodes();
+            let text =
+                super::tile_copy::format_transcript_for_copy(&utts_c, session_start, None, with_tc);
+            copy_to_clipboard_and_flash(&w, &text);
+        });
+    }
+
+    // Copy only the CHECKED lines (no-op when nothing is selected). The model is
+    // built 1:1 with `utts`, so a checked row index is exactly the utterance index.
+    {
+        let m = model.clone();
+        let utts_c = utts_owned;
+        let weak = win.as_weak();
+        win.on_copy_selected_requested(move || {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            let mut sel = std::collections::HashSet::new();
+            for j in 0..m.row_count() {
+                if m.row_data(j).is_some_and(|r| r.checked) {
+                    sel.insert(j);
+                }
+            }
+            if sel.is_empty() {
+                return;
+            }
+            let with_tc = w.get_with_timecodes();
+            let text = super::tile_copy::format_transcript_for_copy(
+                &utts_c,
+                session_start,
+                Some(&sel),
+                with_tc,
+            );
+            copy_to_clipboard_and_flash(&w, &text);
+        });
+    }
 }
 
 /// Open a READ-ONLY structured transcript window for a session (ТЗ1). Reuses the
@@ -1276,6 +1366,7 @@ pub(crate) fn open_transcript(
                 "Система"
             }),
             text: SharedString::from(u.text.split_whitespace().collect::<Vec<_>>().join(" ")),
+            checked: false,
         })
         .collect();
 
@@ -1287,8 +1378,9 @@ pub(crate) fn open_transcript(
             .set_scheme(clamp_scheme(global_scheme()));
         win.set_heading(SharedString::from(heading));
         win.set_empty(utts.is_empty());
-        win.set_lines(ModelRc::new(VecModel::from(lines)));
-        wire_transcript_copy(win, utts, session_start);
+        let model = Rc::new(VecModel::from(lines));
+        win.set_lines(ModelRc::from(model.clone()));
+        wire_transcript_actions(win, &model, utts, session_start);
         let _ = win.show();
         if let Ok(hwnd) = grab_hwnd(win.window()) {
             focus_window(hwnd);
@@ -1308,8 +1400,9 @@ pub(crate) fn open_transcript(
         .set_scheme(clamp_scheme(global_scheme()));
     win.set_heading(SharedString::from(heading));
     win.set_empty(utts.is_empty());
-    win.set_lines(ModelRc::new(VecModel::from(lines)));
-    wire_transcript_copy(&win, utts, session_start);
+    let model = Rc::new(VecModel::from(lines));
+    win.set_lines(ModelRc::from(model.clone()));
+    wire_transcript_actions(&win, &model, utts, session_start);
 
     {
         let slot_c = slot.clone();
