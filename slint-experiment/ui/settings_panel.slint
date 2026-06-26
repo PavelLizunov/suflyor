@@ -524,8 +524,9 @@ export component SettingsWindow inherits Window {
     // Transient confirmation flag for the redacted diagnostic-report copy
     // (bool so the "copied" word is translated in-UI, no Rust-built string).
     in-out property <bool> diag-copied: false;
-    // Transient confirmation for the "Collect logs" action (redacted log saved).
-    in-out property <bool> diag-logs-collected: false;
+    // Full path of the saved redacted log ("Собрать логи") — shown so the tester
+    // can find/copy it even if the Explorer reveal misses (AppData is hidden).
+    in-out property <string> diag-logs-path: "";
     callback diagnostics-check-all-clicked();
     callback diagnostics-copy-report-clicked();
     callback diagnostics-collect-logs-clicked();
@@ -1029,12 +1030,20 @@ export component SettingsWindow inherits Window {
                                 clicked => { root.diagnostics-collect-logs-clicked(); }
                             }
                             Text {
-                                text: root.diag-copied ? @tr("copied") : (root.diag-logs-collected ? @tr("log saved") : "");
+                                text: root.diag-copied ? @tr("copied") : "";
                                 font-size: 11px;
                                 font-weight: 700;
                                 color: Theme.success;
                                 vertical-alignment: center;
                             }
+                        }
+                        // "Собрать логи" result — the full saved path, wrapping, so
+                        // the tester can read/copy it (the reveal is best-effort).
+                        if root.diag-logs-path != "" : Text {
+                            text: root.diag-logs-path;
+                            font-size: 11px;
+                            color: Theme.success;
+                            wrap: word-wrap;
                         }
                         Text {
                             text: @tr("“Check all” pings AI + STT, records the mic, and plays a test tone to verify system-audio capture. Speak during the check to see the mic level — you don't need to play anything yourself.");

@@ -34,6 +34,8 @@ pub(crate) fn populate_diagnostics(
     // Warm the GPU-name cache off-thread now (the Diagnostics tab is opening), so
     // the later "Copy report" click reads it without ever blocking the event loop.
     prime_gpu_cache();
+    // Clear any stale "Собрать логи" path from a previous open (reused window).
+    win.set_diag_logs_path(SharedString::from(""));
     let c = cfg.read();
     let r = c.readiness();
     win.set_diag_summary(SharedString::from(active_stack_label(&c)));
@@ -487,26 +489,28 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
             let Some(w) = weak.upgrade() else { return };
             let weak_done = w.as_weak();
             std::thread::spawn(move || {
-                let ok = match collect_redacted_log() {
+                let msg = match collect_redacted_log() {
                     Ok(out) => {
                         reveal_in_explorer(&out);
-                        true
+                        // Show the FULL path so the tester can find/copy the file
+                        // even if the Explorer reveal misses (AppData is hidden +
+                        // cluttered, which tripped the v0.24.0 tester).
+                        // Mask the username in the shown path (Settings can be
+                        // screen-shared); %USERPROFILE% still resolves if the
+                        // tester pastes it into Explorer's address bar.
+                        format!(
+                            "Сохранён лог: {}",
+                            redact_user_home(&out.display().to_string())
+                        )
                     }
                     Err(e) => {
                         eprintln!("[overlay-host] collect logs failed: {e}");
-                        false
+                        "Не удалось собрать лог — подробности в overlay-host.log".to_string()
                     }
                 };
                 let _ = slint::invoke_from_event_loop(move || {
-                    let Some(w) = weak_done.upgrade() else { return };
-                    w.set_diag_logs_collected(ok);
-                    if ok {
-                        let wk = w.as_weak();
-                        Timer::single_shot(Duration::from_millis(2500), move || {
-                            if let Some(w) = wk.upgrade() {
-                                w.set_diag_logs_collected(false);
-                            }
-                        });
+                    if let Some(w) = weak_done.upgrade() {
+                        w.set_diag_logs_path(SharedString::from(msg));
                     }
                 });
             });
@@ -535,9 +539,9 @@ fn collect_redacted_log() -> std::io::Result<std::path::PathBuf> {
 /// when the profile path contains a space (e.g. a username with a space).
 fn reveal_in_explorer(path: &std::path::Path) {
     use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    // No creation_flags here: explorer.exe is a GUI app; CREATE_NO_WINDOW is for
+    // console processes and can interfere with how it opens/selects the folder.
     let _ = std::process::Command::new("explorer.exe")
-        .creation_flags(CREATE_NO_WINDOW)
         .raw_arg(format!("/select,\"{}\"", path.display()))
         .spawn();
 }
