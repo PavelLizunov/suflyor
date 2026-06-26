@@ -524,8 +524,11 @@ export component SettingsWindow inherits Window {
     // Transient confirmation flag for the redacted diagnostic-report copy
     // (bool so the "copied" word is translated in-UI, no Rust-built string).
     in-out property <bool> diag-copied: false;
+    // Transient confirmation for the "Collect logs" action (redacted log saved).
+    in-out property <bool> diag-logs-collected: false;
     callback diagnostics-check-all-clicked();
     callback diagnostics-copy-report-clicked();
+    callback diagnostics-collect-logs-clicked();
     // Phase E6 v29 — meeting-context editor (Profile+context tab).
     in-out property <string> meeting-context-input: "";
     in-out property <string> meeting-context-result: "";
@@ -1021,8 +1024,12 @@ export component SettingsWindow inherits Window {
                                 text: @tr("Copy report");
                                 clicked => { root.diagnostics-copy-report-clicked(); }
                             }
+                            Button {
+                                text: @tr("Collect logs");
+                                clicked => { root.diagnostics-collect-logs-clicked(); }
+                            }
                             Text {
-                                text: root.diag-copied ? @tr("copied") : "";
+                                text: root.diag-copied ? @tr("copied") : (root.diag-logs-collected ? @tr("log saved") : "");
                                 font-size: 11px;
                                 font-weight: 700;
                                 color: Theme.success;

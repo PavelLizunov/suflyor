@@ -476,6 +476,70 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
             });
         });
     }
+
+    // F — "Собрать логи": write a REDACTED copy of overlay-host.log (username →
+    // %USERPROFILE%, hosts/IPs masked) and reveal it in Explorer, so a tester can
+    // attach the log without hunting for the file. Off-thread (the log can be
+    // large); the redaction reuses the same passes as "Copy report".
+    {
+        let weak = win.as_weak();
+        win.on_diagnostics_collect_logs_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            let weak_done = w.as_weak();
+            std::thread::spawn(move || {
+                let ok = match collect_redacted_log() {
+                    Ok(out) => {
+                        reveal_in_explorer(&out);
+                        true
+                    }
+                    Err(e) => {
+                        eprintln!("[overlay-host] collect logs failed: {e}");
+                        false
+                    }
+                };
+                let _ = slint::invoke_from_event_loop(move || {
+                    let Some(w) = weak_done.upgrade() else { return };
+                    w.set_diag_logs_collected(ok);
+                    if ok {
+                        let wk = w.as_weak();
+                        Timer::single_shot(Duration::from_millis(2500), move || {
+                            if let Some(w) = wk.upgrade() {
+                                w.set_diag_logs_collected(false);
+                            }
+                        });
+                    }
+                });
+            });
+        });
+    }
+}
+
+/// F — read overlay-host.log, REDACT it (username → %USERPROFILE%, hosts/IPs
+/// masked — the same passes "Copy report" uses), write a support-safe copy next
+/// to it, and return that path. Log sites print presence flags / char-counts
+/// (never key values), but the log DOES embed the OS username in file paths, so
+/// this masks it before the tester shares the file.
+fn collect_redacted_log() -> std::io::Result<std::path::PathBuf> {
+    let root = overlay_backend::paths::data_root().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "no data root for the log")
+    })?;
+    let raw = std::fs::read_to_string(root.join("overlay-host.log"))?;
+    let redacted = redact_user_home(&redact_ipv4(&redact_urls(&raw)));
+    let out = root.join("suflyor-log-for-support.txt");
+    std::fs::write(&out, redacted)?;
+    Ok(out)
+}
+
+/// Open Explorer with `path` selected so the tester can grab/attach it directly.
+/// `raw_arg` keeps the explicit quotes around the path so `/select` works even
+/// when the profile path contains a space (e.g. a username with a space).
+fn reveal_in_explorer(path: &std::path::Path) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let _ = std::process::Command::new("explorer.exe")
+        .creation_flags(CREATE_NO_WINDOW)
+        .raw_arg(format!("/select,\"{}\"", path.display()))
+        .spawn();
 }
 
 #[cfg(test)]

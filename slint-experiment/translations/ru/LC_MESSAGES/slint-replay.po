@@ -384,6 +384,12 @@ msgstr "Копировать отчёт"
 msgid "copied"
 msgstr "скопировано"
 
+msgid "Collect logs"
+msgstr "Собрать логи"
+
+msgid "log saved"
+msgstr "лог сохранён"
+
 msgid "Toggle hotkey-hint popover"
 msgstr "Показать/скрыть подсказку по хоткеям"
 
