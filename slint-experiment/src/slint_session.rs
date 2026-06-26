@@ -412,12 +412,13 @@ async fn transcript_forwarder(
             continue;
         }
         // Phase E6 diagnostic — log every STT event so we can debug
-        // "mic transcript not working" complaints. Truncate text to
-        // 80 chars to keep stderr readable.
+        // "mic transcript not working" complaints. COUNT only, never the
+        // recognized text: overlay-host.log is shareable ("Collect logs") and
+        // must not carry the meeting transcript.
         log_info(&format!(
-            "transcript event: source={:?} text='{}'",
+            "transcript event: source={:?} ({} chars)",
             ev.source,
-            ev.text.chars().take(80).collect::<String>(),
+            ev.text.chars().count()
         ));
         // Mic-mute drop — same semantic as src-tauri's check.
         if matches!(ev.source, AudioSource::Mic) && lock(&rt).mic_muted {
@@ -688,7 +689,8 @@ async fn maybe_spawn_auto_tile(
             .iter()
             .any(|(prefix, _)| prefix == &normalized)
         {
-            log_info(&format!("tile dedup: skipping prefix '{normalized}'"));
+            // No transcript text in the log (it is shareable via "Collect logs").
+            log_info("tile dedup: skipping a duplicate question prefix");
             return;
         }
         s.recent_question_prefixes.push((normalized, now));
@@ -720,10 +722,8 @@ async fn maybe_spawn_auto_tile(
     };
 
     if let Some(cached_answer) = cache_hit {
-        log_info(&format!(
-            "qa_cache HIT (avoided AI call): {}",
-            text.chars().take(60).collect::<String>()
-        ));
+        // No transcript text in the log (shareable via "Collect logs").
+        log_info("qa_cache HIT (avoided AI call)");
         let trigger_text_for_q = match &trigger {
             backend_runtime::Trigger::Question(q) => q.clone(),
             backend_runtime::Trigger::Keyword(kw, _) => kw.clone(),
@@ -758,7 +758,15 @@ async fn maybe_spawn_auto_tile(
         return;
     }
 
-    log_info(&format!("auto-tile triggered: {trigger:?}"));
+    // Variant + counts only — never the question / keyword / transcript-line
+    // TEXT (the log is shareable via "Collect logs").
+    let trigger_kind = match &trigger {
+        backend_runtime::Trigger::Question(q) => format!("question ({} chars)", q.chars().count()),
+        backend_runtime::Trigger::Keyword(kw, _) => {
+            format!("keyword ({} chars + line)", kw.chars().count())
+        }
+    };
+    log_info(&format!("auto-tile triggered: {trigger_kind}"));
 
     // ===== Cost cap — BLOCK the auto-tile cloud spend once over budget =====
     // Local inference is free (cost stays 0), so this only ever trips on the

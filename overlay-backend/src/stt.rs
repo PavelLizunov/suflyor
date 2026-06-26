@@ -860,21 +860,22 @@ async fn finish_transcript(
     match result {
         Ok(text) if !text.trim().is_empty() => {
             if is_likely_hallucination(&text) {
+                // Log a COUNT, never the recognized text — overlay-host.log is
+                // shareable (the "Collect logs" button) and must not carry the
+                // user's meeting transcript.
                 log::info!(
-                    "STT [{:?}] hallucination filtered: '{}'",
+                    "STT [{:?}] hallucination filtered ({} chars)",
                     src,
-                    text.chars().take(80).collect::<String>()
+                    text.chars().count()
                 );
             } else {
                 health.last_stt_ok_ms.store(
                     crate::journal::now_unix_ms() as u64,
                     std::sync::atomic::Ordering::Relaxed,
                 );
-                log::info!(
-                    "STT got text [{:?}]: '{}'",
-                    src,
-                    text.chars().take(80).collect::<String>()
-                );
+                // COUNT only — never the recognized text (shareable log; no
+                // meeting transcript in it).
+                log::info!("STT got text [{:?}]: {} chars", src, text.chars().count());
                 let _ = tx
                     .send(TranscriptEvent {
                         source: src,
