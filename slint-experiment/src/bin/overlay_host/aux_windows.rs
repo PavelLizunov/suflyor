@@ -483,13 +483,15 @@ pub(crate) fn open_archive(
     // One recordings snapshot for this browse session (v0.17.1 — was a
     // filesystem stat PER ROW per rebuild; see recording_ids_snapshot).
     let recordings = Rc::new(recording_ids_snapshot());
-    let conspects = Rc::new(overlay_backend::conspect::session_ids());
 
     match store.as_ref() {
         Some(store_rc) => {
             let sessions = store_rc.borrow().list_sessions().unwrap_or_default();
             // v0.17.1 — plain count (the 🗄 now lives in the header SVG icon).
             win.set_summary(SharedString::from(sessions.len().to_string()));
+            // Re-snapshot conspect ids fresh each (re)build so a row flips to
+            // "Просмотреть" the moment its summary lands (A2) — one cheap dir read.
+            let conspects = overlay_backend::conspect::session_ids();
             let rows: Vec<ArchiveRow> = sessions
                 .iter()
                 .map(|s| session_to_row(s, &recordings, &conspects))
@@ -507,7 +509,6 @@ pub(crate) fn open_archive(
         let weak = win.as_weak();
         let store_q = store.clone();
         let recordings_q = recordings.clone();
-        let conspects_q = conspects.clone();
         win.on_query_changed(move |q| {
             let Some(p) = weak.upgrade() else {
                 return;
@@ -516,13 +517,16 @@ pub(crate) fn open_archive(
                 return;
             };
             let trimmed = q.trim();
+            // Fresh conspect snapshot per rebuild (A2): after a summary completes we
+            // invoke_query_changed, and this re-read flips the row to "Просмотреть".
+            let conspects = overlay_backend::conspect::session_ids();
             let rows: Vec<ArchiveRow> = if trimmed.is_empty() {
                 store_rc
                     .borrow()
                     .list_sessions()
                     .unwrap_or_default()
                     .iter()
-                    .map(|s| session_to_row(s, &recordings_q, &conspects_q))
+                    .map(|s| session_to_row(s, &recordings_q, &conspects))
                     .collect()
             } else {
                 let fts = fts_query(trimmed);
@@ -534,7 +538,7 @@ pub(crate) fn open_archive(
                         .search(&fts, 60)
                         .unwrap_or_default()
                         .iter()
-                        .map(|h| hit_to_row(h, &recordings_q, &conspects_q))
+                        .map(|h| hit_to_row(h, &recordings_q, &conspects))
                         .collect()
                 }
             };
@@ -867,6 +871,8 @@ pub(crate) fn open_archive(
                         if let Some(win) = weak_done.upgrade() {
                             win.set_retranscribe_busy(false);
                             win.set_retranscribe_status(SharedString::from(""));
+                            // A2: refresh rows so this one flips to "Просмотреть" now.
+                            win.invoke_query_changed(win.get_query());
                         }
                     });
                 });
@@ -928,6 +934,8 @@ pub(crate) fn open_archive(
                     if let Some(win) = weak_done.upgrade() {
                         win.set_retranscribe_busy(false);
                         win.set_retranscribe_status(SharedString::from(""));
+                        // A2: refresh rows so this one flips to "Просмотреть" now.
+                        win.invoke_query_changed(win.get_query());
                     }
                 });
             });
@@ -1288,12 +1296,12 @@ fn session_to_row(
         meta: SharedString::from(meta),
         has_recordings: recordings.contains(&s.id),
         name: SharedString::from(name.unwrap_or_default()),
-        // F4 — "↻ Summary" needs SOMETHING to summarize, matching start_resummary's
-        // source chain: a saved recording (re-STT), indexed transcript lines (catalog
-        // source), or journal AI Q&A prompts (the from_jsonl_prompts fallback, tracked
-        // by ai_turns_count). None → the button is inert, so gate it off and show a
-        // "not enough data" hint instead.
-        has_data: recordings.contains(&s.id) || s.transcript_lines > 0 || s.ai_turns_count > 0,
+        // F4 / D1 — "Summary" needs a RELIABLE source: a saved recording (re-STT) or
+        // indexed transcript lines (catalog). AI-Q&A-only sessions (ai_turns>0 but no
+        // recording/transcript) were counted before, yet in practice they yield no
+        // usable summary (the from_jsonl_prompts fallback is too thin — the tester saw
+        // a "Сформировать" that then failed), so they now read "Недостаточно данных".
+        has_data: recordings.contains(&s.id) || s.transcript_lines > 0,
         has_summary: conspects.contains(&s.id),
     }
 }
