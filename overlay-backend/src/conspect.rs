@@ -32,9 +32,12 @@ use std::path::{Path, PathBuf};
 /// Sub-directory under the data root holding the per-session sidecars.
 const DIR: &str = "conspects";
 
-/// Retention cap — keep the newest N conspect files, pruned on each save. One
-/// per session and a few KB–100 KB each; this bounds an otherwise unbounded
-/// directory without coupling to the journal/recording retention policies.
+/// Retention cap — keep the newest N sidecar files, pruned on each save. Applies
+/// to BOTH the conspect (`*.json`) and debrief (`*.txt`) dirs: one file per
+/// session, a few KB–100 KB each, so this bounds an otherwise unbounded directory
+/// without coupling to the journal/recording retention policies. A pruned sidecar
+/// for a still-listed session degrades to the viewer's empty-state (the gating
+/// `session_ids` / `debrief_session_ids` listings stop reporting it).
 const KEEP_NEWEST: usize = 500;
 
 /// One map part: the raw transcript slice it was built from + its conspectus.
@@ -200,7 +203,7 @@ fn save_in(dir: &Path, c: &Conspect) -> anyhow::Result<()> {
     std::fs::write(&tmp, &bytes)?;
     // Atomic replace — same proven pattern as config::save (MoveFileEx replace).
     std::fs::rename(&tmp, &path)?;
-    prune_in(dir, KEEP_NEWEST);
+    prune_in(dir, KEEP_NEWEST, "json");
     Ok(())
 }
 
@@ -288,6 +291,9 @@ fn save_debrief_in(dir: &Path, session_id: &str, text: &str) -> anyhow::Result<(
     let tmp = dir.join(format!("{stem}.txt.tmp"));
     std::fs::write(&tmp, text.as_bytes())?;
     std::fs::rename(&tmp, &path)?;
+    // Bound the dir to the newest N, same policy as the conspect store (a debrief
+    // is written once per session, so mtime == creation order).
+    prune_in(dir, KEEP_NEWEST, "txt");
     Ok(())
 }
 
@@ -326,9 +332,14 @@ pub fn debrief_session_ids() -> std::collections::HashSet<String> {
 /// Delete a session's saved debrief sidecar (best-effort, safe-stem guarded).
 /// Called when a session is deleted from the archive so no orphan debrief lingers.
 pub fn delete_debrief(session_id: &str) -> bool {
-    let Some(dir) = debriefs_dir() else {
-        return false;
-    };
+    match debriefs_dir() {
+        Some(dir) => delete_debrief_in(&dir, session_id),
+        None => false,
+    }
+}
+
+/// Pure delete (test seam) — mirrors [`delete_in`].
+fn delete_debrief_in(dir: &Path, session_id: &str) -> bool {
     let Some(stem) = safe_stem(session_id) else {
         return false;
     };
@@ -406,16 +417,18 @@ fn drop_backup_in(dir: &Path, session_id: &str) {
     }
 }
 
-/// Keep the newest `keep` `*.json` conspects by mtime (falling back to name
+/// Keep the newest `keep` `*.<ext>` sidecars by mtime (falling back to name
 /// order when mtime is unreadable); delete the rest. Best-effort, never panics.
-fn prune_in(dir: &Path, keep: usize) {
+/// `ext` is the bare extension (`"json"` conspects, `"txt"` debriefs) — the
+/// `.tmp`/`.bak` companions have a different final extension and are left alone.
+fn prune_in(dir: &Path, keep: usize, ext: &str) {
     let Ok(rd) = std::fs::read_dir(dir) else {
         return;
     };
     let mut files: Vec<(std::time::SystemTime, PathBuf)> = rd
         .flatten()
         .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|x| x == "json"))
+        .filter(|p| p.extension().is_some_and(|x| x == ext))
         .map(|p| {
             let mtime = p
                 .metadata()
@@ -431,7 +444,7 @@ fn prune_in(dir: &Path, keep: usize) {
     files.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.cmp(&a.1)));
     for (_, path) in files.into_iter().skip(keep) {
         if let Err(e) = std::fs::remove_file(&path) {
-            log::debug!("conspect prune: could not remove {}: {e}", path.display());
+            log::debug!("sidecar prune: could not remove {}: {e}", path.display());
         }
     }
 }
@@ -480,6 +493,39 @@ mod tests {
         );
         // path-escape rejected by safe_stem
         assert!(save_debrief_in(dir, "../escape", "x").is_err());
+    }
+
+    #[test]
+    fn delete_debrief_in_removes_txt_and_is_idempotent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        save_debrief_in(dir, "s1", "coaching text").unwrap();
+        assert!(dir.join("s1.txt").exists());
+        assert!(delete_debrief_in(dir, "s1")); // removed
+        assert!(!dir.join("s1.txt").exists());
+        assert!(!delete_debrief_in(dir, "s1")); // already gone → false, no panic
+        assert!(!delete_debrief_in(dir, "../escape")); // unsafe id rejected
+                                                       // A delete does not disturb a different session's debrief.
+        save_debrief_in(dir, "s2", "other").unwrap();
+        assert!(!delete_debrief_in(dir, "s1"));
+        assert_eq!(load_debrief_in(dir, "s2").as_deref(), Some("other"));
+    }
+
+    #[test]
+    fn save_debrief_prunes_to_keep_newest() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        // Default KEEP_NEWEST is large; prune directly to assert the txt filter.
+        for i in 0..5 {
+            save_debrief_in(dir, &format!("s{i}"), "x").unwrap();
+        }
+        prune_in(dir, 2, "txt");
+        let remaining = std::fs::read_dir(dir)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.path().extension().is_some_and(|x| x == "txt"))
+            .count();
+        assert_eq!(remaining, 2, "debrief prune keeps exactly the newest 2");
     }
 
     #[test]
@@ -565,7 +611,7 @@ mod tests {
             let c = sample(&format!("s{i}"));
             save_in(tmp.path(), &c).unwrap();
         }
-        prune_in(tmp.path(), 2);
+        prune_in(tmp.path(), 2, "json");
         let remaining = std::fs::read_dir(tmp.path())
             .unwrap()
             .flatten()
