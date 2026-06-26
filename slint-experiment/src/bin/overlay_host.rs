@@ -3180,7 +3180,7 @@ fn main() -> Result<(), slint::PlatformError> {
             let weak_done = weak_for_summary.clone();
             rt_handle_for_summary.spawn(async move {
                 overlay_backend::runtime::run_meeting_summary(
-                    events_c, cfg_c, transcript, session_id,
+                    events_c, cfg_c, transcript, session_id, false,
                 )
                 .await;
                 // Success OR error — run_meeting_summary spawned a tile

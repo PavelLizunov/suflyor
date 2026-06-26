@@ -357,7 +357,7 @@ async fn run_meeting_summary_with_noop_events_does_not_panic() {
     // Empty session id = the "ephemeral / don't persist" sentinel, so the
     // conspect sidecar is never touched and the test stays hermetic (no
     // write to the real %APPDATA%).
-    run_meeting_summary(sink, cfg, transcript, String::new()).await;
+    run_meeting_summary(sink, cfg, transcript, String::new(), false).await;
 }
 
 /// v0.18.6 invariant: a conspect carries the part SUMMARIES the reduce needs,

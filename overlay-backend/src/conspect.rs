@@ -281,7 +281,59 @@ fn delete_in(dir: &Path, session_id: &str) -> bool {
         return false;
     };
     let _ = std::fs::remove_file(dir.join(format!("{stem}.json.tmp")));
+    let _ = std::fs::remove_file(dir.join(format!("{stem}.json.bak")));
     std::fs::remove_file(dir.join(format!("{stem}.json"))).is_ok()
+}
+
+/// B3 — set the current conspect aside before a FORCED rebuild (the archive's
+/// "Пересоздать"/"Сформировать"). A forced run overwrites `<stem>.json` as it maps,
+/// so without this a regenerate that then FAILS would destroy the previous good
+/// recap. Renames `<stem>.json` → `<stem>.json.bak` (the "bak" extension makes it
+/// invisible to `session_ids`/`prune_in`, which match only `.json`). Returns true if
+/// a conspect existed and was moved aside.
+#[must_use]
+pub fn backup(session_id: &str) -> bool {
+    conspects_dir().is_some_and(|dir| backup_in(&dir, session_id))
+}
+
+/// Pure backup (test seam).
+fn backup_in(dir: &Path, session_id: &str) -> bool {
+    let Some(stem) = safe_stem(session_id) else {
+        return false;
+    };
+    let path = dir.join(format!("{stem}.json"));
+    path.exists() && std::fs::rename(&path, dir.join(format!("{stem}.json.bak"))).is_ok()
+}
+
+/// Restore a [`backup`] after a FAILED forced rebuild: `<stem>.json.bak` →
+/// `<stem>.json`, recovering the previous good recap. No-op without a backup.
+pub fn restore_backup(session_id: &str) {
+    if let Some(dir) = conspects_dir() {
+        let _ = restore_backup_in(&dir, session_id);
+    }
+}
+
+/// Pure restore (test seam); true if a backup was restored.
+fn restore_backup_in(dir: &Path, session_id: &str) -> bool {
+    let Some(stem) = safe_stem(session_id) else {
+        return false;
+    };
+    let bak = dir.join(format!("{stem}.json.bak"));
+    bak.exists() && std::fs::rename(&bak, dir.join(format!("{stem}.json"))).is_ok()
+}
+
+/// Drop a [`backup`] after a SUCCESSFUL forced rebuild (the fresh recap is committed).
+pub fn drop_backup(session_id: &str) {
+    if let Some(dir) = conspects_dir() {
+        drop_backup_in(&dir, session_id);
+    }
+}
+
+/// Pure drop (test seam).
+fn drop_backup_in(dir: &Path, session_id: &str) {
+    if let Some(stem) = safe_stem(session_id) {
+        let _ = std::fs::remove_file(dir.join(format!("{stem}.json.bak")));
+    }
 }
 
 /// Keep the newest `keep` `*.json` conspects by mtime (falling back to name
@@ -354,6 +406,34 @@ mod tests {
         assert!(exists_in(tmp.path(), "session_123")); // present → true
         assert!(!exists_in(tmp.path(), "other")); // a different id → false
         assert!(!exists_in(tmp.path(), "../escape")); // unsafe stem → false
+    }
+
+    #[test]
+    fn backup_restore_drop_round_trip() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        assert!(!backup_in(dir, "s1")); // nothing to back up yet
+        let mut c = sample("s1");
+        c.final_summary = Some("good recap".into());
+        save_in(dir, &c).unwrap();
+        // Backup moves the live .json aside (B3 — before a forced rebuild).
+        assert!(backup_in(dir, "s1"));
+        assert!(!dir.join("s1.json").exists());
+        assert!(dir.join("s1.json.bak").exists());
+        // Restore (FAILED rebuild) brings the previous recap back intact.
+        assert!(restore_backup_in(dir, "s1"));
+        assert!(!dir.join("s1.json.bak").exists());
+        assert_eq!(
+            load_in(dir, "s1").and_then(|c| c.final_summary).as_deref(),
+            Some("good recap")
+        );
+        // Drop (SUCCESSFUL rebuild): back up, the rebuild writes a fresh .json, drop
+        // the backup — the new .json stays, the .bak is gone.
+        assert!(backup_in(dir, "s1"));
+        save_in(dir, &c).unwrap(); // stand-in for the rebuild's fresh save
+        drop_backup_in(dir, "s1");
+        assert!(!dir.join("s1.json.bak").exists());
+        assert!(dir.join("s1.json").exists());
     }
 
     #[test]

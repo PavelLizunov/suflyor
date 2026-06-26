@@ -864,7 +864,7 @@ pub(crate) fn open_archive(
                 rt.spawn(async move {
                     let _guard = rt_guard; // RAII: latch freed on task end (incl. panic)
                     overlay_backend::runtime::run_meeting_summary(
-                        events_job, cfg_job, transcript, sid,
+                        events_job, cfg_job, transcript, sid, true,
                     )
                     .await;
                     let _ = slint::invoke_from_event_loop(move || {

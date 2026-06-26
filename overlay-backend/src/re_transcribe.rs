@@ -269,7 +269,8 @@ pub async fn retranscribe_and_summarize(
     on_progress(Progress::Step("Building summary…".to_string()));
     // Pass the archive session id so the conspect persists under it — a failed
     // reduce can then be retried from the saved parts without re-running STT.
-    crate::runtime::run_meeting_summary(events, cfg, transcript, session_id.to_string()).await;
+    crate::runtime::run_meeting_summary(events, cfg, transcript, session_id.to_string(), false)
+        .await;
     Ok(n)
 }
 

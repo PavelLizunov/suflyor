@@ -579,6 +579,7 @@ pub async fn run_meeting_summary(
     cfg: SharedConfig,
     transcript: Vec<TranscriptLine>,
     session_id: String,
+    force: bool,
 ) {
     let (response_language, preferred_monitor, stealth, is_local) = {
         let c = cfg.read();
@@ -603,7 +604,9 @@ pub async fn run_meeting_summary(
     // kills the tester bug where re-requesting a summary made the model beg for
     // the conspect text: we never re-send a reduce with empty parts — we resume
     // the persisted one. A changed transcript (fingerprint differs) rebuilds.
-    if let Some(saved) = conspect::load(&session_id) {
+    // B3 — a FORCED rebuild (the archive's "Пересоздать"/"Сформировать") skips this
+    // reuse so it produces a fresh recap instead of returning the cached one.
+    if let Some(saved) = (!force).then(|| conspect::load(&session_id)).flatten() {
         if saved.fingerprint == fp {
             if let Some(answer) = saved.final_summary.clone() {
                 log::info!("meeting summary: transcript unchanged — returning the saved recap");
@@ -633,6 +636,14 @@ pub async fn run_meeting_summary(
         }
     }
 
+    // B3 — a forced rebuild overwrites the live conspect as it maps, so back the old
+    // one up first: if this run never produces a final_summary (the regenerate
+    // failed), we roll back to the previous good recap rather than destroy it.
+    let rollback_sid = if force && conspect::backup(&session_id) {
+        Some(session_id.clone())
+    } else {
+        None
+    };
     // Build a fresh conspect. The part SOURCES are recorded up front and
     // persisted BEFORE any AI call, so a crash / error mid-map keeps them.
     let budget = if is_local {
@@ -661,6 +672,15 @@ pub async fn run_meeting_summary(
     };
     conspect::save(&cs);
     finish_summary_from_conspect(&events, &cfg, cs, tile_title, monitor_hint, stealth).await;
+    // B3 — forced run finished: keep the fresh recap if it produced one, else restore
+    // the backed-up previous summary (the rebuild failed → don't lose the old copy).
+    if let Some(sid) = rollback_sid {
+        if conspect::load(&sid).and_then(|c| c.final_summary).is_some() {
+            conspect::drop_backup(&sid);
+        } else {
+            conspect::restore_backup(&sid);
+        }
+    }
 }
 
 /// Retry a summary that errored, REUSING its persisted conspect — the action
