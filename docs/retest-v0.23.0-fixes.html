@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>suflyor v0.23.0 — проверка только фиксов A2/B3/D1</title>
+<style>
+  :root{--bg:#0f1115;--card:#171a21;--bd:#2a2f3a;--fg:#e7ebf0;--mut:#9aa4b2;--ok:#2ecc71;--no:#e74c3c;--accent:#5b9bff}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif;padding:20px}
+  .wrap{max-width:760px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--mut);margin:0 0 16px}
+  .meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+  .meta input{background:var(--card);border:1px solid var(--bd);color:var(--fg);border-radius:8px;padding:6px 10px}
+  .item{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+  .item h2{font-size:16px;margin:0 0 6px}
+  .crit{color:var(--mut);font-size:13.5px;margin:0 0 10px}
+  .crit b{color:var(--fg)}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .btns{display:flex;gap:6px}
+  .btns button{cursor:pointer;border:1px solid var(--bd);background:#10131a;color:var(--fg);border-radius:8px;padding:6px 12px;font-size:14px}
+  .btns button.ok.sel{background:var(--ok);color:#06270f;border-color:var(--ok);font-weight:600}
+  .btns button.no.sel{background:var(--no);color:#2a0606;border-color:var(--no);font-weight:600}
+  textarea{width:100%;margin-top:8px;background:#10131a;border:1px solid var(--bd);color:var(--fg);border-radius:8px;padding:8px;font:14px/1.45 inherit;resize:vertical;min-height:46px}
+  .bar{display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap}
+  .bar button{cursor:pointer;border:1px solid var(--bd);background:var(--accent);color:#03122e;border-radius:8px;padding:8px 14px;font-size:14px;font-weight:600}
+  .bar button.sec{background:var(--card);color:var(--fg)}
+  .count{color:var(--mut);margin-left:auto}
+  .note{color:var(--mut);font-size:13px;margin-top:14px;border-top:1px solid var(--bd);padding-top:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>suflyor <b>v0.23.0</b> — проверка только фиксов</h1>
+  <p class="sub">Свежая сборка уже запущена. Только 3 бага из твоего отчёта — отметь ок/не ок и при желании впиши комментарий. Архив открывается по <b>F7</b>.</p>
+  <div class="meta">
+    <input id="who" placeholder="Кто проверял">
+    <input id="date" placeholder="Дата">
+  </div>
+
+  <div id="list"></div>
+
+  <div class="bar">
+    <button onclick="copyReport()">📋 Копировать отчёт</button>
+    <button class="sec" onclick="downloadMd()">⬇ Скачать .md</button>
+    <button class="sec" onclick="resetAll()">Сбросить</button>
+    <span class="count" id="count"></span>
+  </div>
+
+  <p class="note">F-few («Память» чернеет с малым числом записей) — это для машины <b>другого</b> тестера, после релиза, тут не нужно. F-gpu (видеокарта в «Копировать отчёт») уже прислан. Большой чеклист на весь архив (archive-retest-v0.23.0.html) для этого раунда не нужен.</p>
+</div>
+
+<script>
+const ITEMS=[
+ ["A2","Авто-переключение строки после генерации",
+  "F7 → у созвона со стенограммой/записью нажми «Сформировать» → дождись сводку. ПРИЁМКА: строка <b>сама</b> стала «Просмотреть», БЕЗ закрытия/открытия архива."],
+ ["B3","«Пересоздать» = свежий пересчёт, не кэш",
+  "У созвона с готовой сводкой → «↻ Пересоздать» → подтверди. ПРИЁМКА: идёт <b>новый прогон</b> (виден прогресс), результат — пересчитанная сводка, а не мгновенный возврат прежней. При сбое старая сводка не пропадает."],
+ ["D1","Пустой созвон → «Недостаточно данных»",
+  "Открой созвон <b>без записи и без текста</b>. ПРИЁМКА: кнопка — «Недостаточно данных» (НЕ активное «Сформировать», которое ничего не строит)."],
+];
+const KEY="suflyor-retest-v0230-fixes";
+let st=JSON.parse(localStorage.getItem(KEY)||"{}");
+function save(){localStorage.setItem(KEY,JSON.stringify(st));renderCount()}
+function setS(id,v){st[id]=st[id]||{};st[id].s=v;save();render()}
+function setC(id,v){st[id]=st[id]||{};st[id].c=v;save()}
+function render(){
+  document.getElementById("who").value=st.__who||"";
+  document.getElementById("date").value=st.__date||"";
+  const L=document.getElementById("list");L.innerHTML="";
+  for(const [id,title,crit] of ITEMS){
+    const s=(st[id]||{}).s||"", c=(st[id]||{}).c||"";
+    const d=document.createElement("div");d.className="item";
+    d.innerHTML=`<h2>${id} — ${title}</h2><p class="crit">${crit}</p>
+      <div class="row"><div class="btns">
+        <button class="ok ${s==='ok'?'sel':''}" onclick="setS('${id}','ok')">✓ ок</button>
+        <button class="no ${s==='no'?'sel':''}" onclick="setS('${id}','no')">✗ не ок</button>
+      </div></div>
+      <textarea placeholder="комментарий (необязательно)" oninput="setC('${id}',this.value)">${c}</textarea>`;
+    L.appendChild(d);
+  }
+  renderCount();
+}
+function renderCount(){
+  const done=ITEMS.filter(([id])=>(st[id]||{}).s).length;
+  document.getElementById("count").textContent=`${done} / ${ITEMS.length} отмечено`;
+}
+function reportText(){
+  let o=`# suflyor v0.23.0 — фиксы A2/B3/D1\n`;
+  o+=`Кто: ${st.__who||"—"} · Дата: ${st.__date||"—"}\n\n`;
+  for(const [id,title] of ITEMS){
+    const s=(st[id]||{}).s, c=(st[id]||{}).c||"";
+    const mark=s==="ok"?"✓ ОК":s==="no"?"✗ НЕ ОК":"— не отмечено";
+    o+=`## ${id} — ${title}\n${mark}${c?` — ${c}`:""}\n\n`;
+  }
+  return o;
+}
+function copyReport(){navigator.clipboard.writeText(reportText()).then(()=>alert("Скопировано"))}
+function downloadMd(){
+  const b=new Blob([reportText()],{type:"text/markdown"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="suflyor-v0.23.0-fixes.md";a.click();
+}
+function resetAll(){if(confirm("Очистить?")){st={};save();render()}}
+document.getElementById("who").addEventListener("input",e=>{st.__who=e.target.value;save()});
+document.getElementById("date").addEventListener("input",e=>{st.__date=e.target.value;save()});
+render();
+</script>
+</body>
+</html>
