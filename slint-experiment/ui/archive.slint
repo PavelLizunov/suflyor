@@ -29,6 +29,7 @@ export struct ArchiveRow {
     name: string,      // v0.22.0 — the raw editable session name ("" if unnamed) — pre-fills the inline rename field
     has-data: bool,    // F4 — has a saved transcript OR recording → "↻ Summary" is actionable
     has-summary: bool, // a conspect sidecar exists → row offers "Просмотреть", else "Сформировать"
+    has-debrief: bool, // a debrief sidecar exists → row offers a "Коучинг" view button
 }
 
 // v0.22.0 — a compact 24px icon action button for archive rows (rename ✎,
@@ -112,6 +113,8 @@ export component ArchiveWindow inherits Window {
     // A row WITH a saved summary opens it READ-ONLY (re-shown as a tile, no AI
     // call) via this; regeneration stays the (confirmed) retranscribe-requested.
     callback view-summary-requested(int);
+    // D — re-show the saved post-meeting debrief (coaching) READ-ONLY as a tile.
+    callback view-debrief-requested(int);
     // v0.22.0 — rename: ✎ opens the field (Rust sets renaming-index + rename-text
     // from the current name); ✓ / Enter confirms; ✗ cancels. Regen re-asks the
     // local model for a fresh title from the saved transcript.
@@ -458,6 +461,29 @@ export component ArchiveWindow inherits Window {
                                         }
                                         redo-ta := TouchArea {
                                             clicked => { root.retranscribe-requested(i); }
+                                        }
+                                    }
+                                    // D — "Коучинг": re-show the saved post-meeting
+                                    // debrief read-only (no AI), when one was persisted.
+                                    if row.has-debrief : Rectangle {
+                                        height: 26px;
+                                        border-radius: Metrics.radius-control;
+                                        border-width: Metrics.border-thin;
+                                        border-color: Theme.border;
+                                        background: debrief-ta.has-hover ? Theme.accent.with-alpha(0.18) : transparent;
+                                        HorizontalLayout {
+                                            padding-left: 8px;
+                                            padding-right: 8px;
+                                            alignment: center;
+                                            Text {
+                                                text: @tr("Coaching");
+                                                font-size: Metrics.font-caption;
+                                                color: Theme.text-secondary;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                        debrief-ta := TouchArea {
+                                            clicked => { root.view-debrief-requested(i); }
                                         }
                                     }
                                 }

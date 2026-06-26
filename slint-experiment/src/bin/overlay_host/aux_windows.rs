@@ -492,9 +492,10 @@ pub(crate) fn open_archive(
             // Re-snapshot conspect ids fresh each (re)build so a row flips to
             // "Просмотреть" the moment its summary lands (A2) — one cheap dir read.
             let conspects = overlay_backend::conspect::session_ids();
+            let debriefs = overlay_backend::conspect::debrief_session_ids();
             let rows: Vec<ArchiveRow> = sessions
                 .iter()
-                .map(|s| session_to_row(s, &recordings, &conspects))
+                .map(|s| session_to_row(s, &recordings, &conspects, &debriefs))
                 .collect();
             win.set_results(ModelRc::new(VecModel::from(rows)));
         }
@@ -520,13 +521,14 @@ pub(crate) fn open_archive(
             // Fresh conspect snapshot per rebuild (A2): after a summary completes we
             // invoke_query_changed, and this re-read flips the row to "Просмотреть".
             let conspects = overlay_backend::conspect::session_ids();
+            let debriefs = overlay_backend::conspect::debrief_session_ids();
             let rows: Vec<ArchiveRow> = if trimmed.is_empty() {
                 store_rc
                     .borrow()
                     .list_sessions()
                     .unwrap_or_default()
                     .iter()
-                    .map(|s| session_to_row(s, &recordings_q, &conspects))
+                    .map(|s| session_to_row(s, &recordings_q, &conspects, &debriefs))
                     .collect()
             } else {
                 let fts = fts_query(trimmed);
@@ -538,7 +540,7 @@ pub(crate) fn open_archive(
                         .search(&fts, 60)
                         .unwrap_or_default()
                         .iter()
-                        .map(|h| hit_to_row(h, &recordings_q, &conspects))
+                        .map(|h| hit_to_row(h, &recordings_q, &conspects, &debriefs))
                         .collect()
                 }
             };
@@ -749,6 +751,7 @@ pub(crate) fn open_archive(
             };
             match outcome {
                 Ok(()) => {
+                    // (debrief sidecar cleanup lives in delete_session_everywhere)
                     // Rebuild the list (the row is gone); also resets edit-state.
                     let q = p.get_query();
                     p.invoke_query_changed(q);
@@ -1028,6 +1031,46 @@ pub(crate) fn open_archive(
         });
     }
 
+    // D — "Коучинг": re-show the saved post-meeting debrief read-only as a tile
+    // (no AI), mirroring view-summary. The button shows only when a debrief was
+    // persisted (ArchiveRow.has_debrief), so load_debrief is normally Some.
+    {
+        let weak = win.as_weak();
+        let events_c = events.clone();
+        let cfg_c = cfg.clone();
+        win.on_view_debrief_requested(move |idx| {
+            let Some(p) = weak.upgrade() else {
+                return;
+            };
+            let results = p.get_results();
+            let Some(row) = archive_row_at(&results, idx) else {
+                return;
+            };
+            let sid = row.id.to_string();
+            if sid.is_empty() {
+                return;
+            }
+            if let Some(text) =
+                overlay_backend::conspect::load_debrief(&sid).filter(|t| !t.trim().is_empty())
+            {
+                let stealth = cfg_c.read().stealth_enabled;
+                let _ = events_c.spawn_tile_full(
+                    overlay_backend::events::TileSpec {
+                        question: format!("🎯 Debrief · {}", row.title),
+                        answer: text,
+                        source: "debrief".into(),
+                        is_translation: false,
+                        highlights: vec![],
+                        summary_session: None,
+                    },
+                    overlay_backend::events::MonitorHint::Auto,
+                    stealth,
+                    overlay_backend::events::TileKind::Debrief,
+                );
+            }
+        });
+    }
+
     {
         let weak = win.as_weak();
         let slot = archive_ref.clone();
@@ -1260,6 +1303,7 @@ fn session_to_row(
     s: &Session,
     recordings: &std::collections::HashSet<String>,
     conspects: &std::collections::HashSet<String>,
+    debriefs: &std::collections::HashSet<String>,
 ) -> ArchiveRow {
     let time = archive_time_label(s.started_at_ms, &s.id);
     let name = overlay_backend::session_names::get(&s.id);
@@ -1303,6 +1347,7 @@ fn session_to_row(
         // a "Сформировать" that then failed), so they now read "Недостаточно данных".
         has_data: recordings.contains(&s.id) || s.transcript_lines > 0,
         has_summary: conspects.contains(&s.id),
+        has_debrief: debriefs.contains(&s.id),
     }
 }
 
@@ -1313,6 +1358,7 @@ fn hit_to_row(
     h: &SearchHit,
     recordings: &std::collections::HashSet<String>,
     conspects: &std::collections::HashSet<String>,
+    debriefs: &std::collections::HashSet<String>,
 ) -> ArchiveRow {
     // Prefer the session NAME (v0.22.0) so a named session reads the same in
     // search results as in the full list; fall back to the МСК time. Keep the
@@ -1345,6 +1391,7 @@ fn hit_to_row(
         // has a summary source.
         has_data: true,
         has_summary: conspects.contains(&h.session_id),
+        has_debrief: debriefs.contains(&h.session_id),
     }
 }
 
@@ -1830,7 +1877,12 @@ mod tests {
 
     #[test]
     fn session_row_uses_plain_counts() {
-        let row = session_to_row(&sample_session(), &no_recordings(), &no_recordings());
+        let row = session_to_row(
+            &sample_session(),
+            &no_recordings(),
+            &no_recordings(),
+            &no_recordings(),
+        );
         // v0.17.2 — the label is МСК wall-clock from started_at_ms, not the UTC id.
         // v0.22.0 — a COMPLETED session has no status prefix (the "done " was
         // dropped so a named/timed title reads clean).
@@ -1848,7 +1900,7 @@ mod tests {
     fn session_row_shows_cost_when_nonzero() {
         let mut s = sample_session();
         s.total_cost_microcents = 2_400_000; // $0.024
-        let row = session_to_row(&s, &no_recordings(), &no_recordings());
+        let row = session_to_row(&s, &no_recordings(), &no_recordings(), &no_recordings());
         assert_eq!(row.meta.as_str(), "$0.024");
     }
 
@@ -1861,7 +1913,7 @@ mod tests {
             body: "a   key value   structure".into(),
             rank: -1.0,
         };
-        let row = hit_to_row(&h, &no_recordings(), &no_recordings());
+        let row = hit_to_row(&h, &no_recordings(), &no_recordings(), &no_recordings());
         // Hits carry only the UTC id stamp → parsed + shifted to МСК (+3h).
         assert!(
             row.title

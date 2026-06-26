@@ -323,6 +323,19 @@ pub fn debrief_session_ids() -> std::collections::HashSet<String> {
         .unwrap_or_default()
 }
 
+/// Delete a session's saved debrief sidecar (best-effort, safe-stem guarded).
+/// Called when a session is deleted from the archive so no orphan debrief lingers.
+pub fn delete_debrief(session_id: &str) -> bool {
+    let Some(dir) = debriefs_dir() else {
+        return false;
+    };
+    let Some(stem) = safe_stem(session_id) else {
+        return false;
+    };
+    let _ = std::fs::remove_file(dir.join(format!("{stem}.txt.tmp")));
+    std::fs::remove_file(dir.join(format!("{stem}.txt"))).is_ok()
+}
+
 /// Delete a session's conspect sidecar (and any stale `.tmp`). Idempotent +
 /// safe-stem guarded; returns true if the main `.json` was removed.
 pub fn delete(session_id: &str) -> bool {

@@ -90,9 +90,10 @@ pub fn delete_session_everywhere(store: &mut Store, session_id: &str) -> Result<
     let sessions_dir = crate::journal::sessions_dir()?;
     let recordings_dir = crate::recorder::recordings_dir()?;
     delete_session_files_in(&sessions_dir, &recordings_dir, session_id)?;
-    // Conspect sidecar: self-guarded + idempotent, carries no data the journal
-    // lacks — best-effort, never blocks the catalog delete.
+    // Conspect + debrief sidecars: self-guarded + idempotent, carry no data the
+    // journal lacks — best-effort, never block the catalog delete.
     crate::conspect::delete(session_id);
+    crate::conspect::delete_debrief(session_id);
     // Catalog row LAST — only reached when every FS artifact above is gone.
     store.delete_session(session_id)?;
     Ok(())
