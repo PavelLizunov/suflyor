@@ -128,6 +128,48 @@ pub(crate) fn redact_urls(s: &str) -> String {
     out
 }
 
+/// Replace the current user's home directory with the `%USERPROFILE%` placeholder
+/// so the copied report never leaks the OS username via a model/cache path
+/// (`C:\Users\alice\suflyor-local-ai\…` → `%USERPROFILE%\suflyor-local-ai\…`).
+/// The report is advertised "safe to paste into a support thread", but the host /
+/// IP redaction never touched LOCAL FILE PATHS — so the STT model dir used to
+/// carry the username verbatim. Reads `USERPROFILE`; delegates to the pure,
+/// case-insensitive `redact_home_in` seam (unit-testable without the live env).
+pub(crate) fn redact_user_home(s: &str) -> String {
+    match std::env::var("USERPROFILE") {
+        Ok(home) => redact_home_in(s, &home),
+        Err(_) => s.to_string(),
+    }
+}
+
+/// Pure core of `redact_user_home`: replace every ASCII-case-INSENSITIVE
+/// occurrence of `home` with `%USERPROFILE%`. Windows paths are case-insensitive
+/// and the STT model dir is a USER-PICKED folder (not derived from `USERPROFILE`),
+/// so its casing can legitimately differ from the env var — a case-sensitive match
+/// would silently miss and leak the username. `to_ascii_lowercase` preserves byte
+/// length AND char boundaries (ASCII A–Z↔a–z is one byte; non-ASCII bytes are
+/// untouched), and a match starts on an ASCII byte (always a boundary), so every
+/// index taken from the lowercased haystack is a valid slice index into the
+/// original `s`. No-op on an implausibly short `home` (len < 4) so a stray root
+/// can't blanket the report.
+fn redact_home_in(s: &str, home: &str) -> String {
+    if home.len() < 4 {
+        return s.to_string();
+    }
+    let hay = s.to_ascii_lowercase();
+    let needle = home.to_ascii_lowercase();
+    let mut out = String::with_capacity(s.len());
+    let mut last = 0;
+    while let Some(rel) = hay[last..].find(&needle) {
+        let start = last + rel;
+        out.push_str(&s[last..start]);
+        out.push_str("%USERPROFILE%");
+        last = start + needle.len();
+    }
+    out.push_str(&s[last..]);
+    out
+}
+
 /// Cached GPU adapter name(s) — computed once, OFF the event loop (see
 /// `prime_gpu_cache`). `build_diag_report` only ever READS this, so the "Copy
 /// report" click can never block on a slow / hung WMI query.
@@ -239,11 +281,12 @@ pub(crate) fn build_diag_report(cfg: &overlay_backend::config::SharedConfig) -> 
         std::env::consts::ARCH,
         GPU_CACHE.get().map(String::as_str).unwrap_or("unknown"),
     );
-    // Mask the host of any base_url FIRST (IPv4 / IPv6 / DNS), keeping
-    // scheme/port/path; then redact_ipv4 as a backstop for any bare IPv4 that
-    // wasn't part of a URL. redact_ipv4 alone matched ONLY dotted-IPv4, so a
-    // DNS / IPv6 bridge host used to leak verbatim into the copied report.
-    redact_ipv4(&redact_urls(&report))
+    // Mask the user-home (→ %USERPROFILE%) so a local model path can't leak the
+    // OS username; then the host of any base_url (IPv4 / IPv6 / DNS) keeping
+    // scheme/port/path; redact_ipv4 is a backstop for any bare IPv4 that wasn't
+    // part of a URL. redact_ipv4 alone matched ONLY dotted-IPv4, so a DNS / IPv6
+    // bridge host used to leak verbatim into the copied report.
+    redact_ipv4(&redact_urls(&redact_user_home(&report)))
 }
 
 /// P0 — the Diagnostics tab owns its two button callbacks. Settings only WIRES
@@ -459,6 +502,40 @@ mod tests {
         assert_eq!(
             redact_ipv4("suflyor diagnostics (v1.16.1)"),
             "suflyor diagnostics (v1.16.1)"
+        );
+    }
+
+    // The copied report is "safe to paste into a support thread", but the host/IP
+    // redaction never masked LOCAL FILE PATHS — so the STT model dir (under the
+    // user home) leaked the OS username verbatim. Lock that the user-home →
+    // %USERPROFILE% masking holds and is path-safe.
+    #[test]
+    fn redact_user_home_masks_profile_dir_keeps_rest() {
+        // Canonical: home is a prefix of the STT model dir.
+        assert_eq!(
+            redact_home_in(
+                "STT: ready — gigaam · C:\\Users\\alice\\suflyor-local-ai\\gigaam-v3",
+                "C:\\Users\\alice"
+            ),
+            "STT: ready — gigaam · %USERPROFILE%\\suflyor-local-ai\\gigaam-v3"
+        );
+        // Case-INSENSITIVE: a user-picked dir can differ in casing from USERPROFILE
+        // (drive letter or any segment) — must still be masked, not leaked.
+        assert_eq!(
+            redact_home_in("models at c:\\users\\Alice\\m", "C:\\Users\\alice"),
+            "models at %USERPROFILE%\\m"
+        );
+        // EVERY occurrence is masked (a future line could embed the home twice).
+        assert_eq!(
+            redact_home_in("C:\\Users\\bob\\a and C:\\Users\\bob\\b", "C:\\Users\\bob"),
+            "%USERPROFILE%\\a and %USERPROFILE%\\b"
+        );
+        // A bare / implausibly short home must NOT blanket the whole report.
+        assert_eq!(redact_home_in("C:\\x is fine", "C:\\"), "C:\\x is fine");
+        // No home occurrence → untouched (model id, version, device name).
+        assert_eq!(
+            redact_home_in("GPU: NVIDIA GeForce RTX 5060 Ti", "C:\\Users\\bob"),
+            "GPU: NVIDIA GeForce RTX 5060 Ti"
         );
     }
 
