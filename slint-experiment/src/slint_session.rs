@@ -1030,7 +1030,7 @@ async fn maybe_spawn_auto_tile(
 ///
 /// Phase E5 wiring: caller is expected to invoke `maybe_run_debrief`
 /// with the returned snapshot — that helper checks the debrief gate
-/// (cfg opt-in + ≥30s session + ≥5 mic lines + non-empty AI bearer)
+/// (cfg opt-in + ≥30s session + ≥5 mic lines + AI configured local-or-cloud)
 /// and fires `overlay_backend::runtime::run_post_meeting_debrief`.
 pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<TranscriptLine> {
     let mut s = lock(&rt);
@@ -1164,8 +1164,13 @@ pub fn debrief_gate(
     if !c.post_meeting_debrief_enabled {
         return Err("post-meeting debrief disabled in Settings → 🎯 Coaching");
     }
-    if c.ai_bearer.trim().is_empty() {
-        return Err("AI bearer empty — no bridge configured");
+    // Resolve the ACTIVE provider (local OR cloud) — the SAME `configured` check
+    // that powers "AI: ready" in Diagnostics. The old gate tested the raw cloud
+    // `ai_bearer`, which is ALWAYS empty for a local-provider user, so their
+    // debrief was silently skipped even though `run_post_meeting_debrief` itself
+    // already resolves the local endpoint (a local server needs no bearer).
+    if !c.readiness().ai.configured {
+        return Err("AI not configured — enable a provider in Settings → AI");
     }
     if session_duration_ms < DEBRIEF_MIN_SESSION_MS {
         return Err("session too short (<30s)");

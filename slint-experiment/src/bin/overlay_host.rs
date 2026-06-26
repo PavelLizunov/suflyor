@@ -1588,7 +1588,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     );
                     events_c.emit("session:stopped", serde_json::Value::Null);
                     // Phase E5 — debrief (gated: opt-in + ≥30s +
-                    // ≥5 mic lines + non-empty AI bearer).
+                    // ≥5 mic lines + AI configured local-or-cloud).
                     slint_session::maybe_run_debrief(
                         events_c,
                         cfg_c,
