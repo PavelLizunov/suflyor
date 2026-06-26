@@ -1511,17 +1511,23 @@ fn main() -> Result<(), slint::PlatformError> {
             // pipeline's own flag is reset here too (start_session also resets
             // it, but a Stop-while-paused must clear it now).
             slint_replay::runtime_state::lock(&rt_for_timer).paused = false;
-            let new_active = {
+            // Capture the elapsed session seconds BEFORE the stop-reset below.
+            // The debrief snapshot further down used to RE-READ st.session_secs
+            // AFTER this handler had already zeroed it on Stop, so every session
+            // measured 0 ms → the debrief gate always saw "<30s" → the
+            // post-meeting debrief NEVER fired (the real "разбор не появляется").
+            let (new_active, session_secs_at_stop) = {
                 let mut st = match s.lock() {
                     Ok(g) => g,
                     Err(p) => p.into_inner(),
                 };
                 st.timer_active = !st.timer_active;
                 st.paused = false;
+                let elapsed_secs = st.session_secs;
                 if !st.timer_active {
                     st.session_secs = 0;
                 }
-                st.timer_active
+                (st.timer_active, elapsed_secs)
             };
             if let Some(o) = weak.upgrade() {
                 o.set_timer_active(new_active);
@@ -1573,13 +1579,10 @@ fn main() -> Result<(), slint::PlatformError> {
                 let events_c = events_for_timer.clone();
                 let cfg_c = cfg_for_timer.clone();
                 let rt_handle_c = rt_handle_for_timer.clone();
-                let session_secs_snapshot = {
-                    let st = match s.lock() {
-                        Ok(g) => g,
-                        Err(p) => p.into_inner(),
-                    };
-                    st.session_secs
-                };
+                // Value captured BEFORE the stop-reset above (the live counter is
+                // already 0 here). This gates the debrief's ≥30s check, so a real
+                // session no longer reads as "too short".
+                let session_secs_snapshot = session_secs_at_stop;
                 rt_handle_for_timer.spawn(async move {
                     let snapshot = slint_session::stop_session(rt_c, &cfg_c);
                     eprintln!(
