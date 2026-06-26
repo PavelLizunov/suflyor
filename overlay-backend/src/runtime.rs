@@ -56,6 +56,7 @@ pub async fn run_post_meeting_debrief(
     events: Arc<dyn RuntimeEvents>,
     cfg: SharedConfig,
     transcript: Vec<TranscriptLine>,
+    session_id: String,
 ) {
     let (base_url, bearer, model, response_language, preferred_monitor, stealth) = {
         let c = cfg.read();
@@ -130,6 +131,12 @@ pub async fn run_post_meeting_debrief(
         }
     };
     log::info!("post-meeting debrief landed: {} chars", answer.len());
+    // D — persist the debrief so it's re-viewable in the archive ("Коучинг"
+    // button), next to the summary. Empty session_id = ephemeral (test sentinel)
+    // → skip. Best-effort: the live tile shows regardless.
+    if !session_id.trim().is_empty() {
+        crate::conspect::save_debrief(&session_id, &answer);
+    }
 
     let tile_title = if is_ru {
         "🎯 Debrief: что улучшить".to_string()

@@ -32,7 +32,7 @@ async fn run_post_meeting_debrief_with_noop_events_does_not_panic() {
     // Fire-and-forget — with empty ai_bearer the AI call fails
     // and the fn returns without spawning a tile. Either way
     // no panic, no resource leak.
-    run_post_meeting_debrief(sink, cfg, transcript).await;
+    run_post_meeting_debrief(sink, cfg, transcript, String::new()).await;
 }
 
 // ── Meeting-summary battery (v0.12.0 — S1) ──

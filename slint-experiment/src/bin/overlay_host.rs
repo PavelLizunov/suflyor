@@ -1583,6 +1583,14 @@ fn main() -> Result<(), slint::PlatformError> {
                 // already 0 here). This gates the debrief's ≥30s check, so a real
                 // session no longer reads as "too short".
                 let session_secs_snapshot = session_secs_at_stop;
+                // D — session id (journal stem) for persisting the debrief. It
+                // survives Stop, but snapshot it now since `rt_c` is moved into
+                // stop_session below. Empty (no session) → the debrief save is
+                // skipped (the live tile still shows).
+                let session_id_snapshot = slint_replay::runtime_state::lock(&rt_for_timer)
+                    .current_session_id
+                    .clone()
+                    .unwrap_or_default();
                 rt_handle_for_timer.spawn(async move {
                     let snapshot = slint_session::stop_session(rt_c, &cfg_c);
                     eprintln!(
@@ -1596,6 +1604,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         events_c,
                         cfg_c,
                         snapshot,
+                        session_id_snapshot,
                         session_secs_snapshot * 1000,
                         &rt_handle_c,
                     );

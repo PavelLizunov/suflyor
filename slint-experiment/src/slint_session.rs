@@ -1209,6 +1209,7 @@ pub fn maybe_run_debrief(
     events: Arc<dyn RuntimeEvents>,
     cfg: SharedConfig,
     transcript: Vec<TranscriptLine>,
+    session_id: String,
     session_duration_ms: u64,
     rt_handle: &tokio::runtime::Handle,
 ) {
@@ -1220,7 +1221,10 @@ pub fn maybe_run_debrief(
                 session_duration_ms / 1000
             ));
             rt_handle.spawn(async move {
-                overlay_backend::runtime::run_post_meeting_debrief(events, cfg, transcript).await;
+                overlay_backend::runtime::run_post_meeting_debrief(
+                    events, cfg, transcript, session_id,
+                )
+                .await;
             });
         }
         Err(reason) => {

@@ -266,6 +266,63 @@ pub fn session_ids() -> std::collections::HashSet<String> {
         .unwrap_or_default()
 }
 
+// ===== Post-meeting debrief sidecar (D) — coaching text, re-viewable in the
+// archive next to the summary. Same dir / safe_stem / atomic pattern as the
+// conspect above, but ONE plain-text string per session (no map-reduce). =====
+
+/// The debriefs directory under the resolved data root, if resolvable.
+fn debriefs_dir() -> Option<PathBuf> {
+    crate::paths::data_root().map(|root| root.join("debriefs"))
+}
+
+/// Save a session's post-meeting debrief (coaching) text. Best-effort, atomic
+/// tmp+rename. Returns false on any failure (the live tile still showed it).
+pub fn save_debrief(session_id: &str, text: &str) -> bool {
+    debriefs_dir().is_some_and(|dir| save_debrief_in(&dir, session_id, text).is_ok())
+}
+
+fn save_debrief_in(dir: &Path, session_id: &str, text: &str) -> anyhow::Result<()> {
+    let stem = safe_stem(session_id).ok_or_else(|| anyhow::anyhow!("unsafe debrief session id"))?;
+    std::fs::create_dir_all(dir)?;
+    let path = dir.join(format!("{stem}.txt"));
+    let tmp = dir.join(format!("{stem}.txt.tmp"));
+    std::fs::write(&tmp, text.as_bytes())?;
+    std::fs::rename(&tmp, &path)?;
+    Ok(())
+}
+
+/// Load a session's saved debrief text, or `None` if absent / unreadable.
+#[must_use]
+pub fn load_debrief(session_id: &str) -> Option<String> {
+    debriefs_dir().and_then(|dir| load_debrief_in(&dir, session_id))
+}
+
+fn load_debrief_in(dir: &Path, session_id: &str) -> Option<String> {
+    let stem = safe_stem(session_id)?;
+    std::fs::read_to_string(dir.join(format!("{stem}.txt"))).ok()
+}
+
+/// Session ids that have a saved debrief — a CHEAP dir listing (`*.txt` stems),
+/// so the archive gates the per-row "Коучинг" button without a stat per row.
+#[must_use]
+pub fn debrief_session_ids() -> std::collections::HashSet<String> {
+    debriefs_dir()
+        .and_then(|dir| std::fs::read_dir(dir).ok())
+        .map(|rd| {
+            rd.flatten()
+                .filter_map(|e| {
+                    let p = e.path();
+                    if p.extension().is_some_and(|x| x == "txt") {
+                        p.file_stem().map(|s| s.to_string_lossy().into_owned())
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Delete a session's conspect sidecar (and any stale `.tmp`). Idempotent +
 /// safe-stem guarded; returns true if the main `.json` was removed.
 pub fn delete(session_id: &str) -> bool {
@@ -396,6 +453,20 @@ mod tests {
     fn load_missing_is_none() {
         let tmp = tempfile::tempdir().unwrap();
         assert!(load_in(tmp.path(), "nope").is_none());
+    }
+
+    #[test]
+    fn debrief_save_load_round_trip() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        assert!(load_debrief_in(dir, "s1").is_none()); // absent → None
+        save_debrief_in(dir, "s1", "pace: ok\nfillers: few 'эээ'").unwrap();
+        assert_eq!(
+            load_debrief_in(dir, "s1").as_deref(),
+            Some("pace: ok\nfillers: few 'эээ'")
+        );
+        // path-escape rejected by safe_stem
+        assert!(save_debrief_in(dir, "../escape", "x").is_err());
     }
 
     #[test]
