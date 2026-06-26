@@ -696,8 +696,12 @@ pub(crate) fn wire_local_ai(
                             "Обновление пропущено — оставлен текущий движок.".to_string()
                         }
                         Err(e) => {
+                            // Surface the REAL stage/cause — not the misleading
+                            // "failed to CHECK" (the failure is usually the swap).
+                            // Full chain (incl. os errors) → log; the top context
+                            // names the stage. No base_url/bearer in engine errors.
                             eprintln!("[overlay-host] engine update failed: {e:#}");
-                            "Не удалось проверить обновление движка.".to_string()
+                            format!("Не удалось обновить движок: {e}")
                         }
                     };
                     w.set_engine_update_status(SharedString::from(msg));

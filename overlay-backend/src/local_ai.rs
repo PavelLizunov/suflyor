@@ -1159,12 +1159,32 @@ pub fn update_llama_engine(
     // Swap. Free the live :8080 first so its binaries aren't file-locked.
     on(Progress::Step("Installing the new engine".into()));
     let _ = stop_listener_on_port(LLAMA_PORT, root);
-    std::thread::sleep(Duration::from_millis(500));
-    let backup_name = installed
-        .map(|b| format!("llama.cpp.backup-b{b}"))
-        .unwrap_or_else(|| "llama.cpp.backup-prev".into());
-    swap_engine_binaries(&staging, &llama_dir, &root.join(backup_name))
-        .context("swap engine binaries")?;
+    let backup_dir = root.join(
+        installed
+            .map(|b| format!("llama.cpp.backup-b{b}"))
+            .unwrap_or_else(|| "llama.cpp.backup-prev".into()),
+    );
+    // Windows frees a just-killed process's file handles ASYNCHRONOUSLY, so
+    // llama-server.exe can stay locked (os error 32 — sharing violation) for a
+    // beat after the stop. swap_engine_binaries copies the .exe FIRST and bails
+    // before touching any DLL when it's locked, so a failed attempt leaves the
+    // live engine intact and is safe to retry. A fixed 500 ms was too short on
+    // some machines → the swap failed on the FIRST "Update engine" click and
+    // worked only on the 2nd (by then the server was already down). Retry with
+    // backoff until the handle frees.
+    let mut result = swap_engine_binaries(&staging, &llama_dir, &backup_dir);
+    for attempt in 1..=7u32 {
+        if result.is_ok() {
+            break;
+        }
+        bail_if_cancelled(cancel)?;
+        on(Progress::Step(format!(
+            "Waiting for the old engine to close… ({attempt}/7)"
+        )));
+        std::thread::sleep(Duration::from_millis(750));
+        result = swap_engine_binaries(&staging, &llama_dir, &backup_dir);
+    }
+    result.context("swap engine binaries (engine still locked after retries)")?;
     let _ = std::fs::remove_dir_all(&staging);
     write_build_stamp(&llama_dir, &rel.tag_name);
     // fs-audit #1 — verify-before-swap means only the immediately-previous
