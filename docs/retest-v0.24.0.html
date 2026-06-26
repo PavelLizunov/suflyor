@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>suflyor v0.24.0 — проверка фиксов по логам</title>
+<style>
+  :root{--bg:#0f1115;--card:#171a21;--bd:#2a2f3a;--fg:#e7ebf0;--mut:#9aa4b2;--ok:#2ecc71;--no:#e74c3c;--accent:#5b9bff}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif;padding:20px}
+  .wrap{max-width:820px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--mut);margin:0 0 16px}
+  .meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+  .meta input{background:var(--card);border:1px solid var(--bd);color:var(--fg);border-radius:8px;padding:6px 10px}
+  .item{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+  .item h2{font-size:16px;margin:0 0 6px}
+  .crit{color:var(--mut);font-size:13.5px;margin:0 0 10px}
+  .crit b{color:var(--fg)}
+  .btns{display:flex;gap:6px}
+  .btns button{cursor:pointer;border:1px solid var(--bd);background:#10131a;color:var(--fg);border-radius:8px;padding:6px 12px;font-size:14px}
+  .btns button.ok.sel{background:var(--ok);color:#06270f;border-color:var(--ok);font-weight:600}
+  .btns button.no.sel{background:var(--no);color:#2a0606;border-color:var(--no);font-weight:600}
+  textarea{width:100%;margin-top:8px;background:#10131a;border:1px solid var(--bd);color:var(--fg);border-radius:8px;padding:8px;font:14px/1.45 inherit;resize:vertical;min-height:42px}
+  .bar{display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap}
+  .bar button{cursor:pointer;border:1px solid var(--bd);background:var(--accent);color:#03122e;border-radius:8px;padding:8px 14px;font-size:14px;font-weight:600}
+  .bar button.sec{background:var(--card);color:var(--fg)}
+  .count{color:var(--mut);margin-left:auto}
+  .note{color:var(--mut);font-size:13px;margin-top:14px;border-top:1px solid var(--bd);padding-top:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>suflyor <b>v0.24.0</b> — проверка фиксов по твоим логам</h1>
+  <p class="sub">Установи новую сборку. Включи коучинг: Настройки → Коучинг → «Включить разбор после встречи». Отмечай ок/не ок + при желании коммент.</p>
+  <div class="meta">
+    <input id="who" placeholder="Кто проверял">
+    <input id="date" placeholder="Дата">
+  </div>
+  <div id="list"></div>
+  <div class="bar">
+    <button onclick="copyReport()">📋 Копировать отчёт</button>
+    <button class="sec" onclick="downloadMd()">⬇ Скачать .md</button>
+    <button class="sec" onclick="resetAll()">Сбросить</button>
+    <span class="count" id="count"></span>
+  </div>
+  <p class="note">Главный фикс — <b>A</b> (разбор вообще не запускался: длительность всегда читалась как 0 → «слишком коротко»). E проверяй, только если реально есть обновление движка.</p>
+</div>
+<script>
+const ITEMS=[
+ ["A","Коучинг-разбор ПОЯВЛЯЕТСЯ после встречи",
+  "Коучинг включён. Проведи созвон <b>≥30 секунд</b> и говори сам (≥5 своих реплик), затем Стоп. ПРИЁМКА: появляется тайл «🎯 Debrief» с разбором (темп, слова-паразиты, структура). Раньше не появлялся НИКОГДА."],
+ ["C","Видимый статус вместо тишины",
+  "(1) ИИ настроен, но созвон совсем короткий/без речи → тайла нет (норм). (2) Коучинг включён, но ИИ не настроен → тайл-подсказка «ИИ не настроен». (3) Содержательный созвон, но ты почти не говорил (<5 реплик) → тайл «Недостаточно вашей речи». ПРИЁМКА: при проблеме — понятный тайл, не молчок."],
+ ["D","Разбор доступен в архиве",
+  "После успешного разбора открой Архив (F7) → у этого созвона есть кнопка <b>«Коучинг»</b> → клик → разбор открывается тайлом (read-only, без ИИ). Удали созвон (🗑) → разбор тоже исчезает. ПРИЁМКА: разбор сохраняется и виден в архиве рядом со сводкой."],
+ ["E","Движок обновляется с ПЕРВОГО клика",
+  "ТОЛЬКО если реально есть обновление движка. Настройки → «Обновить движок» → ПРИЁМКА: проходит с первого клика (раньше падало «Не удалось проверить…», помогал лишь 2-й клик), виден прогресс; при реальной ошибке — понятная причина в статусе."],
+ ["F","Кнопка «Собрать логи» + лог без стенограммы",
+  "Настройки → Диагностика → <b>«Собрать логи»</b> → откроется Проводник с выделенным файлом suflyor-log-for-support.txt. Открой его. ПРИЁМКА: НЕТ текста встречи (только счётчики типа «STT got text: N chars»), путь пользователя скрыт как %USERPROFILE%."],
+];
+const KEY="suflyor-retest-v0240"; // gitleaks:allow — localStorage key slug, not a secret
+let st=JSON.parse(localStorage.getItem(KEY)||"{}");
+function save(){localStorage.setItem(KEY,JSON.stringify(st));renderCount()}
+function setS(id,v){st[id]=st[id]||{};st[id].s=v;save();render()}
+function setC(id,v){st[id]=st[id]||{};st[id].c=v;save()}
+function render(){
+  document.getElementById("who").value=st.__who||"";
+  document.getElementById("date").value=st.__date||"";
+  const L=document.getElementById("list");L.innerHTML="";
+  for(const [id,title,crit] of ITEMS){
+    const s=(st[id]||{}).s||"", c=(st[id]||{}).c||"";
+    const d=document.createElement("div");d.className="item";
+    d.innerHTML=`<h2>${id} — ${title}</h2><p class="crit">${crit}</p>
+      <div class="btns">
+        <button class="ok ${s==='ok'?'sel':''}" onclick="setS('${id}','ok')">✓ ок</button>
+        <button class="no ${s==='no'?'sel':''}" onclick="setS('${id}','no')">✗ не ок</button>
+      </div>
+      <textarea placeholder="комментарий" oninput="setC('${id}',this.value)">${c}</textarea>`;
+    L.appendChild(d);
+  }
+  renderCount();
+}
+function renderCount(){
+  const done=ITEMS.filter(([id])=>(st[id]||{}).s).length;
+  document.getElementById("count").textContent=`${done} / ${ITEMS.length} отмечено`;
+}
+function reportText(){
+  let o=`# suflyor v0.24.0 — проверка фиксов\n`;
+  o+=`Кто: ${st.__who||"—"} · Дата: ${st.__date||"—"}\n\n`;
+  for(const [id,title] of ITEMS){
+    const s=(st[id]||{}).s, c=(st[id]||{}).c||"";
+    const mark=s==="ok"?"✓ ОК":s==="no"?"✗ НЕ ОК":"— не отмечено";
+    o+=`## ${id} — ${title}\n${mark}${c?` — ${c}`:""}\n\n`;
+  }
+  return o;
+}
+function copyReport(){navigator.clipboard.writeText(reportText()).then(()=>alert("Скопировано"))}
+function downloadMd(){
+  const b=new Blob([reportText()],{type:"text/markdown"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="suflyor-v0.24.0-retest.md";a.click();
+}
+function resetAll(){if(confirm("Очистить?")){st={};save();render()}}
+document.getElementById("who").addEventListener("input",e=>{st.__who=e.target.value;save()});
+document.getElementById("date").addEventListener("input",e=>{st.__date=e.target.value;save()});
+render();
+</script>
+</body>
+</html>
