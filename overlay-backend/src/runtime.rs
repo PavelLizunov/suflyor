@@ -118,6 +118,14 @@ pub async fn run_post_meeting_debrief(
         Ok(text) => text,
         Err(e) => {
             log::warn!("post-meeting debrief AI call failed: {e:#}");
+            // C — don't vanish silently: a GENERIC error tile (no base_url /
+            // error chain — it can land in a screenshot).
+            let body = if is_ru {
+                "Не удалось сформировать разбор (ошибка ИИ). Подробности — в логе («Собрать логи» в Диагностике).".to_string()
+            } else {
+                "Couldn't generate the debrief (AI error). Details in the log (Diagnostics → Collect logs).".to_string()
+            };
+            spawn_debrief_notice(events.as_ref(), &cfg, body);
             return;
         }
     };
@@ -153,6 +161,35 @@ pub async fn run_post_meeting_debrief(
         TileKind::Debrief,
     ) {
         log::warn!("post-meeting debrief tile spawn failed: {e}");
+    }
+}
+
+/// C — spawn a Debrief STATUS tile (AI-error / "not enough data" / "AI not
+/// configured" notice) so the post-meeting debrief never fails SILENTLY. `body`
+/// must be GENERIC (no base_url / error chain — it can land in a screenshot).
+pub fn spawn_debrief_notice(events: &dyn RuntimeEvents, cfg: &SharedConfig, body: String) {
+    let (preferred_monitor, stealth) = {
+        let c = cfg.read();
+        (c.tile_monitor_name.clone(), c.stealth_enabled)
+    };
+    let monitor_hint = match preferred_monitor.as_deref() {
+        Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
+        _ => MonitorHint::Auto,
+    };
+    if let Err(e) = events.spawn_tile_full(
+        TileSpec {
+            question: "🎯 Debrief".to_string(),
+            answer: body,
+            source: "debrief".into(),
+            is_translation: false,
+            highlights: vec![],
+            summary_session: None,
+        },
+        monitor_hint,
+        stealth,
+        TileKind::Debrief,
+    ) {
+        log::warn!("debrief notice tile spawn failed: {e}");
     }
 }
 

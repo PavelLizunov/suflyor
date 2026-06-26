@@ -1160,6 +1160,13 @@ const DEBRIEF_MIN_SESSION_MS: u64 = 30_000;
 /// runs (user must have actually spoken).
 const DEBRIEF_MIN_MIC_LINES: usize = 5;
 
+/// Gate-skip reasons that warrant a USER-VISIBLE notice — shared so `debrief_gate`
+/// (producer) and `maybe_run_debrief` (the notice mapping) cannot drift apart if
+/// the wording changes. The other reasons (disabled / too-short / no-speech) stay
+/// silent and need no constant.
+const SKIP_AI_NOT_CONFIGURED: &str = "AI not configured — enable a provider in Settings → AI";
+const SKIP_NOT_ENOUGH_MIC: &str = "not enough mic lines for meaningful debrief";
+
 /// Phase E5 — gate the debrief call. `Ok(())` means the debrief
 /// should fire; `Err(reason)` short-circuits with a log line.
 /// Mirrors src-tauri's `should_run_debrief` invariants.
@@ -1178,7 +1185,7 @@ pub fn debrief_gate(
     // debrief was silently skipped even though `run_post_meeting_debrief` itself
     // already resolves the local endpoint (a local server needs no bearer).
     if !c.readiness().ai.configured {
-        return Err("AI not configured — enable a provider in Settings → AI");
+        return Err(SKIP_AI_NOT_CONFIGURED);
     }
     if session_duration_ms < DEBRIEF_MIN_SESSION_MS {
         return Err("session too short (<30s)");
@@ -1188,7 +1195,7 @@ pub fn debrief_gate(
         .filter(|l| matches!(l.source, AudioSource::Mic))
         .count();
     if mic_lines < DEBRIEF_MIN_MIC_LINES {
-        return Err("not enough mic lines for meaningful debrief");
+        return Err(SKIP_NOT_ENOUGH_MIC);
     }
     Ok(())
 }
@@ -1218,6 +1225,33 @@ pub fn maybe_run_debrief(
         }
         Err(reason) => {
             log_info(&format!("post-meeting debrief skipped: {reason}"));
+            // C — surface a NOTICE for the cases the user would expect feedback
+            // on; stay silent for "disabled" and trivially-short / no-speech
+            // sessions (don't nag on quick test runs).
+            let is_ru = cfg.read().response_language == "ru";
+            let mic_lines = transcript
+                .iter()
+                .filter(|l| matches!(l.source, AudioSource::Mic))
+                .count();
+            let notice: Option<String> = if reason == SKIP_AI_NOT_CONFIGURED {
+                Some(if is_ru {
+                    "Коучинг включён, но ИИ не настроен — откройте Настройки → AI.".to_string()
+                } else {
+                    "Coaching is on, but no AI provider is configured — open Settings → AI."
+                        .to_string()
+                })
+            } else if reason == SKIP_NOT_ENOUGH_MIC && mic_lines >= 1 {
+                Some(if is_ru {
+                    "Недостаточно вашей речи в этой сессии для разбора.".to_string()
+                } else {
+                    "Not enough of your speech in this session to build a debrief.".to_string()
+                })
+            } else {
+                None
+            };
+            if let Some(body) = notice {
+                overlay_backend::runtime::spawn_debrief_notice(events.as_ref(), &cfg, body);
+            }
         }
     }
 }
