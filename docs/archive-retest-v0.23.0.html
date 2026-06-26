@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>suflyor v0.23.0 — проверка: просмотр сводки + диагностика «Памяти»</title>
+<style>
+  :root {
+    --bg:#f5f7fa; --card:#fff; --ink:#1a1f29; --muted:#6b7480; --border:#e2e6ec;
+    --accent:#2563eb; --accent-soft:#eaf1ff;
+    --ok:#15924b; --ok-bg:#e6f6ec; --bug:#d12f3f; --bug-bg:#fdeaec;
+    --warn:#b8860b; --warn-bg:#fbf3df; --skip:#8a93a0; --skip-bg:#eef1f4;
+    --shadow:0 1px 3px rgba(16,24,40,.06),0 1px 2px rgba(16,24,40,.04);
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#14171c; --card:#1c2027; --ink:#e6e9ee; --muted:#9aa3b0; --border:#2b313a;
+    --accent:#5b8cff; --accent-soft:#1e2940;
+    --ok:#4ade80; --ok-bg:#143524; --bug:#f87a86; --bug-bg:#3a1b20;
+    --warn:#e6c15a; --warn-bg:#382f14; --skip:#8a93a0; --skip-bg:#262b33; --shadow:none;}}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.55 -apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:84px;}
+  .wrap{max-width:880px;margin:0 auto;padding:0 18px;}
+  header{position:sticky;top:0;z-index:10;background:var(--bg);
+    border-bottom:1px solid var(--border);padding:14px 0 12px;backdrop-filter:blur(6px);}
+  h1{font-size:20px;margin:0 0 4px;} .sub{color:var(--muted);font-size:13px;margin:0 0 10px;}
+  .meta{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+  .meta label{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:3px;}
+  .meta input{font:inherit;padding:5px 8px;border:1px solid var(--border);border-radius:7px;
+    background:var(--card);color:var(--ink);min-width:150px;}
+  .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .prog{font-size:13px;color:var(--muted);margin-right:auto;}
+  button{font:inherit;font-weight:600;cursor:pointer;border:1px solid var(--border);
+    background:var(--card);color:var(--ink);padding:8px 14px;border-radius:8px;}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  button:active{transform:translateY(1px);}
+  details.guide{background:var(--card);border:1px solid var(--border);border-radius:12px;
+    box-shadow:var(--shadow);margin:18px 0;padding:0 16px;}
+  details.guide>summary{font-size:16px;font-weight:700;cursor:pointer;padding:14px 0;list-style:none;}
+  details.guide>summary::before{content:"▸ ";color:var(--accent);}
+  details.guide[open]>summary::before{content:"▾ ";}
+  .guide-body{padding:0 0 16px;}
+  .guide-body h3{font-size:14px;margin:16px 0 6px;}
+  .guide-body ol,.guide-body ul{margin:6px 0;padding-left:22px;} .guide-body li{margin:3px 0;}
+  .guide-body p{margin:7px 0;}
+  kbd{background:var(--skip-bg);border:1px solid var(--border);border-radius:5px;padding:1px 6px;
+    font:600 12px ui-monospace,Consolas,monospace;}
+  .note{background:var(--warn-bg);border:1px solid var(--warn);border-radius:9px;padding:9px 12px;
+    color:var(--ink);font-size:13px;margin:10px 0;}
+  .note b{color:var(--warn);}
+  .mocks{display:flex;gap:14px;flex-wrap:wrap;margin:12px 0;}
+  .mock{flex:1;min-width:280px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg);}
+  .mock .tt{background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:12px;padding:6px 10px;}
+  .mock .body{padding:8px 10px;font-size:12.5px;}
+  .row{display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px dashed var(--border);}
+  .row:last-child{border-bottom:none;}
+  .row .when{color:var(--muted);white-space:nowrap;font-size:11px;}
+  .row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pill{border:1px solid var(--accent);color:var(--accent);background:var(--accent-soft);
+    border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;white-space:nowrap;}
+  .ico{border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:3px 6px;font-size:11px;}
+  .dis{color:var(--muted);font-size:11px;opacity:.7;}
+  .callout{color:var(--accent);font-weight:600;font-size:11.5px;margin:4px 0 0;}
+  section{margin:20px 0;} section>h2{font-size:16px;margin:0 0 10px;}
+  .item{background:var(--card);border:1px solid var(--border);border-radius:10px;
+    box-shadow:var(--shadow);padding:12px 14px;margin-bottom:10px;}
+  .item.touched{border-left:3px solid var(--accent);}
+  .item .top{display:flex;gap:8px;align-items:baseline;}
+  .id{font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .desc{flex:1;} .hint{color:var(--muted);font-size:12.5px;margin:3px 0 0 30px;}
+  .opts{display:flex;gap:6px;flex-wrap:wrap;margin:9px 0 8px;}
+  .opt{font-size:13px;font-weight:600;padding:5px 11px;border-radius:999px;border:1px solid var(--border);
+    background:var(--card);color:var(--muted);cursor:pointer;user-select:none;}
+  .opt[data-on="ok"].active{background:var(--ok-bg);color:var(--ok);border-color:var(--ok);}
+  .opt[data-on="bug"].active{background:var(--bug-bg);color:var(--bug);border-color:var(--bug);}
+  .opt[data-on="q"].active{background:var(--warn-bg);color:var(--warn);border-color:var(--warn);}
+  .opt[data-on="skip"].active{background:var(--skip-bg);color:var(--skip);border-color:var(--skip);}
+  .cmt{width:100%;font:inherit;padding:7px 9px;border:1px solid var(--border);border-radius:8px;
+    background:var(--bg);color:var(--ink);resize:vertical;min-height:34px;}
+  footer{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--border);padding:10px 0;}
+  footer .wrap{display:flex;gap:10px;align-items:center;}
+  dialog{border:1px solid var(--border);border-radius:12px;padding:0;max-width:760px;width:92%;
+    background:var(--card);color:var(--ink);}
+  dialog .pad{padding:16px;}
+  dialog textarea{width:100%;height:320px;font:13px/1.4 ui-monospace,Consolas,monospace;
+    border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--ink);padding:10px;}
+  .toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:var(--ok);color:#fff;
+    padding:8px 16px;border-radius:8px;font-weight:600;opacity:0;transition:opacity .2s;pointer-events:none;}
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <h1>Проверка: просмотр сводки + диагностика «Памяти» · suflyor <b>v0.23.0</b></h1>
+  <p class="sub">Установи новую сборку v0.23.0. Прочитай инструкцию ↓, потом отмечай пункты.</p>
+  <div class="meta">
+    <label>Кто проверял<input id="m-who" placeholder="имя"></label>
+    <label>Дата<input id="m-date" placeholder="дд.мм.2026"></label>
+    <label>Версия из «О программе»<input id="m-ver" placeholder="0.23.0"></label>
+    <label>Тема<input id="m-theme" placeholder="светлая / тёмная"></label>
+  </div>
+  <div class="bar">
+    <span class="prog" id="prog">0 / 0 заполнено</span>
+    <button onclick="resetAll()">Очистить</button>
+    <button class="primary" onclick="buildReport()">Собрать отчёт</button>
+  </div>
+</div></header>
+
+<main class="wrap">
+
+<details class="guide" open>
+  <summary>📖 Инструкция — что нового и как проверять</summary>
+  <div class="guide-body">
+    <p><b>Что изменилось:</b> раньше у созвона со сводкой клик по кнопке сводки <b>сразу</b>
+    предлагал «Пересоздать» (тратил платный AI-запрос и мог затереть хорошую сводку).
+    Теперь у такого созвона основное действие — <b>«Просмотреть»</b>: открывает уже
+    готовую сводку только для чтения, <b>без обращения к ИИ</b>. Пересоздание осталось,
+    но как <b>вторичная</b> кнопка <b>↻</b> рядом — с подтверждением.</p>
+
+    <h3>Где это (окно «Архив», <kbd>F7</kbd>)</h3>
+    <p>В строке каждого созвона справа — действие сводки. Теперь оно в трёх видах:</p>
+    <div class="mocks">
+      <div class="mock">
+        <div class="tt">Три состояния кнопки сводки в строке архива</div>
+        <div class="body">
+          <div class="row"><span class="when">сводка ЕСТЬ</span><span class="nm">Созвон с командой…</span>
+            <span class="pill">📄 Просмотреть</span><span class="ico">↻</span></div>
+          <div class="row"><span class="when">сводки НЕТ</span><span class="nm">Свежий созвон…</span>
+            <span class="pill">↻ Сформировать</span></div>
+          <div class="row"><span class="when">нет данных</span><span class="nm">Пустой созвон…</span>
+            <span class="dis">Недостаточно данных</span></div>
+          <p class="callout">«Просмотреть» = открыть готовую сводку (без ИИ) · ↻ рядом = пересоздать (спросит) · «Сформировать» = сделать впервые</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>Какой созвон брать</h3>
+    <ul>
+      <li><b>Раздел A/B:</b> созвон, по которому сводка <b>уже делалась</b> (есть готовая сводка).</li>
+      <li><b>Раздел C:</b> созвон <b>без</b> сводки (свежий или тот, где не запускал сводку).</li>
+      <li><b>Раздел D:</b> самый <b>пустой</b> созвон (без записи и без текста).</li>
+    </ul>
+
+    <div class="note"><b>Раздел F — это диагностика бага «Память», а не проверка фикса.</b>
+    Баг ещё НЕ чинил — мне нужен один твой ответ, чтобы починить точно. Главное — пункт
+    <b>F-few</b> (сократи списки памяти и проверь, остаётся ли чёрный экран).</div>
+
+    <h3>Как отмечать</h3>
+    <p><b style="color:var(--ok)">OK</b> · <b style="color:var(--bug)">БАГ</b> ·
+    <b style="color:var(--warn)">?</b> (непонятно/не нашёл) · <b style="color:var(--skip)">скип</b>.
+    В поле — детали (на БАГ приложи скриншот отдельно). В конце — «Собрать отчёт» →
+    «Копировать» / «Скачать .md» и верни мне.</p>
+  </div>
+</details>
+
+<div id="app"></div>
+
+<section>
+  <h2>Общее впечатление / прочее</h2>
+  <div class="item"><textarea class="cmt" id="general" style="min-height:90px" placeholder="свободный текст…"></textarea></div>
+</section>
+</main>
+
+<footer><div class="wrap">
+  <span class="prog" id="prog2"></span>
+  <button class="primary" style="margin-left:auto" onclick="buildReport()">Собрать отчёт</button>
+</div></footer>
+
+<div class="toast" id="toast">Скопировано ✓</div>
+
+<dialog id="dlg"><div class="pad">
+  <p style="margin:0 0 10px"><b>Отчёт готов.</b> «Копировать» или «Скачать .md» и верни мне.</p>
+  <textarea id="out" readonly></textarea>
+  <div style="display:flex;gap:10px;margin-top:12px">
+    <button class="primary" onclick="copyOut()">Копировать</button>
+    <button onclick="downloadOut()">Скачать .md</button>
+    <button onclick="document.getElementById('dlg').close()">Закрыть</button>
+  </div>
+</div></dialog>
+
+<script>
+const DATA = [
+  ["A. Просмотр сводки — ГЛАВНОЕ (созвон, у которого УЖЕ есть сводка)", [
+    ["A1","У созвона со сводкой в строке архива основная кнопка теперь «Просмотреть» (а НЕ сразу вопрос про пересоздание)","F7 → найди созвон, по которому сводку уже делал."],
+    ["A2","Клик «Просмотреть» → готовая сводка открывается СРАЗУ, без ожидания/спиннера (НЕ тратит AI-запрос)","Должно открыться мгновенно — это сохранённая сводка, без обращения к ИИ. Если думает/крутится — это БАГ."],
+    ["A3","Сводка отформатирована (заголовки, списки) — как обычный тайл ИИ, а не сырой текст с ## и -",""],
+    ["A4","В окне сводки есть «Копировать» — копирует текст сводки",""],
+  ]],
+  ["B. Пересоздание — вторично, с подтверждением (↻ рядом с «Просмотреть»)", [
+    ["B1","Рядом с «Просмотреть» есть маленькая кнопка ↻ (только у созвонов со сводкой)",""],
+    ["B2","Клик ↻ → окно «Пересоздать сводку?»; «Отмена» → сводка НЕ изменилась",""],
+    ["B3","«Пересоздать» РЕАЛЬНО пересчитывает: виден прогресс, и результат — свежий прогон, а НЕ мгновенный возврат той же сводки (раньше отдавалась кэшированная — «текст тот же»)","Если транскрипт не менялся, текст может выйти похожим — но это должен быть НОВЫЙ прогон (с прогрессом), не мгновенно."],
+    ["B4","(если получится прервать/уронить пересоздание) старая сводка НЕ пропадает — остаётся доступной по «Просмотреть»","Опционально: если пересоздание упало, проверь что прежняя сводка на месте. Не получилось сломать — скип."],
+  ]],
+  ["C. Созвон БЕЗ сводки", [
+    ["C1","У созвона без сводки кнопка называется «Сформировать»",""],
+    ["C2","Клик «Сформировать» → строит сводку СРАЗУ, без вопроса (пересоздавать нечего)",""],
+    ["C3","После «Сформировать» (когда сводка построилась) строка СРАЗУ становится «Просмотреть» — БЕЗ закрытия/открытия архива","ФИКС: раньше приходилось переоткрывать архив, чтобы появилась «Просмотреть»."],
+  ]],
+  ["D. Созвон без данных", [
+    ["D1","У пустого созвона (нет записи и нет текста) вместо кнопки — серое «Недостаточно данных», не нажимается",""],
+  ]],
+  ["E. Пустая/битая сводка (если попадётся — иначе скип)", [
+    ["E1","«Просмотреть» у созвона, где сводка пустая → статус «Сводка пуста — нажмите ↻» (не пустое окно, не вылет)","Редкий случай."],
+  ]],
+  ["F. ДИАГНОСТИКА бага «Память» (баг ещё не чинил — нужен твой ответ)", [
+    ["F-repro","Настройки → «Память»: чёрный экран + рассыпание текста при движении мыши — на ЭТОЙ сборке ещё есть?","Да/нет в комментарии."],
+    ["F-few","КЛЮЧЕВОЕ: сократи списки памяти (Reject/Delete до ~10 записей суммарно) → вкладка «Память» всё ещё чернеет / рассыпается?","Если с малым числом стало нормально — напиши «с малым ОК». Если ломается и с малым — напиши «ломается и с малым». От этого зависит, как я чиню."],
+    ["F-gpu","Настройки → «Диагностика» → «Копировать отчёт»: в конце отчёта теперь есть строка «System: windows x86_64 · GPU: …». Вставь её сюда. И отдельно: зависит ли баг от размера окна / масштаба экрана (DPI)?","НОВОЕ в v0.23.0: видеокарта попала в отчёт «Копировать отчёт» (последняя строка «System: … · GPU: …»). Нажми кнопку, вставь сюда строку System, плюс ответь про DPI."],
+  ]],
+];
+const LABEL={ok:"OK",bug:"БАГ",q:"?",skip:"скип"};
+const KEY="suflyor-retest-v0230";
+let state={}; try{state=JSON.parse(localStorage.getItem(KEY)||"{}");}catch(e){state={};}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}}
+function st(id){return state[id]||(state[id]={s:"",c:""});}
+function render(){
+  const app=document.getElementById("app"); app.innerHTML="";
+  for(const [sec,items] of DATA){
+    const s=document.createElement("section"); const h=document.createElement("h2"); h.textContent=sec; s.appendChild(h);
+    for(const it of items){
+      const [id,desc,hint]=it; const cur=st(id);
+      const div=document.createElement("div");
+      div.className="item"+(cur.s||cur.c?" touched":"");
+      div.innerHTML=
+        `<div class="top"><span class="id">${id}</span><span class="desc">${desc}</span></div>`+
+        (hint?`<div class="hint">${hint}</div>`:"")+
+        `<div class="opts">${["ok","bug","q","skip"].map(o=>
+          `<span class="opt${cur.s===o?" active":""}" data-on="${o}" data-id="${id}">${LABEL[o]}</span>`).join("")}</div>`+
+        `<textarea class="cmt" data-cid="${id}" placeholder="комментарий…">${cur.c||""}</textarea>`;
+      s.appendChild(div);
+    }
+    app.appendChild(s);
+  }
+  document.getElementById("general").value=state.__general||"";
+  document.getElementById("m-who").value=state.__who||"";
+  document.getElementById("m-date").value=state.__date||"";
+  document.getElementById("m-ver").value=state.__ver||"";
+  document.getElementById("m-theme").value=state.__theme||"";
+  updateProg();
+}
+document.addEventListener("click",e=>{
+  const opt=e.target.closest(".opt"); if(!opt)return;
+  const id=opt.dataset.id,o=opt.dataset.on,cur=st(id);
+  cur.s=(cur.s===o)?"":o; save(); render();
+});
+document.addEventListener("input",e=>{
+  const t=e.target;
+  if(t.dataset.cid){st(t.dataset.cid).c=t.value;save();updateProg();const it=t.closest(".item");if(it)it.classList.add("touched");}
+  else if(t.id==="general"){state.__general=t.value;save();}
+  else if(t.id==="m-who"){state.__who=t.value;save();}
+  else if(t.id==="m-date"){state.__date=t.value;save();}
+  else if(t.id==="m-ver"){state.__ver=t.value;save();}
+  else if(t.id==="m-theme"){state.__theme=t.value;save();}
+});
+function total(){let n=0;for(const [,items] of DATA)n+=items.length;return n;}
+function filled(){let n=0;for(const k in state){if(k.startsWith("__"))continue;const v=state[k];if(v.s||(v.c&&v.c.trim()))n++;}return n;}
+function updateProg(){const txt=`${filled()} / ${total()} заполнено`;
+  document.getElementById("prog").textContent=txt;document.getElementById("prog2").textContent=txt;}
+function resetAll(){if(!confirm("Очистить все ответы?"))return;state={};save();render();}
+function reportText(){
+  let out=`# suflyor v0.23.0 — просмотр сводки + диагностика «Памяти»\n`;
+  out+=`Кто: ${state.__who||"—"} · Дата: ${state.__date||"—"} · Версия: ${state.__ver||"—"} · Тема: ${state.__theme||"—"}\n`;
+  out+=`Заполнено: ${filled()} / ${total()}\n`;
+  for(const [sec,items] of DATA){
+    out+=`\n## ${sec}\n`;
+    for(const it of items){const [id,desc]=it;const v=st(id);
+      out+=`${id} [${v.s?LABEL[v.s]:"—"}] ${desc}`;
+      if(v.c&&v.c.trim())out+=`  — ${v.c.trim()}`; out+=`\n`;}
+  }
+  if(state.__general&&state.__general.trim())out+=`\n## Общее / прочее\n${state.__general.trim()}\n`;
+  return out;
+}
+function buildReport(){document.getElementById("out").value=reportText();document.getElementById("dlg").showModal();}
+function copyOut(){const ta=document.getElementById("out");
+  navigator.clipboard.writeText(ta.value).then(showToast,()=>{ta.select();document.execCommand("copy");showToast();});}
+function downloadOut(){
+  const blob=new Blob([reportText()],{type:"text/markdown"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download=`suflyor-v0.23.0-retest-${(state.__who||"tester").replace(/\s+/g,"_")}.md`;
+  document.body.appendChild(a);a.click();a.remove();showToast();
+}
+function showToast(){const t=document.getElementById("toast");t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1500);}
+render();
+</script>
+</body>
+</html>

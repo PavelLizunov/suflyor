@@ -31,6 +31,9 @@ pub(crate) fn populate_diagnostics(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::SharedConfig,
 ) {
+    // Warm the GPU-name cache off-thread now (the Diagnostics tab is opening), so
+    // the later "Copy report" click reads it without ever blocking the event loop.
+    prime_gpu_cache();
     let c = cfg.read();
     let r = c.readiness();
     win.set_diag_summary(SharedString::from(active_stack_label(&c)));
@@ -125,6 +128,63 @@ pub(crate) fn redact_urls(s: &str) -> String {
     out
 }
 
+/// Cached GPU adapter name(s) — computed once, OFF the event loop (see
+/// `prime_gpu_cache`). `build_diag_report` only ever READS this, so the "Copy
+/// report" click can never block on a slow / hung WMI query.
+static GPU_CACHE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Kick off the (potentially slow, WMI-blocking) GPU query ONCE on a background
+/// thread, idempotently. `populate_diagnostics` calls this when the Diagnostics
+/// tab is shown, so the value is cached well before the user reaches "Copy
+/// report" — keeping `build_diag_report` (which runs on the Slint event loop)
+/// non-blocking even if the WMI service is hung. The result is static for the
+/// session (the GPU does not change), so caching it once is correct.
+pub(crate) fn prime_gpu_cache() {
+    static STARTED: std::sync::Once = std::sync::Once::new();
+    STARTED.call_once(|| {
+        std::thread::spawn(|| {
+            let _ = GPU_CACHE.set(gpu_name());
+        });
+    });
+}
+
+/// Best-effort GPU adapter name(s) for the diagnostics report — helps localise the
+/// "Память" render bug (DWM / GPU-driver specific). Queries WMI via PowerShell with
+/// NO console window; ANY failure → "unknown" (never breaks the report). The result
+/// is a plain device string (no IP / secret / user input), so the report's redaction
+/// pass leaves it intact. Runs ONLY on the background thread spawned by
+/// `prime_gpu_cache` — never on the event loop.
+fn gpu_name() -> String {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let out = std::process::Command::new("powershell")
+        .creation_flags(CREATE_NO_WINDOW)
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name",
+        ])
+        .output();
+    let Ok(out) = out else {
+        return "unknown".to_string();
+    };
+    if !out.status.success() {
+        return "unknown".to_string();
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    let names: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
+    if names.is_empty() {
+        "unknown".to_string()
+    } else {
+        names.join(", ")
+    }
+}
+
 /// P1.1 — build a REDACTED plain-text diagnostics report for the clipboard.
 /// Carries subsystem status + NEUTRAL details only: never a bearer / API key /
 /// transcript / profile text / screenshot, and the host of any base_url is
@@ -162,7 +222,8 @@ pub(crate) fn build_diag_report(cfg: &overlay_backend::config::SharedConfig) -> 
          Microphone: {}\n\
          System audio: {}\n\
          Hotkeys: {}\n\
-         Stealth: {}\n",
+         Stealth: {}\n\
+         System: {} {} · GPU: {}\n",
         env!("CARGO_PKG_VERSION"),
         st(r.ai.configured),
         r.ai.detail,
@@ -174,6 +235,9 @@ pub(crate) fn build_diag_report(cfg: &overlay_backend::config::SharedConfig) -> 
         dev(&r.sys.detail),
         hk_line,
         if r.stealth_on { "on" } else { "off" },
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        GPU_CACHE.get().map(String::as_str).unwrap_or("unknown"),
     );
     // Mask the host of any base_url FIRST (IPv4 / IPv6 / DNS), keeping
     // scheme/port/path; then redact_ipv4 as a backstop for any bare IPv4 that
