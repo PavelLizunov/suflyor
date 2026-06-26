@@ -60,7 +60,7 @@ const ITEMS=[
  ["D1","Пустой созвон → «Недостаточно данных»",
   "Открой созвон <b>без записи и без текста</b>. ПРИЁМКА: кнопка — «Недостаточно данных» (НЕ активное «Сформировать», которое ничего не строит)."],
 ];
-const KEY="suflyor-retest-v0230-fixes";
+const KEY="suflyor-retest-v0230-fixes"; // gitleaks:allow — localStorage key slug, not a secret
 let st=JSON.parse(localStorage.getItem(KEY)||"{}");
 function save(){localStorage.setItem(KEY,JSON.stringify(st));renderCount()}
 function setS(id,v){st[id]=st[id]||{};st[id].s=v;save();render()}
