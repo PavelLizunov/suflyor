@@ -136,12 +136,27 @@ pub(crate) fn redact_urls(s: &str) -> String {
 /// The report is advertised "safe to paste into a support thread", but the host /
 /// IP redaction never touched LOCAL FILE PATHS — so the STT model dir used to
 /// carry the username verbatim. Reads `USERPROFILE`; delegates to the pure,
-/// case-insensitive `redact_home_in` seam (unit-testable without the live env).
+/// case-insensitive `redact_home_all_forms` seam (unit-testable without env).
 pub(crate) fn redact_user_home(s: &str) -> String {
     match std::env::var("USERPROFILE") {
-        Ok(home) => redact_home_in(s, &home),
+        Ok(home) => redact_home_all_forms(s, &home),
         Err(_) => s.to_string(),
     }
+}
+
+/// Mask the home dir in EVERY separator form that shows up in the log, not only
+/// our own single-backslash paths: third-party libs (transcribe_rs / GigaAM) log
+/// model paths via Rust `{:?}` Debug, which DOUBLES the backslashes
+/// (`C:\\Users\\alice\\…`), and some std/cargo lines use forward slashes. A
+/// single-form pass misses the `\\`-escaped form and leaks the OS username —
+/// caught live (2026-06-27): 28 unmasked hits in a "Собрать логи" export.
+/// Conscious residual: an 8.3 short name (`X3D_MU~1`) isn't derived from
+/// USERPROFILE and would slip all three forms — not seen in live logs and a
+/// low-identity mangled token, so left uncovered rather than risk over-masking.
+fn redact_home_all_forms(s: &str, home: &str) -> String {
+    let r = redact_home_in(s, home);
+    let r = redact_home_in(&r, &home.replace('\\', "\\\\"));
+    redact_home_in(&r, &home.replace('\\', "/"))
 }
 
 /// Pure core of `redact_user_home`: replace every ASCII-case-INSENSITIVE
@@ -604,6 +619,30 @@ mod tests {
         assert_eq!(
             redact_home_in("GPU: NVIDIA GeForce RTX 5060 Ti", "C:\\Users\\bob"),
             "GPU: NVIDIA GeForce RTX 5060 Ti"
+        );
+    }
+
+    #[test]
+    fn redact_user_home_masks_double_backslash_and_forward_slash_forms() {
+        // transcribe_rs / GigaAM log model paths via {:?} Debug, which DOUBLES the
+        // backslashes; the home (from USERPROFILE) is single-backslash. The export
+        // must still mask it — this is the live F leak (28 hits) pinned as a test.
+        let home = r"C:\Users\alice";
+        let dbl = redact_home_all_forms(
+            r#"Loading GigaAM model from "C:\\Users\\alice\\suflyor-local-ai\\m.onnx""#,
+            home,
+        );
+        assert!(!dbl.to_ascii_lowercase().contains("alice"), "leaked: {dbl}");
+        assert!(dbl.contains("%USERPROFILE%"));
+        // Forward-slash paths (std / cargo) are masked too.
+        assert_eq!(
+            redact_home_all_forms("cache at C:/Users/alice/.cargo", home),
+            "cache at %USERPROFILE%/.cargo"
+        );
+        // Single-backslash still works (no regression).
+        assert_eq!(
+            redact_home_all_forms("at C:\\Users\\alice\\x", home),
+            "at %USERPROFILE%\\x"
         );
     }
 
