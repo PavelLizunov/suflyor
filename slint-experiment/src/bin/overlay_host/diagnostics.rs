@@ -534,17 +534,21 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
 }
 
 /// F — read overlay-host.log, REDACT it (username → %USERPROFILE%, hosts/IPs
-/// masked — the same passes "Copy report" uses), write a support-safe copy next
-/// to it, and return that path. Log sites print presence flags / char-counts
-/// (never key values), but the log DOES embed the OS username in file paths, so
-/// this masks it before the tester shares the file.
+/// masked — the same passes "Copy report" uses), and write a support-safe copy
+/// to the DESKTOP, returning that path. Saving to the Desktop (not the hidden,
+/// cluttered %APPDATA% data dir) is deliberate: the tester must see the file
+/// immediately and never hunt for it (live feedback, 2026-06-27). Falls back to
+/// the data dir only if the Desktop known-folder can't be resolved. Log sites
+/// print presence flags / char-counts (never key values), but the log DOES embed
+/// the OS username in file paths, so this masks it before the tester shares it.
 fn collect_redacted_log() -> std::io::Result<std::path::PathBuf> {
     let root = overlay_backend::paths::data_root().ok_or_else(|| {
         std::io::Error::new(std::io::ErrorKind::NotFound, "no data root for the log")
     })?;
     let raw = std::fs::read_to_string(root.join("overlay-host.log"))?;
     let redacted = redact_user_home(&redact_ipv4(&redact_urls(&raw)));
-    let out = root.join("suflyor-log-for-support.txt");
+    let dir = dirs::desktop_dir().unwrap_or(root);
+    let out = dir.join("suflyor-log.txt");
     std::fs::write(&out, redacted)?;
     Ok(out)
 }
