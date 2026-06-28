@@ -1185,6 +1185,16 @@ pub fn update_llama_engine(
         result = swap_engine_binaries(&staging, &llama_dir, &backup_dir);
     }
     result.context("swap engine binaries (engine still locked after retries)")?;
+    // P1-2: post-swap sanity — the live engine MUST now exist before we stamp the
+    // build as updated. swap_engine_binaries already bails when the staged build
+    // has no llama-server.exe; this guards any residual "swap returned Ok but the
+    // live exe isn't there" path so the UI never reports a phantom update.
+    if !llama_dir.join("llama-server.exe").is_file() {
+        let _ = std::fs::remove_dir_all(&staging);
+        return Ok(EngineUpdate::Skipped {
+            reason: "engine install produced no llama-server.exe — kept the current engine".into(),
+        });
+    }
     let _ = std::fs::remove_dir_all(&staging);
     write_build_stamp(&llama_dir, &rel.tag_name);
     // fs-audit #1 — verify-before-swap means only the immediately-previous
@@ -1279,14 +1289,48 @@ fn swap_engine_binaries(staging: &Path, live: &Path, backup: &Path) -> Result<()
             .and_then(|e| e.to_str())
             .is_some_and(|e| e.eq_ignore_ascii_case("exe") || e.eq_ignore_ascii_case("dll"))
     };
-    let mut files: Vec<PathBuf> = std::fs::read_dir(staging)
-        .context("read staging dir")?
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.is_file() && is_engine_file(p))
-        .collect();
+    // RECURSIVELY collect engine files. The llama.cpp / cudart zips sometimes nest
+    // the binaries in a subfolder (or the two zips extract into different subdirs);
+    // a direct-children-only read then copies ZERO files while verify-before-swap
+    // (which finds llama-server.exe recursively) still passes — stamping a phantom
+    // "updated" with the live engine unchanged (P1-2). Reject a duplicate engine
+    // filename across locations rather than guess which copy to install.
+    let mut by_name: std::collections::BTreeMap<std::ffi::OsString, PathBuf> = Default::default();
+    let mut stack = vec![staging.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if is_engine_file(&p) {
+                if let Some(name) = p.file_name().map(|n| n.to_os_string()) {
+                    if by_name.insert(name.clone(), p).is_some() {
+                        bail!(
+                            "ambiguous staged engine: duplicate {} in the downloaded archive",
+                            name.to_string_lossy()
+                        );
+                    }
+                }
+            }
+        }
+    }
+    // Must install at least the server binary — otherwise this is not a real engine
+    // and we must NOT report success / write the build stamp (P1-2).
+    let has_server = by_name.keys().any(|n| {
+        n.to_str()
+            .is_some_and(|s| s.eq_ignore_ascii_case("llama-server.exe"))
+    });
+    if !has_server {
+        bail!("staged build has no llama-server.exe to install");
+    }
+    let mut files: Vec<PathBuf> = by_name.into_values().collect();
     files.sort_by_key(|p| {
-        // exes (false → sorts first), then everything else.
+        // exes (false → sorts first) before DLLs, so the locked-live-exe copy is
+        // attempted first and a sharing violation bails before any DLL is touched
+        // (keeps the live engine intact + the attempt safely retryable).
         !p.extension()
             .and_then(|e| e.to_str())
             .is_some_and(|e| e.eq_ignore_ascii_case("exe"))

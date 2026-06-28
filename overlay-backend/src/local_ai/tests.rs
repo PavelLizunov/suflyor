@@ -425,3 +425,69 @@ fn apply_result_sets_local_and_keeps_secrets() {
     assert!(cfg.ai_local_vision);
     assert_eq!(cfg.vision_provider, "same");
 }
+
+// P1-2: swap_engine_binaries must install engine files from a NESTED staging
+// layout (verify-before-swap finds llama-server.exe recursively; the swap used to
+// read only direct children → copied 0 files yet returned Ok → phantom "updated").
+#[test]
+fn swap_installs_nested_engine_layout() {
+    let staging = tempfile::tempdir().unwrap();
+    let live = tempfile::tempdir().unwrap();
+    let backup_root = tempfile::tempdir().unwrap();
+    let nested = staging.path().join("llama-build-x64");
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::write(nested.join("llama-server.exe"), b"EXE").unwrap();
+    std::fs::write(nested.join("ggml.dll"), b"DLL").unwrap();
+    swap_engine_binaries(staging.path(), live.path(), &backup_root.path().join("bk")).unwrap();
+    assert!(
+        live.path().join("llama-server.exe").is_file(),
+        "nested exe installed"
+    );
+    assert!(
+        live.path().join("ggml.dll").is_file(),
+        "nested dll installed"
+    );
+}
+
+#[test]
+fn swap_installs_flat_engine_layout() {
+    let staging = tempfile::tempdir().unwrap();
+    let live = tempfile::tempdir().unwrap();
+    let backup_root = tempfile::tempdir().unwrap();
+    std::fs::write(staging.path().join("llama-server.exe"), b"EXE").unwrap();
+    std::fs::write(staging.path().join("cudart.dll"), b"DLL").unwrap();
+    swap_engine_binaries(staging.path(), live.path(), &backup_root.path().join("bk")).unwrap();
+    assert!(live.path().join("llama-server.exe").is_file());
+    assert!(live.path().join("cudart.dll").is_file());
+}
+
+#[test]
+fn swap_fails_without_llama_server_so_no_phantom_update() {
+    // No llama-server.exe staged → Err, so update_llama_engine never stamps
+    // .llama-build on a copied-nothing "success" (P1-2).
+    let staging = tempfile::tempdir().unwrap();
+    let live = tempfile::tempdir().unwrap();
+    let backup_root = tempfile::tempdir().unwrap();
+    std::fs::write(staging.path().join("readme.txt"), b"x").unwrap();
+    std::fs::write(staging.path().join("only.dll"), b"DLL").unwrap();
+    let r = swap_engine_binaries(staging.path(), live.path(), &backup_root.path().join("bk"));
+    assert!(r.is_err(), "must fail when no llama-server.exe is staged");
+    assert!(!live.path().join("llama-server.exe").is_file());
+}
+
+#[test]
+fn swap_rejects_ambiguous_duplicate_engine_file() {
+    let staging = tempfile::tempdir().unwrap();
+    let live = tempfile::tempdir().unwrap();
+    let backup_root = tempfile::tempdir().unwrap();
+    std::fs::write(staging.path().join("llama-server.exe"), b"EXE").unwrap();
+    let sub = staging.path().join("dup");
+    std::fs::create_dir_all(&sub).unwrap();
+    std::fs::write(sub.join("ggml.dll"), b"A").unwrap();
+    std::fs::write(staging.path().join("ggml.dll"), b"B").unwrap();
+    let r = swap_engine_binaries(staging.path(), live.path(), &backup_root.path().join("bk"));
+    assert!(
+        r.is_err(),
+        "duplicate engine filename across dirs must be rejected"
+    );
+}
