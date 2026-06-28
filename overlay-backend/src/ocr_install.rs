@@ -28,7 +28,11 @@ const BUNDLE_SHA256: &str = "d753736e47d147cc7c42faf8948b33431d28524fd36f542aac1
 
 /// Coarse progress for the Settings UI.
 pub enum OcrProgress {
-    Step(String),
+    AlreadyInstalled,
+    Downloading,
+    Verifying,
+    Unpacking,
+    Installed,
 }
 
 /// True when the OCR engine is installed (delegates to the resolver the OCR
@@ -42,24 +46,22 @@ pub fn is_installed() -> bool {
 /// a worker thread (mirrors the voice + local-AI installers).
 pub fn install(on: &dyn Fn(OcrProgress)) -> Result<()> {
     if is_installed() {
-        on(OcrProgress::Step(
-            "Распознавание текста уже установлено".to_string(),
-        ));
+        on(OcrProgress::AlreadyInstalled);
         return Ok(());
     }
     let root = crate::paths::data_root().context("APPDATA not set — no data dir")?;
     std::fs::create_dir_all(&root).with_context(|| format!("create {}", root.display()))?;
     let dest = root.join("tesseract");
 
-    on(OcrProgress::Step("Скачивание движка (~53 МБ)…".to_string()));
+    on(OcrProgress::Downloading);
     let tarball = root.join("tesseract-ocr.download.tar.bz2");
     let _ = std::fs::remove_file(&tarball);
     curl_download(BUNDLE_URL, &tarball).context("download OCR engine")?;
 
-    on(OcrProgress::Step("Проверка…".to_string()));
+    on(OcrProgress::Verifying);
     verify_sha256(&tarball, BUNDLE_SHA256, "OCR")?;
 
-    on(OcrProgress::Step("Распаковка…".to_string()));
+    on(OcrProgress::Unpacking);
     if let Err(e) = extract_tar_bz2(&tarball, &root) {
         let _ = std::fs::remove_dir_all(&dest);
         let _ = std::fs::remove_file(&tarball);
@@ -79,9 +81,7 @@ pub fn install(on: &dyn Fn(OcrProgress)) -> Result<()> {
         let _ = std::fs::remove_dir_all(&dest);
         bail!("движок распознавания установлен не полностью");
     }
-    on(OcrProgress::Step(
-        "Распознавание текста установлено".to_string(),
-    ));
+    on(OcrProgress::Installed);
     Ok(())
 }
 

@@ -289,7 +289,8 @@ export component SettingsWindow inherits Window {
     // Index of the row whose inline install is running (-1 = none) + its status
     // line. The controller sets these while a hub install worker runs.
     in-out property <int> component-busy-index: -1;
-    in-out property <string> component-busy-status;
+    in-out property <int> component-busy-phase: 0;
+    in-out property <string> component-busy-label;
     // Fired when the user clicks a card's inline «Установить» (passes the row index).
     callback component-install(int);
     in-out property <string> memory-status: "";
@@ -353,7 +354,8 @@ export component SettingsWindow inherits Window {
     in-out property <int> tts-rate-index: 1; // 0..4 preset, default «1.0×»
     in-out property <bool> tts-available: false;
     in-out property <bool> tts-installing: false;
-    in-out property <string> tts-install-status;
+    in-out property <int> tts-install-phase: 0;
+    in-out property <string> tts-install-label;
     callback tts-voice-changed(int);
     callback tts-rate-changed(int);
     callback tts-test-clicked();
@@ -363,7 +365,7 @@ export component SettingsWindow inherits Window {
     // installed on demand (not bundled).
     in-out property <bool> ocr-installed: false;
     in-out property <bool> ocr-installing: false;
-    in-out property <string> ocr-install-status;
+    in-out property <int> ocr-install-phase: 0;
     callback ocr-install-clicked();
     in-out property <string> ai-local-base-url-input: "";
     // Phase E10.1 — model dropdown populated from GET {base_url}/models so the
@@ -1200,8 +1202,16 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                         }
-                        if root.tts-install-status != "" : Text {
-                            text: root.tts-install-status;
+                        if root.tts-install-phase != 0 : Text {
+                            text: root.tts-install-phase == 1 ? @tr("Preparing…")
+                                : root.tts-install-phase == 2 ? @tr("Downloading: {}…", root.tts-install-label)
+                                : root.tts-install-phase == 3 ? @tr("Verifying: {}…", root.tts-install-label)
+                                : root.tts-install-phase == 4 ? @tr("Unpacking: {}…", root.tts-install-label)
+                                : root.tts-install-phase == 5 ? @tr("{} — already installed", root.tts-install-label)
+                                : root.tts-install-phase == 6 ? @tr("Voices installed")
+                                : root.tts-install-phase == 7 ? @tr("Installed partially; failed: {}", root.tts-install-label)
+                                : root.tts-install-phase == 9 ? @tr("{} — download failed (retry later)", root.tts-install-label)
+                                : @tr("Couldn't install the voices — check the connection and retry.");
                             font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
@@ -1578,7 +1588,20 @@ export component SettingsWindow inherits Window {
                                 // installed → inline «Установить»; otherwise the
                                 // installed / not-installed label.
                                 if idx == root.component-busy-index : Text {
-                                    text: root.component-busy-status;
+                                    text: root.component-busy-phase == 1 ? @tr("Preparing…")
+                                        : root.component-busy-phase == 2 ? @tr("Downloading: {}…", root.component-busy-label)
+                                        : root.component-busy-phase == 3 ? @tr("Verifying: {}…", root.component-busy-label)
+                                        : root.component-busy-phase == 4 ? @tr("Unpacking: {}…", root.component-busy-label)
+                                        : root.component-busy-phase == 5 ? @tr("{} — already installed", root.component-busy-label)
+                                        : root.component-busy-phase == 6 ? @tr("Voices installed")
+                                        : root.component-busy-phase == 7 ? @tr("Installed partially; failed: {}", root.component-busy-label)
+                                        : root.component-busy-phase == 9 ? @tr("{} — download failed (retry later)", root.component-busy-label)
+                                        : root.component-busy-phase == 10 ? @tr("Downloading the engine (~53 MB)…")
+                                        : root.component-busy-phase == 11 ? @tr("Verifying…")
+                                        : root.component-busy-phase == 12 ? @tr("Unpacking…")
+                                        : root.component-busy-phase == 13 ? @tr("Text recognition already installed")
+                                        : root.component-busy-phase == 14 ? @tr("Text recognition installed")
+                                        : @tr("Couldn't install — check the connection and retry.");
                                     font-size: 11px;
                                     color: Theme.accent;
                                     vertical-alignment: center;
@@ -2259,13 +2282,19 @@ export component SettingsWindow inherits Window {
                                 clicked => { root.ocr-install-clicked(); }
                             }
                         }
-                        if root.ocr-installed && root.ocr-install-status == "" : Text {
+                        if root.ocr-installed && root.ocr-install-phase == 0 : Text {
                             text: @tr("Text recognition is installed.");
                             font-size: 11px;
                             color: Theme.text-secondary;
                         }
-                        if root.ocr-install-status != "" : Text {
-                            text: root.ocr-install-status;
+                        if root.ocr-install-phase != 0 : Text {
+                            text: root.ocr-install-phase == 1 ? @tr("Preparing…")
+                                : root.ocr-install-phase == 2 ? @tr("Downloading the engine (~53 MB)…")
+                                : root.ocr-install-phase == 3 ? @tr("Verifying…")
+                                : root.ocr-install-phase == 4 ? @tr("Unpacking…")
+                                : root.ocr-install-phase == 5 ? @tr("Text recognition already installed")
+                                : root.ocr-install-phase == 6 ? @tr("Text recognition installed")
+                                : @tr("Couldn't install text recognition — check the connection and retry.");
                             font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;

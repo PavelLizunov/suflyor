@@ -49,7 +49,13 @@ pub const VOICE_PACKS: &[VoicePack] = &[
 /// Coarse progress for the Settings UI (no byte bar — the packs are small and
 /// the steps are quick; a step label is enough and robust).
 pub enum VoiceProgress {
-    Step(String),
+    AlreadyInstalled(String),
+    Downloading(String),
+    Verifying(String),
+    Unpacking(String),
+    PackFailed(String),
+    AllInstalled,
+    PartiallyInstalled(String),
 }
 
 /// `%APPDATA%\suflyor\tts` — where voices install. Same dir the sidecar scans.
@@ -100,10 +106,7 @@ pub fn install_voices(cancel: &AtomicBool, on: &dyn Fn(VoiceProgress)) -> Result
         }
         let dir = root.join(pack.id);
         if pack_installed(&dir) {
-            on(VoiceProgress::Step(format!(
-                "{} — уже установлен",
-                pack.label
-            )));
+            on(VoiceProgress::AlreadyInstalled(pack.label.to_string()));
             ok += 1;
             continue;
         }
@@ -112,10 +115,7 @@ pub fn install_voices(cancel: &AtomicBool, on: &dyn Fn(VoiceProgress)) -> Result
             Err(e) => {
                 log::warn!("voice pack '{}' failed: {e:#}", pack.id);
                 failed.push(pack.label);
-                on(VoiceProgress::Step(format!(
-                    "{} — не скачался (повторите позже)",
-                    pack.label
-                )));
+                on(VoiceProgress::PackFailed(pack.label.to_string()));
             }
         }
     }
@@ -124,12 +124,9 @@ pub fn install_voices(cancel: &AtomicBool, on: &dyn Fn(VoiceProgress)) -> Result
         bail!("не удалось установить ни одного голоса");
     }
     if failed.is_empty() {
-        on(VoiceProgress::Step("Голоса установлены".to_string()));
+        on(VoiceProgress::AllInstalled);
     } else {
-        on(VoiceProgress::Step(format!(
-            "Установлено частично; не скачалось: {}",
-            failed.join(", ")
-        )));
+        on(VoiceProgress::PartiallyInstalled(failed.join(", ")));
     }
     Ok(())
 }
@@ -142,15 +139,15 @@ fn install_one(
     dir: &Path,
     on: &dyn Fn(VoiceProgress),
 ) -> Result<()> {
-    on(VoiceProgress::Step(format!("Скачивание: {}…", pack.label)));
+    on(VoiceProgress::Downloading(pack.label.to_string()));
     let tarball = root.join(format!("{}.download.tar.bz2", pack.id));
     let _ = std::fs::remove_file(&tarball);
     curl_download(pack.url, &tarball).with_context(|| format!("download {}", pack.label))?;
 
-    on(VoiceProgress::Step(format!("Проверка: {}…", pack.label)));
+    on(VoiceProgress::Verifying(pack.label.to_string()));
     verify_sha256(&tarball, pack.sha256, pack.label)?;
 
-    on(VoiceProgress::Step(format!("Распаковка: {}…", pack.label)));
+    on(VoiceProgress::Unpacking(pack.label.to_string()));
     if let Err(e) = extract_tar_bz2(&tarball, root) {
         let _ = std::fs::remove_dir_all(dir);
         let _ = std::fs::remove_file(&tarball);

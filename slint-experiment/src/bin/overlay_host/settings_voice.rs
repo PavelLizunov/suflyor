@@ -93,18 +93,32 @@ pub(crate) fn wire_voice_settings(
                 return; // already running
             }
             w.set_tts_installing(true);
-            w.set_tts_install_status(SharedString::from("Подготовка…"));
+            w.set_tts_install_phase(1); // preparing
+            w.set_tts_install_label(SharedString::from(""));
             let weak_done = w.as_weak();
             let cfg_t = cfg_install.clone();
             std::thread::spawn(move || {
                 let cancel = std::sync::atomic::AtomicBool::new(false);
                 let weak_cb = weak_done.clone();
                 let on = move |p: overlay_backend::tts_install::VoiceProgress| {
-                    let overlay_backend::tts_install::VoiceProgress::Step(s) = p;
+                    use overlay_backend::tts_install::VoiceProgress;
+                    // Map the semantic variant → (phase int, label). The .slint
+                    // renders the localized text via @tr from the phase; the label
+                    // is the (untranslated) voice name / failed-pack list.
+                    let (phase, label): (i32, String) = match p {
+                        VoiceProgress::Downloading(l) => (2, l),
+                        VoiceProgress::Verifying(l) => (3, l),
+                        VoiceProgress::Unpacking(l) => (4, l),
+                        VoiceProgress::AlreadyInstalled(l) => (5, l),
+                        VoiceProgress::AllInstalled => (6, String::new()),
+                        VoiceProgress::PartiallyInstalled(f) => (7, f),
+                        VoiceProgress::PackFailed(l) => (9, l),
+                    };
                     let weak_in = weak_cb.clone();
                     let _ = slint::invoke_from_event_loop(move || {
                         if let Some(w) = weak_in.upgrade() {
-                            w.set_tts_install_status(SharedString::from(s));
+                            w.set_tts_install_phase(phase);
+                            w.set_tts_install_label(SharedString::from(label));
                         }
                     });
                 };
@@ -120,9 +134,7 @@ pub(crate) fn wire_voice_settings(
                     };
                     w.set_tts_installing(false);
                     if result.is_err() {
-                        w.set_tts_install_status(SharedString::from(
-                            "Не удалось установить голоса — проверьте интернет и повторите.",
-                        ));
+                        w.set_tts_install_phase(8); // generic failure
                         return;
                     }
                     // Success — refresh the chooser from the freshly-installed
@@ -136,9 +148,9 @@ pub(crate) fn wire_voice_settings(
                     w.set_tts_available(!voices.is_empty());
                     w.set_tts_voice_names(ModelRc::new(VecModel::from(names)));
                     w.set_tts_voice_index(0);
-                    // NB: don't overwrite the status here — install_voices already
-                    // set the final "Голоса установлены" / "Установлено частично…"
-                    // message via the progress callback (it ran just before this).
+                    // NB: don't overwrite the phase here — install_voices already
+                    // set the final phase 6 (all installed) / 7 (partial) via the
+                    // progress callback (it ran just before this).
                     if let Some(first) = voices.first() {
                         // Persist the selection so a restart resolves to the SAME
                         // voice the live session is now playing (not just whatever

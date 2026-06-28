@@ -188,16 +188,25 @@ pub(crate) fn wire_vision_settings(
                 return;
             }
             w.set_ocr_installing(true);
-            w.set_ocr_install_status(SharedString::from("Подготовка…"));
+            w.set_ocr_install_phase(1); // preparing
             let weak_done = w.as_weak();
             std::thread::spawn(move || {
                 let weak_cb = weak_done.clone();
                 let on = move |p: overlay_backend::ocr_install::OcrProgress| {
-                    let overlay_backend::ocr_install::OcrProgress::Step(s) = p;
+                    use overlay_backend::ocr_install::OcrProgress;
+                    // Semantic variant → phase int; the .slint renders the
+                    // localized text via @tr (no label needed for OCR).
+                    let phase: i32 = match p {
+                        OcrProgress::Downloading => 2,
+                        OcrProgress::Verifying => 3,
+                        OcrProgress::Unpacking => 4,
+                        OcrProgress::AlreadyInstalled => 5,
+                        OcrProgress::Installed => 6,
+                    };
                     let weak_in = weak_cb.clone();
                     let _ = slint::invoke_from_event_loop(move || {
                         if let Some(w) = weak_in.upgrade() {
-                            w.set_ocr_install_status(SharedString::from(s));
+                            w.set_ocr_install_phase(phase);
                         }
                     });
                 };
@@ -211,11 +220,9 @@ pub(crate) fn wire_vision_settings(
                     };
                     w.set_ocr_installing(false);
                     if result.is_err() {
-                        w.set_ocr_install_status(SharedString::from(
-                            "Не удалось установить распознавание — проверьте интернет и повторите.",
-                        ));
+                        w.set_ocr_install_phase(8); // generic failure
                     } else {
-                        // Final status was set by install() via the progress
+                        // Final phase was set by install() via the progress
                         // callback; just flip the installed flag so the button
                         // disappears.
                         w.set_ocr_installed(true);

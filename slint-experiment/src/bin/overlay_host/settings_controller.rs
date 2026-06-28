@@ -162,7 +162,8 @@ pub(crate) fn open_settings(
                 return; // one inline install at a time
             }
             w.set_component_busy_index(idx);
-            w.set_component_busy_status(SharedString::from("Подготовка…"));
+            w.set_component_busy_phase(1); // preparing
+            w.set_component_busy_label(SharedString::from(""));
             let weak_done = w.as_weak();
             let cfg_t = cfg_inst.clone();
             std::thread::spawn(move || {
@@ -173,11 +174,21 @@ pub(crate) fn open_settings(
                         let cancel = std::sync::atomic::AtomicBool::new(false);
                         let weak_cb = weak_done.clone();
                         let on = move |p: overlay_backend::tts_install::VoiceProgress| {
-                            let overlay_backend::tts_install::VoiceProgress::Step(s) = p;
+                            use overlay_backend::tts_install::VoiceProgress;
+                            let (phase, label): (i32, String) = match p {
+                                VoiceProgress::Downloading(l) => (2, l),
+                                VoiceProgress::Verifying(l) => (3, l),
+                                VoiceProgress::Unpacking(l) => (4, l),
+                                VoiceProgress::AlreadyInstalled(l) => (5, l),
+                                VoiceProgress::AllInstalled => (6, String::new()),
+                                VoiceProgress::PartiallyInstalled(f) => (7, f),
+                                VoiceProgress::PackFailed(l) => (9, l),
+                            };
                             let weak_in = weak_cb.clone();
                             let _ = slint::invoke_from_event_loop(move || {
                                 if let Some(w) = weak_in.upgrade() {
-                                    w.set_component_busy_status(SharedString::from(s));
+                                    w.set_component_busy_phase(phase);
+                                    w.set_component_busy_label(SharedString::from(label));
                                 }
                             });
                         };
@@ -187,11 +198,18 @@ pub(crate) fn open_settings(
                     4 => {
                         let weak_cb = weak_done.clone();
                         let on = move |p: overlay_backend::ocr_install::OcrProgress| {
-                            let overlay_backend::ocr_install::OcrProgress::Step(s) = p;
+                            use overlay_backend::ocr_install::OcrProgress;
+                            let phase: i32 = match p {
+                                OcrProgress::Downloading => 10,
+                                OcrProgress::Verifying => 11,
+                                OcrProgress::Unpacking => 12,
+                                OcrProgress::AlreadyInstalled => 13,
+                                OcrProgress::Installed => 14,
+                            };
                             let weak_in = weak_cb.clone();
                             let _ = slint::invoke_from_event_loop(move || {
                                 if let Some(w) = weak_in.upgrade() {
-                                    w.set_component_busy_status(SharedString::from(s));
+                                    w.set_component_busy_phase(phase);
                                 }
                             });
                         };
@@ -211,9 +229,7 @@ pub(crate) fn open_settings(
                     if failed {
                         // Keep the row marked busy so the generic message shows; the
                         // next Settings open clears it (populate resets busy-index).
-                        w.set_component_busy_status(SharedString::from(
-                            "Не удалось установить — проверьте интернет и повторите.",
-                        ));
+                        w.set_component_busy_phase(8); // generic failure
                     } else {
                         // Refresh from live state — the just-installed row goes green.
                         let snap = cfg_t.read();
@@ -1296,7 +1312,7 @@ pub(crate) fn populate_token_status(
     // status reset so a stale "Готово…" can't survive a reopen.
     win.set_ocr_installed(overlay_backend::ocr_install::is_installed());
     win.set_ocr_installing(false);
-    win.set_ocr_install_status(SharedString::from(""));
+    win.set_ocr_install_phase(0);
     // UI-audit 2026-06-13 (CRITICAL): the Settings window is REUSED, not
     // recreated, so every transient one-shot status string survived from the
     // previous open and described a STALE action (the user caught a lingering
@@ -1330,7 +1346,8 @@ pub(crate) fn populate_token_status(
     // can't show a stale "Подготовка…" on a row whose install already finished
     // (the project's #1 reused-window stale-status class — caught by
     // settings_reset_guard).
-    win.set_component_busy_status(blank());
+    win.set_component_busy_phase(0);
+    win.set_component_busy_label(blank());
     win.set_component_busy_index(-1);
     win.set_ai_prompt_cache(c.ai_prompt_cache);
     win.set_ai_provider_index(i32::from(c.ai_provider == "local"));
@@ -1377,7 +1394,8 @@ pub(crate) fn populate_token_status(
         // Reset the transient install state on (re)open — the Settings window is
         // reused, so a leftover "Готово…" / progress string must not survive.
         win.set_tts_installing(false);
-        win.set_tts_install_status(SharedString::from(""));
+        win.set_tts_install_phase(0);
+        win.set_tts_install_label(SharedString::from(""));
     }
     win.set_ai_local_thinking(c.ai_local_thinking);
     // v0.18.0 — local model size choice + whether the 12B is downloaded yet.
