@@ -491,3 +491,28 @@ fn swap_rejects_ambiguous_duplicate_engine_file() {
         "duplicate engine filename across dirs must be rejected"
     );
 }
+
+// P1-1: zip-slip guard for the engine extractor — only entries that stay inside
+// the extraction dir are allowed.
+#[test]
+fn archive_entry_safety_rejects_zip_slip() {
+    // safe relative entries
+    assert!(archive_entry_is_safe("build/llama-server.exe"));
+    assert!(archive_entry_is_safe("ggml.dll"));
+    assert!(archive_entry_is_safe("a/b/c.dll"));
+    assert!(archive_entry_is_safe("")); // tar -tf trailing blank line
+                                        // escapes — all rejected
+    assert!(!archive_entry_is_safe("../escape.txt"));
+    assert!(!archive_entry_is_safe("a/../../escape"));
+    assert!(!archive_entry_is_safe("..\\escape")); // backslash-normalised
+    assert!(!archive_entry_is_safe("/etc/passwd")); // posix-absolute
+    assert!(!archive_entry_is_safe("C:/escape.txt")); // drive
+    assert!(!archive_entry_is_safe("C:\\escape.txt"));
+    assert!(!archive_entry_is_safe("\\\\server\\share\\x")); // UNC
+                                                             // Windows trailing-space coercion: ".. " / "..  " resolve to ".." → rejected.
+    assert!(!archive_entry_is_safe(".. /x"));
+    assert!(!archive_entry_is_safe("a/..  /b"));
+    // A bare "." current-dir component is harmless and must stay allowed
+    // (tar may emit "./"-prefixed entries).
+    assert!(archive_entry_is_safe("./build/x.dll"));
+}

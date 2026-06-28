@@ -1684,10 +1684,61 @@ fn download_and_extract(
     Ok(())
 }
 
+/// Full path to the libarchive `tar.exe` under System32 (Win10 1803+), so PATH
+/// order can't substitute a different `tar` for archive extraction (P1-1). Falls
+/// back to a bare `tar.exe` only if System32's copy is somehow absent. (Mirrors
+/// the TTS/OCR installers' system_bsdtar.)
+fn system_tar() -> PathBuf {
+    std::env::var_os("SystemRoot")
+        .map(|r| PathBuf::from(r).join("System32").join("tar.exe"))
+        .filter(|p| p.is_file())
+        .unwrap_or_else(|| PathBuf::from("tar.exe"))
+}
+
+/// SECURITY (P1-1): true iff an archive entry path stays inside the extraction
+/// dir. Rejects absolute paths, a leading `/` or `\` (incl. UNC), a drive prefix
+/// (`C:`), and any `..` component — the zip-slip vectors a poisoned release asset
+/// could use. Empty lines (tar -tf trailing newline) are ignored (safe).
+fn archive_entry_is_safe(entry: &str) -> bool {
+    let e = entry.trim().replace('\\', "/");
+    if e.is_empty() {
+        return true;
+    }
+    if e.starts_with('/') {
+        return false; // posix-absolute or (normalised) UNC / leading backslash
+    }
+    let b = e.as_bytes();
+    if b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':' {
+        return false; // drive-qualified (C:\...)
+    }
+    // Reject any `..` traversal component. Windows also strips trailing spaces
+    // from a name, so ".. " / "..  " resolve to ".." too — collapse trailing
+    // spaces before the compare. (A bare "." is the harmless current-dir, and
+    // tar may emit "./"-prefixed entries, so it must NOT be rejected.)
+    !e.split('/').any(|c| c.trim_end_matches(' ') == "..")
+}
+
 fn extract_zip(zip: &Path, dest_dir: &Path) -> Result<()> {
+    // System32-pinned bsdtar (P1-1) so a `tar.exe` earlier on PATH can't be run.
+    let tar = system_tar();
+    let tar_s = tar.to_string_lossy().to_string();
+    // SECURITY (P1-1): list entries and reject any that would escape dest BEFORE
+    // extracting — a poisoned release zip could otherwise zip-slip via `..` or an
+    // absolute/drive path. (Windows symlink creation needs a privilege the app
+    // lacks, so a symlink entry just fails to extract rather than escaping.)
+    let listing = run_capture(&tar_s, &["-tf", &zip.to_string_lossy()])
+        .with_context(|| format!("list archive {}", zip.display()))?;
+    if !listing.status.success() {
+        bail!("could not list archive: {}", zip.display());
+    }
+    for entry in String::from_utf8_lossy(&listing.stdout).lines() {
+        if !archive_entry_is_safe(entry) {
+            bail!("refusing unsafe archive entry: {entry}");
+        }
+    }
     // bsdtar (tar.exe) on Windows 10 1803+ extracts zip archives.
     let status = launch_hidden_wait(
-        "tar.exe",
+        &tar_s,
         &[
             "-xf",
             &zip.to_string_lossy(),
@@ -1965,7 +2016,7 @@ fn preflight() -> Result<()> {
     if run_capture("curl.exe", &["--version"]).is_err() {
         bail!("curl.exe not found (needs Windows 10 1803+)");
     }
-    if run_capture("tar.exe", &["--version"]).is_err() {
+    if run_capture(&system_tar().to_string_lossy(), &["--version"]).is_err() {
         bail!("tar.exe not found (needs Windows 10 1803+)");
     }
     Ok(())
