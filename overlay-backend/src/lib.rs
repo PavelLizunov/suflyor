@@ -11,6 +11,7 @@ pub mod config;
 pub mod conspect;
 pub mod events;
 pub mod health;
+pub(crate) mod http_log;
 pub mod journal;
 pub mod kb;
 pub mod local_ai;

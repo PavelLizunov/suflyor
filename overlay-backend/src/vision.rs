@@ -253,12 +253,14 @@ pub async fn test_connection(base_url: String, bearer: String, model: String) ->
     if status.is_success() {
         Ok(format!("HTTP {}", status.as_u16()))
     } else {
-        // Log the body, return ONLY the status — the snippet can carry the local
-        // vision base_url / server internals into the screen-shared Settings /
-        // Diagnostics result field (audit Q7).
+        // Status only (no body): the body can carry the local vision base_url /
+        // internals into the screen-shared Settings/Diagnostics field (audit Q7)
+        // AND the shareable "Собрать логи" export (P0-1). Log status + size only.
         let txt = resp.text().await.unwrap_or_default();
-        let snippet: String = txt.chars().take(200).collect();
-        log::warn!("vision endpoint test HTTP {}: {snippet}", status.as_u16());
+        log::warn!(
+            "{}",
+            crate::http_log::http_error_line("vision endpoint test", status.as_u16(), txt.len())
+        );
         Err(anyhow!("HTTP {}", status.as_u16()))
     }
 }

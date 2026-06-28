@@ -831,13 +831,13 @@ async fn transcribe_once_attempt(
     if !resp.status().is_success() {
         let status = resp.status();
         // Keep the status (drives is_permanent_error + tells the user 401 vs 5xx)
-        // but DROP the response body from the returned error: a local server's
-        // body can carry paths/internals that would paint into the screen-
-        // capturable PTT tile. Body → file log only.
+        // but DROP the response body everywhere: it can carry paths/internals/
+        // transcript that would paint into the PTT tile AND land in the shareable
+        // "Собрать логи" export (P0-1). Log status + size only.
         let body = resp.text().await.unwrap_or_default();
         log::warn!(
-            "STT HTTP {status} body: {}",
-            body.chars().take(500).collect::<String>()
+            "{}",
+            crate::http_log::http_error_line("STT", status.as_u16(), body.len())
         );
         anyhow::bail!("STT HTTP {status}");
     }

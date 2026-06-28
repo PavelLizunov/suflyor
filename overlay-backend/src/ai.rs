@@ -216,12 +216,15 @@ pub async fn test_connection(base_url: String, bearer: String, model: String) ->
     if status.is_success() {
         Ok(format!("HTTP {}", status.as_u16()))
     } else {
-        // The body can echo the local base_url / a prompt / server internals — log
-        // it but return ONLY the status, so the screen-shared Settings result
-        // field can't leak it (audit Q7 / the generic-AI-error-message policy).
+        // The body can echo the local base_url / a prompt / server internals — so
+        // it is NOT logged (it would land in overlay-host.log → the shareable
+        // "Собрать логи" export, P0-1) and NOT returned (screen-shared Settings
+        // result, audit Q7). Log status + body size only.
         let txt = resp.text().await.unwrap_or_default();
-        let snippet: String = txt.chars().take(200).collect();
-        log::warn!("AI bridge test HTTP {}: {snippet}", status.as_u16());
+        log::warn!(
+            "{}",
+            crate::http_log::http_error_line("AI bridge test", status.as_u16(), txt.len())
+        );
         Err(anyhow!("HTTP {}", status.as_u16()))
     }
 }
@@ -242,11 +245,12 @@ pub async fn list_models(base_url: &str, bearer: &str) -> Result<Vec<String>> {
     let resp = req.send().await.context("GET models")?;
     let status = resp.status();
     if !status.is_success() {
-        // Log the body, return only the status (same screen-share-leak guard as
-        // test_connection — this error reaches the Settings model-dropdown area).
+        // Status only (no body): same P0-1 / screen-share guard as test_connection.
         let txt = resp.text().await.unwrap_or_default();
-        let snippet: String = txt.chars().take(200).collect();
-        log::warn!("list_models HTTP {}: {snippet}", status.as_u16());
+        log::warn!(
+            "{}",
+            crate::http_log::http_error_line("list_models", status.as_u16(), txt.len())
+        );
         return Err(anyhow!("HTTP {}", status.as_u16()));
     }
     let v: Value = resp.json().await.context("parse models json")?;
@@ -319,13 +323,11 @@ async fn stream_inner(
         // DROP the body: a server's body can carry paths/internals that would
         // paint into the streamed error tile. Body → file log only.
         let body = resp.text().await.unwrap_or_default();
-        // v0.17.1 (мега-аудит) — this line is now LIVE (the log facade finally
-        // reaches overlay-host.log). 500 → 200 chars: enough to identify the
-        // error shape, less room for a server body to echo paths/internals
-        // into the tester log. Tile text stays status-only either way.
+        // P0-1: do NOT log the body — it reaches overlay-host.log → the shareable
+        // "Собрать логи" export and can echo prompts/paths/internals. Status+size.
         log::warn!(
-            "AI stream HTTP {status} body: {}",
-            body.chars().take(200).collect::<String>()
+            "{}",
+            crate::http_log::http_error_line("AI stream", status.as_u16(), body.len())
         );
         return Err(anyhow!("HTTP {status}"));
     }
@@ -713,11 +715,11 @@ async fn complete_once(
     };
     if !resp.status().is_success() {
         let status = resp.status();
-        // Keep status (classification), drop body (see stream_inner).
+        // Keep status (classification), drop body (P0-1 — see stream_inner / http_log).
         let body = resp.text().await.unwrap_or_default();
         log::warn!(
-            "AI complete HTTP {status} body: {}",
-            body.chars().take(500).collect::<String>()
+            "{}",
+            crate::http_log::http_error_line("AI complete", status.as_u16(), body.len())
         );
         anyhow::bail!("HTTP {status}");
     }
