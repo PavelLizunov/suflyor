@@ -403,6 +403,25 @@ impl Store {
         Ok(out)
     }
 
+    /// Just the candidate TEXTS for a profile across ALL statuses — for the
+    /// extractor's dedup (never re-suggest an existing text). One query selecting
+    /// only the `text` column, instead of three unbounded `list_candidates(-1)`
+    /// full-row scans (P1-3). profile_id is indexed.
+    pub fn candidate_texts(&self, profile_id: &str) -> Result<Vec<String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT COALESCE(text, '') FROM memory_candidates WHERE profile_id = ?1")
+            .context("prepare candidate_texts")?;
+        let rows = stmt
+            .query_map(params![profile_id], |r| r.get::<_, String>(0))
+            .context("query candidate_texts")?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.context("map candidate text")?);
+        }
+        Ok(out)
+    }
+
     /// Count candidates for a profile in a status (e.g. `pending` → a badge).
     pub fn count_candidates(&self, profile_id: &str, status: &str) -> Result<i64> {
         self.conn

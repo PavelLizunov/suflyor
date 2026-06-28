@@ -29,6 +29,10 @@ const EXTRACT_RECENT_SESSIONS: usize = 12;
 /// in un-virtualized lists, so an unbounded count blew up the UI thread).
 const MEMORY_TAB_CAP: i64 = 200;
 
+/// Guards re-entering the (worker-thread) extractor while a run is in flight, so
+/// a double-click can't launch two scans (P1-3).
+static EXTRACT_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Wire the 💭 Memory tab: load the candidate + item lists and bind the
 /// approve / reject / delete / extract callbacks.
 pub(crate) fn wire_memory(win: &SettingsWindow) {
@@ -76,11 +80,28 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
     {
         let weak = win.as_weak();
         win.on_memory_extract(move || {
-            if let Some(w) = weak.upgrade() {
-                let inserted = run_extract();
-                w.set_memory_status(SharedString::from(format!("➕ {inserted}")));
-                reload_memory(&w);
+            let Some(w) = weak.upgrade() else { return };
+            // P1-3: the extractor scans candidate texts + reads AI turns for the
+            // recent sessions + inserts — far too heavy for the Slint event loop
+            // (froze the window on a large DB). Run it on a worker thread; the
+            // status text is the busy indicator and EXTRACT_RUNNING guards a
+            // double-fire. The Slint models are only ever touched back on the
+            // event loop via invoke_from_event_loop.
+            if EXTRACT_RUNNING.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                return;
             }
+            w.set_memory_status(SharedString::from("⏳ извлекаю…"));
+            let done = w.as_weak();
+            std::thread::spawn(move || {
+                let inserted = run_extract();
+                let _ = slint::invoke_from_event_loop(move || {
+                    EXTRACT_RUNNING.store(false, std::sync::atomic::Ordering::SeqCst);
+                    if let Some(w) = done.upgrade() {
+                        w.set_memory_status(SharedString::from(format!("➕ {inserted}")));
+                        reload_memory(&w);
+                    }
+                });
+            });
         });
     }
     // v0.16.0 — manual "add your own fact" (personal knowledge base). Inserts
@@ -156,15 +177,13 @@ fn run_extract() -> usize {
     let Ok(mut store) = open_default_store() else {
         return 0;
     };
-    // Existing candidate texts across ALL statuses → never re-suggest one.
-    let mut seen: HashSet<String> = HashSet::new();
-    for status in ["pending", "approved", "rejected"] {
-        if let Ok(cs) = store.list_candidates(PROFILE, status, -1) {
-            for c in cs {
-                seen.insert(c.text);
-            }
-        }
-    }
+    // Existing candidate texts across ALL statuses → never re-suggest one. One
+    // text-only query instead of three unbounded full-row scans (P1-3).
+    let mut seen: HashSet<String> = store
+        .candidate_texts(PROFILE)
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
     let sessions = store.list_sessions().unwrap_or_default();
     let mut inserted = 0usize;
     for s in sessions.into_iter().take(EXTRACT_RECENT_SESSIONS) {
