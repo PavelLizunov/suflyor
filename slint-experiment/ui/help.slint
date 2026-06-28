@@ -205,7 +205,7 @@ export component HelpWindow inherits Window {
                             vertical-alignment: center;
                         }
                         Text {
-                            text: "Справка - иконки, хоткеи и жесты";
+                            text: @tr("Help — icons, hotkeys & gestures");
                             font-size: 15px;
                             font-weight: 700;
                             color: Theme.text-primary;
@@ -225,32 +225,32 @@ export component HelpWindow inherits Window {
                     spacing: 0px;
 
                     Text {
-                        text: "Иконки бара";
+                        text: @tr("Bar icons");
                         font-weight: 700;
                         font-size: Metrics.font-body;
                         color: Theme.accent;
                     }
                     Rectangle { height: 8px; }
-                    TableHeader { left: "Иконка"; right: "Что делает"; }
+                    TableHeader { left: @tr("Icon"); right: @tr("What it does"); }
                     for row in [
-                        { ico: @image-url("../assets/icons/grip.svg"), hasicon: true, glyph: "", desc: "Перетащить = двигать бар; показывает состояние" },
-                        { ico: @image-url("../assets/icons/mic.svg"), hasicon: true, glyph: "", desc: "Постоянный захват микрофона (твой голос)" },
-                        { ico: @image-url("../assets/icons/speaker.svg"), hasicon: true, glyph: "", desc: "Постоянный захват системного звука (собеседник)" },
-                        { ico: @image-url("../assets/icons/mic.svg"), hasicon: true, glyph: "спросить", desc: "Удержание = запись голоса -> ответ AI (свайп вверх = lock)" },
-                        { ico: @image-url("../assets/icons/speaker.svg"), hasicon: true, glyph: "захватить", desc: "Удержание = запись системного звука -> ответ AI (свайп вверх = lock)" },
-                        { ico: @image-url("../assets/icons/play.svg"), hasicon: true, glyph: "", desc: "Старт/стоп живой сессии (распознавание + авто-подсказки)" },
-                        { ico: @image-url("../assets/icons/x.svg"), hasicon: false, glyph: "$0.000", desc: "Стоимость сессии (только cloud; локально бесплатно)" },
-                        { ico: @image-url("../assets/icons/stealth.svg"), hasicon: true, glyph: "", desc: "Stealth: скрыть overlay от захвата/шеринга экрана" },
-                        { ico: @image-url("../assets/icons/flame.svg"), hasicon: true, glyph: "", desc: "Агрессивные авто-тайлы (отвечать чаще)" },
-                        { ico: @image-url("../assets/icons/pencil.svg"), hasicon: true, glyph: "", desc: "Написать вопрос текстом" },
-                        { ico: @image-url("../assets/icons/plus.svg"), hasicon: true, glyph: "", desc: "Новый тайл из последней строки / ручной вопрос" },
-                        { ico: @image-url("../assets/icons/camera.svg"), hasicon: true, glyph: "", desc: "Скриншот области -> ответ vision-AI" },
-                        { ico: @image-url("../assets/icons/archive.svg"), hasicon: true, glyph: "", desc: "Архив сессий: просмотр и поиск прошлых созвонов (также F7)" },
-                        { ico: @image-url("../assets/icons/summary.svg"), hasicon: true, glyph: "", desc: "Сводка созвона: конспект (участники, темы, решения, задачи)" },
-                        { ico: @image-url("../assets/icons/gear.svg"), hasicon: true, glyph: "", desc: "Настройки" },
-                        { ico: @image-url("../assets/icons/sos.svg"), hasicon: true, glyph: "", desc: "Эта справка (также F1)" },
-                        { ico: @image-url("../assets/icons/restart.svg"), hasicon: true, glyph: "", desc: "Перезапуск overlay (в 2 шага; настройки сохраняются)" },
-                        { ico: @image-url("../assets/icons/x.svg"), hasicon: true, glyph: "", desc: "Выход (в 2 шага)" },
+                        { ico: @image-url("../assets/icons/grip.svg"), hasicon: true, glyph: "", desc: @tr("Drag to move the bar; shows the live state") },
+                        { ico: @image-url("../assets/icons/mic.svg"), hasicon: true, glyph: "", desc: @tr("Toggle continuous mic capture (your voice)") },
+                        { ico: @image-url("../assets/icons/speaker.svg"), hasicon: true, glyph: "", desc: @tr("Toggle continuous system-audio capture (the other side)") },
+                        { ico: @image-url("../assets/icons/mic.svg"), hasicon: true, glyph: @tr("ask"), desc: @tr("Hold to record your voice → AI answer (swipe up to lock)") },
+                        { ico: @image-url("../assets/icons/speaker.svg"), hasicon: true, glyph: @tr("grab"), desc: @tr("Hold to capture system audio → AI answer (swipe up to lock)") },
+                        { ico: @image-url("../assets/icons/play.svg"), hasicon: true, glyph: "", desc: @tr("Start / stop the live session (transcript + auto-tips)") },
+                        { ico: @image-url("../assets/icons/x.svg"), hasicon: false, glyph: "$0.000", desc: @tr("Session cost (cloud only; local is free)") },
+                        { ico: @image-url("../assets/icons/stealth.svg"), hasicon: true, glyph: "", desc: @tr("Stealth: hide the overlay from screen capture / share") },
+                        { ico: @image-url("../assets/icons/flame.svg"), hasicon: true, glyph: "", desc: @tr("Aggressive auto-tiles (answer more often)") },
+                        { ico: @image-url("../assets/icons/pencil.svg"), hasicon: true, glyph: "", desc: @tr("Write a question as text") },
+                        { ico: @image-url("../assets/icons/plus.svg"), hasicon: true, glyph: "", desc: @tr("New tile from the last line / a manual question") },
+                        { ico: @image-url("../assets/icons/camera.svg"), hasicon: true, glyph: "", desc: @tr("Screenshot a region → AI vision answer") },
+                        { ico: @image-url("../assets/icons/archive.svg"), hasicon: true, glyph: "", desc: @tr("Session archive: browse and search past calls (also F7)") },
+                        { ico: @image-url("../assets/icons/summary.svg"), hasicon: true, glyph: "", desc: @tr("Call summary: digest (participants, topics, decisions, tasks)") },
+                        { ico: @image-url("../assets/icons/gear.svg"), hasicon: true, glyph: "", desc: @tr("Settings") },
+                        { ico: @image-url("../assets/icons/sos.svg"), hasicon: true, glyph: "", desc: @tr("This help (also F1)") },
+                        { ico: @image-url("../assets/icons/restart.svg"), hasicon: true, glyph: "", desc: @tr("Restart the overlay (two-step; settings survive)") },
+                        { ico: @image-url("../assets/icons/x.svg"), hasicon: true, glyph: "", desc: @tr("Quit (two-step)") },
                     ] : TableRow {
                         icon: row.ico;
                         has-icon: row.hasicon;
@@ -260,26 +260,26 @@ export component HelpWindow inherits Window {
 
                     Rectangle { height: 18px; }
                     Text {
-                        text: "Хоткеи";
+                        text: @tr("Hotkeys");
                         font-weight: 700;
                         font-size: Metrics.font-body;
                         color: Theme.accent;
                     }
                     Rectangle { height: 8px; }
-                    TableHeader { left: "Клавиша"; right: "Действие"; }
+                    TableHeader { left: @tr("Key"); right: @tr("Action"); }
                     for row in [
-                        ["F1", "Эта справка"],
-                        ["F9", "Спросить AI сейчас (ответ стримится в тайл)"],
-                        ["Shift+F9", "Спросить AI с эскалацией к умной cloud-модели (разово)"],
-                        ["F8", "Скриншот -> Vision-AI (выделите область; Esc - отмена)"],
-                        ["F3", "Повторить последний вопрос со свежим контекстом"],
-                        ["F4", "Палитра базы знаний (открыть / закрыть)"],
-                        ["F6", "Ручной тайл из последней строки транскрипта"],
-                        ["F7", "Архив сессий (просмотр и поиск)"],
-                        ["Shift+F8", "Скриншот -> перевод текста (Vision-AI)"],
-                        ["Shift+Alt+1", "Озвучить выделенный текст (TTS)"],
-                        ["Shift+Alt+2", "Распознать текст с области экрана (OCR) и озвучить"],
-                        ["Shift+Alt+3", "Пауза / продолжение озвучки"],
+                        ["F1", @tr("This help")],
+                        ["F9", @tr("Ask AI now (streams the answer into a tile)")],
+                        ["Shift+F9", @tr("Ask AI escalated to the smart cloud model (one-shot)")],
+                        ["F8", @tr("Screenshot → AI vision (drag a region; Esc cancels)")],
+                        ["F3", @tr("Re-ask the last question with fresh context")],
+                        ["F4", @tr("Knowledge-base palette (open / close)")],
+                        ["F6", @tr("Manual tile from the last transcript line")],
+                        ["F7", @tr("Session archive (browse and search)")],
+                        ["Shift+F8", @tr("Screenshot → translate text (AI vision)")],
+                        ["Shift+Alt+1", @tr("Read the selected text aloud (TTS)")],
+                        ["Shift+Alt+2", @tr("OCR a screen region and read it aloud")],
+                        ["Shift+Alt+3", @tr("Pause / resume reading aloud")],
                     ] : TableRow {
                         key-row: true;
                         glyph: row[0];
@@ -302,14 +302,14 @@ export component HelpWindow inherits Window {
 
                     Rectangle { height: 18px; }
                     Text {
-                        text: "Локальная модель и зрение";
+                        text: @tr("Local model and vision");
                         font-weight: 700;
                         font-size: Metrics.font-body;
                         color: Theme.accent;
                     }
                     Rectangle { height: 8px; }
                     Text {
-                        text: "Локальная AI-модель: Быстрее (4B) или Умнее (12B) — выбор в Настройки -> AI. Если локальный AI отвалится, overlay перезапустит сервер сам. Язык распознавания (Авто/Русский/English) — там же, в Настройки -> Речь. Зрение (F8) работает на модели 4B.";
+                        text: @tr("Local AI model: Faster (4B) or Smarter (12B) — choose in Settings → AI. If the local AI drops, the overlay restarts the server itself. Recognition language (Auto/Russian/English) is in the same place, under Settings → Speech. Vision (F8) runs on the 4B model.");
                         font-size: Metrics.font-label;
                         color: Theme.text-secondary;
                         wrap: word-wrap;
@@ -317,14 +317,14 @@ export component HelpWindow inherits Window {
 
                     Rectangle { height: 18px; }
                     Text {
-                        text: "Озвучка · распознавание · компактный режим";
+                        text: @tr("Read-aloud · recognition · compact mode");
                         font-weight: 700;
                         font-size: Metrics.font-body;
                         color: Theme.accent;
                     }
                     Rectangle { height: 8px; }
                     Text {
-                        text: "Shift+Alt+1 — озвучить выделенный текст; Shift+Alt+2 — распознать текст с области экрана (OCR) и озвучить; Shift+Alt+3 — пауза/продолжение. Голоса (TTS) и движок распознавания (OCR) ставятся кнопкой в Настройки -> AI (TTS и Vision). Компактный режим «читалки»: чип свернуть на баре превращает бар в маленькую пилюлю только для озвучки. «Режим прослушивания» (Настройки -> Авто-тайлы) глушит авто-тайлы, чтобы просто записывать и слушать.";
+                        text: @tr("Shift+Alt+1 — read the selected text aloud; Shift+Alt+2 — OCR text from a screen region and read it; Shift+Alt+3 — pause/resume. Voices (TTS) and the recognition engine (OCR) install with a button in Settings → AI (TTS and Vision). Compact \"reader\" mode: the collapse chip on the bar turns it into a tiny read-aloud-only pill. \"Listening mode\" (Settings → Auto-tiles) mutes auto-tiles so you can just record and listen.");
                         font-size: Metrics.font-label;
                         color: Theme.text-secondary;
                         wrap: word-wrap;

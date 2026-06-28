@@ -1277,3 +1277,50 @@ msgstr "Размещение тайлов"
 
 msgid "Which monitor new answer tiles appear on."
 msgstr "На каком мониторе появляются новые тайлы-ответы."
+
+# === help.slint (P1-4 — Help window i18n) ===
+
+msgid "Icon"
+msgstr "Иконка"
+
+msgid "What it does"
+msgstr "Что делает"
+
+msgid "Key"
+msgstr "Клавиша"
+
+msgid "Action"
+msgstr "Действие"
+
+msgid "Session archive: browse and search past calls (also F7)"
+msgstr "Архив сессий: просмотр и поиск прошлых созвонов (также F7)"
+
+msgid "Call summary: digest (participants, topics, decisions, tasks)"
+msgstr "Сводка созвона: конспект (участники, темы, решения, задачи)"
+
+msgid "Ask AI escalated to the smart cloud model (one-shot)"
+msgstr "Спросить AI с эскалацией к умной cloud-модели (разово)"
+
+msgid "Session archive (browse and search)"
+msgstr "Архив сессий (просмотр и поиск)"
+
+msgid "Screenshot → translate text (AI vision)"
+msgstr "Скриншот → перевод текста (Vision-AI)"
+
+msgid "Read the selected text aloud (TTS)"
+msgstr "Озвучить выделенный текст (TTS)"
+
+msgid "Pause / resume reading aloud"
+msgstr "Пауза / продолжение озвучки"
+
+msgid "Local model and vision"
+msgstr "Локальная модель и зрение"
+
+msgid "Local AI model: Faster (4B) or Smarter (12B) — choose in Settings → AI. If the local AI drops, the overlay restarts the server itself. Recognition language (Auto/Russian/English) is in the same place, under Settings → Speech. Vision (F8) runs on the 4B model."
+msgstr "Локальная AI-модель: Быстрее (4B) или Умнее (12B) — выбор в Настройки -> AI. Если локальный AI отвалится, overlay перезапустит сервер сам. Язык распознавания (Авто/Русский/English) — там же, в Настройки -> Речь. Зрение (F8) работает на модели 4B."
+
+msgid "Read-aloud · recognition · compact mode"
+msgstr "Озвучка · распознавание · компактный режим"
+
+msgid "Shift+Alt+1 — read the selected text aloud; Shift+Alt+2 — OCR text from a screen region and read it; Shift+Alt+3 — pause/resume. Voices (TTS) and the recognition engine (OCR) install with a button in Settings → AI (TTS and Vision). Compact \"reader\" mode: the collapse chip on the bar turns it into a tiny read-aloud-only pill. \"Listening mode\" (Settings → Auto-tiles) mutes auto-tiles so you can just record and listen."
+msgstr "Shift+Alt+1 — озвучить выделенный текст; Shift+Alt+2 — распознать текст с области экрана (OCR) и озвучить; Shift+Alt+3 — пауза/продолжение. Голоса (TTS) и движок распознавания (OCR) ставятся кнопкой в Настройки -> AI (TTS и Vision). Компактный режим «читалки»: чип свернуть на баре превращает бар в маленькую пилюлю только для озвучки. «Режим прослушивания» (Настройки -> Авто-тайлы) глушит авто-тайлы, чтобы просто записывать и слушать."
