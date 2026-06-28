@@ -663,6 +663,11 @@ mod tests {
             redact_urls("STT: http://[2001:db8::1]:9000/v1 ok"),
             "STT: http://***:9000/v1 ok"
         );
+        // P0-2: bracketed IPv6 WITHOUT a port must be fully masked (no ':abcd]' leak).
+        assert_eq!(
+            redact_urls("vision @ http://[fd00::abcd]/v1"),
+            "vision @ http://***/v1"
+        );
         // Plain IPv4 in a URL — host blanked, port/path kept.
         assert_eq!(
             redact_urls("http://192.168.0.142:18902/v1"),

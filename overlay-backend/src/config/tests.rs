@@ -1221,3 +1221,33 @@ fn add_profile_does_not_clone_active_profile_context() {
     // ninitux is left untouched
     assert_eq!(c.context_profiles[0].context, "ninitux description");
 }
+
+// P0-2: a bracketed IPv6 host WITHOUT a port must be fully masked — rfind(':')
+// used to keep ':abcd]' and leak the IPv6 tail. Keep a port only when ':<digits>'
+// follows the closing ']'.
+#[test]
+fn mask_host_bracketed_ipv6_without_port_is_fully_masked() {
+    assert_eq!(mask_host("http://[fd00::abcd]/v1"), "http://***/v1");
+    assert_eq!(mask_host("https://[::1]"), "https://***");
+    assert_eq!(mask_host("http://[2001:db8::1]/path"), "http://***/path");
+}
+
+#[test]
+fn mask_host_keeps_real_ports_and_dns_ipv4() {
+    // bracketed IPv6 WITH a port keeps the port
+    assert_eq!(
+        mask_host("http://[2001:db8::1]:9000/v1"),
+        "http://***:9000/v1"
+    );
+    assert_eq!(mask_host("http://[::1]:8080"), "http://***:8080");
+    // DNS + IPv4 hosts unchanged (regression guard)
+    assert_eq!(
+        mask_host("http://192.168.0.142:18902/v1"),
+        "http://***:18902/v1"
+    );
+    assert_eq!(
+        mask_host("http://bridge.tailnet.ts.net:18902/v1"),
+        "http://***:18902/v1"
+    );
+    assert_eq!(mask_host("http://example.com/v1"), "http://***/v1");
+}

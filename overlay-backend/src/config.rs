@@ -1432,8 +1432,29 @@ pub fn mask_host(url: &str) -> String {
         Some(i) => (&rest[..i], &rest[i..]),
         None => (rest, ""),
     };
-    // Keep the :port suffix of the authority if any, blank the host.
-    let port = authority.rfind(':').map(|i| &authority[i..]).unwrap_or("");
+    // Keep the :port suffix of the authority if any, blank the host. A bracketed
+    // IPv6 literal ([fd00::abcd]) has colons INSIDE the brackets that are part of
+    // the address, not a port — so for those keep a port ONLY when ':<digits>'
+    // follows the closing ']'; otherwise nothing. (P0-2: a plain rfind(':') kept
+    // ':abcd]' and leaked the IPv6 tail for a no-port bracketed host.)
+    let port = if authority.starts_with('[') {
+        match authority.find(']') {
+            Some(close) => {
+                let after = &authority[close + 1..];
+                if after.starts_with(':')
+                    && after.len() > 1
+                    && after.as_bytes()[1..].iter().all(u8::is_ascii_digit)
+                {
+                    after
+                } else {
+                    ""
+                }
+            }
+            None => "", // malformed (no closing bracket) — blank the whole authority
+        }
+    } else {
+        authority.rfind(':').map(|i| &authority[i..]).unwrap_or("")
+    };
     format!("{scheme}***{port}{path}")
 }
 
