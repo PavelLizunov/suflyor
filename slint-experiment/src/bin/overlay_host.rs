@@ -1816,16 +1816,15 @@ fn main() -> Result<(), slint::PlatformError> {
                 // payload ([summary-prompt, transcript]) instead of the bare title,
                 // so the generic regenerate/escalate (which re-ask the stored
                 // [system, user] of a 1-user-turn history WITHOUT reframing) rebuild
-                // the summary correctly. The transcript is read live from the
-                // full-session accumulator at seed time (≈ completion time); for an
-                // ongoing session this may include a few seconds more speech than the
-                // displayed summary, which is the right input for a "rebuild".
-                // Stays true for every non-Summary kind; for Summary it records
-                // whether the seed actually captured a transcript. A session restart
-                // between the Summary request and this tile painting clears
-                // full_transcript (slint_session.rs) → empty seed → 🔄/🧠 would
-                // rebuild from nothing, so we leave them OFF for that (rare) tile
-                // below. The displayed answer is unaffected (already computed).
+                // the summary correctly. ТЗ1-Баг2 — the transcript is taken from the
+                // session's PERSISTED conspect sources (what actually built THIS
+                // summary), so a follow-up on an archived summary answers about that
+                // session; the LIVE accumulator is only the fallback when no conspect
+                // sources exist. `summary_seed_has_transcript` records whether the
+                // seed captured a transcript at all — a session restart before this
+                // tile paints can leave both empty → 🔄/🧠 rebuild from nothing, so we
+                // leave them OFF for that (rare) tile below. Displayed answer is
+                // unaffected (already computed). Stays true for every non-Summary kind.
                 let mut summary_seed_has_transcript = true;
                 let mut messages = if matches!(req.kind, TileKind::Summary) {
                     let (is_local, transcript) = {
@@ -1837,7 +1836,6 @@ fn main() -> Result<(), slint::PlatformError> {
                             .collect::<Vec<_>>();
                         (is_local, tx)
                     };
-                    summary_seed_has_transcript = !transcript.is_empty();
                     // v0.16.0 — same keyword-gated memory LOGIC as the bar
                     // build. Computed at seed time, so a 🔄/🧠 rebuild uses the
                     // CURRENT transcript + memory — the v0.12.2 "rebuild" sema:
@@ -1854,8 +1852,32 @@ fn main() -> Result<(), slint::PlatformError> {
                     // v0.17.1 (мега-аудит) — format ONCE and reuse for both the
                     // memory_ref gating and the seed (was two full passes over
                     // a potentially 20k-line transcript on the UI thread).
-                    let formatted =
-                        overlay_backend::runtime::format_transcript_for_summary(&transcript, is_ru);
+                    // ТЗ1-Баг2: for a summary tied to a session (archive-view OR the
+                    // just-saved live one), seed from the PERSISTED transcript that
+                    // built its summary (the conspect part sources) so a follow-up
+                    // answers about THAT session — not the live/empty transcript +
+                    // active profile. Fall back to the live transcript when the
+                    // conspect has no usable sources.
+                    let formatted = req
+                        .spec
+                        .summary_session
+                        .as_deref()
+                        .and_then(overlay_backend::conspect::load)
+                        .map(|c| {
+                            c.parts
+                                .iter()
+                                .map(|p| p.source.as_str())
+                                .collect::<Vec<_>>()
+                                .join("\n")
+                        })
+                        .filter(|s| !s.trim().is_empty())
+                        .unwrap_or_else(|| {
+                            overlay_backend::runtime::format_transcript_for_summary(
+                                &transcript,
+                                is_ru,
+                            )
+                        });
+                    summary_seed_has_transcript = !formatted.trim().is_empty();
                     let memory_ref =
                         overlay_backend::memory::summary_reference_for_transcript(&formatted);
                     overlay_backend::runtime::build_summary_seed_from_formatted(
