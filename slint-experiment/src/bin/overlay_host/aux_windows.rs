@@ -484,6 +484,15 @@ pub(crate) fn open_archive(
     // filesystem stat PER ROW per rebuild; see recording_ids_snapshot).
     let recordings = Rc::new(recording_ids_snapshot());
 
+    // Баг5-class guard: the archive results render in an UN-VIRTUALIZED 50px-row
+    // `for` inside a ScrollView (archive.slint:299), so cap the DISPLAYED rows —
+    // content must stay under the Slint SW-renderer's i16 (32767px) coordinate
+    // limit or a rounded-rect row's wrapped coordinate panics/corrupts (like the
+    // Memory tab). The DB keeps every session (the count shows the true total);
+    // older sessions are reachable via search (itself capped at 60).
+    const ARCHIVE_LIST_CAP: usize = 300;
+    const _: () = assert!(ARCHIVE_LIST_CAP * 60 + 200 < 32_767);
+
     match store.as_ref() {
         Some(store_rc) => {
             let sessions = store_rc.borrow().list_sessions().unwrap_or_default();
@@ -495,6 +504,7 @@ pub(crate) fn open_archive(
             let debriefs = overlay_backend::conspect::debrief_session_ids();
             let rows: Vec<ArchiveRow> = sessions
                 .iter()
+                .take(ARCHIVE_LIST_CAP)
                 .map(|s| session_to_row(s, &recordings, &conspects, &debriefs))
                 .collect();
             win.set_results(ModelRc::new(VecModel::from(rows)));
@@ -528,6 +538,7 @@ pub(crate) fn open_archive(
                     .list_sessions()
                     .unwrap_or_default()
                     .iter()
+                    .take(ARCHIVE_LIST_CAP)
                     .map(|s| session_to_row(s, &recordings_q, &conspects, &debriefs))
                     .collect()
             } else {
