@@ -178,6 +178,70 @@ pub fn detect_nvidia() -> bool {
     }
 }
 
+/// Which GPU acceleration to target for the local engine (Баг2): NVIDIA → CUDA
+/// build; any other GPU (AMD/Intel) → Vulkan build; none → CPU.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum GpuKind {
+    Nvidia,
+    Other,
+    None,
+}
+
+/// Classify the GPU for engine selection. NVIDIA (CUDA) is checked first via the
+/// cheap `nvidia-smi`; only a non-NVIDIA machine pays the WMI query for an AMD /
+/// Intel adapter (Vulkan). No detectable GPU → CPU.
+fn detect_gpu() -> GpuKind {
+    if detect_nvidia() {
+        GpuKind::Nvidia
+    } else if detect_non_nvidia_gpu() && vulkan_loader_present() {
+        // Vulkan needs BOTH a non-NVIDIA GPU AND the loader (vulkan-1.dll, shipped
+        // with Win10+). Without the loader the Vulkan build can't load at all — and
+        // the -ngl 0 fallback re-runs the SAME exe, so it couldn't rescue it — so
+        // use CPU rather than risk a failed install on a loader-less box (Баг2).
+        GpuKind::Other
+    } else {
+        GpuKind::None
+    }
+}
+
+/// True if the Vulkan loader (`vulkan-1.dll`) is present in System32 — required for
+/// the Vulkan llama build to load at all.
+fn vulkan_loader_present() -> bool {
+    std::env::var_os("SystemRoot")
+        .map(|r| PathBuf::from(r).join("System32").join("vulkan-1.dll"))
+        .is_some_and(|p| p.is_file())
+}
+
+/// True if a non-NVIDIA display adapter (AMD / Intel) is present. Best-effort name
+/// match over WMI; a false positive only means we try the Vulkan build and fall
+/// back to CPU if it can't offload (Баг2), so this never makes things worse.
+fn detect_non_nvidia_gpu() -> bool {
+    let out = match run_capture(
+        "powershell",
+        &[
+            "-NoProfile",
+            "-Command",
+            "(Get-CimInstance Win32_VideoController).Name -join ';'",
+        ],
+    ) {
+        Ok(o) if o.status.success() => o.stdout,
+        _ => return false,
+    };
+    let names = String::from_utf8_lossy(&out).to_lowercase();
+    ["radeon", "amd", "intel", "arc"]
+        .iter()
+        .any(|k| names.contains(k))
+}
+
+/// `-ngl` for a GPU kind: offload all layers for any GPU build, CPU-only otherwise.
+fn gpu_ngl(gpu: GpuKind) -> &'static str {
+    if gpu == GpuKind::None {
+        "0"
+    } else {
+        "99"
+    }
+}
+
 /// Write the installer's resulting endpoints/models into a `Config`, switching
 /// it to the local stack. Secrets (groq key / ai bearer) are untouched because
 /// only these fields are mutated and the caller saves the whole struct.
@@ -250,7 +314,11 @@ pub fn install(
         ensure_disk_space(&opts.root, need, on)?;
     }
 
-    let use_gpu = detect_nvidia() && !opts.force_cpu;
+    let gpu = if opts.force_cpu {
+        GpuKind::None
+    } else {
+        detect_gpu()
+    };
     let mut cuda_version: Option<String> = None;
 
     // ---- llama.cpp + Gemma -------------------------------------------------
@@ -259,7 +327,7 @@ pub fn install(
         std::fs::create_dir_all(&llama_dir)?;
         if find_exe(&llama_dir, "llama-server.exe").is_none() {
             let rel = github_release(LLAMA_REPO)?;
-            let pick = pick_llama(&rel.assets, !use_gpu)?;
+            let pick = pick_llama(&rel.assets, gpu)?;
             cuda_version = pick.version.clone();
             let blabel = format!("llama.cpp {}", pick.version.as_deref().unwrap_or("CPU"));
             download_and_extract(
@@ -328,7 +396,9 @@ pub fn install(
             && find_exe(&whisper_dir, "server.exe").is_none()
         {
             let assets = github_assets(WHISPER_REPO)?;
-            let (url, size) = pick_whisper(&assets, !use_gpu)?;
+            // whisper.cpp ships CPU + cuBLAS(NVIDIA) builds only — no Vulkan; so GPU
+            // whisper stays NVIDIA-only, AMD/Intel use the CPU whisper build (Баг2).
+            let (url, size) = pick_whisper(&assets, gpu != GpuKind::Nvidia)?;
             download_and_extract(&url, size, "whisper.cpp", &whisper_dir, cancel, on)?;
         }
         let whisper_dest = whisper_dir.join(WHISPER_FILE);
@@ -419,7 +489,7 @@ pub fn install(
         let gguf_s = gguf.to_string_lossy().into_owned();
         let mmproj = llama_dir.join(MMPROJ_FILE);
         let mmproj_s = mmproj.to_string_lossy().into_owned();
-        let ngl = if use_gpu { "99" } else { "0" };
+        let ngl = gpu_ngl(gpu);
         let mut args: Vec<&str> = vec![
             "-m",
             &gguf_s,
@@ -472,29 +542,92 @@ pub fn install(
 
     // ---- wait for llama readiness + verify GPU offload --------------------
     let mut on_gpu = false;
+    let mut effective_gpu = gpu;
     if !opts.skip_llama {
         on(Progress::Step("Waiting for the model to load".to_string()));
-        // P0.2: fail the install if the model never loads or can't generate —
-        // don't report success on a wedged server.
-        wait_ready(&format!("{LLAMA_BASE_URL}/models"), 120)
-            .context("llama-server did not become ready")?;
-        // The tile shows {e} (this top-level context), so it must be actionable
-        // RU; the inner bail (with a reply snippet) only reaches the log via {e:#}.
-        verify_llama_ready(on).context(
+        // The user-facing message (shown as the tile's {e}) must be actionable RU;
+        // the inner detail only reaches the log via {e:#}.
+        const NOT_READY_RU: &str =
             "Локальная модель установилась, но не смогла запуститься на этом \
              компьютере (не успела прогреться). Попробуйте переустановить, либо \
-             включите облачный AI в Настройках → AI.",
-        )?;
-        if use_gpu {
-            on_gpu = verify_gpu_offload(24);
-            let verdict = if on_gpu {
-                format!("GPU (CUDA {})", cuda_version.as_deref().unwrap_or("?"))
+             включите облачный AI в Настройках → AI.";
+        // P0.2: fail (or fall back) if the model never loads or can't generate —
+        // don't report success on a wedged server.
+        let ready: Result<()> = (|| {
+            wait_ready(&format!("{LLAMA_BASE_URL}/models"), 120)?;
+            verify_llama_ready(on)?;
+            Ok(())
+        })();
+        if let Err(e) = ready {
+            // Баг2 — a GPU offload build (CUDA/Vulkan) didn't come up on this
+            // machine (missing/unusable driver). Relaunch the SAME binary CPU-only
+            // (-ngl 0) so local AI still works; bounds the worst case at the prior
+            // CPU behavior. A Vulkan/CUDA-built llama-server runs fine on CPU.
+            if gpu != GpuKind::None {
+                log::warn!("local-ai: GPU launch not ready ({e:#}); falling back to CPU (-ngl 0)");
+                on(Progress::Step("GPU didn't start — using CPU".to_string()));
+                // Free :8080 — owner-aware, this kills the failed GPU llama WE
+                // launched. Then drop only its now-dead handle: llama is servers[0]
+                // here (this block runs only when !skip_llama, and llama is pushed
+                // before whisper). Do NOT pop() — that would kill the whisper server
+                // (pushed last) and wedge its readiness wait below (CRITICAL fix).
+                let _ = stop_listener_on_port(LLAMA_PORT, &opts.root);
+                if !servers.is_empty() {
+                    // Reap the failed llama's handle (its process was already killed
+                    // by the port-free above) so the Child isn't dropped unreaped
+                    // (clippy::zombie_processes). Do NOT touch whisper (servers[1..]).
+                    let mut dead = servers.remove(0);
+                    let _ = dead.wait();
+                }
+                std::thread::sleep(Duration::from_millis(800));
+                let exe2 = find_exe(&llama_dir, "llama-server.exe")
+                    .context("llama-server.exe missing for CPU fallback")?;
+                let gguf2 = llama_dir.join(GEMMA_FILE);
+                let gguf2_s = gguf2.to_string_lossy().into_owned();
+                let mmproj2 = llama_dir.join(MMPROJ_FILE);
+                let mmproj2_s = mmproj2.to_string_lossy().into_owned();
+                let mut cpu_args: Vec<&str> = vec![
+                    "-m",
+                    &gguf2_s,
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    LLAMA_PORT,
+                    "-ngl",
+                    "0",
+                    "-c",
+                    "8192",
+                    "--jinja",
+                ];
+                if mmproj2.exists() {
+                    cpu_args.push("--mmproj");
+                    cpu_args.push(&mmproj2_s);
+                }
+                servers.push(launch_hidden(&exe2, &cpu_args)?);
+                wait_ready(&format!("{LLAMA_BASE_URL}/models"), 120).context(NOT_READY_RU)?;
+                verify_llama_ready(on).context(NOT_READY_RU)?;
+                effective_gpu = GpuKind::None;
             } else {
-                "CPU (GPU offload not detected — update the NVIDIA driver)".to_string()
-            };
-            on(Progress::Gpu(verdict));
-        } else {
-            on(Progress::Gpu("CPU".to_string()));
+                return Err(e).context(NOT_READY_RU);
+            }
+        }
+        match effective_gpu {
+            GpuKind::Nvidia => {
+                on_gpu = verify_gpu_offload(24);
+                let verdict = if on_gpu {
+                    format!("GPU (CUDA {})", cuda_version.as_deref().unwrap_or("?"))
+                } else {
+                    "CPU (GPU offload not detected — update the NVIDIA driver)".to_string()
+                };
+                on(Progress::Gpu(verdict));
+            }
+            GpuKind::Other => {
+                // Vulkan offload isn't visible to nvidia-smi; the model loaded +
+                // generated above, so report GPU. The tester confirms the speedup.
+                on_gpu = true;
+                on(Progress::Gpu("GPU (Vulkan)".to_string()));
+            }
+            GpuKind::None => on(Progress::Gpu("CPU".to_string())),
         }
     }
     if !opts.skip_whisper {
@@ -1119,8 +1252,8 @@ pub fn update_llama_engine(
     // binaries until the new ones are proven good). The staging dir is a SIBLING
     // of `llama.cpp` (NOT inside it) so `find_exe(&llama_dir, …)` — which recurses
     // — can never pick up the half-downloaded staged binary and launch it on :8080.
-    let use_gpu = detect_nvidia();
-    let pick = pick_llama(&rel.assets, !use_gpu)?;
+    let gpu = detect_gpu();
+    let pick = pick_llama(&rel.assets, gpu)?;
     let staging = root.join(".llama-staging-update");
     let _ = std::fs::remove_dir_all(&staging);
     std::fs::create_dir_all(&staging).context("create engine staging dir")?;
@@ -1149,7 +1282,7 @@ pub fn update_llama_engine(
             });
         }
     };
-    if !verify_engine_runs(&staged_exe, &llama_dir, use_gpu, cancel) {
+    if !verify_engine_runs(&staged_exe, &llama_dir, gpu != GpuKind::None, cancel) {
         let _ = std::fs::remove_dir_all(&staging);
         return Ok(EngineUpdate::Skipped {
             reason: "new build failed to launch — kept the current engine".into(),
@@ -1436,7 +1569,8 @@ pub fn ensure_servers(
     prefer_quality: bool,
 ) -> Vec<Child> {
     let mut started = Vec::new();
-    let use_gpu = detect_nvidia();
+    // Any GPU (NVIDIA CUDA or AMD/Intel Vulkan build) → offload; else CPU (Баг2).
+    let use_gpu = detect_gpu() != GpuKind::None;
     // NOTE: deliberately launch-only — do NOT kill+relaunch a server that is
     // already answering. Live smoke showed that relaunching the (warm) server on
     // startup defeats the model warm-up (the warm-up then hits a cold-loading
@@ -1576,11 +1710,12 @@ fn cuda_version_of(name: &str) -> Option<(u32, u32)> {
     Some((maj, min))
 }
 
-/// Pick the llama.cpp Windows build: newest CUDA build + matching cudart, or the
-/// CPU build when `force_cpu` (or no CUDA build exists). RTX 50-series (Blackwell)
-/// needs CUDA >= 12.8, so we always take the HIGHEST available CUDA version.
-fn pick_llama(assets: &[GhAsset], force_cpu: bool) -> Result<LlamaPick> {
-    if !force_cpu {
+/// Pick the llama.cpp Windows build for the detected GPU (Баг2): NVIDIA → newest
+/// CUDA build + matching cudart (RTX 50-series/Blackwell needs CUDA ≥ 12.8, so we
+/// take the HIGHEST CUDA version); AMD/Intel → the Vulkan build; none (or no
+/// matching GPU asset in this release) → the CPU build.
+fn pick_llama(assets: &[GhAsset], gpu: GpuKind) -> Result<LlamaPick> {
+    if gpu == GpuKind::Nvidia {
         let best = assets
             .iter()
             .filter(|a| a.name.starts_with("llama-"))
@@ -1600,6 +1735,22 @@ fn pick_llama(assets: &[GhAsset], force_cpu: bool) -> Result<LlamaPick> {
                 version: Some(format!("{maj}.{min}")),
             });
         }
+        // No CUDA asset in this release → fall through to the CPU build.
+    }
+    if gpu == GpuKind::Other {
+        if let Some(vk) = assets
+            .iter()
+            .find(|a| a.name.starts_with("llama-") && a.name.ends_with("-bin-win-vulkan-x64.zip"))
+        {
+            return Ok(LlamaPick {
+                build_url: vk.browser_download_url.clone(),
+                build_size: vk.size,
+                cudart_url: None,
+                cudart_size: 0,
+                version: Some("Vulkan".to_string()),
+            });
+        }
+        // No Vulkan asset in this release → fall through to the CPU build.
     }
     let cpu = assets
         .iter()

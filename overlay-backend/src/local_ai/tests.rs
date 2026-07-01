@@ -256,7 +256,7 @@ fn pick_newest_cuda_and_matching_cudart() {
         asset("cudart-llama-bin-win-cuda-13.3-x64.zip"),
         asset("llama-b9410-bin-win-vulkan-x64.zip"),
     ];
-    let pick = pick_llama(&assets, false).unwrap();
+    let pick = pick_llama(&assets, GpuKind::Nvidia).unwrap();
     assert_eq!(pick.version.as_deref(), Some("13.3"));
     assert!(pick
         .build_url
@@ -274,7 +274,38 @@ fn pick_cpu_when_forced() {
         asset("cudart-llama-bin-win-cuda-13.3-x64.zip"),
         asset("llama-b9410-bin-win-cpu-x64.zip"),
     ];
-    let pick = pick_llama(&assets, true).unwrap();
+    let pick = pick_llama(&assets, GpuKind::None).unwrap();
+    assert!(pick.version.is_none());
+    assert!(pick.cudart_url.is_none());
+    assert!(pick.build_url.ends_with("llama-b9410-bin-win-cpu-x64.zip"));
+}
+
+#[test]
+fn pick_vulkan_for_non_nvidia_gpu() {
+    // AMD/Intel (GpuKind::Other) → the Vulkan build, no cudart (Баг2).
+    let assets = vec![
+        asset("llama-b9410-bin-win-cpu-x64.zip"),
+        asset("llama-b9410-bin-win-cuda-13.3-x64.zip"),
+        asset("cudart-llama-bin-win-cuda-13.3-x64.zip"),
+        asset("llama-b9410-bin-win-vulkan-x64.zip"),
+    ];
+    let pick = pick_llama(&assets, GpuKind::Other).unwrap();
+    assert_eq!(pick.version.as_deref(), Some("Vulkan"));
+    assert!(pick.cudart_url.is_none());
+    assert!(pick
+        .build_url
+        .ends_with("llama-b9410-bin-win-vulkan-x64.zip"));
+}
+
+#[test]
+fn pick_cpu_when_non_nvidia_but_no_vulkan_asset() {
+    // AMD/Intel machine but the release has no Vulkan build → CPU fallthrough.
+    let assets = vec![
+        asset("llama-b9410-bin-win-cpu-x64.zip"),
+        asset("llama-b9410-bin-win-cuda-13.3-x64.zip"),
+        asset("cudart-llama-bin-win-cuda-13.3-x64.zip"),
+    ];
+    let pick = pick_llama(&assets, GpuKind::Other).unwrap();
     assert!(pick.version.is_none());
     assert!(pick.cudart_url.is_none());
     assert!(pick.build_url.ends_with("llama-b9410-bin-win-cpu-x64.zip"));
@@ -328,7 +359,7 @@ fn pick_whisper_gpu_falls_back_to_cpu_when_no_cublas() {
 #[ignore = "hits the live GitHub API (run with --ignored)"]
 fn live_pick_llama_is_blackwell_capable() {
     let assets = github_assets(LLAMA_REPO).unwrap();
-    let pick = pick_llama(&assets, false).unwrap();
+    let pick = pick_llama(&assets, GpuKind::Nvidia).unwrap();
     let v = pick.version.expect("a CUDA build should exist");
     let mut it = v.split('.');
     let maj: u32 = it.next().unwrap().parse().unwrap();
