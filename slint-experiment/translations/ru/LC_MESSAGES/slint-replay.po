@@ -121,6 +121,9 @@ msgstr "выделить все"
 msgid "Audio not saved"
 msgstr "Аудио не сохранено"
 
+msgid "{} more lines not shown - use 'Copy all' for the full transcript"
+msgstr "Показаны не все строки: скрыто {}. «Копировать всё» даёт полный транскрипт."
+
 msgid "Delete session?"
 msgstr "Удалить сессию?"
 

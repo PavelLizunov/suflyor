@@ -1649,6 +1649,28 @@ fn wire_transcript_player(
     transcript_player::set_poll_timer(timer);
 }
 
+/// Cap on transcript rows DISPLAYED in the viewer: the FIRST N utterances
+/// (chronological). A DISPLAY bound only — "Copy all" exports every line (it reads
+/// the full utterance set, not this capped view) and an overflow footer discloses
+/// the hidden tail, so a long meeting isn't SILENTLY truncated. The rows render in
+/// an UN-VIRTUALIZED `for` inside a ScrollView (transcript.slint), so the list's
+/// content height ≈ N·(row height). The Slint software renderer holds coordinates
+/// in i16 (max 32767px); once content exceeds that, a rounded-rect row's wrapped
+/// coordinate panics the SW renderer (`Shifted::new`) and corrupts skia — the same
+/// class as Баг5. Unlike the archive (fixed 50px rows), transcript rows are
+/// VARIABLE-height (wrapping utterance text), so each row is ALSO clamped to 120px
+/// and clipped in transcript.slint; the cap and clamp TOGETHER bound the list.
+/// Taking the FIRST N (not the last) preserves the model-index == utterance-index
+/// invariant that copy-selected / play-line / active-line rely on.
+const TRANSCRIPT_DISPLAY_CAP: usize = 200;
+
+// Баг5-class guard (compile-time): keep the un-virtualized transcript list under
+// the SW renderer's i16 (32767px) coordinate limit. cap · per-row px (120px clamp
+// in transcript.slint + 2px spacing, rounded up to 140 for headroom) + a
+// scroll/border allowance must stay under. Raising the cap without shrinking the
+// per-row clamp fails the build.
+const _: () = assert!(TRANSCRIPT_DISPLAY_CAP * 140 + 800 < 32_767);
+
 /// Open a READ-ONLY structured transcript window for a session (ТЗ1). Reuses the
 /// slot if already open; otherwise builds the per-line model from the session's
 /// utterances and presents the window stealth-aware. The model is (re)built on
@@ -1666,6 +1688,7 @@ pub(crate) fn open_transcript(
     let lines: Vec<TranscriptLine> = utts
         .iter()
         .enumerate()
+        .take(TRANSCRIPT_DISPLAY_CAP) // Баг5-class i16 bound: first N (chronological) — keeps model idx == utt idx
         .map(|(i, u)| {
             // F1: prefer the persisted per-line audio offset (audio_ms) for BOTH the
             // shown timecode AND the player seek; old sessions (no audio_ms) fall back
@@ -1684,6 +1707,9 @@ pub(crate) fn open_transcript(
             }
         })
         .collect();
+    // Utterances hidden by the display cap — the footer discloses this (Copy all
+    // still exports every line). 0 when the whole transcript fits under the cap.
+    let overflow = utts.len().saturating_sub(TRANSCRIPT_DISPLAY_CAP) as i32;
     let session_id = session.map(|s| s.id.clone()).unwrap_or_default();
     // Drop any prior session's player + poll timer — the window is reused, so a
     // fresh open must not keep the previous session's audio playing (ТЗ2b).
@@ -1699,6 +1725,7 @@ pub(crate) fn open_transcript(
         win.set_empty(utts.is_empty());
         let model = Rc::new(VecModel::from(lines));
         win.set_lines(ModelRc::from(model.clone()));
+        win.set_overflow_count(overflow);
         wire_transcript_actions(win, &model, utts, session_start);
         wire_transcript_player(win, &session_id, &model);
         let _ = win.show();
@@ -1722,6 +1749,7 @@ pub(crate) fn open_transcript(
     win.set_empty(utts.is_empty());
     let model = Rc::new(VecModel::from(lines));
     win.set_lines(ModelRc::from(model.clone()));
+    win.set_overflow_count(overflow);
     wire_transcript_actions(&win, &model, utts, session_start);
     wire_transcript_player(&win, &session_id, &model);
 
