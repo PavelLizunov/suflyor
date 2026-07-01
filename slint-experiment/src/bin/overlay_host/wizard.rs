@@ -320,8 +320,12 @@ pub(crate) fn wire_wizard_steps(
                 o.invoke_open_settings_clicked();
             }
             // 🧠 AI bridge tab (index 11) — the local-AI installer lives there.
+            // Баг4 — actually START the install (mirrors "Open diagnostics" auto-
+            // running its check just below). The button previously only navigated,
+            // so the user landed in complex Settings with nothing installing.
             if let Some(sw) = set.borrow().as_ref() {
                 sw.set_active_tab(11);
+                sw.invoke_install_local_ai_clicked();
             }
         });
     }
