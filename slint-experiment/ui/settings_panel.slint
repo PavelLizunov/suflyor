@@ -2669,6 +2669,11 @@ export component SettingsWindow inherits Window {
                             border-radius: 6px;
                             border-width: 1px;
                             border-color: Theme.border;
+                            // Баг5 — clamp + clip so a long fact can't grow the row;
+                            // with MEMORY_TAB_CAP this keeps the un-virtualized list
+                            // under the SW renderer's i16 (32767px) coordinate limit.
+                            max-height: 120px;
+                            clip: true;
                             VerticalLayout {
                                 padding: 8px;
                                 spacing: 4px;
@@ -2715,6 +2720,10 @@ export component SettingsWindow inherits Window {
                             border-radius: 6px;
                             border-width: 1px;
                             border-color: Theme.border;
+                            // Баг5 — clamp + clip (see candidates above): bounds the
+                            // un-virtualized list under the SW renderer's i16 limit.
+                            max-height: 120px;
+                            clip: true;
                             HorizontalLayout {
                                 padding: 8px;
                                 spacing: 6px;

@@ -23,11 +23,21 @@ use super::{ComponentHandle, MemoryRow, ModelRc, SettingsWindow, SharedString, V
 const PROFILE: &str = "default";
 /// How many of the most-recent sessions the Extract action mines.
 const EXTRACT_RECENT_SESSIONS: usize = 12;
-/// F8 — cap on rows loaded into the review tab: the newest N candidates / items.
+/// Cap on rows loaded into the review tab: the newest N candidates / items.
 /// A DISPLAY bound only — the DB keeps everything and the AI context reads the full
-/// set; this stops a huge backlog from freezing / crashing the tab (the rows render
-/// in un-virtualized lists, so an unbounded count blew up the UI thread).
-const MEMORY_TAB_CAP: i64 = 200;
+/// set. The rows render in UN-VIRTUALIZED lists inside a ScrollView, so the tab's
+/// content height ≈ 2·N·(row height). The Slint software renderer holds coordinates
+/// in i16 (max 32767px); once content exceeds that, a rounded-rect row's wrapped
+/// coordinate panics the SW renderer (`draw_rounded_rectangle_line` → `Shifted::new`)
+/// and corrupts skia (Баг5). With each row clamped to ≤120px in settings_panel.slint,
+/// N=100 keeps content well under the i16 limit (see the guard test below).
+const MEMORY_TAB_CAP: i64 = 100;
+
+// Баг5 guard (compile-time): keep the un-virtualized lists under the SW renderer's
+// i16 (32767px) coordinate limit. 2 lists · cap · per-row px (120px clamp in
+// settings_panel.slint + headroom) + a generous card allowance must stay under.
+// Raising MEMORY_TAB_CAP without lowering the per-row clamp fails the build.
+const _: () = assert!(MEMORY_TAB_CAP * 2 * 140 + 800 < 32_767);
 
 /// Guards re-entering the (worker-thread) extractor while a run is in flight, so
 /// a double-click can't launch two scans (P1-3).
