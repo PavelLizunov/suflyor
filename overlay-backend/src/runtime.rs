@@ -1025,6 +1025,7 @@ pub fn build_auto_tile_prompts(
     recent_transcript: &[String],
     meeting_context: &str,
     response_language: &str,
+    live_coaching: bool,
 ) -> (String, String) {
     let lang_block = match response_language {
         "ru" => {
@@ -1043,6 +1044,17 @@ pub fn build_auto_tile_prompts(
              если вопрос про что-то другое):\n{}",
             meeting_context.trim()
         )
+    };
+
+    // Фича1 — live-coaching режим: тайлы как готовые к чтению вслух реплики.
+    let coaching_block = if live_coaching {
+        "\n=== Режим чтения вслух (коучинг) ===\n\
+         Пользователь ПРОЧИТАЕТ ответ вслух дословно. Пиши короткими уверенными \
+         фразами, готовыми к произнесению: без слов-паразитов («ну», «как бы», \
+         «типа», «эээ», «в общем»); без неуверенности («наверное», «может быть», \
+         «я думаю») — утвердительно; законченные предложения, не телеграфный конспект."
+    } else {
+        ""
     };
 
     let system_prompt = format!(
@@ -1078,7 +1090,7 @@ pub fn build_auto_tile_prompts(
          - {lang_block}\n\
          - Транскрипт может содержать ошибки Whisper — восстанавливай смысл из контекста: \
            \"К87С\" = \"K8s\", \"лоуд-эвередж\" = \"load average\", \"гинкс\" = \"nginx\", \
-           \"3к\" = \"k3s\", \"эстиди\" = \"etcd\", \"истио\" = \"istio\"."
+           \"3к\" = \"k3s\", \"эстиди\" = \"etcd\", \"истио\" = \"istio\".{coaching_block}"
     );
 
     let transcript_block = if recent_transcript.is_empty() {
@@ -1422,6 +1434,9 @@ pub async fn reask_last(
         // (off the audio thread; graceful + bounded; empty when none approved).
         &crate::memory::context_for_meeting(&meeting_context),
         &response_language,
+        // F3 re-ask is user-initiated, not an auto "во время встречи" hint — the
+        // live-coaching read-aloud style applies only to auto-tiles (Фича1).
+        false,
     );
 
     let user_prompt = format!(
@@ -1709,6 +1724,8 @@ pub async fn manual_spawn_tile(
         // Phase 3b.4 — fold the user's APPROVED memory into the background block.
         &crate::memory::context_for_meeting(&meeting_context),
         &response_language,
+        // F6 manual tile is user-initiated — read-aloud style is auto-only (Фича1).
+        false,
     );
     let messages = vec![
         ai::ChatMessage {

@@ -548,6 +548,8 @@ export component SettingsWindow inherits Window {
     // Phase F — Coaching + Auto-tiles controls (were dead/cosmetic: no binding).
     in-out property <bool> coaching-debrief: false;
     callback coaching-debrief-changed(bool);
+    in-out property <bool> coaching-live-tiles: false;
+    callback coaching-live-tiles-changed(bool);
     // v0.13.0 — raw-audio recording (Audio tab).
     in-out property <bool> record-audio: true;
     callback record-audio-changed(bool);
@@ -906,6 +908,19 @@ export component SettingsWindow inherits Window {
                                 checked <=> root.coaching-debrief;
                                 toggled(v) => {
                                     root.coaching-debrief-changed(v);
+                                }
+                            }
+                            Text {
+                                text: @tr("Live speech mode phrases the on-screen tile hints as ready-to-read-aloud lines (no filler, confident, short). Independent of the debrief.");
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            DarkCheck {
+                                text: @tr("Live speech mode — read tiles aloud");
+                                checked <=> root.coaching-live-tiles;
+                                toggled(v) => {
+                                    root.coaching-live-tiles-changed(v);
                                 }
                             }
                         }

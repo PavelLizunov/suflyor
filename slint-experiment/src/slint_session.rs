@@ -815,6 +815,9 @@ async fn maybe_spawn_auto_tile(
         backend_runtime::Trigger::Question(q) => q.clone(),
         backend_runtime::Trigger::Keyword(kw, _) => kw.clone(),
     };
+    // Фича1 — read-aloud tone for these live auto-tiles when the coaching
+    // live-speech toggle is on (the auto hints the user reads aloud on-call).
+    let live_coaching = cfg.read().live_coaching_tiles_enabled;
     let (system_prompt, prompt) = backend_runtime::build_auto_tile_prompts(
         &trigger,
         &recent_transcript,
@@ -823,6 +826,7 @@ async fn maybe_spawn_auto_tile(
         // cache key above (computed once; off the audio thread).
         &effective_context,
         &response_language,
+        live_coaching,
     );
     let sys_full = system_prompt.clone();
     let usr_full = prompt.clone();

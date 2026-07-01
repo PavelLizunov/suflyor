@@ -221,6 +221,13 @@ pub struct Config {
     #[serde(default = "default_post_meeting_debrief_enabled")]
     pub post_meeting_debrief_enabled: bool,
 
+    /// When true, LIVE auto-tile hints are phrased as ready-to-read-aloud lines
+    /// (no filler words, confident/assertive, short) so the user can voice them
+    /// verbatim during a call. Independent of `post_meeting_debrief_enabled`.
+    /// Default OFF — opt-in via the Coaching tab (Фича1).
+    #[serde(default)]
+    pub live_coaching_tiles_enabled: bool,
+
     /// v0.13.0 — record the raw session audio (mic + system, separate 16 kHz
     /// mono WAVs) under `%APPDATA%\suflyor\recordings\<session_id>\`. Kept
     /// locally; nothing is uploaded. Enables a future "re-transcribe + re-summary
@@ -565,6 +572,7 @@ impl Config {
             tile_font_size: default_tile_font_size(),
             snippets: default_snippets(),
             post_meeting_debrief_enabled: default_post_meeting_debrief_enabled(),
+            live_coaching_tiles_enabled: false,
             record_audio_enabled: default_record_audio_enabled(),
             record_retention_sessions: default_record_retention_sessions(),
             record_retention_days: 0,

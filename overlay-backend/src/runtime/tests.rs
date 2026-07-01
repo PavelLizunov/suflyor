@@ -413,7 +413,8 @@ fn prompt_always_contains_injection_guard() {
         (vec!["normal line".to_string()], "Senior SRE"),
         (vec!["a".to_string(); 50], "x".repeat(2000).as_str()),
     ] {
-        let (sys, _usr) = build_auto_tile_prompts(&Trigger::Question("q".into()), lines, ctx, "ru");
+        let (sys, _usr) =
+            build_auto_tile_prompts(&Trigger::Question("q".into()), lines, ctx, "ru", false);
         assert!(
             sys.contains("БЕЗОПАСНОСТЬ"),
             "system prompt missing anti-injection block for input shape {lines:?}"
@@ -429,7 +430,7 @@ fn prompt_always_contains_injection_guard() {
 /// makes up answers to malformed transcripts.
 #[test]
 fn prompt_contains_garbage_and_offtopic_guards() {
-    let (sys, _) = build_auto_tile_prompts(&Trigger::Question("test".into()), &[], "", "ru");
+    let (sys, _) = build_auto_tile_prompts(&Trigger::Question("test".into()), &[], "", "ru", false);
     assert!(sys.contains("мусор"), "missing garbage-input rule");
     assert!(sys.contains("повтори?"), "missing 'повтори?' fallback");
     assert!(
@@ -446,7 +447,7 @@ fn prompt_contains_garbage_and_offtopic_guards() {
 /// the canonical Cyrillic-mangling → Latin recoveries.
 #[test]
 fn prompt_contains_whisper_artifact_recovery_hints() {
-    let (sys, _) = build_auto_tile_prompts(&Trigger::Question("test".into()), &[], "", "ru");
+    let (sys, _) = build_auto_tile_prompts(&Trigger::Question("test".into()), &[], "", "ru", false);
     assert!(sys.contains("К87С") || sys.contains("K8s"));
     assert!(sys.contains("гинкс") || sys.contains("nginx"));
     // Newly added in morning addendum:
@@ -467,6 +468,7 @@ fn prompt_handles_long_transcript() {
         &lines,
         "Senior SRE interview, 7 years k8s",
         "ru",
+        false,
     );
     assert!(usr.contains("Что такое kubernetes?"));
     assert!(
@@ -478,7 +480,7 @@ fn prompt_handles_long_transcript() {
 /// Empty transcript must not crash + still produce coherent prompt.
 #[test]
 fn prompt_handles_empty_transcript() {
-    let (sys, usr) = build_auto_tile_prompts(&Trigger::Question("q?".into()), &[], "", "ru");
+    let (sys, usr) = build_auto_tile_prompts(&Trigger::Question("q?".into()), &[], "", "ru", false);
     assert!(!sys.is_empty());
     assert!(!usr.is_empty());
     assert!(
@@ -490,8 +492,13 @@ fn prompt_handles_empty_transcript() {
 /// Russian language rule must dominate when response_language="ru".
 #[test]
 fn prompt_enforces_russian_response_when_configured() {
-    let (sys, _) =
-        build_auto_tile_prompts(&Trigger::Question("how to scale?".into()), &[], "", "ru");
+    let (sys, _) = build_auto_tile_prompts(
+        &Trigger::Question("how to scale?".into()),
+        &[],
+        "",
+        "ru",
+        false,
+    );
     assert!(
         sys.contains("ИСКЛЮЧИТЕЛЬНО на русском"),
         "missing strict Russian rule"
@@ -507,6 +514,7 @@ fn prompt_offtopic_guard_present_with_empty_context() {
         &[],
         "",
         "ru",
+        false,
     );
     assert!(sys.contains("не про техническую"));
 }
@@ -519,9 +527,28 @@ fn prompt_keyword_trigger_includes_keyword_and_line() {
         &[],
         "",
         "ru",
+        false,
     );
     assert!(usr.contains("etcd"));
     assert!(usr.contains("consensus"));
+}
+
+/// Live-coaching mode adds read-aloud tone rules to the system prompt; off leaves
+/// them out (Фича1). The two modes must be independent of everything else.
+#[test]
+fn prompt_live_coaching_adds_readaloud_rules() {
+    let q = Trigger::Question("как ответить?".into());
+    let (on, _) = build_auto_tile_prompts(&q, &[], "", "ru", true);
+    let (off, _) = build_auto_tile_prompts(&q, &[], "", "ru", false);
+    assert!(
+        on.contains("чтения вслух"),
+        "live=on must add read-aloud rules"
+    );
+    assert!(on.contains("без слов-паразитов"));
+    assert!(
+        !off.contains("чтения вслух"),
+        "live=off must NOT add read-aloud rules"
+    );
 }
 
 /// Reask with no prior QA → emits tile:error + returns None.

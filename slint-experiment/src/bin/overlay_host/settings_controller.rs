@@ -121,6 +121,7 @@ pub(crate) fn open_settings(
         let snap = cfg.read();
         refresh_profiles(&win, &snap);
         win.set_coaching_debrief(snap.post_meeting_debrief_enabled);
+        win.set_coaching_live_tiles(snap.live_coaching_tiles_enabled);
         win.set_record_audio(snap.record_audio_enabled);
         win.set_auto_tiles_enabled(snap.auto_tiles_enabled);
         win.set_suppress_tiles(snap.suppress_tiles);
@@ -748,6 +749,14 @@ pub(crate) fn open_settings(
         win.on_coaching_debrief_changed(move |on| {
             let mut c = cfg_c.write();
             c.post_meeting_debrief_enabled = on;
+            let _ = overlay_backend::config::save(&c);
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_coaching_live_tiles_changed(move |on| {
+            let mut c = cfg_c.write();
+            c.live_coaching_tiles_enabled = on;
             let _ = overlay_backend::config::save(&c);
         });
     }

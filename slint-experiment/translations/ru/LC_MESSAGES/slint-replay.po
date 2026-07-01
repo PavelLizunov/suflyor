@@ -1372,3 +1372,10 @@ msgstr "Не удалось установить распознавание — 
 
 msgid "Couldn't install — check the connection and retry."
 msgstr "Не удалось установить — проверьте интернет и повторите."
+
+# === Coaching live-speech toggle (Фича1) ===
+msgid "Live speech mode — read tiles aloud"
+msgstr "Живой режим речи — читать тайлы вслух"
+
+msgid "Live speech mode phrases the on-screen tile hints as ready-to-read-aloud lines (no filler, confident, short). Independent of the debrief."
+msgstr "Живой режим речи формулирует экранные подсказки в тайлах как готовые к чтению вслух фразы (без слов-паразитов, уверенно, коротко). Независимо от разбора."
