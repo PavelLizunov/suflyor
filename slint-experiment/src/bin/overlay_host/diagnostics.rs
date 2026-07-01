@@ -335,6 +335,41 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
         });
     }
 
+    // DB maintenance: back up + NON-DESTRUCTIVE repair (integrity_check → checkpoint
+    // / reindex / FTS-rebuild / vacuum → re-check) on a WORKER THREAD (VACUUM etc.
+    // block — keep them off the event loop). Never deletes user rows; the backup
+    // path is reported so the tester can find it.
+    {
+        let weak = win.as_weak();
+        win.on_db_repair_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            w.set_db_repair_status(SharedString::from("⏳ Проверка базы…"));
+            let done = w.as_weak();
+            std::thread::spawn(move || {
+                let msg =
+                    match overlay_backend::persistence::maintenance::diagnose_and_repair_default() {
+                        Ok(h) => {
+                            let backup = h.backup_path.unwrap_or_else(|| "—".to_string());
+                            if h.healthy {
+                                format!("✓ База в порядке. Резервная копия: {backup}")
+                            } else {
+                                format!(
+                                    "⚠ Остались проблемы ({}). Данные не удалялись; резервная копия: {backup}",
+                                    h.issues.len()
+                                )
+                            }
+                        }
+                        Err(e) => format!("[err] Не удалось проверить базу: {e}"),
+                    };
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = done.upgrade() {
+                        w.set_db_repair_status(SharedString::from(msg));
+                    }
+                });
+            });
+        });
+    }
+
     // #131 — diagnostics "Проверить всё": live-ping the ACTIVE AI endpoint
     // (resolved via ai_endpoint — NOT the raw cloud fields) + the active STT
     // backend, in ONE off-thread runtime, and write both rows back. Mic / sys

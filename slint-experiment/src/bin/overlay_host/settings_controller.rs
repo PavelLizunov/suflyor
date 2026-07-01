@@ -1316,6 +1316,9 @@ pub(crate) fn populate_token_status(
     win.set_vision_local_base_url_input(SharedString::from(c.vision_local_base_url.clone()));
     win.set_vision_local_model_input(SharedString::from(c.vision_local_model.clone()));
     win.set_vision_test_result(SharedString::from(""));
+    // Clear the DB-maintenance result so a prior ✓/⚠ doesn't linger on reopen
+    // (reused-window transient-status rule; settings_reset_guard enforces this).
+    win.set_db_repair_status(SharedString::from(""));
     // OCR engine (Tesseract) install state — re-checked each open (the data dir
     // is user-writable + the installer button writes it). Transient install
     // status reset so a stale "Готово…" can't survive a reopen.

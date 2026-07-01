@@ -532,6 +532,9 @@ export component SettingsWindow inherits Window {
     callback diagnostics-check-all-clicked();
     callback diagnostics-copy-report-clicked();
     callback diagnostics-collect-logs-clicked();
+    // DB maintenance ("Проверить и починить базу") — worker-thread result summary.
+    in-out property <string> db-repair-status: "";
+    callback db-repair-clicked();
     // Phase E6 v29 — meeting-context editor (Profile+context tab).
     in-out property <string> meeting-context-input: "";
     in-out property <string> meeting-context-result: "";
@@ -1046,6 +1049,10 @@ export component SettingsWindow inherits Window {
                                 text: @tr("Collect logs");
                                 clicked => { root.diagnostics-collect-logs-clicked(); }
                             }
+                            Button {
+                                text: @tr("Check & repair database");
+                                clicked => { root.db-repair-clicked(); }
+                            }
                             Text {
                                 text: root.diag-copied ? @tr("copied") : "";
                                 font-size: 11px;
@@ -1053,6 +1060,14 @@ export component SettingsWindow inherits Window {
                                 color: Theme.success;
                                 vertical-alignment: center;
                             }
+                        }
+                        // DB maintenance result (backup path / health) — wraps so the
+                        // tester can read the saved backup location.
+                        if root.db-repair-status != "" : Text {
+                            text: root.db-repair-status;
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
                         }
                         // "Собрать логи" result — the full saved path, wrapping, so
                         // the tester can read/copy it (the reveal is best-effort).

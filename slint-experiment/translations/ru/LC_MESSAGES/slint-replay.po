@@ -1379,3 +1379,7 @@ msgstr "Живой режим речи — читать тайлы вслух"
 
 msgid "Live speech mode phrases the on-screen tile hints as ready-to-read-aloud lines (no filler, confident, short). Independent of the debrief."
 msgstr "Живой режим речи формулирует экранные подсказки в тайлах как готовые к чтению вслух фразы (без слов-паразитов, уверенно, коротко). Независимо от разбора."
+
+# === DB maintenance (Diagnostics tab) ===
+msgid "Check & repair database"
+msgstr "Проверить и починить базу"

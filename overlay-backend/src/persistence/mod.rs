@@ -22,6 +22,7 @@
 //! indexer + FTS search land in follow-up commits.
 
 mod indexer;
+pub mod maintenance;
 mod migrations;
 pub mod models;
 mod sqlite_store;
