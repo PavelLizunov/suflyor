@@ -343,7 +343,7 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
         let weak = win.as_weak();
         win.on_db_repair_clicked(move || {
             let Some(w) = weak.upgrade() else { return };
-            w.set_db_repair_status(SharedString::from("⏳ Проверка базы…"));
+            w.set_db_repair_status(SharedString::from("Проверка базы…"));
             let done = w.as_weak();
             std::thread::spawn(move || {
                 let msg =
@@ -351,10 +351,10 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                         Ok(h) => {
                             let backup = h.backup_path.unwrap_or_else(|| "—".to_string());
                             if h.healthy {
-                                format!("✓ База в порядке. Резервная копия: {backup}")
+                                format!("[ok] База в порядке. Резервная копия: {backup}")
                             } else {
                                 format!(
-                                    "⚠ Остались проблемы ({}). Данные не удалялись; резервная копия: {backup}",
+                                    "[!] Остались проблемы ({}). Данные не удалялись; резервная копия: {backup}",
                                     h.issues.len()
                                 )
                             }
@@ -379,13 +379,13 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
         let weak = win.as_weak();
         win.on_db_clear_queue_clicked(move || {
             let Some(w) = weak.upgrade() else { return };
-            w.set_db_repair_status(SharedString::from("🧹 Очистка очереди…"));
+            w.set_db_repair_status(SharedString::from("Очистка очереди…"));
             let done = w.as_weak();
             std::thread::spawn(move || {
                 let msg =
                     match overlay_backend::persistence::maintenance::clear_memory_candidates_default() {
                         Ok(r) => format!(
-                            "🧹 Очередь предложений очищена: удалено {}. Резервная копия: {}",
+                            "[ok] Очередь предложений очищена: удалено {}. Резервная копия: {}",
                             r.cleared, r.backup_path
                         ),
                         Err(e) => format!("[err] Очистка отменена: {e}"),
@@ -402,13 +402,13 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
         let weak = win.as_weak();
         win.on_db_clear_memory_clicked(move || {
             let Some(w) = weak.upgrade() else { return };
-            w.set_db_repair_status(SharedString::from("🧹 Очистка памяти…"));
+            w.set_db_repair_status(SharedString::from("Очистка памяти…"));
             let done = w.as_weak();
             std::thread::spawn(move || {
                 let msg =
                     match overlay_backend::persistence::maintenance::clear_memory_items_default() {
                         Ok(r) => format!(
-                            "🧹 Одобренная память очищена: удалено {}. Резервная копия: {}",
+                            "[ok] Одобренная память очищена: удалено {}. Резервная копия: {}",
                             r.cleared, r.backup_path
                         ),
                         Err(e) => format!("[err] Очистка отменена: {e}"),
