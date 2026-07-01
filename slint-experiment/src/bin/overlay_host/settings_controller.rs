@@ -1319,6 +1319,9 @@ pub(crate) fn populate_token_status(
     // Clear the DB-maintenance result so a prior ✓/⚠ doesn't linger on reopen
     // (reused-window transient-status rule; settings_reset_guard enforces this).
     win.set_db_repair_status(SharedString::from(""));
+    // Disarm any half-armed destructive clear so reopening Settings never leaves a
+    // "tap again to delete" button primed.
+    win.set_db_clear_armed(SharedString::from(""));
     // OCR engine (Tesseract) install state — re-checked each open (the data dir
     // is user-writable + the installer button writes it). Transient install
     // status reset so a stale "Готово…" can't survive a reopen.

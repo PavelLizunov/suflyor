@@ -370,6 +370,58 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
         });
     }
 
+    // DB clears (destructive, but the Slint side requires a 2-tap confirm and the
+    // backend backs up the DB FIRST — bailing if the backup fails). Worker thread
+    // so a big DELETE never blocks the event loop. Reuses db-repair-status for the
+    // result line. Only the memory tables are touched (whitelisted in the backend);
+    // sessions/archive are never affected.
+    {
+        let weak = win.as_weak();
+        win.on_db_clear_queue_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            w.set_db_repair_status(SharedString::from("🧹 Очистка очереди…"));
+            let done = w.as_weak();
+            std::thread::spawn(move || {
+                let msg =
+                    match overlay_backend::persistence::maintenance::clear_memory_candidates_default() {
+                        Ok(r) => format!(
+                            "🧹 Очередь предложений очищена: удалено {}. Резервная копия: {}",
+                            r.cleared, r.backup_path
+                        ),
+                        Err(e) => format!("[err] Очистка отменена: {e}"),
+                    };
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = done.upgrade() {
+                        w.set_db_repair_status(SharedString::from(msg));
+                    }
+                });
+            });
+        });
+    }
+    {
+        let weak = win.as_weak();
+        win.on_db_clear_memory_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            w.set_db_repair_status(SharedString::from("🧹 Очистка памяти…"));
+            let done = w.as_weak();
+            std::thread::spawn(move || {
+                let msg =
+                    match overlay_backend::persistence::maintenance::clear_memory_items_default() {
+                        Ok(r) => format!(
+                            "🧹 Одобренная память очищена: удалено {}. Резервная копия: {}",
+                            r.cleared, r.backup_path
+                        ),
+                        Err(e) => format!("[err] Очистка отменена: {e}"),
+                    };
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = done.upgrade() {
+                        w.set_db_repair_status(SharedString::from(msg));
+                    }
+                });
+            });
+        });
+    }
+
     // #131 — diagnostics "Проверить всё": live-ping the ACTIVE AI endpoint
     // (resolved via ai_endpoint — NOT the raw cloud fields) + the active STT
     // backend, in ONE off-thread runtime, and write both rows back. Mic / sys

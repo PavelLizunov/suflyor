@@ -535,6 +535,12 @@ export component SettingsWindow inherits Window {
     // DB maintenance ("Проверить и починить базу") — worker-thread result summary.
     in-out property <string> db-repair-status: "";
     callback db-repair-clicked();
+    // Destructive memory clears — 2-click confirm: db-clear-armed holds ""|"queue"
+    // |"memory"; the callback fires only on the CONFIRMED (second) tap. The backend
+    // backs up the DB before deleting. Reset in populate_token_status on reopen.
+    in-out property <string> db-clear-armed: "";
+    callback db-clear-queue-clicked();
+    callback db-clear-memory-clicked();
     // Phase E6 v29 — meeting-context editor (Profile+context tab).
     in-out property <string> meeting-context-input: "";
     in-out property <string> meeting-context-result: "";
@@ -1049,16 +1055,62 @@ export component SettingsWindow inherits Window {
                                 text: @tr("Collect logs");
                                 clicked => { root.diagnostics-collect-logs-clicked(); }
                             }
-                            Button {
-                                text: @tr("Check & repair database");
-                                clicked => { root.db-repair-clicked(); }
-                            }
                             Text {
                                 text: root.diag-copied ? @tr("copied") : "";
                                 font-size: 11px;
                                 font-weight: 700;
                                 color: Theme.success;
                                 vertical-alignment: center;
+                            }
+                        }
+                        // ── База данных — бэкап-first ремонт + намеренные очистки.
+                        // Each button on its OWN row: the wide RU labels overflowed a
+                        // single HorizontalLayout (which does not wrap) — the "уехал" bug.
+                        Rectangle { height: 6px; }
+                        Text {
+                            text: @tr("Database");
+                            font-size: 11px;
+                            font-weight: 700;
+                            color: Theme.text-muted;
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            Button {
+                                text: @tr("Check & repair database");
+                                clicked => { root.db-repair-clicked(); }
+                            }
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            // Destructive → 2-click confirm; backend backs up first.
+                            Button {
+                                text: root.db-clear-armed == "queue"
+                                    ? @tr("Tap again — clear the suggestions queue")
+                                    : @tr("Clear suggestions queue");
+                                clicked => {
+                                    if (root.db-clear-armed == "queue") {
+                                        root.db-clear-armed = "";
+                                        root.db-clear-queue-clicked();
+                                    } else {
+                                        root.db-clear-armed = "queue";
+                                    }
+                                }
+                            }
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            Button {
+                                text: root.db-clear-armed == "memory"
+                                    ? @tr("Tap again — clear approved memory")
+                                    : @tr("Clear approved memory");
+                                clicked => {
+                                    if (root.db-clear-armed == "memory") {
+                                        root.db-clear-armed = "";
+                                        root.db-clear-memory-clicked();
+                                    } else {
+                                        root.db-clear-armed = "memory";
+                                    }
+                                }
                             }
                         }
                         // DB maintenance result (backup path / health) — wraps so the

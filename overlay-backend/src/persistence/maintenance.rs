@@ -10,7 +10,7 @@
 //! none.
 
 use anyhow::{bail, Context, Result};
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
 use std::path::{Path, PathBuf};
 
 /// Outcome of a diagnose+repair pass. All strings are plain (the UI localizes its
@@ -383,6 +383,129 @@ fn unix_millis() -> u128 {
         .unwrap_or(0)
 }
 
+// ── USER-INITIATED targeted clears of the memory tables ────────────────────────
+//
+// These DELETE rows ON PURPOSE (the user asked to "clear the accumulated queue").
+// Two hard safety rules, enforced by `clear_table_at`:
+//   1. BACK UP FIRST — reuse `backup_before_repair`; if no backup lands, bail
+//      WITHOUT deleting anything.
+//   2. Delete the ONE requested table ONLY — `table` is a FIXED whitelist of the
+//      two memory tables; nothing else ever reaches SQL. Sessions/utterances/
+//      ai_turns/FTS are NEVER touched. Grep this block: the only DELETE is
+//      `DELETE FROM memory_candidates|memory_items WHERE profile_id = ?1`.
+
+/// Outcome of a targeted clear: how many rows went, and where the pre-delete
+/// backup landed (`backup_path` empty iff there was no DB to clear).
+pub struct ClearResult {
+    pub cleared: usize,
+    pub backup_path: String,
+}
+
+/// Clear the pending "Suggestions" queue (`memory_candidates`) for profile
+/// `default`. Backs up first; deletes ONLY that table's `default` rows.
+///
+/// # Errors
+/// If paths can't be resolved, or (STRICT) if the pre-delete backup couldn't be
+/// written — in which case nothing is deleted.
+pub fn clear_memory_candidates_default() -> Result<ClearResult> {
+    clear_table_at(
+        &default_catalog_path()?,
+        &backups_dir()?,
+        "memory_candidates",
+    )
+}
+
+/// Clear approved curated memory (`memory_items`) for profile `default`. Backs up
+/// first; deletes ONLY that table's `default` rows.
+///
+/// # Errors
+/// As [`clear_memory_candidates_default`].
+pub fn clear_memory_items_default() -> Result<ClearResult> {
+    clear_table_at(&default_catalog_path()?, &backups_dir()?, "memory_items")
+}
+
+/// Read-only count of the `default` "Suggestions" queue, for a confirm prompt.
+/// Returns 0 if the DB doesn't exist yet.
+///
+/// # Errors
+/// If the catalog path can't be resolved, or the count query fails.
+pub fn count_memory_candidates_default() -> Result<usize> {
+    count_table_at(&default_catalog_path()?, "memory_candidates")
+}
+
+/// Read-only count of `default` curated memory items, for a confirm prompt.
+/// Returns 0 if the DB doesn't exist yet.
+///
+/// # Errors
+/// As [`count_memory_candidates_default`].
+pub fn count_memory_items_default() -> Result<usize> {
+    count_table_at(&default_catalog_path()?, "memory_items")
+}
+
+/// Testable core of the targeted clear. `table` MUST be one of the two memory
+/// tables — any other value bails BEFORE any I/O, so no arbitrary name is ever
+/// interpolated into SQL. Sequence: whitelist → (no DB → no-op) → BACKUP FIRST
+/// (bail if it fails) → `DELETE FROM <table> WHERE profile_id = 'default'`.
+///
+/// # Errors
+/// Non-whitelisted `table`; the backups dir can't be created; the backup fails
+/// (nothing is deleted); or the DB can't be opened / the DELETE fails.
+fn clear_table_at(path: &Path, backups: &Path, table: &str) -> Result<ClearResult> {
+    // (0) WHITELIST — the ONLY table names that may reach SQL. Reject everything
+    // else up front (sessions/utterances/ai_turns/FTS can never be passed here).
+    if !matches!(table, "memory_candidates" | "memory_items") {
+        bail!("отказ: очистка разрешена только для таблиц памяти, не «{table}»");
+    }
+
+    // (1) Nothing to clear if the DB was never created.
+    if !path.exists() {
+        return Ok(ClearResult {
+            cleared: 0,
+            backup_path: String::new(),
+        });
+    }
+
+    // (2) BACKUP FIRST — before the DELETE. STRICT: no backup ⇒ no delete.
+    std::fs::create_dir_all(backups).context("create backups dir")?;
+    let backup_path = match backup_before_repair(path, backups) {
+        Some(bp) => bp,
+        None => bail!("резервная копия не создана — очистка отменена"),
+    };
+    prune_backups(backups, 5);
+
+    // (3) DELETE the ONE whitelisted table's `default` rows — nothing else.
+    let conn = open_main(path)?;
+    let sql = format!("DELETE FROM {table} WHERE profile_id = ?1");
+    let cleared = conn
+        .execute(&sql, params!["default"])
+        .with_context(|| format!("clear {table}"))?;
+
+    Ok(ClearResult {
+        cleared,
+        backup_path,
+    })
+}
+
+/// Read-only `COUNT(*)` of a whitelisted memory table's `default` rows. Missing
+/// DB → 0.
+///
+/// # Errors
+/// Non-whitelisted `table`, or the count query fails.
+fn count_table_at(path: &Path, table: &str) -> Result<usize> {
+    if !matches!(table, "memory_candidates" | "memory_items") {
+        bail!("отказ: подсчёт разрешён только для таблиц памяти, не «{table}»");
+    }
+    if !path.exists() {
+        return Ok(0);
+    }
+    let conn = open_main(path)?;
+    let sql = format!("SELECT COUNT(*) FROM {table} WHERE profile_id = 'default'");
+    let n: i64 = conn
+        .query_row(&sql, [], |r| r.get(0))
+        .with_context(|| format!("count {table}"))?;
+    Ok(usize::try_from(n).unwrap_or(0))
+}
+
 /// Resolve the default catalog path via `Store::default_path`, erroring if the OS
 /// config dir can't be resolved.
 fn default_catalog_path() -> Result<PathBuf> {
@@ -404,7 +527,6 @@ fn backups_dir() -> Result<PathBuf> {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
-    use rusqlite::params;
 
     /// Build a small, valid catalog with real user data + an FTS5 index at `path`.
     fn seed_db(path: &Path) {
@@ -519,6 +641,117 @@ mod tests {
             keeper.exists(),
             "prune must never touch the live catalog.sqlite"
         );
+    }
+
+    /// Seed a DB with the two memory tables (3 candidates + 2 items, all
+    /// profile 'default') plus a `sessions` table (1 row) that the clears must
+    /// NEVER touch. Minimal schema — the clears only read `profile_id`.
+    fn seed_memory_db(path: &Path) {
+        let conn = Connection::open(path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions (id INTEGER PRIMARY KEY, title TEXT);
+             CREATE TABLE memory_candidates (id INTEGER PRIMARY KEY, profile_id TEXT NOT NULL, text TEXT);
+             CREATE TABLE memory_items (id INTEGER PRIMARY KEY, profile_id TEXT NOT NULL, text TEXT);
+             INSERT INTO sessions (title) VALUES ('a meeting');",
+        )
+        .unwrap();
+        for t in ["q1", "q2", "q3"] {
+            conn.execute(
+                "INSERT INTO memory_candidates (profile_id, text) VALUES ('default', ?1)",
+                params![t],
+            )
+            .unwrap();
+        }
+        for t in ["fact1", "fact2"] {
+            conn.execute(
+                "INSERT INTO memory_items (profile_id, text) VALUES ('default', ?1)",
+                params![t],
+            )
+            .unwrap();
+        }
+    }
+
+    fn count_of(path: &Path, table: &str) -> i64 {
+        let conn = Connection::open(path).unwrap();
+        conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+            .unwrap()
+    }
+
+    #[test]
+    fn clear_candidates_clears_only_the_queue_and_backs_up() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = tmp.path().join("catalog.sqlite");
+        let backups = tmp.path().join("backups");
+        seed_memory_db(&db);
+
+        let res = clear_table_at(&db, &backups, "memory_candidates").unwrap();
+
+        assert_eq!(res.cleared, 3, "all 3 pending candidates removed");
+        assert!(
+            Path::new(&res.backup_path).exists(),
+            "backup taken before delete at {}",
+            res.backup_path
+        );
+        assert_eq!(count_of(&db, "memory_candidates"), 0, "queue emptied");
+        // The OTHER tables are untouched — proves only the queue was cleared.
+        assert_eq!(count_of(&db, "memory_items"), 2, "curated items untouched");
+        assert_eq!(count_of(&db, "sessions"), 1, "sessions untouched");
+    }
+
+    #[test]
+    fn clear_items_clears_only_curated_memory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = tmp.path().join("catalog.sqlite");
+        let backups = tmp.path().join("backups");
+        seed_memory_db(&db);
+
+        let res = clear_table_at(&db, &backups, "memory_items").unwrap();
+
+        assert_eq!(res.cleared, 2, "both curated items removed");
+        assert!(Path::new(&res.backup_path).exists(), "backup taken");
+        assert_eq!(count_of(&db, "memory_items"), 0, "items emptied");
+        assert_eq!(count_of(&db, "memory_candidates"), 3, "queue untouched");
+        assert_eq!(count_of(&db, "sessions"), 1, "sessions untouched");
+    }
+
+    #[test]
+    fn clear_rejects_non_whitelisted_table() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = tmp.path().join("catalog.sqlite");
+        let backups = tmp.path().join("backups");
+        seed_memory_db(&db);
+
+        // A real, populated table — the whitelist, not a missing table, must reject it.
+        assert!(
+            clear_table_at(&db, &backups, "sessions").is_err(),
+            "whitelist must reject any non-memory table"
+        );
+        assert!(clear_table_at(&db, &backups, "utterances").is_err());
+        assert!(clear_table_at(&db, &backups, "memory_candidates; DROP TABLE sessions").is_err());
+        // The rejected attempt deleted nothing.
+        assert_eq!(count_of(&db, "sessions"), 1, "reject must not delete");
+    }
+
+    #[test]
+    fn clear_missing_db_is_noop() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = tmp.path().join("does-not-exist.sqlite");
+        let backups = tmp.path().join("backups");
+        let res = clear_table_at(&db, &backups, "memory_candidates").unwrap();
+        assert_eq!(res.cleared, 0);
+        assert!(res.backup_path.is_empty(), "no backup for a missing DB");
+    }
+
+    #[test]
+    fn count_reads_default_rows() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = tmp.path().join("catalog.sqlite");
+        seed_memory_db(&db);
+        assert_eq!(count_table_at(&db, "memory_candidates").unwrap(), 3);
+        assert_eq!(count_table_at(&db, "memory_items").unwrap(), 2);
+        // Missing DB → 0.
+        let missing = tmp.path().join("nope.sqlite");
+        assert_eq!(count_table_at(&missing, "memory_items").unwrap(), 0);
     }
 
     #[test]
