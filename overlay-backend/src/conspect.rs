@@ -221,12 +221,101 @@ fn load_in(dir: &Path, session_id: &str) -> Option<Conspect> {
     let path = dir.join(format!("{stem}.json"));
     let bytes = std::fs::read(&path).ok()?;
     match serde_json::from_slice::<Conspect>(&bytes) {
-        Ok(c) => Some(c),
+        Ok(mut c) => {
+            // Clean LaTeX/math markup from summaries saved before the sanitizer
+            // existed, so old recaps also render real symbols on display (Баг1).
+            if let Some(fs) = c.final_summary.as_deref() {
+                c.final_summary = Some(sanitize_summary(fs));
+            }
+            Some(c)
+        }
         Err(e) => {
             log::warn!("conspect {stem}: parse failed ({e}); ignoring");
             None
         }
     }
+}
+
+/// Strip LaTeX / math-mode markup an LLM sometimes emits into a summary
+/// (`$\rightarrow$`, `\to`, `\( … \)`) so the plain-text markdown view shows real
+/// symbols, not source (Баг1). Applied on save (new) AND on load (legacy).
+///
+/// A command is converted only when terminated by a non-letter (LaTeX command
+/// boundary), so legit backslash tokens (`C:\tools`, `\network`) survive intact.
+///
+/// ponytail ceilings: a `$` glued to a digit/letter (`$100`, a price) is kept —
+/// only a math-delimiter `$` (non-alphanumeric on both sides) is dropped, so a
+/// spaced price `$ 100` loses its `$` and a variable span `$x+y$` is left as-is
+/// (rare; the prompt nudge covers it). A path segment literally named after a
+/// command (`C:\to\bin`) is still converted — vanishingly rare.
+fn replace_latex_command(s: &str, cmd: &str, sym: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(pos) = rest.find(cmd) {
+        out.push_str(&rest[..pos]);
+        let after = &rest[pos + cmd.len()..];
+        // A following ascii letter means this is a longer token (e.g. `\tools`
+        // for `\to`), NOT the command — leave it verbatim.
+        if after
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_ascii_alphabetic())
+        {
+            out.push_str(sym);
+        } else {
+            out.push_str(cmd);
+        }
+        rest = after;
+    }
+    out.push_str(rest);
+    out
+}
+
+#[must_use]
+pub fn sanitize_summary(s: &str) -> String {
+    // 1) LaTeX arrow/relation commands → their unicode symbol (± `$` wrappers),
+    //    boundary-checked so legit backslash tokens (paths) are left alone.
+    let mut out = s.to_string();
+    for (cmd, sym) in [
+        ("\\rightarrow", "→"),
+        ("\\Rightarrow", "⇒"),
+        ("\\leftrightarrow", "↔"),
+        ("\\leftarrow", "←"),
+        ("\\Leftarrow", "⇐"),
+        ("\\to", "→"),
+        ("\\times", "×"),
+        ("\\approx", "≈"),
+        ("\\leq", "≤"),
+        ("\\geq", "≥"),
+        ("\\neq", "≠"),
+        ("\\ne", "≠"),
+        ("\\ldots", "…"),
+        ("\\dots", "…"),
+    ] {
+        out = replace_latex_command(&out, cmd, sym);
+    }
+    // 2) inline / display math delimiters → gone.
+    for d in ["\\(", "\\)", "\\[", "\\]"] {
+        out = out.replace(d, "");
+    }
+    // 3) drop `$` used as a math delimiter (non-alnum on both sides); keep a `$`
+    //    glued to a digit/letter (prices).
+    let chars: Vec<char> = out.chars().collect();
+    let mut cleaned = String::with_capacity(out.len());
+    for (i, &ch) in chars.iter().enumerate() {
+        if ch == '$' {
+            let prev_alnum = i
+                .checked_sub(1)
+                .and_then(|j| chars.get(j))
+                .is_some_and(|c| c.is_alphanumeric());
+            let next_alnum = chars.get(i + 1).is_some_and(|c| c.is_alphanumeric());
+            if !prev_alnum && !next_alnum {
+                continue;
+            }
+        }
+        cleaned.push(ch);
+    }
+    cleaned
 }
 
 /// True if a session has a saved conspect sidecar — a CHEAP path check (no read /
@@ -479,6 +568,42 @@ mod tests {
     fn load_missing_is_none() {
         let tmp = tempfile::tempdir().unwrap();
         assert!(load_in(tmp.path(), "nope").is_none());
+    }
+
+    #[test]
+    fn sanitize_summary_strips_latex_keeps_prices() {
+        assert_eq!(
+            sanitize_summary("Командно $\\rightarrow$ обсудить"),
+            "Командно → обсудить"
+        );
+        assert_eq!(sanitize_summary("A \\to B"), "A → B");
+        assert_eq!(sanitize_summary("cost \\(x\\) done"), "cost x done");
+        // prices with `$` glued to a digit survive
+        assert_eq!(sanitize_summary("бюджет $100 и $250"), "бюджет $100 и $250");
+        assert_eq!(sanitize_summary("обычный текст"), "обычный текст");
+        // CRIT-1 regression: legit backslash tokens (paths) survive the command-
+        // boundary check ('\to' in '\tools', '\ne' in '\network', '\times' in
+        // '\timestamp' are letter-continued → not commands).
+        assert_eq!(sanitize_summary("dump C:\\tools\\db"), "dump C:\\tools\\db");
+        assert_eq!(sanitize_summary("share \\network\\x"), "share \\network\\x");
+        assert_eq!(
+            sanitize_summary("field \\timestamp now"),
+            "field \\timestamp now"
+        );
+    }
+
+    #[test]
+    fn load_cleans_legacy_latex_summary() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut c = sample("s_latex");
+        c.final_summary = Some("Итого $\\rightarrow$ готово".into());
+        save_in(tmp.path(), &c).unwrap();
+        assert_eq!(
+            load_in(tmp.path(), "s_latex")
+                .and_then(|c| c.final_summary)
+                .as_deref(),
+            Some("Итого → готово")
+        );
     }
 
     #[test]

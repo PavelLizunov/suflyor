@@ -364,6 +364,13 @@ pub fn summary_system_prompt(is_ru: bool, truncated: bool) -> String {
          uncertain attribution with \"(uncertain)\"; be concise. Respond in English."
             .to_string()
     };
+    // Баг1 — the plain-text markdown view can't render LaTeX; forbid it so the
+    // model writes real symbols (the sanitizer is the guarantee, this the nudge).
+    p.push_str(if is_ru {
+        " Пиши ОБЫЧНЫМ текстом: без LaTeX/markdown-математики ($...$, \\(...\\), \\rightarrow) — стрелку пиши «→»."
+    } else {
+        " Write PLAIN text: no LaTeX/markdown math ($...$, \\(...\\), \\rightarrow) — write arrows as \"→\"."
+    });
     if truncated {
         p.push_str(if is_ru {
             "\nВажно: транскрипт усечён посередине — суммируй только то, что есть, \
@@ -869,6 +876,9 @@ async fn finish_summary_from_conspect(
 
     match ai::complete(&base_url, &bearer, &model, messages, SUMMARY_MAX_TOKENS).await {
         Ok(answer) => {
+            // Strip LaTeX/math markup once, up front — the sanitized text is what
+            // gets both persisted AND shown in the live tile (Баг1).
+            let answer = conspect::sanitize_summary(&answer);
             log::info!("meeting summary landed: {} chars", answer.len());
             cs.final_summary = Some(answer.clone());
             conspect::save(&cs);
