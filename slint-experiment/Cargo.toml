@@ -115,7 +115,7 @@ global-hotkey = "0.6"
 # Phase E6 v28 — native file dialogs for Settings import/export.
 # rfd (PolyMeilex) wraps the OS-native picker (IFileDialog on Windows);
 # no GTK on Windows. Used only by the Settings Export/Import buttons.
-rfd = { version = "0.15", default-features = false }
+rfd = { version = "0.17", default-features = false }
 
 # V2 vision feature — encode the BitBlt screen capture. `image` (jpeg only,
 # default-features off to stay lean) downscales + JPEG-encodes; `base64` wraps
