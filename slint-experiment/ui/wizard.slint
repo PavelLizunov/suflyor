@@ -150,6 +150,9 @@ export component WizardWindow inherits Window {
     callback nav-skip();
     callback finished();
     callback cancelled();
+    // Frameless window drag (cursor-delta, wired in Rust — same idiom as Settings).
+    callback drag-start-requested();
+    callback drag-moved();
 
     // Maps a diagnostics level int → text + colour, identical convention to the
     // Diagnostics tab (-1 checking · 0 ok · 2 not-configured · 4 needs-attention).
@@ -212,20 +215,36 @@ export component WizardWindow inherits Window {
                 padding: 20px;
                 spacing: 14px;
 
-                // Header: step counter + corner close
-                HorizontalLayout {
-                    Text {
-                        text: @tr("Step {} of 7", root.step + 1);
-                        color: Theme.text-secondary;
-                        font-size: Metrics.font-body;
-                        font-weight: 600;
-                        vertical-alignment: center;
+                // Header: step counter + corner close. Doubles as the window
+                // drag handle (frameless — no native title bar); the drag
+                // TouchArea sits BEHIND the row so the CloseButton on top still
+                // captures its own clicks (same idiom as Settings).
+                Rectangle {
+                    height: 26px;
+                    TouchArea {
+                        mouse-cursor: grab;
+                        pointer-event(ev) => {
+                            if (ev.button == PointerEventButton.left
+                                && ev.kind == PointerEventKind.down) {
+                                root.drag-start-requested();
+                            }
+                        }
+                        moved => { if (self.pressed) { root.drag-moved(); } }
                     }
-                    Rectangle { horizontal-stretch: 1; }
-                    CloseButton {
-                        box: 26px;
-                        glyph: 14px;
-                        clicked => { root.cancelled(); }
+                    HorizontalLayout {
+                        Text {
+                            text: @tr("Step {} of 7", root.step + 1);
+                            color: Theme.text-secondary;
+                            font-size: Metrics.font-body;
+                            font-weight: 600;
+                            vertical-alignment: center;
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        CloseButton {
+                            box: 26px;
+                            glyph: 14px;
+                            clicked => { root.cancelled(); }
+                        }
                     }
                 }
 

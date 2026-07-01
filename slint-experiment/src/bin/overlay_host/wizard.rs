@@ -26,10 +26,10 @@
 //! NOTE (§7): the parent crate-root symbols this module references are imported
 //! explicitly below.
 use super::{
-    apply_scheme_wizard, config, focus_window, global_scheme, global_stealth, grab_hwnd,
-    present_window_stealth_aware, set_global_stealth, set_skip_taskbar, set_stealth,
-    try_acquire_mic, ComponentHandle, OverlayBarWindow, Rc, RefCell, SettingsWindow, SharedString,
-    WindowRegistry, WizardWindow,
+    apply_scheme_wizard, config, drag_begin, drag_update, focus_window, global_scheme,
+    global_stealth, grab_hwnd, present_window_stealth_aware, set_global_stealth, set_skip_taskbar,
+    set_stealth, try_acquire_mic, ComponentHandle, OverlayBarWindow, Rc, RefCell, SettingsWindow,
+    SharedString, WindowRegistry, WizardWindow,
 };
 
 /// Refill the step-7 summary rows. Renders ONLY secret-free values: the live
@@ -340,6 +340,27 @@ pub(crate) fn wire_wizard_steps(
             if let Some(sw) = set.borrow().as_ref() {
                 sw.set_active_tab(13);
                 sw.invoke_diagnostics_check_all_clicked();
+            }
+        });
+    }
+
+    // Frameless window drag — the header row is the handle (same cursor-delta
+    // idiom as Settings/bar/tiles): grab_hwnd + drag_begin/drag_update reused.
+    {
+        let weak = win.as_weak();
+        win.on_drag_start_requested(move || {
+            if let Some(w) = weak.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(w.window()) {
+                    drag_begin(hwnd);
+                }
+            }
+        });
+        let weak_move = win.as_weak();
+        win.on_drag_moved(move || {
+            if let Some(w) = weak_move.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(w.window()) {
+                    drag_update(hwnd);
+                }
             }
         });
     }
