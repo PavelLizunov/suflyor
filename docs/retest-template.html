@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<!--
+  RETEST CHECKLIST TEMPLATE — the "golden rule" fillable tester report.
+  Copy to docs/retest-v<VERSION>-fixes.html per release; the retest-gate hook
+  (.claude/hooks/git-gate.ps1) BLOCKS `gh release create vX.Y.Z` unless a matching
+  docs/retest-*X.Y.Z*.html exists.
+
+  To fill: replace the <h1>/<sub> version, then add one <div class="item"> per
+  change inside <div id="items">. Item format:
+
+    <div class="item" data-id="Short id — one line">
+      <span class="id">Short id — what it is</span><span class="sev p0|p1|f">P0|fix|feature|visual</span>
+      <div class="steps"><span class="lang">RU</span><span class="lang">EN</span><span class="lang">AMD</span><b>Шаги:</b> …</div>
+      <div class="exp"><b>Ожидание:</b> …</div>
+      <div class="note">⚠ optional caveat</div>
+    </div>
+
+  Scope items to CHANGED areas only (not a full regression). Flag EN/RU visual
+  items and hardware-specific (AMD/iGPU) items with the <span class="lang"> chips.
+  The status control + comment box + export/copy are wired automatically.
+-->
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>suflyor vX.Y.Z — ретест</title>
+<style>
+  :root{--bg:#0f1216;--card:#171c22;--line:#262d36;--txt:#e6eaf0;--mut:#9aa6b2;--acc:#5b9dff;--ok:#3fb950;--fail:#f85149;--na:#8b949e;--warn:#d29922}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;padding:24px}
+  h1{font-size:21px;margin:0 0 4px}
+  .sub{color:var(--mut);font-size:13px;margin-bottom:18px}
+  .meta{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:13px}
+  .meta b{color:var(--acc)}
+  .grp{margin:22px 0 8px;font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--acc)}
+  .item{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:12px}
+  .item .id{font-weight:700}
+  .sev{font-size:11px;padding:2px 7px;border-radius:20px;margin-left:8px;vertical-align:middle}
+  .sev.p0{background:#3a1416;color:#ff7b72}.sev.p1{background:#3a2c10;color:#e3b341}.sev.f{background:#16303a;color:#79c0ff}
+  .steps{margin:8px 0}.exp{margin:6px 0 10px;color:var(--mut);font-size:13.5px}.exp b{color:var(--ok)}
+  .lang{display:inline-block;font-size:11px;background:#1f2630;border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:var(--mut);margin-right:6px}
+  .ctl{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;margin-top:8px}
+  .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{background:transparent;color:var(--mut);border:0;padding:6px 14px;cursor:pointer;font:inherit}
+  .seg button.on[data-v=pass]{background:var(--ok);color:#04130a}
+  .seg button.on[data-v=fail]{background:var(--fail);color:#1a0405}
+  .seg button.on[data-v=na]{background:var(--na);color:#0c0f12}
+  textarea{flex:1;min-width:240px;min-height:38px;background:#0d1116;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:7px 10px;font:inherit;resize:vertical}
+  .bar{position:sticky;bottom:0;margin-top:24px;background:#0d1116ee;backdrop-filter:blur(6px);border-top:1px solid var(--line);padding:14px 0;display:flex;gap:12px;align-items:center}
+  .bar button{background:var(--acc);color:#04122e;border:0;border-radius:8px;padding:10px 18px;font:inherit;font-weight:700;cursor:pointer}
+  .bar button.ghost{background:transparent;color:var(--acc);border:1px solid var(--acc)}
+  .tally{color:var(--mut);font-size:13px}.tally b{color:var(--txt)}
+  .note{color:var(--warn);font-size:12.5px;margin-top:4px}
+  code{background:#0d1116;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:13px}
+</style>
+</head>
+<body>
+<h1>suflyor vX.Y.Z — ретест</h1>
+<div class="sub">Короткий чек-лист по изменённому — не полная регрессия.</div>
+<div class="meta"><b>ВАЖНО:</b> тестируй УСТАНОВЛЕННЫЙ билд (<code>setup.exe /S</code> → ярлык), версия = <b>X.Y.Z</b>.</div>
+
+<div id="items">
+  <!-- ADD .item BLOCKS HERE (see the format comment at the top of this file) -->
+</div>
+
+<div class="bar">
+  <button onclick="exportResults()">⬇ Экспортировать результаты</button>
+  <button class="ghost" onclick="copyResults()">⧉ Скопировать</button>
+  <span class="tally" id="tally"></span>
+</div>
+
+<script>
+  const VERSION = "vX.Y.Z";
+  const state={};
+  document.querySelectorAll('.item').forEach(it=>{
+    const id=it.dataset.id; state[id]={status:'',comment:''};
+    const ctl=document.createElement('div');ctl.className='ctl';
+    const seg=document.createElement('div');seg.className='seg';
+    [['pass','✓ Прошло'],['fail','✗ Не прошло'],['na','— Н/Д']].forEach(([v,lbl])=>{
+      const b=document.createElement('button');b.dataset.v=v;b.textContent=lbl;
+      b.onclick=()=>{state[id].status=v;seg.querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');tally();};
+      seg.appendChild(b);
+    });
+    const ta=document.createElement('textarea');ta.placeholder='Комментарий / что увидел…';
+    ta.oninput=()=>{state[id].comment=ta.value;};
+    ctl.appendChild(seg);ctl.appendChild(ta);it.appendChild(ctl);
+  });
+  function tally(){
+    const v=Object.values(state),p=v.filter(x=>x.status==='pass').length,f=v.filter(x=>x.status==='fail').length,n=v.filter(x=>x.status==='na').length;
+    document.getElementById('tally').innerHTML=`<b>${p}</b> прошло · <b>${f}</b> не прошло · <b>${n}</b> н/д · <b>${v.length-p-f-n}</b> осталось`;
+  }
+  tally();
+  function build(){
+    let o=`suflyor ${VERSION} — ретест\nДата: ${new Date().toLocaleString('ru-RU')}\n==============================\n\n`;
+    document.querySelectorAll('.item').forEach(it=>{
+      const s=state[it.dataset.id],L={pass:'ПРОШЛО',fail:'НЕ ПРОШЛО',na:'Н/Д','':'(не отмечено)'}[s.status];
+      o+=`[${L}] ${it.dataset.id}\n`; if(s.comment.trim())o+=`    ${s.comment.trim().replace(/\n/g,'\n    ')}\n`; o+=`\n`;
+    });
+    const v=Object.values(state);
+    o+=`Итог: ${v.filter(x=>x.status==='pass').length} прошло, ${v.filter(x=>x.status==='fail').length} не прошло, ${v.filter(x=>x.status==='na').length} н/д, ${v.filter(x=>!x.status).length} не отмечено.\n`;
+    return o;
+  }
+  function exportResults(){const b=new Blob([build()],{type:'text/plain;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`retest-${VERSION}-results.txt`;a.click();}
+  async function copyResults(){try{await navigator.clipboard.writeText(build());alert('Скопировано.');}catch(e){exportResults();}}
+</script>
+</body>
+</html>

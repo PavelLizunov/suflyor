@@ -39,6 +39,40 @@ if ($payload.tool_input -and $payload.tool_input.command) {
     $cmd = [string]$payload.tool_input.command
 }
 
+# --- Retest-HTML gate (golden rule) -----------------------------------
+# BLOCK `gh release create vX.Y.Z` when there is no tester checklist
+# docs/retest-*X.Y.Z*.html. Every release ships a FILLABLE self-contained HTML
+# checklist (memory: always-html-test-report). Defensive: any error here ALLOWS
+# the release (a hook bug must never brick a release).
+try {
+    if ($cmd -match 'gh\s+release\s+create\s+v?(\d+\.\d+\.\d+)') {
+        $ver = $Matches[1]
+        $pr = $PSScriptRoot
+        while ($pr -and -not (Test-Path (Join-Path $pr "overlay-backend\Cargo.toml"))) {
+            $parent = Split-Path -Parent $pr
+            if ($parent -eq $pr) { break }
+            $pr = $parent
+        }
+        $docs = Join-Path $pr "docs"
+        $hits = @()
+        if (Test-Path $docs) {
+            $hits = @(Get-ChildItem -Path $docs -Filter "retest-*$ver*.html" -File -ErrorAction SilentlyContinue)
+        }
+        if ($hits.Count -eq 0) {
+            [Console]::Error.WriteLine("")
+            [Console]::Error.WriteLine("[git-gate] BLOCK: releasing v$ver but docs/retest-*$ver*.html is missing.")
+            [Console]::Error.WriteLine("[git-gate] Golden rule: every release ships a fillable self-contained HTML tester checklist.")
+            [Console]::Error.WriteLine("[git-gate] Create docs/retest-v$ver-fixes.html (copy docs/retest-template.html), then re-run.")
+            exit 2
+        }
+        [Console]::Error.WriteLine("[git-gate] retest checklist present for v$ver ($($hits[0].Name)) -- release allowed.")
+        exit 0
+    }
+} catch {
+    [Console]::Error.WriteLine("[git-gate] WARN: retest-gate errored ($_); allowing release.")
+    exit 0
+}
+
 # --- Fast exit if not git commit/push ---------------------------------
 $isCommit = $cmd -match '\bgit\s+commit\b'
 $isPush   = $cmd -match '\bgit\s+push\b'

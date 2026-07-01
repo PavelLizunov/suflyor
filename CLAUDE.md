@@ -112,6 +112,13 @@ bad commits. Setup:
 - `.claude/hooks/git-gate.ps1` runs `cargo fmt --check + clippy` (both
   crates) on every `git commit`, plus `cargo test` (both crates) on every
   `git push`.
+- **Retest-gate (2026-07-01):** the SAME hook also BLOCKS
+  `gh release create vX.Y.Z` unless `docs/retest-*X.Y.Z*.html` exists — the
+  golden-rule fillable tester checklist (memory `[[always-html-test-report]]`),
+  so a release can't ship without one. Copy `docs/retest-template.html` →
+  `docs/retest-v<version>-fixes.html` and fill the per-change items. (Editing the
+  `.ps1` takes effect immediately; the branch is defensive — any error ALLOWS the
+  release rather than bricking it.)
 - `--no-verify` bypasses with a WARN line (rare; hotfix only per below).
 - After editing the hook OR `settings.json`: RESTART Claude Code (the
   settings watcher does not pick up changes mid-session).
