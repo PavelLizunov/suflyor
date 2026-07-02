@@ -83,6 +83,17 @@ export component PaletteWindow inherits Window {
                     root.close-requested();
                     return accept;
                 }
+                // Layout-independent editing shortcuts (see text_ask.slint):
+                // Slint keys Ctrl+A/C/V/X on the Latin a/c/v/x, so under a Cyrillic
+                // layout the physical keys emit ф/с/м/ч and die. Call the LineEdit's
+                // own functions; paste/cut fire `edited` above, so the search list
+                // refreshes automatically. Keycode matches, not UI strings.
+                if (event.modifiers.control && !event.modifiers.shift) {
+                    if (event.text == "м" || event.text == "М") { search-input.paste(); return accept; }
+                    if (event.text == "с" || event.text == "С") { search-input.copy(); return accept; }
+                    if (event.text == "ч" || event.text == "Ч") { search-input.cut(); return accept; }
+                    if (event.text == "ф" || event.text == "Ф") { search-input.select-all(); return accept; }
+                }
                 return reject;
             }
 

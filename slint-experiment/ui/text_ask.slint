@@ -71,6 +71,18 @@ export component TextAskWindow inherits Window {
                 root.cancelled();
                 return accept;
             }
+            // Layout-independent editing shortcuts. Slint's built-in Ctrl+A/C/V/X
+            // are keyed on the Latin chars a/c/v/x (i-slint-core `shortcut()`), so
+            // under a Cyrillic layout the physical keys emit ф/с/м/ч and the
+            // shortcuts silently die. Match those and call the LineEdit's own
+            // functions (cursor/selection-aware). "ф/с/м/ч" are keycode matches,
+            // not UI strings — deliberately not @tr.
+            if (e.modifiers.control && !e.modifiers.shift) {
+                if (e.text == "м" || e.text == "М") { input.paste(); return accept; }
+                if (e.text == "с" || e.text == "С") { input.copy(); return accept; }
+                if (e.text == "ч" || e.text == "Ч") { input.cut(); return accept; }
+                if (e.text == "ф" || e.text == "Ф") { input.select-all(); return accept; }
+            }
             return reject;
         }
         VerticalLayout {
