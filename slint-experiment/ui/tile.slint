@@ -537,6 +537,10 @@ export component TileWindow inherits Window {
                 viewport-width: self.width;
                 VerticalLayout {
                     spacing: 4px;
+                    // A2 fix (retest r2): right inset so the per-block ⭐ gutter clears the
+                    // ScrollView scrollbar on long/scrolling answers (tester: the stars
+                    // "compete with the scroll" and get hard to click).
+                    padding-right: 14px;
                     // Per-block wrapper is a LAYOUT, not a bare Rectangle.
                     // A Rectangle does NOT size its height to non-layout
                     // children, so long Text blocks collapsed to ~0px and

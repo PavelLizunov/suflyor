@@ -2797,6 +2797,12 @@ export component SettingsWindow inherits Window {
                             // un-virtualized list under the SW renderer's i16 limit.
                             max-height: 120px;
                             clip: true;
+                            // A1 fix (retest r2): wrap the two conditional rows in a
+                            // VerticalLayout so the Rectangle sizes to the ACTIVE row. A
+                            // Rectangle does NOT size to conditional children → rows
+                            // overlapped past ~4 items ("text наслаивается"); the VL sizes
+                            // to its one active child (same pattern as the candidate rows).
+                            VerticalLayout {
                             // A1 — display mode: fact text + Edit + Delete.
                             if root.memory-editing-id != m.id : HorizontalLayout {
                                 padding: 8px;
@@ -2842,6 +2848,7 @@ export component SettingsWindow inherits Window {
                                     text: @tr("Cancel");
                                     clicked => { root.memory-editing-id = -1; }
                                 }
+                            }
                             }
                         }
                         }
