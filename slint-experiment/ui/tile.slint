@@ -112,6 +112,16 @@ export component TileWindow inherits Window {
     // (set on conversational tiles); `copied` briefly flips to a check icon.
     in-out property <bool> can-copy: false;
     in-out property <bool> copied: false;
+    // C (ТЗ 2026-07-02) — per-code-block copy: index of the code block whose 📋
+    // just fired (its icon flips to a check for ~1.5s); -1 = none. Rust-driven,
+    // mirroring `copied` above.
+    in-out property <int> copied-block-index: -1;
+    // Stale-marker guard: streaming re-renders REPLACE the blocks model on every
+    // delta, so a mid-stream index would no longer point at the same code block —
+    // clear it on any model swap (else the check could flash on the wrong block
+    // for ≤1.5s). A settled answer fires no further set_blocks, so the Rust 1.5s
+    // timer still handles the normal (post-answer) case.
+    changed blocks => { root.copied-block-index = -1; }
     // v0.18.6 — «Повторить»: shown on a summary-failure tile that carries a
     // session id. Resumes the summary from the persisted conspect (re-maps only
     // the failed parts, then re-runs the reduce) — see retry_meeting_summary.
@@ -133,6 +143,8 @@ export component TileWindow inherits Window {
     callback escalate-clicked();
     // V0.8.3 — copy the answer text to the clipboard (Rust flashes a check icon).
     callback copy-clicked();
+    // C (ТЗ 2026-07-02) — copy ONE fenced code block: (block-index, clean code).
+    callback copy-block-clicked(int, string);
     // v0.18.6 — retry a failed meeting summary from its persisted conspect.
     callback retry-clicked();
     // Read-aloud — speak the tile's text aloud / toggle pause-resume.
@@ -555,10 +567,40 @@ export component TileWindow inherits Window {
                             clip: true;
                             VerticalLayout {
                                 padding: 8px;
-                                if block.lang != "" : Text {
-                                    text: block.lang;
-                                    font-size: 9px;
-                                    color: Theme.text-muted;
+                                spacing: 4px;
+                                // Header: language label (left) + per-block copy
+                                // button (right). The button copies THIS block's
+                                // clean code — `block.text` is the fence-stripped
+                                // body, so no backticks reach the clipboard.
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    Text {
+                                        text: block.lang;
+                                        font-size: 9px;
+                                        color: Theme.text-muted;
+                                        vertical-alignment: center;
+                                    }
+                                    Rectangle { horizontal-stretch: 1; }
+                                    Rectangle {
+                                        width: 22px;
+                                        height: 18px;
+                                        border-radius: 4px;
+                                        background: cb-touch.has-hover ? Theme.border-strong : transparent;
+                                        cb-touch := TouchArea {
+                                            clicked => { root.copy-block-clicked(i, block.text); }
+                                        }
+                                        Image {
+                                            source: root.copied-block-index == i
+                                                ? @image-url("../assets/icons/check.svg")
+                                                : @image-url("../assets/icons/copy.svg");
+                                            colorize: root.copied-block-index == i ? Theme.success : Theme.text-muted;
+                                            width: 12px;
+                                            height: 12px;
+                                            image-fit: contain;
+                                            x: (parent.width - self.width) / 2;
+                                            y: (parent.height - self.height) / 2;
+                                        }
+                                    }
                                 }
                                 // Code keeps no-wrap so commands / YAML / JSON
                                 // don't reflow and lose meaning; long lines

@@ -268,6 +268,42 @@ pub(crate) fn wire_copy(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayBa
     });
 }
 
+/// C (ТЗ 2026-07-02) — wire the per-code-block 📋 copy button. STATELESS: the
+/// `.slint` hands us the block's index + its CLEAN code (`block.text` is the
+/// fence-stripped body — no backticks), we write only that to the clipboard and
+/// flash a check on THAT block (`copied-block-index`) for ~1.5 s. Wired from
+/// `wire_tile_drag`, the one hook every tile-creation path calls, so it reaches
+/// F9 / PTT / vision / auto / content tiles alike. Local copy — no egress, safe
+/// under screen-share / stealth (same contract as `wire_copy`).
+pub(crate) fn wire_code_copy(tile: &TileWindow) {
+    let weak = tile.as_weak();
+    tile.on_copy_block_clicked(move |idx, code| {
+        if code.is_empty() {
+            return;
+        }
+        match clipboard_win::set_clipboard_string(code.as_str()) {
+            Ok(()) => {
+                let Some(t) = weak.upgrade() else {
+                    return;
+                };
+                t.set_copied_block_index(idx);
+                let w = t.as_weak();
+                Timer::single_shot(Duration::from_millis(1500), move || {
+                    if let Some(t) = w.upgrade() {
+                        // Clear only if THIS block is still the flashed one — a
+                        // newer copy of another block moved the marker; don't
+                        // clobber its check early.
+                        if t.get_copied_block_index() == idx {
+                            t.set_copied_block_index(-1);
+                        }
+                    }
+                });
+            }
+            Err(e) => eprintln!("[overlay-host] code-block copy failed: {e}"),
+        }
+    });
+}
+
 /// Text for the 🔊 read-aloud: the LATEST assistant answer only — never the user
 /// prompts / transcript / earlier turns. (The 📋 copy deliberately includes the
 /// whole labelled thread; read-aloud must NOT, or it speaks your own questions

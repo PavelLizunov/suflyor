@@ -226,6 +226,10 @@ pub(crate) fn wire_tile_drag(tile: &TileWindow) {
             }
         }
     });
+    // C (ТЗ 2026-07-02) — every tile that can render code gets the per-code-block
+    // copy button wired here: this is the single hook every tile-creation path
+    // (F9 / PTT / vision / content) calls, so no site can miss it.
+    super::tile_copy::wire_code_copy(tile);
 }
 
 /// Apply transparency + position tile on the appropriate monitor.
