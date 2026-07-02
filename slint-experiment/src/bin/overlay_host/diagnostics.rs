@@ -364,6 +364,10 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = done.upgrade() {
                         w.set_db_repair_status(SharedString::from(msg));
+                        // Refresh the Память tab lists so a clear is reflected
+                        // IMMEDIATELY — the deleted rows were lingering in the UI
+                        // until a Settings reopen (bounded 100-row re-read).
+                        super::settings_memory::reload_memory(&w);
                     }
                 });
             });
@@ -393,6 +397,10 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = done.upgrade() {
                         w.set_db_repair_status(SharedString::from(msg));
+                        // Refresh the Память tab lists so a clear is reflected
+                        // IMMEDIATELY — the deleted rows were lingering in the UI
+                        // until a Settings reopen (bounded 100-row re-read).
+                        super::settings_memory::reload_memory(&w);
                     }
                 });
             });
@@ -416,6 +424,10 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = done.upgrade() {
                         w.set_db_repair_status(SharedString::from(msg));
+                        // Refresh the Память tab lists so a clear is reflected
+                        // IMMEDIATELY — the deleted rows were lingering in the UI
+                        // until a Settings reopen (bounded 100-row re-read).
+                        super::settings_memory::reload_memory(&w);
                     }
                 });
             });

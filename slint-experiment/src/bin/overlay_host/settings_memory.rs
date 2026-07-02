@@ -162,7 +162,7 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
 /// Re-open the catalog, load pending candidates + active items, and push both
 /// into the tab's models. Best-effort: a catalog-open failure leaves the lists
 /// empty rather than crashing.
-fn reload_memory(win: &SettingsWindow) {
+pub(crate) fn reload_memory(win: &SettingsWindow) {
     let (cands, items) = match open_default_store() {
         Ok(store) => (
             store
