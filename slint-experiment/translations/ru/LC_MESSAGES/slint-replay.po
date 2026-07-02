@@ -801,6 +801,9 @@ msgstr "Переименовать"
 msgid "Delete"
 msgstr "Удалить"
 
+msgid "Edit"
+msgstr "Редактировать"
+
 msgid "local model — e.g. qwen2.5:7b-instruct"
 msgstr "локальная модель — напр. qwen2.5:7b-instruct"
 

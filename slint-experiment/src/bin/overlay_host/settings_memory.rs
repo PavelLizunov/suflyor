@@ -157,6 +157,28 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
             }
         });
     }
+    // A1 (ТЗ 2026-07-02) — save an inline edit of an approved fact. Empty/whitespace
+    // text = "no change" (keep the original, just leave edit mode); a non-empty edit
+    // goes through the existing update_memory_item_text, then reload + exit edit mode.
+    {
+        let weak = win.as_weak();
+        win.on_memory_edit_save(move |id, text| {
+            let Some(w) = weak.upgrade() else { return };
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                match open_default_store() {
+                    Ok(mut store) => {
+                        if let Err(e) = store.update_memory_item_text(i64::from(id), trimmed) {
+                            eprintln!("[overlay-host] memory edit failed: {e:#}");
+                        }
+                    }
+                    Err(e) => eprintln!("[overlay-host] memory edit: store open failed: {e:#}"),
+                }
+            }
+            w.set_memory_editing_id(-1);
+            reload_memory(&w);
+        });
+    }
 }
 
 /// Re-open the catalog, load pending candidates + active items, and push both

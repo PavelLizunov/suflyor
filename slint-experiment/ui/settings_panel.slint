@@ -303,6 +303,12 @@ export component SettingsWindow inherits Window {
     // consent the approve step otherwise provides).
     in-out property <string> memory-add-text: "";
     callback memory-add-fact(string);
+    // A1 (ТЗ 2026-07-02) — inline edit of an approved fact. `memory-editing-id` is
+    // the item id currently in edit mode (-1 = none); `memory-edit-text` is the
+    // edit buffer. Begin/cancel are pure-Slint; Save calls Rust.
+    in-out property <int> memory-editing-id: -1;
+    in-out property <string> memory-edit-text: "";
+    callback memory-edit-save(int, string);
     // Persisted cross-window toggles (driven by overlay-host).
     in-out property <bool> always-on-top-toggle: true;
     in-out property <bool> stealth-toggle: false;
@@ -2791,7 +2797,8 @@ export component SettingsWindow inherits Window {
                             // un-virtualized list under the SW renderer's i16 limit.
                             max-height: 120px;
                             clip: true;
-                            HorizontalLayout {
+                            // A1 — display mode: fact text + Edit + Delete.
+                            if root.memory-editing-id != m.id : HorizontalLayout {
                                 padding: 8px;
                                 spacing: 6px;
                                 Text {
@@ -2803,8 +2810,37 @@ export component SettingsWindow inherits Window {
                                     vertical-alignment: center;
                                 }
                                 Button {
+                                    text: @tr("Edit");
+                                    clicked => {
+                                        // Seed the buffer with THIS fact's text (not
+                                        // the kind glyph) and enter edit mode.
+                                        root.memory-edit-text = m.text;
+                                        root.memory-editing-id = m.id;
+                                    }
+                                }
+                                Button {
                                     text: @tr("Delete");
                                     clicked => { root.memory-delete-item(m.id); }
+                                }
+                            }
+                            // A1 — edit mode (only the row whose id matches): inline
+                            // LineEdit + Save + Cancel. Only one row is ever in edit
+                            // mode, so the shared edit buffer is unambiguous.
+                            if root.memory-editing-id == m.id : HorizontalLayout {
+                                padding: 8px;
+                                spacing: 6px;
+                                LineEdit {
+                                    text <=> root.memory-edit-text;
+                                    horizontal-stretch: 1;
+                                    accepted(t) => { root.memory-edit-save(m.id, t); }
+                                }
+                                Button {
+                                    text: @tr("Save");
+                                    clicked => { root.memory-edit-save(m.id, root.memory-edit-text); }
+                                }
+                                Button {
+                                    text: @tr("Cancel");
+                                    clicked => { root.memory-editing-id = -1; }
                                 }
                             }
                         }

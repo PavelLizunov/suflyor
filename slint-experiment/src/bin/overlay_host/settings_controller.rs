@@ -1322,6 +1322,9 @@ pub(crate) fn populate_token_status(
     // Disarm any half-armed destructive clear so reopening Settings never leaves a
     // "tap again to delete" button primed.
     win.set_db_clear_armed(SharedString::from(""));
+    // A1 — drop any in-flight inline memory edit so reopening Settings never lands
+    // on a row stuck in edit mode (reused-window transient-state rule).
+    win.set_memory_editing_id(-1);
     // OCR engine (Tesseract) install state — re-checked each open (the data dir
     // is user-writable + the installer button writes it). Transient install
     // status reset so a stale "Готово…" can't survive a reopen.
