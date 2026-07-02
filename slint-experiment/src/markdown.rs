@@ -8,8 +8,8 @@
 //!
 //! Phase 4 scope: H1-H3, paragraphs, bullet lists, code blocks (no
 //! syntect colors), horizontal rules. Inline emphasis renders as
-//! plaintext (bold/italic dropped; inline code wrapped in literal
-//! backticks). GFM tables render as an aligned monospace block (#109);
+//! plaintext (bold/italic dropped; inline code rendered PLAIN — backticks
+//! stripped, see Event::Code). GFM tables render as an aligned monospace block (#109);
 //! links, images, footnotes, HTML are silently dropped — Phase 4.x.
 
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
@@ -133,14 +133,19 @@ pub fn parse(source: &str) -> Vec<Block> {
                 }
             }
             Event::Code(t) => {
+                // B-inline (ТЗ 2026-07-02): inline code renders as PLAIN text — drop
+                // the literal backticks the tester saw around `journalctl`. Slint's
+                // flat Text has neither styled runs nor inline flow across multi-style
+                // runs, so true monospace-inline would need a custom text-layout engine
+                // (out of scope). Whole-answer copy is unaffected — it copies the raw
+                // markdown, not these blocks.
+                // ponytail: inline code renders plain; upgrade path = styled runs.
                 let buf = if in_cell {
                     &mut current_cell
                 } else {
                     &mut current_text
                 };
-                buf.push('`');
                 buf.push_str(&t);
-                buf.push('`');
             }
             Event::SoftBreak | Event::HardBreak => {
                 if in_cell {
@@ -310,7 +315,7 @@ This tile demonstrates the **Phase 4** markdown body adapter integrated into the
 ## What's working
 
 - Headings (H1, H2, H3 — visible above and below)
-- Paragraphs with **bold** (rendered plaintext for now) and `inline code` (wrapped in backticks)
+- Paragraphs with **bold** (rendered plaintext for now) and `inline code` (backticks stripped)
 - Bullet lists like this one
 - Fenced code blocks
 

@@ -136,11 +136,9 @@ fn parse_markdown(source: &str) -> Vec<MarkdownBlock> {
                 current_text.push_str(&t);
             }
             Event::Code(t) => {
-                // Inline code — render as wrapped backticks in the spike;
-                // Phase 4 would emit a StyledText monospace run.
-                current_text.push('`');
+                // B-inline (ТЗ 2026-07-02): inline code renders plain (backticks
+                // stripped) — kept in sync with markdown.rs::parse.
                 current_text.push_str(&t);
-                current_text.push('`');
             }
             Event::SoftBreak | Event::HardBreak => {
                 current_text.push(' ');
