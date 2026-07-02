@@ -1457,7 +1457,16 @@ fn wire_transcript_actions(
     // flash (the fresh model already starts all-unchecked).
     win.set_all_selected(false);
     win.set_copied(false);
+    // A2 — reset the capture editor too (the window is reused across sessions).
+    win.set_capturing_line_index(-1);
     let utts_owned: Vec<Utterance> = utts.to_vec();
+
+    // A2 (ТЗ 2026-07-02) — «⭐ В память»: persist the (edited) captured line as an
+    // approved memory note (the .slint seeds capture-text from the row's ⭐ and
+    // closes the editor on Save; empty = no-op).
+    win.on_add_to_memory(move |text| {
+        super::tile_copy::insert_approved_note(&text);
+    });
 
     // Toggle one line; keep "select all" in sync (ON iff EVERY row is checked).
     {

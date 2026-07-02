@@ -7,7 +7,7 @@
 // i18n: chrome strings are @tr (English msgid; RU in slint-replay.po). The row
 // DATA (time / speaker / text) is language-neutral, built in Rust.
 
-import { ScrollView, Palette } from "std-widgets.slint";
+import { ScrollView, Palette, LineEdit, Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { CloseButton } from "controls.slint";
 import { Metrics } from "metrics.slint";
@@ -90,6 +90,10 @@ export component TranscriptWindow inherits Window {
     in-out property <float> progress: 0;
     in-out property <string> time-text: "";
     in-out property <int> active-line: -1;
+    // A2 (ТЗ 2026-07-02) — «⭐ В память»: the line index whose capture editor is
+    // open (-1 = none) + the shared edit buffer. One line at a time.
+    in-out property <int> capturing-line-index: -1;
+    in-out property <string> capture-text: "";
 
     callback toggle-play();
     callback play-line(int);
@@ -101,6 +105,8 @@ export component TranscriptWindow inherits Window {
     callback close-requested();
     callback drag-start-requested();
     callback drag-moved();
+    // A2 — save the (edited) captured line as an approved memory note.
+    callback add-to-memory(string);
 
     forward-focus: fs;
 
@@ -322,8 +328,57 @@ export component TranscriptWindow inherits Window {
                                     horizontal-stretch: 1;
                                     wrap: word-wrap;
                                 }
+                                // A2 — ⭐ capture THIS line into memory. Its own
+                                // TouchArea intercepts the click, so it doesn't also
+                                // trigger the row's play-line (like the Tick above).
+                                Rectangle {
+                                    width: 22px;
+                                    height: 16px;
+                                    border-radius: 4px;
+                                    background: star-ta.has-hover ? Theme.border-strong : transparent;
+                                    star-ta := TouchArea {
+                                        clicked => {
+                                            root.capture-text = line.text;
+                                            root.capturing-line-index = i;
+                                        }
+                                    }
+                                    Text {
+                                        text: "⭐";
+                                        font-size: 11px;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
                             }
                         }
+                    }
+                }
+
+                // A2 (ТЗ 2026-07-02) — «⭐ В память»: one editor for the window,
+                // seeded by the ⭐ on each row. Edit/trim the captured line → Save
+                // (approved memory note) / Cancel.
+                if root.capturing-line-index != -1 : HorizontalLayout {
+                    spacing: Metrics.space-sm;
+                    Text {
+                        text: @tr("Add to memory:");
+                        font-size: Metrics.font-caption;
+                        color: Theme.text-muted;
+                        vertical-alignment: center;
+                    }
+                    LineEdit {
+                        text <=> root.capture-text;
+                        horizontal-stretch: 1;
+                    }
+                    Button {
+                        text: @tr("Save");
+                        clicked => {
+                            root.add-to-memory(root.capture-text);
+                            root.capturing-line-index = -1;
+                        }
+                    }
+                    Button {
+                        text: @tr("Cancel");
+                        clicked => { root.capturing-line-index = -1; }
                     }
                 }
 

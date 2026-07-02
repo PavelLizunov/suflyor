@@ -304,37 +304,41 @@ pub(crate) fn wire_code_copy(tile: &TileWindow) {
     });
 }
 
-/// A2 (ТЗ 2026-07-02) — wire the per-block «⭐ В память» save. The `.slint` opens
-/// an inline editor prefilled with the block's text and closes it on Save; here we
-/// just persist the (edited) text as an APPROVED memory note — the user typing /
-/// confirming the fact IS the consent, the same rule the Settings "add fact" path
-/// uses. Empty/whitespace is ignored. Wired from `wire_tile_drag`, so every tile
-/// that renders blocks gets it. Local write — no egress, safe under stealth.
-pub(crate) fn wire_add_to_memory(tile: &TileWindow) {
-    tile.on_add_to_memory(move |text| {
-        let trimmed = text.trim();
-        if trimmed.is_empty() {
-            return;
-        }
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as i64)
-            .unwrap_or(0);
-        match overlay_backend::persistence::open_default_store() {
-            Ok(mut store) => {
-                let item = overlay_backend::persistence::NewMemoryItem {
-                    profile_id: "default".into(),
-                    kind: "note".into(),
-                    text: trimmed.to_string(),
-                    source_session_id: None,
-                };
-                if let Err(e) = store.insert_memory_item(&item, now) {
-                    eprintln!("[overlay-host] add-to-memory failed: {e:#}");
-                }
+/// A2 (ТЗ 2026-07-02) — persist `text` as an APPROVED memory note (kind "note",
+/// profile "default"): the shared write behind BOTH the per-block «⭐ В память» on
+/// tiles and the per-line one on the transcript. The user typing / confirming the
+/// fact IS the approval consent (same rule as the Settings "add fact"). Empty /
+/// whitespace is a no-op. Local SQLite — no egress; errors are logged, not fatal.
+pub(crate) fn insert_approved_note(text: &str) {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return;
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    match overlay_backend::persistence::open_default_store() {
+        Ok(mut store) => {
+            let item = overlay_backend::persistence::NewMemoryItem {
+                profile_id: "default".into(),
+                kind: "note".into(),
+                text: trimmed.to_string(),
+                source_session_id: None,
+            };
+            if let Err(e) = store.insert_memory_item(&item, now) {
+                eprintln!("[overlay-host] add-to-memory failed: {e:#}");
             }
-            Err(e) => eprintln!("[overlay-host] add-to-memory: store open failed: {e:#}"),
         }
-    });
+        Err(e) => eprintln!("[overlay-host] add-to-memory: store open failed: {e:#}"),
+    }
+}
+
+/// A2 — wire a tile's per-block «⭐ В память» to `insert_approved_note`. The `.slint`
+/// opens an inline editor prefilled with the block's text and closes it on Save.
+/// Wired from `wire_tile_drag`, so every block-rendering tile gets it.
+pub(crate) fn wire_add_to_memory(tile: &TileWindow) {
+    tile.on_add_to_memory(move |text| insert_approved_note(&text));
 }
 
 /// Text for the 🔊 read-aloud: the LATEST assistant answer only — never the user
