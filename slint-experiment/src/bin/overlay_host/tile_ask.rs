@@ -242,6 +242,7 @@ pub(crate) fn fire_f9_ask(
         kind: markdown::kind::PARAGRAPH,
         text: SharedString::from("⏳ Asking AI…"),
         lang: SharedString::from(""),
+        marked: false,
     }];
     tile.set_blocks(ModelRc::new(VecModel::from(placeholder)));
     let weak_close = tile.as_weak();

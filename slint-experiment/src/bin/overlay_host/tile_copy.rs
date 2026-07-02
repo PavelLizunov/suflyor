@@ -33,7 +33,11 @@
 //! `TileWindow`, the clipboard helper, and the `vision` prompts through it).
 //! That is intentional for the extraction; the imports get narrowed in a later
 //! pass.
-use super::{ai, vision, Arc, ComponentHandle, Duration, OverlayBarBridge, TileWindow, Timer};
+use super::{
+    ai, vision, Arc, ComponentHandle, Duration, MarkdownBlock, OverlayBarBridge, SharedString,
+    TileWindow, Timer, VecModel,
+};
+use slint::Model;
 // `conversations_evict_keys` lives in `tile_controller.rs`; only this module's
 // eviction unit test (`copy_tests`) exercises it, so import it TEST-ONLY — a
 // plain module-level import would be unused in the normal build (clippy -D).
@@ -334,11 +338,101 @@ pub(crate) fn insert_approved_note(text: &str) {
     }
 }
 
-/// A2 — wire a tile's per-block «⭐ В память» to `insert_approved_note`. The `.slint`
-/// opens an inline editor prefilled with the block's text and closes it on Save.
-/// Wired from `wire_tile_drag`, so every block-rendering tile gets it.
-pub(crate) fn wire_add_to_memory(tile: &TileWindow) {
-    tile.on_add_to_memory(move |text| insert_approved_note(&text));
+/// A2 (ТЗ 2026-07-02, redesign) — wire the per-block MARK → save flow on a tile.
+/// `toggle-block-marked(i)` flips block i's `marked` in the live blocks model and
+/// maintains `marked-count` (seeding `capture-text` when exactly one is marked, for
+/// the trim-before-save editor). `save-marked` writes every marked block as an
+/// approved note (single-marked uses the edited `capture-text`), then clears marks.
+/// `clear-marks` cancels. Wired via `wire_tile_drag` (the universal per-tile hook).
+pub(crate) fn wire_block_capture(tile: &TileWindow) {
+    {
+        let weak = tile.as_weak();
+        tile.on_toggle_block_marked(move |idx| {
+            let Some(t) = weak.upgrade() else { return };
+            let blocks = t.get_blocks();
+            let Some(vm) = blocks.as_any().downcast_ref::<VecModel<MarkdownBlock>>() else {
+                return;
+            };
+            let Ok(i) = usize::try_from(idx) else { return };
+            let Some(mut row) = vm.row_data(i) else {
+                return;
+            };
+            row.marked = !row.marked;
+            vm.set_row_data(i, row);
+            // Recompute the count + the sole-marked index (when exactly one).
+            let mut count = 0_i32;
+            let mut single_idx = -1_i32;
+            let mut single_text = SharedString::default();
+            for j in 0..vm.row_count() {
+                if let Some(r) = vm.row_data(j) {
+                    if r.marked {
+                        count += 1;
+                        single_idx = i32::try_from(j).unwrap_or(-1);
+                        single_text = r.text.clone();
+                    }
+                }
+            }
+            t.set_marked_count(count);
+            // Seed the edit buffer ONLY when the SOLE-marked block CHANGES (review
+            // I-1): an in-progress edit then survives marking/un-marking OTHER blocks
+            // (sole block unchanged → no re-seed), while switching which single block
+            // is marked re-seeds to the new block's text — so the buffer never
+            // mismatches the marked block.
+            if count == 1 && single_idx != t.get_capture_block_index() {
+                t.set_capture_text(single_text);
+                t.set_capture_block_index(single_idx);
+            }
+        });
+    }
+    {
+        let weak = tile.as_weak();
+        tile.on_save_marked(move || {
+            let Some(t) = weak.upgrade() else { return };
+            let blocks = t.get_blocks();
+            let Some(vm) = blocks.as_any().downcast_ref::<VecModel<MarkdownBlock>>() else {
+                return;
+            };
+            // Single mark → the (possibly edited) buffer; multiple → each block's text.
+            if t.get_marked_count() == 1 {
+                insert_approved_note(t.get_capture_text().as_str());
+            } else {
+                for j in 0..vm.row_count() {
+                    if let Some(r) = vm.row_data(j) {
+                        if r.marked {
+                            insert_approved_note(r.text.as_str());
+                        }
+                    }
+                }
+            }
+            clear_all_marks(vm);
+            t.set_marked_count(0);
+            t.set_capture_block_index(-1);
+        });
+    }
+    {
+        let weak = tile.as_weak();
+        tile.on_clear_marks(move || {
+            let Some(t) = weak.upgrade() else { return };
+            let blocks = t.get_blocks();
+            if let Some(vm) = blocks.as_any().downcast_ref::<VecModel<MarkdownBlock>>() {
+                clear_all_marks(vm);
+            }
+            t.set_marked_count(0);
+            t.set_capture_block_index(-1);
+        });
+    }
+}
+
+/// Un-mark every block in the model (shared by save + cancel).
+fn clear_all_marks(vm: &VecModel<MarkdownBlock>) {
+    for j in 0..vm.row_count() {
+        if let Some(mut r) = vm.row_data(j) {
+            if r.marked {
+                r.marked = false;
+                vm.set_row_data(j, r);
+            }
+        }
+    }
 }
 
 /// Text for the 🔊 read-aloud: the LATEST assistant answer only — never the user

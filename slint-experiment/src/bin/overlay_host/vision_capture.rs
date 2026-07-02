@@ -323,6 +323,7 @@ pub(crate) fn launch_vision_for_bgra(
         kind: markdown::kind::PARAGRAPH,
         text: SharedString::from(placeholder_s),
         lang: SharedString::from(""),
+        marked: false,
     }])));
     let weak_close = tile.as_weak();
     let vec_for_close = tiles.clone();

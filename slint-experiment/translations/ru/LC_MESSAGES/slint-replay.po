@@ -807,6 +807,9 @@ msgstr "Редактировать"
 msgid "Add to memory:"
 msgstr "Добавить в память:"
 
+msgid "To memory ({})"
+msgstr "В память ({})"
+
 msgid "local model — e.g. qwen2.5:7b-instruct"
 msgstr "локальная модель — напр. qwen2.5:7b-instruct"
 

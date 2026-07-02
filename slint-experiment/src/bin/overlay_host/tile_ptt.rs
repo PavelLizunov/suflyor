@@ -41,6 +41,7 @@ pub(crate) fn ptt_tile_error(weak: slint::Weak<TileWindow>, msg: &str) {
                 kind: markdown::kind::PARAGRAPH,
                 text: SharedString::from(msg),
                 lang: SharedString::from(""),
+                marked: false,
             }])));
         }
     });
@@ -116,6 +117,7 @@ pub(crate) fn fire_ptt_ask(
         kind: markdown::kind::PARAGRAPH,
         text: SharedString::from("⏳ Расшифровка…"),
         lang: SharedString::from(""),
+        marked: false,
     }])));
     let weak_close = tile.as_weak();
     let vec_for_close = tiles.clone();

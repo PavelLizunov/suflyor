@@ -15,6 +15,31 @@ export struct MarkdownBlock {
     kind: int,
     text: string,
     lang: string,
+    // A2 (ТЗ 2026-07-02) — quiet per-block mark for «⭐ В память»; toggled via Rust
+    // (toggle-block-marked), reset with the model on each stream re-render.
+    marked: bool,
+}
+
+// A2 (ТЗ 2026-07-02) — the quiet «⭐ В память» mark: a MUTED outline star (SVG so it
+// colorizes — the U+2B50 emoji the tester found "too bright" cannot). Accent + full
+// opacity when marked; muted + dim (0.35) at rest; full on hover. Click toggles.
+component StarMark inherits Rectangle {
+    in property <bool> marked;
+    callback clicked;
+    width: 20px;
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+    }
+    Image {
+        source: @image-url("../assets/icons/star.svg");
+        colorize: root.marked ? Theme.accent : Theme.text-muted;
+        opacity: root.marked ? 1.0 : (ta.has-hover ? 1.0 : 0.35);
+        width: 13px;
+        height: 13px;
+        image-fit: contain;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
 }
 
 // One row in a tile's «⋯» overflow popup — icon + label, hover-highlighted.
@@ -116,17 +141,23 @@ export component TileWindow inherits Window {
     // just fired (its icon flips to a check for ~1.5s); -1 = none. Rust-driven,
     // mirroring `copied` above.
     in-out property <int> copied-block-index: -1;
-    // A2 (ТЗ 2026-07-02) — «⭐ В память» capture: the block index whose inline
-    // add-to-memory editor is open (-1 = none) + the edit buffer. One at a time.
-    in-out property <int> capturing-block-index: -1;
+    // A2 (ТЗ 2026-07-02, редизайн) — «⭐ В память»: quiet per-block MARK (toggle),
+    // then one bottom «В память (N)» panel. marked-count = how many blocks are marked
+    // (Rust-maintained); capture-text = the edit buffer shown only when exactly one is
+    // marked (trim-before-save). Each block carries its own `marked`.
+    in-out property <int> marked-count: 0;
     in-out property <string> capture-text: "";
-    callback add-to-memory(string);
-    // Stale-marker guard: streaming re-renders REPLACE the blocks model on every
-    // delta, so a mid-stream index would no longer point at the same block — clear
-    // BOTH the copied-check and the capture editor on any model swap. A settled
-    // answer fires no further set_blocks, so the Rust 1.5s timer still handles the
-    // normal (post-answer) copied case.
-    changed blocks => { root.copied-block-index = -1; root.capturing-block-index = -1; }
+    // Which single block `capture-text` was seeded from (-1 = none). Lets an
+    // in-progress edit survive marking/un-marking OTHER blocks — Rust re-seeds only
+    // when the sole-marked block actually changes (review I-1).
+    in-out property <int> capture-block-index: -1;
+    callback toggle-block-marked(int);
+    callback save-marked();
+    callback clear-marks();
+    // Stale-marker guard: streaming re-renders REPLACE the blocks model on every delta
+    // (fresh blocks come with marked=false), so clear the copied-check AND the
+    // marked-count on any model swap. A settled answer fires no further set_blocks.
+    changed blocks => { root.copied-block-index = -1; root.marked-count = 0; root.capture-block-index = -1; root.capture-text = ""; }
     // v0.18.6 — «Повторить»: shown on a summary-failure tile that carries a
     // session id. Resumes the summary from the persisted conspect (re-maps only
     // the failed parts, then re-runs the reduce) — see retry_meeting_summary.
@@ -538,12 +569,20 @@ export component TileWindow inherits Window {
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
-                        // Paragraph
-                        if block.kind == 0 : Text {
-                            text: block.text;
-                            font-size: 12px;
-                            color: Theme.text-secondary;
-                            wrap: word-wrap;
+                        // Paragraph (+ A2 star gutter on the right)
+                        if block.kind == 0 : HorizontalLayout {
+                            spacing: 4px;
+                            Text {
+                                text: block.text;
+                                font-size: 12px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                                horizontal-stretch: 1;
+                            }
+                            StarMark {
+                                marked: block.marked;
+                                clicked => { root.toggle-block-marked(i); }
+                            }
                         }
                         // Bullet
                         if block.kind == 4 : HorizontalLayout {
@@ -561,6 +600,10 @@ export component TileWindow inherits Window {
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                                 horizontal-stretch: 1;
+                            }
+                            StarMark {
+                                marked: block.marked;
+                                clicked => { root.toggle-block-marked(i); }
                             }
                         }
                         // Code block
@@ -606,6 +649,10 @@ export component TileWindow inherits Window {
                                             y: (parent.height - self.height) / 2;
                                         }
                                     }
+                                    StarMark {
+                                        marked: block.marked;
+                                        clicked => { root.toggle-block-marked(i); }
+                                    }
                                 }
                                 // Code keeps no-wrap so commands / YAML / JSON
                                 // don't reflow and lose meaning; long lines
@@ -645,57 +692,29 @@ export component TileWindow inherits Window {
                                 }
                             }
                         }
-                        // A2 (ТЗ 2026-07-02) — «⭐ В память» on fact-bearing blocks
-                        // (paragraph / bullet / code). Click → inline editor prefilled
-                        // with the block text → edit/trim → approved memory. One block
-                        // at a time (single capturing-block-index).
-                        if (block.kind == 0 || block.kind == 4 || block.kind == 5) && root.capturing-block-index != i : HorizontalLayout {
-                            Rectangle { horizontal-stretch: 1; }
-                            Rectangle {
-                                width: 22px;
-                                height: 16px;
-                                border-radius: 4px;
-                                background: star-ta.has-hover ? Theme.border-strong : transparent;
-                                star-ta := TouchArea {
-                                    clicked => {
-                                        root.capture-text = block.text;
-                                        root.capturing-block-index = i;
-                                    }
-                                }
-                                Text {
-                                    text: "⭐";
-                                    font-size: 11px;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                }
-                            }
-                        }
-                        if root.capturing-block-index == i : VerticalLayout {
-                            spacing: 4px;
-                            Text {
-                                text: @tr("Add to memory:");
-                                font-size: 9px;
-                                color: Theme.text-muted;
-                            }
-                            HorizontalLayout {
-                                spacing: 6px;
-                                LineEdit {
-                                    text <=> root.capture-text;
-                                    horizontal-stretch: 1;
-                                }
-                                Button {
-                                    text: @tr("Save");
-                                    clicked => {
-                                        root.add-to-memory(root.capture-text);
-                                        root.capturing-block-index = -1;
-                                    }
-                                }
-                                Button {
-                                    text: @tr("Cancel");
-                                    clicked => { root.capturing-block-index = -1; }
-                                }
-                            }
-                        }
+                    }
+                }
+            }
+
+            // A2 (ТЗ 2026-07-02) — «⭐ В память» action bar: shows once ≥1 block is
+            // marked. N==1 exposes the edit buffer (trim-before-save, the flow the
+            // tester accepted on the transcript); N>1 saves each marked block as its
+            // own fact (edit later in Настройки → Память).
+            if root.marked-count >= 1 : VerticalLayout {
+                spacing: 4px;
+                if root.marked-count == 1 : LineEdit {
+                    text <=> root.capture-text;
+                }
+                HorizontalLayout {
+                    spacing: 6px;
+                    Rectangle { horizontal-stretch: 1; }
+                    Button {
+                        text: @tr("To memory ({})", root.marked-count);
+                        clicked => { root.save-marked(); }
+                    }
+                    Button {
+                        text: @tr("Cancel");
+                        clicked => { root.clear-marks(); }
                     }
                 }
             }

@@ -1173,6 +1173,7 @@ pub(crate) fn spawn_content_tile(
             kind: b.kind,
             text: SharedString::from(b.text),
             lang: SharedString::from(b.lang),
+            marked: false,
         })
         .collect();
     tile.set_blocks(ModelRc::new(VecModel::from(blocks)));

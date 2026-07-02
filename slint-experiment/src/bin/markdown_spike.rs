@@ -54,6 +54,7 @@ fn block(kind: i32, text: String, lang: String) -> MarkdownBlock {
         kind,
         text: SharedString::from(text),
         lang: SharedString::from(lang),
+        marked: false,
     }
 }
 

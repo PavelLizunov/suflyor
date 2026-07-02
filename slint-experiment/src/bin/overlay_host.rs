@@ -500,6 +500,7 @@ pub(crate) fn to_md_blocks(md: &str) -> Vec<MarkdownBlock> {
             kind: b.kind,
             text: SharedString::from(b.text),
             lang: SharedString::from(b.lang),
+            marked: false,
         })
         .collect()
 }
@@ -1717,6 +1718,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     kind: b.kind,
                     text: SharedString::from(b.text),
                     lang: SharedString::from(b.lang),
+                    marked: false,
                 })
                 .collect();
             tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
@@ -2902,6 +2904,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     "Нет транскрипта. Начните сессию (захват аудио) — когда появятся реплики, «+ тайл» спросит AI по последним из них."
                 }),
                 lang: SharedString::from(""),
+                marked: false,
             }];
             tile.set_blocks(ModelRc::new(VecModel::from(placeholder)));
 
@@ -2976,6 +2979,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         kind: b.kind,
                         text: SharedString::from(b.text),
                         lang: SharedString::from(b.lang),
+                        marked: false,
                     })
                     .collect();
                     t.set_blocks(ModelRc::new(VecModel::from(blocks)));
@@ -3024,6 +3028,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                     kind: b.kind,
                                     text: SharedString::from(b.text),
                                     lang: SharedString::from(b.lang),
+                                    marked: false,
                                 })
                                 .collect();
                             tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
@@ -3066,6 +3071,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                     kind: b.kind,
                                     text: SharedString::from(b.text),
                                     lang: SharedString::from(b.lang),
+                                    marked: false,
                                 })
                                 .collect();
                             tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
