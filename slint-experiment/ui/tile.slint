@@ -116,12 +116,17 @@ export component TileWindow inherits Window {
     // just fired (its icon flips to a check for ~1.5s); -1 = none. Rust-driven,
     // mirroring `copied` above.
     in-out property <int> copied-block-index: -1;
+    // A2 (ТЗ 2026-07-02) — «⭐ В память» capture: the block index whose inline
+    // add-to-memory editor is open (-1 = none) + the edit buffer. One at a time.
+    in-out property <int> capturing-block-index: -1;
+    in-out property <string> capture-text: "";
+    callback add-to-memory(string);
     // Stale-marker guard: streaming re-renders REPLACE the blocks model on every
-    // delta, so a mid-stream index would no longer point at the same code block —
-    // clear it on any model swap (else the check could flash on the wrong block
-    // for ≤1.5s). A settled answer fires no further set_blocks, so the Rust 1.5s
-    // timer still handles the normal (post-answer) case.
-    changed blocks => { root.copied-block-index = -1; }
+    // delta, so a mid-stream index would no longer point at the same block — clear
+    // BOTH the copied-check and the capture editor on any model swap. A settled
+    // answer fires no further set_blocks, so the Rust 1.5s timer still handles the
+    // normal (post-answer) copied case.
+    changed blocks => { root.copied-block-index = -1; root.capturing-block-index = -1; }
     // v0.18.6 — «Повторить»: shown on a summary-failure tile that carries a
     // session id. Resumes the summary from the persisted conspect (re-maps only
     // the failed parts, then re-runs the reduce) — see retry_meeting_summary.
@@ -637,6 +642,57 @@ export component TileWindow inherits Window {
                                     color: Theme.code-text;
                                     font-family: Theme.font-mono;
                                     wrap: no-wrap;
+                                }
+                            }
+                        }
+                        // A2 (ТЗ 2026-07-02) — «⭐ В память» on fact-bearing blocks
+                        // (paragraph / bullet / code). Click → inline editor prefilled
+                        // with the block text → edit/trim → approved memory. One block
+                        // at a time (single capturing-block-index).
+                        if (block.kind == 0 || block.kind == 4 || block.kind == 5) && root.capturing-block-index != i : HorizontalLayout {
+                            Rectangle { horizontal-stretch: 1; }
+                            Rectangle {
+                                width: 22px;
+                                height: 16px;
+                                border-radius: 4px;
+                                background: star-ta.has-hover ? Theme.border-strong : transparent;
+                                star-ta := TouchArea {
+                                    clicked => {
+                                        root.capture-text = block.text;
+                                        root.capturing-block-index = i;
+                                    }
+                                }
+                                Text {
+                                    text: "⭐";
+                                    font-size: 11px;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                        if root.capturing-block-index == i : VerticalLayout {
+                            spacing: 4px;
+                            Text {
+                                text: @tr("Add to memory:");
+                                font-size: 9px;
+                                color: Theme.text-muted;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                LineEdit {
+                                    text <=> root.capture-text;
+                                    horizontal-stretch: 1;
+                                }
+                                Button {
+                                    text: @tr("Save");
+                                    clicked => {
+                                        root.add-to-memory(root.capture-text);
+                                        root.capturing-block-index = -1;
+                                    }
+                                }
+                                Button {
+                                    text: @tr("Cancel");
+                                    clicked => { root.capturing-block-index = -1; }
                                 }
                             }
                         }
