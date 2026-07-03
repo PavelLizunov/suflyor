@@ -15,10 +15,12 @@
 
 mod candidates;
 mod context_builder;
+mod normalize;
 mod summary_ref;
 
 pub use candidates::extract_heuristic;
 pub use context_builder::{context_for_meeting, format_memory_block, merge_context};
+pub use normalize::{heuristic_clean, is_grounded};
 pub use summary_ref::{
     format_summary_reference, key_terms, relevant_items, summary_reference_for_transcript,
 };
