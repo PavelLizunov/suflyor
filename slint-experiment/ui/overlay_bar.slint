@@ -1119,6 +1119,13 @@ export component OverlayBarWindow inherits Window {
                     accent: #fbbf24;
                     clicked => { root.pause-toggle-clicked(); }
                 }
+                // 🔒 Lock tiles (listening mode) — same toggle as the full bar; trembles while active.
+                LockChip {
+                    locked: root.suppress-tiles;
+                    a11y: "Lock tiles — stop pop-ups (listening mode)";
+                    accent: #f59e0b;
+                    clicked => { root.suppress-tiles-toggle-clicked(); }
+                }
                 // Spring — absorbs the slack so the status pill stays natural-
                 // width (identical to the full bar) and Expand sits at the right
                 // edge, mirroring the full bar's window-control placement.

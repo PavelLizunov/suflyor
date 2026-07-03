@@ -94,7 +94,9 @@ export component TileWindow inherits Window {
     always-on-top: true;
     preferred-width: 460px;
     preferred-height: 360px;
-    min-width: 320px;
+    // 360 (was 320): the header's fixed-width control cluster (copy/more/speak/maximize/close)
+    // + a capped source-label must fit so Close never clips even at the narrowest size.
+    min-width: 360px;
     min-height: 200px;
 
     in-out property <string> tile-title: "Untitled tile";
@@ -295,6 +297,10 @@ export component TileWindow inherits Window {
                     border-radius: 8px;
                     height: 20px;
                     horizontal-stretch: 0;
+                    // Cap + elide: a long source-label (e.g. a full local-model .gguf path)
+                    // must NOT push the fixed-width header buttons — including Close — off the
+                    // right edge. Bounded here so the window controls always stay visible.
+                    max-width: 150px;
                     HorizontalLayout {
                         padding-left: 6px;
                         padding-right: 6px;
@@ -303,6 +309,7 @@ export component TileWindow inherits Window {
                             font-size: 10px;
                             color: Theme.text-muted;
                             vertical-alignment: center;
+                            overflow: elide;
                         }
                     }
                 }
