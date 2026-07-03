@@ -55,10 +55,20 @@ export component CloseButton inherits Rectangle {
 // selection's byte offsets ride out through `capture(anchor, cursor)` (Rust slices
 // the source text and orders them).
 //
-// Root is a VerticalLayout (sizes to its child — a bare Rectangle would collapse);
-// the ContextMenuArea is a CHILD, not the base — `inherits ContextMenuArea` panics
+// The ContextMenuArea is a CHILD, not the base — `inherits ContextMenuArea` panics
 // the Slint compiler (special-lowered in the menu pass, cannot be subclassed).
-export component SelectableText inherits VerticalLayout {
+//
+// Root is a Rectangle whose height is bound to the TextInput's wrapped height. A
+// ContextMenuArea reports ZERO layout-info (its Menu is lowered to a separate item
+// tree BEFORE layout, so a box layout measures the menu cell as 0) — a layout root
+// would collapse to 0 and the un-clipped text would paint over the next block
+// (the header/code/table overlap bug). A Rectangle root makes the ContextMenuArea a
+// non-layout child that fills the root (100%×100%); the TextInput fills that, so
+// `ti.preferred-height` = wrapped height at the assigned width, and we bind the root
+// to it. This is exactly how std-widgets' TextEditBase sizes its viewport
+// (`text-input.preferred-height`). No cycle: preferred-height depends on width only.
+export component SelectableText inherits Rectangle {
+    height: ti.preferred-height;
     in property <string> text;
     in property <length> font-size: 12px;
     in property <int> font-weight: 400;
