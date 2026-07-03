@@ -121,6 +121,63 @@ component Chip inherits Rectangle {
     }
 }
 
+// Lock chip (v0.28) — toggles "listening mode" (config.suppress_tiles): auto AI tiles stop
+// popping (handy while recording a game — a tile would sit on top of it). When ACTIVE the
+// padlock TREMBLES so the user understands tiles are being held back on purpose — «где тайлы?»
+// → the shaking lock answers. Uses a raw Image (not IconSlot) so it can rotate.
+component LockChip inherits Rectangle {
+    in property <bool> locked: false;
+    in property <string> a11y;
+    in property <color> accent: #f59e0b;
+    callback clicked();
+    property <bool> phase: false;
+
+    accessible-role: button;
+    accessible-label: a11y;
+    background: locked
+        ? accent.with-alpha(0.18)
+        : (ta.pressed
+            ? accent.with-alpha(0.34)
+            : (ta.has-hover ? Theme.border-strong.with-alpha(0.22) : transparent));
+    border-color: locked ? accent : (ta.has-hover ? accent.with-alpha(0.6) : Theme.border-strong);
+    border-width: 1px;
+    border-radius: Metrics.radius-control;
+    height: 22px;
+    min-width: 30px;
+    horizontal-stretch: 0;
+    animate background { duration: 80ms; }
+
+    // Trembles only while locked: flip `phase` every 90ms and let `animate` swing the padlock
+    // between +7° and -7°, so it visibly shakes; at rest (unlocked) it sits flat.
+    Timer {
+        interval: 90ms;
+        running: root.locked;
+        triggered => {
+            root.phase = !root.phase;
+        }
+    }
+    Image {
+        source: @image-url("../assets/icons/lock.svg");
+        colorize: root.locked ? root.accent : Theme.text-secondary;
+        width: 14px;
+        height: 14px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        // transform-rotation pivots around the element centre by default → a clean wobble.
+        transform-rotation: root.locked ? (root.phase ? 7deg : -7deg) : 0deg;
+        animate transform-rotation {
+            duration: 85ms;
+            easing: ease-in-out;
+        }
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
 // Active-indicator chip: chip with a small pulsing dot prefix that
 // represents an "active" / "live" capture state. Used for mic + sys.
 component LiveChip inherits Rectangle {
@@ -458,6 +515,9 @@ export component OverlayBarWindow inherits Window {
     // захватить + timer + Expand). Persisted via config.compact_bar; Rust resizes
     // the bar window on toggle.
     in-out property <bool> compact-bar: false;
+    // v0.28 — "listening mode" (config.suppress_tiles): the bar lock chip toggles this; when
+    // true, auto AI tiles are suppressed (slint_session::maybe_spawn_auto_tile early-returns).
+    in-out property <bool> suppress-tiles: false;
 
     // ===== Callbacks =====
     callback mic-toggle-clicked();
@@ -477,6 +537,7 @@ export component OverlayBarWindow inherits Window {
     callback capture-clicked(); // 📷 screenshot -> vision (same as F8)
     callback stealth-toggle-clicked();
     callback aggressive-toggle-clicked();
+    callback suppress-tiles-toggle-clicked(); // 🔒 bar lock chip → toggle listening mode
     callback open-settings-clicked();
     callback help-clicked();   // 🆘 chip / F1 → open the help window
     callback archive-clicked(); // 🗄 chip / F7 → open the session archive
@@ -670,6 +731,14 @@ export component OverlayBarWindow inherits Window {
                 active: root.aggressive-active;
                 accent: #fb923c;
                 clicked => { root.aggressive-toggle-clicked(); }
+            }
+            // 🔒 Lock tiles (listening mode) — stop auto AI tiles popping (e.g. over a game).
+            // Trembles while active so their absence is obviously ON PURPOSE.
+            LockChip {
+                locked: root.suppress-tiles;
+                a11y: "Lock tiles — stop pop-ups (listening mode)";
+                accent: #f59e0b;
+                clicked => { root.suppress-tiles-toggle-clicked(); }
             }
             // 🗄 Session archive (also F7) — browse + search past sessions.
             // Icon-only + left of the spring so it consumes slack, not the

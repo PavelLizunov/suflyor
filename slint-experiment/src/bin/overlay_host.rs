@@ -3287,6 +3287,30 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // 🔒 Lock tiles (listening mode). The bar lock chip mirrors config.suppress_tiles — the SAME
+    // field the Settings "listening mode" checkbox and slint_session::maybe_spawn_auto_tile read,
+    // so toggling here suppresses/resumes auto AI tiles live (no restart, no extra flag). The
+    // chip trembles while active so their absence reads as deliberate.
+    {
+        let cfg_for_lock = cfg.clone();
+        let weak_for_lock = overlay.as_weak();
+        if let Some(o) = weak_for_lock.upgrade() {
+            o.set_suppress_tiles(cfg_for_lock.read().suppress_tiles);
+        }
+        overlay.on_suppress_tiles_toggle_clicked(move || {
+            let new_state = {
+                let mut c = cfg_for_lock.write();
+                c.suppress_tiles = !c.suppress_tiles;
+                let _ = overlay_backend::config::save(&c);
+                c.suppress_tiles
+            };
+            eprintln!("[overlay-host] suppress-tiles (listening mode) -> {new_state}");
+            if let Some(o) = weak_for_lock.upgrade() {
+                o.set_suppress_tiles(new_state);
+            }
+        });
+    }
+
     // ===== Compact "reader mode" toggle =====
     // Collapse the wide bar to a small read-aloud pill (+ resize the window so
     // it stops eating the screen) for using the app purely as a TTS reader.
