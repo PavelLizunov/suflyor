@@ -55,7 +55,13 @@ winresource = "0.1"
 # need no system deps (no GTK/X11). `raw-window-handle-06` exposes the
 # native HWND so the overlay-spike binary can call Win32 SetWindowLongPtrW
 # directly.
-slint = { version = "1.16", features = ["raw-window-handle-06"] }
+slint = { version = "1.16", features = [
+    "raw-window-handle-06",
+    # G1 (2026-07-03) — per-window winit event filter for layout-independent Ctrl+C/V/X/A
+    # (see src/bin/overlay_host/kbd_shortcuts.rs). Slint's purpose-built interception point;
+    # pinned at 1.16 so the "unstable" API surface is fixed for us.
+    "unstable-winit-030",
+] }
 
 # Journal data layer (Day 2). serde_json parses the per-line JSONL
 # events; dirs resolves %APPDATA%; anyhow gives Context-friendly errors.

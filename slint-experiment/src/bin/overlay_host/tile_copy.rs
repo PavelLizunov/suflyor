@@ -395,17 +395,14 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
             let Some(vm) = blocks.as_any().downcast_ref::<VecModel<MarkdownBlock>>() else {
                 return;
             };
-            // Single mark → the (possibly edited) buffer; multiple → each block's text.
+            // Single mark → the (possibly edited) buffer. Multiple → ONE joined record
+            // (G2a, ТЗ part 2): related facts stop fragmenting into separate rows — the
+            // «z14-backup → имя / подсеть / IP = 3 rows» complaint. Refine later in
+            // Настройки → Память (A1). "; " sep keeps the joined note single-line-editable.
             if t.get_marked_count() == 1 {
                 insert_approved_note(t.get_capture_text().as_str());
             } else {
-                for j in 0..vm.row_count() {
-                    if let Some(r) = vm.row_data(j) {
-                        if r.marked {
-                            insert_approved_note(r.text.as_str());
-                        }
-                    }
-                }
+                insert_approved_note(&join_marked_text(vm));
             }
             clear_all_marks(vm);
             t.set_marked_count(0);
@@ -578,6 +575,24 @@ fn clear_all_marks(vm: &VecModel<MarkdownBlock>) {
     }
 }
 
+/// G2a (ТЗ part 2) — join every marked block's text into ONE record (in block order,
+/// `"; "` separated, single-line-editable) so a multi-⭐ save is one coherent fact, not
+/// N fragmented rows. Pure → tested.
+fn join_marked_text(vm: &VecModel<MarkdownBlock>) -> String {
+    let mut out = String::new();
+    for j in 0..vm.row_count() {
+        if let Some(r) = vm.row_data(j) {
+            if r.marked {
+                if !out.is_empty() {
+                    out.push_str("; ");
+                }
+                out.push_str(r.text.as_str());
+            }
+        }
+    }
+    out
+}
+
 /// Text for the 🔊 read-aloud: the LATEST assistant answer only — never the user
 /// prompts / transcript / earlier turns. (The 📋 copy deliberately includes the
 /// whole labelled thread; read-aloud must NOT, or it speaks your own questions
@@ -745,6 +760,28 @@ mod copy_tests {
         let nl = out.matches('\n').count();
         assert!(nl <= 501, "line-capped, got {nl} newlines");
         assert!(out.ends_with('…'), "truncation marker appended");
+    }
+
+    #[test]
+    fn join_marked_text_combines_marked_only_in_order() {
+        let mk = |text: &str, marked: bool| MarkdownBlock {
+            kind: 0,
+            text: text.into(),
+            lang: "".into(),
+            marked,
+        };
+        let vm = VecModel::from(vec![
+            mk("Имя: z14-4443-backup", true),
+            mk("не отмечено", false),
+            mk("Подсеть: 10.255.28.96/27", true),
+            mk("IP: 10.255.28.116", true),
+        ]);
+        // G2a — ONE record, "; "-joined, marked-only, in block order (un-fragmenting the
+        // z14-backup «имя / подсеть / IP = 3 rows» example).
+        assert_eq!(
+            join_marked_text(&vm),
+            "Имя: z14-4443-backup; Подсеть: 10.255.28.96/27; IP: 10.255.28.116"
+        );
     }
 
     #[test]

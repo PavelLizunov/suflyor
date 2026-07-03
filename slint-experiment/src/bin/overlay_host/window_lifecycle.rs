@@ -149,6 +149,10 @@ where
     W: slint::ComponentHandle + 'static,
     F: Fn(windows::Win32::Foundation::HWND) + 'static,
 {
+    // G1 — layout-independent Ctrl+C/V/X/A/Z/Y for every editable field on this window
+    // (winit key filter; idempotent). Covers Settings / palette / text_ask / wizard /
+    // help / archive / transcript — all the aux windows funnel through here.
+    crate::kbd_shortcuts::install(win.window());
     // Park off-screen BEFORE the first frame (always — see fn doc). The reveal
     // tick decorates + (under stealth) WDAs, then moves it on-screen, so the
     // first visible frame is complete. Unconditional so a stealth toggle

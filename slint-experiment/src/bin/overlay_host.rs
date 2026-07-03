@@ -76,6 +76,10 @@ use ui::{
 mod window_lifecycle;
 use window_lifecycle::*;
 
+// G1 (2026-07-03) — layout-independent Ctrl+C/V/X/A/Z/Y via a per-window winit filter.
+#[path = "overlay_host/kbd_shortcuts.rs"]
+mod kbd_shortcuts;
+
 // Phase 2 of the modularization (docs/overlay-host-modularization-plan.md §5.2):
 // diagnostics readiness population + the REDACTED clipboard report live in their
 // own file alongside the binary. `use diagnostics::*;` re-exports the moved

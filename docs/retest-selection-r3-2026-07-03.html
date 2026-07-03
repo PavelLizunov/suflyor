@@ -1,0 +1,212 @@
+<meta charset="utf-8">
+<title>Суфлёр — ретест r3: раскладки (Ctrl+C/V/X/A) + склейка памяти (2026-07-03)</title>
+<style>
+  :root{--bg:#12151c;--panel:#1a1f29;--line:#2c3444;--txt:#e6eaf0;--muted:#9aa4b6;--accent:#5aa2ff;--ok:#3ecb8f;--bad:#ff6b6b;--skip:#c9a24a}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif;padding:28px 18px 90px}
+  .wrap{max-width:920px;margin:0 auto}
+  h1{font-size:21px;margin:0 0 6px}
+  .sub{color:var(--muted);margin:0 0 18px}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:0 0 16px}
+  .box.info{background:#16202e;border-color:#28405e}
+  .box.warn{background:#231d13;border-color:#4a3c1e}
+  .box h3{margin:0 0 6px;font-size:14px;color:var(--accent)}
+  .box.warn h3{color:var(--skip)}
+  .box ul{margin:6px 0 0;padding-left:20px;color:var(--muted)}
+  h2{font-size:16px;margin:26px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  .item{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0 0 10px}
+  .item .q{font-weight:600;margin:0 0 4px}
+  .item .do,.item .exp{color:var(--muted);font-size:13px;margin:2px 0}
+  .item .exp b{color:var(--txt);font-weight:600}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg label{padding:6px 12px;cursor:pointer;font-size:13px;user-select:none;border-right:1px solid var(--line)}
+  .seg label:last-child{border-right:0}
+  .seg input{display:none}
+  .seg label.ok.on{background:var(--ok);color:#06231a;font-weight:700}
+  .seg label.bad.on{background:var(--bad);color:#2a0808;font-weight:700}
+  .seg label.skip.on{background:var(--skip);color:#241b06;font-weight:700}
+  .item textarea{width:100%;margin-top:8px;background:#0e1119;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px;font:13px/1.45 inherit;resize:vertical;min-height:34px}
+  .item.done-ok{border-color:#2c5c47}
+  .item.done-bad{border-color:#5c2c2c}
+  .bar{position:fixed;left:0;right:0;bottom:0;background:#0e1119ee;border-top:1px solid var(--line);padding:12px 18px;display:flex;gap:12px;align-items:center;backdrop-filter:blur(6px)}
+  .bar .stat{color:var(--muted);font-size:13px}
+  .bar .stat b{color:var(--txt)}
+  button{background:var(--accent);color:#04122b;border:0;border-radius:8px;padding:9px 16px;font-weight:700;cursor:pointer;font-size:14px}
+  button.ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
+  dialog{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:12px;max-width:760px;width:92%}
+  dialog textarea{width:100%;height:340px;background:#0e1119;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:10px;font:12px/1.4 ui-monospace,Consolas,monospace}
+  dialog .row{display:flex;gap:10px;justify-content:flex-end;margin-top:10px}
+  code{background:#0e1119;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:12px}
+  kbd{background:#252c3a;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 6px;font-size:12px}
+</style>
+<div class="wrap">
+  <h1>Суфлёр — ретест r3: раскладки + склейка памяти</h1>
+  <p class="sub">Сборка от 2026-07-03 (r3). Запусти обычным ярлыком. Заполни → внизу «Экспорт результатов».</p>
+
+  <div class="box info">
+    <h3>Что нового в r3</h3>
+    <ul>
+      <li><b>Ctrl+C / V / X / A под ЛЮБОЙ раскладкой</b> — не только русской. Теперь ловим физическую клавишу (не символ), так что работает и на др. языках. Главное — проверить под РУС во всех полях.</li>
+      <li><b>Склейка памяти</b> — несколько ⭐ (или чекбоксов в стенограмме) → ОДНА запись, не N разрозненных (фикс z14-backup → 3 строки).</li>
+    </ul>
+  </div>
+  <div class="box warn">
+    <h3>Как тестировать G1</h3>
+    <ul>
+      <li>Переключи раскладку на <b>РУССКУЮ</b> и жми Ctrl+C/V/X/A физическими клавишами (C/V/X/A), не думая о букве под ними.</li>
+      <li>Старые шимы я <b>оставил</b> временно (подстраховка) — удалю, когда подтвердишь, что новый механизм работает.</li>
+    </ul>
+  </div>
+
+  <h2>G1. Ctrl+C/V/X/A под русской раскладкой</h2>
+  <div class="item" data-id="G1_1">
+    <div class="q">Настройки → «Свой факт» (тот самый баг)</div>
+    <div class="do">РУС раскладка. Настройки → Память → поле «Свой факт» (или любое поле ввода). Скопируй что-то в другом месте → в поле <kbd>Ctrl</kbd>+<kbd>V</kbd>.</div>
+    <div class="exp">Ожидается: <b>вставляется</b>. Также проверь Ctrl+A (выделить всё в поле), Ctrl+X (вырезать).</div>
+  </div>
+  <div class="item" data-id="G1_2">
+    <div class="q">Окно «Написать» (✏)</div>
+    <div class="do">РУС. Открой ✏ «Написать ассистенту». Печатай, <kbd>Ctrl</kbd>+<kbd>A</kbd>, <kbd>Ctrl</kbd>+<kbd>C</kbd>, <kbd>Ctrl</kbd>+<kbd>V</kbd>, <kbd>Ctrl</kbd>+<kbd>X</kbd>.</div>
+    <div class="exp">Ожидается: все четыре работают.</div>
+  </div>
+  <div class="item" data-id="G1_3">
+    <div class="q">Редактор факта + «Продолжить диалог»</div>
+    <div class="do">РУС. В тайле: выдели текст → правый клик → «Выделенное в память» → в поле снизу <kbd>Ctrl</kbd>+<kbd>V</kbd>. Также в «Продолжить диалог» <kbd>Ctrl</kbd>+<kbd>V</kbd>.</div>
+    <div class="exp">Ожидается: вставка работает в обоих.</div>
+  </div>
+  <div class="item" data-id="G1_4">
+    <div class="q">Палитра F4</div>
+    <div class="do">РУС. F4 → в поле поиска <kbd>Ctrl</kbd>+<kbd>V</kbd> / печать / <kbd>Ctrl</kbd>+<kbd>A</kbd>.</div>
+    <div class="exp">Ожидается: работает.</div>
+  </div>
+  <div class="item" data-id="G1_5">
+    <div class="q">Копирование с выделяемого текста ответа</div>
+    <div class="do">РУС. Выдели текст в тайле/сводке → <kbd>Ctrl</kbd>+<kbd>C</kbd> (и <kbd>Ctrl</kbd>+<kbd>A</kbd>) → вставь куда-нибудь.</div>
+    <div class="exp">Ожидается: копирует выделенное / всё.</div>
+  </div>
+  <div class="item" data-id="G1_6">
+    <div class="q">Латинская раскладка не сломалась (регрессия)</div>
+    <div class="do">Переключись на <b>EN</b>. Те же Ctrl+C/V/X/A в любом поле.</div>
+    <div class="exp">Ожидается: работают как раньше (это важно — не должно сломаться).</div>
+  </div>
+  <div class="item" data-id="G1_7">
+    <div class="q">Другая раскладка (если есть)</div>
+    <div class="do">Если есть 3-я раскладка (укр/нем/фр) — Ctrl+V в любом поле.</div>
+    <div class="exp">Ожидается: работает. Нет 3-й раскладки → «Пропустить».</div>
+  </div>
+
+  <h2>G2. Склейка памяти (одна запись, не разрозненно)</h2>
+  <div class="item" data-id="G2_1">
+    <div class="q">Несколько ⭐ на блоках → ОДНА запись</div>
+    <div class="do">В тайле/сводке отметь ⭐ несколько блоков (напр. имя / подсеть / IP) → «В память (N)». Открой Настройки → Память.</div>
+    <div class="exp">Ожидается: <b>ОДНА</b> запись (склейка через «; »), а не N отдельных строк. Раньше дробилось.</div>
+  </div>
+  <div class="item" data-id="G2_2">
+    <div class="q">Одиночная ⭐ по-прежнему с правкой</div>
+    <div class="do">Отметь ОДИН блок ⭐ → поле правки снизу → поправь → «В память».</div>
+    <div class="exp">Ожидается: как раньше (трим перед сохранением).</div>
+  </div>
+  <div class="item" data-id="G2_3">
+    <div class="q">Стенограмма: чекбоксы → ОДНА запись</div>
+    <div class="do">Архив F7 → 📄 стенограмма. Отметь чекбоксы нескольких строк → кнопка <b>«Выбранное в память»</b> (рядом с «Копировать выбранное»). Проверь Настройки → Память.</div>
+    <div class="exp">Ожидается: одна склеенная запись из отмеченных строк.</div>
+  </div>
+
+  <h2>D. Старое не сломалось</h2>
+  <div class="item" data-id="D1">
+    <div class="q">Регрессия</div>
+    <div class="do">Быстро: выделение текста (поблочно + режим «Выделить текст»), наслоения нет, скролл/драг тайла, звёзды приглушённые.</div>
+    <div class="exp">Ожидается: всё как в r2.</div>
+  </div>
+
+  <div class="box" data-id="FREE">
+    <h3>Свободный коммент</h3>
+    <textarea id="freeNote" placeholder="замечания…" style="width:100%;background:#0e1119;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px;min-height:60px;font:13px/1.45 inherit"></textarea>
+  </div>
+</div>
+
+<div class="bar">
+  <span class="stat" id="stat"></span>
+  <span style="flex:1"></span>
+  <button class="ghost" id="resetBtn">Сброс</button>
+  <button id="exportBtn">Экспорт результатов</button>
+</div>
+
+<dialog id="dlg">
+  <h3 style="margin:0 0 8px">Результаты — скопируй и пришли мне</h3>
+  <textarea id="out" readonly></textarea>
+  <div class="row">
+    <button class="ghost" id="dlBtn">Скачать .txt</button>
+    <button id="copyBtn">Копировать</button>
+    <button class="ghost" id="closeBtn">Закрыть</button>
+  </div>
+</dialog>
+
+<script>
+const KEY="suflyor-retest-r3-2026-07-03";
+const items=[...document.querySelectorAll(".item")];
+for(const it of items){
+  const id=it.dataset.id;
+  const seg=document.createElement("div");seg.className="controls";
+  seg.innerHTML=`<div class="seg">
+    <label class="ok" data-v="ok"><input type="radio" name="${id}" value="ok">✅ ОК</label>
+    <label class="bad" data-v="bad"><input type="radio" name="${id}" value="bad">❌ Не ок</label>
+    <label class="skip" data-v="skip"><input type="radio" name="${id}" value="skip">⏭ Пропустить</label>
+  </div>`;
+  const ta=document.createElement("textarea");ta.placeholder="коммент (если не ОК — что именно)";ta.dataset.c=id;
+  it.appendChild(seg);it.appendChild(ta);
+}
+function save(){
+  const d={free:document.getElementById("freeNote").value,items:{}};
+  for(const it of items){const id=it.dataset.id;
+    const r=it.querySelector(`input[name="${id}"]:checked`);
+    d.items[id]={v:r?r.value:"",c:it.querySelector(`textarea[data-c="${id}"]`).value};}
+  localStorage.setItem(KEY,JSON.stringify(d));render();
+}
+function paint(it,v){it.classList.toggle("done-ok",v==="ok");it.classList.toggle("done-bad",v==="bad");
+  it.querySelectorAll(".seg label").forEach(l=>l.classList.toggle("on",l.dataset.v===v));}
+function render(){
+  let ok=0,bad=0,todo=0;
+  for(const it of items){const id=it.dataset.id;
+    const r=it.querySelector(`input[name="${id}"]:checked`);const v=r?r.value:"";
+    paint(it,v);if(v==="ok")ok++;else if(v==="bad")bad++;else if(v==="")todo++;}
+  document.getElementById("stat").innerHTML=`<b>${ok}</b> ОК · <b style="color:var(--bad)">${bad}</b> не ок · <b>${todo}</b> осталось из ${items.length}`;
+}
+function load(){
+  const raw=localStorage.getItem(KEY);if(!raw){render();return;}
+  try{const d=JSON.parse(raw);document.getElementById("freeNote").value=d.free||"";
+    for(const it of items){const id=it.dataset.id;const s=d.items?.[id];if(!s)continue;
+      if(s.v){const inp=it.querySelector(`input[name="${id}"][value="${s.v}"]`);if(inp)inp.checked=true;}
+      it.querySelector(`textarea[data-c="${id}"]`).value=s.c||"";}
+  }catch(e){}
+  render();
+}
+document.addEventListener("change",e=>{if(e.target.matches("input[type=radio]"))save();});
+document.addEventListener("input",e=>{if(e.target.tagName==="TEXTAREA")save();});
+function report(){
+  const L=[];L.push("СУФЛЁР — ретест r3: раскладки + склейка памяти (2026-07-03)");L.push("");
+  const titles={};document.querySelectorAll(".item").forEach(it=>titles[it.dataset.id]=it.querySelector(".q").textContent);
+  const mark={ok:"[OK]  ",bad:"[FAIL]",skip:"[skip]","":"[ -- ]"};
+  let ok=0,bad=0;
+  for(const it of items){const id=it.dataset.id;
+    const r=it.querySelector(`input[name="${id}"]:checked`);const v=r?r.value:"";
+    const c=it.querySelector(`textarea[data-c="${id}"]`).value.trim();
+    if(v==="ok")ok++;if(v==="bad")bad++;
+    L.push(`${mark[v]} ${id}. ${titles[id]}`);if(c)L.push(`        ↳ ${c}`);}
+  L.push("");L.push(`ИТОГ: ${ok} OK, ${bad} FAIL из ${items.length}`);
+  const free=document.getElementById("freeNote").value.trim();
+  if(free){L.push("");L.push("СВОБОДНЫЙ КОММЕНТ:");L.push(free);}
+  return L.join("\n");
+}
+const dlg=document.getElementById("dlg");
+document.getElementById("exportBtn").onclick=()=>{document.getElementById("out").value=report();dlg.showModal();};
+document.getElementById("closeBtn").onclick=()=>dlg.close();
+document.getElementById("copyBtn").onclick=()=>{const t=document.getElementById("out");t.select();
+  navigator.clipboard?.writeText(t.value).then(()=>{document.getElementById("copyBtn").textContent="Скопировано ✓";
+    setTimeout(()=>document.getElementById("copyBtn").textContent="Копировать",1500);}).catch(()=>document.execCommand("copy"));};
+document.getElementById("dlBtn").onclick=()=>{const b=new Blob([report()],{type:"text/plain"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="retest-r3-2026-07-03.txt";a.click();};
+document.getElementById("resetBtn").onclick=()=>{if(confirm("Сбросить все ответы?")){localStorage.removeItem(KEY);location.reload();}};
+load();
+</script>

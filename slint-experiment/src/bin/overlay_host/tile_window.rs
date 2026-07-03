@@ -251,6 +251,9 @@ pub(crate) fn wire_tile_drag(tile: &TileWindow) {
 /// already excluded from capture. Same pattern the persistent capture overlay
 /// uses. When stealth is off there's nothing to hide, so show normally.
 pub(crate) fn present_tile_window(tile: &TileWindow) {
+    // G1 — layout-independent Ctrl+C/V/X/A/Z/Y for the tile's editable fields (capture
+    // editor + follow-up LineEdit) and copy/select-all on the read-only answer text.
+    crate::kbd_shortcuts::install(tile.window());
     if global_stealth() {
         tile.window()
             .set_position(slint::PhysicalPosition::new(-32000, -32000));
