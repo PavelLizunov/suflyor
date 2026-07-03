@@ -313,11 +313,65 @@ pub(crate) fn wire_code_copy(tile: &TileWindow) {
 /// tiles and the per-line one on the transcript. The user typing / confirming the
 /// fact IS the approval consent (same rule as the Settings "add fact"). Empty /
 /// whitespace is a no-op. Local SQLite — no egress; errors are logged, not fatal.
-pub(crate) fn insert_approved_note(text: &str) {
+///
+/// `normalize` (M1-b-2, docs/memory-architecture.md §3): this text is a RAW STT span (a
+/// single starred transcript line) that should be tidied into a clean fact. It's stored
+/// INSTANTLY as its heuristic-clean (so the ⭐ feels instant), with the raw kept in
+/// `source_text`; then a background thread asks the AI to rewrite it and — ONLY if the
+/// rewrite passes the `is_grounded` gate — swaps in the clean fact (`norm_status` → `llm`),
+/// else keeps the heuristic text (`heuristic`). Clean sources (tile blocks = already-clean AI
+/// text, user-grouped multi-⭐ joins, hand-selected spans) pass `false` → stored verbatim.
+pub(crate) fn insert_approved_note(text: &str, normalize: bool) {
     let trimmed = text.trim();
     if trimmed.is_empty() {
         return;
     }
+    if !normalize {
+        store_note(trimmed, None, "none");
+        return;
+    }
+    // Raw STT: store the heuristic-clean immediately (raw kept as provenance), then normalize
+    // in the background so the ⭐ never waits on an AI round-trip.
+    let raw = trimmed.to_string();
+    let cleaned = overlay_backend::memory::heuristic_clean(&raw);
+    let cleaned = if cleaned.trim().is_empty() {
+        raw.clone()
+    } else {
+        cleaned
+    };
+    let Some(id) = store_note(&cleaned, Some(&raw), "pending") else {
+        return; // insert failed (already logged)
+    };
+    let ep = overlay_backend::config::load().ai_endpoint(true);
+    if ep.base_url.trim().is_empty() {
+        finalize_normalized(id, &raw, &cleaned, None, "heuristic"); // no AI configured
+        return;
+    }
+    // ponytail: one OS thread per starred line. Captures are infrequent and ai::complete's
+    // AI_SEMAPHORE caps concurrent AI calls, so an unbounded spawn is fine; add a bounded pool
+    // only if rapid-fire starring is ever shown to pile up threads.
+    std::thread::spawn(move || {
+        let outcome = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .ok()
+            .and_then(|rt| {
+                rt.block_on(overlay_backend::memory::normalize_fact(
+                    &raw,
+                    &ep.base_url,
+                    &ep.bearer,
+                    &ep.model,
+                ))
+            });
+        match outcome {
+            Some(fact) => finalize_normalized(id, &raw, &fact.text, fact.entity.as_deref(), "llm"),
+            None => finalize_normalized(id, &raw, &cleaned, None, "heuristic"),
+        }
+    });
+}
+
+/// Insert one approved note; returns its id (None on failure, logged). Stamps `now` here.
+fn store_note(text: &str, source_text: Option<&str>, norm_status: &str) -> Option<i64> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
@@ -327,17 +381,40 @@ pub(crate) fn insert_approved_note(text: &str) {
             let item = overlay_backend::persistence::NewMemoryItem {
                 profile_id: "default".into(),
                 kind: "note".into(),
-                text: trimmed.to_string(),
+                text: text.to_string(),
                 source_session_id: None,
-                source_text: None,
+                source_text: source_text.map(str::to_string),
                 entity: None,
-                norm_status: "none".into(),
+                norm_status: norm_status.into(),
             };
-            if let Err(e) = store.insert_memory_item(&item, now) {
-                eprintln!("[overlay-host] add-to-memory failed: {e:#}");
+            match store.insert_memory_item(&item, now) {
+                Ok(id) => Some(id),
+                Err(e) => {
+                    eprintln!("[overlay-host] add-to-memory failed: {e:#}");
+                    None
+                }
             }
         }
-        Err(e) => eprintln!("[overlay-host] add-to-memory: store open failed: {e:#}"),
+        Err(e) => {
+            eprintln!("[overlay-host] add-to-memory: store open failed: {e:#}");
+            None
+        }
+    }
+}
+
+/// Record the normalization outcome on item `id` (text + entity + status). `source_text` is the
+/// raw span we normalized — the rowid-reuse guard (see `update_memory_item_normalized`).
+/// Best-effort.
+fn finalize_normalized(id: i64, source_text: &str, text: &str, entity: Option<&str>, status: &str) {
+    match overlay_backend::persistence::open_default_store() {
+        Ok(mut store) => {
+            if let Err(e) =
+                store.update_memory_item_normalized(id, source_text, text, entity, status)
+            {
+                eprintln!("[overlay-host] normalize update failed: {e:#}");
+            }
+        }
+        Err(e) => eprintln!("[overlay-host] normalize: store open failed: {e:#}"),
     }
 }
 
@@ -403,9 +480,9 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
             // «z14-backup → имя / подсеть / IP = 3 rows» complaint. Refine later in
             // Настройки → Память (A1). "; " sep keeps the joined note single-line-editable.
             if t.get_marked_count() == 1 {
-                insert_approved_note(t.get_capture_text().as_str());
+                insert_approved_note(t.get_capture_text().as_str(), false);
             } else {
-                insert_approved_note(&join_marked_text(vm));
+                insert_approved_note(&join_marked_text(vm), false);
             }
             clear_all_marks(vm);
             t.set_marked_count(0);
@@ -491,7 +568,7 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
         let weak = tile.as_weak();
         tile.on_save_capture(move || {
             let Some(t) = weak.upgrade() else { return };
-            insert_approved_note(t.get_capture_text().as_str());
+            insert_approved_note(t.get_capture_text().as_str(), false);
             t.set_capture_pending(false);
             t.set_capture_text(SharedString::default());
         });

@@ -1,8 +1,8 @@
 //! memory::normalize (M1 of docs/memory-architecture.md §3) — turn a RAW captured span
 //! (messy STT / a verbatim block) into a clean, atomic fact.
 //!
-//! Two PURE, deterministic pieces live here; the LLM rewrite (layer 2) is wired
-//! separately (M1-b) because it needs `ai::complete`:
+//! Three pieces — two PURE + deterministic (unit-tested), plus the async orchestrator that
+//! composes them with `ai::complete`:
 //!
 //! - [`heuristic_clean`] — cheap layer-1 pre-clean (collapse whitespace, drop an immediate
 //!   duplicate STT-stutter word). Deliberately conservative: it makes garbage *shorter/tidier*
@@ -14,8 +14,14 @@
 //!   WHOLE source token verbatim, content words are contained, negation polarity is preserved,
 //!   and the shape is sane. This is what makes an LLM normalization safe to run unattended — a
 //!   failing rewrite is rejected and the caller keeps the un-rewritten (heuristic) text.
+//! - [`normalize_fact`] — async layer-2 orchestrator: heuristic-clean → one AI rewrite → gate
+//!   with `is_grounded`. Returns the grounded fact, or `None` so the caller keeps the heuristic
+//!   text (never a hallucinated rewrite).
 //!
-//! Both are pure functions with no I/O, unit-tested like `key_terms` / `format_memory_block`.
+//! The two helpers are pure (no I/O), unit-tested like `key_terms`; `normalize_fact` is the only
+//! I/O path (one AI call) — its JSON parse (`parse_first_fact`) is tested, the network call not.
+
+use crate::ai::{self, ChatMessage, MessageContent};
 
 /// The lowercase alphanumeric "core" of a token (strips surrounding punctuation/case) —
 /// used to detect immediate duplicate words: «Даже,» and «даже» share the core «даже».
@@ -166,8 +172,105 @@ pub fn is_grounded(source: &str, rewrite: &str) -> bool {
     content_missing * 10 <= content_total
 }
 
+/// A normalized fact from [`normalize_fact`]: clean atomic text + its primary entity (the thing
+/// the fact is about), when the model could name one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NormalizedFact {
+    pub text: String,
+    pub entity: Option<String>,
+}
+
+/// System prompt for the layer-2 rewrite. Russian (the app + the facts are Russian). The hard
+/// guarantees (identifiers verbatim, no invention, negation preserved) are RE-CHECKED by
+/// [`is_grounded`] — the prompt asks for good behaviour, the gate enforces it.
+const NORMALIZE_SYSTEM: &str = "Ты нормализуешь короткий фрагмент из личной памяти пользователя. \
+Фрагмент — сырая расшифровка речи: в нём бывают оговорки, повторы, слова-паразиты, разорванные слова.\n\n\
+Задача: превратить его в ОДИН чёткий короткий факт на том же языке, что и вход.\n\n\
+Строгие правила:\n\
+- Сохрани ДОСЛОВНО все идентификаторы: числа, IP-адреса, подсети, порты, имена, логины, даты, версии, коды. \
+Нельзя менять ни одной цифры или буквы в них.\n\
+- Ничего не выдумывай. Если смысл неясен — оставь формулировку как есть.\n\
+- Убери шум речи (эканье, повторы, самоисправления), собери разорванные слова, сделай ясное утверждение.\n\
+- Сохрани отрицание («не», «нельзя», «без») — не переворачивай смысл.\n\
+- Без пояснений, без markdown, без тройных кавычек.\n\n\
+Ответь ТОЛЬКО строгим JSON:\n\
+{\"facts\":[{\"entity\":\"<главный предмет факта, коротко>\",\"text\":\"<чистый факт>\"}]}\n\
+Обычно один факт. entity — о чём факт (имя/система/человек), или \"\" если неясно.";
+
+/// Async layer-2 normalization (M1, docs/memory-architecture.md §3): heuristic-clean the raw
+/// span, ask the AI to rewrite it into one clean atomic fact (no-think JSON via [`ai::complete`]),
+/// and accept the rewrite ONLY if [`is_grounded`] passes against the RAW source. Returns the
+/// grounded fact, or `None` on any AI error / parse failure / grounding rejection — the caller
+/// then keeps the heuristic-cleaned text, never a hallucinated rewrite.
+pub async fn normalize_fact(
+    raw: &str,
+    base_url: &str,
+    bearer: &str,
+    model: &str,
+) -> Option<NormalizedFact> {
+    let cleaned = heuristic_clean(raw);
+    if cleaned.trim().is_empty() {
+        return None;
+    }
+    let messages = vec![
+        ChatMessage {
+            role: "system".into(),
+            content: MessageContent::Text(NORMALIZE_SYSTEM.into()),
+        },
+        ChatMessage {
+            role: "user".into(),
+            content: MessageContent::Text(cleaned),
+        },
+    ];
+    let resp = ai::complete(base_url, bearer, model, messages, 400)
+        .await
+        .ok()?;
+    let fact = parse_first_fact(&resp)?;
+    // The gate: reject any rewrite not grounded in the RAW source (which carries every
+    // identifier). On rejection the caller keeps the heuristic text.
+    if !is_grounded(raw, &fact.text) {
+        return None;
+    }
+    Some(fact)
+}
+
+/// Extract the first fact from a model reply that SHOULD be `{"facts":[{entity,text}]}` but may
+/// be wrapped in prose or ```json fences. Pure → tested. `None` if nothing parseable.
+fn parse_first_fact(resp: &str) -> Option<NormalizedFact> {
+    #[derive(serde::Deserialize)]
+    struct FactsDto {
+        #[serde(default)]
+        facts: Vec<FactDto>,
+    }
+    #[derive(serde::Deserialize)]
+    struct FactDto {
+        #[serde(default)]
+        entity: String,
+        #[serde(default)]
+        text: String,
+    }
+    // Slice from the first '{' to the last '}' — drops ```json fences / surrounding prose.
+    let start = resp.find('{')?;
+    let end = resp.rfind('}')?;
+    if end < start {
+        return None;
+    }
+    let parsed: FactsDto = serde_json::from_str(&resp[start..=end]).ok()?;
+    let first = parsed.facts.into_iter().next()?;
+    let text = first.text.trim().to_string();
+    if text.is_empty() {
+        return None;
+    }
+    let entity = {
+        let e = first.entity.trim();
+        (!e.is_empty()).then(|| e.to_string())
+    };
+    Some(NormalizedFact { text, entity })
+}
+
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]
@@ -247,5 +350,27 @@ mod tests {
         assert!(is_grounded("проект Альфа наша CRM", "Альфе — CRM проекта"));
         // All-identifier fact (no content words) is fine when they're verbatim.
         assert!(is_grounded("порт 8080 API", "8080 API"));
+    }
+
+    #[test]
+    fn parse_first_fact_handles_clean_fenced_and_prose() {
+        let f =
+            parse_first_fact(r#"{"facts":[{"entity":"z14","text":"Бекап-сервер z14"}]}"#).unwrap();
+        assert_eq!(f.text, "Бекап-сервер z14");
+        assert_eq!(f.entity.as_deref(), Some("z14"));
+        // ```json fences + surrounding prose are tolerated; empty entity → None.
+        let f =
+            parse_first_fact("Вот:\n```json\n{\"facts\":[{\"entity\":\"\",\"text\":\"кофе по утрам\"}]}\n```\nготово")
+                .unwrap();
+        assert_eq!(f.text, "кофе по утрам");
+        assert_eq!(f.entity, None);
+    }
+
+    #[test]
+    fn parse_first_fact_rejects_empty_and_garbage() {
+        assert!(parse_first_fact(r#"{"facts":[]}"#).is_none());
+        assert!(parse_first_fact("не json вообще").is_none());
+        // Present but empty text → not a fact.
+        assert!(parse_first_fact(r#"{"facts":[{"entity":"x"}]}"#).is_none());
     }
 }

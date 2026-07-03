@@ -561,17 +561,25 @@ impl Store {
     /// (`norm_status` = `heuristic` | `llm`, plus the extracted `entity` if any). The
     /// background normalizer calls this once a rewrite clears the grounding gate; the
     /// raw text stays in `source_text` (set at insert) as provenance.
+    ///
+    /// Guards against SQLite rowid REUSE: `id` is a rowid (no AUTOINCREMENT), so if the
+    /// original 'pending' row was deleted — or a bulk-clear reset the counter — during the
+    /// async normalize window, `id` may now point at a DIFFERENT capture. We only finalize a
+    /// row that is still `'pending'` AND whose `source_text` is the exact raw span we
+    /// normalized; otherwise the background write is a harmless no-op (0 rows).
     pub fn update_memory_item_normalized(
         &mut self,
         id: i64,
+        source_text: &str,
         text: &str,
         entity: Option<&str>,
         norm_status: &str,
     ) -> Result<()> {
         self.conn
             .execute(
-                "UPDATE memory_items SET text = ?2, entity = ?3, norm_status = ?4 WHERE id = ?1",
-                params![id, text, entity, norm_status],
+                "UPDATE memory_items SET text = ?3, entity = ?4, norm_status = ?5 \
+                 WHERE id = ?1 AND norm_status = 'pending' AND source_text = ?2",
+                params![id, source_text, text, entity, norm_status],
             )
             .context("update memory item normalized")?;
         Ok(())
@@ -1142,9 +1150,23 @@ mod tests {
         assert_eq!(it.source_text.as_deref(), Some("ну это бекап сервер z14"));
         assert_eq!(it.norm_status, "pending");
         assert_eq!(it.entity, None);
-        // The background normalizer flips text/entity/status; source_text stays as provenance.
+        // Rowid-reuse guard: a WRONG source_text (a different capture that reused the id) is a
+        // no-op — the row stays 'pending' with its heuristic text.
         store
-            .update_memory_item_normalized(id, "Бекап-сервер z14", Some("z14"), "llm")
+            .update_memory_item_normalized(id, "чужой источник", "hacked", None, "llm")
+            .unwrap();
+        let it = &store.list_memory_items("default", true, -1).unwrap()[0];
+        assert_eq!(it.norm_status, "pending");
+        assert_eq!(it.text, "бекап сервер z14");
+        // Correct source_text → the normalizer flips text/entity/status; source_text stays.
+        store
+            .update_memory_item_normalized(
+                id,
+                "ну это бекап сервер z14",
+                "Бекап-сервер z14",
+                Some("z14"),
+                "llm",
+            )
             .unwrap();
         let it = &store.list_memory_items("default", true, -1).unwrap()[0];
         assert_eq!(it.text, "Бекап-сервер z14");
