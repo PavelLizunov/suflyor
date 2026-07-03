@@ -329,6 +329,9 @@ pub(crate) fn insert_approved_note(text: &str) {
                 kind: "note".into(),
                 text: trimmed.to_string(),
                 source_session_id: None,
+                source_text: None,
+                entity: None,
+                norm_status: "none".into(),
             };
             if let Err(e) = store.insert_memory_item(&item, now) {
                 eprintln!("[overlay-host] add-to-memory failed: {e:#}");

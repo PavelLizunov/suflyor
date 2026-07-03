@@ -133,6 +133,9 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
                             kind: "note".into(),
                             text: trimmed.to_string(),
                             source_session_id: None,
+                            source_text: None,
+                            entity: None,
+                            norm_status: "none".into(),
                         },
                         now_ms(),
                     )

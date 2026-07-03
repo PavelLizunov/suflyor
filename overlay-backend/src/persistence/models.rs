@@ -101,6 +101,14 @@ pub struct MemoryItem {
     pub archived_at_ms: Option<i64>,
     /// `none` | `pending` | `done` (Phase 4 embeddings).
     pub embedding_status: String,
+    /// M1 (migration 0005): the RAW captured text before normalization (provenance).
+    /// `None` when the item was never normalized (typed fact / already-clean block).
+    pub source_text: Option<String>,
+    /// M1 (0005): the primary entity this fact is about (for M3 grouping). `None`
+    /// until extracted.
+    pub entity: Option<String>,
+    /// M1 (0005): normalization state — `none` | `pending` | `heuristic` | `llm`.
+    pub norm_status: String,
 }
 
 /// Fields for inserting a new [`MemoryCandidate`]. The store assigns `id`,
@@ -123,4 +131,11 @@ pub struct NewMemoryItem {
     pub kind: String,
     pub text: String,
     pub source_session_id: Option<String>,
+    /// M1 (0005): the RAW captured text, when this note was normalized on capture
+    /// (`None` for a typed / already-clean note — no provenance to keep).
+    pub source_text: Option<String>,
+    /// M1 (0005): extracted entity (`None` until M3).
+    pub entity: Option<String>,
+    /// M1 (0005): normalization state at insert — `none` | `pending` | `heuristic`.
+    pub norm_status: String,
 }

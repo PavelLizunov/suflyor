@@ -491,14 +491,18 @@ impl Store {
         self.conn
             .execute(
                 "INSERT INTO memory_items \
-                 (profile_id, kind, text, source_session_id, approved_at_ms, embedding_status) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, 'none')",
+                 (profile_id, kind, text, source_session_id, approved_at_ms, embedding_status, \
+                  source_text, entity, norm_status) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, 'none', ?6, ?7, ?8)",
                 params![
                     m.profile_id,
                     m.kind,
                     m.text,
                     m.source_session_id,
-                    approved_at_ms
+                    approved_at_ms,
+                    m.source_text,
+                    m.entity,
+                    m.norm_status
                 ],
             )
             .context("insert memory item")?;
@@ -520,12 +524,14 @@ impl Store {
             .conn
             .prepare(if include_archived {
                 "SELECT id, profile_id, COALESCE(kind, ''), COALESCE(text, ''), \
-                 source_session_id, approved_at_ms, archived_at_ms, embedding_status \
+                 source_session_id, approved_at_ms, archived_at_ms, embedding_status, \
+                 source_text, entity, COALESCE(norm_status, 'none') \
                  FROM memory_items WHERE profile_id = ?1 \
                  ORDER BY approved_at_ms DESC, id DESC LIMIT ?2"
             } else {
                 "SELECT id, profile_id, COALESCE(kind, ''), COALESCE(text, ''), \
-                 source_session_id, approved_at_ms, archived_at_ms, embedding_status \
+                 source_session_id, approved_at_ms, archived_at_ms, embedding_status, \
+                 source_text, entity, COALESCE(norm_status, 'none') \
                  FROM memory_items WHERE profile_id = ?1 \
                  AND archived_at_ms IS NULL ORDER BY approved_at_ms DESC, id DESC LIMIT ?2"
             })
@@ -548,6 +554,26 @@ impl Store {
                 params![id, text],
             )
             .context("update memory item text")?;
+        Ok(())
+    }
+
+    /// M1 (0005): replace an item's text after normalization and record the outcome
+    /// (`norm_status` = `heuristic` | `llm`, plus the extracted `entity` if any). The
+    /// background normalizer calls this once a rewrite clears the grounding gate; the
+    /// raw text stays in `source_text` (set at insert) as provenance.
+    pub fn update_memory_item_normalized(
+        &mut self,
+        id: i64,
+        text: &str,
+        entity: Option<&str>,
+        norm_status: &str,
+    ) -> Result<()> {
+        self.conn
+            .execute(
+                "UPDATE memory_items SET text = ?2, entity = ?3, norm_status = ?4 WHERE id = ?1",
+                params![id, text, entity, norm_status],
+            )
+            .context("update memory item normalized")?;
         Ok(())
     }
 
@@ -638,6 +664,9 @@ fn row_to_item(row: &Row) -> rusqlite::Result<MemoryItem> {
         approved_at_ms: row.get(5)?,
         archived_at_ms: row.get(6)?,
         embedding_status: row.get(7)?,
+        source_text: row.get(8)?,
+        entity: row.get(9)?,
+        norm_status: row.get(10)?,
     })
 }
 
@@ -1073,6 +1102,9 @@ mod tests {
                     kind: "note".into(),
                     text: "manual note".into(),
                     source_session_id: None,
+                    source_text: None,
+                    entity: None,
+                    norm_status: "none".into(),
                 },
                 10,
             )
@@ -1086,5 +1118,38 @@ mod tests {
             .list_memory_items("default", true, -1)
             .unwrap()
             .is_empty());
+    }
+
+    #[test]
+    fn normalization_columns_round_trip_and_update() {
+        let mut store = Store::open_in_memory().unwrap();
+        let id = store
+            .insert_memory_item(
+                &NewMemoryItem {
+                    profile_id: "default".into(),
+                    kind: "note".into(),
+                    text: "бекап сервер z14".into(),
+                    source_session_id: None,
+                    source_text: Some("ну это бекап сервер z14".into()),
+                    entity: None,
+                    norm_status: "pending".into(),
+                },
+                10,
+            )
+            .unwrap();
+        // Provenance + status round-trip through the read.
+        let it = &store.list_memory_items("default", true, -1).unwrap()[0];
+        assert_eq!(it.source_text.as_deref(), Some("ну это бекап сервер z14"));
+        assert_eq!(it.norm_status, "pending");
+        assert_eq!(it.entity, None);
+        // The background normalizer flips text/entity/status; source_text stays as provenance.
+        store
+            .update_memory_item_normalized(id, "Бекап-сервер z14", Some("z14"), "llm")
+            .unwrap();
+        let it = &store.list_memory_items("default", true, -1).unwrap()[0];
+        assert_eq!(it.text, "Бекап-сервер z14");
+        assert_eq!(it.entity.as_deref(), Some("z14"));
+        assert_eq!(it.norm_status, "llm");
+        assert_eq!(it.source_text.as_deref(), Some("ну это бекап сервер z14"));
     }
 }

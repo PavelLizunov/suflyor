@@ -106,6 +106,9 @@ mod tests {
             approved_at_ms: 0,
             archived_at_ms: None,
             embedding_status: "none".into(),
+            source_text: None,
+            entity: None,
+            norm_status: "none".into(),
         }
     }
 
