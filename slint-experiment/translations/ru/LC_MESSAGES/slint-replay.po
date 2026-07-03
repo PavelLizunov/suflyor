@@ -1425,3 +1425,15 @@ msgstr "Очистить одобренную память"
 
 msgid "Tap again — clear approved memory"
 msgstr "Ещё раз — очистить одобренную память"
+
+msgid "normalizing…"
+msgstr "обрабатывается…"
+
+msgid "cleaned by AI"
+msgstr "подчищено ИИ"
+
+msgid "cleaned"
+msgstr "почищено"
+
+msgid " · was: {}"
+msgstr " · было: {}"

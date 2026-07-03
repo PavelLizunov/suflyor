@@ -1589,7 +1589,9 @@ fn wire_transcript_actions(
         let weak = win.as_weak();
         win.on_save_capture(move || {
             let Some(w) = weak.upgrade() else { return };
-            super::tile_copy::insert_approved_note(w.get_capture_text().as_str(), false);
+            // A selected transcript span is raw STT → normalize it (single fact), like the
+            // single-⭐ line. The multi-⭐ join stays verbatim (entity-grouping is M3).
+            super::tile_copy::insert_approved_note(w.get_capture_text().as_str(), true);
             w.set_capture_pending(false);
             w.set_capture_text(slint::SharedString::default());
         });

@@ -242,6 +242,8 @@ fn candidate_row(c: &MemoryCandidate) -> MemoryRow {
         kind: SharedString::from(kind_glyph(&c.kind)),
         text: SharedString::from(c.text.clone()),
         reason: SharedString::from(c.reason.clone()),
+        source_text: SharedString::default(),
+        norm_status: SharedString::from("none"),
     }
 }
 
@@ -252,6 +254,8 @@ fn item_row(m: &MemoryItem) -> MemoryRow {
         kind: SharedString::from(kind_glyph(&m.kind)),
         text: SharedString::from(m.text.clone()),
         reason: SharedString::default(),
+        source_text: SharedString::from(m.source_text.clone().unwrap_or_default()),
+        norm_status: SharedString::from(m.norm_status.clone()),
     }
 }
 
