@@ -474,8 +474,9 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
 
 /// Clamp a byte index down to the nearest char boundary ≤ `i` (and ≤ len). Slint's
 /// selection byte-offsets already land on boundaries; this is a defensive guard so
-/// slicing the block text can never panic on a multibyte (Cyrillic) string.
-fn char_boundary(s: &str, i: usize) -> usize {
+/// slicing the source text can never panic on a multibyte (Cyrillic) string. Shared
+/// with the transcript selection-capture in `aux_windows`.
+pub(crate) fn char_boundary(s: &str, i: usize) -> usize {
     let mut i = i.min(s.len());
     while i > 0 && !s.is_char_boundary(i) {
         i -= 1;

@@ -9,7 +9,7 @@
 
 import { ScrollView, Palette, LineEdit, Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { CloseButton } from "controls.slint";
+import { CloseButton, SelectableText } from "controls.slint";
 import { Metrics } from "metrics.slint";
 import { DarkCheck } from "settings_panel.slint";
 
@@ -111,6 +111,10 @@ export component TranscriptWindow inherits Window {
     callback drag-moved();
     // A2 — save the (edited) captured line as an approved memory note.
     callback add-to-memory(string);
+    // ТЗ 2026-07-03 — mouse-selection capture: (line-index, anchor-byte-offset,
+    // cursor-byte-offset). Rust slices line.text by the selection and opens the same
+    // editor (capture-text + capturing-line-index) the per-line ⭐ uses.
+    callback capture-line-selection(int, int, int);
 
     forward-focus: fs;
 
@@ -332,12 +336,18 @@ export component TranscriptWindow inherits Window {
                                     vertical-alignment: top;
                                     width: 84px;
                                 }
-                                Text {
+                                // ТЗ 2026-07-03 — selectable (read-only TextInput):
+                                // drag-select → right-click Copy / ⭐-to-memory. Clicks
+                                // on the text now go to selection, so the row's play-line
+                                // seek stays on the timecode/speaker columns + padding
+                                // (plain Texts, clicks fall through to the row TouchArea).
+                                SelectableText {
                                     text: line.text;
                                     font-size: Metrics.font-body;
-                                    color: Theme.text-secondary;
+                                    text-color: Theme.text-secondary;
                                     horizontal-stretch: 1;
                                     wrap: word-wrap;
+                                    capture(a, c) => { root.capture-line-selection(i, a, c); }
                                 }
                                 // A2 — ⭐ capture THIS line into memory. Its own
                                 // TouchArea intercepts the click, so it doesn't also

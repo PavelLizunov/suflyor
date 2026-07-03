@@ -1469,6 +1469,34 @@ fn wire_transcript_actions(
         super::tile_copy::insert_approved_note(&text);
     });
 
+    // ТЗ 2026-07-03 — mouse-selection capture: slice the displayed line's text by the
+    // selection's byte offsets (ordered + char-boundary-clamped for Cyrillic) and open
+    // the SAME editor the per-line ⭐ uses (capture-text + capturing-line-index → Save
+    // routes through on_add_to_memory above).
+    {
+        let m = model.clone();
+        let weak = win.as_weak();
+        win.on_capture_line_selection(move |idx, a, c| {
+            let Some(w) = weak.upgrade() else { return };
+            let i = idx.max(0) as usize;
+            let Some(row) = m.row_data(i) else {
+                return;
+            };
+            let text = row.text.as_str();
+            let (lo, hi) = if a <= c { (a, c) } else { (c, a) };
+            let lo = super::tile_copy::char_boundary(text, usize::try_from(lo).unwrap_or(0));
+            let hi = super::tile_copy::char_boundary(text, usize::try_from(hi).unwrap_or(0));
+            let span = text.get(lo..hi).unwrap_or("").trim();
+            if span.is_empty() {
+                return;
+            }
+            w.set_capture_text(span.into());
+            // Store the clamped, non-negative index (matches the stricter tile handler)
+            // so the editor can never open under a bogus negative `capturing-line-index`.
+            w.set_capturing_line_index(i as i32);
+        });
+    }
+
     // Toggle one line; keep "select all" in sync (ON iff EVERY row is checked).
     {
         let m = model.clone();

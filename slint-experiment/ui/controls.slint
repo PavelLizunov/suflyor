@@ -46,3 +46,59 @@ export component CloseButton inherits Rectangle {
         clicked => { root.clicked(); }
     }
 }
+
+// ТЗ 2026-07-03 — selectable read-only text (shared by tiles/summaries/archive
+// AND the transcript). Slint's `Text` can't be selected; a read-only `TextInput`
+// can — real mouse drag / double-click word / triple-click paragraph / Ctrl+A —
+// while still growing to its wrapped content in a layout. A right-click
+// ContextMenuArea offers «Copy selection» + «Add selection to memory»; the
+// selection's byte offsets ride out through `capture(anchor, cursor)` (Rust slices
+// the source text and orders them).
+//
+// Root is a VerticalLayout (sizes to its child — a bare Rectangle would collapse);
+// the ContextMenuArea is a CHILD, not the base — `inherits ContextMenuArea` panics
+// the Slint compiler (special-lowered in the menu pass, cannot be subclassed).
+export component SelectableText inherits VerticalLayout {
+    in property <string> text;
+    in property <length> font-size: 12px;
+    in property <int> font-weight: 400;
+    in property <brush> text-color;
+    in property <TextWrap> wrap: word-wrap;
+    in property <string> mono-family;   // "" = default proportional font
+    // (anchor-byte-offset, cursor-byte-offset) of the current selection.
+    callback capture(int, int);
+    ContextMenuArea {
+        Menu {
+            MenuItem {
+                title: @tr("Copy selection");
+                activated => { ti.copy(); }
+            }
+            MenuItem {
+                title: @tr("Add selection to memory");
+                activated => { root.capture(ti.anchor-position-byte-offset, ti.cursor-position_byte-offset); }
+            }
+        }
+        ti := TextInput {
+            text: root.text;
+            read-only: true;
+            single-line: false;
+            wrap: root.wrap;
+            font-size: root.font-size;
+            font-weight: root.font-weight;
+            font-family: root.mono-family;
+            color: root.text-color;
+            selection-background-color: Theme.accent.with-alpha(0.35);
+            // Cyrillic-layout shim (same as text_ask.slint): Slint binds Ctrl+C/A to
+            // the Latin c/a; under a RU layout the physical keys emit с/ф, so the
+            // built-in shortcuts die. Latin c/a are handled natively (read-only still
+            // allows copy/select-all).
+            key-pressed(e) => {
+                if (e.modifiers.control && !e.modifiers.shift) {
+                    if (e.text == "с" || e.text == "С") { ti.copy(); return accept; }
+                    if (e.text == "ф" || e.text == "Ф") { ti.select-all(); return accept; }
+                }
+                return reject;
+            }
+        }
+    }
+}
