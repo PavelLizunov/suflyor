@@ -1,5 +1,40 @@
 # Goal — suflyor follow-ups (2026-07-03): layout-independent shortcuts + связная память + transcript parity
 
+## ⏭ NEXT SESSION (owner paused 2026-07-04 «завтра продолжим») — condense open issues
+
+Feature A (condense — commits `8b1e7fe`+`9de8fbc`) is LIVE + installed (PID at the time). Verified
+on the owner's real gemma-4-12B: a long **tile** answer → 3 clean short RU facts ('llm'). BUT the
+owner's live test surfaced TWO issues to fix next:
+
+1. **Condense REJECTS paraphrased colloquial STT → falls back to heuristic ("почищено"), so the
+   text isn't shortened + looks DUPLICATED** (screenshot: memory items show the full ramble AND
+   `было:` = the same ramble). ROOT CAUSE: `is_grounded`'s content-word containment (≥90% of the
+   fact's words must be IN the source) is right for NORMALIZE (minimal rewrite) but TOO STRICT for
+   CONDENSE — summarizing colloquial speech PARAPHRASES (жрёт→ест, synonyms) → containment <90% →
+   every extracted fact rejected → `grounded.is_empty()` → None → heuristic. Works only when the AI
+   REUSES source words (clean tile answers), fails when it must paraphrase (raw STT).
+   **FIX (design first, maybe fable):** split the gate — for CONDENSE, keep the ANTI-HALLUCINATION
+   core (every DIGIT identifier + name verbatim; NO NEW identifiers introduced; negation parity)
+   but DROP/loosen the content-word containment so legit paraphrase passes. i.e. a separate
+   `is_grounded_condense` (or a param) that allows reworded content but still forbids fabricated
+   numbers/names. Then re-verify on the colloquial STT samples (the «кот/таблетки» + «биом» rambles
+   in the screenshot).
+2. **UI: `было:` duplicates the text for HEURISTIC items.** Only show `было: <raw>` when it
+   MATERIALLY differs from the stored text (i.e. for 'llm'), OR drop it for 'heuristic'. Quick fix
+   in settings_panel.slint (the `if m.norm-status == "llm" || "heuristic"` branch → split so
+   heuristic shows just a subtle mark, no full `было:`).
+3. **Transcript shows only a subset — "скрыто 17 строк"** (screenshot 1). The transcript display
+   is capped (i16 SW-renderer guard, Баг5 class — un-virtualized tall content panics). «Копировать
+   всё» gives the full text, but the owner wants to SEE all. **FIX:** virtualize the transcript
+   list (Slint `ListView`, which renders only visible rows → no i16 panic → no cap needed), or
+   raise the cap safely. Anchor: `aux_windows.rs open_transcript` + `transcript.slint`.
+
+Also still open (lower prio): select-mode drag-scroll on huge answers (screenshot from prior turn;
+Slint `TextInput`-in-`ScrollView` limitation; condense reduces the need). Everything is committed +
+gate-green + NOT pushed. No release without «релизь».
+
+---
+
 Follow-up to the text-selection work (see `docs/goal-text-selection-2026-07-03.md`). The
 selection ask (ТЗ 2026-07-03 **part 1**) is DONE + owner-verified (retest r1/r2). This goal
 captures everything remaining, per owner 2026-07-03: "всё из перечисленного заверни в goal…
