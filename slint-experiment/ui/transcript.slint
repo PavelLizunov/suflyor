@@ -363,11 +363,17 @@ export component TranscriptWindow inherits Window {
                                             root.capturing-line-index = i;
                                         }
                                     }
-                                    Text {
-                                        text: "⭐";
-                                        font-size: 11px;
-                                        horizontal-alignment: center;
-                                        vertical-alignment: center;
+                                    // Muted outline star (SVG), matching the tiles' StarMark —
+                                    // the U+2B50 emoji rendered as a too-bright solid yellow.
+                                    Image {
+                                        source: @image-url("../assets/icons/star.svg");
+                                        colorize: star-ta.has-hover ? Theme.accent : Theme.text-muted;
+                                        opacity: star-ta.has-hover ? 1.0 : 0.5;
+                                        width: 13px;
+                                        height: 13px;
+                                        image-fit: contain;
+                                        x: (parent.width - self.width) / 2;
+                                        y: (parent.height - self.height) / 2;
                                     }
                                 }
                             }

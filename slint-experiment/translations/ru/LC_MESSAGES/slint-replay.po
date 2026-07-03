@@ -822,6 +822,12 @@ msgstr "Копировать выделенное"
 msgid "Add selection to memory"
 msgstr "Выделенное в память"
 
+msgid "Select text"
+msgstr "Выделить текст"
+
+msgid "Rich view"
+msgstr "Обычный вид"
+
 msgid "local model — e.g. qwen2.5:7b-instruct"
 msgstr "локальная модель — напр. qwen2.5:7b-instruct"
 

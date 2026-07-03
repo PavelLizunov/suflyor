@@ -1,0 +1,205 @@
+<meta charset="utf-8">
+<title>Суфлёр — ретест r2: режим «Выделить текст» + звёзды (2026-07-03)</title>
+<style>
+  :root{--bg:#12151c;--panel:#1a1f29;--line:#2c3444;--txt:#e6eaf0;--muted:#9aa4b6;--accent:#5aa2ff;--ok:#3ecb8f;--bad:#ff6b6b;--skip:#c9a24a}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif;padding:28px 18px 90px}
+  .wrap{max-width:920px;margin:0 auto}
+  h1{font-size:21px;margin:0 0 6px}
+  .sub{color:var(--muted);margin:0 0 18px}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:0 0 16px}
+  .box.info{background:#16202e;border-color:#28405e}
+  .box.warn{background:#231d13;border-color:#4a3c1e}
+  .box h3{margin:0 0 6px;font-size:14px;color:var(--accent)}
+  .box.warn h3{color:var(--skip)}
+  .box ul{margin:6px 0 0;padding-left:20px;color:var(--muted)}
+  h2{font-size:16px;margin:26px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  .item{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0 0 10px}
+  .item .q{font-weight:600;margin:0 0 4px}
+  .item .do,.item .exp{color:var(--muted);font-size:13px;margin:2px 0}
+  .item .exp b{color:var(--txt);font-weight:600}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg label{padding:6px 12px;cursor:pointer;font-size:13px;user-select:none;border-right:1px solid var(--line)}
+  .seg label:last-child{border-right:0}
+  .seg input{display:none}
+  .seg label.ok.on{background:var(--ok);color:#06231a;font-weight:700}
+  .seg label.bad.on{background:var(--bad);color:#2a0808;font-weight:700}
+  .seg label.skip.on{background:var(--skip);color:#241b06;font-weight:700}
+  .item textarea{width:100%;margin-top:8px;background:#0e1119;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px;font:13px/1.45 inherit;resize:vertical;min-height:34px}
+  .item.done-ok{border-color:#2c5c47}
+  .item.done-bad{border-color:#5c2c2c}
+  .bar{position:fixed;left:0;right:0;bottom:0;background:#0e1119ee;border-top:1px solid var(--line);padding:12px 18px;display:flex;gap:12px;align-items:center;backdrop-filter:blur(6px)}
+  .bar .stat{color:var(--muted);font-size:13px}
+  .bar .stat b{color:var(--txt)}
+  button{background:var(--accent);color:#04122b;border:0;border-radius:8px;padding:9px 16px;font-weight:700;cursor:pointer;font-size:14px}
+  button.ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
+  dialog{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:12px;max-width:760px;width:92%}
+  dialog textarea{width:100%;height:340px;background:#0e1119;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:10px;font:12px/1.4 ui-monospace,Consolas,monospace}
+  dialog .row{display:flex;gap:10px;justify-content:flex-end;margin-top:10px}
+  code{background:#0e1119;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:12px}
+  kbd{background:#252c3a;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 6px;font-size:12px}
+</style>
+<div class="wrap">
+  <h1>Суфлёр — ретест r2: режим «Выделить текст» + звёзды</h1>
+  <p class="sub">Сборка от 2026-07-03 (r2). Запусти обычным ярлыком. Заполни статусы → внизу «Экспорт результатов».</p>
+
+  <div class="box info">
+    <h3>Что нового в r2</h3>
+    <ul>
+      <li><b>Режим «Выделить текст»</b> — в «⋯»-меню тайла/сводки. Тело меняется на одно поле со всем ответом → можно тащить выделение <b>СКВОЗЬ несколько блоков</b> (то, чего не хватало: «выделить сразу много»).</li>
+      <li><b>Звёзды в стенограмме</b> — были ярко-жёлтые эмодзи, стали приглушённый SVG как в тайлах.</li>
+      <li>Плюс перепроверка, что <b>фикс наслоения не сломался</b> (я снова правил tile.slint).</li>
+    </ul>
+  </div>
+  <div class="box warn">
+    <h3>Что осталось «как есть» (не баг)</h3>
+    <ul>
+      <li><b>Обычное</b> (не в режиме) выделение — по-прежнему в рамках одного блока. Сквозное — через режим «Выделить текст». Так задумано (предел Slint).</li>
+      <li><b>Ctrl+C под РУС</b> в обычных полях (Настройки/визард) может не срабатывать — обходной путь есть (правый клик «Копировать»). Широкий фикс кириллицы — отдельная задача.</li>
+    </ul>
+  </div>
+
+  <h2>A. Наслоение не вернулось (регрессия — я снова трогал tile.slint)</h2>
+  <div class="item" data-id="A1">
+    <div class="q">Блоки по-прежнему не наслаиваются</div>
+    <div class="do">Открой сводку с разделами / тайл с кодом (архив F7 → «Просмотреть»).</div>
+    <div class="exp">Ожидается: заголовки/код/длинные абзацы стоят раздельно, ничего не наезжает (как в r1).</div>
+  </div>
+
+  <h2>E. Режим «Выделить текст» — ГЛАВНОЕ новое</h2>
+  <div class="item" data-id="E1">
+    <div class="q">Вход в режим</div>
+    <div class="do">На тайле/сводке нажми <b>«⋯»</b> в шапке (теперь есть на всех тайлах) → <b>«Выделить текст»</b>.</div>
+    <div class="exp">Ожидается: тело тайла меняется на <b>одно поле со всем текстом ответа</b> (без разбивки на блоки, буллеты как «• …»).</div>
+  </div>
+  <div class="item" data-id="E2">
+    <div class="q">Сквозное выделение</div>
+    <div class="do">Зажми и тащи мышь <b>через несколько «блоков»</b> — от заголовка через абзац к буллетам.</div>
+    <div class="exp">Ожидается: выделяется <b>единым куском через всё</b> (не обрывается на границе блока).</div>
+  </div>
+  <div class="item" data-id="E3">
+    <div class="q">Копирование сквозного фрагмента</div>
+    <div class="do">Выдели сквозной кусок → <kbd>Ctrl</kbd>+<kbd>C</kbd> или правый клик → «Копировать выделенное» → вставь куда-нибудь.</div>
+    <div class="exp">Ожидается: вставился весь выделенный многострочный фрагмент.</div>
+  </div>
+  <div class="item" data-id="E4">
+    <div class="q">Сквозной фрагмент в память</div>
+    <div class="do">Выдели → правый клик → «Выделенное в память» → снизу поле с текстом → поправь → «В память».</div>
+    <div class="exp">Ожидается: фрагмент в <b>Настройки → Память</b> одной записью.</div>
+  </div>
+  <div class="item" data-id="E5">
+    <div class="q">Выход из режима</div>
+    <div class="do">«⋯» → <b>«Обычный вид»</b>.</div>
+    <div class="exp">Ожидается: вернулся обычный вид с блоками, ⭐ и кнопками — всё на месте.</div>
+  </div>
+  <div class="item" data-id="E6">
+    <div class="q">Длинный ответ не роняет приложение</div>
+    <div class="do">Войди в режим на длинном ответе (много текста), поскролль поле.</div>
+    <div class="exp">Ожидается: поле прокручивается, <b>нет чёрного экрана / падения</b> (на очень длинном текст обрезается с «…» — это ок).</div>
+  </div>
+
+  <h2>Z. Звёзды в стенограмме</h2>
+  <div class="item" data-id="Z1">
+    <div class="q">Звёзды приглушённые</div>
+    <div class="do">Архив F7 → 📄 стенограмма. Посмотри на ⭐ справа у строк.</div>
+    <div class="exp">Ожидается: <b>приглушённые (серые) звёзды</b>, не ярко-жёлтые эмодзи; при наведении — акцентная подсветка. Как ⭐ в тайлах.</div>
+  </div>
+
+  <h2>D. Старое не сломалось</h2>
+  <div class="item" data-id="D1">
+    <div class="q">Быстрая регрессия</div>
+    <div class="do">Скролл тайла, перетаскивание за шапку, ⭐-мультивыбор на блоках, 📋-копия, «Продолжить диалог», поблочное выделение (вне режима).</div>
+    <div class="exp">Ожидается: всё как раньше.</div>
+  </div>
+
+  <div class="box" data-id="FREE">
+    <h3>Свободный коммент</h3>
+    <textarea id="freeNote" placeholder="замечания, что ещё заметил…" style="width:100%;background:#0e1119;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px;min-height:60px;font:13px/1.45 inherit"></textarea>
+  </div>
+</div>
+
+<div class="bar">
+  <span class="stat" id="stat"></span>
+  <span style="flex:1"></span>
+  <button class="ghost" id="resetBtn">Сброс</button>
+  <button id="exportBtn">Экспорт результатов</button>
+</div>
+
+<dialog id="dlg">
+  <h3 style="margin:0 0 8px">Результаты — скопируй и пришли мне</h3>
+  <textarea id="out" readonly></textarea>
+  <div class="row">
+    <button class="ghost" id="dlBtn">Скачать .txt</button>
+    <button id="copyBtn">Копировать</button>
+    <button class="ghost" id="closeBtn">Закрыть</button>
+  </div>
+</dialog>
+
+<script>
+const KEY="suflyor-retest-selection-r2-2026-07-03";
+const items=[...document.querySelectorAll(".item")];
+for(const it of items){
+  const id=it.dataset.id;
+  const seg=document.createElement("div");seg.className="controls";
+  seg.innerHTML=`<div class="seg">
+    <label class="ok" data-v="ok"><input type="radio" name="${id}" value="ok">✅ ОК</label>
+    <label class="bad" data-v="bad"><input type="radio" name="${id}" value="bad">❌ Не ок</label>
+    <label class="skip" data-v="skip"><input type="radio" name="${id}" value="skip">⏭ Пропустить</label>
+  </div>`;
+  const ta=document.createElement("textarea");ta.placeholder="коммент (если не ОК — что именно)";ta.dataset.c=id;
+  it.appendChild(seg);it.appendChild(ta);
+}
+function save(){
+  const d={free:document.getElementById("freeNote").value,items:{}};
+  for(const it of items){const id=it.dataset.id;
+    const r=it.querySelector(`input[name="${id}"]:checked`);
+    d.items[id]={v:r?r.value:"",c:it.querySelector(`textarea[data-c="${id}"]`).value};}
+  localStorage.setItem(KEY,JSON.stringify(d));render();
+}
+function paint(it,v){it.classList.toggle("done-ok",v==="ok");it.classList.toggle("done-bad",v==="bad");
+  it.querySelectorAll(".seg label").forEach(l=>l.classList.toggle("on",l.dataset.v===v));}
+function render(){
+  let ok=0,bad=0,todo=0;
+  for(const it of items){const id=it.dataset.id;
+    const r=it.querySelector(`input[name="${id}"]:checked`);const v=r?r.value:"";
+    paint(it,v);if(v==="ok")ok++;else if(v==="bad")bad++;else if(v==="")todo++;}
+  document.getElementById("stat").innerHTML=`<b>${ok}</b> ОК · <b style="color:var(--bad)">${bad}</b> не ок · <b>${todo}</b> осталось из ${items.length}`;
+}
+function load(){
+  const raw=localStorage.getItem(KEY);if(!raw){render();return;}
+  try{const d=JSON.parse(raw);document.getElementById("freeNote").value=d.free||"";
+    for(const it of items){const id=it.dataset.id;const s=d.items?.[id];if(!s)continue;
+      if(s.v){const inp=it.querySelector(`input[name="${id}"][value="${s.v}"]`);if(inp)inp.checked=true;}
+      it.querySelector(`textarea[data-c="${id}"]`).value=s.c||"";}
+  }catch(e){}
+  render();
+}
+document.addEventListener("change",e=>{if(e.target.matches("input[type=radio]"))save();});
+document.addEventListener("input",e=>{if(e.target.tagName==="TEXTAREA")save();});
+function report(){
+  const L=[];L.push("СУФЛЁР — ретест r2: режим «Выделить текст» + звёзды (2026-07-03)");L.push("");
+  const titles={};document.querySelectorAll(".item").forEach(it=>titles[it.dataset.id]=it.querySelector(".q").textContent);
+  const mark={ok:"[OK]  ",bad:"[FAIL]",skip:"[skip]","":"[ -- ]"};
+  let ok=0,bad=0;
+  for(const it of items){const id=it.dataset.id;
+    const r=it.querySelector(`input[name="${id}"]:checked`);const v=r?r.value:"";
+    const c=it.querySelector(`textarea[data-c="${id}"]`).value.trim();
+    if(v==="ok")ok++;if(v==="bad")bad++;
+    L.push(`${mark[v]} ${id}. ${titles[id]}`);if(c)L.push(`        ↳ ${c}`);}
+  L.push("");L.push(`ИТОГ: ${ok} OK, ${bad} FAIL из ${items.length}`);
+  const free=document.getElementById("freeNote").value.trim();
+  if(free){L.push("");L.push("СВОБОДНЫЙ КОММЕНТ:");L.push(free);}
+  return L.join("\n");
+}
+const dlg=document.getElementById("dlg");
+document.getElementById("exportBtn").onclick=()=>{document.getElementById("out").value=report();dlg.showModal();};
+document.getElementById("closeBtn").onclick=()=>dlg.close();
+document.getElementById("copyBtn").onclick=()=>{const t=document.getElementById("out");t.select();
+  navigator.clipboard?.writeText(t.value).then(()=>{document.getElementById("copyBtn").textContent="Скопировано ✓";
+    setTimeout(()=>document.getElementById("copyBtn").textContent="Копировать",1500);}).catch(()=>document.execCommand("copy"));};
+document.getElementById("dlBtn").onclick=()=>{const b=new Blob([report()],{type:"text/plain"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="retest-selection-r2-2026-07-03.txt";a.click();};
+document.getElementById("resetBtn").onclick=()=>{if(confirm("Сбросить все ответы?")){localStorage.removeItem(KEY);location.reload();}};
+load();
+</script>

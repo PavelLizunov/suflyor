@@ -432,13 +432,23 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
         let weak = tile.as_weak();
         tile.on_capture_selection(move |idx, a, c| {
             let Some(t) = weak.upgrade() else { return };
-            let blocks = t.get_blocks();
-            let Some(vm) = blocks.as_any().downcast_ref::<VecModel<MarkdownBlock>>() else {
-                return;
+            // Source text: the whole-answer select-mode buffer (idx < 0, Option A) or one
+            // block (idx >= 0). Owned in both branches so the `&str` slice below outlives
+            // the temporary model borrow.
+            let src = if idx < 0 {
+                t.get_select_text()
+            } else {
+                let blocks = t.get_blocks();
+                let Some(vm) = blocks.as_any().downcast_ref::<VecModel<MarkdownBlock>>() else {
+                    return;
+                };
+                let Ok(i) = usize::try_from(idx) else { return };
+                match vm.row_data(i) {
+                    Some(row) => row.text,
+                    None => return,
+                }
             };
-            let Ok(i) = usize::try_from(idx) else { return };
-            let Some(row) = vm.row_data(i) else { return };
-            let text = row.text.as_str();
+            let text = src.as_str();
             let (lo, hi) = if a <= c { (a, c) } else { (c, a) };
             let lo = char_boundary(text, usize::try_from(lo).unwrap_or(0));
             let hi = char_boundary(text, usize::try_from(hi).unwrap_or(0));
@@ -446,11 +456,35 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
             if span.is_empty() {
                 return;
             }
-            clear_all_marks(vm);
+            // Clear any block marks so only the selection editor shows.
+            if let Some(vm) = t
+                .get_blocks()
+                .as_any()
+                .downcast_ref::<VecModel<MarkdownBlock>>()
+            {
+                clear_all_marks(vm);
+            }
             t.set_marked_count(0);
             t.set_capture_block_index(-1);
             t.set_capture_text(span.into());
             t.set_capture_pending(true);
+        });
+    }
+    {
+        // Option A — toggle whole-answer select mode. On enter, join the current blocks into
+        // `select-text` (the .slint swaps the per-block body for one SelectableText of it).
+        let weak = tile.as_weak();
+        tile.on_toggle_select_mode(move || {
+            let Some(t) = weak.upgrade() else { return };
+            if t.get_select_mode() {
+                t.set_select_mode(false);
+                return;
+            }
+            let blocks = t.get_blocks();
+            if let Some(vm) = blocks.as_any().downcast_ref::<VecModel<MarkdownBlock>>() {
+                t.set_select_text(build_select_text(vm).into());
+            }
+            t.set_select_mode(true);
         });
     }
     {
@@ -470,6 +504,54 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
             t.set_capture_text(SharedString::default());
         });
     }
+}
+
+/// Option A — join the current blocks into one plain-text buffer for select mode: bullets
+/// get a `• ` prefix, HRs are skipped, blocks separated by a blank line. Capped well under
+/// the SW-renderer's i16 (32767px) coordinate limit so one tall TextInput can't panic /
+/// black-out on a pathologically huge answer (the same Баг5 class the transcript/archive
+/// lists guard). char-boundary-safe truncation.
+fn build_select_text(vm: &VecModel<MarkdownBlock>) -> String {
+    // Rendered height ~ wrapped-LINE-count, so BOTH dimensions are capped: CHAR_CAP bounds
+    // width + memory, LINE_CAP bounds height. A char-only cap misses a single block that
+    // carries many hard newlines (a long code block / list) → that would let the joined
+    // TextInput exceed the SW-renderer's i16 (32767px) limit and panic/black-out (Баг5 class).
+    const CHAR_CAP: usize = 12_000;
+    const LINE_CAP: usize = 500;
+    // wrapped lines ≤ hard-newlines (≤ LINE_CAP) + chars/~40 (min wrapped chars/line at the
+    // min tile width); at ~36px/line (12px text, generous UI scale) that stays under i16.
+    const _: () = assert!((LINE_CAP + CHAR_CAP / 40) * 36 + 400 < 32_767);
+    let mut out = String::new();
+    for j in 0..vm.row_count() {
+        let Some(r) = vm.row_data(j) else { continue };
+        if r.kind == 6 {
+            continue; // HR — nothing to select
+        }
+        if !out.is_empty() {
+            out.push_str("\n\n");
+        }
+        if r.kind == 4 {
+            out.push_str("• "); // bullet marker (the • is a separate Text in block view)
+        }
+        out.push_str(r.text.as_str());
+        if out.len() >= CHAR_CAP {
+            break; // rough guard bounds memory; the precise dual cap is applied below
+        }
+    }
+    // Cap to whichever limit is hit first (char-boundary-safe). `line_cut` also tames a
+    // SINGLE block with many hard newlines, which the in-loop char guard alone can't.
+    let char_cut = char_boundary(&out, CHAR_CAP.min(out.len()));
+    let line_cut = out
+        .match_indices('\n')
+        .nth(LINE_CAP)
+        .map(|(i, _)| i)
+        .unwrap_or(out.len());
+    let cut = char_cut.min(line_cut);
+    if cut < out.len() {
+        out.truncate(cut);
+        out.push_str("\n…");
+    }
+    out
 }
 
 /// Clamp a byte index down to the nearest char boundary ≤ `i` (and ≤ len). Slint's
@@ -625,6 +707,44 @@ mod copy_tests {
         assert_eq!(char_boundary(s, 99), 4, "past end clamps to len");
         // The span a selection would take is always a valid slice.
         assert_eq!(&s[char_boundary(s, 1)..char_boundary(s, 3)], "а");
+    }
+
+    #[test]
+    fn select_text_join_prefixes_bullets_and_skips_hr() {
+        let mk = |kind: i32, text: &str| MarkdownBlock {
+            kind,
+            text: text.into(),
+            lang: "".into(),
+            marked: false,
+        };
+        let vm = VecModel::from(vec![
+            mk(1, "Заголовок"),  // H1
+            mk(0, "Абзац."),     // paragraph
+            mk(4, "пункт один"), // bullet → prefixed "• "
+            mk(6, ""),           // HR → skipped
+            mk(4, "пункт два"),  // bullet
+        ]);
+        assert_eq!(
+            build_select_text(&vm),
+            "Заголовок\n\nАбзац.\n\n• пункт один\n\n• пункт два"
+        );
+    }
+
+    #[test]
+    fn select_text_caps_pathological_line_count() {
+        // A SINGLE block with thousands of hard newlines (huge code block / list) must be
+        // line-capped so the joined field can't exceed the SW-renderer i16 limit (Баг5).
+        let many = "x\n".repeat(2000); // ~2000 lines in one block
+        let vm = VecModel::from(vec![MarkdownBlock {
+            kind: 0,
+            text: many.into(),
+            lang: "".into(),
+            marked: false,
+        }]);
+        let out = build_select_text(&vm);
+        let nl = out.matches('\n').count();
+        assert!(nl <= 501, "line-capped, got {nl} newlines");
+        assert!(out.ends_with('…'), "truncation marker appended");
     }
 
     #[test]
