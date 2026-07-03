@@ -49,6 +49,33 @@ Owner (r2 D1): "в стенограмме нет сквозного выделе
 mode to the transcript (dual-capped join of the DISPLAYED lines — transcript already caps at
 200 lines). Lower priority: the transcript already has per-line ⭐ + «Копировать выбранное».
 
+## STATUS (updated 2026-07-03)
+- **G1 layout-independent Ctrl+C/V/X/A** — ✅ `79ee2c3` (winit filter, `unstable-winit-030`).
+  Owner-verified r3 (RU + EN, all fields). Old Cyrillic shims KEPT as dead-code safety net —
+  **delete after more live confidence** (small cleanup left).
+- **G2a tile N⭐ → one record** — ✅ `79ee2c3`. Owner-verified r3.
+- **G2b transcript ⭐ multi-mark → one record** — ✅ `4212b7c`. Reworked from a checkbox
+  button to tile-style ⭐-multi (owner: «не могу выбрать сразу несколько звёздочек»).
+  Owner-verified r4 (5/5). Ported the tile I-1 edit-guard.
+- **G2c AI-grouping + fact FORMATTING/normalization** — ⏳ NEXT, DESIGN FIRST. Owner wants a
+  maximally-detailed solution + a fact-formatting layer (facts come from raw messy STT →
+  must be normalized, not stored verbatim). Fable is designing the full memory architecture
+  (extraction → normalization → storage → retrieval → embeddings?/vector? → context budget);
+  output → `docs/memory-architecture.md` (ADR). Do NOT build until the design is agreed.
+- **G3 transcript cross-block select-mode** — ⏳ deferred (P2 parity; low value now).
+
+## Backlog
+- **Slint 1.17 + Slint-MCP for verification.** 1.17 (2026-06-24) adds DragArea/DropArea,
+  Tooltip (markdown), RadioGroup, `cross-axis-alignment` — NOTHING for text-selection /
+  KeyEvent / winit, so no forced upgrade for our features. BUT the "Getting Good Vibes from
+  Slint" post (2026-07-03, `slint.dev/blog/slint-and-AI-MCP.html`) documents the Slint MCP
+  (the `mcp` feature we already build with `SLINT_MCP_PORT`) with richer capabilities than
+  our 1.16 exposes: real element-tree inspection, click/drag/keyboard dispatch, inline
+  screenshots, `SLINT_BACKEND=headless` for CI, hot-reload AI loops. **Investigate:** does
+  1.17's MCP element-tree populate (ours returned 0 children)? If so it could REPLACE the
+  painful computer-use smoke, and headless-MCP could add automated UI checks to the gate.
+- Tooltip widget (1.17) — nice-to-have for the UI later.
+
 ## Method (every phase)
 ci.ps1 0/0 ×3 crates + independent adversarial review + **owner HTML retest** (fillable
 `docs/retest-*.html`, golden rule) before it's "done". No computer-use flailing — owner tests.
