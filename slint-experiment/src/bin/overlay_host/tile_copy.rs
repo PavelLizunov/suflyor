@@ -373,6 +373,9 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
                 }
             }
             t.set_marked_count(count);
+            // Switching to the block-mark flow cancels any pending mouse-selection
+            // capture (they share the one bottom editor bar — keep them exclusive).
+            t.set_capture_pending(false);
             // Seed the edit buffer ONLY when the SOLE-marked block CHANGES (review
             // I-1): an in-progress edit then survives marking/un-marking OTHER blocks
             // (sole block unchanged → no re-seed), while switching which single block
@@ -421,6 +424,63 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
             t.set_capture_block_index(-1);
         });
     }
+    // ТЗ 2026-07-03 — mouse-selection capture: slice the block's text by the
+    // selection's byte offsets (the drag may run either way, so order them), seed the
+    // edit buffer, and open the pending editor. Marks are cleared so the single bottom
+    // bar is unambiguous. The user editing/confirming the span IS the approval consent.
+    {
+        let weak = tile.as_weak();
+        tile.on_capture_selection(move |idx, a, c| {
+            let Some(t) = weak.upgrade() else { return };
+            let blocks = t.get_blocks();
+            let Some(vm) = blocks.as_any().downcast_ref::<VecModel<MarkdownBlock>>() else {
+                return;
+            };
+            let Ok(i) = usize::try_from(idx) else { return };
+            let Some(row) = vm.row_data(i) else { return };
+            let text = row.text.as_str();
+            let (lo, hi) = if a <= c { (a, c) } else { (c, a) };
+            let lo = char_boundary(text, usize::try_from(lo).unwrap_or(0));
+            let hi = char_boundary(text, usize::try_from(hi).unwrap_or(0));
+            let span = text.get(lo..hi).unwrap_or("").trim();
+            if span.is_empty() {
+                return;
+            }
+            clear_all_marks(vm);
+            t.set_marked_count(0);
+            t.set_capture_block_index(-1);
+            t.set_capture_text(span.into());
+            t.set_capture_pending(true);
+        });
+    }
+    {
+        let weak = tile.as_weak();
+        tile.on_save_capture(move || {
+            let Some(t) = weak.upgrade() else { return };
+            insert_approved_note(t.get_capture_text().as_str());
+            t.set_capture_pending(false);
+            t.set_capture_text(SharedString::default());
+        });
+    }
+    {
+        let weak = tile.as_weak();
+        tile.on_cancel_capture(move || {
+            let Some(t) = weak.upgrade() else { return };
+            t.set_capture_pending(false);
+            t.set_capture_text(SharedString::default());
+        });
+    }
+}
+
+/// Clamp a byte index down to the nearest char boundary ≤ `i` (and ≤ len). Slint's
+/// selection byte-offsets already land on boundaries; this is a defensive guard so
+/// slicing the block text can never panic on a multibyte (Cyrillic) string.
+fn char_boundary(s: &str, i: usize) -> usize {
+    let mut i = i.min(s.len());
+    while i > 0 && !s.is_char_boundary(i) {
+        i -= 1;
+    }
+    i
 }
 
 /// Un-mark every block in the model (shared by save + cancel).
@@ -550,6 +610,21 @@ mod copy_tests {
     //! copy pulling in the raw Mic/System transcript, and follow-ups being
     //! re-answered as the original question. Pure: no bridge, no UI, no network.
     use super::*;
+
+    #[test]
+    fn char_boundary_clamps_into_multibyte() {
+        // Cyrillic: each letter is 2 bytes (а = 0..2, б = 2..4). A mouse selection's
+        // byte offsets must never slice mid-char (would panic).
+        let s = "аб";
+        assert_eq!(char_boundary(s, 0), 0);
+        assert_eq!(char_boundary(s, 1), 0, "mid-char clamps down");
+        assert_eq!(char_boundary(s, 2), 2);
+        assert_eq!(char_boundary(s, 3), 2, "mid-char clamps down");
+        assert_eq!(char_boundary(s, 4), 4);
+        assert_eq!(char_boundary(s, 99), 4, "past end clamps to len");
+        // The span a selection would take is always a valid slice.
+        assert_eq!(&s[char_boundary(s, 1)..char_boundary(s, 3)], "а");
+    }
 
     #[test]
     fn transcript_copy_format() {

@@ -813,6 +813,15 @@ msgstr "Добавить в память:"
 msgid "To memory ({})"
 msgstr "В память ({})"
 
+msgid "To memory"
+msgstr "В память"
+
+msgid "Copy selection"
+msgstr "Копировать выделенное"
+
+msgid "Add selection to memory"
+msgstr "Выделенное в память"
+
 msgid "local model — e.g. qwen2.5:7b-instruct"
 msgstr "локальная модель — напр. qwen2.5:7b-instruct"
 

@@ -42,6 +42,59 @@ component StarMark inherits Rectangle {
     }
 }
 
+// ТЗ 2026-07-03 — selectable read-only text. Slint's `Text` can't be selected;
+// a read-only `TextInput` can (real mouse drag / double-click word / triple-click
+// paragraph / Ctrl+A), while still growing to its wrapped content in a layout. A
+// right-click ContextMenuArea offers «Copy selection» + «Add selection to memory»;
+// the selection's byte-offsets ride out through `capture(anchor, cursor)` (Rust
+// slices the block text and orders them). Reused for every text-bearing block.
+// Root is a VerticalLayout (sizes to its child — a bare Rectangle would collapse,
+// same lesson as the per-block wrapper); the ContextMenuArea is a CHILD, not the
+// base — `inherits ContextMenuArea` panics the Slint compiler (it is special-lowered
+// in the menu pass and cannot be subclassed).
+component SelectableText inherits VerticalLayout {
+    in property <string> text;
+    in property <length> font-size: 12px;
+    in property <int> font-weight: 400;
+    in property <brush> text-color;
+    in property <TextWrap> wrap: word-wrap;
+    in property <string> mono-family;   // "" = default proportional font
+    // (anchor-byte-offset, cursor-byte-offset) of the current selection.
+    callback capture(int, int);
+    ContextMenuArea {
+        Menu {
+            MenuItem {
+                title: @tr("Copy selection");
+                activated => { ti.copy(); }
+            }
+            MenuItem {
+                title: @tr("Add selection to memory");
+                activated => { root.capture(ti.anchor-position-byte-offset, ti.cursor-position_byte-offset); }
+            }
+        }
+        ti := TextInput {
+            text: root.text;
+            read-only: true;
+            single-line: false;
+            wrap: root.wrap;
+            font-size: root.font-size;
+            font-weight: root.font-weight;
+            font-family: root.mono-family;
+            color: root.text-color;
+            // Cyrillic-layout shim (same as text_ask.slint): Slint binds Ctrl+C/A to the
+            // Latin c/a; under a RU layout the physical keys emit с/ф, so the built-in
+            // shortcuts die. Latin c/a are handled natively (read-only allows copy/select-all).
+            key-pressed(e) => {
+                if (e.modifiers.control && !e.modifiers.shift) {
+                    if (e.text == "с" || e.text == "С") { ti.copy(); return accept; }
+                    if (e.text == "ф" || e.text == "Ф") { ti.select-all(); return accept; }
+                }
+                return reject;
+            }
+        }
+    }
+}
+
 // One row in a tile's «⋯» overflow popup — icon + label, hover-highlighted.
 component TileMenuRow inherits Rectangle {
     in property <image> icon;
@@ -154,10 +207,20 @@ export component TileWindow inherits Window {
     callback toggle-block-marked(int);
     callback save-marked();
     callback clear-marks();
+    // ТЗ 2026-07-03 — mouse-selection capture: a right-click «Add selection to memory»
+    // on any block raises `capture-pending` and seeds `capture-text` with the selected
+    // span (Rust slices block.text by the selection's byte offsets) → the bottom editor
+    // bar opens for trim-before-save, independent of the per-block ⭐ marks.
+    in-out property <bool> capture-pending: false;
+    // (block-index, anchor-byte-offset, cursor-byte-offset) of the right-click selection.
+    callback capture-selection(int, int, int);
+    // Save the pending selection (edited `capture-text`) as one approved note; discard it.
+    callback save-capture();
+    callback cancel-capture();
     // Stale-marker guard: streaming re-renders REPLACE the blocks model on every delta
     // (fresh blocks come with marked=false), so clear the copied-check AND the
     // marked-count on any model swap. A settled answer fires no further set_blocks.
-    changed blocks => { root.copied-block-index = -1; root.marked-count = 0; root.capture-block-index = -1; root.capture-text = ""; }
+    changed blocks => { root.copied-block-index = -1; root.marked-count = 0; root.capture-block-index = -1; root.capture-text = ""; root.capture-pending = false; }
     // v0.18.6 — «Повторить»: shown on a summary-failure tile that carries a
     // session id. Resumes the summary from the persisted conspect (re-maps only
     // the failed parts, then re-runs the reduce) — see retry_meeting_summary.
@@ -550,38 +613,42 @@ export component TileWindow inherits Window {
                     for block[i] in root.blocks: VerticalLayout {
 
                         // H1
-                        if block.kind == 1 : Text {
+                        if block.kind == 1 : SelectableText {
                             text: block.text;
                             font-size: 18px;
                             font-weight: 700;
-                            color: Theme.text-primary;
+                            text-color: Theme.text-primary;
                             wrap: word-wrap;
+                            capture(a, c) => { root.capture-selection(i, a, c); }
                         }
                         // H2
-                        if block.kind == 2 : Text {
+                        if block.kind == 2 : SelectableText {
                             text: block.text;
                             font-size: 15px;
                             font-weight: 700;
-                            color: Theme.text-secondary;
+                            text-color: Theme.text-secondary;
                             wrap: word-wrap;
+                            capture(a, c) => { root.capture-selection(i, a, c); }
                         }
                         // H3
-                        if block.kind == 3 : Text {
+                        if block.kind == 3 : SelectableText {
                             text: block.text;
                             font-size: 13px;
                             font-weight: 700;
-                            color: Theme.text-secondary;
+                            text-color: Theme.text-secondary;
                             wrap: word-wrap;
+                            capture(a, c) => { root.capture-selection(i, a, c); }
                         }
                         // Paragraph (+ A2 star gutter on the right)
                         if block.kind == 0 : HorizontalLayout {
                             spacing: 4px;
-                            Text {
+                            SelectableText {
                                 text: block.text;
                                 font-size: 12px;
-                                color: Theme.text-secondary;
+                                text-color: Theme.text-secondary;
                                 wrap: word-wrap;
                                 horizontal-stretch: 1;
+                                capture(a, c) => { root.capture-selection(i, a, c); }
                             }
                             StarMark {
                                 marked: block.marked;
@@ -598,12 +665,13 @@ export component TileWindow inherits Window {
                                 color: Theme.accent;
                                 width: 10px;
                             }
-                            Text {
+                            SelectableText {
                                 text: block.text;
                                 font-size: 12px;
-                                color: Theme.text-secondary;
+                                text-color: Theme.text-secondary;
                                 wrap: word-wrap;
                                 horizontal-stretch: 1;
+                                capture(a, c) => { root.capture-selection(i, a, c); }
                             }
                             StarMark {
                                 marked: block.marked;
@@ -662,12 +730,13 @@ export component TileWindow inherits Window {
                                 // don't reflow and lose meaning; long lines
                                 // clip at the box edge (clip:true) — maximize
                                 // the tile (maximize button) to read them in full.
-                                Text {
+                                SelectableText {
                                     text: block.text;
                                     font-size: 11px;
-                                    color: Theme.code-text;
-                                    font-family: Theme.font-mono;
+                                    text-color: Theme.code-text;
+                                    mono-family: Theme.font-mono;
                                     wrap: no-wrap;
+                                    capture(a, c) => { root.capture-selection(i, a, c); }
                                 }
                             }
                         }
@@ -687,12 +756,13 @@ export component TileWindow inherits Window {
                             border-color: Theme.border;
                             VerticalLayout {
                                 padding: 8px;
-                                Text {
+                                SelectableText {
                                     text: block.text;
                                     font-size: 11px;
-                                    color: Theme.code-text;
-                                    font-family: Theme.font-mono;
+                                    text-color: Theme.code-text;
+                                    mono-family: Theme.font-mono;
                                     wrap: no-wrap;
+                                    capture(a, c) => { root.capture-selection(i, a, c); }
                                 }
                             }
                         }
@@ -704,21 +774,28 @@ export component TileWindow inherits Window {
             // marked. N==1 exposes the edit buffer (trim-before-save, the flow the
             // tester accepted on the transcript); N>1 saves each marked block as its
             // own fact (edit later in Настройки → Память).
-            if root.marked-count >= 1 : VerticalLayout {
+            if root.marked-count >= 1 || root.capture-pending : VerticalLayout {
                 spacing: 4px;
-                if root.marked-count == 1 : LineEdit {
+                // Editor: the single-mark trim buffer OR a pending mouse-selection.
+                if root.marked-count == 1 || root.capture-pending : LineEdit {
                     text <=> root.capture-text;
                 }
                 HorizontalLayout {
                     spacing: 6px;
                     Rectangle { horizontal-stretch: 1; }
                     Button {
-                        text: @tr("To memory ({})", root.marked-count);
-                        clicked => { root.save-marked(); }
+                        text: root.capture-pending ? @tr("To memory") : @tr("To memory ({})", root.marked-count);
+                        clicked => {
+                            if (root.capture-pending) { root.save-capture(); }
+                            else { root.save-marked(); }
+                        }
                     }
                     Button {
                         text: @tr("Cancel");
-                        clicked => { root.clear-marks(); }
+                        clicked => {
+                            if (root.capture-pending) { root.cancel-capture(); }
+                            else { root.clear-marks(); }
+                        }
                     }
                 }
             }
