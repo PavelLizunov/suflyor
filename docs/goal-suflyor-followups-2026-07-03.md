@@ -65,6 +65,41 @@ mode to the transcript (dual-capped join of the DISPLAYED lines — transcript a
   design-first later) → **Slint 1.16→1.17 migration** (Tooltip / DragArea / cross-axis-align +
   the richer MCP; verify the G1 `unstable-winit-030` filter + byte-offset props + ContextMenuArea
   still hold).
+
+#### M1 progress (normalization)
+- **Schema (0005)** — ✅ `41096c3`. `memory_items`/`memory_candidates` +
+  `source_text`/`entity`/`norm_status` (dormant). `LATEST_VERSION`→5.
+- **M1-a — pure core** — ✅ `81bea74`. `overlay-backend/src/memory/normalize.rs`:
+  `heuristic_clean` (ws + ≥4-letter stutter-dedup, never drops numbers/short words) +
+  `is_grounded(source,rewrite)` (anti-hallucination gate). Pub lib API (not dead-code),
+  7 tests. **Adversarial review caught a CRITICAL false-accept** — identifiers were matched
+  by substring so a truncated IP (`10.0.0.11` vs `10.0.0.116`) passed → fixed to WHOLE-TOKEN
+  equality against a tokenized source; + acronym-swap (VPN→DNS now gated), incomplete-negation
+  (added `не…`/`ни…` prefix + `нельзя`/`без`), and vacuous-`0≤0` holes, all fixed + pinned.
+  No behaviour change yet (nothing calls it).
+- **M1-b-1 — store CRUD for 0005 columns** — ✅ `3ea23fe`. `MemoryItem`/`NewMemoryItem`
+  +`source_text`/`entity`/`norm_status`; `insert_memory_item` writes them, `list_memory_items`
+  reads them, new `update_memory_item_normalized(id, text, entity, norm_status)` for the async
+  completion. INVISIBLE — every caller passes `None`/`None`/`"none"`, behaviour unchanged.
+  Round-trip test (insert → read → normalized-update, source_text preserved). 31/31 backend
+  tests + both crates clippy-clean. No owner retest needed (nothing user-visible changed).
+- **M1-b-2 — async LLM normalization on capture** — ⏳ NEXT. **OWNER-VISIBLE (needs HTML
+  retest) + prompt is anti-hallucination-critical → design the prompt with fable, run it past
+  the owner.** Plan: (1) `normalize_fact(raw, base_url, bearer, model) -> Option<{text,entity}>`
+  in `normalize.rs` — `heuristic_clean` → `ai::complete` no-think JSON `{"facts":[{entity,text}]}`
+  → parse (tolerate ```json fences) → **gate the rewrite with `is_grounded(raw, rewrite)`**;
+  return None (→ keep heuristic text) on any reject / AI-fail / parse-fail. Parse is unit-testable;
+  the AI call is not. (2) **ASYNC** (fable): capture stays the instant SQLite write
+  (`norm_status='pending'`, text=heuristic-clean, source_text=Some(raw)); a worker thread
+  (`std::thread` + tokio `Runtime` + `rt.block_on` — the `settings_controller.rs:936` pattern)
+  runs `normalize_fact`, then reopens the store and `update_memory_item_normalized` (→ `'llm'`
+  on success, else `'heuristic'`). ⭐ never blocks on the AI. (3) per-source routing
+  (memory-architecture §3.2): ⭐transcript single line = heuristic+LLM (the clean first cut);
+  ⭐tile-block / typed «Свой факт» / joined multi-⭐ = trim/heuristic only (clean text or a
+  user-grouped blob — no LLM split, that's M3). «Извлечь» batched LLM = a follow-up. Anchors:
+  `tile_copy.rs insert_approved_note` (:316, add a `normalize: bool`/source-kind param),
+  `aux_windows.rs wire_transcript_actions` (transcript single-line save), `ai.rs complete`
+  (:776), `settings_controller.rs:936` (async template), `ai::ChatMessage` ctor.
 - **G3 transcript cross-block select-mode** — ⏳ deferred (P2 parity; low value now).
 
 ## Backlog
