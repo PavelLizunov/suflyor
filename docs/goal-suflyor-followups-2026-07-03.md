@@ -57,11 +57,14 @@ mode to the transcript (dual-capped join of the DISPLAYED lines — transcript a
 - **G2b transcript ⭐ multi-mark → one record** — ✅ `4212b7c`. Reworked from a checkbox
   button to tile-style ⭐-multi (owner: «не могу выбрать сразу несколько звёздочек»).
   Owner-verified r4 (5/5). Ported the tile I-1 edit-guard.
-- **G2c AI-grouping + fact FORMATTING/normalization** — ⏳ NEXT, DESIGN FIRST. Owner wants a
-  maximally-detailed solution + a fact-formatting layer (facts come from raw messy STT →
-  must be normalized, not stored verbatim). Fable is designing the full memory architecture
-  (extraction → normalization → storage → retrieval → embeddings?/vector? → context budget);
-  output → `docs/memory-architecture.md` (ADR). Do NOT build until the design is agreed.
+- **Memory rework — design DONE + APPROVED.** `docs/memory-architecture.md` (fable ADR).
+  Owner chose **FULL pipeline M1–M4** (2026-07-03): M1 normalization-on-capture (fact
+  formatting — the MUST) · M2 relevance retrieval (FTS5 BM25) · M3 coherence (entity-grouping
+  + merge) · M4 embeddings + hybrid (e5-small sidecar + cosine/RRF). **Building now, M1 first.**
+  Then (owner, after M1–M4): **M6 graph memory** (entity+relation knowledge-graph over facts —
+  design-first later) → **Slint 1.16→1.17 migration** (Tooltip / DragArea / cross-axis-align +
+  the richer MCP; verify the G1 `unstable-winit-030` filter + byte-offset props + ContextMenuArea
+  still hold).
 - **G3 transcript cross-block select-mode** — ⏳ deferred (P2 parity; low value now).
 
 ## Backlog

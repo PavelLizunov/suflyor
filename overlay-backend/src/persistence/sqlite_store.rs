@@ -953,16 +953,16 @@ mod tests {
     }
 
     #[test]
-    fn latest_migration_version_is_4() {
+    fn latest_migration_version_is_5() {
         let store = Store::open_in_memory().unwrap();
         let v: i32 = store
             .conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(v, migrations::LATEST_VERSION);
-        // Literal pin — bump deliberately when adding a migration (now incl. 0004
-        // utterances.audio_ms, F1).
-        assert_eq!(v, 4);
+        // Literal pin — bump deliberately when adding a migration (now incl. 0005
+        // memory_v2: source_text / entity / norm_status for fact normalization, M1).
+        assert_eq!(v, 5);
     }
 
     #[test]

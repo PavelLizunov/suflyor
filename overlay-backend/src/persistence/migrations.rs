@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 use rusqlite::Connection;
 
 /// The newest schema version this build knows how to produce.
-pub(crate) const LATEST_VERSION: i32 = 4;
+pub(crate) const LATEST_VERSION: i32 = 5;
 
 /// Ordered `(target_user_version, sql)` migrations. Index = order applied.
 const MIGRATIONS: &[(i32, &str)] = &[
@@ -22,6 +22,7 @@ const MIGRATIONS: &[(i32, &str)] = &[
         4,
         include_str!("../../migrations/0004_utterance_audio_ms.sql"),
     ),
+    (5, include_str!("../../migrations/0005_memory_v2.sql")),
 ];
 
 /// Apply every migration newer than the DB's current `user_version`, each in its
