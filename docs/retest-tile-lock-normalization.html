@@ -1,0 +1,83 @@
+<meta charset="utf-8">
+<title>Суфлёр — приёмка: замок тайлов + нормализация памяти</title>
+<style>
+  :root{--bg:#12151c;--panel:#1a1f29;--line:#2c3444;--txt:#e6eaf0;--muted:#9aa4b6;--accent:#5aa2ff;--ok:#3ecb8f;--bad:#ff6b6b;--skip:#c9a24a}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif;padding:28px 18px 90px}
+  .wrap{max-width:900px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 6px}.sub{color:var(--muted);margin:0 0 18px}
+  .box{background:#16202e;border:1px solid #28405e;border-radius:10px;padding:14px 16px;margin:0 0 16px}
+  .box h3{margin:0 0 6px;font-size:14px;color:var(--accent)}.box ul{margin:6px 0 0;padding-left:20px;color:var(--muted)}
+  h2{font-size:16px;margin:24px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  .item{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0 0 10px}
+  .item .q{font-weight:600;margin:0 0 4px}.item .exp{color:var(--muted);font-size:13px}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg label{padding:6px 12px;cursor:pointer;font-size:13px;user-select:none;border-right:1px solid var(--line)}
+  .seg label:last-child{border-right:0}.seg input{display:none}
+  .seg label.ok.on{background:var(--ok);color:#06231a;font-weight:700}
+  .seg label.bad.on{background:var(--bad);color:#2a0808;font-weight:700}
+  .seg label.skip.on{background:var(--skip);color:#241b06;font-weight:700}
+  .item textarea{width:100%;margin-top:8px;background:#0e1119;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px;font:13px/1.45 inherit;resize:vertical;min-height:34px}
+  .item.done-ok{border-color:#2c5c47}.item.done-bad{border-color:#5c2c2c}
+  .bar{position:fixed;left:0;right:0;bottom:0;background:#0e1119ee;border-top:1px solid var(--line);padding:12px 18px;display:flex;gap:12px;align-items:center;backdrop-filter:blur(6px)}
+  .bar .stat{color:var(--muted);font-size:13px}.bar .stat b{color:var(--txt)}
+  button{background:var(--accent);color:#04122b;border:0;border-radius:8px;padding:9px 16px;font-weight:700;cursor:pointer;font-size:14px}
+  button.ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
+  dialog{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:12px;max-width:760px;width:92%}
+  dialog textarea{width:100%;height:300px;background:#0e1119;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:10px;font:12px/1.4 ui-monospace,Consolas,monospace}
+  dialog .row{display:flex;gap:10px;justify-content:flex-end;margin-top:10px}
+  kbd{background:#252c3a;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 6px;font-size:12px}
+</style>
+<div class="wrap">
+  <h1>Суфлёр — приёмка: замок тайлов + нормализация памяти</h1>
+  <p class="sub">На УСТАНОВЛЕННОМ билде (после <code>setup.exe /S</code> и запуска установленного ярлыка — не из target/release). Отметь каждый пункт, добавь комментарий, «Экспорт результатов» → пришли мне текст.</p>
+
+  <div class="box">
+    <h3>Что проверяем (2 фичи)</h3>
+    <ul>
+      <li><b>🔒 Замок тайлов</b> — кнопка-замок на баре: глушит всплывание авто-тайлов (например, при записи игры), дрожит пока активна.</li>
+      <li><b>🧠 Нормализация памяти (M1-b-2)</b> — ⭐ на строке стенограммы: факт сохраняется сразу, затем ИИ фоном подчищает его в аккуратный факт (числа/IP/имена — дословно, иначе переписка отвергается).</li>
+    </ul>
+  </div>
+
+  <h2>🔒 Замок тайлов</h2>
+  <div class="item" data-id="T1"><div class="q">Кнопка-замок на баре</div><div class="exp">На баре в ряду быстрых действий (рядом с 🔥 «агрессивный авто-тайл») появился значок <b>замка</b> — векторный, в стиле остальных иконок.</div></div>
+  <div class="item" data-id="T2"><div class="q">Клик → подсветка + дрожь</div><div class="exp">Клик по замку → он подсвечивается (янтарный) и <b>потрясывается</b> (мелко дрожит). Повторный клик → выключается, замок замирает ровно (не остаётся наклонённым).</div></div>
+  <div class="item" data-id="T3"><div class="q">Авто-тайлы заглушены / вернулись</div><div class="exp">Замок активен → говоришь, но авто-тайлы <b>не вылетают</b>. Выключил замок → авто-тайлы снова появляются на каждую реплику (как раньше).</div></div>
+  <div class="item" data-id="T4"><div class="q">Ручное всё ещё работает</div><div class="exp">При ВКЛЮЧЁННОМ замке: <kbd>F9</kbd>/«Написать»/<kbd>F6</kbd>, «Сводка», ошибки — тайлы всё равно появляются (замок глушит ТОЛЬКО авто-тайлы, не осознанные запросы).</div></div>
+  <div class="item" data-id="T5"><div class="q">Один переключатель с Настройками</div><div class="exp">Замок на баре и Настройки → «Режим прослушивания» («не показывать тайлы») — это ОДНО и то же. Переключил на баре → открыл Настройки → галка в том же состоянии (и наоборот).</div></div>
+  <div class="item" data-id="T6"><div class="q">Сохраняется после перезапуска</div><div class="exp">Включил замок → закрыл и снова открыл приложение → замок всё ещё активен и <b>дрожит</b> (сразу понятно, почему тайлов нет).</div></div>
+
+  <h2>🧠 Нормализация факта из стенограммы</h2>
+  <div class="item" data-id="N1"><div class="q">Мгновенно, затем подчищается</div><div class="exp">Отметь ⭐ ОДНУ строку стенограммы (сырой STT, с «эканьем»/повторами) → «В память». В Настройки→Память факт появляется <b>сразу</b>; через миг (после ответа ИИ) текст <b>подчищается</b> в аккуратный факт.</div></div>
+  <div class="item" data-id="N2"><div class="q">Идентификаторы — дословно</div><div class="exp">Если в реплике были <b>число / IP / подсеть / порт / имя</b> (напр. <code>10.255.28.116</code>, <code>z14-4443</code>) — в подчищенном факте они ТЕ ЖЕ, ни одна цифра/буква не изменилась. (Если ИИ что-то изменил в идентификаторе — переписка отвергается, остаётся исходный текст.)</div></div>
+  <div class="item" data-id="N3"><div class="q">Смысл/отрицание не переврано</div><div class="exp">«не», «нельзя», «без» не перевернулись; факт означает то же, что сказано. Ничего выдуманного не добавилось.</div></div>
+  <div class="item" data-id="N4"><div class="q">Без ИИ — тоже работает</div><div class="exp">Если ИИ выключен / локальная модель не настроена — факт всё равно сохраняется (просто вычищенный эвристикой, без переписки). Ничего не теряется, ⭐ не зависает.</div></div>
+  <div class="item" data-id="N5"><div class="q">Остальное ИИ НЕ трогает</div><div class="exp">⭐ на БЛОКЕ тайла, «свой факт» в Настройках, склейка нескольких ⭐ в одну запись, выделенный фрагмент — сохраняются КАК ЕСТЬ (ИИ их не переписывает — только сырую одиночную ⭐-строку стенограммы).</div></div>
+  <div class="item" data-id="N6"><div class="q">Старое не сломалось</div><div class="exp">v0.27-поведение цело: несколько ⭐ → ОДНА склеенная запись; редактор факта перед сохранением; копирование; «Продолжить диалог».</div></div>
+
+  <div class="box" data-id="FREE" style="background:var(--panel);border-color:var(--line)"><h3 style="color:var(--accent)">Коммент / что не так</h3><textarea id="freeNote" placeholder="замечания, примеры фактов до/после, скриншоты…" style="width:100%;background:#0e1119;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px;min-height:54px;font:13px/1.45 inherit"></textarea></div>
+</div>
+<div class="bar"><span class="stat" id="stat"></span><span style="flex:1"></span><button class="ghost" id="resetBtn">Сброс</button><button id="exportBtn">Экспорт результатов</button></div>
+<dialog id="dlg"><h3 style="margin:0 0 8px">Результаты</h3><textarea id="out" readonly></textarea><div class="row"><button id="copyBtn">Копировать</button><button class="ghost" id="closeBtn">Закрыть</button></div></dialog>
+<script>
+const KEY="suflyor-retest-tile-lock-norm";
+const items=[...document.querySelectorAll(".item")];
+for(const it of items){const id=it.dataset.id;const seg=document.createElement("div");seg.className="controls";
+  seg.innerHTML=`<div class="seg"><label class="ok" data-v="ok"><input type="radio" name="${id}" value="ok">✅ ОК</label><label class="bad" data-v="bad"><input type="radio" name="${id}" value="bad">❌ Не ок</label><label class="skip" data-v="skip"><input type="radio" name="${id}" value="skip">⏭</label></div>`;
+  const ta=document.createElement("textarea");ta.placeholder="коммент";ta.dataset.c=id;it.appendChild(seg);it.appendChild(ta);}
+function save(){const d={free:document.getElementById("freeNote").value,items:{}};for(const it of items){const id=it.dataset.id;const r=it.querySelector(`input[name="${id}"]:checked`);d.items[id]={v:r?r.value:"",c:it.querySelector(`textarea[data-c="${id}"]`).value};}localStorage.setItem(KEY,JSON.stringify(d));render();}
+function paint(it,v){it.classList.toggle("done-ok",v==="ok");it.classList.toggle("done-bad",v==="bad");it.querySelectorAll(".seg label").forEach(l=>l.classList.toggle("on",l.dataset.v===v));}
+function render(){let ok=0,bad=0,todo=0;for(const it of items){const id=it.dataset.id;const r=it.querySelector(`input[name="${id}"]:checked`);const v=r?r.value:"";paint(it,v);if(v==="ok")ok++;else if(v==="bad")bad++;else todo++;}document.getElementById("stat").innerHTML=`<b>${ok}</b> ОК · <b style="color:var(--bad)">${bad}</b> не ок · <b>${todo}</b> из ${items.length}`;}
+function load(){const raw=localStorage.getItem(KEY);if(raw){try{const d=JSON.parse(raw);document.getElementById("freeNote").value=d.free||"";for(const it of items){const id=it.dataset.id;const s=d.items?.[id];if(!s)continue;if(s.v){const inp=it.querySelector(`input[name="${id}"][value="${s.v}"]`);if(inp)inp.checked=true;}it.querySelector(`textarea[data-c="${id}"]`).value=s.c||"";}}catch(e){}}render();}
+document.addEventListener("change",e=>{if(e.target.matches("input[type=radio]"))save();});
+document.addEventListener("input",e=>{if(e.target.tagName==="TEXTAREA")save();});
+function report(){const L=["СУФЛЁР — приёмка: замок тайлов + нормализация памяти",""];const t={};document.querySelectorAll(".item").forEach(it=>t[it.dataset.id]=it.querySelector(".q").textContent);const mk={ok:"[OK]  ",bad:"[FAIL]",skip:"[skip]","":"[ -- ]"};let ok=0,bad=0;for(const it of items){const id=it.dataset.id;const r=it.querySelector(`input[name="${id}"]:checked`);const v=r?r.value:"";const c=it.querySelector(`textarea[data-c="${id}"]`).value.trim();if(v==="ok")ok++;if(v==="bad")bad++;L.push(`${mk[v]} ${id}. ${t[id]}`);if(c)L.push(`        ↳ ${c}`);}L.push("",`ИТОГ: ${ok} OK, ${bad} FAIL из ${items.length}`);const f=document.getElementById("freeNote").value.trim();if(f){L.push("","КОММЕНТ:",f);}return L.join("\n");}
+const dlg=document.getElementById("dlg");
+document.getElementById("exportBtn").onclick=()=>{document.getElementById("out").value=report();dlg.showModal();};
+document.getElementById("closeBtn").onclick=()=>dlg.close();
+document.getElementById("copyBtn").onclick=()=>{const t=document.getElementById("out");t.select();navigator.clipboard?.writeText(t.value).then(()=>{document.getElementById("copyBtn").textContent="Скопировано ✓";setTimeout(()=>document.getElementById("copyBtn").textContent="Копировать",1500);}).catch(()=>{});};
+document.getElementById("resetBtn").onclick=()=>{if(confirm("Сбросить?")){localStorage.removeItem(KEY);location.reload();}};
+load();
+</script>

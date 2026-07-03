@@ -83,23 +83,29 @@ mode to the transcript (dual-capped join of the DISPLAYED lines — transcript a
   completion. INVISIBLE — every caller passes `None`/`None`/`"none"`, behaviour unchanged.
   Round-trip test (insert → read → normalized-update, source_text preserved). 31/31 backend
   tests + both crates clippy-clean. No owner retest needed (nothing user-visible changed).
-- **M1-b-2 — async LLM normalization on capture** — ⏳ NEXT. **OWNER-VISIBLE (needs HTML
-  retest) + prompt is anti-hallucination-critical → design the prompt with fable, run it past
-  the owner.** Plan: (1) `normalize_fact(raw, base_url, bearer, model) -> Option<{text,entity}>`
-  in `normalize.rs` — `heuristic_clean` → `ai::complete` no-think JSON `{"facts":[{entity,text}]}`
-  → parse (tolerate ```json fences) → **gate the rewrite with `is_grounded(raw, rewrite)`**;
-  return None (→ keep heuristic text) on any reject / AI-fail / parse-fail. Parse is unit-testable;
-  the AI call is not. (2) **ASYNC** (fable): capture stays the instant SQLite write
-  (`norm_status='pending'`, text=heuristic-clean, source_text=Some(raw)); a worker thread
-  (`std::thread` + tokio `Runtime` + `rt.block_on` — the `settings_controller.rs:936` pattern)
-  runs `normalize_fact`, then reopens the store and `update_memory_item_normalized` (→ `'llm'`
-  on success, else `'heuristic'`). ⭐ never blocks on the AI. (3) per-source routing
-  (memory-architecture §3.2): ⭐transcript single line = heuristic+LLM (the clean first cut);
-  ⭐tile-block / typed «Свой факт» / joined multi-⭐ = trim/heuristic only (clean text or a
-  user-grouped blob — no LLM split, that's M3). «Извлечь» batched LLM = a follow-up. Anchors:
-  `tile_copy.rs insert_approved_note` (:316, add a `normalize: bool`/source-kind param),
-  `aux_windows.rs wire_transcript_actions` (transcript single-line save), `ai.rs complete`
-  (:776), `settings_controller.rs:936` (async template), `ai::ChatMessage` ctor.
+- **M1-b-2 — async LLM normalization on capture** — ✅ `1a84bf4`. Star a single raw-STT
+  transcript line → instant save as heuristic-clean (`norm_status='pending'`, raw in
+  `source_text`); a worker thread (std::thread + current-thread tokio rt) runs `normalize_fact`
+  (heuristic → `ai::complete` no-think JSON → `parse_first_fact` → **gate with
+  `is_grounded(raw, rewrite)`**) then `update_memory_item_normalized` (→ `'llm'` on success,
+  else `'heuristic'`). ⭐ never blocks on the AI. Routing: ONLY the single-⭐ transcript line
+  normalizes; tile blocks / multi-⭐ joins / selection spans / typed facts stay verbatim.
+  Adversarial review caught a SQLite rowid-REUSE bug (delete/clear mid-window could land the
+  UPDATE on a reused-id row) → guarded the UPDATE with `norm_status='pending' AND source_text=?`;
+  test added. Gate 0/0. **Owner retest: `docs/retest-tile-lock-normalization.html`.**
+  Follow-ups: «Извлечь» batched normalization; broaden to selection spans if the owner wants;
+  sweep stale `'pending'` rows on boot (cosmetic — text is already the heuristic clean).
+- **M2–M4 (relevance / coherence / embeddings)** — ⏳ NEXT, after the owner signs off M1.
+
+#### Side feature — 🔒 bar lock chip (listening mode)
+- ✅ `cc5a7e6` — owner ТЗ (2026-07-03/04): «отключать всплывание тайлов … кнопка с замочком …
+  векторная SVG … потрясывается, чтобы понять почему тайлов нет» (для записи игр — тайл
+  перекрывает игру). REUSES `config.suppress_tiles` (existing field + live enforcement in
+  `slint_session::maybe_spawn_auto_tile` + a Settings checkbox — no new flag/enforcement); adds a
+  bar `LockChip` (SVG padlock `assets/icons/lock.svg`, TREMBLES via `Timer`+`transform-rotation`
+  ±7° while active) + `on_suppress_tiles_toggle_clicked` wiring + startup seed (persisted-locked
+  restart shows the shaking lock). Adversarial review clean (only note: bar↔Settings widgets
+  re-sync on open, not live — accepted, mirrors `auto_tiles`). Owner retest in the same HTML.
 - **G3 transcript cross-block select-mode** — ⏳ deferred (P2 parity; low value now).
 
 ## Backlog
