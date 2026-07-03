@@ -314,24 +314,19 @@ pub(crate) fn wire_code_copy(tile: &TileWindow) {
 /// fact IS the approval consent (same rule as the Settings "add fact"). Empty /
 /// whitespace is a no-op. Local SQLite — no egress; errors are logged, not fatal.
 ///
-/// `normalize` (M1-b-2, docs/memory-architecture.md §3): this text is a RAW STT span (a
-/// single starred transcript line) that should be tidied into a clean fact. It's stored
-/// INSTANTLY as its heuristic-clean (so the ⭐ feels instant), with the raw kept in
-/// `source_text`; then a background thread asks the AI to rewrite it and — ONLY if the
-/// rewrite passes the `is_grounded` gate — swaps in the clean fact (`norm_status` → `llm`),
-/// else keeps the heuristic text (`heuristic`). Clean sources (tile blocks = already-clean AI
-/// text, user-grouped multi-⭐ joins, hand-selected spans) pass `false` → stored verbatim.
-pub(crate) fn insert_approved_note(text: &str, normalize: bool) {
+/// Feature A (condense — M1-b-2): the text — a tile answer OR a raw STT span — is stored
+/// INSTANTLY as its heuristic-clean (so the ⭐ feels instant), with the raw kept in `source_text`;
+/// then a background thread asks the AI to condense it into 1–3 SHORT facts and — only the facts
+/// that pass the `is_grounded` gate — swaps them in (`norm_status` → `llm`), else keeps the
+/// heuristic text (`heuristic`). Every ⭐/selection save comes here; typed «свой факт» (Settings)
+/// does NOT (it's stored verbatim via its own path).
+pub(crate) fn insert_approved_note(text: &str) {
     let trimmed = text.trim();
     if trimmed.is_empty() {
         return;
     }
-    if !normalize {
-        store_note(trimmed, None, "none");
-        return;
-    }
-    // Raw STT: store the heuristic-clean immediately (raw kept as provenance), then normalize
-    // in the background so the ⭐ never waits on an AI round-trip.
+    // Store the heuristic-clean immediately (raw kept as provenance), then condense in the
+    // background so the ⭐ never waits on an AI round-trip.
     let raw = trimmed.to_string();
     let cleaned = overlay_backend::memory::heuristic_clean(&raw);
     let cleaned = if cleaned.trim().is_empty() {
@@ -347,9 +342,9 @@ pub(crate) fn insert_approved_note(text: &str, normalize: bool) {
         finalize_normalized(id, &raw, &cleaned, None, "heuristic"); // no AI configured
         return;
     }
-    // ponytail: one OS thread per starred line. Captures are infrequent and ai::complete's
+    // ponytail: one OS thread per save. Saves are user-initiated + infrequent and ai::complete's
     // AI_SEMAPHORE caps concurrent AI calls, so an unbounded spawn is fine; add a bounded pool
-    // only if rapid-fire starring is ever shown to pile up threads.
+    // only if rapid-fire saving is ever shown to pile up threads.
     std::thread::spawn(move || {
         let outcome = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -480,9 +475,9 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
             // «z14-backup → имя / подсеть / IP = 3 rows» complaint. Refine later in
             // Настройки → Память (A1). "; " sep keeps the joined note single-line-editable.
             if t.get_marked_count() == 1 {
-                insert_approved_note(t.get_capture_text().as_str(), false);
+                insert_approved_note(t.get_capture_text().as_str());
             } else {
-                insert_approved_note(&join_marked_text(vm), false);
+                insert_approved_note(&join_marked_text(vm));
             }
             clear_all_marks(vm);
             t.set_marked_count(0);
@@ -568,7 +563,7 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
         let weak = tile.as_weak();
         tile.on_save_capture(move || {
             let Some(t) = weak.upgrade() else { return };
-            insert_approved_note(t.get_capture_text().as_str(), false);
+            insert_approved_note(t.get_capture_text().as_str());
             t.set_capture_pending(false);
             t.set_capture_text(SharedString::default());
         });

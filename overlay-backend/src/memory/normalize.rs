@@ -14,12 +14,13 @@
 //!   WHOLE source token verbatim, content words are contained, negation polarity is preserved,
 //!   and the shape is sane. This is what makes an LLM normalization safe to run unattended — a
 //!   failing rewrite is rejected and the caller keeps the un-rewritten (heuristic) text.
-//! - [`normalize_fact`] — async layer-2 orchestrator: heuristic-clean → one AI rewrite → gate
-//!   with `is_grounded`. Returns the grounded fact, or `None` so the caller keeps the heuristic
-//!   text (never a hallucinated rewrite).
+//! - [`normalize_fact`] — async condense (feature A): heuristic-clean → AI extracts 1–3 SHORT
+//!   facts → keep only those that pass `is_grounded` (per fact) → join. A long tile answer
+//!   becomes a few short facts; a messy STT line becomes one clean fact. Returns the condensed
+//!   fact(s), or `None` so the caller keeps the heuristic text (never a hallucinated fact).
 //!
 //! The two helpers are pure (no I/O), unit-tested like `key_terms`; `normalize_fact` is the only
-//! I/O path (one AI call) — its JSON parse (`parse_first_fact`) is tested, the network call not.
+//! I/O path (one AI call) — its JSON parse (`parse_facts`) is tested, the network call is not.
 
 use crate::ai::{self, ChatMessage, MessageContent};
 
@@ -180,28 +181,35 @@ pub struct NormalizedFact {
     pub entity: Option<String>,
 }
 
-/// System prompt for the layer-2 rewrite. Russian (the app + the facts are Russian). The hard
-/// guarantees (identifiers verbatim, no invention, negation preserved) are RE-CHECKED by
-/// [`is_grounded`] — the prompt asks for good behaviour, the gate enforces it.
-const NORMALIZE_SYSTEM: &str = "Ты нормализуешь короткий фрагмент из личной памяти пользователя. \
-Фрагмент — сырая расшифровка речи: в нём бывают оговорки, повторы, слова-паразиты, разорванные слова.\n\n\
-Задача: превратить его в ОДИН чёткий короткий факт на том же языке, что и вход.\n\n\
+/// System prompt for the condense/normalize pass (M1-b-2, feature A). Russian (the app + the
+/// facts are Russian). Extracts 1–3 SHORT atomic facts from the input, which may be a clean AI
+/// tile answer OR raw speech-to-text. The hard guarantees (identifiers verbatim, no invention,
+/// negation preserved) are RE-CHECKED PER FACT by [`is_grounded`] — the prompt asks for good
+/// behaviour, the gate enforces it.
+const CONDENSE_SYSTEM: &str = "Ты извлекаешь КОРОТКИЕ факты для личной памяти пользователя (их \
+потом подсовывают ИИ как подсказки на будущих созвонах). Вход — это ответ ИИ ИЛИ сырая \
+расшифровка речи.\n\n\
+Выдели из текста от 1 до 3 САМЫХ ВАЖНЫХ фактов. Каждый факт — одно короткое ясное утверждение \
+(НЕ абзац).\n\n\
 Строгие правила:\n\
-- Сохрани ДОСЛОВНО все идентификаторы: числа, IP-адреса, подсети, порты, имена, логины, даты, версии, коды. \
-Нельзя менять ни одной цифры или буквы в них.\n\
-- Ничего не выдумывай. Если смысл неясен — оставь формулировку как есть.\n\
-- Убери шум речи (эканье, повторы, самоисправления), собери разорванные слова, сделай ясное утверждение.\n\
+- Пиши факты на ТОМ ЖЕ языке, что и вход (русский вход → русские факты; НЕ переводи).\n\
+- Сохрани ДОСЛОВНО все идентификаторы: числа, IP-адреса, подсети, порты, имена, логины, даты, \
+версии, коды. Нельзя менять ни одной цифры или буквы в них.\n\
+- Ничего не выдумывай — только то, что реально есть в тексте.\n\
+- Убери воду, вступления и пояснения — оставь суть. Убери шум речи (эканье, повторы, обрывки).\n\
 - Сохрани отрицание («не», «нельзя», «без») — не переворачивай смысл.\n\
+- Если текст и так короткий факт — верни его как есть (один факт).\n\
 - Без пояснений, без markdown, без тройных кавычек.\n\n\
 Ответь ТОЛЬКО строгим JSON:\n\
-{\"facts\":[{\"entity\":\"<главный предмет факта, коротко>\",\"text\":\"<чистый факт>\"}]}\n\
-Обычно один факт. entity — о чём факт (имя/система/человек), или \"\" если неясно.";
+{\"facts\":[{\"entity\":\"<о чём факт, коротко>\",\"text\":\"<короткий факт>\"}]}\n\
+От 1 до 3 фактов. entity — имя/система/человек, или \"\" если неясно.";
 
-/// Async layer-2 normalization (M1, docs/memory-architecture.md §3): heuristic-clean the raw
-/// span, ask the AI to rewrite it into one clean atomic fact (no-think JSON via [`ai::complete`]),
-/// and accept the rewrite ONLY if [`is_grounded`] passes against the RAW source. Returns the
-/// grounded fact, or `None` on any AI error / parse failure / grounding rejection — the caller
-/// then keeps the heuristic-cleaned text, never a hallucinated rewrite.
+/// Async condense/normalize (M1-b-2, feature A): heuristic-clean the raw span, ask the AI to
+/// extract 1–3 SHORT atomic facts (no-think JSON via [`ai::complete`]), keep ONLY the facts that
+/// pass [`is_grounded`] against the RAW source (each carries its own identifiers), and join up to
+/// 3 of them with «; ». Returns the condensed fact(s), or `None` on any AI error / parse
+/// failure / all-rejected — the caller then keeps the heuristic-cleaned text, never a
+/// hallucinated fact. (A long tile answer → a few short facts; a messy STT line → one clean fact.)
 pub async fn normalize_fact(
     raw: &str,
     base_url: &str,
@@ -215,28 +223,41 @@ pub async fn normalize_fact(
     let messages = vec![
         ChatMessage {
             role: "system".into(),
-            content: MessageContent::Text(NORMALIZE_SYSTEM.into()),
+            content: MessageContent::Text(CONDENSE_SYSTEM.into()),
         },
         ChatMessage {
             role: "user".into(),
             content: MessageContent::Text(cleaned),
         },
     ];
-    let resp = ai::complete(base_url, bearer, model, messages, 400)
+    let resp = ai::complete(base_url, bearer, model, messages, 500)
         .await
         .ok()?;
-    let fact = parse_first_fact(&resp)?;
-    // The gate: reject any rewrite not grounded in the RAW source (which carries every
-    // identifier). On rejection the caller keeps the heuristic text.
-    if !is_grounded(raw, &fact.text) {
+    // Keep only facts grounded in the RAW source; take ≤3. A hallucinated fact is dropped
+    // individually, so a good fact survives alongside a rejected one.
+    let grounded: Vec<NormalizedFact> = parse_facts(&resp)
+        .into_iter()
+        .filter(|f| is_grounded(raw, &f.text))
+        .take(3)
+        .collect();
+    if grounded.is_empty() {
         return None;
     }
-    Some(fact)
+    let entity = grounded.iter().find_map(|f| f.entity.clone());
+    // Join with "; " (not "\n") so a multi-fact record stays single-line-editable in the
+    // Настройки→Память LineEdit — same convention as `join_marked_text`.
+    let text = grounded
+        .iter()
+        .map(|f| f.text.as_str())
+        .collect::<Vec<_>>()
+        .join("; ");
+    Some(NormalizedFact { text, entity })
 }
 
-/// Extract the first fact from a model reply that SHOULD be `{"facts":[{entity,text}]}` but may
-/// be wrapped in prose or ```json fences. Pure → tested. `None` if nothing parseable.
-fn parse_first_fact(resp: &str) -> Option<NormalizedFact> {
+/// Parse ALL facts from a model reply that SHOULD be `{"facts":[{entity,text},…]}` but may be
+/// wrapped in prose or ```json fences. Pure → tested. Empty vec if nothing parseable; facts with
+/// an empty `text` are dropped.
+fn parse_facts(resp: &str) -> Vec<NormalizedFact> {
     #[derive(serde::Deserialize)]
     struct FactsDto {
         #[serde(default)]
@@ -250,22 +271,30 @@ fn parse_first_fact(resp: &str) -> Option<NormalizedFact> {
         text: String,
     }
     // Slice from the first '{' to the last '}' — drops ```json fences / surrounding prose.
-    let start = resp.find('{')?;
-    let end = resp.rfind('}')?;
-    if end < start {
-        return None;
-    }
-    let parsed: FactsDto = serde_json::from_str(&resp[start..=end]).ok()?;
-    let first = parsed.facts.into_iter().next()?;
-    let text = first.text.trim().to_string();
-    if text.is_empty() {
-        return None;
-    }
-    let entity = {
-        let e = first.entity.trim();
-        (!e.is_empty()).then(|| e.to_string())
+    let (Some(start), Some(end)) = (resp.find('{'), resp.rfind('}')) else {
+        return Vec::new();
     };
-    Some(NormalizedFact { text, entity })
+    if end < start {
+        return Vec::new();
+    }
+    let Ok(parsed) = serde_json::from_str::<FactsDto>(&resp[start..=end]) else {
+        return Vec::new();
+    };
+    parsed
+        .facts
+        .into_iter()
+        .filter_map(|f| {
+            let text = f.text.trim().to_string();
+            if text.is_empty() {
+                return None;
+            }
+            let e = f.entity.trim();
+            Some(NormalizedFact {
+                text,
+                entity: (!e.is_empty()).then(|| e.to_string()),
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -353,24 +382,27 @@ mod tests {
     }
 
     #[test]
-    fn parse_first_fact_handles_clean_fenced_and_prose() {
-        let f =
-            parse_first_fact(r#"{"facts":[{"entity":"z14","text":"Бекап-сервер z14"}]}"#).unwrap();
-        assert_eq!(f.text, "Бекап-сервер z14");
-        assert_eq!(f.entity.as_deref(), Some("z14"));
-        // ```json fences + surrounding prose are tolerated; empty entity → None.
-        let f =
-            parse_first_fact("Вот:\n```json\n{\"facts\":[{\"entity\":\"\",\"text\":\"кофе по утрам\"}]}\n```\nготово")
-                .unwrap();
-        assert_eq!(f.text, "кофе по утрам");
-        assert_eq!(f.entity, None);
+    fn parse_facts_handles_clean_fenced_and_multi() {
+        let fs = parse_facts(r#"{"facts":[{"entity":"z14","text":"Бекап-сервер z14"}]}"#);
+        assert_eq!(fs.len(), 1);
+        assert_eq!(fs[0].text, "Бекап-сервер z14");
+        assert_eq!(fs[0].entity.as_deref(), Some("z14"));
+        // ```json fences + surrounding prose tolerated; empty entity → None; MULTIPLE facts kept.
+        let fs = parse_facts(
+            "Вот:\n```json\n{\"facts\":[{\"entity\":\"\",\"text\":\"кофе по утрам\"},\
+             {\"entity\":\"порт\",\"text\":\"порт 8080\"}]}\n```\nготово",
+        );
+        assert_eq!(fs.len(), 2);
+        assert_eq!(fs[0].text, "кофе по утрам");
+        assert_eq!(fs[0].entity, None);
+        assert_eq!(fs[1].text, "порт 8080");
     }
 
     #[test]
-    fn parse_first_fact_rejects_empty_and_garbage() {
-        assert!(parse_first_fact(r#"{"facts":[]}"#).is_none());
-        assert!(parse_first_fact("не json вообще").is_none());
-        // Present but empty text → not a fact.
-        assert!(parse_first_fact(r#"{"facts":[{"entity":"x"}]}"#).is_none());
+    fn parse_facts_rejects_empty_and_garbage() {
+        assert!(parse_facts(r#"{"facts":[]}"#).is_empty());
+        assert!(parse_facts("не json вообще").is_empty());
+        // Present but empty text → dropped.
+        assert!(parse_facts(r#"{"facts":[{"entity":"x"}]}"#).is_empty());
     }
 }

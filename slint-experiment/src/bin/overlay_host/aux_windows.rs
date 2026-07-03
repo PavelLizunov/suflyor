@@ -1521,7 +1521,7 @@ fn wire_transcript_actions(
         win.on_save_marked(move || {
             let Some(w) = weak.upgrade() else { return };
             if w.get_marked_count() == 1 {
-                super::tile_copy::insert_approved_note(w.get_capture_text().as_str(), true);
+                super::tile_copy::insert_approved_note(w.get_capture_text().as_str());
             } else {
                 let mut joined = String::new();
                 for j in 0..m.row_count() {
@@ -1538,7 +1538,7 @@ fn wire_transcript_actions(
                         }
                     }
                 }
-                super::tile_copy::insert_approved_note(&joined, false);
+                super::tile_copy::insert_approved_note(&joined);
             }
             clear_transcript_marks(&m);
             w.set_marked_count(0);
@@ -1589,9 +1589,9 @@ fn wire_transcript_actions(
         let weak = win.as_weak();
         win.on_save_capture(move || {
             let Some(w) = weak.upgrade() else { return };
-            // A selected transcript span is raw STT → normalize it (single fact), like the
-            // single-⭐ line. The multi-⭐ join stays verbatim (entity-grouping is M3).
-            super::tile_copy::insert_approved_note(w.get_capture_text().as_str(), true);
+            // Every save condenses (feature A): a selected span, a joined multi-⭐, and a single
+            // starred line all go through the same AI condense on the background worker.
+            super::tile_copy::insert_approved_note(w.get_capture_text().as_str());
             w.set_capture_pending(false);
             w.set_capture_text(slint::SharedString::default());
         });
