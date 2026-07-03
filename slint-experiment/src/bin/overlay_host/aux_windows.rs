@@ -1447,6 +1447,20 @@ fn copy_to_clipboard_and_flash(w: &TranscriptWindow, text: &str) {
 /// is read back at copy time. Re-wired on EVERY open (fresh model + utterances)
 /// so a reused window always acts on the session currently shown. Copy formats
 /// via the pure `tile_copy::format_transcript_for_copy` and is purely local.
+///
+/// Un-mark every transcript line (shared by save-marked + clear-marks + the
+/// selection-capture, which keep the ⭐-marks and a text selection mutually exclusive).
+fn clear_transcript_marks(m: &VecModel<TranscriptLine>) {
+    for j in 0..m.row_count() {
+        if let Some(mut r) = m.row_data(j) {
+            if r.marked {
+                r.marked = false;
+                m.set_row_data(j, r);
+            }
+        }
+    }
+}
+
 fn wire_transcript_actions(
     win: &TranscriptWindow,
     model: &Rc<VecModel<TranscriptLine>>,
@@ -1458,21 +1472,94 @@ fn wire_transcript_actions(
     // flash (the fresh model already starts all-unchecked).
     win.set_all_selected(false);
     win.set_copied(false);
-    // A2 — reset the capture editor too (the window is reused across sessions).
-    win.set_capturing_line_index(-1);
+    // G2b — reset the ⭐-mark editor state (the window is reused across sessions; the
+    // fresh model already starts all-unmarked).
+    win.set_marked_count(0);
+    win.set_capture_pending(false);
+    win.set_capture_text(slint::SharedString::default());
+    win.set_capture_line_index(-1);
     let utts_owned: Vec<Utterance> = utts.to_vec();
 
-    // A2 (ТЗ 2026-07-02) — «⭐ В память»: persist the (edited) captured line as an
-    // approved memory note (the .slint seeds capture-text from the row's ⭐ and
-    // closes the editor on Save; empty = no-op).
-    win.on_add_to_memory(move |text| {
-        super::tile_copy::insert_approved_note(&text);
-    });
+    // G2b (2026-07-03) — ⭐ MULTI-mark → save, mirroring the tiles: toggle a line's mark,
+    // recompute the count, seed the edit buffer when EXACTLY one is marked (trim-before-save).
+    {
+        let m = model.clone();
+        let weak = win.as_weak();
+        win.on_toggle_line_marked(move |idx| {
+            let Some(w) = weak.upgrade() else { return };
+            let i = idx.max(0) as usize;
+            let Some(mut row) = m.row_data(i) else { return };
+            row.marked = !row.marked;
+            m.set_row_data(i, row);
+            let mut count = 0_i32;
+            let mut single_idx = -1_i32;
+            let mut single = slint::SharedString::default();
+            for j in 0..m.row_count() {
+                if let Some(r) = m.row_data(j) {
+                    if r.marked {
+                        count += 1;
+                        single_idx = i32::try_from(j).unwrap_or(-1);
+                        single = r.text.clone();
+                    }
+                }
+            }
+            w.set_marked_count(count);
+            w.set_capture_pending(false); // marking cancels a pending text selection
+                                          // Re-seed the edit buffer ONLY when the SOLE-marked line changes, so an
+                                          // in-progress edit survives marking/unmarking OTHER lines (tile review I-1).
+            if count == 1 && single_idx != w.get_capture_line_index() {
+                w.set_capture_text(single);
+                w.set_capture_line_index(single_idx);
+            }
+        });
+    }
+    // «В память (N)»: join every marked line into ONE approved note (N==1 uses the edited
+    // buffer), then clear the marks. Same coherent-memory join as the tiles (G2a).
+    {
+        let m = model.clone();
+        let weak = win.as_weak();
+        win.on_save_marked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            if w.get_marked_count() == 1 {
+                super::tile_copy::insert_approved_note(w.get_capture_text().as_str());
+            } else {
+                let mut joined = String::new();
+                for j in 0..m.row_count() {
+                    if let Some(r) = m.row_data(j) {
+                        if r.marked {
+                            let line = r.text.as_str().trim();
+                            if line.is_empty() {
+                                continue;
+                            }
+                            if !joined.is_empty() {
+                                joined.push_str("; ");
+                            }
+                            joined.push_str(line);
+                        }
+                    }
+                }
+                super::tile_copy::insert_approved_note(&joined);
+            }
+            clear_transcript_marks(&m);
+            w.set_marked_count(0);
+            w.set_capture_line_index(-1);
+            w.set_capture_text(slint::SharedString::default());
+        });
+    }
+    {
+        let m = model.clone();
+        let weak = win.as_weak();
+        win.on_clear_marks(move || {
+            let Some(w) = weak.upgrade() else { return };
+            clear_transcript_marks(&m);
+            w.set_marked_count(0);
+            w.set_capture_line_index(-1);
+            w.set_capture_text(slint::SharedString::default());
+        });
+    }
 
-    // ТЗ 2026-07-03 — mouse-selection capture: slice the displayed line's text by the
-    // selection's byte offsets (ordered + char-boundary-clamped for Cyrillic) and open
-    // the SAME editor the per-line ⭐ uses (capture-text + capturing-line-index → Save
-    // routes through on_add_to_memory above).
+    // Right-click text-selection capture (P2): slice the displayed line by the selection's
+    // byte offsets → the SAME editor via `capture-pending` (mirrors the tile selection path).
     {
         let m = model.clone();
         let weak = win.as_weak();
@@ -1490,10 +1577,29 @@ fn wire_transcript_actions(
             if span.is_empty() {
                 return;
             }
+            // Selection + ⭐-marks share the one editor — keep them mutually exclusive.
+            clear_transcript_marks(&m);
+            w.set_marked_count(0);
+            w.set_capture_line_index(-1);
             w.set_capture_text(span.into());
-            // Store the clamped, non-negative index (matches the stricter tile handler)
-            // so the editor can never open under a bogus negative `capturing-line-index`.
-            w.set_capturing_line_index(i as i32);
+            w.set_capture_pending(true);
+        });
+    }
+    {
+        let weak = win.as_weak();
+        win.on_save_capture(move || {
+            let Some(w) = weak.upgrade() else { return };
+            super::tile_copy::insert_approved_note(w.get_capture_text().as_str());
+            w.set_capture_pending(false);
+            w.set_capture_text(slint::SharedString::default());
+        });
+    }
+    {
+        let weak = win.as_weak();
+        win.on_cancel_capture(move || {
+            let Some(w) = weak.upgrade() else { return };
+            w.set_capture_pending(false);
+            w.set_capture_text(slint::SharedString::default());
         });
     }
 
@@ -1731,6 +1837,7 @@ pub(crate) fn open_transcript(
                 }),
                 text: SharedString::from(u.text.split_whitespace().collect::<Vec<_>>().join(" ")),
                 checked: false,
+                marked: false,
                 start_ms: off.unwrap_or(0) as i32,
             }
         })

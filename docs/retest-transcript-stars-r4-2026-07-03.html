@@ -1,0 +1,105 @@
+<meta charset="utf-8">
+<title>Суфлёр — ретест r4: ⭐-мультивыбор в стенограмме (2026-07-03)</title>
+<style>
+  :root{--bg:#12151c;--panel:#1a1f29;--line:#2c3444;--txt:#e6eaf0;--muted:#9aa4b6;--accent:#5aa2ff;--ok:#3ecb8f;--bad:#ff6b6b;--skip:#c9a24a}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif;padding:28px 18px 90px}
+  .wrap{max-width:900px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 6px}
+  .sub{color:var(--muted);margin:0 0 18px}
+  .box{background:#16202e;border:1px solid #28405e;border-radius:10px;padding:14px 16px;margin:0 0 16px}
+  .box h3{margin:0 0 6px;font-size:14px;color:var(--accent)}
+  .box ul{margin:6px 0 0;padding-left:20px;color:var(--muted)}
+  .item{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0 0 10px}
+  .item .q{font-weight:600;margin:0 0 4px}
+  .item .do,.item .exp{color:var(--muted);font-size:13px;margin:2px 0}
+  .item .exp b{color:var(--txt);font-weight:600}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg label{padding:6px 12px;cursor:pointer;font-size:13px;user-select:none;border-right:1px solid var(--line)}
+  .seg label:last-child{border-right:0}
+  .seg input{display:none}
+  .seg label.ok.on{background:var(--ok);color:#06231a;font-weight:700}
+  .seg label.bad.on{background:var(--bad);color:#2a0808;font-weight:700}
+  .seg label.skip.on{background:var(--skip);color:#241b06;font-weight:700}
+  .item textarea{width:100%;margin-top:8px;background:#0e1119;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px;font:13px/1.45 inherit;resize:vertical;min-height:34px}
+  .item.done-ok{border-color:#2c5c47}.item.done-bad{border-color:#5c2c2c}
+  .bar{position:fixed;left:0;right:0;bottom:0;background:#0e1119ee;border-top:1px solid var(--line);padding:12px 18px;display:flex;gap:12px;align-items:center;backdrop-filter:blur(6px)}
+  .bar .stat{color:var(--muted);font-size:13px}.bar .stat b{color:var(--txt)}
+  button{background:var(--accent);color:#04122b;border:0;border-radius:8px;padding:9px 16px;font-weight:700;cursor:pointer;font-size:14px}
+  button.ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
+  dialog{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:12px;max-width:760px;width:92%}
+  dialog textarea{width:100%;height:300px;background:#0e1119;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:10px;font:12px/1.4 ui-monospace,Consolas,monospace}
+  dialog .row{display:flex;gap:10px;justify-content:flex-end;margin-top:10px}
+  kbd{background:#252c3a;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 6px;font-size:12px}
+</style>
+<div class="wrap">
+  <h1>Суфлёр — ретест r4: ⭐-мультивыбор в стенограмме</h1>
+  <p class="sub">Стенограмма: ⭐ теперь работает как в тайлах — накапливай несколько → одна запись. Открой F7 → 📄. Внизу «Экспорт».</p>
+  <div class="box">
+    <h3>Что изменилось</h3>
+    <ul>
+      <li>⭐ у строки стенограммы — теперь <b>переключатель-мультивыбор</b> (как в тайлах), а не одиночный захват. Отметь несколько → одна кнопка «В память (N)» → одна склеенная запись.</li>
+      <li>Убрал прежнюю кнопку «Выбранное в память» из строки «выделить все» (её заменил ⭐-мультивыбор). Чекбоксы слева остались только для «Копировать выбранное».</li>
+    </ul>
+  </div>
+
+  <div class="item" data-id="T1">
+    <div class="q">⭐-мультивыбор → одна запись</div>
+    <div class="do">Кликни ⭐ на <b>нескольких</b> строках. Звёзды должны подсветиться (акцент). Внизу — «В память (N)». Нажми.</div>
+    <div class="exp">Ожидается: звёзды накапливаются (N растёт); Настройки → Память → <b>ОДНА</b> склеенная запись из отмеченных строк.</div>
+  </div>
+  <div class="item" data-id="T2">
+    <div class="q">Снять звезду (toggle)</div>
+    <div class="do">Кликни отмеченную ⭐ ещё раз.</div>
+    <div class="exp">Ожидается: снимается, N уменьшается.</div>
+  </div>
+  <div class="item" data-id="T3">
+    <div class="q">Одна ⭐ — с правкой</div>
+    <div class="do">Отметь ОДНУ строку ⭐ → внизу поле с текстом → поправь → «В память».</div>
+    <div class="exp">Ожидается: одна запись (с твоей правкой).</div>
+  </div>
+  <div class="item" data-id="T4">
+    <div class="q">Выделение мышью → в память (не сломалось)</div>
+    <div class="do">Выдели часть текста реплики мышью → правый клик → «Выделенное в память» → редактор → сохрани.</div>
+    <div class="exp">Ожидается: работает; при этом ⭐-отметки сбрасываются (общий редактор).</div>
+  </div>
+  <div class="item" data-id="T5">
+    <div class="q">Копирование чекбоксами (регрессия)</div>
+    <div class="do">Отметь чекбоксы <b>слева</b> у пары строк → «Копировать выбранное» → вставь куда-нибудь.</div>
+    <div class="exp">Ожидается: копирование в буфер работает как раньше (чекбоксы ≠ звёзды, независимы).</div>
+  </div>
+
+  <div class="box" data-id="FREE" style="background:var(--panel);border-color:var(--line)">
+    <h3 style="color:var(--accent)">Коммент</h3>
+    <textarea id="freeNote" placeholder="замечания…" style="width:100%;background:#0e1119;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px;min-height:54px;font:13px/1.45 inherit"></textarea>
+  </div>
+</div>
+<div class="bar"><span class="stat" id="stat"></span><span style="flex:1"></span><button class="ghost" id="resetBtn">Сброс</button><button id="exportBtn">Экспорт результатов</button></div>
+<dialog id="dlg"><h3 style="margin:0 0 8px">Результаты — скопируй и пришли</h3><textarea id="out" readonly></textarea><div class="row"><button id="copyBtn">Копировать</button><button class="ghost" id="closeBtn">Закрыть</button></div></dialog>
+<script>
+const KEY="suflyor-retest-r4-2026-07-03";
+const items=[...document.querySelectorAll(".item")];
+for(const it of items){const id=it.dataset.id;const seg=document.createElement("div");seg.className="controls";
+  seg.innerHTML=`<div class="seg"><label class="ok" data-v="ok"><input type="radio" name="${id}" value="ok">✅ ОК</label><label class="bad" data-v="bad"><input type="radio" name="${id}" value="bad">❌ Не ок</label><label class="skip" data-v="skip"><input type="radio" name="${id}" value="skip">⏭ Пропустить</label></div>`;
+  const ta=document.createElement("textarea");ta.placeholder="коммент";ta.dataset.c=id;it.appendChild(seg);it.appendChild(ta);}
+function save(){const d={free:document.getElementById("freeNote").value,items:{}};
+  for(const it of items){const id=it.dataset.id;const r=it.querySelector(`input[name="${id}"]:checked`);d.items[id]={v:r?r.value:"",c:it.querySelector(`textarea[data-c="${id}"]`).value};}
+  localStorage.setItem(KEY,JSON.stringify(d));render();}
+function paint(it,v){it.classList.toggle("done-ok",v==="ok");it.classList.toggle("done-bad",v==="bad");it.querySelectorAll(".seg label").forEach(l=>l.classList.toggle("on",l.dataset.v===v));}
+function render(){let ok=0,bad=0,todo=0;for(const it of items){const id=it.dataset.id;const r=it.querySelector(`input[name="${id}"]:checked`);const v=r?r.value:"";paint(it,v);if(v==="ok")ok++;else if(v==="bad")bad++;else todo++;}
+  document.getElementById("stat").innerHTML=`<b>${ok}</b> ОК · <b style="color:var(--bad)">${bad}</b> не ок · <b>${todo}</b> осталось из ${items.length}`;}
+function load(){const raw=localStorage.getItem(KEY);if(raw){try{const d=JSON.parse(raw);document.getElementById("freeNote").value=d.free||"";for(const it of items){const id=it.dataset.id;const s=d.items?.[id];if(!s)continue;if(s.v){const inp=it.querySelector(`input[name="${id}"][value="${s.v}"]`);if(inp)inp.checked=true;}it.querySelector(`textarea[data-c="${id}"]`).value=s.c||"";}}catch(e){}}render();}
+document.addEventListener("change",e=>{if(e.target.matches("input[type=radio]"))save();});
+document.addEventListener("input",e=>{if(e.target.tagName==="TEXTAREA")save();});
+function report(){const L=["СУФЛЁР — ретест r4: ⭐-мультивыбор в стенограмме (2026-07-03)",""];const t={};document.querySelectorAll(".item").forEach(it=>t[it.dataset.id]=it.querySelector(".q").textContent);
+  const mk={ok:"[OK]  ",bad:"[FAIL]",skip:"[skip]","":"[ -- ]"};let ok=0,bad=0;
+  for(const it of items){const id=it.dataset.id;const r=it.querySelector(`input[name="${id}"]:checked`);const v=r?r.value:"";const c=it.querySelector(`textarea[data-c="${id}"]`).value.trim();if(v==="ok")ok++;if(v==="bad")bad++;L.push(`${mk[v]} ${id}. ${t[id]}`);if(c)L.push(`        ↳ ${c}`);}
+  L.push("",`ИТОГ: ${ok} OK, ${bad} FAIL из ${items.length}`);const f=document.getElementById("freeNote").value.trim();if(f){L.push("","КОММЕНТ:",f);}return L.join("\n");}
+const dlg=document.getElementById("dlg");
+document.getElementById("exportBtn").onclick=()=>{document.getElementById("out").value=report();dlg.showModal();};
+document.getElementById("closeBtn").onclick=()=>dlg.close();
+document.getElementById("copyBtn").onclick=()=>{const t=document.getElementById("out");t.select();navigator.clipboard?.writeText(t.value).then(()=>{document.getElementById("copyBtn").textContent="Скопировано ✓";setTimeout(()=>document.getElementById("copyBtn").textContent="Копировать",1500);}).catch(()=>{});};
+document.getElementById("resetBtn").onclick=()=>{if(confirm("Сбросить?")){localStorage.removeItem(KEY);location.reload();}};
+load();
+</script>

@@ -18,7 +18,8 @@ export struct TranscriptLine {
     offset-label: string, // "02:15" session-relative, or "" if start unknown
     speaker: string,      // "Система" | "Микрофон"
     text: string,
-    checked: bool,        // ТЗ1 — per-line selection for "Copy selected"
+    checked: bool,        // ТЗ1 — per-line selection for "Copy selected" (clipboard)
+    marked: bool,         // G2b (2026-07-03) — per-line ⭐ multi-mark for «В память (N)»
     start-ms: int,        // ТЗ2b — session-relative ms, for click-to-seek + active line
 }
 
@@ -94,10 +95,18 @@ export component TranscriptWindow inherits Window {
     in-out property <float> progress: 0;
     in-out property <string> time-text: "";
     in-out property <int> active-line: -1;
-    // A2 (ТЗ 2026-07-02) — «⭐ В память»: the line index whose capture editor is
-    // open (-1 = none) + the shared edit buffer. One line at a time.
-    in-out property <int> capturing-line-index: -1;
+    // G2b (2026-07-03) — «⭐ В память», mirrors the tiles: the per-line ⭐ toggles the
+    // line's `marked`; one bottom «В память (N)» bar joins the marked lines into ONE
+    // record. `capture-text` = the edit buffer (shown at N==1, or for a pending
+    // selection); `capture-pending` = a right-click text-selection capture (independent
+    // of the ⭐ marks, same split as the tiles).
+    in-out property <int> marked-count: 0;
     in-out property <string> capture-text: "";
+    in-out property <bool> capture-pending: false;
+    // Which single line seeded `capture-text` (-1 = none). Re-seed the edit buffer ONLY
+    // when the SOLE-marked line changes, so an in-progress edit survives marking/unmarking
+    // OTHER lines (mirrors the tile's review-I-1 guard).
+    in-out property <int> capture-line-index: -1;
 
     callback toggle-play();
     callback play-line(int);
@@ -109,11 +118,17 @@ export component TranscriptWindow inherits Window {
     callback close-requested();
     callback drag-start-requested();
     callback drag-moved();
-    // A2 — save the (edited) captured line as an approved memory note.
-    callback add-to-memory(string);
+    // G2b (2026-07-03) — ⭐ multi-mark → save, mirroring the tiles: toggle a line's mark;
+    // «В память (N)» joins ALL marked lines into ONE note; clear-marks cancels.
+    callback toggle-line-marked(int);
+    callback save-marked();
+    callback clear-marks();
+    // Right-click text-selection capture → the same editor (save / cancel).
+    callback save-capture();
+    callback cancel-capture();
     // ТЗ 2026-07-03 — mouse-selection capture: (line-index, anchor-byte-offset,
     // cursor-byte-offset). Rust slices line.text by the selection and opens the same
-    // editor (capture-text + capturing-line-index) the per-line ⭐ uses.
+    // editor (capture-text + capture-pending) that the ⭐-mark flow uses.
     callback capture-line-selection(int, int, int);
 
     forward-focus: fs;
@@ -349,9 +364,10 @@ export component TranscriptWindow inherits Window {
                                     wrap: word-wrap;
                                     capture(a, c) => { root.capture-line-selection(i, a, c); }
                                 }
-                                // A2 — ⭐ capture THIS line into memory. Its own
-                                // TouchArea intercepts the click, so it doesn't also
-                                // trigger the row's play-line (like the Tick above).
+                                // G2b — ⭐ MULTI-mark this line (toggle), like the tiles.
+                                // Its own TouchArea intercepts the click so it doesn't also
+                                // trigger the row's play-line (like the Tick above). Mark
+                                // several → one «В память (N)» bar below.
                                 Rectangle {
                                     width: 22px;
                                     height: 16px;
@@ -359,16 +375,15 @@ export component TranscriptWindow inherits Window {
                                     background: star-ta.has-hover ? Theme.border-strong : transparent;
                                     star-ta := TouchArea {
                                         clicked => {
-                                            root.capture-text = line.text;
-                                            root.capturing-line-index = i;
+                                            root.toggle-line-marked(i);
                                         }
                                     }
-                                    // Muted outline star (SVG), matching the tiles' StarMark —
-                                    // the U+2B50 emoji rendered as a too-bright solid yellow.
+                                    // Muted outline star (SVG), same as the tiles' StarMark:
+                                    // accent + full opacity when marked; muted + dim at rest.
                                     Image {
                                         source: @image-url("../assets/icons/star.svg");
-                                        colorize: star-ta.has-hover ? Theme.accent : Theme.text-muted;
-                                        opacity: star-ta.has-hover ? 1.0 : 0.5;
+                                        colorize: line.marked ? Theme.accent : (star-ta.has-hover ? Theme.accent : Theme.text-muted);
+                                        opacity: line.marked ? 1.0 : (star-ta.has-hover ? 1.0 : 0.5);
                                         width: 13px;
                                         height: 13px;
                                         image-fit: contain;
@@ -381,31 +396,38 @@ export component TranscriptWindow inherits Window {
                     }
                 }
 
-                // A2 (ТЗ 2026-07-02) — «⭐ В память»: one editor for the window,
-                // seeded by the ⭐ on each row. Edit/trim the captured line → Save
-                // (approved memory note) / Cancel.
-                if root.capturing-line-index != -1 : HorizontalLayout {
+                // G2b — «В память» bar (mirrors the tiles): shows when ≥1 line is
+                // ⭐-marked OR a text selection is pending. N==1 / a selection exposes the
+                // edit buffer to trim before save; N>1 joins the marked lines into ONE
+                // record. «В память (N)» = save-marked; a pending selection = save-capture.
+                if root.marked-count >= 1 || root.capture-pending : VerticalLayout {
                     spacing: Metrics.space-sm;
-                    Text {
-                        text: @tr("Add to memory:");
-                        font-size: Metrics.font-caption;
-                        color: Theme.text-muted;
-                        vertical-alignment: center;
-                    }
-                    LineEdit {
+                    if root.marked-count == 1 || root.capture-pending : LineEdit {
                         text <=> root.capture-text;
-                        horizontal-stretch: 1;
                     }
-                    Button {
-                        text: @tr("Save");
-                        clicked => {
-                            root.add-to-memory(root.capture-text);
-                            root.capturing-line-index = -1;
+                    HorizontalLayout {
+                        spacing: Metrics.space-sm;
+                        Rectangle { horizontal-stretch: 1; }
+                        Button {
+                            text: root.capture-pending ? @tr("To memory") : @tr("To memory ({})", root.marked-count);
+                            clicked => {
+                                if (root.capture-pending) {
+                                    root.save-capture();
+                                } else {
+                                    root.save-marked();
+                                }
+                            }
                         }
-                    }
-                    Button {
-                        text: @tr("Cancel");
-                        clicked => { root.capturing-line-index = -1; }
+                        Button {
+                            text: @tr("Cancel");
+                            clicked => {
+                                if (root.capture-pending) {
+                                    root.cancel-capture();
+                                } else {
+                                    root.clear-marks();
+                                }
+                            }
+                        }
                     }
                 }
 
