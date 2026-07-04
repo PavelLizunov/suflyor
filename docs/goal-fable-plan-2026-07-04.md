@@ -81,6 +81,19 @@ Owner ran the checklist: 6 OK, 2 FAIL. P1/P2/P4-safety/P5-shift+copy/D3 all ✅.
 
 Status:
 - **R1 + R1.2** ✅ committed `daa36cc` — gate green, review SOUND (overflow confirmed non-recurring).
+## ROUND 3 — fable redesign for garbled STT (owner: «нужна помощь fable», 2026-07-04)
+Round-2 re-retest still FAILed RM1: a rambling multi-sentence garbled line stored RAW. Diagnosed via
+DB (post-fix 'heuristic'==source) + fable consult. Root cause (fable): P4 made a weak model do a
+VERBATIM COPY of garbage → it autocorrects → quote never anchors → Ok(None) → raw. Fix (`f448488` +
+`f9ba27a`): **M1′ segment→select→validate** — CODE segments into clauses, model SELECTS a clause by
+index + rewrites, `validate_rewrite` grounds it (content words rooted + IN ORDER → no fabrication/
+reorder/recombination; safety-review order-check closed within-clause recombination). Fallback stores
+the BEST clause (`heuristic_condense`), not the raw line. **Fused-token un-merge** (`split_fused_token`
+in heuristic_clean): «LLМоткрытых»→«LLM открытых» (mixed-script only; pure-script/negations/numbers
+untouched → safe). **VALIDATED LIVE on gemma-4-12B :8080**: owner's exact line → «использования
+открытых моделей» (clean, validator-accepted). 14 normalize tests (incl. owner's verbatim line e2e).
+Independent opus safety review: SOUND. Rebuilt + relaunching for owner's final RM1 re-test. NOT released.
+
 ## ROUND 2 RETEST (owner, 2026-07-04) — 4 OK / 2 FAIL of 7
 - ✅ RM3 (AI-off), RS1 (mode back), RT1 (transcript shift), RR1 (regression). M1 confirmed WORKING on
   normal lines (screenshot: «будем двигаться в этом направлении», «Сбер справился» cleaned). 📌 = glyph.

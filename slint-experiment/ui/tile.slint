@@ -590,6 +590,7 @@ export component TileWindow inherits Window {
                 vertical-stretch: 1;
                 horizontal-stretch: 1;
                 viewport-width: self.width;
+                min-height: 0px; // RS2: scroll inside the fixed tile, never grow the window (see below)
                 VerticalLayout {
                     spacing: 4px;
                     // A2 fix (retest r2): right inset so the per-block ⭐ gutter clears the
@@ -771,6 +772,12 @@ export component TileWindow inherits Window {
                 vertical-stretch: 1;
                 horizontal-stretch: 1;
                 viewport-width: self.width;
+                // RS2 (retest): min-height 0 so the tall joined field SCROLLS inside the fixed-height
+                // tile instead of forcing the window taller — which pushed «В память»/«Отмена» (and
+                // «Продолжить диалог») off the bottom until the user deleted text. The window sizes to
+                // its content's min-height (no window max-height); without this the field's full height
+                // propagates up as the window min. vertical-stretch then gives it the leftover space.
+                min-height: 0px;
                 VerticalLayout {
                     padding-right: 14px;
                     // Proportional + word-wrap: ONE mixed prose+code buffer, so code loses
