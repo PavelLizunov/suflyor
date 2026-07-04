@@ -2823,14 +2823,18 @@ export component SettingsWindow inherits Window {
                                     // M1-b-2 observability — normalization state + the raw source,
                                     // so it's visible the AI tidied the fact. Hidden for verbatim
                                     // (none) captures.
+                                    // P3: 'pending' can mean the AI is OFFLINE and the row is queued
+                                    // for the next sweep — «ждёт ИИ» is honest for what the user sees
+                                    // (the active-condense case resolves in seconds, before they look).
                                     if m.norm-status == "pending" : Text {
-                                        text: @tr("normalizing…");
+                                        text: @tr("waiting for AI");
                                         font-size: 10px;
                                         color: Theme.text-muted;
                                     }
-                                    // Heuristic only (AI didn't run / was rejected): the text ≈ the
-                                    // raw, so DON'T show "· was:" — it would just duplicate the fact.
-                                    if m.norm-status == "heuristic" : Text {
+                                    // Heuristic only (AI declined / not configured): show «почищено»
+                                    // ONLY if it actually changed the text — else the badge would lie
+                                    // about a no-op clean.
+                                    if m.norm-status == "heuristic" && m.text != m.source-text : Text {
                                         text: @tr("cleaned");
                                         font-size: 10px;
                                         color: Theme.text-muted;

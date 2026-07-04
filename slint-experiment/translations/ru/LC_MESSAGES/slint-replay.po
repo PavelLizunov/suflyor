@@ -822,11 +822,8 @@ msgstr "Копировать выделенное"
 msgid "Add selection to memory"
 msgstr "Выделенное в память"
 
-msgid "Select text"
-msgstr "Выделить текст"
-
-msgid "Rich view"
-msgstr "Обычный вид"
+msgid "Copy"
+msgstr "Копировать"
 
 msgid "local model — e.g. qwen2.5:7b-instruct"
 msgstr "локальная модель — напр. qwen2.5:7b-instruct"
@@ -1426,8 +1423,8 @@ msgstr "Очистить одобренную память"
 msgid "Tap again — clear approved memory"
 msgstr "Ещё раз — очистить одобренную память"
 
-msgid "normalizing…"
-msgstr "обрабатывается…"
+msgid "waiting for AI"
+msgstr "ждёт ИИ"
 
 msgid "cleaned by AI"
 msgstr "подчищено ИИ"

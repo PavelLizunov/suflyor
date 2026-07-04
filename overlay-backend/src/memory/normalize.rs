@@ -11,8 +11,10 @@
 //!   («10.0.0.11» ≠ «10.0.0.116»), or recombine distant words into a false claim. It IS a piece of
 //!   the source. Residual (accept): a semantic inversion the source itself contains is copied as-is.
 //! - [`normalize_fact`] — async orchestrator: heuristic-clean → AI quotes (no-think JSON) → locate
-//!   each quote → join ≤3. Returns the located facts, or `None` so the caller keeps the heuristic
-//!   text (never a hallucinated fact).
+//!   each quote → join ≤3. Returns `Ok(Some)` (located facts), `Ok(None)` (AI replied but nothing
+//!   located, OR failed PERMANENTLY (4xx bad config) — either way TERMINAL, keep heuristic text) or
+//!   `Err` (a TRANSIENT AI failure → offline/timeout/5xx, RETRYABLE — the caller leaves the row
+//!   `'pending'` for `sweep_pending` to retry). Never a hallucinated fact.
 //!
 //! The pure pieces are unit-tested like `key_terms`; `normalize_fact`'s one AI call is not (its JSON
 //! parse `parse_facts` is).
@@ -133,18 +135,20 @@ entity — имя/система/человек ИЗ ТЕКСТА, или \"\" �
 /// Async condense (M1-b-2, feature A / P4): heuristic-clean the raw span, ask the AI for 1–3 VERBATIM
 /// quotes (no-think JSON via [`ai::complete`]), and [`locate_span`] each against the cleaned source —
 /// keeping the exact SOURCE SLICE (dropping any quote that isn't a contiguous fragment). Joins ≤3 with
-/// «; ». Returns the located fact(s), or `None` on any AI error / parse failure / nothing-located — the
-/// caller then keeps the heuristic-cleaned text, never a hallucinated fact. A long tile answer → a few
-/// short quoted facts; a messy STT line → one clean quoted fact.
+/// «; ». Three outcomes (P3 offline-reliability): `Ok(Some)` located fact(s); `Ok(None)` TERMINAL —
+/// the AI replied but nothing parsed/located, OR failed PERMANENTLY (4xx bad bearer/model) so a retry
+/// is pointless (caller keeps the heuristic text, marks `'heuristic'`); `Err` a TRANSIENT AI failure
+/// (offline/timeout/5xx — RETRYABLE, caller leaves the row `'pending'`). Never a hallucinated fact.
+/// A long tile answer → a few short quoted facts; a messy STT line → one clean quote.
 pub async fn normalize_fact(
     raw: &str,
     base_url: &str,
     bearer: &str,
     model: &str,
-) -> Option<NormalizedFact> {
+) -> anyhow::Result<Option<NormalizedFact>> {
     let cleaned = heuristic_clean(raw);
     if cleaned.trim().is_empty() {
-        return None;
+        return Ok(None);
     }
     let messages = vec![
         ChatMessage {
@@ -156,9 +160,18 @@ pub async fn normalize_fact(
             content: MessageContent::Text(cleaned.clone()),
         },
     ];
-    let resp = ai::complete(base_url, bearer, model, messages, 500)
-        .await
-        .ok()?;
+    // P3 pivot: split the AI-call failure by whether a RETRY could ever help.
+    // - TRANSIENT (offline / timeout / 5xx / rate-limit) → Err: the caller leaves the row 'pending'
+    //   so a later sweep retries once the AI is back — the whole offline-reliability fix (D1).
+    // - PERMANENT (4xx: bad bearer/model, oversized req) → Ok(None): give up cleanly (keep the
+    //   heuristic text, mark terminal), else the row would stick 'pending' FOREVER and be re-hammered
+    //   on every sweep trigger for an error retry can't fix — and a permanent-error row at the head of
+    //   the queue would break the whole sweep, starving the retryable rows behind it.
+    let resp = match ai::complete(base_url, bearer, model, messages, 500).await {
+        Ok(r) => r,
+        Err(e) if ai::is_permanent_ai_error(&format!("{e:#}")) => return Ok(None),
+        Err(e) => return Err(e),
+    };
     // Each fact's text must be a VERBATIM CONTIGUOUS quote of the (cleaned) source: locate_span
     // returns the exact source slice or drops the fact — we store slices, never the model's text.
     let facts: Vec<(String, Option<String>)> = parse_facts(&resp)
@@ -173,7 +186,7 @@ pub async fn normalize_fact(
         .take(3)
         .collect();
     if facts.is_empty() {
-        return None;
+        return Ok(None); // AI replied but nothing located → terminal 'heuristic', not a retry.
     }
     let entity = facts.iter().find_map(|(_, e)| e.clone());
     // Join with "; " (not "\n") so a multi-fact record stays single-line-editable in the
@@ -183,7 +196,7 @@ pub async fn normalize_fact(
         .map(|(t, _)| t.as_str())
         .collect::<Vec<_>>()
         .join("; ");
-    Some(NormalizedFact { text, entity })
+    Ok(Some(NormalizedFact { text, entity }))
 }
 
 /// Parse ALL facts from a model reply that SHOULD be `{"facts":[{entity,text},…]}` but may be

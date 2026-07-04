@@ -871,6 +871,15 @@ fn main() -> Result<(), slint::PlatformError> {
     // GPU / DirectML runtime is available.
     overlay_backend::stt::configure_gigaam_accelerator(cfg.read().stt_gigaam_gpu);
 
+    // P3 offline-reliability: retry any memory row left 'pending' by a prior session where the AI was
+    // offline at save time. ~15s after boot (lets the network/local-AI settle); provider-agnostic —
+    // sweep_pending resolves the configured endpoint (local OR cloud) and no-ops if none. Its own
+    // plain thread (independent of the local-only warm-up below); sweep_pending spawns the worker.
+    std::thread::spawn(|| {
+        std::thread::sleep(std::time::Duration::from_secs(15));
+        tile_copy::sweep_pending();
+    });
+
     // V0.8.4 — warm up LOCAL models shortly after boot so the user's FIRST real
     // request isn't penalised by cold-start (GigaAM lazy-loads its model on the
     // first transcribe; an llama-server's first inference fills caches). Fire-and-

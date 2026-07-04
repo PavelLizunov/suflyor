@@ -188,6 +188,11 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
 /// into the tab's models. Best-effort: a catalog-open failure leaves the lists
 /// empty rather than crashing.
 pub(crate) fn reload_memory(win: &SettingsWindow) {
+    // P3: opening / refreshing the Память tab retries any row stuck 'pending' (AI was offline at
+    // save). Re-entrancy-guarded + a no-op when nothing's pending, so calling it from every reload
+    // (approve/reject/edit too) is cheap. ponytail: swept rows show 'llm' on the NEXT reload, not
+    // this one — fine, the boot sweep already caught prior-session pendings.
+    super::tile_copy::sweep_pending();
     let (cands, items) = match open_default_store() {
         Ok(store) => (
             store

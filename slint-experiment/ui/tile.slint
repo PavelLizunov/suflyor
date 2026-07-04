@@ -25,10 +25,19 @@ export struct MarkdownBlock {
 // opacity when marked; muted + dim (0.35) at rest; full on hover. Click toggles.
 component StarMark inherits Rectangle {
     in property <bool> marked;
-    callback clicked;
+    // P5: carries whether SHIFT was held, for range-marking. `clicked` gives no modifiers, so latch
+    // the shift state on pointer-DOWN and fire it on `clicked` — this keeps proper click semantics
+    // (fires only on down+up BOTH in-area; a drag-release-outside or a cancel does NOT toggle).
+    callback clicked(bool /* shift */);
     width: 20px;
     ta := TouchArea {
-        clicked => { root.clicked(); }
+        property <bool> shift-latched;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down) {
+                self.shift-latched = e.modifiers.shift;
+            }
+        }
+        clicked => { root.clicked(self.shift-latched); }
     }
     Image {
         source: @image-url("../assets/icons/star.svg");
@@ -151,14 +160,23 @@ export component TileWindow inherits Window {
     // (Rust-maintained); capture-text = the edit buffer shown only when exactly one is
     // marked (trim-before-save). Each block carries its own `marked`.
     in-out property <int> marked-count: 0;
+    // P5: last plain-clicked block index — the anchor a SHIFT+click range-marks up to. A Slint prop
+    // (not Rust-only state) so `changed blocks` resets it WITH the marks below — a streaming model
+    // swap then can't leave a stale anchor that mis-marks a range on the fresh answer.
+    in-out property <int> mark-anchor: -1;
     in-out property <string> capture-text: "";
     // Which single block `capture-text` was seeded from (-1 = none). Lets an
     // in-progress edit survive marking/un-marking OTHER blocks — Rust re-seeds only
     // when the sole-marked block actually changes (review I-1).
     in-out property <int> capture-block-index: -1;
-    callback toggle-block-marked(int);
+    // P5 (ТЗ 2026-07-03): the bool is whether SHIFT was held. Shift+click range-marks from the
+    // last plain-clicked anchor to this block; a plain click toggles + re-anchors. The range/anchor
+    // logic lives in Rust (it owns the blocks model) — this just forwards the modifier.
+    callback toggle-block-marked(int, bool);
     callback save-marked();
     callback clear-marks();
+    // P5 — «Копировать» on the mark bar: copy every marked block's text to the clipboard (marks stay).
+    callback copy-marked();
     // ТЗ 2026-07-03 — mouse-selection capture: a right-click «Add selection to memory»
     // on any block raises `capture-pending` and seeds `capture-text` with the selected
     // span (Rust slices block.text by the selection's byte offsets) → the bottom editor
@@ -169,17 +187,10 @@ export component TileWindow inherits Window {
     // Save the pending selection (edited `capture-text`) as one approved note; discard it.
     callback save-capture();
     callback cancel-capture();
-    // ТЗ 2026-07-03 (Option A) — «Выделить текст» mode: swaps the per-block body for ONE
-    // SelectableText holding the whole (joined, i16-capped) answer, so text can be dragged /
-    // copied / ⭐-captured ACROSS blocks (per-block TextInputs are separate selection islands
-    // — Slint can't span them). `select-text` is built in Rust from the current blocks.
-    in-out property <bool> select-mode: false;
-    in-out property <string> select-text: "";
-    callback toggle-select-mode();
     // Stale-marker guard: streaming re-renders REPLACE the blocks model on every delta
     // (fresh blocks come with marked=false), so clear the copied-check AND the
     // marked-count on any model swap. A settled answer fires no further set_blocks.
-    changed blocks => { root.copied-block-index = -1; root.marked-count = 0; root.capture-block-index = -1; root.capture-text = ""; root.capture-pending = false; root.select-mode = false; }
+    changed blocks => { root.copied-block-index = -1; root.marked-count = 0; root.mark-anchor = -1; root.capture-block-index = -1; root.capture-text = ""; root.capture-pending = false; }
     // v0.18.6 — «Повторить»: shown on a summary-failure tile that carries a
     // session id. Resumes the summary from the persisted conspect (re-maps only
     // the failed parts, then re-runs the reduce) — see retry_meeting_summary.
@@ -390,15 +401,6 @@ export component TileWindow inherits Window {
                             VerticalLayout {
                                 padding: 4px;
                                 spacing: 2px;
-                                // ТЗ 2026-07-03 (Option A) — toggle whole-answer select mode.
-                                TileMenuRow {
-                                    icon: @image-url("../assets/icons/copy.svg");
-                                    label: root.select-mode ? @tr("Rich view") : @tr("Select text");
-                                    clicked => {
-                                        root.toggle-select-mode();
-                                        overflow-popup.close();
-                                    }
-                                }
                                 if root.can-regenerate: TileMenuRow {
                                     icon: @image-url("../assets/icons/refresh.svg");
                                     label: @tr("Regenerate");
@@ -567,7 +569,7 @@ export component TileWindow inherits Window {
             // viewport-width hint, ScrollView lets content render
             // unconstrained → long Russian paragraphs overflowed the
             // dark fill area (user complaint "текст выходит за края").
-            if !root.select-mode : ScrollView {
+            ScrollView {
                 vertical-stretch: 1;
                 horizontal-stretch: 1;
                 viewport-width: self.width;
@@ -625,7 +627,7 @@ export component TileWindow inherits Window {
                             }
                             StarMark {
                                 marked: block.marked;
-                                clicked => { root.toggle-block-marked(i); }
+                                clicked(shift) => { root.toggle-block-marked(i, shift); }
                             }
                         }
                         // Bullet
@@ -648,7 +650,7 @@ export component TileWindow inherits Window {
                             }
                             StarMark {
                                 marked: block.marked;
-                                clicked => { root.toggle-block-marked(i); }
+                                clicked(shift) => { root.toggle-block-marked(i, shift); }
                             }
                         }
                         // Code block
@@ -696,7 +698,7 @@ export component TileWindow inherits Window {
                                     }
                                     StarMark {
                                         marked: block.marked;
-                                        clicked => { root.toggle-block-marked(i); }
+                                        clicked(shift) => { root.toggle-block-marked(i, shift); }
                                     }
                                 }
                                 // Code keeps no-wrap so commands / YAML / JSON
@@ -743,29 +745,6 @@ export component TileWindow inherits Window {
                 }
             }
 
-            // ТЗ 2026-07-03 (Option A) — select mode: the whole answer as ONE selectable
-            // field so text can be dragged / copied / ⭐-captured ACROSS blocks. `select-text`
-            // is the joined + i16-capped answer (built in Rust). capture-selection(-1, …)
-            // tells Rust to slice `select-text` instead of a single block.
-            if root.select-mode : ScrollView {
-                vertical-stretch: 1;
-                horizontal-stretch: 1;
-                viewport-width: self.width;
-                VerticalLayout {
-                    padding-right: 14px;
-                    // Proportional + word-wrap: this is ONE mixed prose+code buffer, so code
-                    // loses monospace/no-wrap here — the accepted cost of a single joined field
-                    // for cross-block copy. Don't "fix" it into a second per-kind renderer.
-                    SelectableText {
-                        text: root.select-text;
-                        font-size: 12px;
-                        text-color: Theme.text-secondary;
-                        wrap: word-wrap;
-                        capture(a, c) => { root.capture-selection(-1, a, c); }
-                    }
-                }
-            }
-
             // A2 (ТЗ 2026-07-02) — «⭐ В память» action bar: shows once ≥1 block is
             // marked. N==1 exposes the edit buffer (trim-before-save, the flow the
             // tester accepted on the transcript); N>1 saves each marked block as its
@@ -785,6 +764,12 @@ export component TileWindow inherits Window {
                             if (root.capture-pending) { root.save-capture(); }
                             else { root.save-marked(); }
                         }
+                    }
+                    // P5 — copy the marked blocks (only when marking, not for a pending selection
+                    // which the user can already Ctrl+C from the editor above).
+                    if root.marked-count >= 1 : Button {
+                        text: @tr("Copy");
+                        clicked => { root.copy-marked(); }
                     }
                     Button {
                         text: @tr("Cancel");

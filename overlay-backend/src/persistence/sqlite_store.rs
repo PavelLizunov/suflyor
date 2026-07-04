@@ -546,11 +546,13 @@ impl Store {
         Ok(out)
     }
 
-    /// Edit an approved item's text.
+    /// Edit an approved item's text. D3 (P3): also resets `norm_status` to `'none'` — a user-authored
+    /// edit is neither AI- nor heuristic-normalized, so it must NOT keep a stale «подчищено ИИ» badge
+    /// nor be re-picked by `sweep_pending` (which only touches `'pending'`).
     pub fn update_memory_item_text(&mut self, id: i64, text: &str) -> Result<()> {
         self.conn
             .execute(
-                "UPDATE memory_items SET text = ?2 WHERE id = ?1",
+                "UPDATE memory_items SET text = ?2, norm_status = 'none' WHERE id = ?1",
                 params![id, text],
             )
             .context("update memory item text")?;
@@ -1173,5 +1175,13 @@ mod tests {
         assert_eq!(it.entity.as_deref(), Some("z14"));
         assert_eq!(it.norm_status, "llm");
         assert_eq!(it.source_text.as_deref(), Some("ну это бекап сервер z14"));
+        // D3 (P3): a manual text edit resets norm_status to 'none' — a user-authored fact is
+        // neither AI- nor heuristic-normalized, so it drops its badge AND won't be re-swept.
+        store
+            .update_memory_item_text(id, "мой правленый факт")
+            .unwrap();
+        let it = &store.list_memory_items("default", true, -1).unwrap()[0];
+        assert_eq!(it.text, "мой правленый факт");
+        assert_eq!(it.norm_status, "none");
     }
 }

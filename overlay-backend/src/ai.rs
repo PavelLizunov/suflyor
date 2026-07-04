@@ -650,7 +650,9 @@ async fn complete_with_usage_inner(
 
 /// HTTP 4xx (except 429) = permanent: auth, quota, bad model name, oversized
 /// request — retry won't fix any of these. Everything else is transient.
-fn is_permanent_ai_error(msg: &str) -> bool {
+/// `pub(crate)` so [`crate::memory::normalize`] can decide pending-vs-terminal:
+/// a transient failure keeps a memory row retryable, a permanent one gives up.
+pub(crate) fn is_permanent_ai_error(msg: &str) -> bool {
     // Parse the numeric status after "HTTP " (errors are built as
     // anyhow!("HTTP {status}")) and treat any 4xx except 429 as permanent —
     // catches unlisted 4xx (e.g. 422) and avoids misreading a transient body

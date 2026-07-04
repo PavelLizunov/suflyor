@@ -38,6 +38,7 @@ use super::{
     TileWindow, Timer, VecModel,
 };
 use slint::Model;
+use std::sync::atomic::{AtomicBool, Ordering};
 // `conversations_evict_keys` lives in `tile_controller.rs`; only this module's
 // eviction unit test (`copy_tests`) exercises it, so import it TEST-ONLY — a
 // plain module-level import would be unused in the normal build (clippy -D).
@@ -339,28 +340,17 @@ pub(crate) fn insert_approved_note(text: &str) {
     };
     let ep = overlay_backend::config::load().ai_endpoint(true);
     if ep.base_url.trim().is_empty() {
-        finalize_normalized(id, &raw, &cleaned, None, "heuristic"); // no AI configured
+        finalize_normalized(id, &raw, &cleaned, None, "heuristic"); // no AI configured → terminal
         return;
     }
     // ponytail: one OS thread per save. Saves are user-initiated + infrequent and ai::complete's
     // AI_SEMAPHORE caps concurrent AI calls, so an unbounded spawn is fine; add a bounded pool
     // only if rapid-fire saving is ever shown to pile up threads.
     std::thread::spawn(move || {
-        let outcome = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .ok()
-            .and_then(|rt| {
-                rt.block_on(overlay_backend::memory::normalize_fact(
-                    &raw,
-                    &ep.base_url,
-                    &ep.bearer,
-                    &ep.model,
-                ))
-            });
-        match outcome {
-            Some(fact) => finalize_normalized(id, &raw, &fact.text, fact.entity.as_deref(), "llm"),
-            None => finalize_normalized(id, &raw, &cleaned, None, "heuristic"),
+        // P3: a transport Err LEAVES the row 'pending' (not 'heuristic') so `sweep_pending` retries
+        // it once the AI is back — the whole offline-reliability fix. Ok(_) is terminal (set inside).
+        if let Err(e) = condense_one(id, &raw, &cleaned, &ep) {
+            eprintln!("[overlay-host] normalize deferred, left 'pending' (AI offline?): {e:#}");
         }
     });
 }
@@ -413,6 +403,105 @@ fn finalize_normalized(id: i64, source_text: &str, text: &str, entity: Option<&s
     }
 }
 
+/// P3 — normalize ONE row SYNCHRONOUSLY (blocks the calling thread on a current-thread runtime; the
+/// caller owns the thread). `Ok(())` = a TERMINAL outcome was recorded (`llm` if a fact located, else
+/// `heuristic`); `Err` = the AI CALL failed (offline/timeout, or runtime build failed) → the row is
+/// LEFT `'pending'` for a later retry. The single normalize+finalize path shared by the per-save
+/// worker and [`sweep_pending`]. `cleaned` is the heuristic fallback; `ep` the resolved endpoint
+/// (local OR cloud — provider-agnostic, same egress class as answers on a cloud provider).
+fn condense_one(
+    id: i64,
+    raw: &str,
+    cleaned: &str,
+    ep: &overlay_backend::config::AiEndpoint,
+) -> anyhow::Result<()> {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    // The inner `?` propagates a transport Err (→ stays 'pending'); Ok(None) is terminal 'heuristic'.
+    match rt.block_on(overlay_backend::memory::normalize_fact(
+        raw,
+        &ep.base_url,
+        &ep.bearer,
+        &ep.model,
+    ))? {
+        Some(fact) => finalize_normalized(id, raw, &fact.text, fact.entity.as_deref(), "llm"),
+        None => finalize_normalized(id, raw, cleaned, None, "heuristic"),
+    }
+    Ok(())
+}
+
+/// Re-entrancy guard for [`sweep_pending`]: boot AND every Настройки→Память open trigger it, so this
+/// keeps two sweeps from double-condensing the same rows at once.
+static SWEEP_RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// Clears [`SWEEP_RUNNING`] on EVERY exit of the sweep thread (early return, break, or panic).
+struct SweepGuard;
+impl Drop for SweepGuard {
+    fn drop(&mut self) {
+        SWEEP_RUNNING.store(false, Ordering::Release);
+    }
+}
+
+/// P3 offline-reliability (D1 + D4): retry every memory row still `'pending'` — a save whose AI
+/// condense never completed because the AI was offline at save time. ONE background thread, SEQUENTIAL,
+/// and ABORTS on the first transport `Err` (AI still down → don't hammer it; the next trigger resumes).
+/// Re-entrancy-guarded. Fires on boot (after a short delay so network/AI can settle) and on each
+/// Настройки→Память open. No-op when no AI is configured (rows stay honestly `'pending'`).
+pub(crate) fn sweep_pending() {
+    if SWEEP_RUNNING.swap(true, Ordering::AcqRel) {
+        return; // a sweep is already in flight
+    }
+    std::thread::spawn(move || {
+        let _guard = SweepGuard; // release SWEEP_RUNNING however this thread exits
+        let ep = overlay_backend::config::load().ai_endpoint(true);
+        if ep.base_url.trim().is_empty() {
+            return; // no AI → nothing to retry against
+        }
+        let pending = list_pending();
+        if pending.is_empty() {
+            return;
+        }
+        eprintln!(
+            "[overlay-host] memory sweep: {} pending row(s)",
+            pending.len()
+        );
+        for (id, raw, cleaned) in pending {
+            if let Err(e) = condense_one(id, &raw, &cleaned, &ep) {
+                eprintln!(
+                    "[overlay-host] memory sweep: AI offline, stopping ({e:#}) — retry later"
+                );
+                break; // AI still down — stop; the next trigger picks up the rest
+            }
+        }
+    });
+}
+
+/// The `'pending'` notes we can retry: `(id, raw source_text, heuristic-clean fallback)`. Rows with no
+/// `source_text` (pre-M1) are skipped — no raw to re-normalize. Read-only; on error → empty (logged).
+fn list_pending() -> Vec<(i64, String, String)> {
+    let store = match overlay_backend::persistence::open_default_store() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("[overlay-host] memory sweep: store open failed: {e:#}");
+            return Vec::new();
+        }
+    };
+    // include_archived: an archived row still deserves its clean text; cap is a sanity bound (5000
+    // offline saves is absurd — it just stops a pathological unbounded scan).
+    match store.list_memory_items("default", true, 5000) {
+        Ok(items) => items
+            .into_iter()
+            .filter(|it| it.norm_status == "pending")
+            .filter_map(|it| it.source_text.map(|raw| (it.id, raw, it.text)))
+            .collect(),
+        Err(e) => {
+            eprintln!("[overlay-host] memory sweep: list failed: {e:#}");
+            Vec::new()
+        }
+    }
+}
+
 /// A2 (ТЗ 2026-07-02, redesign) — wire the per-block MARK → save flow on a tile.
 /// `toggle-block-marked(i)` flips block i's `marked` in the live blocks model and
 /// maintains `marked-count` (seeding `capture-text` when exactly one is marked, for
@@ -422,18 +511,44 @@ fn finalize_normalized(id: i64, source_text: &str, text: &str, entity: Option<&s
 pub(crate) fn wire_block_capture(tile: &TileWindow) {
     {
         let weak = tile.as_weak();
-        tile.on_toggle_block_marked(move |idx| {
+        tile.on_toggle_block_marked(move |idx, shift| {
             let Some(t) = weak.upgrade() else { return };
             let blocks = t.get_blocks();
             let Some(vm) = blocks.as_any().downcast_ref::<VecModel<MarkdownBlock>>() else {
                 return;
             };
             let Ok(i) = usize::try_from(idx) else { return };
-            let Some(mut row) = vm.row_data(i) else {
+            if i >= vm.row_count() {
                 return;
-            };
-            row.marked = !row.marked;
-            vm.set_row_data(i, row);
+            }
+            // SHIFT+click with a live anchor → mark the whole contiguous range anchor..=i (ADD to the
+            // marked set, don't clear others); anchor stays put so repeated shift-clicks re-extend from
+            // the same origin. Otherwise a plain click toggles this block and (re)sets the anchor here.
+            // The anchor is a Slint prop reset by `changed blocks` alongside the marks, so a streaming
+            // model swap can't leave a stale anchor that mis-marks a range on the fresh answer.
+            let shift_anchor = if shift {
+                usize::try_from(t.get_mark_anchor()).ok()
+            } else {
+                None
+            }
+            .filter(|&a| a < vm.row_count());
+            if let Some(a) = shift_anchor {
+                let (lo, hi) = if a <= i { (a, i) } else { (i, a) };
+                for j in lo..=hi {
+                    if let Some(mut r) = vm.row_data(j) {
+                        if !r.marked {
+                            r.marked = true;
+                            vm.set_row_data(j, r);
+                        }
+                    }
+                }
+            } else {
+                if let Some(mut row) = vm.row_data(i) {
+                    row.marked = !row.marked;
+                    vm.set_row_data(i, row);
+                }
+                t.set_mark_anchor(i32::try_from(i).unwrap_or(-1));
+            }
             // Recompute the count + the sole-marked index (when exactly one).
             let mut count = 0_i32;
             let mut single_idx = -1_i32;
@@ -504,21 +619,16 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
         let weak = tile.as_weak();
         tile.on_capture_selection(move |idx, a, c| {
             let Some(t) = weak.upgrade() else { return };
-            // Source text: the whole-answer select-mode buffer (idx < 0, Option A) or one
-            // block (idx >= 0). Owned in both branches so the `&str` slice below outlives
-            // the temporary model borrow.
-            let src = if idx < 0 {
-                t.get_select_text()
-            } else {
-                let blocks = t.get_blocks();
-                let Some(vm) = blocks.as_any().downcast_ref::<VecModel<MarkdownBlock>>() else {
-                    return;
-                };
-                let Ok(i) = usize::try_from(idx) else { return };
-                match vm.row_data(i) {
-                    Some(row) => row.text,
-                    None => return,
-                }
+            // Source: the clicked block's text. Owned so the `&str` slice below outlives the
+            // temporary model borrow.
+            let blocks = t.get_blocks();
+            let Some(vm) = blocks.as_any().downcast_ref::<VecModel<MarkdownBlock>>() else {
+                return;
+            };
+            let Ok(i) = usize::try_from(idx) else { return };
+            let src = match vm.row_data(i) {
+                Some(row) => row.text,
+                None => return,
             };
             let text = src.as_str();
             let (lo, hi) = if a <= c { (a, c) } else { (c, a) };
@@ -543,20 +653,28 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
         });
     }
     {
-        // Option A — toggle whole-answer select mode. On enter, join the current blocks into
-        // `select-text` (the .slint swaps the per-block body for one SelectableText of it).
+        // P5 — «Копировать» on the mark bar: join every marked block (block order, "; " — the same
+        // join as save-marked) and write it to the clipboard. Non-destructive: the marks stay.
         let weak = tile.as_weak();
-        tile.on_toggle_select_mode(move || {
+        tile.on_copy_marked(move || {
             let Some(t) = weak.upgrade() else { return };
-            if t.get_select_mode() {
-                t.set_select_mode(false);
+            let blocks = t.get_blocks();
+            let Some(vm) = blocks.as_any().downcast_ref::<VecModel<MarkdownBlock>>() else {
+                return;
+            };
+            // Mirror save-marked EXACTLY: a single mark copies the (possibly edited) trim buffer, so
+            // Copy never diverges from what the editor shows / To-memory would store; N>1 joins.
+            let text = if t.get_marked_count() == 1 {
+                t.get_capture_text().to_string()
+            } else {
+                join_marked_text(vm)
+            };
+            if text.trim().is_empty() {
                 return;
             }
-            let blocks = t.get_blocks();
-            if let Some(vm) = blocks.as_any().downcast_ref::<VecModel<MarkdownBlock>>() {
-                t.set_select_text(build_select_text(vm).into());
+            if let Err(e) = clipboard_win::set_clipboard_string(&text) {
+                eprintln!("[overlay-host] copy marked failed: {e}");
             }
-            t.set_select_mode(true);
         });
     }
     {
@@ -576,54 +694,6 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
             t.set_capture_text(SharedString::default());
         });
     }
-}
-
-/// Option A — join the current blocks into one plain-text buffer for select mode: bullets
-/// get a `• ` prefix, HRs are skipped, blocks separated by a blank line. Capped well under
-/// the SW-renderer's i16 (32767px) coordinate limit so one tall TextInput can't panic /
-/// black-out on a pathologically huge answer (the same Баг5 class the transcript/archive
-/// lists guard). char-boundary-safe truncation.
-fn build_select_text(vm: &VecModel<MarkdownBlock>) -> String {
-    // Rendered height ~ wrapped-LINE-count, so BOTH dimensions are capped: CHAR_CAP bounds
-    // width + memory, LINE_CAP bounds height. A char-only cap misses a single block that
-    // carries many hard newlines (a long code block / list) → that would let the joined
-    // TextInput exceed the SW-renderer's i16 (32767px) limit and panic/black-out (Баг5 class).
-    const CHAR_CAP: usize = 12_000;
-    const LINE_CAP: usize = 500;
-    // wrapped lines ≤ hard-newlines (≤ LINE_CAP) + chars/~40 (min wrapped chars/line at the
-    // min tile width); at ~36px/line (12px text, generous UI scale) that stays under i16.
-    const _: () = assert!((LINE_CAP + CHAR_CAP / 40) * 36 + 400 < 32_767);
-    let mut out = String::new();
-    for j in 0..vm.row_count() {
-        let Some(r) = vm.row_data(j) else { continue };
-        if r.kind == 6 {
-            continue; // HR — nothing to select
-        }
-        if !out.is_empty() {
-            out.push_str("\n\n");
-        }
-        if r.kind == 4 {
-            out.push_str("• "); // bullet marker (the • is a separate Text in block view)
-        }
-        out.push_str(r.text.as_str());
-        if out.len() >= CHAR_CAP {
-            break; // rough guard bounds memory; the precise dual cap is applied below
-        }
-    }
-    // Cap to whichever limit is hit first (char-boundary-safe). `line_cut` also tames a
-    // SINGLE block with many hard newlines, which the in-loop char guard alone can't.
-    let char_cut = char_boundary(&out, CHAR_CAP.min(out.len()));
-    let line_cut = out
-        .match_indices('\n')
-        .nth(LINE_CAP)
-        .map(|(i, _)| i)
-        .unwrap_or(out.len());
-    let cut = char_cut.min(line_cut);
-    if cut < out.len() {
-        out.truncate(cut);
-        out.push_str("\n…");
-    }
-    out
 }
 
 /// Clamp a byte index down to the nearest char boundary ≤ `i` (and ≤ len). Slint's
@@ -797,44 +867,6 @@ mod copy_tests {
         assert_eq!(char_boundary(s, 99), 4, "past end clamps to len");
         // The span a selection would take is always a valid slice.
         assert_eq!(&s[char_boundary(s, 1)..char_boundary(s, 3)], "а");
-    }
-
-    #[test]
-    fn select_text_join_prefixes_bullets_and_skips_hr() {
-        let mk = |kind: i32, text: &str| MarkdownBlock {
-            kind,
-            text: text.into(),
-            lang: "".into(),
-            marked: false,
-        };
-        let vm = VecModel::from(vec![
-            mk(1, "Заголовок"),  // H1
-            mk(0, "Абзац."),     // paragraph
-            mk(4, "пункт один"), // bullet → prefixed "• "
-            mk(6, ""),           // HR → skipped
-            mk(4, "пункт два"),  // bullet
-        ]);
-        assert_eq!(
-            build_select_text(&vm),
-            "Заголовок\n\nАбзац.\n\n• пункт один\n\n• пункт два"
-        );
-    }
-
-    #[test]
-    fn select_text_caps_pathological_line_count() {
-        // A SINGLE block with thousands of hard newlines (huge code block / list) must be
-        // line-capped so the joined field can't exceed the SW-renderer i16 limit (Баг5).
-        let many = "x\n".repeat(2000); // ~2000 lines in one block
-        let vm = VecModel::from(vec![MarkdownBlock {
-            kind: 0,
-            text: many.into(),
-            lang: "".into(),
-            marked: false,
-        }]);
-        let out = build_select_text(&vm);
-        let nl = out.matches('\n').count();
-        assert!(nl <= 501, "line-capped, got {nl} newlines");
-        assert!(out.ends_with('…'), "truncation marker appended");
     }
 
     #[test]
