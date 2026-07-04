@@ -759,20 +759,18 @@ fn join_marked_text(vm: &VecModel<MarkdownBlock>) -> String {
     out
 }
 
-/// R1 (retest v0.28.0) — join the current blocks into one plain-text buffer for «Выделить текст»
-/// mode: bullets get a `• ` prefix, HRs are skipped, blocks separated by a blank line. Dual-capped
-/// (chars + wrapped lines) well under the renderer's coordinate limit so one tall field can't
-/// blow up on a pathologically huge answer. char-boundary-safe truncation. Pure → tested.
+/// R1/RS2 (retest v0.28.0) — join the current blocks into one plain-text buffer for «Выделить текст»
+/// mode. Each block's internal whitespace (INCL. NEWLINES) is collapsed to single spaces, and blocks
+/// are separated by ONE newline (bullets get `• `, HRs skipped). Collapsing newlines is the owner's
+/// overflow fix: many hard newlines (a long summary / code block) made the single field pathologically
+/// TALL and it broke the tile layout; a flat, wrap-bounded field can't. Code loses its line breaks here
+/// — the accepted cost of one flat select/copy field. Char-capped (boundary-safe) under the renderer's
+/// coordinate limit. Pure → tested.
 fn build_select_text(vm: &VecModel<MarkdownBlock>) -> String {
-    // Rendered height ~ wrapped-LINE-count, so BOTH dimensions are capped: CHAR_CAP bounds
-    // width + memory, LINE_CAP bounds height. A char-only cap misses a single block that
-    // carries many hard newlines (a long code block / list) → that would let the joined
-    // TextInput grow past the renderer's coordinate limit.
     const CHAR_CAP: usize = 12_000;
-    const LINE_CAP: usize = 500;
-    // wrapped lines ≤ hard-newlines (≤ LINE_CAP) + chars/~40 (min wrapped chars/line at the
-    // min tile width); at ~36px/line (12px text, generous UI scale) that stays under i16.
-    const _: () = assert!((LINE_CAP + CHAR_CAP / 40) * 36 + 400 < 32_767);
+    // Newlines are collapsed, so height ≈ wrapped-line count ≤ CHAR_CAP / ~40 chars-per-line; at
+    // ~36px/line that stays well under the renderer's i16 (32767px) coordinate limit.
+    const _: () = assert!((CHAR_CAP / 40) * 36 + 400 < 32_767);
     let mut out = String::new();
     for j in 0..vm.row_count() {
         let Some(r) = vm.row_data(j) else { continue };
@@ -780,28 +778,21 @@ fn build_select_text(vm: &VecModel<MarkdownBlock>) -> String {
             continue; // HR — nothing to select
         }
         if !out.is_empty() {
-            out.push_str("\n\n");
+            out.push('\n');
         }
         if r.kind == 4 {
             out.push_str("• "); // bullet marker (the • is a separate Text in block view)
         }
-        out.push_str(r.text.as_str());
+        // Collapse ALL internal whitespace (incl. newlines) → one flat line per block.
+        out.push_str(&r.text.split_whitespace().collect::<Vec<_>>().join(" "));
         if out.len() >= CHAR_CAP {
-            break; // rough guard bounds memory; the precise dual cap is applied below
+            break;
         }
     }
-    // Cap to whichever limit is hit first (char-boundary-safe). `line_cut` also tames a
-    // SINGLE block with many hard newlines, which the in-loop char guard alone can't.
-    let char_cut = char_boundary(&out, CHAR_CAP.min(out.len()));
-    let line_cut = out
-        .match_indices('\n')
-        .nth(LINE_CAP)
-        .map(|(i, _)| i)
-        .unwrap_or(out.len());
-    let cut = char_cut.min(line_cut);
+    let cut = char_boundary(&out, CHAR_CAP.min(out.len()));
     if cut < out.len() {
         out.truncate(cut);
-        out.push_str("\n…");
+        out.push_str(" …");
     }
     out
 }
@@ -952,26 +943,35 @@ mod copy_tests {
             mk(6, ""),           // HR → skipped
             mk(4, "пункт два"),  // bullet
         ]);
+        // Blocks separated by ONE newline (not a blank line) — internal whitespace collapsed.
         assert_eq!(
             build_select_text(&vm),
-            "Заголовок\n\nАбзац.\n\n• пункт один\n\n• пункт два"
+            "Заголовок\nАбзац.\n• пункт один\n• пункт два"
         );
     }
 
     #[test]
-    fn select_text_caps_pathological_line_count() {
-        // A SINGLE block with thousands of hard newlines (huge code block / list) must be
-        // line-capped so the joined field can't exceed the renderer's coordinate limit.
-        let many = "x\n".repeat(2000); // ~2000 lines in one block
-        let vm = VecModel::from(vec![MarkdownBlock {
+    fn select_text_collapses_newlines_and_char_caps() {
+        let mk = |text: &str| MarkdownBlock {
             kind: 0,
-            text: many.into(),
+            text: text.into(),
             lang: "".into(),
             marked: false,
-        }]);
-        let out = build_select_text(&vm);
-        let nl = out.matches('\n').count();
-        assert!(nl <= 501, "line-capped, got {nl} newlines");
+        };
+        // A block's INTERNAL newlines collapse to spaces (the overflow fix) — only the single
+        // inter-block separator remains, so the field can't become pathologically tall.
+        let vm = VecModel::from(vec![
+            mk("строка один\nстрока два\nстрока три"),
+            mk("второй блок"),
+        ]);
+        assert_eq!(
+            build_select_text(&vm),
+            "строка один строка два строка три\nвторой блок"
+        );
+        // A single huge block is char-capped with a trailing marker.
+        let huge = "слово ".repeat(4000); // ~24000 chars, one block
+        let out = build_select_text(&VecModel::from(vec![mk(&huge)]));
+        assert!(out.chars().count() <= 12_002, "char-capped");
         assert!(out.ends_with('…'), "truncation marker appended");
     }
 
