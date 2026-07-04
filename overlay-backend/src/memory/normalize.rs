@@ -104,23 +104,28 @@ fn has_negation(text: &str) -> bool {
     })
 }
 
-/// The anti-hallucination gate: is the LLM `rewrite` grounded in `source`? Rejects unless
-/// (a) SHAPE is sane — non-empty, ≤300 chars, no markdown header, not ballooned past ~1.5×
-/// the source; (b) every IDENTIFIER token (digit-bearing id or all-caps ASCII acronym) equals
-/// a WHOLE source token verbatim — zero tolerance (a truncated IP `10.0.0.11` must NOT match
-/// `10.0.0.116`, so substring won't do); (c) ≥90% of content words (≥4 letters) are contained
-/// in the source (RU-declension-aware); (d) negation polarity is preserved; (e) SOMETHING was
-/// actually grounded (a rewrite that verified no identifier and has no checkable content word
-/// is rejected, not vacuously accepted). Pure → tested.
+/// The anti-hallucination gate: is the LLM `rewrite` grounded in `source`? STRICT — condensation
+/// is EXTRACTIVE (the prompt keeps the source's WORDS, only drops filler), so a faithful
+/// condensation passes even at this bar while a paraphrase or a fabrication does not. (a) SHAPE —
+/// non-empty, ≤400 chars, no markdown header, not ballooned past ~1.5× the source; (b) every
+/// IDENTIFIER token (digit-bearing id or all-caps ASCII acronym) equals a WHOLE source token
+/// verbatim — zero tolerance (a truncated IP `10.0.0.11` must NOT match `10.0.0.116`), which also
+/// forbids INTRODUCING a new number/acronym; (c) ≥90% of content words (≥4 letters) are contained
+/// in the source (RU-declension-aware) — an adversarial review showed a looser bar lets single-word
+/// lies through («перезагружен»→«взломан»), so this stays strict; (d) negation polarity is
+/// preserved; (e) SOMETHING was actually grounded (no identifier + no checkable content word →
+/// reject). RESIDUAL LIMIT: bag-of-words CANNOT catch RECOMBINATION of real source words into a
+/// false claim (attaching a real subject to the wrong predicate) — the extractive prompt minimizes
+/// it, but closing it fully needs an entailment check. Pure → tested.
 #[must_use]
 pub fn is_grounded(source: &str, rewrite: &str) -> bool {
     let r = rewrite.trim();
     // (a) shape
-    if r.is_empty() || r.chars().count() > 300 || r.starts_with('#') {
+    if r.is_empty() || r.chars().count() > 400 || r.starts_with('#') {
         return false;
     }
     if r.chars().count() > source.chars().count() * 3 / 2 + 20 {
-        return false; // a "normalization" that grows the text is inventing
+        return false; // a "condensation" that GROWS the text is inventing
     }
     // (d) negation must not be introduced or dropped
     if has_negation(source) != has_negation(r) {
@@ -169,7 +174,11 @@ pub fn is_grounded(source: &str, rewrite: &str) -> bool {
     if content_total == 0 && !identifier_seen {
         return false;
     }
-    // (c) ≤10% of content words may be novel grammatical glue.
+    // (c) ≤10% of content words may be novel glue. STRICT on purpose: an adversarial review
+    // showed that loosening this let single-word fabrications through («перезагружен»→«взломан»),
+    // because a bag-of-words gate can't tell a synonym from a lie. So condensation is EXTRACTIVE
+    // (the prompt keeps the source's words), which passes at this strict bar. NB: it still can't
+    // catch RECOMBINATION of real words into a false claim (see the doc) — that needs entailment.
     content_missing * 10 <= content_total
 }
 
@@ -181,27 +190,30 @@ pub struct NormalizedFact {
     pub entity: Option<String>,
 }
 
-/// System prompt for the condense/normalize pass (M1-b-2, feature A). Russian (the app + the
-/// facts are Russian). Extracts 1–3 SHORT atomic facts from the input, which may be a clean AI
-/// tile answer OR raw speech-to-text. The hard guarantees (identifiers verbatim, no invention,
-/// negation preserved) are RE-CHECKED PER FACT by [`is_grounded`] — the prompt asks for good
-/// behaviour, the gate enforces it.
-const CONDENSE_SYSTEM: &str = "Ты извлекаешь КОРОТКИЕ факты для личной памяти пользователя (их \
-потом подсовывают ИИ как подсказки на будущих созвонах). Вход — это ответ ИИ ИЛИ сырая \
-расшифровка речи.\n\n\
+/// System prompt for the condense pass (M1-b-2, feature A). Russian. EXTRACTIVE: it pulls 1–3
+/// short facts using the SOURCE'S OWN WORDS (drop filler, don't reword). An adversarial review
+/// showed a paraphrasing prompt + a loose gate let single-word lies through, and a bag-of-words
+/// gate can't tell a synonym from a lie — so keeping the source's words is what lets a faithful
+/// condensation pass the STRICT [`is_grounded`] (re-checked per fact); a paraphrase is rejected
+/// and the caller keeps the heuristic text. (Bonus: telling it to keep «айпи» not «IP» also
+/// avoids the acronym-transliteration false-reject.)
+const CONDENSE_SYSTEM: &str = "Ты извлекаешь КОРОТКИЕ факты для личной памяти пользователя. \
+Вход — ответ ИИ ИЛИ сырая расшифровка речи.\n\n\
 Выдели из текста от 1 до 3 САМЫХ ВАЖНЫХ фактов. Каждый факт — одно короткое ясное утверждение \
 (НЕ абзац).\n\n\
-Строгие правила:\n\
-- Пиши факты на ТОМ ЖЕ языке, что и вход (русский вход → русские факты; НЕ переводи).\n\
-- Сохрани ДОСЛОВНО все идентификаторы: числа, IP-адреса, подсети, порты, имена, логины, даты, \
-версии, коды. Нельзя менять ни одной цифры или буквы в них.\n\
-- Ничего не выдумывай — только то, что реально есть в тексте.\n\
-- Убери воду, вступления и пояснения — оставь суть. Убери шум речи (эканье, повторы, обрывки).\n\
-- Сохрани отрицание («не», «нельзя», «без») — не переворачивай смысл.\n\
-- Если текст и так короткий факт — верни его как есть (один факт).\n\
+ГЛАВНОЕ ПРАВИЛО: бери СЛОВА ИЗ ТЕКСТА как есть. Можно ВЫКИДЫВАТЬ лишнее (слова-паразиты, повторы, \
+воду) и слегка переставлять — но НЕ заменяй слова синонимами и НЕ перефразируй. Если в тексте \
+«жрёт» — пиши «жрёт», а не «ест»; если «айпи» — пиши «айпи», а не «IP».\n\n\
+Ещё правила:\n\
+- Пиши на ТОМ ЖЕ языке, что и вход (НЕ переводи).\n\
+- Идентификаторы (числа, IP, подсети, порты, имена, логины, даты, коды) — ДОСЛОВНО, ни одной \
+цифры или буквы не менять.\n\
+- Ничего не добавляй, чего нет в тексте.\n\
+- Сохрани отрицание («не», «нельзя», «без», «отказался») — не переворачивай смысл.\n\
+- Если текст и так короткий факт — верни как есть.\n\
 - Без пояснений, без markdown, без тройных кавычек.\n\n\
 Ответь ТОЛЬКО строгим JSON:\n\
-{\"facts\":[{\"entity\":\"<о чём факт, коротко>\",\"text\":\"<короткий факт>\"}]}\n\
+{\"facts\":[{\"entity\":\"<о чём>\",\"text\":\"<короткий факт словами из текста>\"}]}\n\
 От 1 до 3 фактов. entity — имя/система/человек, или \"\" если неясно.";
 
 /// Async condense/normalize (M1-b-2, feature A): heuristic-clean the raw span, ask the AI to
@@ -379,6 +391,22 @@ mod tests {
         assert!(is_grounded("проект Альфа наша CRM", "Альфе — CRM проекта"));
         // All-identifier fact (no content words) is fine when they're verbatim.
         assert!(is_grounded("порт 8080 API", "8080 API"));
+    }
+
+    #[test]
+    fn grounded_condense_extractive_passes_fabrication_rejected() {
+        let src = "он их вообще не жрёт, даёшь котику, выплёвывает таблетку, нужно в уколах давать";
+        // EXTRACTIVE condensation — filler dropped, but every word comes from the source (жрёт
+        // stays жрёт, no synonym) → passes the STRICT gate.
+        assert!(is_grounded(
+            src,
+            "не жрёт, выплёвывает таблетку, нужно давать в уколах"
+        ));
+        // A SINGLE fabricated ≥4-letter word («часто») is now rejected — the strict bar catches
+        // the lie a paraphrasing/loose gate waved through (the review's «взломан» class).
+        assert!(!is_grounded(src, "не жрёт таблетку, часто выплёвывает"));
+        // Wholesale fabrication (novel content, negation still matched) → rejected.
+        assert!(!is_grounded(src, "кот не любит гулять вечером"));
     }
 
     #[test]

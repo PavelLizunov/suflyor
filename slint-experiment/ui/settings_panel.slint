@@ -2820,17 +2820,24 @@ export component SettingsWindow inherits Window {
                                         color: Theme.text-secondary;
                                         wrap: word-wrap;
                                     }
-                                    // M1-b-2 observability — normalization state + the raw
-                                    // source ("cleaned · was: <raw>"), so it's visible that the
-                                    // AI tidied the fact. Hidden for verbatim (none) captures.
+                                    // M1-b-2 observability — normalization state + the raw source,
+                                    // so it's visible the AI tidied the fact. Hidden for verbatim
+                                    // (none) captures.
                                     if m.norm-status == "pending" : Text {
                                         text: @tr("normalizing…");
                                         font-size: 10px;
                                         color: Theme.text-muted;
                                     }
-                                    if m.norm-status == "llm" || m.norm-status == "heuristic" : Text {
-                                        text: (m.norm-status == "llm" ? @tr("cleaned by AI") : @tr("cleaned"))
-                                            + (m.source-text != "" ? @tr(" · was: {}", m.source-text) : "");
+                                    // Heuristic only (AI didn't run / was rejected): the text ≈ the
+                                    // raw, so DON'T show "· was:" — it would just duplicate the fact.
+                                    if m.norm-status == "heuristic" : Text {
+                                        text: @tr("cleaned");
+                                        font-size: 10px;
+                                        color: Theme.text-muted;
+                                    }
+                                    // AI-condensed: the raw genuinely differs → show before→after.
+                                    if m.norm-status == "llm" : Text {
+                                        text: @tr("cleaned by AI") + (m.source-text != "" ? @tr(" · was: {}", m.source-text) : "");
                                         font-size: 10px;
                                         color: Theme.text-muted;
                                         wrap: word-wrap;
