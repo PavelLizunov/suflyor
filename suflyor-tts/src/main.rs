@@ -12,6 +12,7 @@
 //!   PAUSE / RESUME / STOP
 //! EOF on stdin (parent exits) → this process exits.
 
+mod diar;
 mod engine;
 mod playback;
 
@@ -58,6 +59,15 @@ fn parse_cmd(line: &str) -> Option<Cmd> {
 }
 
 fn main() {
+    // Subcommand dispatch: `diarize <wav> …` runs a one-shot speaker diarization,
+    // prints JSON, and exits (D1). No args → the read-aloud stdin loop below,
+    // byte-identical to before. One exe, two jobs, ALWAYS separate OS processes —
+    // a live read-aloud and a diarize batch never share an address space.
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("diarize") {
+        std::process::exit(diar::run_cli(&args[2..]));
+    }
+
     // stdin → Cmd channel. Dropping `tx` on EOF makes the worker's recv() return
     // Err, which exits the process.
     let (tx, rx) = mpsc::channel::<Cmd>();
