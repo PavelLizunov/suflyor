@@ -1809,27 +1809,42 @@ pub(crate) fn open_transcript(
     let heading = session
         .map(|s| session_title(s.started_at_ms, &s.id))
         .unwrap_or_default();
-    let lines: Vec<TranscriptLine> = utts
+    // C1/P2 — compute each utterance's display offset in ORIGINAL order (the F1 fallback reads the
+    // PREVIOUS utterance), THEN sort utterances + rows TOGETHER by the displayed clock (audio start).
+    // Rows arrive in STT-FINALIZE order (unix_ms) but the shown timecode is the audio START; STT
+    // latency (~1-25s) makes those orders differ → out-of-order timecodes at the tail. Sorting one
+    // SHARED set keeps display, "Copy all" and copy-selected consistent AND preserves the
+    // model-index == utterance-index invariant the copy path relies on. Diagnosis: latency (H2), NOT
+    // capture-epoch skew (per-source wall-audio deltas matched ~6s), so no audio.rs change. Stable,
+    // and a no-op for old (audio_ms-less) sessions whose fallback offsets are already monotonic.
+    let mut indexed: Vec<(Option<i64>, &Utterance)> = utts
         .iter()
         .enumerate()
-        .take(TRANSCRIPT_DISPLAY_CAP) // memory sanity bound (not i16 — ListView virtualizes); first N keeps model idx == utt idx
+        .take(TRANSCRIPT_DISPLAY_CAP) // memory sanity bound (not i16 — ListView virtualizes)
         .map(|(i, u)| {
-            // F1: prefer the persisted per-line audio offset (audio_ms) for BOTH the
-            // shown timecode AND the player seek; old sessions (no audio_ms) fall back
-            // to the prev-line wall-clock approximation. See line_start_offset_ms.
-            let off = overlay_backend::session_audio::line_start_offset_ms(utts, i, session_start);
-            TranscriptLine {
-                offset_label: off.map(fmt_offset).unwrap_or_default().into(),
-                speaker: SharedString::from(if u.source == "mic" {
-                    "Микрофон"
-                } else {
-                    "Система"
-                }),
-                text: SharedString::from(u.text.split_whitespace().collect::<Vec<_>>().join(" ")),
-                checked: false,
-                marked: false,
-                start_ms: off.unwrap_or(0) as i32,
-            }
+            (
+                overlay_backend::session_audio::line_start_offset_ms(utts, i, session_start),
+                u,
+            )
+        })
+        .collect();
+    indexed.sort_by_key(|(off, _)| off.unwrap_or(0));
+    // The sorted utterances that BACK the rows — pass THESE (not raw `utts`) to the copy/selection
+    // wiring so a checked row index maps to the right utterance.
+    let utts_display: Vec<Utterance> = indexed.iter().map(|(_, u)| (*u).clone()).collect();
+    let lines: Vec<TranscriptLine> = indexed
+        .iter()
+        .map(|(off, u)| TranscriptLine {
+            offset_label: off.map(fmt_offset).unwrap_or_default().into(),
+            speaker: SharedString::from(if u.source == "mic" {
+                "Микрофон"
+            } else {
+                "Система"
+            }),
+            text: SharedString::from(u.text.split_whitespace().collect::<Vec<_>>().join(" ")),
+            checked: false,
+            marked: false,
+            start_ms: off.unwrap_or(0) as i32,
         })
         .collect();
     // Utterances hidden by the display cap — the footer discloses this (Copy all
@@ -1851,7 +1866,7 @@ pub(crate) fn open_transcript(
         let model = Rc::new(VecModel::from(lines));
         win.set_lines(ModelRc::from(model.clone()));
         win.set_overflow_count(overflow);
-        wire_transcript_actions(win, &model, utts, session_start);
+        wire_transcript_actions(win, &model, &utts_display, session_start);
         wire_transcript_player(win, &session_id, &model);
         let _ = win.show();
         if let Ok(hwnd) = grab_hwnd(win.window()) {
@@ -1875,7 +1890,7 @@ pub(crate) fn open_transcript(
     let model = Rc::new(VecModel::from(lines));
     win.set_lines(ModelRc::from(model.clone()));
     win.set_overflow_count(overflow);
-    wire_transcript_actions(&win, &model, utts, session_start);
+    wire_transcript_actions(&win, &model, &utts_display, session_start);
     wire_transcript_player(&win, &session_id, &model);
 
     {

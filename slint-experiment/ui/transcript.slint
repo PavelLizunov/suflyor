@@ -327,7 +327,9 @@ export component TranscriptWindow inherits Window {
                             HorizontalLayout {
                                 spacing: Metrics.space-sm;
                                 padding-left: 4px;
-                                padding-right: 4px;
+                                // P1/C2 — keep the ⭐ column left of the ListView scrollbar (reuse the
+                                // tiles' right-inset), so stars stay clickable and aren't overdrawn.
+                                padding-right: 18px;
                                 padding-top: 1px;
                                 padding-bottom: 1px;
                                 Tick {
