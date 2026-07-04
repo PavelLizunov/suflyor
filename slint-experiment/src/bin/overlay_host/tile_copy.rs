@@ -316,9 +316,9 @@ pub(crate) fn wire_code_copy(tile: &TileWindow) {
 ///
 /// Feature A (condense — M1-b-2): the text — a tile answer OR a raw STT span — is stored
 /// INSTANTLY as its heuristic-clean (so the ⭐ feels instant), with the raw kept in `source_text`;
-/// then a background thread asks the AI to condense it into 1–3 SHORT facts and — only the facts
-/// that pass the `is_grounded` gate — swaps them in (`norm_status` → `llm`), else keeps the
-/// heuristic text (`heuristic`). Every ⭐/selection save comes here; typed «свой факт» (Settings)
+/// then a background thread asks the AI for 1–3 VERBATIM quotes and — only quotes that `locate_span`
+/// finds as a contiguous source fragment (P4 quote-span) — swaps in the source slices (`norm_status`
+/// → `llm`), else keeps the heuristic text (`heuristic`). Every ⭐/selection save comes here; typed «свой факт» (Settings)
 /// does NOT (it's stored verbatim via its own path).
 pub(crate) fn insert_approved_note(text: &str) {
     let trimmed = text.trim();

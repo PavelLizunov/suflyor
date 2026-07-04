@@ -1,26 +1,21 @@
-//! memory::normalize (M1 of docs/memory-architecture.md §3) — turn a RAW captured span
-//! (messy STT / a verbatim block) into a clean, atomic fact.
+//! memory::normalize (M1, docs/memory-architecture.md §3) — turn a RAW captured span (messy STT /
+//! a verbatim block) into 1–3 clean SHORT facts, safely.
 //!
-//! Three pieces — two PURE + deterministic (unit-tested), plus the async orchestrator that
-//! composes them with `ai::complete`:
+//! **P4 architecture — QUOTE-SPAN extraction** (replaces the old bag-of-words grounding gate, which
+//! an adversarial review showed could neither tell a synonym from a lie nor catch recombination):
+//! - [`heuristic_clean`] — cheap pre-clean (collapse whitespace, drop an immediate ≥4-letter STT
+//!   stutter). Never drops numbers/short words → can't lose a fact. No semantic edits.
+//! - [`locate_span`] — the anti-hallucination CORE: the model returns VERBATIM QUOTES, and this finds
+//!   each as a CONTIGUOUS run of whole tokens in the source and returns the exact SOURCE SLICE. We
+//!   store the slice, never the model's text → a fact cannot fabricate a word, truncate an identifier
+//!   («10.0.0.11» ≠ «10.0.0.116»), or recombine distant words into a false claim. It IS a piece of
+//!   the source. Residual (accept): a semantic inversion the source itself contains is copied as-is.
+//! - [`normalize_fact`] — async orchestrator: heuristic-clean → AI quotes (no-think JSON) → locate
+//!   each quote → join ≤3. Returns the located facts, or `None` so the caller keeps the heuristic
+//!   text (never a hallucinated fact).
 //!
-//! - [`heuristic_clean`] — cheap layer-1 pre-clean (collapse whitespace, drop an immediate
-//!   duplicate STT-stutter word). Deliberately conservative: it makes garbage *shorter/tidier*
-//!   and never drops numbers or short words (a repeated digit/short word may be a real double);
-//!   it does NOT touch semantics (pronouns, mishearings, entity grouping — that's the LLM).
-//! - [`is_grounded`] — the anti-hallucination GATE for an LLM rewrite. An LLM proposal is
-//!   accepted ONLY if it's grounded in the source: every identifier token (a digit-bearing
-//!   id — IP / subnet / port / number — or an all-caps ASCII acronym like VPN / DNS) equals a
-//!   WHOLE source token verbatim, content words are contained, negation polarity is preserved,
-//!   and the shape is sane. This is what makes an LLM normalization safe to run unattended — a
-//!   failing rewrite is rejected and the caller keeps the un-rewritten (heuristic) text.
-//! - [`normalize_fact`] — async condense (feature A): heuristic-clean → AI extracts 1–3 SHORT
-//!   facts → keep only those that pass `is_grounded` (per fact) → join. A long tile answer
-//!   becomes a few short facts; a messy STT line becomes one clean fact. Returns the condensed
-//!   fact(s), or `None` so the caller keeps the heuristic text (never a hallucinated fact).
-//!
-//! The two helpers are pure (no I/O), unit-tested like `key_terms`; `normalize_fact` is the only
-//! I/O path (one AI call) — its JSON parse (`parse_facts`) is tested, the network call is not.
+//! The pure pieces are unit-tested like `key_terms`; `normalize_fact`'s one AI call is not (its JSON
+//! parse `parse_facts` is).
 
 use crate::ai::{self, ChatMessage, MessageContent};
 
@@ -55,173 +50,92 @@ pub fn heuristic_clean(text: &str) -> String {
     out.join(" ")
 }
 
-/// True if `tok` must survive normalization VERBATIM (matched by WHOLE-TOKEN equality, not
-/// substring): it bears a digit (IP / subnet / port / number / mixed id like `z14-4443`) or
-/// is an all-caps ASCII acronym (VPN / DNS / CRM / API) — the classes where a dropped digit
-/// or a swap fabricates a fact. Cyrillic names and lowercase words are content words
-/// (containment, declension-tolerant). NB: an acronym the source spells in Cyrillic («айпи»)
-/// won't match an ASCII rewrite («IP»); we reject that canonicalization (keeping the raw
-/// text) rather than risk letting a genuine swap through — a false reject is only annoying.
-fn is_identifier(tok: &str) -> bool {
-    let has_digit = tok.chars().any(|c| c.is_ascii_digit());
-    let alpha = tok.chars().filter(|c| c.is_alphabetic()).count();
-    let all_caps_ascii = alpha >= 2
-        && tok
-            .chars()
-            .all(|c| !c.is_alphabetic() || c.is_ascii_uppercase());
-    has_digit || all_caps_ascii
+/// Split `s` into maximal alphanumeric tokens (lowercased) with their source byte range. Punctuation
+/// and whitespace are separators, not tokens. `«Бекап-сервер z14»` → `[(бекап,..),(сервер,..),(z14,..)]`.
+fn tokenize(s: &str) -> Vec<(String, usize, usize)> {
+    let mut toks = Vec::new();
+    let mut start: Option<usize> = None;
+    for (b, ch) in s.char_indices() {
+        if ch.is_alphanumeric() {
+            start.get_or_insert(b);
+        } else if let Some(st) = start.take() {
+            toks.push((s[st..b].to_lowercase(), st, b));
+        }
+    }
+    if let Some(st) = start {
+        toks.push((s[st..].to_lowercase(), st, s.len()));
+    }
+    toks
 }
 
-/// Does `src_lower` contain content `word` (already lowercased), tolerating RU declension? A
-/// word of ≥5 chars also matches on its stem (last char dropped): «альфа» matches «альфе».
-/// Substring is intentional here (content words only) — it over-accepts grammatical variants,
-/// which is safe; identifiers use whole-token equality instead (see [`is_grounded`]).
-fn source_contains(src_lower: &str, word: &str) -> bool {
-    if src_lower.contains(word) {
-        return true;
-    }
-    let n = word.chars().count();
-    if n >= 5 {
-        let stem: String = word.chars().take(n - 1).collect();
-        return src_lower.contains(&stem);
-    }
-    false
-}
-
-/// Any negation marker present? Used to reject a rewrite that introduces or drops negation.
-/// Covers the explicit particles plus the productive «не…»/«ни…» prefix (невозможно,
-/// небезопасно, недоступно). ponytail: not exhaustive for Russian (lexical negations like
-/// «отказался», English contractions like «don't» are missed) — false positives here only
-/// cause a harmless false REJECT, so erring broad is safe; the LLM prompt (M1-b) also
-/// instructs polarity preservation. Upgrade to a morphology lib only if this proves leaky.
-fn has_negation(text: &str) -> bool {
-    text.to_lowercase().split_whitespace().any(|w| {
-        let t = w.trim_matches(|c: char| !c.is_alphanumeric());
-        matches!(
-            t,
-            "не" | "нет" | "ни" | "нельзя" | "без" | "no" | "not" | "never" | "никогда" | "никак"
-        ) || ((t.starts_with("не") || t.starts_with("ни")) && t.chars().count() >= 5)
+/// True if `s` bridges a sentence/clause boundary — a contiguous token run must NOT fuse two clauses
+/// into a misleading fact (e.g. «ушёл. Она», «жив; база», «включи прод; выключи тест»). A dot BETWEEN
+/// digits (an IP/version like `10.255.28.116`) is NOT a boundary; only `.!?` at end-of-span or
+/// followed by whitespace, plus `;` / newline, count.
+fn crosses_clause_boundary(s: &str) -> bool {
+    let chars: Vec<char> = s.chars().collect();
+    chars.iter().enumerate().any(|(i, &c)| match c {
+        ';' | '!' | '?' | '\n' | '\r' => true,
+        '.' => chars.get(i + 1).is_none_or(|n| n.is_whitespace()),
+        _ => false,
     })
 }
 
-/// The anti-hallucination gate: is the LLM `rewrite` grounded in `source`? STRICT — condensation
-/// is EXTRACTIVE (the prompt keeps the source's WORDS, only drops filler), so a faithful
-/// condensation passes even at this bar while a paraphrase or a fabrication does not. (a) SHAPE —
-/// non-empty, ≤400 chars, no markdown header, not ballooned past ~1.5× the source; (b) every
-/// IDENTIFIER token (digit-bearing id or all-caps ASCII acronym) equals a WHOLE source token
-/// verbatim — zero tolerance (a truncated IP `10.0.0.11` must NOT match `10.0.0.116`), which also
-/// forbids INTRODUCING a new number/acronym; (c) ≥90% of content words (≥4 letters) are contained
-/// in the source (RU-declension-aware) — an adversarial review showed a looser bar lets single-word
-/// lies through («перезагружен»→«взломан»), so this stays strict; (d) negation polarity is
-/// preserved; (e) SOMETHING was actually grounded (no identifier + no checkable content word →
-/// reject). RESIDUAL LIMIT: bag-of-words CANNOT catch RECOMBINATION of real source words into a
-/// false claim (attaching a real subject to the wrong predicate) — the extractive prompt minimizes
-/// it, but closing it fully needs an entailment check. Pure → tested.
+/// P4 — quote-span grounding (the anti-hallucination core). Find the model's `quote` as a CONTIGUOUS
+/// run of whole tokens inside `source` (case-insensitive), and return the EXACT source slice (original
+/// case, spacing, and any punctuation BETWEEN the tokens). `None` if the quote is not a contiguous
+/// fragment of the source. Because we store the source slice — never the model's text — a stored fact
+/// cannot fabricate a word, cannot truncate an identifier (a partial token ≠ the whole token → no
+/// match, so «10.0.0.11» never matches «10.0.0.116»), and cannot RECOMBINE distant words into a false
+/// claim (non-adjacent tokens are not a contiguous run). Two extra guards keep a fact to ONE short
+/// utterance: reject a span that bridges a clause/sentence boundary (else two clauses fuse into a
+/// misleading claim) or that exceeds ~200 chars (else a long tile answer becomes one giant "fact").
+/// The fact IS a short piece of the source. Residual: a semantic inversion within one clause is copied.
 #[must_use]
-pub fn is_grounded(source: &str, rewrite: &str) -> bool {
-    let r = rewrite.trim();
-    // (a) shape
-    if r.is_empty() || r.chars().count() > 400 || r.starts_with('#') {
-        return false;
+pub fn locate_span(source: &str, quote: &str) -> Option<String> {
+    let src = tokenize(source);
+    let q: Vec<String> = tokenize(quote).into_iter().map(|(t, _, _)| t).collect();
+    if q.is_empty() || q.len() > src.len() {
+        return None;
     }
-    if r.chars().count() > source.chars().count() * 3 / 2 + 20 {
-        return false; // a "condensation" that GROWS the text is inventing
-    }
-    // (d) negation must not be introduced or dropped
-    if has_negation(source) != has_negation(r) {
-        return false;
-    }
-    // Tokenize the source ONCE into trimmed, lowercased WHOLE tokens — identifiers are matched
-    // against these by equality (substring would accept a truncated number).
-    let src_tokens: Vec<String> = source
-        .split_whitespace()
-        .map(|t| {
-            t.trim_matches(|c: char| !c.is_alphanumeric())
-                .to_lowercase()
-        })
-        .filter(|t| !t.is_empty())
-        .collect();
-    let src_lower = source.to_lowercase();
-    let mut content_total = 0usize;
-    let mut content_missing = 0usize;
-    let mut identifier_seen = false;
-    for raw in r.split_whitespace() {
-        let tok = raw.trim_matches(|c: char| !c.is_alphanumeric());
-        if tok.is_empty() {
-            continue;
-        }
-        if is_identifier(tok) {
-            // (b) identifier — must equal a WHOLE source token, verbatim. Zero tolerance.
-            let low = tok.to_lowercase();
-            if !src_tokens.contains(&low) {
-                return false;
-            }
-            identifier_seen = true;
-            continue;
-        }
-        // (c) split a compound («Бекап-сервер») into words; each content word (≥4 letters)
-        // must be contained in the source (declension-aware).
-        for word in tok.split(|c: char| !c.is_alphanumeric()) {
-            if word.chars().filter(|c| c.is_alphabetic()).count() >= 4 {
-                content_total += 1;
-                if !source_contains(&src_lower, &word.to_lowercase()) {
-                    content_missing += 1;
-                }
-            }
-        }
-    }
-    // (e) something must actually be grounded — otherwise «ок да» would pass vacuously (0 ≤ 0).
-    if content_total == 0 && !identifier_seen {
-        return false;
-    }
-    // (c) ≤10% of content words may be novel glue. STRICT on purpose: an adversarial review
-    // showed that loosening this let single-word fabrications through («перезагружен»→«взломан»),
-    // because a bag-of-words gate can't tell a synonym from a lie. So condensation is EXTRACTIVE
-    // (the prompt keeps the source's words), which passes at this strict bar. NB: it still can't
-    // catch RECOMBINATION of real words into a false claim (see the doc) — that needs entailment.
-    content_missing * 10 <= content_total
+    (0..=src.len() - q.len())
+        .find(|&start| (0..q.len()).all(|k| src[start + k].0 == q[k]))
+        .map(|start| source[src[start].1..src[start + q.len() - 1].2].to_string())
+        .filter(|span| span.chars().count() <= 200 && !crosses_clause_boundary(span))
 }
 
 /// A normalized fact from [`normalize_fact`]: clean atomic text + its primary entity (the thing
-/// the fact is about), when the model could name one.
+/// the fact is about), when the model named one. Both are verbatim source slices (via `locate_span`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NormalizedFact {
     pub text: String,
     pub entity: Option<String>,
 }
 
-/// System prompt for the condense pass (M1-b-2, feature A). Russian. EXTRACTIVE: it pulls 1–3
-/// short facts using the SOURCE'S OWN WORDS (drop filler, don't reword). An adversarial review
-/// showed a paraphrasing prompt + a loose gate let single-word lies through, and a bag-of-words
-/// gate can't tell a synonym from a lie — so keeping the source's words is what lets a faithful
-/// condensation pass the STRICT [`is_grounded`] (re-checked per fact); a paraphrase is rejected
-/// and the caller keeps the heuristic text. (Bonus: telling it to keep «айпи» not «IP» also
-/// avoids the acronym-transliteration false-reject.)
-const CONDENSE_SYSTEM: &str = "Ты извлекаешь КОРОТКИЕ факты для личной памяти пользователя. \
-Вход — ответ ИИ ИЛИ сырая расшифровка речи.\n\n\
-Выдели из текста от 1 до 3 САМЫХ ВАЖНЫХ фактов. Каждый факт — одно короткое ясное утверждение \
-(НЕ абзац).\n\n\
-ГЛАВНОЕ ПРАВИЛО: бери СЛОВА ИЗ ТЕКСТА как есть. Можно ВЫКИДЫВАТЬ лишнее (слова-паразиты, повторы, \
-воду) и слегка переставлять — но НЕ заменяй слова синонимами и НЕ перефразируй. Если в тексте \
-«жрёт» — пиши «жрёт», а не «ест»; если «айпи» — пиши «айпи», а не «IP».\n\n\
-Ещё правила:\n\
-- Пиши на ТОМ ЖЕ языке, что и вход (НЕ переводи).\n\
-- Идентификаторы (числа, IP, подсети, порты, имена, логины, даты, коды) — ДОСЛОВНО, ни одной \
-цифры или буквы не менять.\n\
-- Ничего не добавляй, чего нет в тексте.\n\
-- Сохрани отрицание («не», «нельзя», «без», «отказался») — не переворачивай смысл.\n\
-- Если текст и так короткий факт — верни как есть.\n\
-- Без пояснений, без markdown, без тройных кавычек.\n\n\
+/// System prompt for the condense pass (M1-b-2, feature A / P4). Russian. QUOTE-SPAN: the model
+/// returns VERBATIM contiguous quotes, not free text — [`locate_span`] then verifies each is a
+/// contiguous fragment of the source and stores the source slice. So the prompt only has to make
+/// the model COPY (choose start/end), not rewrite; the safety is structural, not prompt-trust.
+const CONDENSE_SYSTEM: &str = "Ты извлекаешь из текста 1–3 самых важных факта для личной памяти \
+пользователя. Вход — ответ ИИ ИЛИ сырая расшифровка речи.\n\n\
+Для каждого факта верни ДОСЛОВНУЮ ЦИТАТУ — НЕПРЕРЫВНЫЙ кусок текста, скопированный БУКВА В БУКВУ. \
+Ты можешь только ВЫБРАТЬ, где цитата начинается и заканчивается (чтобы отрезать слова-паразиты и \
+воду вокруг факта). НЕЛЬЗЯ: перефразировать, менять слова, менять цифры или буквы, склеивать \
+НЕСМЕЖНЫЕ части текста.\n\n\
+Правила:\n\
+- Цитата — СПЛОШНОЙ фрагмент оригинала (одно место, подряд). Не объединяй разные куски.\n\
+- Копируй ТОЧНО: ни одной буквы или цифры не меняй, ничего не добавляй, не переводи.\n\
+- 1–3 цитаты, каждая — одно короткое ясное утверждение, без окружающего мусора.\n\n\
 Ответь ТОЛЬКО строгим JSON:\n\
-{\"facts\":[{\"entity\":\"<о чём>\",\"text\":\"<короткий факт словами из текста>\"}]}\n\
-От 1 до 3 фактов. entity — имя/система/человек, или \"\" если неясно.";
+{\"facts\":[{\"entity\":\"<о чём, коротко>\",\"text\":\"<дословная цитата из текста>\"}]}\n\
+entity — имя/система/человек ИЗ ТЕКСТА, или \"\" если неясно.";
 
-/// Async condense/normalize (M1-b-2, feature A): heuristic-clean the raw span, ask the AI to
-/// extract 1–3 SHORT atomic facts (no-think JSON via [`ai::complete`]), keep ONLY the facts that
-/// pass [`is_grounded`] against the RAW source (each carries its own identifiers), and join up to
-/// 3 of them with «; ». Returns the condensed fact(s), or `None` on any AI error / parse
-/// failure / all-rejected — the caller then keeps the heuristic-cleaned text, never a
-/// hallucinated fact. (A long tile answer → a few short facts; a messy STT line → one clean fact.)
+/// Async condense (M1-b-2, feature A / P4): heuristic-clean the raw span, ask the AI for 1–3 VERBATIM
+/// quotes (no-think JSON via [`ai::complete`]), and [`locate_span`] each against the cleaned source —
+/// keeping the exact SOURCE SLICE (dropping any quote that isn't a contiguous fragment). Joins ≤3 with
+/// «; ». Returns the located fact(s), or `None` on any AI error / parse failure / nothing-located — the
+/// caller then keeps the heuristic-cleaned text, never a hallucinated fact. A long tile answer → a few
+/// short quoted facts; a messy STT line → one clean quoted fact.
 pub async fn normalize_fact(
     raw: &str,
     base_url: &str,
@@ -239,28 +153,34 @@ pub async fn normalize_fact(
         },
         ChatMessage {
             role: "user".into(),
-            content: MessageContent::Text(cleaned),
+            content: MessageContent::Text(cleaned.clone()),
         },
     ];
     let resp = ai::complete(base_url, bearer, model, messages, 500)
         .await
         .ok()?;
-    // Keep only facts grounded in the RAW source; take ≤3. A hallucinated fact is dropped
-    // individually, so a good fact survives alongside a rejected one.
-    let grounded: Vec<NormalizedFact> = parse_facts(&resp)
+    // Each fact's text must be a VERBATIM CONTIGUOUS quote of the (cleaned) source: locate_span
+    // returns the exact source slice or drops the fact — we store slices, never the model's text.
+    let facts: Vec<(String, Option<String>)> = parse_facts(&resp)
         .into_iter()
-        .filter(|f| is_grounded(raw, &f.text))
+        .filter_map(|f| {
+            locate_span(&cleaned, &f.text).map(|span| {
+                // entity is metadata — keep it only if it too is a source quote (never fabricated).
+                let entity = f.entity.and_then(|e| locate_span(&cleaned, &e));
+                (span, entity)
+            })
+        })
         .take(3)
         .collect();
-    if grounded.is_empty() {
+    if facts.is_empty() {
         return None;
     }
-    let entity = grounded.iter().find_map(|f| f.entity.clone());
+    let entity = facts.iter().find_map(|(_, e)| e.clone());
     // Join with "; " (not "\n") so a multi-fact record stays single-line-editable in the
     // Настройки→Память LineEdit — same convention as `join_marked_text`.
-    let text = grounded
+    let text = facts
         .iter()
-        .map(|f| f.text.as_str())
+        .map(|(t, _)| t.as_str())
         .collect::<Vec<_>>()
         .join("; ");
     Some(NormalizedFact { text, entity })
@@ -331,82 +251,54 @@ mod tests {
     }
 
     #[test]
-    fn grounded_accepts_faithful_rewrite() {
-        let src = "ну это бекап сервер z14-4443-backup подсеть 10.255.28.96/27 IP 10.255.28.116";
-        // Reworded prose, but every identifier is a verbatim whole token and content is present.
-        assert!(is_grounded(
-            src,
-            "Бекап-сервер z14-4443-backup: подсеть 10.255.28.96/27, IP 10.255.28.116"
-        ));
+    fn locate_span_returns_verbatim_source_slice() {
+        // Case + whitespace tolerant; returns the ORIGINAL slice incl. inner punctuation/spacing.
+        assert_eq!(
+            locate_span(
+                "Ну это Бекап-Сервер  z14-4443, ага",
+                "бекап-сервер z14-4443"
+            )
+            .as_deref(),
+            Some("Бекап-Сервер  z14-4443")
+        );
     }
 
     #[test]
-    fn grounded_rejects_truncated_or_altered_identifier() {
-        // Substring must NOT count: a truncated IP / CIDR / port / id is a fabricated fact.
-        assert!(!is_grounded("адрес 10.255.28.116", "адрес 10.255.28.11"));
-        assert!(!is_grounded(
-            "подсеть 10.255.28.96/27",
-            "подсеть 10.255.28.96/2"
-        ));
-        assert!(!is_grounded("порт 8080", "порт 808"));
-        assert!(!is_grounded("сервер z14-4443", "сервер z14"));
-        assert!(!is_grounded("бюджет 1000 долларов", "бюджет 100 долларов"));
-        // An invented subnet not present at all — rejected.
-        assert!(!is_grounded(
-            "подсеть 10.255.28.96/27",
-            "подсеть 10.0.0.0/8"
-        ));
+    fn locate_span_rejects_truncated_identifier_and_fabrication() {
+        // Truncated IP: token «11» ≠ «116» → no contiguous match → None (never a wrong IP).
+        assert_eq!(locate_span("айпи 10.255.28.116", "10.255.28.11"), None);
+        // A word not in the source → None.
+        assert_eq!(locate_span("кот не ест таблетки", "собака"), None);
     }
 
     #[test]
-    fn grounded_rejects_acronym_swap() {
-        // An all-caps ASCII acronym must be verbatim — a protocol swap is a fabricated fact.
-        assert!(!is_grounded("используем VPN", "используем DNS"));
-        assert!(is_grounded("используем VPN дома", "дома используем VPN"));
+    fn locate_span_rejects_recombination() {
+        // «Бета» and «продакшн» both exist but are NOT adjacent — the false claim «Бета продакшн»
+        // (Бета was the TEST server) is not a contiguous run → None. A bag-of-words gate can't
+        // catch this; contiguous-token matching does, by construction.
+        let src = "сервер Альфа продакшн, сервер Бета тестовый";
+        assert_eq!(locate_span(src, "Бета продакшн"), None);
+        // The true contiguous claim IS found (verbatim slice).
+        assert_eq!(
+            locate_span(src, "Бета тестовый").as_deref(),
+            Some("Бета тестовый")
+        );
     }
 
     #[test]
-    fn grounded_rejects_negation_flip() {
-        assert!(!is_grounded("я не пью кофе", "пьёт кофе"));
-        assert!(!is_grounded("пьёт кофе по утрам", "не пьёт кофе"));
-        assert!(!is_grounded(
-            "это невозможно сделать быстро",
-            "это возможно сделать быстро"
-        ));
-        assert!(!is_grounded("без ошибок прошло", "с ошибками прошло"));
-    }
-
-    #[test]
-    fn grounded_rejects_bad_shape_and_vacuous() {
-        assert!(!is_grounded("что-то сказано", "")); // empty
-        assert!(!is_grounded("тема", "## Заголовок")); // markdown header
-        assert!(!is_grounded("кот", &"длинно ".repeat(60))); // ballooned
-                                                             // Nothing grounded: no identifier verified, no ≥4-letter content word → reject.
-        assert!(!is_grounded("договорились обо всём", "ок да"));
-    }
-
-    #[test]
-    fn grounded_accepts_declension_and_all_identifiers() {
-        // RU declension: «Альфе» matches the stem of «Альфа»; «CRM» is a verbatim acronym.
-        assert!(is_grounded("проект Альфа наша CRM", "Альфе — CRM проекта"));
-        // All-identifier fact (no content words) is fine when they're verbatim.
-        assert!(is_grounded("порт 8080 API", "8080 API"));
-    }
-
-    #[test]
-    fn grounded_condense_extractive_passes_fabrication_rejected() {
-        let src = "он их вообще не жрёт, даёшь котику, выплёвывает таблетку, нужно в уколах давать";
-        // EXTRACTIVE condensation — filler dropped, but every word comes from the source (жрёт
-        // stays жрёт, no synonym) → passes the STRICT gate.
-        assert!(is_grounded(
-            src,
-            "не жрёт, выплёвывает таблетку, нужно давать в уколах"
-        ));
-        // A SINGLE fabricated ≥4-letter word («часто») is now rejected — the strict bar catches
-        // the lie a paraphrasing/loose gate waved through (the review's «взломан» class).
-        assert!(!is_grounded(src, "не жрёт таблетку, часто выплёвывает"));
-        // Wholesale fabrication (novel content, negation still matched) → rejected.
-        assert!(!is_grounded(src, "кот не любит гулять вечером"));
+    fn locate_span_rejects_boundary_and_overlong() {
+        // Bridging a sentence («ушёл. Она») or clause («жив; база») → rejected: a fact is ONE
+        // clause, not two fused by verbatim inner punctuation.
+        assert_eq!(locate_span("Он ушёл. Она осталась", "ушёл. Она"), None);
+        assert_eq!(locate_span("сервер жив; база мертва", "жив; база"), None);
+        // But a dot BETWEEN digits (IP/version) is NOT a boundary — must still locate.
+        assert_eq!(
+            locate_span("айпи 10.255.28.116 готов", "10.255.28.116").as_deref(),
+            Some("10.255.28.116")
+        );
+        // An over-long contiguous span (a whole tile paragraph) → rejected (one short utterance).
+        let long = "слово ".repeat(60); // ~360 chars, one contiguous token run
+        assert_eq!(locate_span(&long, long.trim()), None);
     }
 
     #[test]
