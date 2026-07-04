@@ -763,20 +763,29 @@ export component TileWindow inherits Window {
                 }
             }
 
-            // R1/RS2 (retest v0.28.0) — «Выделить текст» mode: the whole answer as ONE read-only
-            // TextEdit so text selects / Ctrl+C-copies ACROSS blocks. A std TextEdit is a BOUNDED,
-            // self-scrolling widget — its own preferred height is modest (a few lines), so with
-            // vertical-stretch:1 it fills the leftover tile space and SCROLLS the rest INSIDE, keeping
-            // «В память»/«Отмена»/«Продолжить диалог» on-screen. (SelectableText's height = full text,
-            // which grew the window and shoved the buttons off — even full-screen — no matter the
-            // ScrollView min-height, because the window sizes to the content's PREFERRED height.)
-            // Trade-off: no ⭐-of-selection here (copy is the use); per-block ⭐ is unchanged.
-            if root.select-mode : TextEdit {
+            // R1/RS2 (retest v0.28.0) — «Выделить текст» VIEW: the whole answer as ONE selectable field
+            // to drag-select / Ctrl+C-copy / right-click «Выделенное в память» ACROSS blocks. Hidden
+            // while EDITING a captured selection (capture-pending) — the editor below then gets the
+            // full space, so its «В память» save button can't be pushed off (the real RS2 bug: the
+            // big field + the editor + the button stacked past the window). min-height:0 so it takes
+            // only the leftover space here.
+            if root.select-mode && !root.capture-pending : ScrollView {
                 vertical-stretch: 1;
                 horizontal-stretch: 1;
-                read-only: true;
-                wrap: word-wrap;
-                text: root.select-text;
+                viewport-width: self.width;
+                min-height: 0px;
+                VerticalLayout {
+                    padding-right: 14px;
+                    SelectableText {
+                        text: root.select-text;
+                        font-size: 12px;
+                        text-color: Theme.text-secondary;
+                        wrap: word-wrap;
+                        capture(a, c) => {
+                            root.capture-selection(-1, a, c);
+                        }
+                    }
+                }
             }
 
             // A2 (ТЗ 2026-07-02) — «⭐ В память» action bar: shows once ≥1 block is
@@ -785,9 +794,14 @@ export component TileWindow inherits Window {
             // own fact (edit later in Настройки → Память).
             if root.marked-count >= 1 || root.capture-pending : VerticalLayout {
                 spacing: 4px;
-                // Editor: the single-mark trim buffer OR a pending mouse-selection.
-                if root.marked-count == 1 || root.capture-pending : LineEdit {
+                // Editor: the single-mark trim buffer OR a pending selection. A BOUNDED, scrollable
+                // multi-line TextEdit (was a LineEdit) — a big captured selection is editable + scrolls
+                // WITHIN 160px instead of filling the area and pushing «В память»/«Отмена» off (RS2).
+                if root.marked-count == 1 || root.capture-pending : TextEdit {
                     text <=> root.capture-text;
+                    wrap: word-wrap;
+                    min-height: 44px;
+                    max-height: 160px;
                 }
                 HorizontalLayout {
                     spacing: 6px;

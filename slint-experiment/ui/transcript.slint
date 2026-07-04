@@ -7,7 +7,7 @@
 // i18n: chrome strings are @tr (English msgid; RU in slint-replay.po). The row
 // DATA (time / speaker / text) is language-neutral, built in Rust.
 
-import { ListView, Palette, LineEdit, Button } from "std-widgets.slint";
+import { ListView, Palette, LineEdit, TextEdit, Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { CloseButton, SelectableText } from "controls.slint";
 import { Metrics } from "metrics.slint";
@@ -417,8 +417,13 @@ export component TranscriptWindow inherits Window {
                 // record. «В память (N)» = save-marked; a pending selection = save-capture.
                 if root.marked-count >= 1 || root.capture-pending : VerticalLayout {
                     spacing: Metrics.space-sm;
-                    if root.marked-count == 1 || root.capture-pending : LineEdit {
+                    // RS2: bounded, scrollable multi-line editor (was a LineEdit) so a big captured
+                    // selection scrolls within 160px instead of pushing «В память»/«Отмена» off.
+                    if root.marked-count == 1 || root.capture-pending : TextEdit {
                         text <=> root.capture-text;
+                        wrap: word-wrap;
+                        min-height: 44px;
+                        max-height: 160px;
                     }
                     HorizontalLayout {
                         spacing: Metrics.space-sm;
