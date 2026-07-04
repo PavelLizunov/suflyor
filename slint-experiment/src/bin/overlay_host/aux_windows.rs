@@ -1785,27 +1785,15 @@ fn wire_transcript_player(
     transcript_player::set_poll_timer(timer);
 }
 
-/// Cap on transcript rows DISPLAYED in the viewer: the FIRST N utterances
-/// (chronological). A DISPLAY bound only — "Copy all" exports every line (it reads
-/// the full utterance set, not this capped view) and an overflow footer discloses
-/// the hidden tail, so a long meeting isn't SILENTLY truncated. The rows render in
-/// an UN-VIRTUALIZED `for` inside a ScrollView (transcript.slint), so the list's
-/// content height ≈ N·(row height). The Slint software renderer holds coordinates
-/// in i16 (max 32767px); once content exceeds that, a rounded-rect row's wrapped
-/// coordinate panics the SW renderer (`Shifted::new`) and corrupts skia — the same
-/// class as Баг5. Unlike the archive (fixed 50px rows), transcript rows are
-/// VARIABLE-height (wrapping utterance text), so each row is ALSO clamped to 120px
-/// and clipped in transcript.slint; the cap and clamp TOGETHER bound the list.
-/// Taking the FIRST N (not the last) preserves the model-index == utterance-index
+/// MEMORY sanity bound on transcript rows built into the model: the FIRST N utterances
+/// (chronological). This is NO LONGER an i16 bound — transcript.slint now renders the rows in
+/// a VIRTUALIZED `ListView` (only visible rows are instantiated), so the list's height no longer
+/// hits the SW-renderer's i16 (32767px) coordinate limit and the whole transcript can show. N is
+/// kept only so a runaway session (audio left recording) can't build an unbounded model; 2000
+/// covers a multi-hour meeting (~10 utt/min). "Copy all" still exports every line, and the footer
+/// discloses any tail beyond N. Taking the FIRST N preserves the model-index == utterance-index
 /// invariant that copy-selected / play-line / active-line rely on.
-const TRANSCRIPT_DISPLAY_CAP: usize = 200;
-
-// Баг5-class guard (compile-time): keep the un-virtualized transcript list under
-// the SW renderer's i16 (32767px) coordinate limit. cap · per-row px (120px clamp
-// in transcript.slint + 2px spacing, rounded up to 140 for headroom) + a
-// scroll/border allowance must stay under. Raising the cap without shrinking the
-// per-row clamp fails the build.
-const _: () = assert!(TRANSCRIPT_DISPLAY_CAP * 140 + 800 < 32_767);
+const TRANSCRIPT_DISPLAY_CAP: usize = 2000;
 
 /// Open a READ-ONLY structured transcript window for a session (ТЗ1). Reuses the
 /// slot if already open; otherwise builds the per-line model from the session's
@@ -1824,7 +1812,7 @@ pub(crate) fn open_transcript(
     let lines: Vec<TranscriptLine> = utts
         .iter()
         .enumerate()
-        .take(TRANSCRIPT_DISPLAY_CAP) // Баг5-class i16 bound: first N (chronological) — keeps model idx == utt idx
+        .take(TRANSCRIPT_DISPLAY_CAP) // memory sanity bound (not i16 — ListView virtualizes); first N keeps model idx == utt idx
         .map(|(i, u)| {
             // F1: prefer the persisted per-line audio offset (audio_ms) for BOTH the
             // shown timecode AND the player seek; old sessions (no audio_ms) fall back

@@ -7,7 +7,7 @@
 // i18n: chrome strings are @tr (English msgid; RU in slint-replay.po). The row
 // DATA (time / speaker / text) is language-neutral, built in Rust.
 
-import { ScrollView, Palette, LineEdit, Button } from "std-widgets.slint";
+import { ListView, Palette, LineEdit, Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { CloseButton, SelectableText } from "controls.slint";
 import { Metrics } from "metrics.slint";
@@ -296,11 +296,13 @@ export component TranscriptWindow inherits Window {
                 }
 
                 // ── Chronological transcript rows ──
-                if !root.empty : ScrollView {
+                if !root.empty : ListView {
+                    // Virtualized (only VISIBLE rows are instantiated) → the list height is no
+                    // longer bounded by the SW-renderer i16 (32767px) limit, so ALL utterances
+                    // show — no display cap. Per-row `max-height:120px` + clip still bounds any
+                    // single very long utterance.
                     vertical-stretch: 1;
-                    VerticalLayout {
-                        spacing: 2px;
-                        for line[i] in root.lines : Rectangle {
+                    for line[i] in root.lines : Rectangle {
                             // Баг5 — clamp + clip so ONE long utterance can't grow the
                             // row unbounded; with TRANSCRIPT_DISPLAY_CAP this keeps the
                             // un-virtualized list under the SW renderer's i16 (32767px)
@@ -393,7 +395,6 @@ export component TranscriptWindow inherits Window {
                                 }
                             }
                         }
-                    }
                 }
 
                 // G2b — «В память» bar (mirrors the tiles): shows when ≥1 line is
