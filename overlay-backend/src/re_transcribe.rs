@@ -112,6 +112,21 @@ fn append_chunk_text(acc: &mut String, piece: &str) {
     acc.push_str(piece);
 }
 
+/// A window whose peak amplitude is below this is treated as SILENCE and skipped
+/// before STT. The recorder pads idle gaps with zero samples to keep the WAV a
+/// wall-clock timeline (D0.5); feeding that silence to STT is wasted local inference
+/// and — worse — extra PAID Cloud requests over a long idle channel. Well below
+/// speech (~−44 dBFS), so any window holding a real utterance is still transcribed;
+/// exact-zero padding is always caught. Also trims genuine silence — a pure win.
+const SILENCE_MAX_ABS: u16 = 200;
+
+/// True when every sample is below [`SILENCE_MAX_ABS`] — a padded / silent window
+/// STT would only turn into empty or hallucinated text. `unsigned_abs` (not `abs`)
+/// so `i16::MIN` can't panic.
+fn is_silent_window(buf: &[i16]) -> bool {
+    buf.iter().all(|&s| s.unsigned_abs() < SILENCE_MAX_ABS)
+}
+
 /// Read a saved 16 kHz mono i16 WAV back into PCM samples — FULL-LOAD helper
 /// for tests/tools. The production path streams via [`read_next_chunk`].
 ///
@@ -229,6 +244,12 @@ pub async fn transcribe_session(
                 read_next_chunk(&mut samples, chunk).with_context(|| format!("load {file}"))?;
             if buf.is_empty() {
                 break; // end-of-file (header over-claimed)
+            }
+            // Skip padded / silent windows: the recorder pads idle gaps with zeros to
+            // keep the WAV a wall-clock timeline (D0.5), and running STT over silence
+            // is wasted local inference / paid Cloud requests for no transcript.
+            if is_silent_window(&buf) {
+                continue;
             }
             let piece = stt::transcribe_once(
                 &backend,
@@ -385,5 +406,13 @@ mod tests {
         append_chunk_text(&mut acc, "   ");
         append_chunk_text(&mut acc, "вторая");
         assert_eq!(acc, "первая часть вторая");
+    }
+
+    #[test]
+    fn is_silent_window_skips_padding_and_noise_but_keeps_speech() {
+        assert!(is_silent_window(&[0, 0, 0, 0])); // pure D0.5 padding
+        assert!(is_silent_window(&[10, -30, 5, -12])); // noise floor
+        assert!(!is_silent_window(&[0, 0, 5000, 0])); // one real sample → transcribe it
+        assert!(!is_silent_window(&[i16::MIN])); // extreme; unsigned_abs → no panic
     }
 }

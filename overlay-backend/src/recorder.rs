@@ -22,6 +22,17 @@
 //! though the PCM is on disk. [`repair_unfinalized_in`] runs at the next session
 //! start and patches such headers from the actual file length, so a recording
 //! interrupted by a crash is still playable.
+//!
+//! ## Wall-clock timeline (D0.5 — diarization / player-seek alignment)
+//!
+//! Each chunk carries a `timestamp_ms` = wall-clock ms since its channel's capture
+//! start (`audio.rs`). WASAPI loopback delivers NO packets while nothing renders,
+//! so a naive append makes the WAV run SHORTER than wall-clock by the total quiet
+//! time — and `audio_ms` (wall-clock) then no longer maps to a sample offset (the
+//! mapping drifts, unboundedly, on any session with idle gaps). The writer PADS
+//! silence per channel ([`plan_pad`]) so the WAV stays a true wall-clock timeline:
+//! `sample_offset == audio_ms`. This is what the offline diarizer and the archive
+//! player both rely on to line a transcript line up with its audio.
 
 use crate::audio::{AudioChunk, AudioSource};
 use anyhow::{Context, Result};
@@ -44,8 +55,27 @@ const WRITER_QUEUE: usize = 256;
 /// Canonical `hound` WAV header length (RIFF + fmt(16) + data) in bytes.
 const WAV_HEADER_LEN: u64 = 44;
 
+/// Max silence a single gap may pad (D0.5): 10 min of 16 kHz samples. A session
+/// left armed for hours with no audio would otherwise write gigabytes of zeros;
+/// beyond this the excess is absorbed into `skew` (the WAV then runs earlier than
+/// wall-clock for the rest of the session, which the diarization view discloses
+/// with its «метки времени неточны» banner). Comfortably covers real meeting
+/// pauses (a mute / bathroom break), so the common case stays sample-exact.
+const MAX_PAD_SAMPLES: u64 = 10 * 60 * SAMPLE_RATE as u64;
+
+/// Max TOTAL silence a channel may pad across a whole session (D0.5 disk guard):
+/// 30 min of 16 kHz samples (~57 MB). `MAX_PAD_SAMPLES` bounds one gap; this bounds
+/// the SUM, so a session left armed all day with a sparse channel can't grow the WAV
+/// to gigabytes of zeros. A real meeting's cumulative silence is far below this, so
+/// it stays sample-exact; past the budget the WAV runs earlier than wall-clock and
+/// the diarization view discloses it with the «метки времени неточны» banner.
+/// `// ponytail: raise if genuinely long, gap-heavy sessions need exact labels`.
+const MAX_TOTAL_PAD_SAMPLES: u64 = 30 * 60 * SAMPLE_RATE as u64;
+
 enum RecMsg {
-    Chunk(AudioSource, Vec<i16>),
+    /// `(source, pcm, timestamp_ms)` — `timestamp_ms` is wall-clock ms since the
+    /// channel's capture start (drives the silence-padding, see [`plan_pad`]).
+    Chunk(AudioSource, Vec<i16>, u64),
     Stop,
 }
 
@@ -142,7 +172,11 @@ impl SessionRecorder {
     /// ignored — the session continues without recording.
     pub fn feed(&self, chunk: &AudioChunk) {
         if let Some(tx) = &self.tx {
-            match tx.try_send(RecMsg::Chunk(chunk.source, chunk.pcm_i16.clone())) {
+            match tx.try_send(RecMsg::Chunk(
+                chunk.source,
+                chunk.pcm_i16.clone(),
+                chunk.timestamp_ms,
+            )) {
                 Ok(()) => {}
                 Err(TrySendError::Full(_)) => {
                     self.dropped.fetch_add(1, Ordering::Relaxed);
@@ -196,6 +230,16 @@ impl Drop for SessionRecorder {
 struct ChannelWriter {
     writer: Option<hound::WavWriter<BufWriter<File>>>,
     failed: bool,
+    /// Samples written so far (audio + silence padding) = the WAV's timeline
+    /// position, kept ≈ wall-clock via [`plan_pad`] (D0.5).
+    written: u64,
+    /// Wall-clock samples deliberately NOT padded (gaps over [`MAX_PAD_SAMPLES`] or
+    /// the per-session [`MAX_TOTAL_PAD_SAMPLES`] budget). Subtracted from each chunk's
+    /// target so the FOLLOWING chunks stay aligned to each other instead of every one
+    /// re-padding the same deficit.
+    skew: u64,
+    /// Total silence padded so far this session (bounded by [`MAX_TOTAL_PAD_SAMPLES`]).
+    total_pad: u64,
 }
 
 impl ChannelWriter {
@@ -203,12 +247,24 @@ impl ChannelWriter {
         Self {
             writer: None,
             failed: false,
+            written: 0,
+            skew: 0,
+            total_pad: 0,
         }
     }
 
     /// Write one chunk, lazily creating the file on first sample. A create or
     /// write error marks the channel permanently failed (no truncate-and-retry).
-    fn write_chunk(&mut self, dir: &Path, name: &str, spec: hound::WavSpec, pcm: &[i16]) {
+    /// D0.5: first pads silence so the WAV stays a wall-clock timeline (see
+    /// [`plan_pad`]); `timestamp_ms` is wall-clock ms since capture start.
+    fn write_chunk(
+        &mut self,
+        dir: &Path,
+        name: &str,
+        spec: hound::WavSpec,
+        pcm: &[i16],
+        timestamp_ms: u64,
+    ) {
         if self.failed {
             return; // dead channel — never re-create (would truncate prior audio)
         }
@@ -222,7 +278,27 @@ impl ChannelWriter {
                 }
             }
         }
+        // Per-session disk guard: cap TOTAL padding; over-budget silence is absorbed
+        // into `skew` (like an over-cap gap) so the WAV can't balloon to gigabytes.
+        let pad_budget = MAX_TOTAL_PAD_SAMPLES.saturating_sub(self.total_pad);
+        let (pad, new_skew) = plan_pad(
+            self.written,
+            self.skew,
+            timestamp_ms,
+            pcm.len() as u64,
+            pad_budget,
+        );
+        self.skew = new_skew;
+        self.total_pad += pad;
         if let Some(w) = self.writer.as_mut() {
+            for _ in 0..pad {
+                if w.write_sample(0i16).is_err() {
+                    log::warn!("recorder: write error padding {name} — channel closed");
+                    self.failed = true;
+                    return;
+                }
+            }
+            self.written += pad;
             for &s in pcm {
                 if w.write_sample(s).is_err() {
                     // Mark failed + DROP the writer (so no re-create truncates the
@@ -234,6 +310,7 @@ impl ChannelWriter {
                     self.failed = true;
                     break;
                 }
+                self.written += 1;
             }
         }
     }
@@ -245,6 +322,34 @@ impl ChannelWriter {
             }
         }
     }
+}
+
+/// Silence-padding plan (D0.5) that keeps a channel's WAV a WALL-CLOCK timeline so
+/// `audio_ms` maps straight to a sample offset (offline diarization + archive-player
+/// seek). Pure + unit-tested. `timestamp_ms` is the chunk's emit time = wall-clock
+/// ms since this channel's capture start ≈ the END of the chunk's audio (`audio.rs`).
+///
+/// Returns `(pad_samples, new_skew)`: pad silence so `written` reaches the chunk's
+/// start offset, but never more than [`MAX_PAD_SAMPLES`] in one gap NOR more than
+/// `pad_budget` (the channel's remaining [`MAX_TOTAL_PAD_SAMPLES`] session budget) —
+/// an idle-for-hours session must not write gigabytes of zeros. The un-padded excess
+/// (over either cap) is absorbed into `skew` and subtracted from every later chunk's
+/// target, so the FOLLOWING chunks stay aligned to each other instead of each
+/// re-padding the same deficit (which would splice big silences into post-gap speech).
+/// A backwards / overlapping timestamp yields 0 — forward-only, the WAV never seeks back.
+fn plan_pad(
+    written: u64,
+    skew: u64,
+    timestamp_ms: u64,
+    chunk_len: u64,
+    pad_budget: u64,
+) -> (u64, u64) {
+    let target_end =
+        (timestamp_ms.saturating_mul(u64::from(SAMPLE_RATE)) / 1000).saturating_sub(skew);
+    let target_start = target_end.saturating_sub(chunk_len);
+    let gap = target_start.saturating_sub(written);
+    let pad = gap.min(MAX_PAD_SAMPLES).min(pad_budget);
+    (pad, skew + (gap - pad))
 }
 
 /// Writer thread body — drains the queue, lazily opening one WAV per channel,
@@ -260,12 +365,12 @@ fn writer_loop(rx: &Receiver<RecMsg>, dir: &Path) {
     let mut sys = ChannelWriter::new();
     while let Ok(msg) = rx.recv() {
         match msg {
-            RecMsg::Chunk(source, pcm) => {
+            RecMsg::Chunk(source, pcm, timestamp_ms) => {
                 let (ch, name) = match source {
                     AudioSource::Mic => (&mut mic, "mic.wav"),
                     AudioSource::System => (&mut sys, "system.wav"),
                 };
-                ch.write_chunk(dir, name, spec, &pcm);
+                ch.write_chunk(dir, name, spec, &pcm, timestamp_ms);
             }
             RecMsg::Stop => break,
         }
@@ -597,6 +702,136 @@ mod tests {
         }
     }
 
+    fn chunk_ts(source: AudioSource, samples: &[i16], timestamp_ms: u64) -> AudioChunk {
+        AudioChunk {
+            source,
+            pcm_i16: samples.to_vec(),
+            timestamp_ms,
+        }
+    }
+
+    // ── D0.5 wall-clock silence padding ──
+
+    /// `plan_pad` with an unlimited per-session budget — these cases pin the
+    /// per-gap cap + skew math, not the session-total guard (its own test below).
+    fn pp(written: u64, skew: u64, timestamp_ms: u64, chunk_len: u64) -> (u64, u64) {
+        plan_pad(written, skew, timestamp_ms, chunk_len, u64::MAX)
+    }
+
+    #[test]
+    fn plan_pad_no_gap_when_wav_tracks_wall_clock() {
+        // A 200 ms (3200-sample) chunk emitted at t=200 ms: target_end 3200,
+        // start 0, written 0 → no pad. A contiguous chunk at t=400 ms, written
+        // 3200 → still no pad. The steady-state case pads nothing.
+        assert_eq!(pp(0, 0, 200, 3200), (0, 0));
+        assert_eq!(pp(3200, 0, 400, 3200), (0, 0));
+    }
+
+    #[test]
+    fn plan_pad_fills_a_silence_gap() {
+        // 3200 samples (200 ms) written; next 200 ms chunk arrives at t=1200 ms
+        // after an 800 ms loopback-quiet gap. target_start 16000, gap 12800
+        // silence samples, no skew.
+        assert_eq!(pp(3200, 0, 1200, 3200), (12800, 0));
+    }
+
+    #[test]
+    fn plan_pad_zero_timestamp_appends() {
+        // ts=0 (unit tests / a degenerate first chunk) → target 0 → never pads,
+        // pure append. Pins the behavior the other recorder tests rely on.
+        assert_eq!(pp(0, 0, 0, 4), (0, 0));
+        assert_eq!(pp(1000, 0, 0, 4), (0, 0));
+    }
+
+    #[test]
+    fn plan_pad_forward_only_on_backwards_timestamp() {
+        // A timestamp that would place the chunk BEFORE the current WAV position
+        // (jitter / overlap) pads 0 — the WAV never seeks back.
+        assert_eq!(pp(100_000, 0, 1000, 3200), (0, 0));
+    }
+
+    #[test]
+    fn plan_pad_caps_gap_and_absorbs_excess_into_skew() {
+        // A gap larger than MAX_PAD_SAMPLES pads only the cap; the excess becomes
+        // skew so the NEXT chunk doesn't re-pad the same deficit (which would
+        // splice minutes of silence into post-gap speech).
+        let big_ts = 3_600_000; // 1 h → target_end 57_600_000 samples
+        let (pad, skew) = pp(0, 0, big_ts, 3200);
+        assert_eq!(pad, MAX_PAD_SAMPLES);
+        assert_eq!(skew, (57_600_000 - 3200) - MAX_PAD_SAMPLES);
+        // A contiguous follow-up 200 ms later: with skew applied its target lands
+        // exactly at `written`, so it pads 0 (aligned to the previous chunk).
+        let written = MAX_PAD_SAMPLES + 3200;
+        let (pad2, skew2) = pp(written, skew, big_ts + 200, 3200);
+        assert_eq!(
+            pad2, 0,
+            "post-cap chunk aligns to the previous one, no re-pad"
+        );
+        assert_eq!(skew2, skew, "skew unchanged when no further over-cap gap");
+    }
+
+    #[test]
+    fn plan_pad_session_pad_budget_caps_total() {
+        // Disk guard: with only 1000 samples of session budget left, a 12800-sample
+        // gap pads just 1000 and absorbs the remaining 11800 into skew.
+        assert_eq!(plan_pad(3200, 0, 1200, 3200, 1000), (1000, 11800));
+        // Budget exhausted → no padding at all; the whole gap becomes skew.
+        assert_eq!(plan_pad(3200, 0, 1200, 3200, 0), (0, 12800));
+    }
+
+    #[test]
+    fn feed_pads_silence_so_the_wav_is_a_wall_clock_timeline() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("sess_pad");
+        {
+            let rec = SessionRecorder::start_in(dir.clone()).unwrap();
+            // 200 ms tone at t=200, then (after an 800 ms quiet gap) 200 ms tone at
+            // t=1200. The WAV must span wall-clock 1200 ms = 19200 samples:
+            // tone | silence | tone.
+            rec.feed(&chunk_ts(AudioSource::System, &vec![50i16; 3200], 200));
+            rec.feed(&chunk_ts(AudioSource::System, &vec![70i16; 3200], 1200));
+        }
+        let samples: Vec<i16> = hound::WavReader::open(dir.join("system.wav"))
+            .expect("sys readable")
+            .into_samples::<i16>()
+            .map(|s| s.unwrap())
+            .collect();
+        assert_eq!(samples.len(), 19200, "WAV spans wall-clock 1200 ms");
+        assert_eq!(samples[0], 50, "first tone present");
+        assert_eq!(samples[3199], 50);
+        assert_eq!(samples[3200], 0, "gap padded with silence");
+        assert_eq!(samples[15999], 0);
+        assert_eq!(samples[16000], 70, "second tone at its wall-clock offset");
+        assert_eq!(samples[19199], 70);
+    }
+
+    #[test]
+    fn feed_pads_each_channel_on_its_own_wall_clock() {
+        // Mic + system have INDEPENDENT capture clocks (separate WASAPI threads),
+        // so each WAV is padded on its own timeline. Different gaps → each spans its
+        // own last-chunk wall-clock. The diarizer reads system.wav against system
+        // audio_ms, so this per-channel independence is what it relies on.
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("sess_two");
+        {
+            let rec = SessionRecorder::start_in(dir.clone()).unwrap();
+            // System: 200 ms at t=200, then 200 ms at t=1200 → 1200 ms = 19200.
+            rec.feed(&chunk_ts(AudioSource::System, &vec![70i16; 3200], 200));
+            rec.feed(&chunk_ts(AudioSource::System, &vec![70i16; 3200], 1200));
+            // Mic: 200 ms at t=200, then 200 ms at t=700 → 700 ms = 11200.
+            rec.feed(&chunk_ts(AudioSource::Mic, &vec![50i16; 3200], 200));
+            rec.feed(&chunk_ts(AudioSource::Mic, &vec![50i16; 3200], 700));
+        }
+        let len = |name: &str| {
+            hound::WavReader::open(dir.join(name))
+                .unwrap()
+                .into_samples::<i16>()
+                .count()
+        };
+        assert_eq!(len("system.wav"), 19200, "system on its own 1200 ms clock");
+        assert_eq!(len("mic.wav"), 11200, "mic on its own 700 ms clock");
+    }
+
     #[test]
     fn size_cap_prunes_oldest_until_under_budget() {
         let tmp = tempfile::tempdir().unwrap();
@@ -666,11 +901,11 @@ mod tests {
             sample_format: hound::SampleFormat::Int,
         };
         let mut ch = ChannelWriter::new();
-        ch.write_chunk(&bad_dir, "system.wav", spec, &[1, 2, 3]);
+        ch.write_chunk(&bad_dir, "system.wav", spec, &[1, 2, 3], 0);
         assert!(ch.failed, "a create failure latches the channel failed");
         assert!(ch.writer.is_none());
         // Second chunk must short-circuit on `failed` (no second create attempt).
-        ch.write_chunk(&bad_dir, "system.wav", spec, &[4, 5, 6]);
+        ch.write_chunk(&bad_dir, "system.wav", spec, &[4, 5, 6], 0);
         assert!(ch.failed);
         assert!(!bad_dir.exists(), "a failed channel creates nothing");
     }
