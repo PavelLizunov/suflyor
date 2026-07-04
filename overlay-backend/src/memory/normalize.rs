@@ -106,40 +106,244 @@ pub fn locate_span(source: &str, quote: &str) -> Option<String> {
         .filter(|span| span.chars().count() <= 200 && !crosses_clause_boundary(span))
 }
 
+/// Russian/English stopwords + STT fillers — carry no fact content, so they don't gate grounding.
+const STOPWORDS: &[&str] = &[
+    "и",
+    "в",
+    "во",
+    "на",
+    "с",
+    "со",
+    "по",
+    "о",
+    "об",
+    "а",
+    "но",
+    "что",
+    "чтобы",
+    "как",
+    "это",
+    "эта",
+    "этот",
+    "эти",
+    "этом",
+    "этой",
+    "того",
+    "том",
+    "же",
+    "бы",
+    "ли",
+    "вот",
+    "ну",
+    "там",
+    "тут",
+    "то",
+    "так",
+    "уж",
+    "из",
+    "за",
+    "до",
+    "от",
+    "для",
+    "при",
+    "про",
+    "мы",
+    "ты",
+    "он",
+    "она",
+    "они",
+    "оно",
+    "вы",
+    "типа",
+    "короче",
+    "значит",
+    "самое",
+    "был",
+    "было",
+    "были",
+    "есть",
+    "будет",
+    "будем",
+    "если",
+    "или",
+    "уже",
+    "ещё",
+    "еще",
+    "the",
+    "and",
+    "for",
+    "that",
+    "this",
+    "with",
+    "are",
+];
+
+/// Negation particles — a rewrite must NOT INTRODUCE one absent from the span (meaning inversion).
+const NEGATIONS: &[&str] = &[
+    "не",
+    "нет",
+    "ни",
+    "нельзя",
+    "без",
+    "никак",
+    "никогда",
+    "ничего",
+    "никто",
+    "никакой",
+];
+
+/// Length of the shared leading char-run — a crude stem test for inflected Russian (the root is
+/// prefix-stable, endings inflect). договорились/договорённости → 6; взломан/перезагружен → 0.
+fn common_prefix_len(a: &str, b: &str) -> usize {
+    a.chars().zip(b.chars()).take_while(|(x, y)| x == y).count()
+}
+
+/// True if fact word `w` is rooted in `source_words`: a shared prefix ≥ min(len_w, len_s, 4). So a
+/// 4+‑char word needs a 4‑char shared root (catches inflection: сервер/сервера), a 3‑char word needs
+/// all 3 (код/кода ✓, код/кот ✗). A fabricated word (взломан) shares no root → not grounded.
+fn word_grounded(w: &str, source_words: &[String]) -> bool {
+    let wl = w.chars().count();
+    source_words.iter().any(|s| {
+        let need = wl.min(s.chars().count()).min(4);
+        need > 0 && common_prefix_len(w, s) >= need
+    })
+}
+
+/// Content words of `s`: lowercased ALPHABETIC tokens ≥3 chars, minus stopwords/negations. (Numbers
+/// & identifiers are checked by [`digit_tokens`]; negations by [`negation_words`].)
+fn content_words(s: &str) -> Vec<String> {
+    tokenize(s)
+        .into_iter()
+        .map(|(t, _, _)| t)
+        .filter(|t| {
+            t.chars().count() >= 3
+                && t.chars().all(char::is_alphabetic)
+                && !STOPWORDS.contains(&t.as_str())
+                && !NEGATIONS.contains(&t.as_str())
+        })
+        .collect()
+}
+
+/// Maximal identifier-ish runs of `s` that contain a digit — IPs/versions/ports/codes
+/// («10.0.0.116», «z14-4443», «8080»). A rewrite must reproduce each VERBATIM (a truncated/altered
+/// number is a different token). Leading/trailing separators are trimmed (sentence dots etc.).
+fn digit_tokens(s: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    for ch in s.chars() {
+        if ch.is_alphanumeric() || matches!(ch, '.' | '-' | ':' | '_') {
+            cur.push(ch);
+        } else {
+            push_digit_token(&cur, &mut out);
+            cur.clear();
+        }
+    }
+    push_digit_token(&cur, &mut out);
+    out
+}
+
+/// Push `cur` to `out` (lowercased, separator-trimmed) iff it holds a digit. Helper for [`digit_tokens`].
+fn push_digit_token(cur: &str, out: &mut Vec<String>) {
+    let t = cur.trim_matches(|c| matches!(c, '.' | '-' | ':' | '_'));
+    if t.chars().any(|c| c.is_ascii_digit()) {
+        out.push(t.to_lowercase());
+    }
+}
+
+/// Negation particles present in `s`.
+fn negation_words(s: &str) -> Vec<String> {
+    tokenize(s)
+        .into_iter()
+        .map(|(t, _, _)| t)
+        .filter(|t| NEGATIONS.contains(&t.as_str()))
+        .collect()
+}
+
+/// True if every element of `needles` appears in `haystack` IN ORDER (a subsequence). Greedy: each
+/// needle consumes `haystack` forward from the previous match, so ORDER — not just membership — is
+/// enforced. `[20, 10]` is NOT a subsequence of `[10, 20]`.
+fn is_ordered_subsequence(needles: &[String], haystack: &[String]) -> bool {
+    let mut it = haystack.iter();
+    needles.iter().all(|n| it.any(|h| h == n))
+}
+
+/// M1 — deterministic grounding gate for a REWRITE: the clean `fact` must be a faithful rewrite of
+/// `span` (a contiguous source quote from [`locate_span`]). It may drop filler / inflect / keep order,
+/// but must NOT: (1) use a content word not rooted in the span (no synonyms/fabrication); (2) change,
+/// invent, or REORDER a number/identifier (digit-tokens must be an ordered subsequence of the span's —
+/// so «с 10 до 20» → «с 20 до 10» is rejected); (3) change the NEGATION count (rejects both ADDING
+/// «не» — «работает» → «не работает» — AND DROPPING it — «не отвечает» → «отвечает», the meaning
+/// inversion a cleaning model most often makes); (4) exceed ~200 chars. Because `span` is ONE short
+/// contiguous quote, a faithful rewrite of it can't recombine distant source parts, and a rejected
+/// rewrite falls back to the verbatim `span`. RESIDUAL (accepted, per owner — over-rejecting here
+/// would just re-roughen facts): a near-prefix synonym swap that shares a ≥4-char root (проверили ↔
+/// провалили) or an intra-clause content-word REORDER (клиент платит подрядчику ↔ подрядчик платит
+/// клиенту) — the prompt asks to keep word order + reuse words to make these unlikely, but neither is
+/// blocked deterministically without over-rejecting legitimate cleaning.
+#[must_use]
+pub fn validate_rewrite(span: &str, fact: &str) -> bool {
+    let f = fact.trim();
+    if f.is_empty() || f.chars().count() > 200 {
+        return false;
+    }
+    let src_words = content_words(span);
+    if content_words(f)
+        .iter()
+        .any(|w| !word_grounded(w, &src_words))
+    {
+        return false;
+    }
+    if !is_ordered_subsequence(&digit_tokens(f), &digit_tokens(span)) {
+        return false;
+    }
+    if negation_words(f).len() != negation_words(span).len() {
+        return false;
+    }
+    true
+}
+
 /// A normalized fact from [`normalize_fact`]: clean atomic text + its primary entity (the thing
-/// the fact is about), when the model named one. Both are verbatim source slices (via `locate_span`).
+/// the fact is about), when the model named one. `text` is either a validated clean rewrite of a
+/// verbatim span, or (when the rewrite fails validation) the verbatim span itself. `entity` is always
+/// a verbatim source slice (via `locate_span`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NormalizedFact {
     pub text: String,
     pub entity: Option<String>,
 }
 
-/// System prompt for the condense pass (M1-b-2, feature A / P4). Russian. QUOTE-SPAN: the model
-/// returns VERBATIM contiguous quotes, not free text — [`locate_span`] then verifies each is a
-/// contiguous fragment of the source and stores the source slice. So the prompt only has to make
-/// the model COPY (choose start/end), not rewrite; the safety is structural, not prompt-trust.
-const CONDENSE_SYSTEM: &str = "Ты извлекаешь из текста 1–3 самых важных факта для личной памяти \
-пользователя. Вход — ответ ИИ ИЛИ сырая расшифровка речи.\n\n\
-Для каждого факта верни ДОСЛОВНУЮ ЦИТАТУ — НЕПРЕРЫВНЫЙ кусок текста, скопированный БУКВА В БУКВУ. \
-Ты можешь только ВЫБРАТЬ, где цитата начинается и заканчивается (чтобы отрезать слова-паразиты и \
-воду вокруг факта). НЕЛЬЗЯ: перефразировать, менять слова, менять цифры или буквы, склеивать \
-НЕСМЕЖНЫЕ части текста.\n\n\
-Правила:\n\
-- Цитата — СПЛОШНОЙ фрагмент оригинала (одно место, подряд). Не объединяй разные куски.\n\
-- Копируй ТОЧНО: ни одной буквы или цифры не меняй, ничего не добавляй, не переводи.\n\
-- 1–3 цитаты, каждая — одно короткое ясное утверждение, без окружающего мусора.\n\n\
+/// System prompt for the rewrite pass (M1). Russian. The model returns, per fact, a VERBATIM
+/// contiguous `quote` (anchored by [`locate_span`] → no recombination) AND a clean `fact` (a rewrite
+/// of THAT quote). [`validate_rewrite`] then gates the clean fact against the quote; a failed rewrite
+/// falls back to the verbatim quote. So the prompt asks for clean facts, but safety is structural
+/// (quote anchor + validator), not prompt-trust.
+const REWRITE_SYSTEM: &str =
+    "Ты извлекаешь 1–3 самых важных факта для личной памяти пользователя. \
+Вход — ответ ИИ ИЛИ сырая расшифровка речи.\n\n\
+Для КАЖДОГО факта верни ДВА поля:\n\
+- \"quote\" — ДОСЛОВНЫЙ непрерывный кусок исходного текста (скопируй БУКВА В БУКВУ, одно место \
+подряд), который содержит факт;\n\
+- \"fact\" — та же мысль, но ЧИСТО: убери слова-паразиты и воду, оставь суть.\n\n\
+СТРОГИЕ правила для \"fact\":\n\
+- Используй ТОЛЬКО слова из \"quote\" (можно менять их форму и убирать лишние, но СОХРАНЯЙ порядок \
+слов). НЕ добавляй новых слов, НЕ подбирай синонимы, НЕ переводи.\n\
+- Числа, коды, адреса (IP, порты, версии, имена) — ТОЧНО как в тексте, ни цифры не меняй.\n\
+- Сохраняй отрицание (не/нет/ни), если оно есть — не переворачивай смысл.\n\
+- Коротко: одно ясное утверждение.\n\n\
 Ответь ТОЛЬКО строгим JSON:\n\
-{\"facts\":[{\"entity\":\"<о чём, коротко>\",\"text\":\"<дословная цитата из текста>\"}]}\n\
+{\"facts\":[{\"entity\":\"<о чём, коротко, из текста>\",\"quote\":\"<дословная цитата>\",\
+\"fact\":\"<чистый факт>\"}]}\n\
 entity — имя/система/человек ИЗ ТЕКСТА, или \"\" если неясно.";
 
-/// Async condense (M1-b-2, feature A / P4): heuristic-clean the raw span, ask the AI for 1–3 VERBATIM
-/// quotes (no-think JSON via [`ai::complete`]), and [`locate_span`] each against the cleaned source —
-/// keeping the exact SOURCE SLICE (dropping any quote that isn't a contiguous fragment). Joins ≤3 with
-/// «; ». Three outcomes (P3 offline-reliability): `Ok(Some)` located fact(s); `Ok(None)` TERMINAL —
-/// the AI replied but nothing parsed/located, OR failed PERMANENTLY (4xx bad bearer/model) so a retry
-/// is pointless (caller keeps the heuristic text, marks `'heuristic'`); `Err` a TRANSIENT AI failure
-/// (offline/timeout/5xx — RETRYABLE, caller leaves the row `'pending'`). Never a hallucinated fact.
-/// A long tile answer → a few short quoted facts; a messy STT line → one clean quote.
+/// Async normalize (M1): heuristic-clean the raw span, ask the AI for 1–3 `{quote, fact}` pairs
+/// (no-think JSON via [`ai::complete`]) — `quote` a VERBATIM contiguous span, `fact` its clean
+/// rewrite. Per fact: [`locate_span`] anchors the quote to an exact source slice (drops it if the
+/// quote isn't a contiguous fragment → no recombination); then [`validate_rewrite`] gates the clean
+/// `fact` against that span (clean tier) or falls back to the verbatim span (safe tier). Joins ≤3 with
+/// «; ». Three outcomes (P3 offline-reliability): `Ok(Some)` fact(s); `Ok(None)` TERMINAL — the AI
+/// replied but nothing parsed/anchored, OR failed PERMANENTLY (4xx bad bearer/model) so a retry is
+/// pointless (caller keeps the heuristic text, marks `'heuristic'`); `Err` a TRANSIENT AI failure
+/// (offline/timeout/5xx — RETRYABLE, caller leaves the row `'pending'`). Never a fabricated fact.
 pub async fn normalize_fact(
     raw: &str,
     base_url: &str,
@@ -153,7 +357,7 @@ pub async fn normalize_fact(
     let messages = vec![
         ChatMessage {
             role: "system".into(),
-            content: MessageContent::Text(CONDENSE_SYSTEM.into()),
+            content: MessageContent::Text(REWRITE_SYSTEM.into()),
         },
         ChatMessage {
             role: "user".into(),
@@ -172,21 +376,26 @@ pub async fn normalize_fact(
         Err(e) if ai::is_permanent_ai_error(&format!("{e:#}")) => return Ok(None),
         Err(e) => return Err(e),
     };
-    // Each fact's text must be a VERBATIM CONTIGUOUS quote of the (cleaned) source: locate_span
-    // returns the exact source slice or drops the fact — we store slices, never the model's text.
     let facts: Vec<(String, Option<String>)> = parse_facts(&resp)
         .into_iter()
         .filter_map(|f| {
-            locate_span(&cleaned, &f.text).map(|span| {
-                // entity is metadata — keep it only if it too is a source quote (never fabricated).
-                let entity = f.entity.and_then(|e| locate_span(&cleaned, &e));
-                (span, entity)
-            })
+            // Anchor to a VERBATIM contiguous span (drops a quote that isn't a real fragment → the
+            // fact can't recombine distant source parts).
+            let span = locate_span(&cleaned, &f.quote)?;
+            // Clean tier: a validated rewrite of the span; else safe tier: the verbatim span itself.
+            let text = if validate_rewrite(&span, &f.fact) {
+                f.fact.trim().to_string()
+            } else {
+                span
+            };
+            // entity is metadata — keep it only if it too is a source quote (never fabricated).
+            let entity = f.entity.and_then(|e| locate_span(&cleaned, &e));
+            Some((text, entity))
         })
         .take(3)
         .collect();
     if facts.is_empty() {
-        return Ok(None); // AI replied but nothing located → terminal 'heuristic', not a retry.
+        return Ok(None); // AI replied but nothing parsed/anchored → terminal 'heuristic', not a retry.
     }
     let entity = facts.iter().find_map(|(_, e)| e.clone());
     // Join with "; " (not "\n") so a multi-fact record stays single-line-editable in the
@@ -199,10 +408,19 @@ pub async fn normalize_fact(
     Ok(Some(NormalizedFact { text, entity }))
 }
 
-/// Parse ALL facts from a model reply that SHOULD be `{"facts":[{entity,text},…]}` but may be
-/// wrapped in prose or ```json fences. Pure → tested. Empty vec if nothing parseable; facts with
-/// an empty `text` are dropped.
-fn parse_facts(resp: &str) -> Vec<NormalizedFact> {
+/// A raw fact parsed from the model reply (before grounding): the clean `fact`, the verbatim `quote`
+/// it is anchored to, and an optional `entity`. [`normalize_fact`] then anchors + validates.
+struct ParsedFact {
+    entity: Option<String>,
+    quote: String,
+    fact: String,
+}
+
+/// Parse ALL facts from a model reply that SHOULD be `{"facts":[{entity,quote,fact},…]}` but may be
+/// wrapped in prose or ```json fences. Pure → tested. Empty vec if nothing parseable; a fact with an
+/// empty `quote` is dropped (the quote is the required verbatim anchor; `fact` may be empty → the
+/// caller then falls back to the located span).
+fn parse_facts(resp: &str) -> Vec<ParsedFact> {
     #[derive(serde::Deserialize)]
     struct FactsDto {
         #[serde(default)]
@@ -213,7 +431,9 @@ fn parse_facts(resp: &str) -> Vec<NormalizedFact> {
         #[serde(default)]
         entity: String,
         #[serde(default)]
-        text: String,
+        quote: String,
+        #[serde(default)]
+        fact: String,
     }
     // Slice from the first '{' to the last '}' — drops ```json fences / surrounding prose.
     let (Some(start), Some(end)) = (resp.find('{'), resp.rfind('}')) else {
@@ -229,14 +449,15 @@ fn parse_facts(resp: &str) -> Vec<NormalizedFact> {
         .facts
         .into_iter()
         .filter_map(|f| {
-            let text = f.text.trim().to_string();
-            if text.is_empty() {
-                return None;
+            let quote = f.quote.trim().to_string();
+            if quote.is_empty() {
+                return None; // no verbatim anchor → can't ground → drop
             }
             let e = f.entity.trim();
-            Some(NormalizedFact {
-                text,
+            Some(ParsedFact {
                 entity: (!e.is_empty()).then(|| e.to_string()),
+                quote,
+                fact: f.fact.trim().to_string(),
             })
         })
         .collect()
@@ -316,26 +537,66 @@ mod tests {
 
     #[test]
     fn parse_facts_handles_clean_fenced_and_multi() {
-        let fs = parse_facts(r#"{"facts":[{"entity":"z14","text":"Бекап-сервер z14"}]}"#);
+        let fs = parse_facts(
+            r#"{"facts":[{"entity":"z14","quote":"ну это бекап сервер z14","fact":"бекап-сервер z14"}]}"#,
+        );
         assert_eq!(fs.len(), 1);
-        assert_eq!(fs[0].text, "Бекап-сервер z14");
+        assert_eq!(fs[0].quote, "ну это бекап сервер z14");
+        assert_eq!(fs[0].fact, "бекап-сервер z14");
         assert_eq!(fs[0].entity.as_deref(), Some("z14"));
         // ```json fences + surrounding prose tolerated; empty entity → None; MULTIPLE facts kept.
         let fs = parse_facts(
-            "Вот:\n```json\n{\"facts\":[{\"entity\":\"\",\"text\":\"кофе по утрам\"},\
-             {\"entity\":\"порт\",\"text\":\"порт 8080\"}]}\n```\nготово",
+            "Вот:\n```json\n{\"facts\":[{\"entity\":\"\",\"quote\":\"кофе по утрам\",\"fact\":\"кофе по утрам\"},\
+             {\"entity\":\"порт\",\"quote\":\"порт 8080\",\"fact\":\"порт 8080\"}]}\n```\nготово",
         );
         assert_eq!(fs.len(), 2);
-        assert_eq!(fs[0].text, "кофе по утрам");
+        assert_eq!(fs[0].quote, "кофе по утрам");
         assert_eq!(fs[0].entity, None);
-        assert_eq!(fs[1].text, "порт 8080");
+        assert_eq!(fs[1].fact, "порт 8080");
     }
 
     #[test]
     fn parse_facts_rejects_empty_and_garbage() {
         assert!(parse_facts(r#"{"facts":[]}"#).is_empty());
         assert!(parse_facts("не json вообще").is_empty());
-        // Present but empty text → dropped.
-        assert!(parse_facts(r#"{"facts":[{"entity":"x"}]}"#).is_empty());
+        // Present but empty QUOTE (the required verbatim anchor) → dropped even if `fact` is set.
+        assert!(parse_facts(r#"{"facts":[{"entity":"x","fact":"есть факт"}]}"#).is_empty());
+    }
+
+    #[test]
+    fn validate_rewrite_accepts_faithful_clean_rewrite() {
+        // Drops filler, reorders, inflects — every content word rooted in the span, number verbatim.
+        assert!(validate_rewrite(
+            "ну это бекап сервер z14 наверное",
+            "бекап-сервер z14"
+        ));
+        assert!(validate_rewrite(
+            "мы как бы провели встречу и договорились двигаться",
+            "провели встречу, договорились двигаться"
+        ));
+        // Inflection: договорённости shares a ≥4-char root with договорились.
+        assert!(validate_rewrite("в итоге договорились", "договорённости"));
+    }
+
+    #[test]
+    fn validate_rewrite_rejects_fabrication_number_and_negation_change() {
+        // A synonym/fabricated content word not rooted in the span.
+        assert!(!validate_rewrite(
+            "сервер вчера перезагружен",
+            "сервер взломан"
+        ));
+        // A truncated / wrong number is a different digit-token.
+        assert!(!validate_rewrite("айпи 10.0.0.116 готов", "айпи 10.0.0.11"));
+        assert!(!validate_rewrite("порт 8080 открыт", "порт 9090 открыт"));
+        // ADDING a negation absent from the span (meaning inversion).
+        assert!(!validate_rewrite("сервер работает", "сервер не работает"));
+        // DROPPING a negation the span had — the inversion a cleaning model most often makes (F1).
+        assert!(!validate_rewrite("сервер не отвечает", "сервер отвечает"));
+        assert!(!validate_rewrite("доступ не дали", "доступ дали"));
+        // REORDERING a numeric range keeps the digit-token SET but flips meaning (F2).
+        assert!(!validate_rewrite("бэкап с 10 до 20", "бэкап с 20 до 10"));
+        // Over-long (a whole paragraph is not one clean fact).
+        let long = "слово ".repeat(60);
+        assert!(!validate_rewrite(&long, long.trim()));
     }
 }

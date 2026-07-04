@@ -62,5 +62,33 @@ Owner 2026-07-04: «начали всё сразу делать» — implement 
 - **P5** ✅ code-complete, gating — DELETED select-mode Option A (the overflow bug) + `build_select_text`;
   added SHIFT-click ⭐ range-marking (Rust `Cell` anchor, `pointer-event.modifiers.shift`) + «Копировать»
   on the mark bar (`join_marked_text`→clipboard). Adversarial review in flight.
-- Gate `budpvo7z2` running (fmt+clippy-D+test×3+i18n). NOT pushed (accumulating). ⚠ Owner test of the
-  memory (P3/P4) needs the local AI UP; the AI-OFF case now defers to `'pending'` + auto-retries.
+- **ALL FIVE committed** (`67eb8e5` P1+P2, `b6c67c0` P4, `dff50b9` P3+P5), each gated (fmt+clippy-D+
+  test×3 both crates+i18n) + independently adversarially reviewed (P3 HIGH + P5 MEDIUM/LOW/NIT fixed).
+- Installer rebuilt (P1-P5); fresh `overlay-host.exe` placed at the installed path (hash-verified
+  `3119…`) — the `setup.exe /S` headless install hung (a close-running-instance / launch-on-finish
+  wait), so the exe was copied directly (equivalent for the retest; a normal GUI install is
+  unaffected — release-time TODO to confirm /S). Live smoke: installed exe boots + stays alive, no crash.
+- Owner retest checklist: `docs/retest-v0.28.0-fixes.html` (P1-P5, fillable). M1-M2 (nice-clean facts)
+  need AI UP; M3 tests AI-OFF. NOT pushed / NOT released — awaiting «релизь» after retest.
+
+## ROUND 2 — owner retest v0.28.0 feedback (2026-07-04)
+Owner ran the checklist: 6 OK, 2 FAIL. P1/P2/P4-safety/P5-shift+copy/D3 all ✅. Three follow-ups:
+- **M1 quality** — owner found the verbatim quote-span «странная» (keeps interior filler); chose
+  **validated LLM-rewrite**. Also confirmed the `📌` was the note kind-glyph (display), NOT stored —
+  P4 anti-fabrication intact.
+- **R1** — owner wants the deleted whole-tile «Выделить текст» selection back (fixed overflow + new icon).
+- **R1.2** — SHIFT-range ⭐ in the transcript too (was tiles-only).
+
+Status:
+- **R1 + R1.2** ✅ committed `daa36cc` — gate green, review SOUND (overflow confirmed non-recurring).
+- **M1** ⏳ code-complete, RE-GATING after review fixes — `normalize_fact` asks for `{quote, fact}`:
+  `locate_span` anchors the verbatim `quote` (no distant recombination), `validate_rewrite(span,
+  fact)` gates the clean rewrite → clean tier, else falls back to the verbatim span. Safety-focused
+  adversarial review (empirically traced exploits through a function replica): verdict FIX-NEEDED,
+  applied both prescribed fixes — **(F1 HIGH)** negation now requires COUNT-PARITY (was: no-added-only)
+  so a dropped «не» («не отвечает»→«отвечает», the modal cleaning-model inversion) is rejected;
+  **(F2 MED)** digit-tokens must be an ORDERED subsequence (was: set-membership) so «с 10 до 20»→«с 20
+  до 10» is rejected. Prompt now says «сохраняй порядок слов». Residuals ACCEPTED (over-tightening
+  would re-roughen facts — the owner's original complaint): near-prefix synonym swap (проверили↔
+  провалили) + intra-clause content reorder — documented in the validator docstring. 11 normalize
+  tests pass. NOT released.
