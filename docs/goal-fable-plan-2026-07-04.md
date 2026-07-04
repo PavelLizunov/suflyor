@@ -81,7 +81,21 @@ Owner ran the checklist: 6 OK, 2 FAIL. P1/P2/P4-safety/P5-shift+copy/D3 all ✅.
 
 Status:
 - **R1 + R1.2** ✅ committed `daa36cc` — gate green, review SOUND (overflow confirmed non-recurring).
-- **M1** ⏳ code-complete, RE-GATING after review fixes — `normalize_fact` asks for `{quote, fact}`:
+## ROUND 2 RETEST (owner, 2026-07-04) — 4 OK / 2 FAIL of 7
+- ✅ RM3 (AI-off), RS1 (mode back), RT1 (transcript shift), RR1 (regression). M1 confirmed WORKING on
+  normal lines (screenshot: «будем двигаться в этом направлении», «Сбер справился» cleaned). 📌 = glyph.
+- **RM1 FAIL** → **fixed `ec24b7e`**: a rambling multi-sentence STT line stored raw (AI quote crossed
+  sentence boundaries → locate_span rejected → heuristic fallback). Prompt now: quote ONE sentence, no
+  interior «.!?;», drop filler harder. No validator change. Residual: recognizer-fused token
+  («LLМоткрытых») can't be un-merged. ⚠ depends on the model following guidance — owner to re-verify.
+- **RS2 FAIL** → **fixed `ec24b7e`**: «Выделить текст» still overflowed on big text (many hard newlines
+  → tall field). Per owner's own diagnosis, build_select_text now COLLAPSES newlines (flat line/block,
+  single \n sep). ⚠ couldn't reproduce headlessly (computer-use mis-renders the overlay; can't force a
+  long answer) — owner to re-verify on a long summary.
+- Rebuilt + relaunched for round-2-retest re-test. Checklist reused: `docs/retest-v0.28.0-round2.html`.
+
+## (round-1 M1 detail, below — superseded by the round-2 fixes above)
+- **M1** ✅ shipped `e124b9c` — `normalize_fact` asks for `{quote, fact}`:
   `locate_span` anchors the verbatim `quote` (no distant recombination), `validate_rewrite(span,
   fact)` gates the clean rewrite → clean tier, else falls back to the verbatim span. Safety-focused
   adversarial review (empirically traced exploits through a function replica): verdict FIX-NEEDED,

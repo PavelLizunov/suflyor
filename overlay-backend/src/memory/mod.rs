@@ -20,7 +20,7 @@ mod summary_ref;
 
 pub use candidates::extract_heuristic;
 pub use context_builder::{context_for_meeting, format_memory_block, merge_context};
-pub use normalize::{heuristic_clean, normalize_fact, NormalizedFact};
+pub use normalize::{heuristic_clean, heuristic_condense, normalize_fact, NormalizedFact};
 pub use summary_ref::{
     format_summary_reference, key_terms, relevant_items, summary_reference_for_transcript,
 };

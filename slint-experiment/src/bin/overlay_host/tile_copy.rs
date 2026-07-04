@@ -340,7 +340,9 @@ pub(crate) fn insert_approved_note(text: &str) {
     };
     let ep = overlay_backend::config::load().ai_endpoint(true);
     if ep.base_url.trim().is_empty() {
-        finalize_normalized(id, &raw, &cleaned, None, "heuristic"); // no AI configured → terminal
+        // No AI configured → terminal heuristic: store the best clauses, not the whole raw line.
+        let h = overlay_backend::memory::heuristic_condense(&cleaned);
+        finalize_normalized(id, &raw, &h, None, "heuristic");
         return;
     }
     // ponytail: one OS thread per save. Saves are user-initiated + infrequent and ai::complete's
@@ -426,7 +428,14 @@ fn condense_one(
         &ep.model,
     ))? {
         Some(fact) => finalize_normalized(id, raw, &fact.text, fact.entity.as_deref(), "llm"),
-        None => finalize_normalized(id, raw, cleaned, None, "heuristic"),
+        // Terminal heuristic: store the BEST clauses, not the whole raw ramble (fable's fallback).
+        None => finalize_normalized(
+            id,
+            raw,
+            &overlay_backend::memory::heuristic_condense(cleaned),
+            None,
+            "heuristic",
+        ),
     }
     Ok(())
 }
