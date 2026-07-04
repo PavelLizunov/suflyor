@@ -5,7 +5,7 @@
 // CommonMark via slint_replay::markdown::parse() and pushes the
 // resulting Vec<Block> into the `blocks` property.
 
-import { Button, LineEdit, ScrollView, Palette } from "std-widgets.slint";
+import { Button, LineEdit, ScrollView, TextEdit, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { CloseButton, SelectableText } from "controls.slint";
 
@@ -763,33 +763,20 @@ export component TileWindow inherits Window {
                 }
             }
 
-            // R1 (retest v0.28.0) — «Выделить текст» mode: the whole answer as ONE selectable field
-            // so text can be dragged / copied ACROSS blocks. `select-text` is the joined + capped
-            // answer (built in Rust). Same bounded ScrollView shape as the block view above: it clips
-            // + scrolls its viewport, so a huge field stays INSIDE the fixed window and can't paint
-            // over the buttons below (the overflow that got this deleted; also fixed in SelectableText).
-            if root.select-mode : ScrollView {
+            // R1/RS2 (retest v0.28.0) — «Выделить текст» mode: the whole answer as ONE read-only
+            // TextEdit so text selects / Ctrl+C-copies ACROSS blocks. A std TextEdit is a BOUNDED,
+            // self-scrolling widget — its own preferred height is modest (a few lines), so with
+            // vertical-stretch:1 it fills the leftover tile space and SCROLLS the rest INSIDE, keeping
+            // «В память»/«Отмена»/«Продолжить диалог» on-screen. (SelectableText's height = full text,
+            // which grew the window and shoved the buttons off — even full-screen — no matter the
+            // ScrollView min-height, because the window sizes to the content's PREFERRED height.)
+            // Trade-off: no ⭐-of-selection here (copy is the use); per-block ⭐ is unchanged.
+            if root.select-mode : TextEdit {
                 vertical-stretch: 1;
                 horizontal-stretch: 1;
-                viewport-width: self.width;
-                // RS2 (retest): min-height 0 so the tall joined field SCROLLS inside the fixed-height
-                // tile instead of forcing the window taller — which pushed «В память»/«Отмена» (and
-                // «Продолжить диалог») off the bottom until the user deleted text. The window sizes to
-                // its content's min-height (no window max-height); without this the field's full height
-                // propagates up as the window min. vertical-stretch then gives it the leftover space.
-                min-height: 0px;
-                VerticalLayout {
-                    padding-right: 14px;
-                    // Proportional + word-wrap: ONE mixed prose+code buffer, so code loses
-                    // monospace/no-wrap here — the accepted cost of a single joined field.
-                    SelectableText {
-                        text: root.select-text;
-                        font-size: 12px;
-                        text-color: Theme.text-secondary;
-                        wrap: word-wrap;
-                        capture(a, c) => { root.capture-selection(-1, a, c); }
-                    }
-                }
+                read-only: true;
+                wrap: word-wrap;
+                text: root.select-text;
             }
 
             // A2 (ТЗ 2026-07-02) — «⭐ В память» action bar: shows once ≥1 block is
