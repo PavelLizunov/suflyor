@@ -20,9 +20,9 @@
 //!   `Err` a TRANSIENT AI failure (RETRYABLE — row left `'pending'`). Never a fabricated fact.
 //! - [`locate_span`] — kept for the ENTITY path only (a verbatim contiguous source slice).
 //!
-//! Residuals (accepted): a near-prefix synonym sharing a ≥4-char root (проверили↔провалили); lossy
-//! OMISSION of a non-negated word (a shorter-but-true fact); a recognizer-fused token («LLМоткрытых»)
-//! stays as-is (un-merging it is a deferred follow-up).
+//! A recognizer-fused mixed-script token («LLМоткрытых») is un-merged in [`heuristic_clean`] via
+//! [`split_fused_token`] so the real words ground. Residuals (accepted): a near-prefix synonym sharing
+//! a ≥4-char root (проверили↔провалили); lossy OMISSION of a non-negated word (a shorter-but-true fact).
 //!
 //! The pure pieces are unit-tested; `normalize_fact`'s one AI call is not (its JSON parse + the
 //! segmenter + the validator are).
@@ -38,24 +38,116 @@ fn word_core(tok: &str) -> String {
         .collect()
 }
 
-/// Layer-1 heuristic pre-clean (pure, always cheap): collapse whitespace runs to single
-/// spaces and drop an IMMEDIATE duplicate STT-stutter word — a repeated ALPHABETIC word of
-/// ≥4 chars, e.g. «Даже,  даже писана» → «Даже, писана». Numbers and short words are NEVER
-/// collapsed («порт 80 80», «код два два», «5 5» may be real doubles), so this can't lose a
-/// fact. Conservative on purpose — no semantic edits (that's the LLM layer).
+/// In the Unicode Cyrillic block.
+fn is_cyr(c: char) -> bool {
+    ('\u{0400}'..='\u{04FF}').contains(&c)
+}
+
+/// Uppercase Cyrillic → its glyph-IDENTICAL Latin lookalike (confusables only). Used to repair a
+/// recognizer that emitted a Cyrillic letter where a visually-identical Latin one belongs.
+fn cyr_upper_confusable(c: char) -> Option<char> {
+    Some(match c {
+        'А' => 'A',
+        'В' => 'B',
+        'Е' => 'E',
+        'К' => 'K',
+        'М' => 'M',
+        'Н' => 'H',
+        'О' => 'O',
+        'Р' => 'P',
+        'С' => 'C',
+        'Т' => 'T',
+        'У' => 'Y',
+        'Х' => 'X',
+        _ => return None,
+    })
+}
+
+/// De-garble a recognizer-FUSED mixed-script token, e.g. «LLМоткрытых» → [«LLM», «открытых»] (the STT
+/// glued a Latin acronym to a Cyrillic word via a confusable «М»). Only touches a token that has BOTH
+/// Latin and Cyrillic LETTERS: (1) fold a BRIDGING uppercase Cyrillic confusable — Latin before it,
+/// lowercase-Cyrillic after it — to Latin («М»→«M»); (2) split into maximal Latin / Cyrillic runs where
+/// each side is ≥2 letters. A pure-script token (сервер, GigaChat, недоступен), a numeric/identifier
+/// token (10.0.0.116, z14), or a short token is returned UNCHANGED. Letters only — digits, punctuation
+/// and negation particles (не/…, always pure-Cyrillic) can never be touched, so no number, negation, or
+/// meaning can change; it only inserts a space / swaps a glyph-identical codepoint. Pure → tested.
+fn split_fused_token(tok: &str) -> Vec<String> {
+    let chars: Vec<char> = tok.chars().collect();
+    if !chars.iter().any(|c| c.is_ascii_alphabetic()) || !chars.iter().copied().any(is_cyr) {
+        return vec![tok.to_string()]; // pure-script / no-letter → untouched
+    }
+    let folded: Vec<char> = (0..chars.len())
+        .map(|i| {
+            let lat_before = i > 0 && chars[i - 1].is_ascii_alphabetic();
+            let low_cyr_after = chars
+                .get(i + 1)
+                .is_some_and(|&n| is_cyr(n) && n.is_lowercase());
+            if lat_before && low_cyr_after {
+                cyr_upper_confusable(chars[i]).unwrap_or(chars[i])
+            } else {
+                chars[i]
+            }
+        })
+        .collect();
+    let script = |c: char| -> u8 {
+        if c.is_ascii_alphabetic() {
+            1
+        } else if is_cyr(c) {
+            2
+        } else {
+            0
+        }
+    };
+    // Group into maximal same-script runs, then split ONLY between a Latin letter-run and a Cyrillic
+    // letter-run when both are ≥2 letters (a shorter side stays attached — no orphan 1-char splits).
+    let mut runs: Vec<(u8, String)> = Vec::new();
+    for &c in &folded {
+        let k = script(c);
+        match runs.last_mut() {
+            Some((rk, s)) if *rk == k => s.push(c),
+            _ => runs.push((k, c.to_string())),
+        }
+    }
+    let mut out: Vec<String> = vec![String::new()];
+    let (mut prev_kind, mut prev_len) = (0u8, 0usize);
+    for (k, s) in &runs {
+        let len = s.chars().count();
+        if (*k == 1 || *k == 2) && prev_kind != 0 && prev_kind != *k && prev_len >= 2 && len >= 2 {
+            out.push(String::new());
+        }
+        if let Some(last) = out.last_mut() {
+            last.push_str(s);
+        }
+        if *k != 0 {
+            prev_kind = *k;
+            prev_len = len;
+        }
+    }
+    out.retain(|t| !t.is_empty());
+    out
+}
+
+/// Layer-1 heuristic pre-clean (pure, always cheap): collapse whitespace runs to single spaces,
+/// [`split_fused_token`] a recognizer-fused mixed-script token («LLМоткрытых» → «LLM открытых»), and
+/// drop an IMMEDIATE duplicate STT-stutter word — a repeated ALPHABETIC word of ≥4 chars, e.g.
+/// «Даже,  даже писана» → «Даже, писана». Numbers and short words are NEVER collapsed («порт 80 80»,
+/// «код два два» may be real doubles), so this can't lose a fact. No semantic edits (that's the LLM
+/// layer); the fused-split only inserts a space / swaps a glyph-identical codepoint.
 #[must_use]
 pub fn heuristic_clean(text: &str) -> String {
-    let mut out: Vec<&str> = Vec::new();
-    for tok in text.split_whitespace() {
-        if let Some(prev) = out.last() {
-            let core = word_core(tok);
-            let is_stutter_word =
-                core.chars().count() >= 4 && core.chars().all(char::is_alphabetic);
-            if is_stutter_word && core == word_core(prev) {
-                continue; // immediate repeat of a ≥4-letter word → an STT stutter
+    let mut out: Vec<String> = Vec::new();
+    for raw in text.split_whitespace() {
+        for tok in split_fused_token(raw) {
+            if let Some(prev) = out.last() {
+                let core = word_core(&tok);
+                let is_stutter_word =
+                    core.chars().count() >= 4 && core.chars().all(char::is_alphabetic);
+                if is_stutter_word && core == word_core(prev) {
+                    continue; // immediate repeat of a ≥4-letter word → an STT stutter
+                }
             }
+            out.push(tok);
         }
-        out.push(tok);
     }
     out.join(" ")
 }
@@ -615,6 +707,37 @@ mod tests {
     }
 
     #[test]
+    fn split_fused_token_de_garbles_mixed_script_only() {
+        // The owner's case: Latin acronym fused to a Cyrillic word via a confusable «М» → split.
+        assert_eq!(
+            split_fused_token("LLМоткрытых"),
+            vec!["LLM".to_string(), "открытых".to_string()]
+        );
+        // All-caps fused → split without needing the fold (no confusable bridges into a word).
+        assert_eq!(
+            split_fused_token("APIСЕРВЕР"),
+            vec!["API".to_string(), "СЕРВЕР".to_string()]
+        );
+        // Pure-script / identifiers / negation words are UNTOUCHED — no meaning can change.
+        for t in [
+            "сервер",
+            "GigaChat",
+            "недоступен",
+            "перезагружен",
+            "10.0.0.116",
+            "z14",
+            "не",
+        ] {
+            assert_eq!(split_fused_token(t), vec![t.to_string()], "untouched: {t}");
+        }
+        // End-to-end via heuristic_clean: the fused token becomes two clean tokens.
+        assert_eq!(
+            heuristic_clean("используем LLМоткрытых моделей"),
+            "используем LLM открытых моделей"
+        );
+    }
+
+    #[test]
     fn locate_span_returns_verbatim_source_slice() {
         // Case + whitespace tolerant; returns the ORIGINAL slice incl. inner punctuation/spacing.
         assert_eq!(
@@ -714,6 +837,29 @@ mod tests {
         );
         // A clause that validates a clean rewrite exists (the whole point — the fact can ground now).
         let content = cl.iter().find(|c| c.contains("решили идти")).unwrap();
+        assert!(validate_rewrite(
+            content,
+            "решили идти в сторону использования открытых моделей"
+        ));
+    }
+
+    #[test]
+    fn owner_garbled_line_cleans_end_to_end() {
+        // The owner's ACTUAL failing line, verbatim (with the recognizer-FUSED «LLМоткрытых»).
+        let raw = "А-аа, вот, значит, так. А-а-а, да, это самое, мы, в общем, тогда решили идти в \
+                   сторону это самое, так-то этого направления использования этих самых, как их \
+                   там, LLМоткрытых моделей. Вот так-то да-да. ыбочку и";
+        // heuristic_clean un-fuses «LLМоткрытых» → «LLM открытых»; segment isolates the content clause.
+        let cleaned = heuristic_clean(raw);
+        assert!(
+            cleaned.contains("LLM открытых"),
+            "fused token un-merged: {cleaned}"
+        );
+        let clauses = segment_clauses(&cleaned);
+        let content = clauses.iter().find(|c| c.contains("LLM открытых")).unwrap();
+        // gemma-4-12B's actual output for this clause (validated live against :8080) now GROUNDS,
+        // because «открытых» is a real token after the un-merge. Before this fix it was rejected.
+        assert!(validate_rewrite(content, "использования открытых моделей"));
         assert!(validate_rewrite(
             content,
             "решили идти в сторону использования открытых моделей"
