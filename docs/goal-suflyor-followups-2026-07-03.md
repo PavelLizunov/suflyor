@@ -2,6 +2,24 @@
 
 ## ⏭ NEXT SESSION (owner paused 2026-07-04 «завтра продолжим») — condense open issues
 
+> **RESOLVED 2026-07-04 (continuation):** all three done + gate-green.
+> **(1)** A focused review proved loosening the gate to ≥50% was UNSAFE (single-word lies like
+> «перезагружен»→«взломан» passed — bag-of-words can't tell a synonym from a lie, and a % threshold
+> can't catch one lie in a long fact). So instead of loosening the gate, I made the CONDENSE prompt
+> **EXTRACTIVE** (keep the source's WORDS, drop only filler) and kept `is_grounded` STRICT (≥90%) —
+> a faithful extraction passes, a paraphrase/fabrication is rejected → heuristic. This ALSO fixes
+> the айпи→IP false-reject (prompt now says keep «айпи»). **RESIDUAL (documented in the is_grounded
+> doc):** bag-of-words still can't catch RECOMBINATION of real words into a false claim (e.g. «сервер
+> Бета продакшн» when Бета was the test server) — closing that needs an entailment check (future,
+> and NOT LLM-self-grading per methodology). **(2)** `было:` now shows only for `'llm'` items
+> (heuristic shows just «почищено», no duplicated raw). **(3)** transcript → virtualized `ListView`
+> (renders only visible rows → no i16 cap → all lines show; the 200-cap is now a 2000 memory-sanity
+> bound). ⚠ Owner retest still needed (their AI must be up for condense; ListView is a render change
+> — confirm a long transcript scrolls + ⭐/selection work + no crash). Retest:
+> `docs/retest-tile-lock-normalization.html` (adds X2 transcript). Select-mode drag-scroll on huge
+> answers still deferred (Slint TextInput limitation; condense reduces its need).
+
+
 Feature A (condense — commits `8b1e7fe`+`9de8fbc`) is LIVE + installed (PID at the time). Verified
 on the owner's real gemma-4-12B: a long **tile** answer → 3 clean short RU facts ('llm'). BUT the
 owner's live test surfaced TWO issues to fix next:
