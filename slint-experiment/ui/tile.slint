@@ -187,10 +187,18 @@ export component TileWindow inherits Window {
     // Save the pending selection (edited `capture-text`) as one approved note; discard it.
     callback save-capture();
     callback cancel-capture();
+    // R1 (retest v0.28.0) — «Выделить текст» mode restored: swaps the per-block body for ONE
+    // SelectableText holding the whole (joined, capped) answer, so text can be dragged / copied /
+    // ⭐-captured ACROSS blocks (per-block TextInputs are separate selection islands — Slint can't
+    // span them). `select-text` is built in Rust. The overflow that got it deleted was the
+    // ContextMenuArea-collapse paint bug, since fixed in SelectableText (Rectangle root).
+    in-out property <bool> select-mode: false;
+    in-out property <string> select-text: "";
+    callback toggle-select-mode();
     // Stale-marker guard: streaming re-renders REPLACE the blocks model on every delta
     // (fresh blocks come with marked=false), so clear the copied-check AND the
     // marked-count on any model swap. A settled answer fires no further set_blocks.
-    changed blocks => { root.copied-block-index = -1; root.marked-count = 0; root.mark-anchor = -1; root.capture-block-index = -1; root.capture-text = ""; root.capture-pending = false; }
+    changed blocks => { root.copied-block-index = -1; root.marked-count = 0; root.mark-anchor = -1; root.capture-block-index = -1; root.capture-text = ""; root.capture-pending = false; root.select-mode = false; }
     // v0.18.6 — «Повторить»: shown on a summary-failure tile that carries a
     // session id. Resumes the summary from the persisted conspect (re-maps only
     // the failed parts, then re-runs the reduce) — see retry_meeting_summary.
@@ -401,6 +409,15 @@ export component TileWindow inherits Window {
                             VerticalLayout {
                                 padding: 4px;
                                 spacing: 2px;
+                                // R1 (retest v0.28.0) — toggle whole-answer «Выделить текст» mode.
+                                TileMenuRow {
+                                    icon: @image-url("../assets/icons/select-text.svg");
+                                    label: root.select-mode ? @tr("Rich view") : @tr("Select text");
+                                    clicked => {
+                                        root.toggle-select-mode();
+                                        overflow-popup.close();
+                                    }
+                                }
                                 if root.can-regenerate: TileMenuRow {
                                     icon: @image-url("../assets/icons/refresh.svg");
                                     label: @tr("Regenerate");
@@ -569,7 +586,7 @@ export component TileWindow inherits Window {
             // viewport-width hint, ScrollView lets content render
             // unconstrained → long Russian paragraphs overflowed the
             // dark fill area (user complaint "текст выходит за края").
-            ScrollView {
+            if !root.select-mode : ScrollView {
                 vertical-stretch: 1;
                 horizontal-stretch: 1;
                 viewport-width: self.width;
@@ -741,6 +758,29 @@ export component TileWindow inherits Window {
                                 }
                             }
                         }
+                    }
+                }
+            }
+
+            // R1 (retest v0.28.0) — «Выделить текст» mode: the whole answer as ONE selectable field
+            // so text can be dragged / copied ACROSS blocks. `select-text` is the joined + capped
+            // answer (built in Rust). Same bounded ScrollView shape as the block view above: it clips
+            // + scrolls its viewport, so a huge field stays INSIDE the fixed window and can't paint
+            // over the buttons below (the overflow that got this deleted; also fixed in SelectableText).
+            if root.select-mode : ScrollView {
+                vertical-stretch: 1;
+                horizontal-stretch: 1;
+                viewport-width: self.width;
+                VerticalLayout {
+                    padding-right: 14px;
+                    // Proportional + word-wrap: ONE mixed prose+code buffer, so code loses
+                    // monospace/no-wrap here — the accepted cost of a single joined field.
+                    SelectableText {
+                        text: root.select-text;
+                        font-size: 12px;
+                        text-color: Theme.text-secondary;
+                        wrap: word-wrap;
+                        capture(a, c) => { root.capture-selection(-1, a, c); }
                     }
                 }
             }

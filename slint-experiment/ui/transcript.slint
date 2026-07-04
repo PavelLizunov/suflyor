@@ -101,6 +101,9 @@ export component TranscriptWindow inherits Window {
     // selection); `capture-pending` = a right-click text-selection capture (independent
     // of the ⭐ marks, same split as the tiles).
     in-out property <int> marked-count: 0;
+    // R1.2 (retest v0.28.0): last plain-clicked line — the anchor a SHIFT+click range-marks up to.
+    // Reset by the Rust wiring on each fresh open (window is reused across sessions).
+    in-out property <int> mark-anchor: -1;
     in-out property <string> capture-text: "";
     in-out property <bool> capture-pending: false;
     // Which single line seeded `capture-text` (-1 = none). Re-seed the edit buffer ONLY
@@ -119,8 +122,9 @@ export component TranscriptWindow inherits Window {
     callback drag-start-requested();
     callback drag-moved();
     // G2b (2026-07-03) — ⭐ multi-mark → save, mirroring the tiles: toggle a line's mark;
-    // «В память (N)» joins ALL marked lines into ONE note; clear-marks cancels.
-    callback toggle-line-marked(int);
+    // «В память (N)» joins ALL marked lines into ONE note; clear-marks cancels. R1.2: the bool is
+    // whether SHIFT was held (range-mark from the anchor to this line); Rust owns the range logic.
+    callback toggle-line-marked(int, bool);
     callback save-marked();
     callback clear-marks();
     // Right-click text-selection capture → the same editor (save / cancel).
@@ -378,8 +382,16 @@ export component TranscriptWindow inherits Window {
                                     border-radius: 4px;
                                     background: star-ta.has-hover ? Theme.border-strong : transparent;
                                     star-ta := TouchArea {
+                                        // R1.2: latch SHIFT on pointer-down, fire on `clicked` (keeps
+                                        // click-cancel-on-drag-off — same pattern as the tiles' StarMark).
+                                        property <bool> shift-latched;
+                                        pointer-event(e) => {
+                                            if (e.kind == PointerEventKind.down) {
+                                                self.shift-latched = e.modifiers.shift;
+                                            }
+                                        }
                                         clicked => {
-                                            root.toggle-line-marked(i);
+                                            root.toggle-line-marked(i, self.shift-latched);
                                         }
                                     }
                                     // Muted outline star (SVG), same as the tiles' StarMark:

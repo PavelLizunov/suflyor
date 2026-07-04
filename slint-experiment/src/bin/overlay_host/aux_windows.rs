@@ -1475,6 +1475,7 @@ fn wire_transcript_actions(
     // G2b — reset the ⭐-mark editor state (the window is reused across sessions; the
     // fresh model already starts all-unmarked).
     win.set_marked_count(0);
+    win.set_mark_anchor(-1); // R1.2: fresh open → no stale range anchor
     win.set_capture_pending(false);
     win.set_capture_text(slint::SharedString::default());
     win.set_capture_line_index(-1);
@@ -1485,12 +1486,37 @@ fn wire_transcript_actions(
     {
         let m = model.clone();
         let weak = win.as_weak();
-        win.on_toggle_line_marked(move |idx| {
+        win.on_toggle_line_marked(move |idx, shift| {
             let Some(w) = weak.upgrade() else { return };
-            let i = idx.max(0) as usize;
-            let Some(mut row) = m.row_data(i) else { return };
-            row.marked = !row.marked;
-            m.set_row_data(i, row);
+            let Ok(i) = usize::try_from(idx) else { return };
+            if i >= m.row_count() {
+                return;
+            }
+            // R1.2: SHIFT+click with a live anchor marks the whole range anchor..=i (adds to the set);
+            // a plain click toggles this line + (re)sets the anchor. Mirrors the tiles' P5 logic.
+            let shift_anchor = if shift {
+                usize::try_from(w.get_mark_anchor()).ok()
+            } else {
+                None
+            }
+            .filter(|&a| a < m.row_count());
+            if let Some(a) = shift_anchor {
+                let (lo, hi) = if a <= i { (a, i) } else { (i, a) };
+                for j in lo..=hi {
+                    if let Some(mut r) = m.row_data(j) {
+                        if !r.marked {
+                            r.marked = true;
+                            m.set_row_data(j, r);
+                        }
+                    }
+                }
+            } else {
+                if let Some(mut row) = m.row_data(i) {
+                    row.marked = !row.marked;
+                    m.set_row_data(i, row);
+                }
+                w.set_mark_anchor(i32::try_from(i).unwrap_or(-1));
+            }
             let mut count = 0_i32;
             let mut single_idx = -1_i32;
             let mut single = slint::SharedString::default();
