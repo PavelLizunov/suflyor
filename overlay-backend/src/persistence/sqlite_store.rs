@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 
 use super::migrations;
 use super::models::{
-    AiTurn, MemoryCandidate, MemoryItem, NewMemoryCandidate, NewMemoryItem, SearchHit, Session,
-    Utterance,
+    AiTurn, DiarSegment, Diarization, MemoryCandidate, MemoryItem, NewMemoryCandidate,
+    NewMemoryItem, SearchHit, Session, Utterance,
 };
 
 /// The catalog handle. Owns one SQLite connection.
@@ -231,6 +231,85 @@ impl Store {
                 |r| r.get(0),
             )
             .context("count ai_turns")
+    }
+
+    /// The persisted speaker-diarization result for a session (`None` if never run
+    /// or the row is unreadable JSON). Survives a catalog re-index (side-table).
+    pub fn get_diarization(&self, session_id: &str) -> Result<Option<Diarization>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT created_at_ms, num_speakers, model_id, segments_json, speaker_names_json \
+                 FROM diarization WHERE session_id = ?1",
+            )
+            .context("prepare get_diarization")?;
+        let mut rows = stmt
+            .query_map(params![session_id], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, String>(4)?,
+                ))
+            })
+            .context("query get_diarization")?;
+        let Some(row) = rows.next() else {
+            return Ok(None);
+        };
+        let (created_at_ms, num_speakers, model_id, segments_json, names_json) =
+            row.context("map diarization row")?;
+        let segments: Vec<DiarSegment> =
+            serde_json::from_str(&segments_json).context("parse segments_json")?;
+        let speaker_names: std::collections::BTreeMap<i32, String> =
+            serde_json::from_str(&names_json).context("parse speaker_names_json")?;
+        Ok(Some(Diarization {
+            session_id: session_id.to_string(),
+            created_at_ms,
+            num_speakers,
+            model_id,
+            segments,
+            speaker_names,
+        }))
+    }
+
+    /// Insert or replace a session's diarization. A re-run REPLACEs the row — the
+    /// caller is responsible for clearing renames (cluster ids permute across runs).
+    pub fn put_diarization(&self, d: &Diarization) -> Result<()> {
+        let segments_json = serde_json::to_string(&d.segments).context("serialize segments")?;
+        let names_json =
+            serde_json::to_string(&d.speaker_names).context("serialize speaker_names")?;
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO diarization \
+                 (session_id, created_at_ms, num_speakers, model_id, segments_json, speaker_names_json) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    d.session_id,
+                    d.created_at_ms,
+                    d.num_speakers,
+                    d.model_id,
+                    segments_json,
+                    names_json
+                ],
+            )
+            .context("insert diarization")?;
+        Ok(())
+    }
+
+    /// Rename one display speaker (or clear it with an empty/blank `name`), leaving
+    /// the segments untouched. No-op if the session has no diarization row.
+    pub fn rename_speaker(&self, session_id: &str, speaker: i32, name: &str) -> Result<()> {
+        let Some(mut d) = self.get_diarization(session_id)? else {
+            return Ok(());
+        };
+        let name = name.trim();
+        if name.is_empty() {
+            d.speaker_names.remove(&speaker);
+        } else {
+            d.speaker_names.insert(speaker, name.to_string());
+        }
+        self.put_diarization(&d)
     }
 
     /// v0.22.x — recompute each session's headline `ai_model` from the model its
@@ -992,16 +1071,16 @@ mod tests {
     }
 
     #[test]
-    fn latest_migration_version_is_5() {
+    fn latest_migration_version_is_6() {
         let store = Store::open_in_memory().unwrap();
         let v: i32 = store
             .conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(v, migrations::LATEST_VERSION);
-        // Literal pin — bump deliberately when adding a migration (now incl. 0005
-        // memory_v2: source_text / entity / norm_status for fact normalization, M1).
-        assert_eq!(v, 5);
+        // Literal pin — bump deliberately when adding a migration (now incl. 0006
+        // diarization: per-session speaker segments + renames, D2).
+        assert_eq!(v, 6);
     }
 
     #[test]
@@ -1183,5 +1262,66 @@ mod tests {
         let it = &store.list_memory_items("default", true, -1).unwrap()[0];
         assert_eq!(it.text, "мой правленый факт");
         assert_eq!(it.norm_status, "none");
+    }
+
+    #[test]
+    fn diarization_round_trips_and_rename_updates_names() {
+        let store = Store::open_in_memory().unwrap();
+        assert!(store.get_diarization("s1").unwrap().is_none());
+
+        let d = Diarization {
+            session_id: "s1".into(),
+            created_at_ms: 111,
+            num_speakers: 2,
+            model_id: "pyannote-3.0+wespeaker-resnet34".into(),
+            segments: vec![
+                DiarSegment {
+                    start_ms: 0,
+                    end_ms: 1500,
+                    speaker: 0,
+                },
+                DiarSegment {
+                    start_ms: 1500,
+                    end_ms: 4200,
+                    speaker: 1,
+                },
+            ],
+            speaker_names: std::collections::BTreeMap::new(),
+        };
+        store.put_diarization(&d).unwrap();
+        assert_eq!(store.get_diarization("s1").unwrap().unwrap(), d);
+
+        // Rename display speaker 1 → "Тимур"; segments untouched.
+        store.rename_speaker("s1", 1, "Тимур").unwrap();
+        let got = store.get_diarization("s1").unwrap().unwrap();
+        assert_eq!(got.speaker_names.get(&1).map(String::as_str), Some("Тимур"));
+        assert_eq!(got.segments, d.segments);
+
+        // Blank name clears the rename.
+        store.rename_speaker("s1", 1, "   ").unwrap();
+        assert!(store
+            .get_diarization("s1")
+            .unwrap()
+            .unwrap()
+            .speaker_names
+            .is_empty());
+
+        // A re-run REPLACEs the row (new segments + count).
+        let d2 = Diarization {
+            num_speakers: 3,
+            segments: vec![DiarSegment {
+                start_ms: 0,
+                end_ms: 9,
+                speaker: 2,
+            }],
+            ..d.clone()
+        };
+        store.put_diarization(&d2).unwrap();
+        let got = store.get_diarization("s1").unwrap().unwrap();
+        assert_eq!(got.num_speakers, 3);
+        assert_eq!(got.segments.len(), 1);
+
+        // Rename on a session with no diarization is a silent no-op.
+        store.rename_speaker("missing", 0, "X").unwrap();
     }
 }

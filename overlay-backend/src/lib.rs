@@ -10,6 +10,7 @@ pub mod components;
 pub mod config;
 pub mod conspect;
 pub mod diar_install;
+pub mod diarize;
 pub(crate) mod download;
 pub mod events;
 pub mod health;

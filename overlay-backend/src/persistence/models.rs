@@ -39,6 +39,38 @@ pub struct Utterance {
     pub audio_ms: Option<i64>,
 }
 
+/// One diarized span: `[start_ms, end_ms)` attributed to speaker index `speaker`.
+/// serde (de)serializes to the compact `{"s","e","sp"}` shape used BOTH on the
+/// `suflyor-tts diarize` sidecar's stdout AND in the stored `segments_json`, so the
+/// one type crosses both boundaries with no separate DTO.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct DiarSegment {
+    #[serde(rename = "s")]
+    pub start_ms: i64,
+    #[serde(rename = "e")]
+    pub end_ms: i64,
+    #[serde(rename = "sp")]
+    pub speaker: i32,
+}
+
+/// A session's persisted speaker-diarization result (side-table `diarization`,
+/// migration 0006). Like the memory tables, it survives a catalog re-index (keyed
+/// by the stable session id; the indexer never touches it). `segments` are sorted
+/// by start; `speaker_names` maps a DISPLAY speaker id → the user's rename (empty
+/// until renamed; a re-run clears it).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Diarization {
+    pub session_id: String,
+    pub created_at_ms: i64,
+    /// Speaker count as reported by the diarizer (provenance; the by-voice view
+    /// shows the count of speakers that actually won ≥1 line).
+    pub num_speakers: i64,
+    /// Engine + models used, e.g. `pyannote-3.0+wespeaker-resnet34` (provenance).
+    pub model_id: String,
+    pub segments: Vec<DiarSegment>,
+    pub speaker_names: std::collections::BTreeMap<i32, String>,
+}
+
 /// One AI question→answer turn within a session (an `ai_request` paired with
 /// its `ai_response`).
 #[derive(Debug, Clone, PartialEq, Eq)]

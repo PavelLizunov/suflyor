@@ -484,8 +484,9 @@ pub fn is_available() -> bool {
 
 // ===== Helpers (filesystem only — no sherpa/onnxruntime here) =====
 
-/// Resolve `suflyor-tts.exe` next to the running executable.
-fn sidecar_exe_path() -> PathBuf {
+/// Resolve `suflyor-tts.exe` next to the running executable. `pub(crate)` so the
+/// diarization client (`crate::diarize`) spawns the SAME sidecar exe.
+pub(crate) fn sidecar_exe_path() -> PathBuf {
     std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.join("suflyor-tts.exe")))

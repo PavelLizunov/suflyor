@@ -29,8 +29,8 @@ mod sqlite_store;
 
 pub use indexer::{index_all, index_journal_file, IndexStats};
 pub use models::{
-    AiTurn, MemoryCandidate, MemoryItem, NewMemoryCandidate, NewMemoryItem, SearchHit, Session,
-    Utterance,
+    AiTurn, DiarSegment, Diarization, MemoryCandidate, MemoryItem, NewMemoryCandidate,
+    NewMemoryItem, SearchHit, Session, Utterance,
 };
 pub use sqlite_store::Store;
 
