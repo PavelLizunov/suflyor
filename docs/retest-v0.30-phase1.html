@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>suflyor v0.30 — приёмка: фаза 1 (стенограмма + диаризация)</title>
+<style>
+  :root { --bg:#151B23; --card:#1c232d; --ink:#E8EEF4; --muted:#9fb0c0; --line:#2b3644;
+          --accent:#4C8DFF; --ok:#3fb950; --bad:#f85149; --skip:#8a97a6; --warn:#E3B341; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; }
+  header { position:sticky; top:0; z-index:5; background:#10151c; border-bottom:1px solid var(--line);
+           padding:14px 20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; font-weight:650; }
+  header .sub { color:var(--muted); font-size:13px; }
+  .spacer { flex:1; }
+  button.export { background:var(--accent); color:#06101f; border:0; border-radius:7px; padding:9px 16px;
+                  font-weight:650; font-size:14px; cursor:pointer; }
+  button.export:hover { filter:brightness(1.1); }
+  main { max-width:900px; margin:0 auto; padding:20px; }
+  .intro { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:22px; }
+  .intro p { margin:6px 0; }
+  .intro code { background:#0e131a; padding:2px 6px; border-radius:4px; color:#cfe0ff; font-size:13px; }
+  h2 { font-size:16px; margin:26px 0 12px; padding-bottom:6px; border-bottom:1px solid var(--line); color:#cfe0ff; }
+  .item { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin:12px 0; }
+  .item .q { font-weight:600; margin-bottom:4px; }
+  .item .how { color:var(--muted); font-size:13.5px; margin-bottom:10px; }
+  .item .how b { color:var(--ink); }
+  .statuses { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .statuses label { cursor:pointer; border:1px solid var(--line); border-radius:20px; padding:5px 13px; font-size:13px;
+                    user-select:none; display:inline-flex; align-items:center; gap:6px; background:#0e131a; }
+  .statuses input { display:none; }
+  .statuses label.ok.sel   { border-color:var(--ok);   background:rgba(63,185,80,.16);  color:#9be7a8; }
+  .statuses label.bad.sel  { border-color:var(--bad);  background:rgba(248,81,73,.16);  color:#ffb3ad; }
+  .statuses label.skip.sel { border-color:var(--skip); background:rgba(138,151,166,.16); color:#c3ccd6; }
+  textarea { width:100%; background:#0e131a; color:var(--ink); border:1px solid var(--line); border-radius:7px;
+             padding:8px 10px; font:14px/1.45 inherit; resize:vertical; min-height:44px; }
+  .shot { margin-top:10px; }
+  .drop { border:1.5px dashed var(--line); border-radius:8px; padding:12px; text-align:center; color:var(--muted);
+          font-size:13px; cursor:pointer; transition:.12s; }
+  .drop:hover, .drop.over { border-color:var(--accent); color:#cfe0ff; background:rgba(76,141,255,.06); }
+  .shots { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+  .shots figure { margin:0; position:relative; border:1px solid var(--line); border-radius:7px; overflow:hidden; max-width:240px; }
+  .shots img { display:block; max-width:100%; height:auto; }
+  .shots .rm { position:absolute; top:4px; right:4px; background:rgba(0,0,0,.6); color:#fff; border:0; border-radius:5px;
+               width:24px; height:24px; cursor:pointer; font-size:15px; line-height:1; }
+  .tag { font-size:11px; font-weight:700; padding:2px 7px; border-radius:5px; margin-right:8px; vertical-align:middle; }
+  .tag.bug { background:rgba(248,81,73,.18); color:#ffb3ad; }
+  .tag.new { background:rgba(76,141,255,.2); color:#a9c9ff; }
+  .note { color:var(--warn); font-size:12.5px; margin-top:6px; }
+  footer { max-width:900px; margin:10px auto 60px; padding:0 20px; color:var(--muted); font-size:12.5px; }
+  @media print { header .export { display:none; } .drop { display:none; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>suflyor v0.30 — приёмка, фаза 1</h1>
+    <div class="sub">Стенограмма (гэп, таймкоды) · Диаризация (баннер, гард переопределения) + установка моделей</div>
+  </div>
+  <div class="spacer"></div>
+  <button class="export" onclick="exportReport()">⭳ Скачать заполненный отчёт</button>
+</header>
+
+<main>
+  <div class="intro">
+    <p><b>Что тестируем.</b> Первая фаза доработок v0.30 по твоему разбору — 3 бага стенограммы/диаризации + гард от случайного стирания имён + кнопка установки моделей в Настройках. (Плеер с питчем/дропдауном/ползунком и авто-число говорящих — это фазы 2–3, ещё впереди.)</p>
+    <p><b>Как запустить.</b> Я обновил установленный билд — запусти ярлык «suflyor (Slint)». Стенограмма: <b>F7</b> (Архив) → сессия с записью → значок <b>💬</b> «Стенограмма».</p>
+    <p><b>Как отмечать.</b> По каждому пункту: ✅ ок / ❌ проблема / ⏭ пропустить, комментарий, и при желании — скриншот (перетащи файл, вставь Ctrl+V, или кликни зону). В конце — «Скачать заполненный отчёт».</p>
+  </div>
+
+  <h2>📄 Стенограмма — раскладка</h2>
+
+  <div class="item" data-id="G1">
+    <div class="q"><span class="tag bug">G</span>G1. Нет пустого промежутка / сжатия строк ДО определения говорящих</div>
+    <div class="how">Открой стенограмму сессии с записью, где есть кнопка «Определить говорящих», <b>но ещё НЕ нажимай её</b>. Реплики должны заполнять окно; окно нормальной ширины. <b>Раньше:</b> сверху был большой пустой промежуток, а строки жались в ~2 строки внизу, и окно было уже. Теперь этого быть не должно ни до, ни после определения.</div>
+  </div>
+
+  <h2>📄 Стенограмма — таймкоды в начале</h2>
+
+  <div class="item" data-id="H1">
+    <div class="q"><span class="tag bug">H</span>H1. Первые реплики показывают реальное время (не 0:00 у всех)</div>
+    <div class="how">Открой стенограмму: первые реплики микрофона и системы имеют <b>разное, реальное</b> время начала и стоят в правильном порядке (кто заговорил первым — тот выше). <b>Раньше:</b> и микрофон, и система в начале были «0:00».</div>
+    <div class="note">⚠ Фикс работает только на НОВЫХ записях (у старых неверное время уже вшито). Лучше запиши короткую новую сессию: пусть собеседник (система) заговорит первым, ты в микрофон — позже, и проверь порядок/время.</div>
+  </div>
+
+  <h2>🗣 Диаризация — баннер о таймингах</h2>
+
+  <div class="item" data-id="E1">
+    <div class="q"><span class="tag bug">E</span>E1. Баннер «тайминги могут быть неточными» больше не спамит</div>
+    <div class="how">Раньше баннер «Тайминги говорящих для этой записи могут быть неточными» вылезал почти на КАЖДОЙ сессии (это и был баг — ты отметил D5 как BAD). Теперь: <b>до</b> определения говорящих баннера нет вообще; он показывается только <b>после</b> определения и только если запись реально короче звука. На нормальной свежей записи его быть не должно.</div>
+  </div>
+
+  <h2>🗣 Диаризация — защита имён при переопределении</h2>
+
+  <div class="item" data-id="F1">
+    <div class="q"><span class="tag new">F</span>F1. Повторное «Определить» спрашивает подтверждение (если есть имена)</div>
+    <div class="how">Определи говорящих → переименуй кого-нибудь (впиши имя, Enter) → нажми «Определить заново» ещё раз. Должна появиться карточка: <b>«Определить говорящих заново? — Заданные вами имена говорящих будут сброшены — Отмена / Определить заново»</b>. <b>Отмена</b> → имена целы, ничего не переопределяется. <b>Определить заново</b> → переопределяет (имена сбрасываются, но уже осознанно).</div>
+  </div>
+
+  <div class="item" data-id="F2">
+    <div class="q">F2. Без заданных имён — запускается сразу, без карточки</div>
+    <div class="how">Если имён ты не задавал, повторное «Определить» запускается сразу (терять нечего — карточка не нужна).</div>
+  </div>
+
+  <div class="item" data-id="F3">
+    <div class="q">F3. Esc и клик по фону закрывают карточку</div>
+    <div class="how">Когда карточка открыта: <b>Esc</b> и клик по затемнённому фону закрывают именно карточку (а не всё окно стенограммы).</div>
+  </div>
+
+  <h2>⚙ Настройки → Vision — установка моделей</h2>
+
+  <div class="item" data-id="V1">
+    <div class="q"><span class="tag new">Codex</span>V1. Кнопка установки моделей говорящих в Настройках</div>
+    <div class="how">Настройки → Vision: есть кнопка <b>«Установить модели говорящих»</b> (~32 МБ) с пояснением. После установки — «Модели говорящих установлены». (Дублирует установку из стенограммы, чтобы фичу можно было найти в Настройках.)</div>
+    <div class="note">⚠ Если модели уже стоят — сразу должно быть видно «установлены» (это тоже «ок»).</div>
+  </div>
+
+  <div class="item" data-id="GEN">
+    <div class="q">Общее впечатление / что-то ещё</div>
+    <div class="how">Любые замечания по вёрстке, тексту, поведению — по-русски и по-английски (переключи язык в Настройках), скриншоты приветствуются.</div>
+  </div>
+</main>
+
+<footer>
+  suflyor v0.30 фаза 1 · ветка <code>claude/diarization-d05</code> · G/H/E <code>b9ccdd2</code> · F <code>66494bb</code> · Settings-Vision <code>702acba</code>
+</footer>
+
+<script>
+const STATUSES = [["ok","✅ ок"],["bad","❌ проблема"],["skip","⏭ пропустить"]];
+document.querySelectorAll(".item").forEach(function(item){
+  const id = item.dataset.id;
+  const sdiv = document.createElement("div"); sdiv.className = "statuses";
+  STATUSES.forEach(function(s){
+    const lab = document.createElement("label"); lab.className = s[0];
+    const inp = document.createElement("input"); inp.type="radio"; inp.name="st_"+id; inp.value=s[0];
+    inp.addEventListener("change", function(){
+      sdiv.querySelectorAll("label").forEach(function(l){ l.classList.remove("sel"); });
+      lab.classList.add("sel");
+    });
+    lab.appendChild(inp); lab.appendChild(document.createTextNode(s[1]));
+    sdiv.appendChild(lab);
+  });
+  item.appendChild(sdiv);
+  const ta = document.createElement("textarea"); ta.placeholder="Комментарий…"; ta.dataset.role="comment";
+  item.appendChild(ta);
+  const shot = document.createElement("div"); shot.className="shot";
+  const drop = document.createElement("div"); drop.className="drop";
+  drop.textContent="📎 Скриншот: перетащи файл, вставь (Ctrl+V) или кликни";
+  const shots = document.createElement("div"); shots.className="shots";
+  const file = document.createElement("input"); file.type="file"; file.accept="image/*"; file.multiple=true; file.style.display="none";
+  drop.addEventListener("click", function(){ file.click(); });
+  file.addEventListener("change", function(e){ [...e.target.files].forEach(f=>addImg(f,shots)); file.value=""; });
+  drop.addEventListener("dragover", function(e){ e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", function(){ drop.classList.remove("over"); });
+  drop.addEventListener("drop", function(e){ e.preventDefault(); drop.classList.remove("over");
+    [...e.dataTransfer.files].forEach(f=>{ if(f.type.startsWith("image/")) addImg(f,shots); }); });
+  item.addEventListener("paste", function(e){
+    [...e.clipboardData.items].forEach(function(it){
+      if(it.type.startsWith("image/")){ addImg(it.getAsFile(), shots); }
+    });
+  });
+  item.tabIndex = 0;
+  shot.appendChild(drop); shot.appendChild(shots); shot.appendChild(file);
+  item.appendChild(shot);
+});
+
+function addImg(fileObj, container){
+  if(!fileObj) return;
+  const r = new FileReader();
+  r.onload = function(){
+    const fig = document.createElement("figure");
+    const img = document.createElement("img"); img.src = r.result;
+    const rm = document.createElement("button"); rm.className="rm"; rm.textContent="×";
+    rm.title="Убрать"; rm.addEventListener("click", function(){ fig.remove(); });
+    fig.appendChild(img); fig.appendChild(rm); container.appendChild(fig);
+  };
+  r.readAsDataURL(fileObj);
+}
+
+function exportReport(){
+  const clone = document.documentElement.cloneNode(true);
+  clone.querySelectorAll("input[type=radio]").forEach(function(r){
+    const live = document.querySelector('input[name="'+r.name+'"][value="'+r.value+'"]');
+    if(live && live.checked){ r.setAttribute("checked",""); r.closest("label").classList.add("sel"); }
+  });
+  const liveTas = document.querySelectorAll("textarea");
+  clone.querySelectorAll("textarea").forEach(function(t,i){ t.textContent = liveTas[i] ? liveTas[i].value : ""; });
+  clone.querySelectorAll(".export,.drop,input[type=file],script").forEach(function(el){ el.remove(); });
+  const foot = clone.querySelector("footer");
+  if(foot){ foot.innerHTML += "<br>Отчёт заполнен и выгружен."; }
+  const html = "<!DOCTYPE html>\n<html lang=\"ru\">" + clone.innerHTML + "</html>";
+  const blob = new Blob([html], {type:"text/html"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = "retest-v0.30-phase1-filled.html"; a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+}
+</script>
+</body>
+</html>
