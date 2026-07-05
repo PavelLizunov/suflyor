@@ -105,11 +105,16 @@ max-overlap over [audio_ms, next.audio_ms) (mic → «Вы») → persist (diari
   ERes2NetV2 / CAM++ zh-en (~2–3× faster on CPU) **if** CPU wall-time is the complaint after
   shipping — a one-line URL+SHA change (the side-table stores segments, not embeddings, so nothing
   else moves).
-- **Clustering** — `FastClusteringConfig { num_clusters: -1, threshold: 0.5 }` (crate defaults) =
-  **auto speaker count**. sherpa semantics: smaller threshold → more clusters. **Bias to
-  over-split**, not merge — two clusters renamed to the same person is cosmetic; one merged cluster
-  (two people, one name) is unrecoverable without a re-run. If 0.5 disappoints, step **down**
-  (→0.4) as a `// ponytail:`-commented constant, NOT a setting. `min_duration_on/off` at defaults.
+- **Clustering** — `FastClusteringConfig`. **⚠ CLI-verified finding (D1, 2026-07-05): auto count
+  (`num_clusters:-1`) is UNUSABLE on real VoIP loopback audio.** On a 30-min meeting, auto gave
+  **150 "speakers" at threshold 0.5, 67 at 0.7, still 23 at 0.9** — the compressed loopback
+  embeddings are too noisy for distance-threshold count detection. But **forcing the count works
+  cleanly**: `--num-speakers 2` → a 71 %/29 % two-way split; `--num-speakers 3` → 70/29/0 (only ~2
+  real speakers). The *segmentation* is fine either way (~350 real turns); only auto count detection
+  fails. ⇒ **the «сколько собеседников» count is the PRIMARY control, not an optional hint** (§7):
+  the client passes `num_clusters = count`. Auto (`-1`) is kept only as a last-resort fallback (when
+  the user truly can't say) and its output is flagged low-confidence. `min_duration_on/off` at
+  defaults (0.3/0.5).
 - **Provider** `cpu`, `num_threads: 4`. Both models 16 kHz — matches the recorder, **no resampling**.
 
 Two SHA-pinned packs install via a Settings → AI button (mirroring `tts_install.rs`) into
@@ -202,10 +207,13 @@ largely a relabel:
   `audio_ms` present; disabled while a job runs (mirrors ↻ re-transcribe, `aux_windows.rs:831`).
   Existing diarization → the toggle shows it; the button re-runs behind a confirm (which clears
   names). Old/live sessions → «недоступно для старых записей».
-- **Speaker-count hint** — one optional field «Сколько собеседников (без вас)? 0 = авто» → maps 1:1
-  to `num_clusters`. Zero algorithm work, and the ONLY repair a human can perform (the owner can
-  count "Тимур/Стас/Никита/Паша = 4"; he can never tune a cosine threshold). Label says **без вас**
-  (mic isn't diarized). Threshold is NOT exposed.
+- **Speaker count — the PRIMARY input** (D1 finding, §3): a field «Сколько собеседников (без вас)?»
+  → maps 1:1 to `num_clusters`, because auto count-detection is unusable on VoIP audio. It's the ONLY
+  repair a human can perform (the owner can count "Тимур/Стас/Никита/Паша = 4"; he can never tune a
+  cosine threshold). Default it to **2** (the common one-interviewer case); the «Определить
+  говорящих» flow lets the user set it before running and re-run with a different count. Label says
+  **без вас** (mic isn't diarized). «Авто» is offered as an explicit low-confidence choice, not the
+  default. Threshold is NOT exposed.
 - **Rename** — a compact per-speaker list (color chip + editable name) atop «По голосам»; edits call
   `rename_speaker` + refresh; persist in `speaker_names_json`.
 - **Timebase banner** — «метки времени неточны — в записи были паузы» when §5.6 trips.
