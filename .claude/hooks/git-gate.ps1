@@ -65,7 +65,33 @@ try {
             [Console]::Error.WriteLine("[git-gate] Create docs/retest-v$ver-fixes.html (copy docs/retest-template.html), then re-run.")
             exit 2
         }
-        [Console]::Error.WriteLine("[git-gate] retest checklist present for v$ver ($($hits[0].Name)) -- release allowed.")
+        [Console]::Error.WriteLine("[git-gate] retest checklist present for v$ver ($($hits[0].Name)).")
+        # ALSO require GREEN CI + security on master. This closes the gap that let
+        # v0.27/v0.28 ship while the `security` workflow was RED: the retest-HTML
+        # check alone never looked at the server-side gate. Fail-OPEN on a gh error
+        # or an in-progress/absent run (a hook glitch must never brick a release);
+        # BLOCK only on a definitive non-"success" conclusion.
+        foreach ($wf in @("CI", "security")) {
+            $concl = ""
+            try {
+                $concl = (& gh run list --branch master --workflow $wf --limit 1 --json conclusion --jq '.[0].conclusion' 2>$null | Out-String).Trim()
+            } catch {
+                [Console]::Error.WriteLine("[git-gate] WARN: could not query '$wf' status ($_) -- allowing (fail-open).")
+                continue
+            }
+            if ([string]::IsNullOrWhiteSpace($concl)) {
+                [Console]::Error.WriteLine("[git-gate] WARN: latest '$wf' run absent/in-progress -- allowing (fail-open).")
+                continue
+            }
+            if ($concl -ne "success") {
+                [Console]::Error.WriteLine("")
+                [Console]::Error.WriteLine("[git-gate] BLOCK: latest master '$wf' workflow = '$concl' (need 'success').")
+                [Console]::Error.WriteLine("[git-gate] A red/failed check must not ship. Inspect: gh run list --branch master --workflow $wf")
+                exit 2
+            }
+            [Console]::Error.WriteLine("[git-gate] '$wf' on master: success.")
+        }
+        [Console]::Error.WriteLine("[git-gate] retest + green CI/security -- release v$ver allowed.")
         exit 0
     }
 } catch {
