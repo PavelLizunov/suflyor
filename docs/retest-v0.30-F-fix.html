@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>suflyor v0.30 — ре-тест F (гард переопределения говорящих)</title>
+<style>
+  :root { --bg:#151B23; --card:#1c232d; --ink:#E8EEF4; --muted:#9fb0c0; --line:#2b3644;
+          --accent:#4C8DFF; --ok:#3fb950; --bad:#f85149; --skip:#8a97a6; --warn:#E3B341; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; }
+  header { position:sticky; top:0; z-index:5; background:#10151c; border-bottom:1px solid var(--line);
+           padding:14px 20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; font-weight:650; }
+  header .sub { color:var(--muted); font-size:13px; }
+  .spacer { flex:1; }
+  button.export { background:var(--accent); color:#06101f; border:0; border-radius:7px; padding:9px 16px;
+                  font-weight:650; font-size:14px; cursor:pointer; }
+  button.export:hover { filter:brightness(1.1); }
+  main { max-width:900px; margin:0 auto; padding:20px; }
+  .intro { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:22px; }
+  .intro p { margin:6px 0; }
+  .intro code { background:#0e131a; padding:2px 6px; border-radius:4px; color:#cfe0ff; font-size:13px; }
+  h2 { font-size:16px; margin:26px 0 12px; padding-bottom:6px; border-bottom:1px solid var(--line); color:#cfe0ff; }
+  .item { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin:12px 0; }
+  .item .q { font-weight:600; margin-bottom:4px; }
+  .item .how { color:var(--muted); font-size:13.5px; margin-bottom:10px; }
+  .item .how b { color:var(--ink); }
+  .statuses { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .statuses label { cursor:pointer; border:1px solid var(--line); border-radius:20px; padding:5px 13px; font-size:13px;
+                    user-select:none; display:inline-flex; align-items:center; gap:6px; background:#0e131a; }
+  .statuses input { display:none; }
+  .statuses label.ok.sel   { border-color:var(--ok);   background:rgba(63,185,80,.16);  color:#9be7a8; }
+  .statuses label.bad.sel  { border-color:var(--bad);  background:rgba(248,81,73,.16);  color:#ffb3ad; }
+  .statuses label.skip.sel { border-color:var(--skip); background:rgba(138,151,166,.16); color:#c3ccd6; }
+  textarea { width:100%; background:#0e131a; color:var(--ink); border:1px solid var(--line); border-radius:7px;
+             padding:8px 10px; font:14px/1.45 inherit; resize:vertical; min-height:44px; }
+  .shot { margin-top:10px; }
+  .drop { border:1.5px dashed var(--line); border-radius:8px; padding:12px; text-align:center; color:var(--muted);
+          font-size:13px; cursor:pointer; transition:.12s; }
+  .drop:hover, .drop.over { border-color:var(--accent); color:#cfe0ff; background:rgba(76,141,255,.06); }
+  .shots { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+  .shots figure { margin:0; position:relative; border:1px solid var(--line); border-radius:7px; overflow:hidden; max-width:240px; }
+  .shots img { display:block; max-width:100%; height:auto; }
+  .shots .rm { position:absolute; top:4px; right:4px; background:rgba(0,0,0,.6); color:#fff; border:0; border-radius:5px;
+               width:24px; height:24px; cursor:pointer; font-size:15px; line-height:1; }
+  .tag { font-size:11px; font-weight:700; padding:2px 7px; border-radius:5px; margin-right:8px; vertical-align:middle;
+         background:rgba(76,141,255,.2); color:#a9c9ff; }
+  .note { color:var(--warn); font-size:12.5px; margin-top:6px; }
+  footer { max-width:900px; margin:10px auto 60px; padding:0 20px; color:var(--muted); font-size:12.5px; }
+  @media print { header .export { display:none; } .drop { display:none; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>suflyor v0.30 — ре-тест F</h1>
+    <div class="sub">Гард переопределения говорящих — повторная проверка после фикса</div>
+  </div>
+  <div class="spacer"></div>
+  <button class="export" onclick="exportReport()">⭳ Скачать заполненный отчёт</button>
+</header>
+
+<main>
+  <div class="intro">
+    <p><b>Что чиним.</b> В прошлый раз F1 не срабатывал («не спрашивает»). Причина (fable нашёл вживую): переименование сохранялось <b>только по Enter</b> — если ты печатал имя и не жал Enter (или кликал «Определить заново», уводя фокус), имя <b>оставалось видимым, но в базу не попадало</b> → гард видел «имён нет» и молча перезапускал. Теперь имя сохраняется <b>по мере ввода</b> (каждый символ), так что гард срабатывает даже без Enter.</p>
+    <p><b>Как запустить.</b> Я обновил установленный билд + перезапустил приложение. Стенограмма: <b>F7</b> → сессия с записью → <b>💬</b> → «Определить говорящих».</p>
+    <p><b>Только F</b> — G/H/V ты уже принял, их не перепроверяем.</p>
+  </div>
+
+  <h2>🗣 Гард переопределения</h2>
+
+  <div class="item" data-id="F1">
+    <div class="q"><span class="tag">F1 (главное)</span>Печатаешь имя БЕЗ Enter → карточка всё равно появляется</div>
+    <div class="how">Определи говорящих → в поле имени впиши имя и <b>НЕ жми Enter</b> → сразу жми «Определить заново». Должна появиться карточка <b>«Определить говорящих заново? — Заданные имена будут сброшены — Отмена / Определить заново»</b>. (Это тот самый сценарий, что падал.)</div>
+  </div>
+
+  <div class="item" data-id="F1b">
+    <div class="q">F1b. С Enter — тоже появляется</div>
+    <div class="how">То же, но с Enter после ввода имени → карточка появляется. (Должно работать в обоих случаях.)</div>
+  </div>
+
+  <div class="item" data-id="F4">
+    <div class="q">F4. «Определить заново» в карточке — переопределяет</div>
+    <div class="how">В карточке нажми «Определить заново» → запускается определение (имена сбрасываются — но уже осознанно, ты подтвердил). «Отмена» → имена целы, ничего не запускается.</div>
+  </div>
+
+  <div class="item" data-id="F3">
+    <div class="q">F3. Esc и клик по фону закрывают карточку</div>
+    <div class="how">Когда карточка открыта: Esc и клик по затемнённому фону закрывают именно карточку (не окно). Имена при этом целы.</div>
+  </div>
+
+  <div class="item" data-id="F2">
+    <div class="q">F2. Без имён — запускается сразу, без карточки</div>
+    <div class="how">Свежий результат без заданных имён: повторное «Определить» запускается сразу (терять нечего).</div>
+  </div>
+
+  <div class="item" data-id="FGEN">
+    <div class="q">Что-то ещё по этому месту</div>
+    <div class="how">Замечания по переименованию/карточке, скриншоты приветствуются.</div>
+  </div>
+</main>
+
+<footer>suflyor v0.30 · ре-тест F после фикса (edited-commit) · ветка <code>claude/diarization-d05</code></footer>
+
+<script>
+const STATUSES = [["ok","✅ ок"],["bad","❌ проблема"],["skip","⏭ пропустить"]];
+document.querySelectorAll(".item").forEach(function(item){
+  const id = item.dataset.id;
+  const sdiv = document.createElement("div"); sdiv.className = "statuses";
+  STATUSES.forEach(function(s){
+    const lab = document.createElement("label"); lab.className = s[0];
+    const inp = document.createElement("input"); inp.type="radio"; inp.name="st_"+id; inp.value=s[0];
+    inp.addEventListener("change", function(){
+      sdiv.querySelectorAll("label").forEach(function(l){ l.classList.remove("sel"); });
+      lab.classList.add("sel");
+    });
+    lab.appendChild(inp); lab.appendChild(document.createTextNode(s[1]));
+    sdiv.appendChild(lab);
+  });
+  item.appendChild(sdiv);
+  const ta = document.createElement("textarea"); ta.placeholder="Комментарий…"; ta.dataset.role="comment";
+  item.appendChild(ta);
+  const shot = document.createElement("div"); shot.className="shot";
+  const drop = document.createElement("div"); drop.className="drop";
+  drop.textContent="📎 Скриншот: перетащи файл, вставь (Ctrl+V) или кликни";
+  const shots = document.createElement("div"); shots.className="shots";
+  const file = document.createElement("input"); file.type="file"; file.accept="image/*"; file.multiple=true; file.style.display="none";
+  drop.addEventListener("click", function(){ file.click(); });
+  file.addEventListener("change", function(e){ [...e.target.files].forEach(f=>addImg(f,shots)); file.value=""; });
+  drop.addEventListener("dragover", function(e){ e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", function(){ drop.classList.remove("over"); });
+  drop.addEventListener("drop", function(e){ e.preventDefault(); drop.classList.remove("over");
+    [...e.dataTransfer.files].forEach(f=>{ if(f.type.startsWith("image/")) addImg(f,shots); }); });
+  item.addEventListener("paste", function(e){
+    [...e.clipboardData.items].forEach(function(it){
+      if(it.type.startsWith("image/")){ addImg(it.getAsFile(), shots); }
+    });
+  });
+  item.tabIndex = 0;
+  shot.appendChild(drop); shot.appendChild(shots); shot.appendChild(file);
+  item.appendChild(shot);
+});
+function addImg(fileObj, container){
+  if(!fileObj) return;
+  const r = new FileReader();
+  r.onload = function(){
+    const fig = document.createElement("figure");
+    const img = document.createElement("img"); img.src = r.result;
+    const rm = document.createElement("button"); rm.className="rm"; rm.textContent="×";
+    rm.title="Убрать"; rm.addEventListener("click", function(){ fig.remove(); });
+    fig.appendChild(img); fig.appendChild(rm); container.appendChild(fig);
+  };
+  r.readAsDataURL(fileObj);
+}
+function exportReport(){
+  const clone = document.documentElement.cloneNode(true);
+  clone.querySelectorAll("input[type=radio]").forEach(function(r){
+    const live = document.querySelector('input[name="'+r.name+'"][value="'+r.value+'"]');
+    if(live && live.checked){ r.setAttribute("checked",""); r.closest("label").classList.add("sel"); }
+  });
+  const liveTas = document.querySelectorAll("textarea");
+  clone.querySelectorAll("textarea").forEach(function(t,i){ t.textContent = liveTas[i] ? liveTas[i].value : ""; });
+  clone.querySelectorAll(".export,.drop,input[type=file],script").forEach(function(el){ el.remove(); });
+  const foot = clone.querySelector("footer");
+  if(foot){ foot.innerHTML += "<br>Отчёт заполнен и выгружен."; }
+  const html = "<!DOCTYPE html>\n<html lang=\"ru\">" + clone.innerHTML + "</html>";
+  const blob = new Blob([html], {type:"text/html"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = "retest-v0.30-F-fix-filled.html"; a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+}
+</script>
+</body>
+</html>

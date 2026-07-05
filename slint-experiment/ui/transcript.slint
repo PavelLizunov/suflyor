@@ -545,8 +545,12 @@ export component TranscriptWindow inherits Window {
                                     text: sp.label;
                                     width: 108px;
                                     font-size: Metrics.font-label;
-                                    // Commit on Enter (blank clears the rename).
-                                    accepted(t) => { root.rename-speaker(sp.id, t); }
+                                    // F-fix (fable, live-proven): commit AS-TYPED, not just on Enter.
+                                    // The old Enter-only `accepted` let a typed-but-uncommitted name sit
+                                    // VISIBLE while the store stayed empty → the re-detect guard saw no
+                                    // names and silently re-ran («не спрашивает»). `edited` keeps the store
+                                    // equal to the visible text; a blank value clears the rename.
+                                    edited(t) => { root.rename-speaker(sp.id, t); }
                                 }
                             }
                         }

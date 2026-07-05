@@ -2057,10 +2057,14 @@ fn wire_transcript_diarization(
                 *diar_c.borrow_mut() = st.get_diarization(&sid).ok().flatten();
             }
             if let Some(d) = diar_c.borrow().as_ref() {
+                // F-fix (fable): the rename now commits per-keystroke (`edited`), so do NOT rebuild
+                // the speaker list here — that recreates the focused LineEdit on every keystroke and
+                // makes typing impossible. The field already shows the typed text; relabel the
+                // transcript rows live, and keep the re-detect guard in sync below.
                 apply_voice_labels(&model_c, &utts_c, d);
-                set_speaker_list(&w, d, &utts_c);
-                // F — a rename may set OR clear the last custom name → keep the guard in sync.
-                w.set_has_speaker_names(d.speaker_names.values().any(|n| !n.trim().is_empty()));
+                let has_names = d.speaker_names.values().any(|n| !n.trim().is_empty());
+                w.set_has_speaker_names(has_names);
+                log::debug!("diar: rename speaker {id} (has_custom_names={has_names})");
             }
         });
     }
