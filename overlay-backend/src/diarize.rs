@@ -60,15 +60,23 @@ pub fn models_ready() -> bool {
     crate::diar_install::models_installed()
 }
 
-/// Whether `system.wav`'s length covers the transcript's wall-clock span, so speaker
-/// segments align to the right lines. `recording_ms` is the WAV length (see
-/// `session_audio::system_recording_ms`); `utts` supplies the span (max `audio_ms`).
+/// Whether `system.wav`'s length covers the SYSTEM-line span, so speaker segments
+/// align to the right lines. `recording_ms` is the WAV length (see
+/// `session_audio::system_recording_ms`); the span is the max `audio_ms` over SYSTEM
+/// utterances ONLY. E-fix (fable 2026-07-05): diarization aligns to system.wav, and
+/// system.wav is padded only up to the last DELIVERED system chunk (loopback freezes
+/// when the call ends), so comparing it against a later MIC line — a goodbye said into
+/// the mic after hangup — made this fire on nearly EVERY session (meaningless banner).
 /// Returns false ONLY when the recording is short by more than [`TIMELINE_TOL_MS`] —
-/// the legacy (pre-D0.5, unpadded) case, where `audio_ms`→sample drifts and speaker
-/// labels can land on the wrong lines. Missing data → true (nothing to warn about).
+/// the legacy/unpadded case where `audio_ms`→sample drifts. Missing data → true.
 #[must_use]
 pub fn timeline_reliable(recording_ms: Option<i64>, utts: &[Utterance]) -> bool {
-    let wall = utts.iter().filter_map(|u| u.audio_ms).max().unwrap_or(0);
+    let wall = utts
+        .iter()
+        .filter(|u| u.source == "system")
+        .filter_map(|u| u.audio_ms)
+        .max()
+        .unwrap_or(0);
     match recording_ms {
         Some(rec) if wall > 0 => rec + TIMELINE_TOL_MS >= wall,
         _ => true,
@@ -314,6 +322,15 @@ mod tests {
         assert!(!timeline_reliable(Some(540_000), &utts)); // 1 min short → legacy/unpadded
         assert!(timeline_reliable(None, &utts)); // unknown length → don't cry wolf
         assert!(timeline_reliable(Some(1000), &[utt("system", None)])); // no audio_ms → ditto
+                                                                        // E-fix: a late MIC line (goodbye said after the call hung up) must NOT count —
+                                                                        // only SYSTEM lines define the span, so a WAV covering the system span stays reliable
+                                                                        // even though the mic line is timestamped 5 min later (this used to fire the banner).
+        let late_mic = vec![
+            utt("system", Some(0)),
+            utt("system", Some(600_000)),
+            utt("mic", Some(900_000)),
+        ];
+        assert!(timeline_reliable(Some(600_000), &late_mic));
     }
 
     #[test]

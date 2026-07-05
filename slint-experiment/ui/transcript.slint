@@ -325,52 +325,54 @@ export component TranscriptWindow inherits Window {
                 // the install prompt is reachable (else the whole feature is hidden).
                 if !root.empty && (root.can-diarize || root.has-diarization || root.needs-diar-models) : VerticalLayout {
                     spacing: Metrics.space-sm;
-                    HorizontalLayout {
-                        spacing: Metrics.space-sm;
-                        // View toggle — only once a result exists.
-                        if root.has-diarization : HorizontalLayout {
-                            spacing: 4px;
-                            Rectangle {
-                                width: 92px;
-                                height: 28px;
-                                border-radius: 6px;
-                                border-width: 1px;
-                                border-color: Theme.accent;
-                                background: !root.by-voice ? Theme.accent : transparent;
-                                role-ta := TouchArea { clicked => { root.toggle-by-voice(false); } }
-                                Text {
-                                    text: @tr("By role");
-                                    color: !root.by-voice ? Theme.on-accent : Theme.accent;
-                                    font-size: Metrics.font-label;
-                                    font-weight: 600;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                }
+                    // G (fable) — the view-toggle row shows ONLY once a result exists. It used
+                    // to sit inside an always-present HorizontalLayout wrapper, but an EMPTY box
+                    // layout in Slint 1.16 reports stretch=f32::MAX (ate all vertical space → the
+                    // ListView collapsed to ~2 rows) AND max-width=0 (opened the window narrower).
+                    // Hoisting the `if` so NOTHING renders pre-detect fixes both. (D3 8b4fa2c regression.)
+                    if root.has-diarization : HorizontalLayout {
+                        spacing: 4px;
+                        Rectangle {
+                            width: 92px;
+                            height: 28px;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.accent;
+                            background: !root.by-voice ? Theme.accent : transparent;
+                            role-ta := TouchArea { clicked => { root.toggle-by-voice(false); } }
+                            Text {
+                                text: @tr("By role");
+                                color: !root.by-voice ? Theme.on-accent : Theme.accent;
+                                font-size: Metrics.font-label;
+                                font-weight: 600;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
                             }
-                            Rectangle {
-                                width: 104px;
-                                height: 28px;
-                                border-radius: 6px;
-                                border-width: 1px;
-                                border-color: Theme.accent;
-                                background: root.by-voice ? Theme.accent : transparent;
-                                voice-ta := TouchArea { clicked => { root.toggle-by-voice(true); } }
-                                Text {
-                                    text: @tr("By voice");
-                                    color: root.by-voice ? Theme.on-accent : Theme.accent;
-                                    font-size: Metrics.font-label;
-                                    font-weight: 600;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                }
-                            }
-                            Rectangle { horizontal-stretch: 1; }
                         }
+                        Rectangle {
+                            width: 104px;
+                            height: 28px;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.accent;
+                            background: root.by-voice ? Theme.accent : transparent;
+                            voice-ta := TouchArea { clicked => { root.toggle-by-voice(true); } }
+                            Text {
+                                text: @tr("By voice");
+                                color: root.by-voice ? Theme.on-accent : Theme.accent;
+                                font-size: Metrics.font-label;
+                                font-weight: 600;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
                     }
-                    // I-1 (fable review) — system.wav is shorter than the transcript span
-                    // (legacy pre-D0.5 recording, OR idle padding hit the recorder's cap), so
-                    // audio_ms→sample drifts and speaker labels may land off. Warn, don't block.
-                    if root.timeline-unreliable : Rectangle {
+                    // I-1 (fable review) — system.wav is shorter than the SYSTEM-line span, so
+                    // audio_ms→sample drifts and speaker labels may land off. E-fix: gate on
+                    // has-diarization — the caveat is about label alignment, so it's meaningless
+                    // (and was firing on every diarizable open) until a result actually exists.
+                    if root.timeline-unreliable && root.has-diarization : Rectangle {
                         border-radius: 6px;
                         border-width: 1px;
                         border-color: Theme.warning;

@@ -318,6 +318,14 @@ pub fn spawn(
             if rms < VAD_RMS_THRESHOLD {
                 utt.silent_run_ms = utt.silent_run_ms.saturating_add(chunk_duration_ms);
             } else {
+                // H (fable) — snap the utterance start to VOICE ONSET, not the buffer's first
+                // chunk. Each channel's first captured chunk is ~t0 and the buffer accumulates
+                // leading silence until voice arrives, so without this the first voiced line on
+                // BOTH channels inherited start≈0 and displayed "00:00" (wrong order + timecodes).
+                // timestamp_ms is stamped at chunk END, so back off one chunk to its start.
+                if !utt.had_voice {
+                    utt.start_ts_ms = chunk.timestamp_ms.saturating_sub(chunk_duration_ms);
+                }
                 utt.silent_run_ms = 0;
                 utt.had_voice = true;
             }
