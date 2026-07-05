@@ -1947,6 +1947,106 @@ fn set_speaker_list(win: &TranscriptWindow, diar: &Diarization, utts: &[Utteranc
     win.set_speakers(ModelRc::from(Rc::new(VecModel::from(rows))));
 }
 
+/// I (2026-07-05) — case-insensitive substring match (full Unicode lowercasing, so Cyrillic
+/// folds too). Returns the indices of `texts` containing `query`; empty/blank query → none.
+/// Pure — the search's only non-trivial logic, so it carries the unit test.
+fn transcript_search_hits(texts: &[&str], query: &str) -> Vec<usize> {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() {
+        return Vec::new();
+    }
+    texts
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| t.to_lowercase().contains(q.as_str()))
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// I — next hit index from cursor `cur` (-1 = fresh) stepping `dir` (±1) over `n` hits (n > 0).
+/// Fresh: › → 0 (first), ‹ → n-1 (last). Positioned: wrap both ways. Pure — unit-tested.
+fn next_hit_index(cur: i32, dir: i32, n: i32) -> i32 {
+    if cur < 0 {
+        if dir >= 0 {
+            0
+        } else {
+            n - 1
+        }
+    } else {
+        (cur + dir).rem_euclid(n)
+    }
+}
+
+/// I (2026-07-05, owner top priority) — in-transcript word search. `search-edited` re-flags the
+/// matching rows (`matched`) in ONE model pass and collects their indices; `search-jump(±1)` moves a
+/// cursor over the hits and reuses the existing `play-line` (seek + play the moment) plus the
+/// `scroll-to-line` fn (visual). Per-window state; reset on every (re)open (the window is reused).
+fn wire_transcript_search(win: &TranscriptWindow, model: &Rc<VecModel<TranscriptLine>>) {
+    win.set_search_query(SharedString::default());
+    win.set_search_count(0);
+    win.set_search_pos(0);
+
+    let hits: Rc<RefCell<Vec<usize>>> = Rc::new(RefCell::new(Vec::new()));
+    let cursor: Rc<std::cell::Cell<i32>> = Rc::new(std::cell::Cell::new(-1));
+
+    {
+        let weak = win.as_weak();
+        let m = model.clone();
+        let hits = hits.clone();
+        let cursor = cursor.clone();
+        win.on_search_edited(move |query| {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            // Row texts → the pure (unit-tested) helper computes the ascending hit indices; then
+            // apply `matched` (write only on a flip — the virtualized list repaints just changed rows).
+            let texts: Vec<String> = (0..m.row_count())
+                .map(|j| {
+                    m.row_data(j)
+                        .map(|r| r.text.to_string())
+                        .unwrap_or_default()
+                })
+                .collect();
+            let refs: Vec<&str> = texts.iter().map(String::as_str).collect();
+            let found = transcript_search_hits(&refs, query.as_str());
+            for j in 0..m.row_count() {
+                if let Some(mut r) = m.row_data(j) {
+                    let is_m = found.binary_search(&j).is_ok();
+                    if r.matched != is_m {
+                        r.matched = is_m;
+                        m.set_row_data(j, r);
+                    }
+                }
+            }
+            w.set_search_count(found.len() as i32);
+            w.set_search_pos(0);
+            *hits.borrow_mut() = found;
+            cursor.set(-1);
+        });
+    }
+    {
+        let weak = win.as_weak();
+        let hits = hits.clone();
+        let cursor = cursor.clone();
+        win.on_search_jump(move |dir| {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            let list = hits.borrow();
+            let n = list.len() as i32;
+            if n == 0 {
+                return;
+            }
+            let next = next_hit_index(cursor.get(), dir, n);
+            cursor.set(next);
+            let row = list[next as usize] as i32;
+            w.set_search_pos(next + 1);
+            w.invoke_scroll_to_line(row); // visual (approximate)
+            w.invoke_play_line(row); // audio — seek to the moment + play (exact)
+        });
+    }
+}
+
 /// D3 — «По голосам» diarization wiring: the role/voice toggle, the «Определить
 /// говорящих» run (worker → poll-timer → persist + repaint), and speaker rename.
 /// Relabelling MUTATES the shared line model in place (same rows, only the speaker
@@ -2283,6 +2383,7 @@ pub(crate) fn open_transcript(
             checked: false,
             marked: false,
             start_ms: off.unwrap_or(0) as i32,
+            matched: false,
         })
         .collect();
     // Utterances hidden by the display cap — the footer discloses this (Copy all
@@ -2306,6 +2407,7 @@ pub(crate) fn open_transcript(
         win.set_overflow_count(overflow);
         wire_transcript_actions(win, &model, &utts_display, session_start);
         wire_transcript_player(win, &session_id, &model);
+        wire_transcript_search(win, &model);
         wire_transcript_diarization(
             win,
             store,
@@ -2339,6 +2441,7 @@ pub(crate) fn open_transcript(
     win.set_overflow_count(overflow);
     wire_transcript_actions(&win, &model, &utts_display, session_start);
     wire_transcript_player(&win, &session_id, &model);
+    wire_transcript_search(&win, &model);
     wire_transcript_diarization(
         &win,
         store,
@@ -2469,6 +2572,36 @@ mod tests {
     fn pretty_label_falls_back_on_odd_id() {
         assert_eq!(pretty_session_label("weird"), "weird");
         assert_eq!(pretty_session_label(""), "");
+    }
+
+    #[test]
+    fn transcript_search_hits_case_insensitive_incl_cyrillic() {
+        let texts = [
+            "Обсудили бюджет на квартал",
+            "Потом про найм",
+            "Вернулись к БЮДЖЕТУ и срокам",
+        ];
+        // Case-insensitive substring; Cyrillic folds → rows 0 and 2 match «бюджет».
+        assert_eq!(transcript_search_hits(&texts, "бюджет"), vec![0, 2]);
+        assert_eq!(transcript_search_hits(&texts, "  НАЙМ  "), vec![1]); // trims + folds case
+        assert_eq!(transcript_search_hits(&texts, "xyz"), Vec::<usize>::new()); // no match
+        assert_eq!(transcript_search_hits(&texts, "   "), Vec::<usize>::new()); // blank → none
+    }
+
+    #[test]
+    fn next_hit_index_fresh_and_wrap() {
+        // Fresh (cur -1): › → first (0), ‹ → last (n-1) — NOT n-2.
+        assert_eq!(next_hit_index(-1, 1, 5), 0);
+        assert_eq!(next_hit_index(-1, -1, 5), 4);
+        // Positioned: step forward/back.
+        assert_eq!(next_hit_index(0, 1, 5), 1);
+        assert_eq!(next_hit_index(2, -1, 5), 1);
+        // Wrap both ends.
+        assert_eq!(next_hit_index(4, 1, 5), 0);
+        assert_eq!(next_hit_index(0, -1, 5), 4);
+        // Single hit — every move stays on 0.
+        assert_eq!(next_hit_index(-1, -1, 1), 0);
+        assert_eq!(next_hit_index(0, 1, 1), 0);
     }
 
     #[test]

@@ -22,6 +22,7 @@ export struct TranscriptLine {
     checked: bool,        // ТЗ1 — per-line selection for "Copy selected" (clipboard)
     marked: bool,         // G2b (2026-07-03) — per-line ⭐ multi-mark for «В память (N)»
     start-ms: int,        // ТЗ2b — session-relative ms, for click-to-seek + active line
+    matched: bool,        // I (2026-07-05) — matches the current in-transcript search query
 }
 
 // D3 — one speaker in the «По голосам» rename list (display id · editable label · colour).
@@ -152,6 +153,11 @@ export component TranscriptWindow inherits Window {
     in-out property <int> speaker-count: 2;
     // The rename list, shown in «По голосам»: display id · label · colour.
     in-out property <[SpeakerRow]> speakers: [];
+    // I (2026-07-05, owner top priority) — in-transcript search. `search-query` drives Rust
+    // match-flagging (`matched` per line); `search-count`/`search-pos` show «pos / count».
+    in-out property <string> search-query: "";
+    in-out property <int> search-count: 0;
+    in-out property <int> search-pos: 0; // 1-based; 0 = no current match
 
     callback toggle-play();
     callback play-line(int);
@@ -189,6 +195,23 @@ export component TranscriptWindow inherits Window {
     // diarizable but the models are absent).
     callback install-diar-models();
     callback rename-speaker(int, string);
+    // I — in-transcript search: `search-edited` re-flags matches on each keystroke; `search-jump(+1/-1)`
+    // moves to the next/prev match (Rust jumps the player via play-line + calls scroll-to-line here).
+    callback search-edited(string);
+    callback search-jump(int);
+
+    // I — scroll the virtualized ListView so line `idx` is roughly centered (same average-height
+    // estimate std StandardListViewBase uses). Approximate with variable-height rows, but the audio
+    // jump is exact + the 200ms poll then paints the landed row via active-line.
+    public function scroll-to-line(idx: int) {
+        if (root.lines.length == 0) {
+            return;
+        }
+        lv.viewport-y = -clamp(
+            idx * (lv.viewport-height / root.lines.length) - lv.height / 2,
+            0px,
+            max(0px, lv.viewport-height - lv.height));
+    }
 
     forward-focus: fs;
 
@@ -557,6 +580,58 @@ export component TranscriptWindow inherits Window {
                     }
                 }
 
+                // ── I (2026-07-05, owner top priority) — in-transcript search row: type → matching
+                // lines tint; Enter / ‹ › jump the player to a match's moment + scroll the list to it. ──
+                if !root.empty : HorizontalLayout {
+                    spacing: Metrics.space-sm;
+                    padding-left: 4px;
+                    LineEdit {
+                        horizontal-stretch: 1;
+                        text <=> root.search-query;
+                        placeholder-text: @tr("Search in transcript");
+                        font-size: Metrics.font-label;
+                        edited(t) => { root.search-edited(t); }
+                        accepted => { root.search-jump(1); }
+                    }
+                    if root.search-query != "" : Text {
+                        text: "\{root.search-pos} / \{root.search-count}";
+                        font-size: Metrics.font-caption;
+                        color: Theme.text-muted;
+                        vertical-alignment: center;
+                    }
+                    // ‹ prev / › next match (ASCII, per the v0.25.1 lesson: skia draws exotic glyphs square).
+                    Rectangle {
+                        width: 26px;
+                        height: 28px;
+                        border-radius: 6px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        TouchArea { clicked => { root.search-jump(-1); } }
+                        Text {
+                            text: "<";
+                            font-size: Metrics.font-body;
+                            color: Theme.text-primary;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                    Rectangle {
+                        width: 26px;
+                        height: 28px;
+                        border-radius: 6px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        TouchArea { clicked => { root.search-jump(1); } }
+                        Text {
+                            text: ">";
+                            font-size: Metrics.font-body;
+                            color: Theme.text-primary;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
                 // ── "Select all" header above the list ──
                 if !root.empty : HorizontalLayout {
                     spacing: Metrics.space-sm;
@@ -588,12 +663,15 @@ export component TranscriptWindow inherits Window {
                 }
 
                 // ── Chronological transcript rows ──
-                if !root.empty : ListView {
+                // I-fix — UNCONDITIONAL so the `lv` name is reachable from scroll-to-line (Slint
+                // can't reference a conditional element from a function). Empty → stretch 0 so the
+                // "Transcript not saved" placeholder (above) fills instead; 0 rows render anyway.
+                lv := ListView {
                     // Virtualized (only VISIBLE rows are instantiated) → the list height is no
                     // longer bounded by the SW-renderer i16 (32767px) limit, so ALL utterances
                     // show — no display cap. Per-row `max-height:120px` + clip still bounds any
                     // single very long utterance.
-                    vertical-stretch: 1;
+                    vertical-stretch: root.empty ? 0 : 1;
                     for line[i] in root.lines : Rectangle {
                             // Баг5 — clamp + clip so ONE long utterance can't grow the
                             // row unbounded; with TRANSCRIPT_DISPLAY_CAP this keeps the
@@ -606,6 +684,7 @@ export component TranscriptWindow inherits Window {
                             // contains the current playback position.
                             background: i == root.active-line
                                 ? Theme.accent.with-alpha(0.14)
+                                : line.matched ? Theme.warning.with-alpha(0.12)
                                 : transparent;
                             border-radius: 4px;
                             // Clicking the row (anywhere but the checkbox) plays the

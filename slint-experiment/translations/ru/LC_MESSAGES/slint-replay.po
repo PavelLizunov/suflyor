@@ -118,6 +118,10 @@ msgstr "Копировать выбранное"
 msgid "select all"
 msgstr "выделить все"
 
+# I (2026-07-05) — in-transcript search box placeholder
+msgid "Search in transcript"
+msgstr "Поиск по стенограмме"
+
 msgid "Audio not saved"
 msgstr "Аудио не сохранено"
 

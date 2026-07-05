@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>suflyor v0.30 — ре-тест I (поиск по стенограмме)</title>
+<style>
+  :root { --bg:#151B23; --card:#1c232d; --ink:#E8EEF4; --muted:#9fb0c0; --line:#2b3644;
+          --accent:#4C8DFF; --ok:#3fb950; --bad:#f85149; --skip:#8a97a6; --warn:#E3B341; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; }
+  header { position:sticky; top:0; z-index:5; background:#10151c; border-bottom:1px solid var(--line);
+           padding:14px 20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; font-weight:650; }
+  header .sub { color:var(--muted); font-size:13px; }
+  .spacer { flex:1; }
+  button.export { background:var(--accent); color:#06101f; border:0; border-radius:7px; padding:9px 16px;
+                  font-weight:650; font-size:14px; cursor:pointer; }
+  button.export:hover { filter:brightness(1.1); }
+  main { max-width:900px; margin:0 auto; padding:20px; }
+  .intro { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:22px; }
+  .intro p { margin:6px 0; }
+  .intro code { background:#0e131a; padding:2px 6px; border-radius:4px; color:#cfe0ff; font-size:13px; }
+  h2 { font-size:16px; margin:26px 0 12px; padding-bottom:6px; border-bottom:1px solid var(--line); color:#cfe0ff; }
+  .item { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin:12px 0; }
+  .item .q { font-weight:600; margin-bottom:4px; }
+  .item .how { color:var(--muted); font-size:13.5px; margin-bottom:10px; }
+  .item .how b { color:var(--ink); }
+  .statuses { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .statuses label { cursor:pointer; border:1px solid var(--line); border-radius:20px; padding:5px 13px; font-size:13px;
+                    user-select:none; display:inline-flex; align-items:center; gap:6px; background:#0e131a; }
+  .statuses input { display:none; }
+  .statuses label.ok.sel   { border-color:var(--ok);   background:rgba(63,185,80,.16);  color:#9be7a8; }
+  .statuses label.bad.sel  { border-color:var(--bad);  background:rgba(248,81,73,.16);  color:#ffb3ad; }
+  .statuses label.skip.sel { border-color:var(--skip); background:rgba(138,151,166,.16); color:#c3ccd6; }
+  textarea { width:100%; background:#0e131a; color:var(--ink); border:1px solid var(--line); border-radius:7px;
+             padding:8px 10px; font:14px/1.45 inherit; resize:vertical; min-height:44px; }
+  .shot { margin-top:10px; }
+  .drop { border:1.5px dashed var(--line); border-radius:8px; padding:12px; text-align:center; color:var(--muted);
+          font-size:13px; cursor:pointer; transition:.12s; }
+  .drop:hover, .drop.over { border-color:var(--accent); color:#cfe0ff; background:rgba(76,141,255,.06); }
+  .shots { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+  .shots figure { margin:0; position:relative; border:1px solid var(--line); border-radius:7px; overflow:hidden; max-width:240px; }
+  .shots img { display:block; max-width:100%; height:auto; }
+  .shots .rm { position:absolute; top:4px; right:4px; background:rgba(0,0,0,.6); color:#fff; border:0; border-radius:5px;
+               width:24px; height:24px; cursor:pointer; font-size:15px; line-height:1; }
+  .tag { font-size:11px; font-weight:700; padding:2px 7px; border-radius:5px; margin-right:8px; vertical-align:middle;
+         background:rgba(76,141,255,.2); color:#a9c9ff; }
+  .tag.re { background:rgba(227,179,65,.2); color:#f0d38a; }
+  .note { color:var(--warn); font-size:12.5px; margin-top:6px; }
+  footer { max-width:900px; margin:10px auto 60px; padding:0 20px; color:var(--muted); font-size:12.5px; }
+  @media print { header .export { display:none; } .drop { display:none; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>suflyor v0.30 — ре-тест I</h1>
+    <div class="sub">Поиск по словам внутри стенограммы → прыжок к моменту</div>
+  </div>
+  <div class="spacer"></div>
+  <button class="export" onclick="exportReport()">Скачать отчёт</button>
+</header>
+
+<main>
+  <div class="intro">
+    <p><b>Что новое.</b> Внутри открытой стенограммы появилась строка <b>поиска</b>. Печатаешь слово → строки, где оно встречается, <b>подсвечиваются</b> тёплым цветом, а рядом счётчик <code>1 / N</code>. Кнопки <b>‹ ›</b> (или <b>Enter</b>) прыгают по совпадениям: список <b>прокручивается</b> к строке <b>и плеер перематывается на этот момент и играет</b> — то самое «найти, где упоминалось X».</p>
+    <p><b>Как открыть.</b> Я обновил установленный билд + перезапустил приложение. Стенограмма: <b>F7</b> → выбери сессию с записью → <b>💬</b>. Строка поиска — над «Выделить всё».</p>
+    <p><b>Важно про I0.</b> Чтобы это сделать, я поменял способ отрисовки самого списка стенограммы. Глянь пунктом I0, что список выглядит как раньше (без дыр/сжатия).</p>
+  </div>
+
+  <h2>🔎 Поиск и прыжок</h2>
+
+  <div class="item" data-id="I0" tabindex="0">
+    <div class="q"><span class="tag re">re-check</span>Список стенограммы выглядит как раньше</div>
+    <div class="how">Открой стенограмму. Список реплик заполняет окно нормально: <b>нет пустой дыры сверху/снизу</b>, нет сжатия в узкую полоску, нет лишней пустой рамки/скроллбара. (Перепроверка — отрисовка списка изменилась ради поиска.) Пустая сессия без стенограммы → по-прежнему «Стенограмма не сохранена» по центру.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_I0" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_I0" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_I0" value="skip">⏭ пропустить</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ перетащи/вставь скриншот</div><div class="shots"></div></div></div>
+
+  <div class="item" data-id="I1" tabindex="0">
+    <div class="q"><span class="tag">I1 (главное)</span>Печатаешь слово → совпадения подсвечиваются + счётчик</div>
+    <div class="how">В строке поиска впиши слово, которое точно есть в разговоре. Все строки с ним <b>подсвечиваются</b>; счётчик показывает число совпадений (например <code>0 / 5</code> до первого прыжка). Стираешь текст → подсветка пропадает, счётчик <code>0 / 0</code>.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_I1" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_I1" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_I1" value="skip">⏭ пропустить</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ перетащи/вставь скриншот</div><div class="shots"></div></div></div>
+
+  <div class="item" data-id="I2" tabindex="0">
+    <div class="q"><span class="tag">I2 (главное)</span>Enter / › → прыжок к моменту (скролл + звук)</div>
+    <div class="how">С введённым словом жми <b>Enter</b> (или <b>›</b>). Должно: список <b>прокрутиться</b> к первому совпадению <b>и плеер перемотаться на этот момент и заиграть</b> оттуда. Счётчик станет <code>1 / N</code>. Это и есть «найти, где сказали про X, и послушать».</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_I2" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_I2" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_I2" value="skip">⏭ пропустить</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ перетащи/вставь скриншот</div><div class="shots"></div></div></div>
+
+  <div class="item" data-id="I3" tabindex="0">
+    <div class="q">‹ › ходят по совпадениям и заворачиваются</div>
+    <div class="how"><b>›</b> — следующее совпадение, <b>‹</b> — предыдущее; счётчик <code>2 / N</code>, <code>3 / N</code>… На последнем <b>›</b> заворачивает на <code>1 / N</code>, а <b>‹</b> с первого — на <code>N / N</code>. Каждый прыжок так же перематывает звук на тот момент.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_I3" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_I3" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_I3" value="skip">⏭ пропустить</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ перетащи/вставь скриншот</div><div class="shots"></div></div></div>
+
+  <div class="item" data-id="I4" tabindex="0">
+    <div class="q">Регистр не важен (рус/лат)</div>
+    <div class="how">Слово находится независимо от регистра: <code>бюджет</code>, <code>Бюджет</code>, <code>БЮДЖЕТ</code> дают одни и те же совпадения. Проверь на русском слове.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_I4" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_I4" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_I4" value="skip">⏭ пропустить</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ перетащи/вставь скриншот</div><div class="shots"></div></div></div>
+
+  <div class="item" data-id="I5" tabindex="0">
+    <div class="q">Нет совпадений / пустой запрос — ничего не ломается</div>
+    <div class="how">Впиши заведомо отсутствующее слово → <code>0 / 0</code>, подсветки нет, ‹ › ничего не делают (не падает). Пустой запрос — то же самое.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_I5" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_I5" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_I5" value="skip">⏭ пропустить</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ перетащи/вставь скриншот</div><div class="shots"></div></div></div>
+
+  <div class="item" data-id="IGEN" tabindex="0">
+    <div class="q">Что-то ещё по поиску</div>
+    <div class="how">Удобство, скорость подсветки на длинной стенограмме, точность попадания скролла/звука, замечания, скриншоты.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_IGEN" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_IGEN" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_IGEN" value="skip">⏭ пропустить</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ перетащи/вставь скриншот</div><div class="shots"></div></div></div>
+</main>
+
+<footer>suflyor v0.30 · ре-тест I (поиск по стенограмме) · ветка <code>claude/diarization-d05</code></footer>
+
+<script>
+(function () {
+  // Status chip selection
+  document.querySelectorAll('.statuses').forEach(function (grp) {
+    grp.querySelectorAll('label').forEach(function (lab) {
+      lab.addEventListener('click', function () {
+        grp.querySelectorAll('label').forEach(function (l) { l.classList.remove('sel'); });
+        lab.classList.add('sel');
+        lab.querySelector('input').checked = true;
+      });
+    });
+  });
+  // Screenshot drop / paste
+  function addShot(shots, src) {
+    var fig = document.createElement('figure');
+    var img = document.createElement('img'); img.src = src;
+    var rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = '×';
+    rm.onclick = function () { fig.remove(); };
+    fig.appendChild(img); fig.appendChild(rm); shots.appendChild(fig);
+  }
+  function fileToShot(shots, file) {
+    if (!file || file.type.indexOf('image') !== 0) return;
+    var r = new FileReader(); r.onload = function (e) { addShot(shots, e.target.result); }; r.readAsDataURL(file);
+  }
+  document.querySelectorAll('.shot').forEach(function (shot) {
+    var drop = shot.querySelector('.drop'); var shots = shot.querySelector('.shots');
+    if (!drop) return;
+    var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.style.display = 'none';
+    drop.appendChild(inp);
+    drop.addEventListener('click', function () { inp.click(); });
+    inp.addEventListener('change', function () { Array.from(inp.files).forEach(function (f) { fileToShot(shots, f); }); inp.value = ''; });
+    drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.classList.add('over'); });
+    drop.addEventListener('dragleave', function () { drop.classList.remove('over'); });
+    drop.addEventListener('drop', function (e) {
+      e.preventDefault(); drop.classList.remove('over');
+      Array.from(e.dataTransfer.files).forEach(function (f) { fileToShot(shots, f); });
+    });
+    shot.closest('.item').addEventListener('paste', function (e) {
+      Array.from(e.clipboardData.items).forEach(function (it) {
+        if (it.type.indexOf('image') === 0) fileToShot(shots, it.getAsFile());
+      });
+    });
+  });
+  // Export the filled report as a self-contained HTML download
+  window.exportReport = function () {
+    document.querySelectorAll('textarea').forEach(function (t) { t.setAttribute('data-val', t.value); t.textContent = t.value; });
+    document.querySelectorAll('input[type=radio]').forEach(function (i) {
+      if (i.checked) i.setAttribute('checked', 'checked'); else i.removeAttribute('checked');
+    });
+    var html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+    var blob = new Blob([html], { type: 'text/html' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'retest-v0.30-I-filled.html'; a.click();
+  };
+})();
+</script>
+</body></html>
