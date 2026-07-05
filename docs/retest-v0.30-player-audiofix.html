@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ru"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>suflyor v0.30 — ре-тест плеера #2 (WSOLA-движок + пропорции футера)</title>
+<style>
+  :root { --bg:#151B23; --card:#1c232d; --ink:#E8EEF4; --muted:#9fb0c0; --line:#2b3644;
+          --accent:#4C8DFF; --ok:#3fb950; --bad:#f85149; --skip:#8a97a6; --warn:#E3B341; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; }
+  header { position:sticky; top:0; z-index:5; background:#10151c; border-bottom:1px solid var(--line);
+           padding:14px 20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; font-weight:650; }
+  header .sub { color:var(--muted); font-size:13px; }
+  .spacer { flex:1; }
+  button.export { background:var(--accent); color:#06101f; border:0; border-radius:7px; padding:9px 16px;
+                  font-weight:650; font-size:14px; cursor:pointer; }
+  button.export:hover { filter:brightness(1.1); }
+  main { max-width:900px; margin:0 auto; padding:20px; }
+  .intro { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:22px; }
+  .intro p { margin:6px 0; }
+  .intro code { background:#0e131a; padding:2px 6px; border-radius:4px; color:#cfe0ff; font-size:13px; }
+  h2 { font-size:16px; margin:26px 0 12px; padding-bottom:6px; border-bottom:1px solid var(--line); color:#cfe0ff; }
+  .item { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin:12px 0; }
+  .item .q { font-weight:600; margin-bottom:4px; }
+  .item .how { color:var(--muted); font-size:13.5px; margin-bottom:10px; }
+  .item .how b { color:var(--ink); }
+  .statuses { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .statuses label { cursor:pointer; border:1px solid var(--line); border-radius:20px; padding:5px 13px; font-size:13px;
+                    user-select:none; display:inline-flex; align-items:center; gap:6px; background:#0e131a; }
+  .statuses input { display:none; }
+  .statuses label.ok.sel   { border-color:var(--ok);   background:rgba(63,185,80,.16);  color:#9be7a8; }
+  .statuses label.bad.sel  { border-color:var(--bad);  background:rgba(248,81,73,.16);  color:#ffb3ad; }
+  .statuses label.skip.sel { border-color:var(--skip); background:rgba(138,151,166,.16); color:#c3ccd6; }
+  textarea { width:100%; background:#0e131a; color:var(--ink); border:1px solid var(--line); border-radius:7px;
+             padding:8px 10px; font:14px/1.45 inherit; resize:vertical; min-height:44px; }
+  .shot { margin-top:10px; }
+  .drop { border:1.5px dashed var(--line); border-radius:8px; padding:12px; text-align:center; color:var(--muted);
+          font-size:13px; cursor:pointer; transition:.12s; }
+  .drop:hover, .drop.over { border-color:var(--accent); color:#cfe0ff; background:rgba(76,141,255,.06); }
+  .shots { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+  .shots figure { margin:0; position:relative; border:1px solid var(--line); border-radius:7px; overflow:hidden; max-width:240px; }
+  .shots img { display:block; max-width:100%; height:auto; }
+  .shots .rm { position:absolute; top:4px; right:4px; background:rgba(0,0,0,.6); color:#fff; border:0; border-radius:5px;
+               width:24px; height:24px; cursor:pointer; font-size:15px; line-height:1; }
+  .tag { font-size:11px; font-weight:700; padding:2px 7px; border-radius:5px; margin-right:8px; vertical-align:middle;
+         background:rgba(76,141,255,.2); color:#a9c9ff; }
+  .tag.ear { background:rgba(227,179,65,.2); color:#f0d38a; }
+  footer { max-width:900px; margin:10px auto 60px; padding:0 20px; color:var(--muted); font-size:12.5px; }
+  @media print { header .export { display:none; } .drop { display:none; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>suflyor v0.30 — ре-тест плеера #2</h1>
+    <div class="sub">Новый движок скорости (WSOLA) + пропорции футера</div>
+  </div>
+  <div class="spacer"></div>
+  <button class="export" onclick="exportReport()">Скачать отчёт</button>
+</header>
+
+<main>
+  <div class="intro">
+    <p><b>Что я поменял по твоим замечаниям.</b></p>
+    <p>1. <b>Звук на скорости.</b> Прошлый движок (фазовый вокодер) давал эхо/«голос уходит на задний план/драматический» — это его беда на речи. Я переключил на <b>другой движок — WSOLA</b> (временнóй, без фазовых артефактов; именно его используют подкаст-плееры для ускорения). Эхо/«размазывания» быть не должно.</p>
+    <p>2. <b>Пропорции футера.</b> Было по 1/3 на всё. Теперь скорость и громкость — <b>фиксированной ширины</b>, а <b>полоса перемотки забирает остальное</b> (≈ 4/6 полоса, ~1/6 скорость, ~1/6 громкость).</p>
+    <p><b>Как открыть.</b> Обновил установленный билд + перезапустил. <b>F7</b> → сессия с записью → <b>💬</b> → мини-плеер внизу.</p>
+    <p><b>🎧 Наушники.</b> A1–A2 — снова на слух, это главное.</p>
+  </div>
+
+  <h2>🎧 Новый движок скорости (WSOLA)</h2>
+
+  <div class="item" data-id="A1" tabindex="0">
+    <div class="q"><span class="tag ear">на слух</span>2× — эхо/«задний план» ушли?</div>
+    <div class="how">Играй, поставь <b>2×</b>. Речь вдвое быстрее, высота нормальная — и теперь <b>без эха/размазывания</b>, голос НЕ уходит на задний план, не «драматический». Сравни с тем, что было. (WSOLA может дать лёгкую «шероховатость» вместо эха — это норм; главное, чтобы не было реверба/двоения.)</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_A1" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_A1" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_A1" value="skip">⏭ пропустить</label></div><textarea placeholder="Как теперь звучит 2×? Лучше? Что осталось?" data-role="comment"></textarea><div class="shot"><div class="shots"></div></div></div>
+
+  <div class="item" data-id="A2" tabindex="0">
+    <div class="q"><span class="tag ear">на слух</span>3× — разборчиво, без эха</div>
+    <div class="how">Поставь <b>3×</b>. Быстро, но разборчиво и без реверба/двоения. На 3× у любого движка возможна лёгкая «рубленость» — оцени, приемлемо ли для перемотки по смыслу.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_A2" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_A2" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_A2" value="skip">⏭ пропустить</label></div><textarea placeholder="3× приемлемо?" data-role="comment"></textarea><div class="shot"><div class="shots"></div></div></div>
+
+  <div class="item" data-id="A3" tabindex="0">
+    <div class="q"><span class="tag ear">на слух</span>Промежуточные (1.5×, 1.75×, 2.5×) — плавно</div>
+    <div class="how">Пройди пару промежуточных значений. Переключение без громкого щелчка/паузы; звук чистый.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_A3" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_A3" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_A3" value="skip">⏭ пропустить</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="shots"></div></div></div>
+
+  <h2>📐 Пропорции футера</h2>
+
+  <div class="item" data-id="LAYOUT" tabindex="0">
+    <div class="q">Полоса перемотки — широкая; скорость/громкость — узкие</div>
+    <div class="how">Теперь <b>полоса перемотки занимает большую часть</b> ряда, а дропдаун скорости и ползунок громкости — компактные (≈ 1/6 каждый). Ничего не обрезано/не наезжает. Если пропорция ещё не та — скажи цифрами, подкручу ширины. Скриншот приветствуется.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_LAYOUT" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_LAYOUT" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_LAYOUT" value="skip">⏭ пропустить</label></div><textarea placeholder="Пропорции ок? Если нет — какие хочешь?" data-role="comment"></textarea><div class="shot"><div class="drop">＋ перетащи/вставь скриншот</div><div class="shots"></div></div></div>
+
+  <div class="item" data-id="PGEN" tabindex="0">
+    <div class="q">Что-то ещё по плееру</div>
+    <div class="how">Задержка при старте/смене скорости (должна была наоборот уменьшиться), перемотка на 2×, поведение в конце записи.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_PGEN" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_PGEN" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_PGEN" value="skip">⏭ пропустить</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="shots"></div></div></div>
+</main>
+
+<footer>suflyor v0.30 · ре-тест плеера #2 (WSOLA-движок + футер) · ветка <code>claude/diarization-d05</code></footer>
+
+<script>
+(function () {
+  document.querySelectorAll('.statuses').forEach(function (grp) {
+    grp.querySelectorAll('label').forEach(function (lab) {
+      lab.addEventListener('click', function () {
+        grp.querySelectorAll('label').forEach(function (l) { l.classList.remove('sel'); });
+        lab.classList.add('sel');
+        lab.querySelector('input').checked = true;
+      });
+    });
+  });
+  function addShot(shots, src) {
+    var fig = document.createElement('figure');
+    var img = document.createElement('img'); img.src = src;
+    var rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = '×';
+    rm.onclick = function () { fig.remove(); };
+    fig.appendChild(img); fig.appendChild(rm); shots.appendChild(fig);
+  }
+  function fileToShot(shots, file) {
+    if (!file || file.type.indexOf('image') !== 0) return;
+    var r = new FileReader(); r.onload = function (e) { addShot(shots, e.target.result); }; r.readAsDataURL(file);
+  }
+  document.querySelectorAll('.shot').forEach(function (shot) {
+    var drop = shot.querySelector('.drop'); var shots = shot.querySelector('.shots');
+    if (!drop) return;
+    var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.style.display = 'none';
+    drop.appendChild(inp);
+    drop.addEventListener('click', function () { inp.click(); });
+    inp.addEventListener('change', function () { Array.from(inp.files).forEach(function (f) { fileToShot(shots, f); }); inp.value = ''; });
+    drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.classList.add('over'); });
+    drop.addEventListener('dragleave', function () { drop.classList.remove('over'); });
+    drop.addEventListener('drop', function (e) {
+      e.preventDefault(); drop.classList.remove('over');
+      Array.from(e.dataTransfer.files).forEach(function (f) { fileToShot(shots, f); });
+    });
+    shot.closest('.item').addEventListener('paste', function (e) {
+      Array.from(e.clipboardData.items).forEach(function (it) {
+        if (it.type.indexOf('image') === 0) fileToShot(shots, it.getAsFile());
+      });
+    });
+  });
+  window.exportReport = function () {
+    document.querySelectorAll('textarea').forEach(function (t) { t.setAttribute('data-val', t.value); t.textContent = t.value; });
+    document.querySelectorAll('input[type=radio]').forEach(function (i) {
+      if (i.checked) i.setAttribute('checked', 'checked'); else i.removeAttribute('checked');
+    });
+    var html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+    var blob = new Blob([html], { type: 'text/html' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'retest-v0.30-player-audiofix-filled.html'; a.click();
+  };
+})();
+</script>
+</body></html>

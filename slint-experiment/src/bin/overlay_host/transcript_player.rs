@@ -53,40 +53,61 @@ impl rodio::Source for PcmCursor {
     }
 }
 
-/// Input samples fed to the stretch processor per `process()` call — a few FFT
-/// windows' worth, so `process()` returns non-empty on the first pump.
-const STRETCH_PUMP: usize = 4096;
+/// Fresh input samples pulled per WSOLA `process()` call (~1 s at 16 kHz). Each call
+/// is a few ms of CPU on the rodio pull thread.
+const WSOLA_CHUNK: usize = 16_384;
+/// Output samples crossfaded at chunk boundaries (~8 ms at 16 kHz) to hide the seam
+/// between the two independent WSOLA renders of the re-fed overlap.
+const XFADE_OUT: usize = 128;
 
 /// Phase 2b (A) — pitch-preserving playback-rate adapter. Wraps `PcmCursor` (still
-/// indexed in ORIGINAL samples) and time-stretches its output through
-/// `timestretch::StreamProcessor` at ratio = 1/speed, so a 2× listen plays in half
-/// the time WITHOUT the resample "chipmunk" pitch shift rodio's `set_speed` gives.
-/// Output is at the SAME sample_rate, so original samples are consumed at sr×speed
-/// per real second — the position clock (`samples_advanced`) is unchanged.
+/// indexed in ORIGINAL samples) and time-stretches its output via the crate's
+/// time-domain `Wsola` at ratio = 1/speed, so a 2× listen plays in half the time
+/// WITHOUT the resample "chipmunk" pitch shift. Output is at the SAME sample_rate, so
+/// original samples are consumed at sr×speed per real second — the position clock
+/// (`samples_advanced`) is unchanged.
+///
+/// WSOLA (time-domain overlap-add) is used INSTEAD of the crate's phase-vocoder
+/// `StreamProcessor`: the PV path smears speech into an echoey/hollow "recede" (a
+/// 256 ms window at 16 kHz — `fft_size` isn't rescaled for the sample rate — plus an
+/// onset-gated overlay + a pitch-shifted ghost blend at 3×), which the owner's live
+/// listen rejected. `Wsola` is NOT stateful across calls, so each chunk re-feeds the
+/// last `overlap_in` input samples and crossfades the doubly-rendered boundary,
+/// keeping the timeline exact to < 1 sample per chunk (fable diagnosis 2026-07-05).
 ///
 /// speed == 1.0 never builds one of these (the caller feeds a bare `PcmCursor`), so
 /// normal playback stays bit-exact and zero-latency.
 struct StretchSource {
     cursor: PcmCursor,
-    proc: timestretch::StreamProcessor,
-    out: Vec<f32>, // stretched output waiting to be yielded
-    read: usize,   // next index into `out`
-    flushed: bool, // input drained + flush() already pulled
+    wsola: timestretch::stretch::Wsola,
+    /// Input samples re-fed into the next chunk so the boundary region is rendered
+    /// twice and can be crossfaded without shortening the timeline.
+    overlap_in: usize,
+    prev_in_tail: Vec<f32>, // last `overlap_in` input samples of the previous chunk
+    held_tail: Vec<f32>,    // last XFADE_OUT output samples, withheld for the blend
+    out: Vec<f32>,
+    read: usize,
+    flushed: bool,
     sample_rate: u32,
 }
 
 impl StretchSource {
     fn new(pcm: Arc<[i16]>, from: usize, sample_rate: u32, speed: f32) -> Self {
-        let params = timestretch::StretchParams::new(1.0 / f64::from(speed))
-            .with_sample_rate(sample_rate)
-            .with_channels(1);
+        let ratio = 1.0 / f64::from(speed);
+        // Speech-tuned WSOLA: 30 ms segments (≥ 2 pitch periods down to ~70 Hz F0),
+        // ±15 ms search — the sizing the crate itself uses for speech-adjacent WSOLA.
+        let seg = (f64::from(sample_rate) * 0.030).round() as usize;
+        let search = (f64::from(sample_rate) * 0.015).round() as usize;
         Self {
             cursor: PcmCursor {
                 pcm,
                 pos: from,
                 sample_rate,
             },
-            proc: timestretch::StreamProcessor::new(params),
+            wsola: timestretch::stretch::Wsola::new(seg, search, ratio),
+            overlap_in: (XFADE_OUT as f64 / ratio).ceil() as usize,
+            prev_in_tail: Vec::new(),
+            held_tail: Vec::new(),
             out: Vec::new(),
             read: 0,
             flushed: false,
@@ -94,35 +115,59 @@ impl StretchSource {
         }
     }
 
-    /// Refill `out` from the next input chunk (or `flush()` at input EOF). Returns
-    /// false only when fully drained. A stretch error degrades to silence for that
-    /// chunk (`unwrap_or_default`) rather than crashing the audio thread.
+    /// Refill `out` with the next stretched chunk (crossfading the boundary against the
+    /// previous chunk's withheld tail), or emit the withheld tail once at input EOF.
+    /// Returns false only when fully drained. A stretch error degrades to silence for
+    /// that chunk (`unwrap_or_default`) rather than crashing the audio thread.
     fn refill(&mut self) -> bool {
         loop {
-            let mut inbuf = Vec::with_capacity(STRETCH_PUMP);
-            for _ in 0..STRETCH_PUMP {
+            let mut inbuf = Vec::with_capacity(self.prev_in_tail.len() + WSOLA_CHUNK);
+            inbuf.extend_from_slice(&self.prev_in_tail);
+            let mut fresh = 0usize;
+            for _ in 0..WSOLA_CHUNK {
                 match self.cursor.next() {
-                    Some(s) => inbuf.push(f32::from(s) / 32768.0),
+                    Some(s) => {
+                        inbuf.push(f32::from(s) / 32768.0);
+                        fresh += 1;
+                    }
                     None => break,
                 }
             }
-            if inbuf.is_empty() {
+            if fresh == 0 {
+                // Input EOF: emit the withheld boundary tail once, then finish.
                 if self.flushed {
                     return false;
                 }
                 self.flushed = true;
-                self.out = self.proc.flush().unwrap_or_default();
-            } else {
-                self.out = self.proc.process(&inbuf).unwrap_or_default();
+                self.out = std::mem::take(&mut self.held_tail);
+                self.read = 0;
+                return !self.out.is_empty();
             }
+            // Runt final chunk: zero-pad so WSOLA accepts it (needs ≥ one segment).
+            let seg = self.wsola.segment_size();
+            if inbuf.len() < seg {
+                inbuf.resize(seg, 0.0);
+            }
+            let mut stretched = self.wsola.process(&inbuf).unwrap_or_default();
+            // The chunk head re-renders the held tail's content (the re-fed input
+            // overlap) — crossfade the two renders to hide the seam.
+            let blend = self.held_tail.len().min(stretched.len());
+            for (i, s) in stretched.iter_mut().take(blend).enumerate() {
+                let t = (i as f32 + 0.5) / blend as f32;
+                *s = self.held_tail[i] * (1.0 - t) + *s * t;
+            }
+            // Withhold this chunk's tail for the next boundary blend.
+            let hold = XFADE_OUT.min(stretched.len());
+            self.held_tail = stretched.split_off(stretched.len() - hold);
+            // Remember the input tail to re-feed next chunk (rendered again + blended).
+            let tail_from = inbuf.len().saturating_sub(self.overlap_in);
+            self.prev_in_tail.clear();
+            self.prev_in_tail.extend_from_slice(&inbuf[tail_from..]);
+
+            self.out = stretched;
             self.read = 0;
             if !self.out.is_empty() {
                 return true;
-            }
-            // process() can return empty while the window fills — keep pumping until
-            // we have output or the input is drained + flushed.
-            if self.flushed {
-                return false;
             }
         }
     }
@@ -507,20 +552,28 @@ mod tests {
     }
 
     #[test]
-    fn stretch_source_compresses_length_at_2x() {
-        // 1 s of a 16 kHz sawtooth → at 2× the pitch-preserving adapter emits ~half as
-        // many samples (ratio = 1/speed = 0.5), ± the processor's window latency. Guards
-        // against inverting the ratio (speed instead of 1/speed → would DOUBLE the length).
+    fn stretch_source_compresses_length_2x_and_3x_multichunk() {
+        // 3 s of a 16 kHz sawtooth (> WSOLA_CHUNK) → several chunk boundaries + the
+        // re-feed/crossfade harness. At N× the adapter emits ~1/N the samples
+        // (ratio = 1/speed). ±20% absorbs WSOLA's boundary overlap; the point is to
+        // catch ratio inversion (speed vs 1/speed → would MULTIPLY, not divide) and any
+        // chunk-boundary dropping/duplication.
         let sr = 16_000u32;
+        let n_in = 3 * sr as usize; // 48000, > WSOLA_CHUNK (16384) → ~3 chunks
         let pcm: Arc<[i16]> = Arc::from(
-            (0..sr as usize)
+            (0..n_in)
                 .map(|i| (((i % 200) as i32 - 100) * 100) as i16)
                 .collect::<Vec<i16>>(),
         );
-        let n = StretchSource::new(pcm, 0, sr, 2.0).count();
+        let n2 = StretchSource::new(pcm.clone(), 0, sr, 2.0).count();
         assert!(
-            (6_000..10_000).contains(&n),
-            "2x output len {n} not ~half of 16000 (ratio inverted?)"
+            (n_in / 2 * 8 / 10..=n_in / 2 * 12 / 10).contains(&n2),
+            "2x output len {n2} not ~half of {n_in}"
+        );
+        let n3 = StretchSource::new(pcm, 0, sr, 3.0).count();
+        assert!(
+            (n_in / 3 * 8 / 10..=n_in / 3 * 12 / 10).contains(&n3),
+            "3x output len {n3} not ~third of {n_in}"
         );
     }
 }
