@@ -231,4 +231,65 @@ pub(crate) fn wire_vision_settings(
             });
         });
     }
+
+    // ===== Speaker-diarization models — download-on-demand install button =====
+    // Two SHA-pinned models (~32 MB) on a worker thread, mirroring the OCR/voice
+    // installers. Once installed, «Определить говорящих» in the transcript window is
+    // enabled. Status is a Rust-set RU string (the DiarProgress variants carry a
+    // label); the error line is GENERIC (no path leak).
+    {
+        let weak = win.as_weak();
+        win.on_diar_install_clicked(move || {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            if w.get_diar_installing() {
+                return;
+            }
+            w.set_diar_installing(true);
+            w.set_diar_install_status(slint::SharedString::from("Подготовка…"));
+            let weak_done = w.as_weak();
+            std::thread::spawn(move || {
+                let weak_cb = weak_done.clone();
+                let on = move |p: overlay_backend::diar_install::DiarProgress| {
+                    use overlay_backend::diar_install::DiarProgress;
+                    let msg = match p {
+                        DiarProgress::AlreadyInstalled(l) => format!("{l} — уже установлено"),
+                        DiarProgress::Downloading(l) => format!("Скачивание: {l}…"),
+                        DiarProgress::Verifying(l) => format!("Проверка: {l}…"),
+                        DiarProgress::Unpacking(l) => format!("Распаковка: {l}…"),
+                        DiarProgress::ModelFailed(l) => format!("Не скачалось: {l}"),
+                        DiarProgress::AllInstalled => "Модели установлены".to_string(),
+                    };
+                    let weak_in = weak_cb.clone();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(w) = weak_in.upgrade() {
+                            w.set_diar_install_status(slint::SharedString::from(msg));
+                        }
+                    });
+                };
+                let cancel = std::sync::atomic::AtomicBool::new(false);
+                let result = overlay_backend::diar_install::install_models(&cancel, &on);
+                if let Err(e) = &result {
+                    diag!("[overlay-host] diarization models install failed: {e:#}");
+                }
+                let _ = slint::invoke_from_event_loop(move || {
+                    let Some(w) = weak_done.upgrade() else {
+                        return;
+                    };
+                    w.set_diar_installing(false);
+                    if result.is_err() {
+                        w.set_diar_install_status(slint::SharedString::from(
+                            "Не удалось установить — проверьте интернет и повторите.",
+                        ));
+                    } else {
+                        w.set_diar_models_installed(true);
+                        // Clear the status so the localized @tr("Speaker models are
+                        // installed.") confirmation renders (not the RU progress literal).
+                        w.set_diar_install_status(slint::SharedString::default());
+                    }
+                });
+            });
+        });
+    }
 }

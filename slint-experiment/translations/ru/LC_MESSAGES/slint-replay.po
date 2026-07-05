@@ -1457,6 +1457,16 @@ msgstr "Определить говорящих"
 msgid "Re-detect speakers"
 msgstr "Определить заново"
 
+# F — re-detect confirm dialog (guards against wiping custom speaker names)
+msgid "Re-detect speakers?"
+msgstr "Определить говорящих заново?"
+
+msgid "Speaker names you set will be reset."
+msgstr "Заданные вами имена говорящих будут сброшены."
+
+msgid "Re-detect"
+msgstr "Определить заново"
+
 # V-1 — diarization model install prompt (shown when models are absent)
 msgid "Speaker detection needs a one-time model download (~30 MB)."
 msgstr "Для определения говорящих нужно один раз скачать модели (~30 МБ)."
@@ -1470,3 +1480,10 @@ msgstr "Скачивание моделей…"
 # I-1 — recording-alignment caveat banner (legacy pre-D0.5 OR idle-padding-capped)
 msgid "Speaker timings may be approximate for this recording."
 msgstr "Тайминги говорящих для этой записи могут быть неточными."
+
+# === Settings → Vision: speaker-diarization models install button (D3.1) ===
+msgid "Speaker detection separates who spoke in the call's system audio (the «Determine speakers» button in the transcript window). Needs two models (~32 MB)."
+msgstr "Определение говорящих разделяет, кто говорил в системном звуке созвона (кнопка «Определить говорящих» в окне транскрипта). Нужны две модели (~32 МБ)."
+
+msgid "Speaker models are installed."
+msgstr "Модели говорящих установлены."

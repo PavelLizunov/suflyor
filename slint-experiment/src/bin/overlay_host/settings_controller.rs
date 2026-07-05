@@ -1331,6 +1331,11 @@ pub(crate) fn populate_token_status(
     win.set_ocr_installed(overlay_backend::ocr_install::is_installed());
     win.set_ocr_installing(false);
     win.set_ocr_install_phase(0);
+    // Speaker-diarization models — same reset-on-reopen discipline (the window is
+    // reused; a stale install status must not survive).
+    win.set_diar_models_installed(overlay_backend::diar_install::models_installed());
+    win.set_diar_installing(false);
+    win.set_diar_install_status(slint::SharedString::default());
     // UI-audit 2026-06-13 (CRITICAL): the Settings window is REUSED, not
     // recreated, so every transient one-shot status string survived from the
     // previous open and described a STALE action (the user caught a lingering

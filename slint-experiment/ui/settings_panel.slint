@@ -377,6 +377,12 @@ export component SettingsWindow inherits Window {
     in-out property <bool> ocr-installing: false;
     in-out property <int> ocr-install-phase: 0;
     callback ocr-install-clicked();
+    // Speaker-diarization models — «Определить говорящих» needs 2 downloadable models
+    // (~32 MB); this button installs them (status is a Rust-set RU string).
+    in-out property <bool> diar-models-installed: false;
+    in-out property <bool> diar-installing: false;
+    in-out property <string> diar-install-status: "";
+    callback diar-install-clicked();
     in-out property <string> ai-local-base-url-input: "";
     // Phase E10.1 — model dropdown populated from GET {base_url}/models so the
     // user picks a loaded model instead of typing its id.
@@ -2387,6 +2393,33 @@ export component SettingsWindow inherits Window {
                                 : root.ocr-install-phase == 5 ? @tr("Text recognition already installed")
                                 : root.ocr-install-phase == 6 ? @tr("Text recognition installed")
                                 : @tr("Couldn't install text recognition — check the connection and retry.");
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
+                        // ── Speaker-diarization models (for «Определить говорящих») ──
+                        Rectangle { background: Theme.border; height: 1px; }
+                        Text {
+                            text: @tr("Speaker detection separates who spoke in the call's system audio (the «Determine speakers» button in the transcript window). Needs two models (~32 MB).");
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
+                        if !root.diar-models-installed : HorizontalLayout {
+                            alignment: start;
+                            Button {
+                                text: root.diar-installing ? @tr("Installing…") : @tr("Install speaker models");
+                                enabled: !root.diar-installing;
+                                clicked => { root.diar-install-clicked(); }
+                            }
+                        }
+                        if root.diar-models-installed && root.diar-install-status == "" : Text {
+                            text: @tr("Speaker models are installed.");
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                        }
+                        if root.diar-install-status != "" : Text {
+                            text: root.diar-install-status;
                             font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
