@@ -12,13 +12,11 @@
 //! fast tessdata, hosted as a stable GitHub release asset. SHA-256 pinning makes
 //! the download verify-before-use (the security review's requirement).
 //!
-//! (The download/verify/extract helpers intentionally duplicate the small ones in
-//! `tts_install` rather than refactoring that freshly-shipped module — keeping
-//! the voice installer untouched avoids regression risk.)
+//! (Download / verify / extract helpers are shared in [`crate::download`].)
 
+use crate::download::{curl_download, extract_tar_bz2, verify_sha256};
 use anyhow::{bail, Context, Result};
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::Path;
 
 /// Hosted OCR-engine bundle (`tesseract/` runtime + RU/EN fast tessdata).
 const BUNDLE_URL: &str =
@@ -92,85 +90,6 @@ pub fn install(on: &dyn Fn(OcrProgress)) -> Result<()> {
 /// the exact bytes this install produced.
 fn dest_has_engine(dest: &Path) -> bool {
     dest.join("tesseract.exe").is_file() && dest.join("tessdata").join("rus.traineddata").is_file()
-}
-
-fn curl_download(url: &str, dest: &Path) -> Result<()> {
-    let status = no_window(Command::new("curl.exe").args([
-        "-L",
-        "--fail",
-        "--silent",
-        "--show-error",
-        "--retry",
-        "5",
-        "--retry-delay",
-        "2",
-        "--retry-all-errors",
-        "--connect-timeout",
-        "30",
-        "-o",
-    ]))
-    .arg(dest)
-    .arg(url)
-    .status()
-    .context("spawn curl.exe")?;
-    if !status.success() {
-        let _ = std::fs::remove_file(dest);
-        bail!("curl exited with {status}");
-    }
-    Ok(())
-}
-
-fn extract_tar_bz2(tarball: &Path, dest_dir: &Path) -> Result<()> {
-    let status = no_window(&mut Command::new(system_bsdtar()))
-        .arg("-xf")
-        .arg(tarball)
-        .arg("-C")
-        .arg(dest_dir)
-        .status()
-        .context("spawn bsdtar")?;
-    if !status.success() {
-        bail!("bsdtar exited with {status}");
-    }
-    Ok(())
-}
-
-fn system_bsdtar() -> PathBuf {
-    std::env::var_os("SystemRoot")
-        .map(|r| PathBuf::from(r).join("System32").join("tar.exe"))
-        .filter(|p| p.is_file())
-        .unwrap_or_else(|| PathBuf::from("tar.exe"))
-}
-
-fn verify_sha256(path: &Path, expected_hex: &str, label: &str) -> Result<()> {
-    use sha2::{Digest, Sha256};
-    let bytes = std::fs::read(path).with_context(|| format!("read {label} to verify"))?;
-    let got = hex(&Sha256::digest(&bytes));
-    if !got.eq_ignore_ascii_case(expected_hex) {
-        let _ = std::fs::remove_file(path);
-        bail!("{label}: SHA-256 не совпал — файл повреждён или подменён, удалён; повторите");
-    }
-    log::info!("{label} sha256 verified");
-    Ok(())
-}
-
-fn hex(bytes: &[u8]) -> String {
-    let mut s = String::with_capacity(bytes.len() * 2);
-    for b in bytes {
-        s.push_str(&format!("{b:02x}"));
-    }
-    s
-}
-
-#[cfg(windows)]
-fn no_window(cmd: &mut Command) -> &mut Command {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    cmd.creation_flags(CREATE_NO_WINDOW)
-}
-
-#[cfg(not(windows))]
-fn no_window(cmd: &mut Command) -> &mut Command {
-    cmd
 }
 
 #[cfg(test)]

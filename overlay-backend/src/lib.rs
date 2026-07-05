@@ -9,6 +9,8 @@ pub mod audio;
 pub mod components;
 pub mod config;
 pub mod conspect;
+pub mod diar_install;
+pub(crate) mod download;
 pub mod events;
 pub mod health;
 pub(crate) mod http_log;
