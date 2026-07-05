@@ -18,3 +18,12 @@ regexes = [
   '''your-api-key''',
   '''<current access token>''',
 ]
+# Generated tester checklists (docs/*.html) embed a `localStorage` progress-KEY
+# whose 23-char value trips gitleaks' generic high-entropy rule — but it is a
+# storage key, never used in any request/auth (verified 2026-07-05). These false
+# positives kept the `security` workflow RED on every push (so it got ignored).
+# A real secret pasted into a doc is still caught by GitHub's native secret-scanning
+# + push-protection (enabled on the repo), so skipping generated HTML here is safe.
+paths = [
+  '''docs/.*\.html$''',
+]
