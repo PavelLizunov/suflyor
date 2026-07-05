@@ -7,7 +7,7 @@
 // i18n: chrome strings are @tr (English msgid; RU in slint-replay.po). The row
 // DATA (time / speaker / text) is language-neutral, built in Rust.
 
-import { ListView, Palette, LineEdit, TextEdit, Button, ScrollView } from "std-widgets.slint";
+import { ListView, Palette, LineEdit, TextEdit, Button, ScrollView, ComboBox, Slider } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { CloseButton, SelectableText } from "controls.slint";
 import { Metrics } from "metrics.slint";
@@ -104,9 +104,10 @@ export component TranscriptWindow inherits Window {
     in-out property <float> progress: 0;
     in-out property <string> time-text: "";
     in-out property <int> active-line: -1;
-    // Player speed + volume-boost (owner req 2026-07-05) — cycled by the mini-player
-    // buttons, applied via set-speed / set-volume. Rust resets both to 1× per session.
-    in-out property <float> speed: 1.0;
+    // Player speed + volume-boost (owner req 2026-07-05) — speed via a ComboBox
+    // (1×–3× step 0.25, `speed-index`), volume via a Slider (0–3×). Applied through
+    // set-speed / set-volume; Rust resets both per session.
+    in-out property <int> speed-index: 0;
     in-out property <float> volume: 1.0;
     // G2b (2026-07-03) — «⭐ В память», mirrors the tiles: the per-line ⭐ toggles the
     // line's `marked`; one bottom «В память (N)» bar joins the marked lines into ONE
@@ -893,74 +894,35 @@ export component TranscriptWindow inherits Window {
                         color: Theme.text-muted;
                         vertical-alignment: center;
                     }
-                    // Speed cycle 1× → 1.5× → 2× (owner req 2026-07-05). rodio set_speed
-                    // resamples, so pitch shifts slightly — fine for review; a pitch-
-                    // preserving version would need a time-stretch dep.
-                    Rectangle {
-                        width: 46px;
-                        height: 28px;
-                        horizontal-stretch: 0;
-                        border-radius: 6px;
-                        border-width: 1px;
-                        border-color: Theme.accent;
-                        background: spd-ta.pressed
-                            ? Theme.accent.with-alpha(0.22)
-                            : spd-ta.has-hover ? Theme.accent.with-alpha(0.14) : transparent;
-                        animate background { duration: 120ms; }
-                        spd-ta := TouchArea {
-                            clicked => {
-                                root.speed = root.speed >= 2.0 ? 1.0 : (root.speed >= 1.5 ? 2.0 : 1.5);
-                                root.set-speed(root.speed);
-                            }
-                        }
-                        Text {
-                            text: root.speed == 1.0 ? "1×" : (root.speed == 1.5 ? "1.5×" : "2×");
-                            color: Theme.accent;
-                            font-size: Metrics.font-caption;
-                            font-weight: 600;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
+                    // Speed: ComboBox 1×–3× step 0.25 (owner req 2026-07-05). Pitch-
+                    // preserving — set-speed routes through the time-stretch adapter.
+                    ComboBox {
+                        min-width: 74px;
+                        model: ["1×", "1.25×", "1.5×", "1.75×", "2×", "2.25×", "2.5×", "2.75×", "3×"];
+                        current-index <=> root.speed-index;
+                        selected(_) => {
+                            root.set-speed(1.0 + root.speed-index * 0.25);
                         }
                     }
-                    // Volume boost cycle 1× → 2× → 3× (owner req «повышение звука») —
-                    // amplify quiet recordings; may clip at extreme gain on loud sources.
-                    Rectangle {
-                        width: 54px;
-                        height: 28px;
-                        horizontal-stretch: 0;
-                        border-radius: 6px;
-                        border-width: 1px;
-                        border-color: Theme.accent;
-                        background: vol-ta.pressed
-                            ? Theme.accent.with-alpha(0.22)
-                            : vol-ta.has-hover ? Theme.accent.with-alpha(0.14) : transparent;
-                        animate background { duration: 120ms; }
-                        vol-ta := TouchArea {
-                            clicked => {
-                                root.volume = root.volume >= 3.0 ? 1.0 : root.volume + 1.0;
-                                root.set-volume(root.volume);
-                            }
+                    // Volume: Slider 0–3× (owner req «повышение звука») — boosts quiet
+                    // recordings; applies live to the sink (no source rebuild). >1 may clip.
+                    VerticalLayout {
+                        alignment: center;
+                        Image {
+                            source: @image-url("../assets/icons/speaker.svg");
+                            colorize: Theme.accent;
+                            width: 13px;
+                            height: 13px;
+                            image-fit: contain;
                         }
-                        HorizontalLayout {
-                            alignment: center;
-                            spacing: 3px;
-                            VerticalLayout {
-                                alignment: center;
-                                Image {
-                                    source: @image-url("../assets/icons/speaker.svg");
-                                    colorize: Theme.accent;
-                                    width: 13px;
-                                    height: 13px;
-                                    image-fit: contain;
-                                }
-                            }
-                            Text {
-                                text: root.volume == 1.0 ? "1×" : (root.volume == 2.0 ? "2×" : "3×");
-                                color: Theme.accent;
-                                font-size: Metrics.font-caption;
-                                font-weight: 600;
-                                vertical-alignment: center;
-                            }
+                    }
+                    Slider {
+                        min-width: 78px;
+                        minimum: 0;
+                        maximum: 3.0;
+                        value <=> root.volume;
+                        changed(v) => {
+                            root.set-volume(v);
                         }
                     }
                 }

@@ -53,6 +53,108 @@ impl rodio::Source for PcmCursor {
     }
 }
 
+/// Input samples fed to the stretch processor per `process()` call — a few FFT
+/// windows' worth, so `process()` returns non-empty on the first pump.
+const STRETCH_PUMP: usize = 4096;
+
+/// Phase 2b (A) — pitch-preserving playback-rate adapter. Wraps `PcmCursor` (still
+/// indexed in ORIGINAL samples) and time-stretches its output through
+/// `timestretch::StreamProcessor` at ratio = 1/speed, so a 2× listen plays in half
+/// the time WITHOUT the resample "chipmunk" pitch shift rodio's `set_speed` gives.
+/// Output is at the SAME sample_rate, so original samples are consumed at sr×speed
+/// per real second — the position clock (`samples_advanced`) is unchanged.
+///
+/// speed == 1.0 never builds one of these (the caller feeds a bare `PcmCursor`), so
+/// normal playback stays bit-exact and zero-latency.
+struct StretchSource {
+    cursor: PcmCursor,
+    proc: timestretch::StreamProcessor,
+    out: Vec<f32>, // stretched output waiting to be yielded
+    read: usize,   // next index into `out`
+    flushed: bool, // input drained + flush() already pulled
+    sample_rate: u32,
+}
+
+impl StretchSource {
+    fn new(pcm: Arc<[i16]>, from: usize, sample_rate: u32, speed: f32) -> Self {
+        let params = timestretch::StretchParams::new(1.0 / f64::from(speed))
+            .with_sample_rate(sample_rate)
+            .with_channels(1);
+        Self {
+            cursor: PcmCursor {
+                pcm,
+                pos: from,
+                sample_rate,
+            },
+            proc: timestretch::StreamProcessor::new(params),
+            out: Vec::new(),
+            read: 0,
+            flushed: false,
+            sample_rate,
+        }
+    }
+
+    /// Refill `out` from the next input chunk (or `flush()` at input EOF). Returns
+    /// false only when fully drained. A stretch error degrades to silence for that
+    /// chunk (`unwrap_or_default`) rather than crashing the audio thread.
+    fn refill(&mut self) -> bool {
+        loop {
+            let mut inbuf = Vec::with_capacity(STRETCH_PUMP);
+            for _ in 0..STRETCH_PUMP {
+                match self.cursor.next() {
+                    Some(s) => inbuf.push(f32::from(s) / 32768.0),
+                    None => break,
+                }
+            }
+            if inbuf.is_empty() {
+                if self.flushed {
+                    return false;
+                }
+                self.flushed = true;
+                self.out = self.proc.flush().unwrap_or_default();
+            } else {
+                self.out = self.proc.process(&inbuf).unwrap_or_default();
+            }
+            self.read = 0;
+            if !self.out.is_empty() {
+                return true;
+            }
+            // process() can return empty while the window fills — keep pumping until
+            // we have output or the input is drained + flushed.
+            if self.flushed {
+                return false;
+            }
+        }
+    }
+}
+
+impl Iterator for StretchSource {
+    type Item = i16;
+    fn next(&mut self) -> Option<i16> {
+        if self.read >= self.out.len() && !self.refill() {
+            return None;
+        }
+        let s = self.out[self.read];
+        self.read += 1;
+        Some((s.clamp(-1.0, 1.0) * 32767.0) as i16)
+    }
+}
+
+impl rodio::Source for StretchSource {
+    fn current_frame_len(&self) -> Option<usize> {
+        None
+    }
+    fn channels(&self) -> u16 {
+        1
+    }
+    fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+    fn total_duration(&self) -> Option<std::time::Duration> {
+        None
+    }
+}
+
 /// A loaded, controllable playback of one session's mixed PCM.
 pub(crate) struct TranscriptPlayer {
     // Held ONLY to keep the audio device open — dropping it stops all playback —
@@ -70,8 +172,9 @@ pub(crate) struct TranscriptPlayer {
     play_started: Option<Instant>,
     /// Frozen position while paused, and the resume point.
     cursor_sample: usize,
-    /// Playback rate (1.0 = normal). rodio resamples → mild pitch shift; scales the
-    /// position clock so the seek-bar / timecode still track ORIGINAL-recording time.
+    /// Playback rate (1.0 = normal). Applied via the pitch-preserving `StretchSource`
+    /// (NOT rodio's resampling `set_speed`); still scales the position clock so the
+    /// seek-bar / timecode track ORIGINAL-recording time.
     speed: f32,
     /// Output gain (1.0 = normal; >1 amplifies quiet recordings, can clip if loud).
     volume: f32,
@@ -142,15 +245,27 @@ impl TranscriptPlayer {
         let from = from.min(self.total());
         self.sink.stop();
         let sink = Sink::try_new(&self.handle)?;
-        // Each seek/resume builds a fresh sink — re-apply the current rate + gain
-        // (a new Sink defaults to 1.0/1.0, so without this a seek resets them).
-        sink.set_speed(self.speed);
+        // A fresh sink defaults to gain 1.0 → re-apply the current volume.
         sink.set_volume(self.volume);
-        sink.append(PcmCursor {
-            pcm: self.pcm.clone(),
-            pos: from,
-            sample_rate: self.sample_rate,
-        });
+        // Phase 2b (A): 1.0× feeds the bare cursor (bit-exact, zero-latency);
+        // otherwise route through the pitch-preserving time-stretch adapter. We do NOT
+        // call sink.set_speed — that resample path (the "chipmunk") is exactly what the
+        // adapter replaces; the sink stays at native rate and the position clock
+        // (which already scales by speed) is unchanged.
+        if (self.speed - 1.0).abs() < f32::EPSILON {
+            sink.append(PcmCursor {
+                pcm: self.pcm.clone(),
+                pos: from,
+                sample_rate: self.sample_rate,
+            });
+        } else {
+            sink.append(StretchSource::new(
+                self.pcm.clone(),
+                from,
+                self.sample_rate,
+                self.speed,
+            ));
+        }
         self.sink = sink;
         self.origin_sample = from;
         self.cursor_sample = from;
@@ -227,10 +342,11 @@ impl TranscriptPlayer {
         Ok(())
     }
 
-    /// Set the output gain (clamped 0–4×; >1 boosts quiet recordings). Applies live
-    /// to the current sink; load_from re-applies it to any sink built by a seek.
+    /// Set the output gain (clamped 0–3×, matching the UI slider max; >1 boosts quiet
+    /// recordings). Applies live to the current sink; load_from re-applies it to any
+    /// sink built by a seek.
     pub(crate) fn set_volume(&mut self, volume: f32) {
-        self.volume = volume.clamp(0.0, 4.0);
+        self.volume = volume.clamp(0.0, 3.0);
         self.sink.set_volume(self.volume);
     }
 }
@@ -377,7 +493,8 @@ pub(crate) fn set_poll_timer(timer: slint::Timer) {
 
 #[cfg(test)]
 mod tests {
-    use super::samples_advanced;
+    use super::*;
+    use std::sync::Arc;
 
     #[test]
     fn speed_scales_playback_advance() {
@@ -387,5 +504,23 @@ mod tests {
         assert_eq!(samples_advanced(1.0, 16_000, 1.0), 16_000);
         assert_eq!(samples_advanced(1.0, 16_000, 2.0), 32_000);
         assert_eq!(samples_advanced(2.0, 16_000, 1.5), 48_000);
+    }
+
+    #[test]
+    fn stretch_source_compresses_length_at_2x() {
+        // 1 s of a 16 kHz sawtooth → at 2× the pitch-preserving adapter emits ~half as
+        // many samples (ratio = 1/speed = 0.5), ± the processor's window latency. Guards
+        // against inverting the ratio (speed instead of 1/speed → would DOUBLE the length).
+        let sr = 16_000u32;
+        let pcm: Arc<[i16]> = Arc::from(
+            (0..sr as usize)
+                .map(|i| (((i % 200) as i32 - 100) * 100) as i16)
+                .collect::<Vec<i16>>(),
+        );
+        let n = StretchSource::new(pcm, 0, sr, 2.0).count();
+        assert!(
+            (6_000..10_000).contains(&n),
+            "2x output len {n} not ~half of 16000 (ratio inverted?)"
+        );
     }
 }

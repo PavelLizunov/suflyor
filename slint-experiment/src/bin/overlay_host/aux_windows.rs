@@ -1752,9 +1752,10 @@ fn wire_transcript_player(
     win.set_progress(0.0);
     win.set_time_text(SharedString::default());
     win.set_active_line(-1);
-    // Reused window — reset speed/volume to 1× so the UI matches the fresh player
-    // (reset() above dropped any prior session's player, which starts at 1×/1×).
-    win.set_speed(1.0);
+    // Reused window — reset the speed ComboBox (index 0 = 1×) + volume slider (1×) so
+    // the UI matches the fresh player (reset() above dropped any prior session's
+    // player, which starts at 1×/1×).
+    win.set_speed_index(0);
     win.set_volume(1.0);
     if !has_audio {
         return;
