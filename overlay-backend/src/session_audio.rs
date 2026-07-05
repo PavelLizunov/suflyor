@@ -82,6 +82,26 @@ pub fn load_mixed_session_audio(session_id: &str) -> Result<(Vec<i16>, u32)> {
     load_mixed_from_dir(&dir)
 }
 
+/// Duration (ms) of a recordings dir's `system.wav`, read from the WAV HEADER
+/// (cheap — no sample decode). Diarization aligns speaker segments to system.wav's
+/// timeline, so comparing this against the transcript's wall-clock span tells a
+/// wall-clock-padded recording (post-D0.5) from a legacy one that ran short by its
+/// idle gaps. `None` when the file is absent/unreadable. Test seam for
+/// [`system_recording_ms`].
+#[must_use]
+pub fn system_recording_ms_in_dir(session_dir: &Path) -> Option<i64> {
+    let reader = hound::WavReader::open(session_dir.join("system.wav")).ok()?;
+    let sr = reader.spec().sample_rate;
+    Some(ms_for_sample(reader.duration() as usize, sr))
+}
+
+/// [`system_recording_ms_in_dir`] for an archived session by id.
+#[must_use]
+pub fn system_recording_ms(session_id: &str) -> Option<i64> {
+    let dir = crate::recorder::recordings_dir().ok()?.join(session_id);
+    system_recording_ms_in_dir(&dir)
+}
+
 /// Sample index for a session-relative offset (ms) at `sample_rate`, clamped to
 /// `[0, total]` so a click past the end seeks to the end, never out of bounds
 /// (ТЗ2b: "таймкод за пределами — clamp"). Sample index ≈ time here — one sample
@@ -226,6 +246,15 @@ mod tests {
         let (pcm, sr) = load_mixed_from_dir(dir).unwrap();
         assert_eq!(sr, 16_000);
         assert_eq!(pcm, vec![110, 220, 30]); // summed + padded
+    }
+
+    #[test]
+    fn system_recording_ms_reads_header_duration() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        assert_eq!(system_recording_ms_in_dir(dir), None); // absent → None
+        write_wav(&dir.join("system.wav"), &vec![0i16; 32_000]); // 2s @ 16 kHz
+        assert_eq!(system_recording_ms_in_dir(dir), Some(2000));
     }
 
     #[test]

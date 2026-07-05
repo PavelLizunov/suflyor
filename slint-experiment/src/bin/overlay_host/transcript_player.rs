@@ -65,11 +65,23 @@ pub(crate) struct TranscriptPlayer {
     sample_rate: u32,
     /// Sample the current source started at (set on (re)start / seek).
     origin_sample: usize,
-    /// `Some(t0)` while playing — position = origin + t0.elapsed()*sr; `None` when
-    /// paused (frozen at `cursor_sample`).
+    /// `Some(t0)` while playing — position = origin + t0.elapsed()*sr*speed; `None`
+    /// when paused (frozen at `cursor_sample`).
     play_started: Option<Instant>,
     /// Frozen position while paused, and the resume point.
     cursor_sample: usize,
+    /// Playback rate (1.0 = normal). rodio resamples → mild pitch shift; scales the
+    /// position clock so the seek-bar / timecode still track ORIGINAL-recording time.
+    speed: f32,
+    /// Output gain (1.0 = normal; >1 amplifies quiet recordings, can clip if loud).
+    volume: f32,
+}
+
+/// Samples of ORIGINAL audio consumed after `elapsed` real seconds at `speed`×.
+/// At 2× the source is pulled twice as fast, so the seek-bar / timecode — which
+/// track original-recording position — must scale by speed too, or they desync.
+fn samples_advanced(elapsed_secs: f64, sample_rate: u32, speed: f32) -> usize {
+    (elapsed_secs * f64::from(sample_rate) * f64::from(speed)) as usize
 }
 
 impl TranscriptPlayer {
@@ -88,6 +100,8 @@ impl TranscriptPlayer {
             origin_sample: 0,
             play_started: None,
             cursor_sample: 0,
+            speed: 1.0,
+            volume: 1.0,
         })
     }
 
@@ -100,7 +114,7 @@ impl TranscriptPlayer {
         let s = match self.play_started {
             Some(t0) => {
                 self.origin_sample
-                    + (t0.elapsed().as_secs_f64() * f64::from(self.sample_rate)) as usize
+                    + samples_advanced(t0.elapsed().as_secs_f64(), self.sample_rate, self.speed)
             }
             None => self.cursor_sample,
         };
@@ -128,6 +142,10 @@ impl TranscriptPlayer {
         let from = from.min(self.total());
         self.sink.stop();
         let sink = Sink::try_new(&self.handle)?;
+        // Each seek/resume builds a fresh sink — re-apply the current rate + gain
+        // (a new Sink defaults to 1.0/1.0, so without this a seek resets them).
+        sink.set_speed(self.speed);
+        sink.set_volume(self.volume);
         sink.append(PcmCursor {
             pcm: self.pcm.clone(),
             pos: from,
@@ -189,6 +207,31 @@ impl TranscriptPlayer {
             self.origin_sample = sample;
         }
         Ok(())
+    }
+
+    /// Set the playback rate (clamped 0.5–3.0×). While playing, the elapsed time so
+    /// far was clocked at the OLD rate, so we re-anchor: freeze the live position,
+    /// then reload from there at the new rate (load_from resets origin + restarts the
+    /// clock). Paused → just store it; the next play()/load_from applies it.
+    pub(crate) fn set_speed(&mut self, speed: f32) -> anyhow::Result<()> {
+        let speed = speed.clamp(0.5, 3.0);
+        let cur = self.position_sample();
+        self.speed = speed;
+        if self.play_started.is_some() {
+            self.load_from(cur)?;
+            self.sink.play();
+            self.play_started = Some(Instant::now());
+        } else {
+            self.cursor_sample = cur;
+        }
+        Ok(())
+    }
+
+    /// Set the output gain (clamped 0–4×; >1 boosts quiet recordings). Applies live
+    /// to the current sink; load_from re-applies it to any sink built by a seek.
+    pub(crate) fn set_volume(&mut self, volume: f32) {
+        self.volume = volume.clamp(0.0, 4.0);
+        self.sink.set_volume(self.volume);
     }
 }
 
@@ -289,6 +332,27 @@ pub(crate) fn seek_fraction(frac: f32) {
     });
 }
 
+/// Set playback rate (no-op if no player loaded — the wiring calls `ensure` first
+/// so a rate chosen before pressing play still takes effect on the loaded player).
+pub(crate) fn set_speed(speed: f32) {
+    PLAYER.with(|p| {
+        if let Some(pl) = p.borrow_mut().as_mut() {
+            if let Err(e) = pl.set_speed(speed) {
+                eprintln!("[overlay-host] transcript player set_speed failed: {e}");
+            }
+        }
+    });
+}
+
+/// Set output gain (no-op if no player loaded — the wiring calls `ensure` first).
+pub(crate) fn set_volume(volume: f32) {
+    PLAYER.with(|p| {
+        if let Some(pl) = p.borrow_mut().as_mut() {
+            pl.set_volume(volume);
+        }
+    });
+}
+
 /// Snapshot for the position poll: (progress 0..1, position ms, total ms,
 /// playing). `None` when no player is loaded.
 pub(crate) fn snapshot() -> Option<(f32, i64, i64, bool)> {
@@ -309,4 +373,19 @@ pub(crate) fn snapshot() -> Option<(f32, i64, i64, bool)> {
 /// Store the repeating poll timer so it outlives the wiring call.
 pub(crate) fn set_poll_timer(timer: slint::Timer) {
     POLL_TIMER.with(|t| *t.borrow_mut() = Some(timer));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::samples_advanced;
+
+    #[test]
+    fn speed_scales_playback_advance() {
+        // The seek-bar / timecode track ORIGINAL-recording position, so at N× the
+        // consumed-sample count must scale by N. Regression guard against dropping
+        // the speed factor → the bar racing ahead of / lagging the audio.
+        assert_eq!(samples_advanced(1.0, 16_000, 1.0), 16_000);
+        assert_eq!(samples_advanced(1.0, 16_000, 2.0), 32_000);
+        assert_eq!(samples_advanced(2.0, 16_000, 1.5), 48_000);
+    }
 }

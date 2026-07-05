@@ -34,6 +34,12 @@ const MAX_DIAR_SECS: u64 = 3 * 60 * 60;
 /// a stray segment win the whole gap. ~one long utterance.
 const WINDOW_CAP_MS: i64 = 30_000;
 
+/// A wall-clock-padded recording (post-D0.5) matches the transcript's timeline within
+/// sub-second skew + chunk granularity; a legacy one runs short by its idle gaps. Flag
+/// the timeline unreliable only when the recording is short by MORE than this — small
+/// enough to catch real gaps, large enough not to cry wolf on skew/rounding.
+const TIMELINE_TOL_MS: i64 = 5_000;
+
 /// Coarse progress for the archive UI (mirrors `re_transcribe::Progress`).
 #[derive(Debug, Clone)]
 pub enum Progress {
@@ -52,6 +58,36 @@ struct SidecarOut {
 #[must_use]
 pub fn models_ready() -> bool {
     crate::diar_install::models_installed()
+}
+
+/// Whether `system.wav`'s length covers the transcript's wall-clock span, so speaker
+/// segments align to the right lines. `recording_ms` is the WAV length (see
+/// `session_audio::system_recording_ms`); `utts` supplies the span (max `audio_ms`).
+/// Returns false ONLY when the recording is short by more than [`TIMELINE_TOL_MS`] —
+/// the legacy (pre-D0.5, unpadded) case, where `audio_ms`→sample drifts and speaker
+/// labels can land on the wrong lines. Missing data → true (nothing to warn about).
+#[must_use]
+pub fn timeline_reliable(recording_ms: Option<i64>, utts: &[Utterance]) -> bool {
+    let wall = utts.iter().filter_map(|u| u.audio_ms).max().unwrap_or(0);
+    match recording_ms {
+        Some(rec) if wall > 0 => rec + TIMELINE_TOL_MS >= wall,
+        _ => true,
+    }
+}
+
+/// Map a diarization failure (already a String — see the worker's `map_err`) to a
+/// clean, user-facing RU message. NEVER echoes the raw chain (it can carry the
+/// `system.wav` path): recognized causes get a specific reason, everything else the
+/// generic line — so a screenshot can't leak a filesystem path.
+#[must_use]
+pub fn friendly_error(raw: &str) -> String {
+    if raw.contains("слишком длинная") {
+        "Запись длиннее 3 часов — определение говорящих недоступно.".to_string()
+    } else if raw.contains("no speakers detected") {
+        "Речь не распознана — говорящие не найдены.".to_string()
+    } else {
+        "Не удалось определить говорящих.".to_string()
+    }
 }
 
 /// Run diarization for a finished session and return the result to persist.
@@ -267,6 +303,27 @@ mod tests {
             text: String::new(),
             audio_ms,
         }
+    }
+
+    #[test]
+    fn timeline_reliable_flags_short_legacy_recordings() {
+        // 10-min transcript span (last audio_ms = 600 s).
+        let utts = vec![utt("system", Some(0)), utt("system", Some(600_000))];
+        assert!(timeline_reliable(Some(600_000), &utts)); // padded → covers the span
+        assert!(timeline_reliable(Some(598_000), &utts)); // 2 s short → within tol
+        assert!(!timeline_reliable(Some(540_000), &utts)); // 1 min short → legacy/unpadded
+        assert!(timeline_reliable(None, &utts)); // unknown length → don't cry wolf
+        assert!(timeline_reliable(Some(1000), &[utt("system", None)])); // no audio_ms → ditto
+    }
+
+    #[test]
+    fn friendly_error_maps_causes_and_never_leaks_paths() {
+        assert!(friendly_error("запись слишком длинная для анализа (> 3 ч)").contains("3 час"));
+        assert!(friendly_error("no speakers detected (no speech, ...)").contains("не найдены"));
+        // Unknown / path-carrying chain → generic line, no filesystem leak.
+        let g = friendly_error("open C:\\Users\\bob\\recordings\\x\\system.wav: not found");
+        assert_eq!(g, "Не удалось определить говорящих.");
+        assert!(!g.contains("bob"));
     }
 
     #[test]

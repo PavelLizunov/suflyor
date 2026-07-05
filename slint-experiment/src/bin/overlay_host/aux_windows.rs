@@ -1752,6 +1752,10 @@ fn wire_transcript_player(
     win.set_progress(0.0);
     win.set_time_text(SharedString::default());
     win.set_active_line(-1);
+    // Reused window — reset speed/volume to 1× so the UI matches the fresh player
+    // (reset() above dropped any prior session's player, which starts at 1×/1×).
+    win.set_speed(1.0);
+    win.set_volume(1.0);
     if !has_audio {
         return;
     }
@@ -1786,6 +1790,25 @@ fn wire_transcript_player(
         });
     }
     win.on_seek_fraction(transcript_player::seek_fraction);
+    // Speed / volume-boost (owner req 2026-07-05). `ensure` first so a value chosen
+    // before pressing play loads the player (paused) and the setting sticks — the
+    // free fns are no-ops on an unloaded player.
+    {
+        let id = id.clone();
+        win.on_set_speed(move |s| {
+            if transcript_player::ensure(&id) {
+                transcript_player::set_speed(s);
+            }
+        });
+    }
+    {
+        let id = id.clone();
+        win.on_set_volume(move |v| {
+            if transcript_player::ensure(&id) {
+                transcript_player::set_volume(v);
+            }
+        });
+    }
 
     // 200 ms position poll → seek-bar / time / active-line / play state.
     let weak = win.as_weak();
@@ -1944,10 +1967,23 @@ fn wire_transcript_diarization(
     let has_sys_audio_ms = utts_display
         .iter()
         .any(|u| u.source == "system" && u.audio_ms.is_some());
-    let can_diarize = session_finished
+    // Diarizable EXCEPT for the models: a finished session with aligned system audio +
+    // a saved recording. Split out so we can offer to install the models (V-1) rather
+    // than hide the whole feature when they're absent.
+    let session_diarizable = session_finished
         && has_sys_audio_ms
-        && overlay_backend::diarize::models_ready()
         && overlay_backend::session_audio::session_has_recordings(session_id);
+    let models_ready = overlay_backend::diarize::models_ready();
+    let can_diarize = session_diarizable && models_ready;
+    let needs_diar_models = session_diarizable && !models_ready;
+    // I-1: warn when the recording predates the wall-clock-padding fix — system.wav
+    // shorter than the transcript span means audio_ms→sample drifts and speaker labels
+    // can land on the wrong lines.
+    let timeline_unreliable = session_diarizable
+        && !overlay_backend::diarize::timeline_reliable(
+            overlay_backend::session_audio::system_recording_ms(session_id),
+            utts_display,
+        );
 
     let diar: Rc<RefCell<Option<Diarization>>> = Rc::new(RefCell::new(
         store.borrow().get_diarization(session_id).ok().flatten(),
@@ -1955,6 +1991,9 @@ fn wire_transcript_diarization(
     let utts_rc: Rc<Vec<Utterance>> = Rc::new(utts_display.to_vec());
 
     win.set_can_diarize(can_diarize);
+    win.set_needs_diar_models(needs_diar_models);
+    win.set_installing_diar_models(false);
+    win.set_timeline_unreliable(timeline_unreliable);
     win.set_has_diarization(diar.borrow().is_some());
     win.set_by_voice(false);
     win.set_diarizing(false);
@@ -2087,10 +2126,78 @@ fn wire_transcript_diarization(
                             w.set_diar_status(SharedString::default());
                         }
                         Err(e) => {
+                            // I-5: surface the specific, path-safe reason (>3h / no speech)
+                            // instead of a bare generic line.
                             w.set_diar_status(SharedString::from(
-                                "Не удалось определить говорящих",
+                                overlay_backend::diarize::friendly_error(&e),
                             ));
                             log::warn!("diarization failed: {e}");
+                        }
+                    }
+                },
+            );
+            DIAR_TIMER.with(|t| *t.borrow_mut() = Some(poll));
+        });
+    }
+
+    // V-1 — install the diarization models off-thread; a UI-thread poll flips
+    // can_diarize when they land (mirrors run-diarization — the store + models are
+    // UI-thread-bound, so the worker only downloads and the poll updates the UI).
+    {
+        let weak = win.as_weak();
+        let rt = rt_handle.clone();
+        win.on_install_diar_models(move || {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            if w.get_installing_diar_models() {
+                return;
+            }
+            w.set_installing_diar_models(true);
+            w.set_diar_status(SharedString::default());
+
+            let slot: Arc<Mutex<Option<Result<(), String>>>> = Arc::new(Mutex::new(None));
+            {
+                let slot_w = slot.clone();
+                rt.spawn_blocking(move || {
+                    let cancel = std::sync::atomic::AtomicBool::new(false);
+                    // ponytail: no per-file progress marshalling — the button's
+                    // "Downloading…" state is enough for a one-time ~30 MB fetch.
+                    let r = overlay_backend::diar_install::install_models(&cancel, &|_| {})
+                        .map_err(|e| format!("{e:#}"));
+                    if let Ok(mut g) = slot_w.lock() {
+                        *g = Some(r);
+                    }
+                });
+            }
+
+            let poll = slint::Timer::default();
+            let weak_p = weak.clone();
+            poll.start(
+                slint::TimerMode::Repeated,
+                std::time::Duration::from_millis(300),
+                move || {
+                    let done = slot.lock().ok().and_then(|mut g| g.take());
+                    let Some(result) = done else {
+                        return;
+                    };
+                    DIAR_TIMER.with(|t| *t.borrow_mut() = None); // stop + drop self
+                    let Some(w) = weak_p.upgrade() else {
+                        return;
+                    };
+                    w.set_installing_diar_models(false);
+                    match result {
+                        Ok(()) => {
+                            // Re-check the fs rather than assume — only enable detect if BOTH
+                            // models really landed (a partial install keeps the prompt up).
+                            let ready = overlay_backend::diarize::models_ready();
+                            w.set_can_diarize(ready);
+                            w.set_needs_diar_models(!ready);
+                            w.set_diar_status(SharedString::default());
+                        }
+                        Err(e) => {
+                            w.set_diar_status(SharedString::from("Не удалось скачать модели"));
+                            log::warn!("diar model install failed: {e}");
                         }
                     }
                 },

@@ -7,7 +7,7 @@
 // i18n: chrome strings are @tr (English msgid; RU in slint-replay.po). The row
 // DATA (time / speaker / text) is language-neutral, built in Rust.
 
-import { ListView, Palette, LineEdit, TextEdit, Button } from "std-widgets.slint";
+import { ListView, Palette, LineEdit, TextEdit, Button, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { CloseButton, SelectableText } from "controls.slint";
 import { Metrics } from "metrics.slint";
@@ -103,6 +103,10 @@ export component TranscriptWindow inherits Window {
     in-out property <float> progress: 0;
     in-out property <string> time-text: "";
     in-out property <int> active-line: -1;
+    // Player speed + volume-boost (owner req 2026-07-05) — cycled by the mini-player
+    // buttons, applied via set-speed / set-volume. Rust resets both to 1× per session.
+    in-out property <float> speed: 1.0;
+    in-out property <float> volume: 1.0;
     // G2b (2026-07-03) — «⭐ В память», mirrors the tiles: the per-line ⭐ toggles the
     // line's `marked`; one bottom «В память (N)» bar joins the marked lines into ONE
     // record. `capture-text` = the edit buffer (shown at N==1, or for a pending
@@ -128,6 +132,15 @@ export component TranscriptWindow inherits Window {
     in-out property <bool> can-diarize: false;
     // A diarization job is running (disabled button + status).
     in-out property <bool> diarizing: false;
+    // V-1 (fable review): session IS diarizable but the models aren't installed → show
+    // an install prompt (otherwise the whole toolbar is hidden and the feature is
+    // undiscoverable + uninstallable).
+    in-out property <bool> needs-diar-models: false;
+    // The diarization models are downloading (progress in diar-status).
+    in-out property <bool> installing-diar-models: false;
+    // I-1 (fable review): this session's recording predates the wall-clock-padding fix
+    // (D0.5), so audio_ms→sample drifts and speaker timings may be approximate → banner.
+    in-out property <bool> timeline-unreliable: false;
     // Progress / error line under the diarize controls.
     in-out property <string> diar-status: "";
     // «Сколько собеседников (без вас)» — the PRIMARY control (auto is unreliable on VoIP
@@ -139,6 +152,10 @@ export component TranscriptWindow inherits Window {
     callback toggle-play();
     callback play-line(int);
     callback seek-fraction(float);
+    // Player speed + volume-boost (owner req 2026-07-05) — the button cycles the value,
+    // sets the property (drives its own label), and hands the new value to Rust.
+    callback set-speed(float);
+    callback set-volume(float);
     callback copy-all-requested();
     callback copy-selected-requested();
     callback toggle-line(int);
@@ -164,6 +181,9 @@ export component TranscriptWindow inherits Window {
     // speaker (display id, new name — blank clears). Rust rebuilds `lines` + `speakers`.
     callback toggle-by-voice(bool);
     callback run-diarization();
+    // V-1 — download the diarization models (shown only when the session is
+    // diarizable but the models are absent).
+    callback install-diar-models();
     callback rename-speaker(int, string);
 
     forward-focus: fs;
@@ -301,7 +321,9 @@ export component TranscriptWindow inherits Window {
                 }
 
                 // ── D3 — «По голосам» diarization toolbar (view toggle + detect controls) ──
-                if !root.empty && (root.can-diarize || root.has-diarization) : VerticalLayout {
+                // V-1: also show when the session is diarizable but models are absent, so
+                // the install prompt is reachable (else the whole feature is hidden).
+                if !root.empty && (root.can-diarize || root.has-diarization || root.needs-diar-models) : VerticalLayout {
                     spacing: Metrics.space-sm;
                     HorizontalLayout {
                         spacing: Metrics.space-sm;
@@ -345,13 +367,71 @@ export component TranscriptWindow inherits Window {
                             Rectangle { horizontal-stretch: 1; }
                         }
                     }
+                    // I-1 (fable review) — system.wav is shorter than the transcript span
+                    // (legacy pre-D0.5 recording, OR idle padding hit the recorder's cap), so
+                    // audio_ms→sample drifts and speaker labels may land off. Warn, don't block.
+                    if root.timeline-unreliable : Rectangle {
+                        border-radius: 6px;
+                        border-width: 1px;
+                        border-color: Theme.warning;
+                        background: Theme.warning.with-alpha(0.10);
+                        HorizontalLayout {
+                            padding: 6px;
+                            Text {
+                                text: @tr("Speaker timings may be approximate for this recording.");
+                                font-size: Metrics.font-caption;
+                                color: Theme.text-primary;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+                    // V-1 (fable review) — models missing: offer the one-time download. The
+                    // detect controls (below) stay hidden until can-diarize flips true.
+                    if root.needs-diar-models && !root.can-diarize : VerticalLayout {
+                        spacing: 4px;
+                        Text {
+                            text: @tr("Speaker detection needs a one-time model download (~30 MB).");
+                            font-size: Metrics.font-caption;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            Rectangle {
+                                width: 232px;
+                                height: 28px;
+                                horizontal-stretch: 0;
+                                border-radius: 6px;
+                                background: root.installing-diar-models
+                                    ? Theme.accent.with-alpha(0.5)
+                                    : instd-ta.has-hover ? Theme.accent : Theme.accent.with-alpha(0.85);
+                                animate background { duration: 120ms; }
+                                instd-ta := TouchArea {
+                                    clicked => { if (!root.installing-diar-models) { root.install-diar-models(); } }
+                                }
+                                Text {
+                                    text: root.installing-diar-models
+                                        ? @tr("Downloading models…")
+                                        : @tr("Install speaker models");
+                                    color: Theme.on-accent;
+                                    font-size: Metrics.font-label;
+                                    font-weight: 600;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                        }
+                    }
                     // ── Row 2 — detect controls (count stepper + run button; own row so
-                    // the fixed-width controls never overflow the min-width window) ──
-                    HorizontalLayout {
+                    // the fixed-width controls never overflow the min-width window). Gated on
+                    // can-diarize (V-1) — hidden until the models are installed. ──
+                    if root.can-diarize : HorizontalLayout {
                         spacing: Metrics.space-sm;
                         // Speaker-count stepper — the PRIMARY control («сколько собеседников»).
+                        // V-2: the count is OTHER voices (diarization runs on system.wav; your
+                        // mic is a separate channel), so «besides you».
                         Text {
-                            text: @tr("Speakers:");
+                            text: @tr("Speakers (besides you):");
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
                             vertical-alignment: center;
@@ -425,23 +505,29 @@ export component TranscriptWindow inherits Window {
                         wrap: word-wrap;
                     }
                     // Rename list (voice view): coloured dot + editable name per speaker.
-                    if root.by-voice && root.speakers.length > 0 : HorizontalLayout {
-                        spacing: Metrics.space-md;
-                        for sp[si] in root.speakers : HorizontalLayout {
-                            spacing: 5px;
-                            Rectangle {
-                                width: 11px;
-                                height: 11px;
-                                border-radius: 5px;
-                                background: sp.color;
-                                y: (parent.height - self.height) / 2;
-                            }
-                            LineEdit {
-                                text: sp.label;
-                                width: 108px;
-                                font-size: Metrics.font-label;
-                                // Commit on Enter (blank clears the rename).
-                                accepted(t) => { root.rename-speaker(sp.id, t); }
+                    // V-3 (fable review): a horizontal ScrollView bounds the row so 5+ speakers
+                    // scroll instead of overflowing the window (the «Память >4» bug shape). For
+                    // the common 2–3 speakers it fits and no scrollbar shows.
+                    if root.by-voice && root.speakers.length > 0 : ScrollView {
+                        height: 42px;
+                        HorizontalLayout {
+                            spacing: Metrics.space-md;
+                            for sp[si] in root.speakers : HorizontalLayout {
+                                spacing: 5px;
+                                Rectangle {
+                                    width: 11px;
+                                    height: 11px;
+                                    border-radius: 5px;
+                                    background: sp.color;
+                                    y: (parent.height - self.height) / 2;
+                                }
+                                LineEdit {
+                                    text: sp.label;
+                                    width: 108px;
+                                    font-size: Metrics.font-label;
+                                    // Commit on Enter (blank clears the rename).
+                                    accepted(t) => { root.rename-speaker(sp.id, t); }
+                                }
                             }
                         }
                     }
@@ -703,6 +789,76 @@ export component TranscriptWindow inherits Window {
                         font-size: Metrics.font-caption;
                         color: Theme.text-muted;
                         vertical-alignment: center;
+                    }
+                    // Speed cycle 1× → 1.5× → 2× (owner req 2026-07-05). rodio set_speed
+                    // resamples, so pitch shifts slightly — fine for review; a pitch-
+                    // preserving version would need a time-stretch dep.
+                    Rectangle {
+                        width: 46px;
+                        height: 28px;
+                        horizontal-stretch: 0;
+                        border-radius: 6px;
+                        border-width: 1px;
+                        border-color: Theme.accent;
+                        background: spd-ta.pressed
+                            ? Theme.accent.with-alpha(0.22)
+                            : spd-ta.has-hover ? Theme.accent.with-alpha(0.14) : transparent;
+                        animate background { duration: 120ms; }
+                        spd-ta := TouchArea {
+                            clicked => {
+                                root.speed = root.speed >= 2.0 ? 1.0 : (root.speed >= 1.5 ? 2.0 : 1.5);
+                                root.set-speed(root.speed);
+                            }
+                        }
+                        Text {
+                            text: root.speed == 1.0 ? "1×" : (root.speed == 1.5 ? "1.5×" : "2×");
+                            color: Theme.accent;
+                            font-size: Metrics.font-caption;
+                            font-weight: 600;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                    // Volume boost cycle 1× → 2× → 3× (owner req «повышение звука») —
+                    // amplify quiet recordings; may clip at extreme gain on loud sources.
+                    Rectangle {
+                        width: 54px;
+                        height: 28px;
+                        horizontal-stretch: 0;
+                        border-radius: 6px;
+                        border-width: 1px;
+                        border-color: Theme.accent;
+                        background: vol-ta.pressed
+                            ? Theme.accent.with-alpha(0.22)
+                            : vol-ta.has-hover ? Theme.accent.with-alpha(0.14) : transparent;
+                        animate background { duration: 120ms; }
+                        vol-ta := TouchArea {
+                            clicked => {
+                                root.volume = root.volume >= 3.0 ? 1.0 : root.volume + 1.0;
+                                root.set-volume(root.volume);
+                            }
+                        }
+                        HorizontalLayout {
+                            alignment: center;
+                            spacing: 3px;
+                            VerticalLayout {
+                                alignment: center;
+                                Image {
+                                    source: @image-url("../assets/icons/speaker.svg");
+                                    colorize: Theme.accent;
+                                    width: 13px;
+                                    height: 13px;
+                                    image-fit: contain;
+                                }
+                            }
+                            Text {
+                                text: root.volume == 1.0 ? "1×" : (root.volume == 2.0 ? "2×" : "3×");
+                                color: Theme.accent;
+                                font-size: Metrics.font-caption;
+                                font-weight: 600;
+                                vertical-alignment: center;
+                            }
+                        }
                     }
                 }
                 if root.empty == false && root.has-audio == false : Text {

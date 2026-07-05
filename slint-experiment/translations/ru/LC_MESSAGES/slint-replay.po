@@ -1448,11 +1448,25 @@ msgstr "По ролям"
 msgid "By voice"
 msgstr "По голосам"
 
-msgid "Speakers:"
-msgstr "Собеседников:"
+msgid "Speakers (besides you):"
+msgstr "Собеседников (без вас):"
 
 msgid "Detect speakers"
 msgstr "Определить говорящих"
 
 msgid "Re-detect speakers"
 msgstr "Определить заново"
+
+# V-1 — diarization model install prompt (shown when models are absent)
+msgid "Speaker detection needs a one-time model download (~30 MB)."
+msgstr "Для определения говорящих нужно один раз скачать модели (~30 МБ)."
+
+msgid "Install speaker models"
+msgstr "Установить модели говорящих"
+
+msgid "Downloading models…"
+msgstr "Скачивание моделей…"
+
+# I-1 — recording-alignment caveat banner (legacy pre-D0.5 OR idle-padding-capped)
+msgid "Speaker timings may be approximate for this recording."
+msgstr "Тайминги говорящих для этой записи могут быть неточными."
