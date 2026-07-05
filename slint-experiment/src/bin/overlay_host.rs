@@ -61,7 +61,7 @@ mod ui {
 
 use ui::{
     ArchiveRow, ArchiveWindow, CaptureOverlay, ComponentRow, HelpWindow, MarkdownBlock, MemoryRow,
-    OverlayBarWindow, PaletteResult, PaletteWindow, RecoverOfferWindow, SettingsWindow,
+    OverlayBarWindow, PaletteResult, PaletteWindow, RecoverOfferWindow, SettingsWindow, SpeakerRow,
     TextAskWindow, TileWindow, TranscriptLine, TranscriptWindow, WizardWindow,
 };
 

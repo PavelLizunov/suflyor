@@ -1440,3 +1440,19 @@ msgstr "почищено"
 
 msgid " · was: {}"
 msgstr " · было: {}"
+
+# === Speaker diarization — «По голосам» (D3) ===
+msgid "By role"
+msgstr "По ролям"
+
+msgid "By voice"
+msgstr "По голосам"
+
+msgid "Speakers:"
+msgstr "Собеседников:"
+
+msgid "Detect speakers"
+msgstr "Определить говорящих"
+
+msgid "Re-detect speakers"
+msgstr "Определить заново"

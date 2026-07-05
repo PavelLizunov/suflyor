@@ -23,15 +23,16 @@ use super::{
     present_tile_window, present_window_stealth_aware, refresh_open_tiles, toggle_tile_maximize,
     ui, wire_tile_drag, Arc, ArchiveRow, ArchiveWindow, AskRoute, ComponentHandle, HelpWindow,
     MarkdownBlock, ModelRc, OverlayBarBridge, OverlayBarWindow, PaletteResult, PaletteWindow, Rc,
-    RefCell, RuntimeEvents, SharedSlintRuntime, SharedString, TextAskWindow, TileWindow,
-    TileWindows, TranscriptLine, TranscriptWindow, VecModel,
+    RefCell, RuntimeEvents, SharedSlintRuntime, SharedString, SpeakerRow, TextAskWindow,
+    TileWindow, TileWindows, TranscriptLine, TranscriptWindow, VecModel,
 };
 use overlay_backend::persistence::{
-    open_default_store, AiTurn, SearchHit, Session, Store, Utterance,
+    open_default_store, AiTurn, Diarization, SearchHit, Session, Store, Utterance,
 };
 // `Model` brings row_data / set_row_data / row_count for the transcript VecModel.
 use slint::Model;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
 /// v0.14.0 — PROCESS-GLOBAL one-job-at-a-time guard for archive re-transcription.
 ///
@@ -792,6 +793,7 @@ pub(crate) fn open_archive(
         let weak = win.as_weak();
         let store_t = store.clone();
         let tslot = transcript_slot.clone();
+        let rt_t = rt_handle.clone();
         win.on_transcript_requested(move |idx| {
             let Some(p) = weak.upgrade() else {
                 return;
@@ -814,7 +816,7 @@ pub(crate) fn open_archive(
                     st.session_utterances(&sid).unwrap_or_default(),
                 )
             };
-            open_transcript(&tslot, session.as_ref(), &utts);
+            open_transcript(&tslot, session.as_ref(), &utts, store_rc, &rt_t);
         });
     }
 
@@ -1821,6 +1823,283 @@ fn wire_transcript_player(
 /// invariant that copy-selected / play-line / active-line rely on.
 const TRANSCRIPT_DISPLAY_CAP: usize = 2000;
 
+thread_local! {
+    // The «Определить говорящих» result-poll timer — held so it outlives the run
+    // closure; the timer clears itself on completion (and on window close).
+    static DIAR_TIMER: RefCell<Option<slint::Timer>> = const { RefCell::new(None) };
+}
+
+/// A distinct colour per speaker id (cycled), vivid enough on light + dark surfaces.
+fn speaker_palette(id: i32) -> slint::Color {
+    const P: &[(u8, u8, u8)] = &[
+        (0x4F, 0x8A, 0xF7),
+        (0xE8, 0x6A, 0x5C),
+        (0x3F, 0xB0, 0x6B),
+        (0xC9, 0x7A, 0xE0),
+        (0xE0, 0x9B, 0x3A),
+        (0x2E, 0xB5, 0xC0),
+        (0xD1, 0x5E, 0x9C),
+        (0x8A, 0x8F, 0x3A),
+    ];
+    let (r, g, b) = P[(id.max(0) as usize) % P.len()];
+    slint::Color::from_rgb_u8(r, g, b)
+}
+
+/// «Вы» / unattributed colour — neutral grey, distinct from the coloured speakers.
+fn neutral_speaker_color() -> slint::Color {
+    slint::Color::from_rgb_u8(0x8A, 0x8A, 0x8A)
+}
+
+/// Display label for a system speaker: the user's rename, else «Говорящий N».
+fn speaker_label(id: i32, names: &std::collections::BTreeMap<i32, String>) -> String {
+    names
+        .get(&id)
+        .filter(|s| !s.trim().is_empty())
+        .cloned()
+        .unwrap_or_else(|| format!("Говорящий {}", id + 1))
+}
+
+/// Reset every row to the role view («Микрофон»/«Система»); the Slint side uses the
+/// theme accent for the colour in role view, so `speaker_color` is left as-is.
+fn apply_role_labels(model: &Rc<VecModel<TranscriptLine>>, utts: &[Utterance]) {
+    for i in 0..model.row_count() {
+        let Some(mut row) = model.row_data(i) else {
+            continue;
+        };
+        let mic = utts.get(i).map(|u| u.source == "mic").unwrap_or(false);
+        row.speaker = SharedString::from(if mic {
+            "Микрофон"
+        } else {
+            "Система"
+        });
+        model.set_row_data(i, row);
+    }
+}
+
+/// Relabel every row for «По голосам»: mic → «Вы»; a system line → its aligned
+/// speaker (rename / «Говорящий N») + palette colour; an unattributed system line →
+/// «Система».
+fn apply_voice_labels(
+    model: &Rc<VecModel<TranscriptLine>>,
+    utts: &[Utterance],
+    diar: &Diarization,
+) {
+    let align = overlay_backend::diarize::align_all(utts, &diar.segments);
+    for i in 0..model.row_count() {
+        let Some(mut row) = model.row_data(i) else {
+            continue;
+        };
+        let mic = utts.get(i).map(|u| u.source == "mic").unwrap_or(false);
+        if mic {
+            row.speaker = SharedString::from("Вы");
+            row.speaker_color = neutral_speaker_color();
+        } else if let Some(Some(id)) = align.get(i) {
+            row.speaker = SharedString::from(speaker_label(*id, &diar.speaker_names));
+            row.speaker_color = speaker_palette(*id);
+        } else {
+            row.speaker = SharedString::from("Система");
+            row.speaker_color = neutral_speaker_color();
+        }
+        model.set_row_data(i, row);
+    }
+}
+
+/// The rename-list rows: the display speakers that actually attribute ≥1 system line.
+fn speaker_rows(diar: &Diarization, utts: &[Utterance]) -> Vec<SpeakerRow> {
+    let align = overlay_backend::diarize::align_all(utts, &diar.segments);
+    let mut ids: Vec<i32> = align.iter().filter_map(|o| *o).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    ids.into_iter()
+        .map(|id| SpeakerRow {
+            id,
+            label: SharedString::from(speaker_label(id, &diar.speaker_names)),
+            color: speaker_palette(id),
+        })
+        .collect()
+}
+
+fn set_speaker_list(win: &TranscriptWindow, diar: &Diarization, utts: &[Utterance]) {
+    let rows = speaker_rows(diar, utts);
+    win.set_speakers(ModelRc::from(Rc::new(VecModel::from(rows))));
+}
+
+/// D3 — «По голосам» diarization wiring: the role/voice toggle, the «Определить
+/// говорящих» run (worker → poll-timer → persist + repaint), and speaker rename.
+/// Relabelling MUTATES the shared line model in place (same rows, only the speaker
+/// label + colour), so the copy / player / star wiring stays valid.
+#[allow(clippy::too_many_arguments)]
+fn wire_transcript_diarization(
+    win: &TranscriptWindow,
+    store: &Rc<RefCell<Store>>,
+    rt_handle: &tokio::runtime::Handle,
+    session_id: &str,
+    session_finished: bool,
+    utts_display: &[Utterance],
+    model: &Rc<VecModel<TranscriptLine>>,
+) {
+    // A stale poll timer from a prior session's window (the window is reused).
+    DIAR_TIMER.with(|t| *t.borrow_mut() = None);
+
+    let has_sys_audio_ms = utts_display
+        .iter()
+        .any(|u| u.source == "system" && u.audio_ms.is_some());
+    let can_diarize = session_finished
+        && has_sys_audio_ms
+        && overlay_backend::diarize::models_ready()
+        && overlay_backend::session_audio::session_has_recordings(session_id);
+
+    let diar: Rc<RefCell<Option<Diarization>>> = Rc::new(RefCell::new(
+        store.borrow().get_diarization(session_id).ok().flatten(),
+    ));
+    let utts_rc: Rc<Vec<Utterance>> = Rc::new(utts_display.to_vec());
+
+    win.set_can_diarize(can_diarize);
+    win.set_has_diarization(diar.borrow().is_some());
+    win.set_by_voice(false);
+    win.set_diarizing(false);
+    win.set_diar_status(SharedString::default());
+    let default_count = diar
+        .borrow()
+        .as_ref()
+        .map(|d| (d.num_speakers.max(1) as i32).clamp(1, 8))
+        .unwrap_or(2);
+    win.set_speaker_count(default_count);
+    // Reset the rename list too (the window is reused) — masked while by-voice=false,
+    // but defends against a stale prior-session list if the gating ever changes.
+    win.set_speakers(ModelRc::from(Rc::new(VecModel::<SpeakerRow>::default())));
+    apply_role_labels(model, &utts_rc);
+
+    // Toggle role ↔ voice.
+    {
+        let weak = win.as_weak();
+        let model_c = model.clone();
+        let diar_c = diar.clone();
+        let utts_c = utts_rc.clone();
+        win.on_toggle_by_voice(move |v| {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            if v {
+                if let Some(d) = diar_c.borrow().as_ref() {
+                    apply_voice_labels(&model_c, &utts_c, d);
+                    set_speaker_list(&w, d, &utts_c);
+                }
+            } else {
+                apply_role_labels(&model_c, &utts_c);
+            }
+            w.set_by_voice(v);
+        });
+    }
+
+    // Rename → persist → reload → repaint (stays in voice view).
+    {
+        let weak = win.as_weak();
+        let store_c = store.clone();
+        let diar_c = diar.clone();
+        let model_c = model.clone();
+        let utts_c = utts_rc.clone();
+        let sid = session_id.to_string();
+        win.on_rename_speaker(move |id, name| {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            {
+                let st = store_c.borrow();
+                let _ = st.rename_speaker(&sid, id, name.as_str());
+                *diar_c.borrow_mut() = st.get_diarization(&sid).ok().flatten();
+            }
+            if let Some(d) = diar_c.borrow().as_ref() {
+                apply_voice_labels(&model_c, &utts_c, d);
+                set_speaker_list(&w, d, &utts_c);
+            }
+        });
+    }
+
+    // Run diarization: spawn the blocking sidecar off-thread; a UI-thread poll timer
+    // picks up the Send result and persists + repaints (the !Sync store + Rc model
+    // stay on the UI thread).
+    {
+        let weak = win.as_weak();
+        let store_c = store.clone();
+        let diar_c = diar.clone();
+        let model_c = model.clone();
+        let utts_c = utts_rc.clone();
+        let rt = rt_handle.clone();
+        let sid = session_id.to_string();
+        win.on_run_diarization(move || {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            if w.get_diarizing() {
+                return;
+            }
+            let count = w.get_speaker_count().clamp(1, 8);
+            w.set_diarizing(true);
+            w.set_diar_status(SharedString::from("Определение говорящих…"));
+
+            let slot: Arc<Mutex<Option<Result<Diarization, String>>>> = Arc::new(Mutex::new(None));
+            let utts_owned: Vec<Utterance> = utts_c.as_ref().clone();
+            {
+                let slot_w = slot.clone();
+                let sid_w = sid.clone();
+                rt.spawn_blocking(move || {
+                    let r = overlay_backend::diarize::run_diarization(
+                        &sid_w,
+                        count,
+                        &utts_owned,
+                        &|_: overlay_backend::diarize::Progress| {},
+                    )
+                    .map_err(|e| format!("{e:#}"));
+                    if let Ok(mut g) = slot_w.lock() {
+                        *g = Some(r);
+                    }
+                });
+            }
+
+            let poll = slint::Timer::default();
+            let weak_p = weak.clone();
+            let store_p = store_c.clone();
+            let diar_p = diar_c.clone();
+            let model_p = model_c.clone();
+            let utts_p = utts_c.clone();
+            poll.start(
+                slint::TimerMode::Repeated,
+                std::time::Duration::from_millis(200),
+                move || {
+                    let done = slot.lock().ok().and_then(|mut g| g.take());
+                    let Some(result) = done else {
+                        return;
+                    };
+                    DIAR_TIMER.with(|t| *t.borrow_mut() = None); // stop + drop self
+                    let Some(w) = weak_p.upgrade() else {
+                        return;
+                    };
+                    w.set_diarizing(false);
+                    match result {
+                        Ok(d) => {
+                            let _ = store_p.borrow().put_diarization(&d);
+                            apply_voice_labels(&model_p, &utts_p, &d);
+                            set_speaker_list(&w, &d, &utts_p);
+                            *diar_p.borrow_mut() = Some(d);
+                            w.set_has_diarization(true);
+                            w.set_by_voice(true);
+                            w.set_diar_status(SharedString::default());
+                        }
+                        Err(e) => {
+                            w.set_diar_status(SharedString::from(
+                                "Не удалось определить говорящих",
+                            ));
+                            log::warn!("diarization failed: {e}");
+                        }
+                    }
+                },
+            );
+            DIAR_TIMER.with(|t| *t.borrow_mut() = Some(poll));
+        });
+    }
+}
+
 /// Open a READ-ONLY structured transcript window for a session (ТЗ1). Reuses the
 /// slot if already open; otherwise builds the per-line model from the session's
 /// utterances and presents the window stealth-aware. The model is (re)built on
@@ -1829,9 +2108,14 @@ pub(crate) fn open_transcript(
     slot: &Rc<RefCell<Option<TranscriptWindow>>>,
     session: Option<&Session>,
     utts: &[Utterance],
+    store: &Rc<RefCell<Store>>,
+    rt_handle: &tokio::runtime::Handle,
 ) {
     // Build the model once — shared by the reuse + first-open paths.
     let session_start = session.and_then(|s| s.started_at_ms).filter(|&ms| ms > 0);
+    // D3 — a finished session is a precondition to diarize (a live session's WAV is
+    // unfinalized). `crashed`/`active` sessions can't.
+    let session_finished = session.map(|s| s.status == "completed").unwrap_or(false);
     let heading = session
         .map(|s| session_title(s.started_at_ms, &s.id))
         .unwrap_or_default();
@@ -1867,6 +2151,9 @@ pub(crate) fn open_transcript(
             } else {
                 "Система"
             }),
+            // Role view uses the theme accent (Slint side); this is only read in the
+            // «По голосам» view, where `rebuild_speaker_labels` overwrites it.
+            speaker_color: slint::Color::from_rgb_u8(0, 0, 0),
             text: SharedString::from(u.text.split_whitespace().collect::<Vec<_>>().join(" ")),
             checked: false,
             marked: false,
@@ -1894,6 +2181,15 @@ pub(crate) fn open_transcript(
         win.set_overflow_count(overflow);
         wire_transcript_actions(win, &model, &utts_display, session_start);
         wire_transcript_player(win, &session_id, &model);
+        wire_transcript_diarization(
+            win,
+            store,
+            rt_handle,
+            &session_id,
+            session_finished,
+            &utts_display,
+            &model,
+        );
         let _ = win.show();
         if let Ok(hwnd) = grab_hwnd(win.window()) {
             focus_window(hwnd);
@@ -1918,12 +2214,22 @@ pub(crate) fn open_transcript(
     win.set_overflow_count(overflow);
     wire_transcript_actions(&win, &model, &utts_display, session_start);
     wire_transcript_player(&win, &session_id, &model);
+    wire_transcript_diarization(
+        &win,
+        store,
+        rt_handle,
+        &session_id,
+        session_finished,
+        &utts_display,
+        &model,
+    );
 
     {
         let slot_c = slot.clone();
         let weak = win.as_weak();
         win.on_close_requested(move || {
             transcript_player::reset(); // stop audio + poll timer when the window closes
+            DIAR_TIMER.with(|t| *t.borrow_mut() = None); // stop the diarization poll too
             if let Some(w) = weak.upgrade() {
                 let _ = w.hide();
             }

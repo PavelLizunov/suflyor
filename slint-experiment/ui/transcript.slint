@@ -16,11 +16,19 @@ import { DarkCheck } from "settings_panel.slint";
 // One transcript row, built in Rust from a session's utterances.
 export struct TranscriptLine {
     offset-label: string, // "02:15" session-relative, or "" if start unknown
-    speaker: string,      // "Система" | "Микрофон"
+    speaker: string,      // «Система» | «Микрофон» (role view) OR «Вы» / «Тимур» / «Говорящий 2» (voice view)
+    speaker-color: color, // D3 — colour of the speaker label (accent in role view; per-speaker in «По голосам»)
     text: string,
     checked: bool,        // ТЗ1 — per-line selection for "Copy selected" (clipboard)
     marked: bool,         // G2b (2026-07-03) — per-line ⭐ multi-mark for «В память (N)»
     start-ms: int,        // ТЗ2b — session-relative ms, for click-to-seek + active line
+}
+
+// D3 — one speaker in the «По голосам» rename list (display id · editable label · colour).
+export struct SpeakerRow {
+    id: int,
+    label: string,
+    color: color,
 }
 
 // A compact square checkbox (reused for per-line selection + "select all").
@@ -111,6 +119,23 @@ export component TranscriptWindow inherits Window {
     // OTHER lines (mirrors the tile's review-I-1 guard).
     in-out property <int> capture-line-index: -1;
 
+    // ── D3 — «По голосам» (speaker diarization) ──
+    // false = «По ролям» (Микрофон/Система, default); true = «По голосам» (per-speaker).
+    in-out property <bool> by-voice: false;
+    // A diarization result exists for this session (enables the toggle).
+    in-out property <bool> has-diarization: false;
+    // The session can be diarized (finished + has system audio + aligned timecodes).
+    in-out property <bool> can-diarize: false;
+    // A diarization job is running (disabled button + status).
+    in-out property <bool> diarizing: false;
+    // Progress / error line under the diarize controls.
+    in-out property <string> diar-status: "";
+    // «Сколько собеседников (без вас)» — the PRIMARY control (auto is unreliable on VoIP
+    // audio). Default 2 (the common one-interviewer case).
+    in-out property <int> speaker-count: 2;
+    // The rename list, shown in «По голосам»: display id · label · colour.
+    in-out property <[SpeakerRow]> speakers: [];
+
     callback toggle-play();
     callback play-line(int);
     callback seek-fraction(float);
@@ -134,6 +159,12 @@ export component TranscriptWindow inherits Window {
     // cursor-byte-offset). Rust slices line.text by the selection and opens the same
     // editor (capture-text + capture-pending) that the ⭐-mark flow uses.
     callback capture-line-selection(int, int, int);
+
+    // D3 — «По голосам»: flip the view; run diarization with `speaker-count`; rename a
+    // speaker (display id, new name — blank clears). Rust rebuilds `lines` + `speakers`.
+    callback toggle-by-voice(bool);
+    callback run-diarization();
+    callback rename-speaker(int, string);
 
     forward-focus: fs;
 
@@ -269,6 +300,153 @@ export component TranscriptWindow inherits Window {
                     }
                 }
 
+                // ── D3 — «По голосам» diarization toolbar (view toggle + detect controls) ──
+                if !root.empty && (root.can-diarize || root.has-diarization) : VerticalLayout {
+                    spacing: Metrics.space-sm;
+                    HorizontalLayout {
+                        spacing: Metrics.space-sm;
+                        // View toggle — only once a result exists.
+                        if root.has-diarization : HorizontalLayout {
+                            spacing: 4px;
+                            Rectangle {
+                                width: 92px;
+                                height: 28px;
+                                border-radius: 6px;
+                                border-width: 1px;
+                                border-color: Theme.accent;
+                                background: !root.by-voice ? Theme.accent : transparent;
+                                role-ta := TouchArea { clicked => { root.toggle-by-voice(false); } }
+                                Text {
+                                    text: @tr("By role");
+                                    color: !root.by-voice ? Theme.on-accent : Theme.accent;
+                                    font-size: Metrics.font-label;
+                                    font-weight: 600;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            Rectangle {
+                                width: 104px;
+                                height: 28px;
+                                border-radius: 6px;
+                                border-width: 1px;
+                                border-color: Theme.accent;
+                                background: root.by-voice ? Theme.accent : transparent;
+                                voice-ta := TouchArea { clicked => { root.toggle-by-voice(true); } }
+                                Text {
+                                    text: @tr("By voice");
+                                    color: root.by-voice ? Theme.on-accent : Theme.accent;
+                                    font-size: Metrics.font-label;
+                                    font-weight: 600;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                        }
+                    }
+                    // ── Row 2 — detect controls (count stepper + run button; own row so
+                    // the fixed-width controls never overflow the min-width window) ──
+                    HorizontalLayout {
+                        spacing: Metrics.space-sm;
+                        // Speaker-count stepper — the PRIMARY control («сколько собеседников»).
+                        Text {
+                            text: @tr("Speakers:");
+                            font-size: Metrics.font-label;
+                            color: Theme.text-muted;
+                            vertical-alignment: center;
+                        }
+                        Rectangle {
+                            width: 26px;
+                            height: 28px;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            TouchArea { clicked => { if (root.speaker-count > 1) { root.speaker-count -= 1; } } }
+                            Text {
+                                text: "−";
+                                font-size: Metrics.font-body;
+                                color: Theme.text-primary;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                        Text {
+                            text: "\{root.speaker-count}";
+                            width: 22px;
+                            font-size: Metrics.font-body;
+                            font-weight: 700;
+                            color: Theme.text-primary;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        Rectangle {
+                            width: 26px;
+                            height: 28px;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            TouchArea { clicked => { if (root.speaker-count < 8) { root.speaker-count += 1; } } }
+                            Text {
+                                text: "+";
+                                font-size: Metrics.font-body;
+                                color: Theme.text-primary;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        Rectangle {
+                            width: 176px;
+                            height: 28px;
+                            border-radius: 6px;
+                            background: root.diarizing
+                                ? Theme.accent.with-alpha(0.5)
+                                : dia-ta.has-hover ? Theme.accent : Theme.accent.with-alpha(0.85);
+                            animate background { duration: 120ms; }
+                            dia-ta := TouchArea {
+                                clicked => { if (!root.diarizing) { root.run-diarization(); } }
+                            }
+                            Text {
+                                text: root.has-diarization ? @tr("Re-detect speakers") : @tr("Detect speakers");
+                                color: Theme.on-accent;
+                                font-size: Metrics.font-label;
+                                font-weight: 600;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                    // Progress / error line.
+                    if root.diar-status != "" : Text {
+                        text: root.diar-status;
+                        font-size: Metrics.font-caption;
+                        color: Theme.text-muted;
+                        wrap: word-wrap;
+                    }
+                    // Rename list (voice view): coloured dot + editable name per speaker.
+                    if root.by-voice && root.speakers.length > 0 : HorizontalLayout {
+                        spacing: Metrics.space-md;
+                        for sp[si] in root.speakers : HorizontalLayout {
+                            spacing: 5px;
+                            Rectangle {
+                                width: 11px;
+                                height: 11px;
+                                border-radius: 5px;
+                                background: sp.color;
+                                y: (parent.height - self.height) / 2;
+                            }
+                            LineEdit {
+                                text: sp.label;
+                                width: 108px;
+                                font-size: Metrics.font-label;
+                                // Commit on Enter (blank clears the rename).
+                                accepted(t) => { root.rename-speaker(sp.id, t); }
+                            }
+                        }
+                    }
+                }
+
                 // ── "Select all" header above the list ──
                 if !root.empty : HorizontalLayout {
                     spacing: Metrics.space-sm;
@@ -355,7 +533,9 @@ export component TranscriptWindow inherits Window {
                                     text: line.speaker;
                                     font-size: Metrics.font-caption;
                                     font-weight: 700;
-                                    color: Theme.accent;
+                                    // Role view: the theme accent (scheme-aware). Voice view:
+                                    // the per-speaker palette colour Rust set on the line.
+                                    color: root.by-voice ? line.speaker-color : Theme.accent;
                                     vertical-alignment: top;
                                     width: 84px;
                                 }
