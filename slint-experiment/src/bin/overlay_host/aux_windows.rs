@@ -1995,6 +1995,14 @@ fn wire_transcript_diarization(
     win.set_installing_diar_models(false);
     win.set_timeline_unreliable(timeline_unreliable);
     win.set_has_diarization(diar.borrow().is_some());
+    // F — arm the re-detect guard iff the stored result already has custom names; reset the
+    // confirm on this REUSED window so it never opens stale on a fresh open (CLAUDE.md gotcha #1).
+    win.set_has_speaker_names(
+        diar.borrow()
+            .as_ref()
+            .is_some_and(|d| d.speaker_names.values().any(|n| !n.trim().is_empty())),
+    );
+    win.set_confirm_rediar(false);
     win.set_by_voice(false);
     win.set_diarizing(false);
     win.set_diar_status(SharedString::default());
@@ -2051,6 +2059,8 @@ fn wire_transcript_diarization(
             if let Some(d) = diar_c.borrow().as_ref() {
                 apply_voice_labels(&model_c, &utts_c, d);
                 set_speaker_list(&w, d, &utts_c);
+                // F — a rename may set OR clear the last custom name → keep the guard in sync.
+                w.set_has_speaker_names(d.speaker_names.values().any(|n| !n.trim().is_empty()));
             }
         });
     }
@@ -2123,6 +2133,10 @@ fn wire_transcript_diarization(
                             *diar_p.borrow_mut() = Some(d);
                             w.set_has_diarization(true);
                             w.set_by_voice(true);
+                            // F — a fresh result carries no custom names; clear the guard and the
+                            // confirm that may have triggered this re-run.
+                            w.set_has_speaker_names(false);
+                            w.set_confirm_rediar(false);
                             w.set_diar_status(SharedString::default());
                         }
                         Err(e) => {

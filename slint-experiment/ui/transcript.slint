@@ -141,6 +141,10 @@ export component TranscriptWindow inherits Window {
     // I-1 (fable review): this session's recording predates the wall-clock-padding fix
     // (D0.5), so audio_ms→sample drifts and speaker timings may be approximate → banner.
     in-out property <bool> timeline-unreliable: false;
+    // F (fable) — re-detect guard: `has-speaker-names` (Rust-set) arms the guard; a re-run
+    // wipes custom names, so `confirm-rediar` shows a confirm card first (clones archive resummary).
+    in-out property <bool> has-speaker-names: false;
+    in-out property <bool> confirm-rediar: false;
     // Progress / error line under the diarize controls.
     in-out property <string> diar-status: "";
     // «Сколько собеседников (без вас)» — the PRIMARY control (auto is unreliable on VoIP
@@ -199,7 +203,12 @@ export component TranscriptWindow inherits Window {
             height: 100%;
             key-pressed(event) => {
                 if (event.text == Key.Escape) {
-                    root.close-requested();
+                    // F — Esc dismisses the re-detect confirm first, then closes the window.
+                    if (root.confirm-rediar) {
+                        root.confirm-rediar = false;
+                    } else {
+                        root.close-requested();
+                    }
                     return accept;
                 }
                 return reject;
@@ -487,7 +496,16 @@ export component TranscriptWindow inherits Window {
                                 : dia-ta.has-hover ? Theme.accent : Theme.accent.with-alpha(0.85);
                             animate background { duration: 120ms; }
                             dia-ta := TouchArea {
-                                clicked => { if (!root.diarizing) { root.run-diarization(); } }
+                                clicked => {
+                                    if (!root.diarizing) {
+                                        // F — confirm before a re-run that would wipe custom names.
+                                        if (root.has-diarization && root.has-speaker-names) {
+                                            root.confirm-rediar = true;
+                                        } else {
+                                            root.run-diarization();
+                                        }
+                                    }
+                                }
                             }
                             Text {
                                 text: root.has-diarization ? @tr("Re-detect speakers") : @tr("Detect speakers");
@@ -868,6 +886,86 @@ export component TranscriptWindow inherits Window {
                     font-size: Metrics.font-caption;
                     color: Theme.text-muted;
                     horizontal-alignment: center;
+                }
+            }
+        }
+
+        // F (fable) — «Re-detect speakers?» confirm, an overlay sibling of `fs` (clones the
+        // archive resummary scrim). Shown only when a result with custom names exists — a re-run
+        // wipes the names (cluster ids permute), so guard it. Scrim-click / Cancel / Esc dismiss.
+        if root.confirm-rediar : Rectangle {
+            width: 100%;
+            height: 100%;
+            background: Theme.scrim;
+            TouchArea { clicked => { root.confirm-rediar = false; } }
+            Rectangle {
+                width: 380px;
+                height: 172px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                background: Theme.bg-surface;
+                border-radius: Metrics.radius-panel;
+                border-width: Metrics.border-thin;
+                border-color: Theme.border-strong;
+                // Swallow clicks on the card so they don't reach the scrim (dismiss).
+                TouchArea { }
+                VerticalLayout {
+                    padding: Metrics.space-md;
+                    spacing: Metrics.space-sm;
+                    Text {
+                        text: @tr("Re-detect speakers?");
+                        font-size: Metrics.font-heading;
+                        font-weight: 700;
+                        color: Theme.text-primary;
+                        horizontal-alignment: center;
+                    }
+                    Text {
+                        text: @tr("Speaker names you set will be reset.");
+                        font-size: Metrics.font-caption;
+                        color: Theme.text-muted;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        spacing: Metrics.space-sm;
+                        alignment: center;
+                        Rectangle {
+                            width: 132px;
+                            height: 32px;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.border-strong;
+                            background: rd-cancel-ta.has-hover ? Theme.bg-elevated : transparent;
+                            rd-cancel-ta := TouchArea { clicked => { root.confirm-rediar = false; } }
+                            Text {
+                                text: @tr("Cancel");
+                                color: Theme.text-primary;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                        Rectangle {
+                            width: 132px;
+                            height: 32px;
+                            border-radius: 6px;
+                            background: rd-ok-ta.pressed
+                                ? Theme.accent.with-alpha(0.7)
+                                : rd-ok-ta.has-hover ? Theme.accent : Theme.accent.with-alpha(0.88);
+                            rd-ok-ta := TouchArea {
+                                clicked => {
+                                    root.confirm-rediar = false;
+                                    root.run-diarization();
+                                }
+                            }
+                            Text {
+                                text: @tr("Re-detect");
+                                color: Theme.on-accent;
+                                font-weight: 600;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
                 }
             }
         }
