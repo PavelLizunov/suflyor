@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>suflyor v0.29.0 — приёмка: плеер + «По голосам»</title>
+<style>
+  :root { --bg:#151B23; --card:#1c232d; --ink:#E8EEF4; --muted:#9fb0c0; --line:#2b3644;
+          --accent:#4C8DFF; --ok:#3fb950; --bad:#f85149; --skip:#8a97a6; --warn:#E3B341; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; }
+  header { position:sticky; top:0; z-index:5; background:#10151c; border-bottom:1px solid var(--line);
+           padding:14px 20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; font-weight:650; }
+  header .sub { color:var(--muted); font-size:13px; }
+  .spacer { flex:1; }
+  button.export { background:var(--accent); color:#06101f; border:0; border-radius:7px; padding:9px 16px;
+                  font-weight:650; font-size:14px; cursor:pointer; }
+  button.export:hover { filter:brightness(1.1); }
+  main { max-width:900px; margin:0 auto; padding:20px; }
+  .intro { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:22px; }
+  .intro p { margin:6px 0; }
+  .intro code { background:#0e131a; padding:2px 6px; border-radius:4px; color:#cfe0ff; font-size:13px; }
+  h2 { font-size:16px; margin:26px 0 12px; padding-bottom:6px; border-bottom:1px solid var(--line); color:#cfe0ff; }
+  .item { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin:12px 0; }
+  .item .q { font-weight:600; margin-bottom:4px; }
+  .item .how { color:var(--muted); font-size:13.5px; margin-bottom:10px; }
+  .item .how b { color:var(--ink); }
+  .statuses { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .statuses label { cursor:pointer; border:1px solid var(--line); border-radius:20px; padding:5px 13px; font-size:13px;
+                    user-select:none; display:inline-flex; align-items:center; gap:6px; background:#0e131a; }
+  .statuses input { display:none; }
+  .statuses label.ok.sel   { border-color:var(--ok);   background:rgba(63,185,80,.16);  color:#9be7a8; }
+  .statuses label.bad.sel  { border-color:var(--bad);  background:rgba(248,81,73,.16);  color:#ffb3ad; }
+  .statuses label.skip.sel { border-color:var(--skip); background:rgba(138,151,166,.16); color:#c3ccd6; }
+  textarea { width:100%; background:#0e131a; color:var(--ink); border:1px solid var(--line); border-radius:7px;
+             padding:8px 10px; font:14px/1.45 inherit; resize:vertical; min-height:44px; }
+  .shot { margin-top:10px; }
+  .drop { border:1.5px dashed var(--line); border-radius:8px; padding:12px; text-align:center; color:var(--muted);
+          font-size:13px; cursor:pointer; transition:.12s; }
+  .drop:hover, .drop.over { border-color:var(--accent); color:#cfe0ff; background:rgba(76,141,255,.06); }
+  .shots { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+  .shots figure { margin:0; position:relative; border:1px solid var(--line); border-radius:7px; overflow:hidden; max-width:240px; }
+  .shots img { display:block; max-width:100%; height:auto; }
+  .shots .rm { position:absolute; top:4px; right:4px; background:rgba(0,0,0,.6); color:#fff; border:0; border-radius:5px;
+               width:24px; height:24px; cursor:pointer; font-size:15px; line-height:1; }
+  .tag { font-size:11px; font-weight:700; padding:2px 7px; border-radius:5px; margin-right:8px; vertical-align:middle; }
+  .tag.new { background:rgba(76,141,255,.2); color:#a9c9ff; }
+  .tag.fix { background:rgba(227,179,65,.18); color:#f0d38a; }
+  .note { color:var(--warn); font-size:12.5px; margin-top:6px; }
+  footer { max-width:900px; margin:10px auto 60px; padding:0 20px; color:var(--muted); font-size:12.5px; }
+  @media print { header .export { display:none; } .drop { display:none; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>suflyor v0.29.0 — приёмка</h1>
+    <div class="sub">Плеер (скорость + громкость) · Диаризация «По голосам» + фиксы ревью</div>
+  </div>
+  <div class="spacer"></div>
+  <button class="export" onclick="exportReport()">⭳ Скачать заполненный отчёт</button>
+</header>
+
+<main>
+  <div class="intro">
+    <p><b>Что тестируем.</b> Новый плеер стенограммы (ускорение + усиление звука) и доработки диаризации «По голосам» по ревью fable.</p>
+    <p><b>Как запустить.</b> Собранный билд ветки лежит в установленной папке <code>%LOCALAPPDATA%\suflyor-slint\</code> — запустите ярлык «suflyor (Slint)». Стенограмма: <b>F7</b> (Архив) → откройте сессию с записью → значок 📄 «Стенограмма».</p>
+    <p><b>Как отмечать.</b> По каждому пункту: ✅ ок / ❌ проблема / ⏭ пропустить, комментарий, и при желании — скриншот (перетащите файл, вставьте из буфера Ctrl+V, или кликните зону). В конце — «Скачать заполненный отчёт» (всё вшивается в один HTML со скринами).</p>
+  </div>
+
+  <h2>🎧 Плеер стенограммы (ваш запрос)</h2>
+
+  <div class="item" data-id="P1">
+    <div class="q">P1. Мини-плеер отображается</div>
+    <div class="how">Откройте стенограмму сессии с аудио. Внизу — строка плеера: <b>play/pause · полоса перемотки · время · кнопка скорости · кнопка громкости 🔊</b>.</div>
+  </div>
+
+  <div class="item" data-id="P2">
+    <div class="q"><span class="tag new">НОВОЕ</span>P2. Скорость: 1× → 1.5× → 2×</div>
+    <div class="how">Тап по кнопке скорости циклит <b>1× → 1.5× → 2× → 1×</b>. Во время воспроизведения звук идёт быстрее, а <b>полоса перемотки и время НЕ рассинхронизируются</b> (не убегают вперёд/назад относительно того, что слышно).</div>
+  </div>
+
+  <div class="item" data-id="P3">
+    <div class="q"><span class="tag new">НОВОЕ</span>P3. Громкость (усиление): 1× → 2× → 3×</div>
+    <div class="how">Тап по кнопке 🔊 циклит <b>1× → 2× → 3× → 1×</b>. Тихая запись становится громче. На 3× возможны искажения только у изначально громких записей — это ожидаемо.</div>
+  </div>
+
+  <div class="item" data-id="P4">
+    <div class="q">P4. Скорость/громкость можно выставить ДО play</div>
+    <div class="how">Не запуская воспроизведение, выставьте, скажем, 2× и 🔊 2×, затем нажмите play — должно заиграть сразу на выбранных значениях.</div>
+  </div>
+
+  <div class="item" data-id="P5">
+    <div class="q">P5. Сброс при смене сессии</div>
+    <div class="how">Выставьте не-1× значения, закройте стенограмму, откройте <b>другую</b> сессию — скорость и громкость снова <b>1× / 1×</b>.</div>
+  </div>
+
+  <h2>🗣 Диаризация «По голосам» + фиксы ревью</h2>
+
+  <div class="item" data-id="D1">
+    <div class="q"><span class="tag fix">V-1</span>D1. Кнопка установки моделей</div>
+    <div class="how">Если модели диаризации НЕ установлены, а сессия пригодна (завершена, есть системное аудио) — показывается подпись «Для определения говорящих нужно один раз скачать модели (~30 МБ)» и кнопка <b>«Установить модели говорящих»</b>. Клик → скачивание → после успеха появляются кнопки определения.</div>
+    <div class="note">⚠ У вас модели уже стоят → сразу видны кнопки определения (это тоже «ок»). Кнопку установки можно проверить, только удалив модели.</div>
+  </div>
+
+  <div class="item" data-id="D2">
+    <div class="q">D2. Запуск определения говорящих</div>
+    <div class="how">Степпер «Собеседников» (по умолчанию 2) + кнопка <b>«Определить говорящих»</b> → идёт анализ → переключается на вид «По голосам» с цветными метками говорящих.</div>
+  </div>
+
+  <div class="item" data-id="D3">
+    <div class="q"><span class="tag fix">V-2</span>D3. Подпись «Собеседников (без вас):»</div>
+    <div class="how">Подпись у степпера читается <b>«Собеседников (без вас):»</b> — счётчик считает удалённых собеседников, не вас (диаризация идёт по системному аудио, ваш микрофон — отдельный канал).</div>
+  </div>
+
+  <div class="item" data-id="D4">
+    <div class="q"><span class="tag fix">V-3</span>D4. Переименование 5+ говорящих не вылезает за окно</div>
+    <div class="how">Если говорящих <b>5 и больше</b>, строка переименования (цветная точка + поле имени на каждого) <b>прокручивается по горизонтали</b> внутри окна, а не расползается за его края и не прячет кнопку. Для 2–3 говорящих полосы прокрутки не видно (умещается).</div>
+    <div class="note">⚠ Проверяется, только если задать 5+ собеседников и запустить определение.</div>
+  </div>
+
+  <div class="item" data-id="D5">
+    <div class="q"><span class="tag fix">I-1</span>D5. Баннер о неточных таймингах для старых записей</div>
+    <div class="how">На записи, сделанной старым билдом (все ваши текущие записи — старые), над кнопками показывается предупреждение: <b>«Тайминги говорящих для этой записи могут быть неточными.»</b> Определение всё равно доступно (баннер не блокирует).</div>
+  </div>
+
+  <div class="item" data-id="D6">
+    <div class="q"><span class="tag fix">I-5</span>D6. Понятные сообщения об ошибке</div>
+    <div class="how">Если определение не удаётся: сообщение конкретное — например «Речь не распознана — говорящие не найдены.» или «Запись длиннее 3 часов…» — а не общий «Не удалось…». В тексте <b>НЕ должно быть путей к файлам</b> (C:\...).</div>
+    <div class="note">⚠ Провал трудно вызвать намеренно; если не удаётся — ⏭.</div>
+  </div>
+
+  <div class="item" data-id="D7">
+    <div class="q">D7. Переименование говорящего сохраняется</div>
+    <div class="how">В виде «По голосам» впишите имя говорящему, Enter — стенограмма перекрашивает/переименовывает его реплики; имя сохраняется после переоткрытия.</div>
+  </div>
+
+  <div class="item" data-id="D8">
+    <div class="q">D8. Переключение «По ролям» ↔ «По голосам»</div>
+    <div class="how">Тумблер «По ролям» / «По голосам» переключает вид (роли Микрофон/Система ↔ per-speaker) без ошибок.</div>
+  </div>
+
+  <div class="item" data-id="GEN">
+    <div class="q">Общее впечатление / что-то ещё</div>
+    <div class="how">Любые замечания по вёрстке, тексту, поведению — и по-русски, и по-английски (переключите язык в Настройках), скриншоты приветствуются.</div>
+  </div>
+</main>
+
+<footer>
+  suflyor v0.29.0 · ветка <code>claude/diarization-d05</code> · коммит <code>dcc2d61</code> · сформировано для приёмки владельцем.
+</footer>
+
+<script>
+const STATUSES = [["ok","✅ ок"],["bad","❌ проблема"],["skip","⏭ пропустить"]];
+document.querySelectorAll(".item").forEach(function(item){
+  const id = item.dataset.id;
+  // status pills
+  const sdiv = document.createElement("div"); sdiv.className = "statuses";
+  STATUSES.forEach(function(s){
+    const lab = document.createElement("label"); lab.className = s[0];
+    const inp = document.createElement("input"); inp.type="radio"; inp.name="st_"+id; inp.value=s[0];
+    inp.addEventListener("change", function(){
+      sdiv.querySelectorAll("label").forEach(function(l){ l.classList.remove("sel"); });
+      lab.classList.add("sel");
+    });
+    lab.appendChild(inp); lab.appendChild(document.createTextNode(s[1]));
+    sdiv.appendChild(lab);
+  });
+  item.appendChild(sdiv);
+  // comment
+  const ta = document.createElement("textarea"); ta.placeholder="Комментарий…"; ta.dataset.role="comment";
+  item.appendChild(ta);
+  // screenshots
+  const shot = document.createElement("div"); shot.className="shot";
+  const drop = document.createElement("div"); drop.className="drop";
+  drop.textContent="📎 Скриншот: перетащите файл, вставьте (Ctrl+V) или кликните";
+  const shots = document.createElement("div"); shots.className="shots";
+  const file = document.createElement("input"); file.type="file"; file.accept="image/*"; file.multiple=true; file.style.display="none";
+  drop.addEventListener("click", function(){ file.click(); });
+  file.addEventListener("change", function(e){ [...e.target.files].forEach(f=>addImg(f,shots)); file.value=""; });
+  drop.addEventListener("dragover", function(e){ e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", function(){ drop.classList.remove("over"); });
+  drop.addEventListener("drop", function(e){ e.preventDefault(); drop.classList.remove("over");
+    [...e.dataTransfer.files].forEach(f=>{ if(f.type.startsWith("image/")) addImg(f,shots); }); });
+  // paste onto the item
+  item.addEventListener("paste", function(e){
+    [...e.clipboardData.items].forEach(function(it){
+      if(it.type.startsWith("image/")){ addImg(it.getAsFile(), shots); }
+    });
+  });
+  item.tabIndex = 0;
+  shot.appendChild(drop); shot.appendChild(shots); shot.appendChild(file);
+  item.appendChild(shot);
+});
+
+function addImg(fileObj, container){
+  if(!fileObj) return;
+  const r = new FileReader();
+  r.onload = function(){
+    const fig = document.createElement("figure");
+    const img = document.createElement("img"); img.src = r.result;
+    const rm = document.createElement("button"); rm.className="rm"; rm.textContent="×";
+    rm.title="Убрать"; rm.addEventListener("click", function(){ fig.remove(); });
+    fig.appendChild(img); fig.appendChild(rm); container.appendChild(fig);
+  };
+  r.readAsDataURL(fileObj);
+}
+
+function exportReport(){
+  // Bake the current state into a static clone: selected radios get the checked attr,
+  // textareas get their value as textContent, remove interactive-only controls.
+  const clone = document.documentElement.cloneNode(true);
+  // radios
+  clone.querySelectorAll("input[type=radio]").forEach(function(r){
+    const live = document.querySelector('input[name="'+r.name+'"][value="'+r.value+'"]');
+    if(live && live.checked){ r.setAttribute("checked",""); r.closest("label").classList.add("sel"); }
+  });
+  // textareas → set textContent so it serializes
+  const liveTas = document.querySelectorAll("textarea");
+  clone.querySelectorAll("textarea").forEach(function(t,i){ t.textContent = liveTas[i] ? liveTas[i].value : ""; });
+  // copy images (they are inline data: URIs already, so cloneNode kept them) — nothing to do
+  // strip export button, drop zones, file inputs, and the <script>
+  clone.querySelectorAll(".export,.drop,input[type=file],script").forEach(function(el){ el.remove(); });
+  // stamp
+  const foot = clone.querySelector("footer");
+  if(foot){ foot.innerHTML += "<br>Отчёт заполнен и выгружен."; }
+  const html = "<!DOCTYPE html>\n<html lang=\"ru\">" + clone.innerHTML + "</html>";
+  const blob = new Blob([html], {type:"text/html"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = "retest-v0.29.0-filled.html"; a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+}
+</script>
+</body>
+</html>
