@@ -700,7 +700,11 @@ async fn maybe_spawn_auto_tile(
     // Audit (prompt-context): compute the EFFECTIVE context (profile + approved
     // memory) ONCE here, hash IT (not the raw meeting_context) so approving/editing/
     // deleting memory invalidates a stale cached answer, and reuse it for the prompt.
-    let effective_context = overlay_backend::memory::context_for_meeting(&meeting_context);
+    // ТЗ 2026-07-06 (A) — the detected question selects the RELEVANT facts; the
+    // hash below covers the resulting context, so a different fact selection
+    // can't serve a stale cached answer.
+    let effective_context =
+        overlay_backend::memory::context_for_meeting(&meeting_context, Some(text.as_str()));
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     effective_context.hash(&mut h);

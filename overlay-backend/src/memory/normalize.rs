@@ -154,7 +154,8 @@ pub fn heuristic_clean(text: &str) -> String {
 
 /// Split `s` into maximal alphanumeric tokens (lowercased) with their source byte range. Punctuation
 /// and whitespace are separators, not tokens. `«Бекап-сервер z14»` → `[(бекап,..),(сервер,..),(z14,..)]`.
-fn tokenize(s: &str) -> Vec<(String, usize, usize)> {
+/// `pub(super)`: reused by context_builder's relevance scorer (ТЗ 2026-07-06 A).
+pub(super) fn tokenize(s: &str) -> Vec<(String, usize, usize)> {
     let mut toks = Vec::new();
     let mut start: Option<usize> = None;
     for (b, ch) in s.char_indices() {
@@ -298,7 +299,8 @@ pub fn locate_span(source: &str, quote: &str) -> Option<String> {
 }
 
 /// Russian/English stopwords + STT fillers — carry no fact content, so they don't gate grounding.
-const STOPWORDS: &[&str] = &[
+/// `pub(super)`: also filters the question's content terms in context_builder (ТЗ 2026-07-06 A).
+pub(super) const STOPWORDS: &[&str] = &[
     "и",
     "в",
     "во",
@@ -392,7 +394,9 @@ fn common_prefix_len(a: &str, b: &str) -> usize {
 /// True if words `a` and `b` share a root: a common prefix ≥ min(len_a, len_b, 4). So a 4+‑char word
 /// needs a 4‑char shared root (catches inflection: сервер/сервера), a 3‑char word needs all 3
 /// (код/кода ✓, код/кот ✗). A fabricated word (взломан) shares no root with the source → no match.
-fn words_match(a: &str, b: &str) -> bool {
+/// `pub(super)`: reused by context_builder's relevance scorer (ТЗ 2026-07-06 A) — the symmetry is
+/// what catches влад↔владислав AND влада↔владислав (either side may be the shorter).
+pub(super) fn words_match(a: &str, b: &str) -> bool {
     let need = a.chars().count().min(b.chars().count()).min(4);
     need > 0 && common_prefix_len(a, b) >= need
 }

@@ -321,8 +321,10 @@ pub(crate) fn fire_ptt_ask(
         }
         // Audit (prompt-context): the LLM prompt carries approved memory + profile.
         // The STT (Whisper) prompt above intentionally stays RAW — Whisper's prompt
-        // budget shouldn't hold conversational memory.
-        let llm_context = overlay_backend::memory::context_for_meeting(&meeting_context);
+        // budget shouldn't hold conversational memory. ТЗ 2026-07-06 (A) — the
+        // recognised spoken question selects the RELEVANT facts.
+        let llm_context =
+            overlay_backend::memory::context_for_meeting(&meeting_context, Some(&question));
         let messages = ai::build_request(
             &llm_context,
             &response_language,

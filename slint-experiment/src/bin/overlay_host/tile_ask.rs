@@ -397,7 +397,10 @@ pub(crate) fn fire_f9_ask(
     // APPROVED memory + profile, the same as the auto/F6/re-ask paths —
     // context_for_meeting folds the bounded memory block in (no-op when nothing
     // is approved, so the request is byte-identical for users without memory).
-    let meeting_context = overlay_backend::memory::context_for_meeting(&meeting_context);
+    // ТЗ 2026-07-06 (A) — a typed ✏ question selects the RELEVANT facts; a plain
+    // F9 (no explicit question) keeps the recency block.
+    let meeting_context =
+        overlay_backend::memory::context_for_meeting(&meeting_context, typed_question.as_deref());
     let current_micro = slint_replay::runtime_state::lock(slint_rt).session_cost_microcents;
     if current_micro > 0 && cap_usd > 0.0 {
         let usd = (current_micro as f64) / 100_000_000.0;

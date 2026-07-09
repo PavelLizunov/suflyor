@@ -1824,8 +1824,10 @@ fn main() -> Result<(), slint::PlatformError> {
                 // Audit (prompt-context): seed the completed-tile history with the
                 // SAME effective context (profile + approved memory) the live answer
                 // paths use, so a follow-up/regenerate matches the original request.
-                let meeting_context =
-                    overlay_backend::memory::context_for_meeting(&meeting_context);
+                let meeting_context = overlay_backend::memory::context_for_meeting(
+                    &meeting_context,
+                    Some(req.spec.question.as_str()),
+                );
                 let question = req.spec.question.clone();
                 // v0.12.2 — Summary tiles seed their dialog with the REAL recap
                 // payload ([summary-prompt, transcript]) instead of the bare title,

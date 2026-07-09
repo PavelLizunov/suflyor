@@ -476,7 +476,9 @@ pub(crate) fn fire_followup_ask(
     };
     // Audit (prompt-context): the follow-up LLM prompt carries approved memory +
     // profile too (reframe builds a fresh neutral system prompt, so no double-add).
-    let meeting_context = overlay_backend::memory::context_for_meeting(&meeting_context);
+    // ТЗ 2026-07-06 (A) — the follow-up question selects the RELEVANT facts.
+    let meeting_context =
+        overlay_backend::memory::context_for_meeting(&meeting_context, Some(&question));
     // THE FIX — send a reframed copy (neutral continuation system + demoted
     // transcript turns) so the model answers THIS question, not the original
     // transcript question. The STORED history (request_messages installed above)
@@ -618,7 +620,18 @@ pub(crate) fn fire_regenerate(
         // Audit (prompt-context): the reframed follow-up prompt carries approved
         // memory + profile. Computed ONLY on this branch — a 1-turn regenerate
         // sends the stored (already-effective) system as-is, no extra catalog read.
-        let meeting_context = overlay_backend::memory::context_for_meeting(&meeting_context);
+        // ТЗ 2026-07-06 (A) — the turn being re-asked (the last user TEXT message)
+        // selects the RELEVANT facts; a Parts (vision) turn → None → recency.
+        let last_user_q = messages
+            .iter()
+            .rev()
+            .find(|m| m.role == "user")
+            .and_then(|m| match &m.content {
+                ai::MessageContent::Text(t) => Some(t.clone()),
+                ai::MessageContent::Parts(_) => None,
+            });
+        let meeting_context =
+            overlay_backend::memory::context_for_meeting(&meeting_context, last_user_q.as_deref());
         reframe_for_send(&messages, &response_language, &meeting_context)
     } else {
         messages.clone()

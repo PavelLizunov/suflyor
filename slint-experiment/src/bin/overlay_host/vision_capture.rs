@@ -408,9 +408,47 @@ pub(crate) fn launch_vision_for_bgra(
             );
         });
     }
+    // ТЗ 2026-07-06 (B) — 🧠 escalate: re-send the SAME screenshot to the smart
+    // cloud. No stashing needed: the conversation already holds the base64 image
+    // (PttStreamSink seeds it on Done) and `fire_regenerate` re-sends a 1-turn
+    // convo verbatim. One-shot: vision tiles have no shared LiveRoute, so later
+    // follow-ups return to the Vision endpoint. Gate mirrors `wire_escalate` but
+    // on the VISION endpoint: only offer when the answer was local (cloud→cloud
+    // is a no-op) AND a cloud bearer exists (no dead affordance), and never on
+    // the OCR path (Tesseract text has no cloud upgrade; also covers the
+    // OCR→VLM fallback, which still enters this fn with mode == Ocr).
+    if ep.as_ref().is_some_and(|e| e.is_local)
+        && !cfg.read().ai_bearer.trim().is_empty()
+        && !matches!(mode, vision::VisionMode::Ocr)
+    {
+        tile.set_can_escalate(true);
+        let weak_es = tile.as_weak();
+        let bridge_es = bridge.clone();
+        let events_es = events.clone();
+        let cfg_es = cfg.clone();
+        let slint_rt_es = slint_rt.clone();
+        let rt_handle_es = rt_handle.clone();
+        tile.on_escalate_clicked(move || {
+            // Cloud badge — parity with the text tile's 🧠 (egress stays legible).
+            if let Some(t) = weak_es.upgrade() {
+                t.set_trigger_label(SharedString::from("cloud (escalated)"));
+                t.set_trigger_color(slint::Color::from_rgb_u8(0x38, 0xbd, 0xf8));
+            }
+            fire_regenerate(
+                convo_id,
+                weak_es.clone(),
+                &bridge_es,
+                &events_es,
+                &cfg_es,
+                &slint_rt_es,
+                &rt_handle_es,
+                AskRoute::Cloud,
+            );
+        });
+    }
     // V5 — 🎤 voice follow-up (record → STT → ask via the VISION endpoint, so
-    // the spoken question stays about the screenshot). Vision tiles aren't
-    // escalatable (wire_escalate isn't called), so this route stays Vision.
+    // the spoken question stays about the screenshot; escalate above is one-shot
+    // and does not re-route this).
     wire_voice_followup(&tile, convo_id, live_route(AskRoute::Vision), cfg);
     wire_copy(&tile, convo_id, bridge);
     wire_speak(&tile, convo_id, bridge);
@@ -489,9 +527,10 @@ pub(crate) fn launch_vision_for_bgra(
     // distort both, so they stay profile-free.
     let vision_context = if matches!(mode, vision::VisionMode::Describe) {
         // Audit (prompt-context): F8 Describe carries approved memory + profile too
-        // (Translate/TestPractice stay profile-free above).
+        // (Translate/TestPractice stay profile-free above). ТЗ 2026-07-06 (A) —
+        // no user question on a screenshot Describe → recency block (None).
         let raw = cfg.read().meeting_context.clone();
-        overlay_backend::memory::context_for_meeting(&raw)
+        overlay_backend::memory::context_for_meeting(&raw, None)
     } else {
         String::new()
     };

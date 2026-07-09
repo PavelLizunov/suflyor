@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ru"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>suflyor — ре-тест ТЗ 2026-07-06 (память-ретрив + скрин-облако + drag плашки)</title>
+<style>
+  :root { --bg:#151B23; --card:#1c232d; --ink:#E8EEF4; --muted:#9fb0c0; --line:#2b3644;
+          --accent:#4C8DFF; --ok:#3fb950; --bad:#f85149; --skip:#8a97a6; --warn:#E3B341; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; }
+  header { position:sticky; top:0; z-index:5; background:#10151c; border-bottom:1px solid var(--line);
+           padding:14px 20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; font-weight:650; }
+  header .sub { color:var(--muted); font-size:13px; }
+  .spacer { flex:1; }
+  button.export { background:var(--accent); color:#06101f; border:0; border-radius:7px; padding:9px 16px;
+                  font-weight:650; font-size:14px; cursor:pointer; }
+  button.export:hover { filter:brightness(1.1); }
+  main { max-width:900px; margin:0 auto; padding:20px; }
+  .intro { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:22px; }
+  .intro p { margin:6px 0; }
+  .intro code { background:#0e131a; padding:2px 6px; border-radius:4px; color:#cfe0ff; font-size:13px; }
+  h2 { font-size:16px; margin:26px 0 12px; padding-bottom:6px; border-bottom:1px solid var(--line); color:#cfe0ff; }
+  .item { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin:12px 0; }
+  .item .q { font-weight:600; margin-bottom:4px; }
+  .item .how { color:var(--muted); font-size:13.5px; margin-bottom:10px; }
+  .item .how b { color:var(--ink); }
+  .statuses { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .statuses label { cursor:pointer; border:1px solid var(--line); border-radius:20px; padding:5px 13px; font-size:13px;
+                    user-select:none; display:inline-flex; align-items:center; gap:6px; background:#0e131a; }
+  .statuses input { display:none; }
+  .statuses label.ok.sel   { border-color:var(--ok);   background:rgba(63,185,80,.16);  color:#9be7a8; }
+  .statuses label.bad.sel  { border-color:var(--bad);  background:rgba(248,81,73,.16);  color:#ffb3ad; }
+  .statuses label.skip.sel { border-color:var(--skip); background:rgba(138,151,166,.16); color:#c3ccd6; }
+  textarea { width:100%; background:#0e131a; color:var(--ink); border:1px solid var(--line); border-radius:7px;
+             padding:8px 10px; font:14px/1.45 inherit; resize:vertical; min-height:44px; }
+  .shot { margin-top:10px; }
+  .drop { border:1.5px dashed var(--line); border-radius:8px; padding:12px; text-align:center; color:var(--muted);
+          font-size:13px; cursor:pointer; transition:.12s; }
+  .drop:hover, .drop.over { border-color:var(--accent); color:#cfe0ff; background:rgba(76,141,255,.06); }
+  .shots { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+  .shots figure { margin:0; position:relative; border:1px solid var(--line); border-radius:7px; overflow:hidden; max-width:240px; }
+  .shots img { display:block; max-width:100%; height:auto; }
+  .shots .rm { position:absolute; top:4px; right:4px; background:rgba(0,0,0,.6); color:#fff; border:0; border-radius:5px;
+               width:24px; height:24px; cursor:pointer; font-size:15px; line-height:1; }
+  .tag { font-size:11px; font-weight:700; padding:2px 7px; border-radius:5px; margin-right:8px; vertical-align:middle;
+         background:rgba(76,141,255,.2); color:#a9c9ff; }
+  footer { max-width:900px; margin:10px auto 60px; padding:0 20px; color:var(--muted); font-size:12.5px; }
+  @media print { header .export { display:none; } .drop { display:none; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>suflyor — ре-тест ТЗ 2026-07-06</h1>
+    <div class="sub">Память отвечает по фактам · скрин-тайл в облако · плашка ввода перетаскивается</div>
+  </div>
+  <div class="spacer"></div>
+  <button class="export" onclick="exportReport()">Скачать отчёт</button>
+</header>
+
+<main>
+  <div class="intro">
+    <p><b>Что чинилось/добавлялось.</b> ①&nbsp;Память: раньше в запрос слепо клались 8 <i>последних</i> одобренных фактов — факт №9+ выпадал → «нет информации». Теперь вопрос <b>выбирает релевантные факты</b> (нечёткий матч: сокращения «Влад»↔«Владислав», опечатки «Писчанкин»↔«Писчаскин»), а при отсутствии совпадений память подмешивается как раньше. ②&nbsp;У скрин-тайла появилась «Smart cloud» в меню «⋯». ③&nbsp;Плашку «Напишите вопрос ассистенту» можно таскать мышью, позиция запоминается.</p>
+    <p><b>Билд обновлён и перезапущен.</b></p>
+  </div>
+
+  <h2>🧠 Баг 1 — память отвечает по фактам</h2>
+
+  <div class="item" data-id="A1" tabindex="0">
+    <div class="q"><span class="tag">A1 (главное)</span>Точный вопрос про сущность из памяти — ответ ИЗ памяти</div>
+    <div class="how">Убедись, что в «Одобренной памяти» есть факт про людей (Тимур Писчаскин / Михаил Голубцов / Владислав Кощеев). Спроси через <b>✏ Написать</b>: <code>кто такой Владислав Кощеев?</code> → ответ содержит факт из памяти (роль/контекст), НЕ «нет информации».</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_A1" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_A1" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_A1" value="skip">⏭ пропустить</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ перетащи/вставь скриншот</div><div class="shots"></div></div></div>
+
+  <div class="item" data-id="A2" tabindex="0">
+    <div class="q"><span class="tag">A2 (главное)</span>Сокращение и опечатка тоже находят факт</div>
+    <div class="how">Спроси: <code>кто такой Влад Кощеев?</code> (сокращение) и <code>кто такой Тимур Писчанкин?</code> (опечатка в фамилии) → в обоих случаях ответ из памяти. Это ровно те кейсы, что падали.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_A2" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_A2" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_A2" value="skip">⏭ пропустить</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ перетащи/вставь скриншот</div><div class="shots"></div></div></div>
+
+  <div class="item" data-id="A3" tabindex="0">
+    <div class="q">Старый факт (не из последних 8) тоже находится</div>
+    <div class="how">Если одобренных фактов больше 8 — спроси про один из <b>самых старых</b>. Раньше он гарантированно выпадал; теперь релевантность его поднимает. (Если фактов ≤8 — пропусти.)</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_A3" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_A3" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_A3" value="skip">⏭ пропустить</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="shots"></div></div></div>
+
+  <div class="item" data-id="A4" tabindex="0">
+    <div class="q">Обычные вопросы не сломались</div>
+    <div class="how">Пару обычных вопросов без связи с памятью (голосом/✏) — ответы адекватные, память не «лезет» не по делу.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_A4" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_A4" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_A4" value="skip">⏭ пропустить</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="shots"></div></div></div>
+
+  <h2>📸 Фича 2 — скрин-тайл в умное облако</h2>
+
+  <div class="item" data-id="B1" tabindex="0">
+    <div class="q"><span class="tag">B1</span>В «⋯» скрин-тайла есть «Smart cloud»</div>
+    <div class="how"><b>F8</b> (скрин) → в тайле ответа открой меню «⋯» → есть пункт <b>Smart cloud</b> (как у текстовых). <i>Примечание: пункт показывается, когда vision-ответ шёл через локальную модель и настроен облачный ключ; в OCR-режиме (Ctrl+F8) его нет — это правильно.</i></div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_B1" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_B1" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_B1" value="skip">⏭ пропустить</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ перетащи/вставь скриншот</div><div class="shots"></div></div></div>
+
+  <div class="item" data-id="B2" tabindex="0">
+    <div class="q"><span class="tag">B2</span>Перегенерация шлёт ТОТ ЖЕ скрин в облако</div>
+    <div class="how">Нажми «Smart cloud» → тайл помечается «cloud (escalated)», ответ перегенерируется <b>по тому же скриншоту</b> (заметно глубже/качественнее). Скрин заново НЕ снимается. <i>Голосовой follow-up после эскалации снова идёт через локальный vision — эскалация одноразовая, так задумано.</i></div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_B2" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_B2" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_B2" value="skip">⏭ пропустить</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ перетащи/вставь скриншот</div><div class="shots"></div></div></div>
+
+  <h2>🖱 Фича 3 — перемещаемая плашка ввода</h2>
+
+  <div class="item" data-id="C1" tabindex="0">
+    <div class="q"><span class="tag">C1</span>Плашка таскается мышью</div>
+    <div class="how">Открой «✏ Написать» → схвати за <b>заголовок</b> («Напишите вопрос ассистенту») → перетащи в любое место, включая второй монитор. Курсор над заголовком — «рука». Крестик и поле ввода работают как раньше.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_C1" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_C1" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_C1" value="skip">⏭ пропустить</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ перетащи/вставь скриншот</div><div class="shots"></div></div></div>
+
+  <div class="item" data-id="C2" tabindex="0">
+    <div class="q"><span class="tag">C2</span>Позиция запоминается</div>
+    <div class="how">Перетащи плашку → закрой (Esc или отправь вопрос) → открой снова → она <b>там же</b>. Перезапусти приложение → всё ещё там же.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_C2" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_C2" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_C2" value="skip">⏭ пропустить</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="shots"></div></div></div>
+
+  <div class="item" data-id="C3" tabindex="0">
+    <div class="q">Ввод/фокус/Esc не пострадали</div>
+    <div class="how">После перетаскивания: печать сразу идёт в поле, Enter отправляет, Esc закрывает, Ctrl+C/V на русской раскладке работают. (Drag не должен красть фокус.)</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_C3" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_C3" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_C3" value="skip">⏭ пропустить</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="shots"></div></div></div>
+
+  <div class="item" data-id="GEN" tabindex="0">
+    <div class="q">Что-то ещё</div>
+    <div class="how">Любые замечания по трём пунктам.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_GEN" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_GEN" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_GEN" value="skip">⏭ пропустить</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ перетащи/вставь скриншот</div><div class="shots"></div></div></div>
+</main>
+
+<footer>suflyor · ре-тест ТЗ 2026-07-06 (A память-ретрив · B скрин-облако · C drag плашки) · ветка <code>master</code></footer>
+
+<script>
+(function () {
+  document.querySelectorAll('.statuses').forEach(function (grp) {
+    grp.querySelectorAll('label').forEach(function (lab) {
+      lab.addEventListener('click', function () {
+        grp.querySelectorAll('label').forEach(function (l) { l.classList.remove('sel'); });
+        lab.classList.add('sel');
+        lab.querySelector('input').checked = true;
+      });
+    });
+  });
+  function addShot(shots, src) {
+    var fig = document.createElement('figure');
+    var img = document.createElement('img'); img.src = src;
+    var rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = '×';
+    rm.onclick = function () { fig.remove(); };
+    fig.appendChild(img); fig.appendChild(rm); shots.appendChild(fig);
+  }
+  function fileToShot(shots, file) {
+    if (!file || file.type.indexOf('image') !== 0) return;
+    var r = new FileReader(); r.onload = function (e) { addShot(shots, e.target.result); }; r.readAsDataURL(file);
+  }
+  document.querySelectorAll('.shot').forEach(function (shot) {
+    var drop = shot.querySelector('.drop'); var shots = shot.querySelector('.shots');
+    if (!drop) return;
+    var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.style.display = 'none';
+    drop.appendChild(inp);
+    drop.addEventListener('click', function () { inp.click(); });
+    inp.addEventListener('change', function () { Array.from(inp.files).forEach(function (f) { fileToShot(shots, f); }); inp.value = ''; });
+    drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.classList.add('over'); });
+    drop.addEventListener('dragleave', function () { drop.classList.remove('over'); });
+    drop.addEventListener('drop', function (e) {
+      e.preventDefault(); drop.classList.remove('over');
+      Array.from(e.dataTransfer.files).forEach(function (f) { fileToShot(shots, f); });
+    });
+    shot.closest('.item').addEventListener('paste', function (e) {
+      Array.from(e.clipboardData.items).forEach(function (it) {
+        if (it.type.indexOf('image') === 0) fileToShot(shots, it.getAsFile());
+      });
+    });
+  });
+  window.exportReport = function () {
+    document.querySelectorAll('textarea').forEach(function (t) { t.setAttribute('data-val', t.value); t.textContent = t.value; });
+    document.querySelectorAll('input[type=radio]').forEach(function (i) {
+      if (i.checked) i.setAttribute('checked', 'checked'); else i.removeAttribute('checked');
+    });
+    var html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+    var blob = new Blob([html], { type: 'text/html' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'retest-tz-2026-07-06-filled.html'; a.click();
+  };
+})();
+</script>
+</body></html>
