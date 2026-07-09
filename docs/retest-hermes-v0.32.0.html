@@ -63,12 +63,12 @@
     <p><b>②&nbsp;API (suflyor → Hermes):</b> кнопка «Подготовить профиль» отдаёт вводную агенту (он ресёрчит) и пишет активный профиль. Живые ответы это НЕ трогает.</p>
     <div class="steps"><b>Разовая настройка перед тестом:</b>
       <ol>
-        <li>В suflyor: <b>Настройки → Hermes</b> → включи «<b>Мост для Hermes</b>» → скопируй <b>токен</b>.</li>
-        <li>Установи плагин: в репозитории запусти <code>integrations\hermes-plugin\install.ps1</code> (напечатает шаги).</li>
-        <li>В <code>~/.hermes/config.yaml</code>: <code>plugins:&nbsp;enabled:&nbsp;[suflyor]</code>. В <code>~/.hermes/.env</code>: <code>SUFLYOR_BRIDGE_TOKEN=&lt;токен&gt;</code> (+ URL). Перезапусти Hermes.</li>
+        <li><b>Установи свежий билд</b> из релиза: <code>suflyor-slint-setup.exe</code> (двойной клик, дойди до конца), затем запусти suflyor из меню Пуск. Проверяем именно УСТАНОВЛЕННУЮ версию.</li>
+        <li>В suflyor: <b>Настройки → Hermes</b> → включи «<b>Мост для Hermes</b>» → скопируй <b>токен</b>. Поле «<b>Хост привязки</b>» оставь как есть — <code>127.0.0.1</code> (твой Hermes на этой же машине). <span style="color:var(--muted)">Оно нужно только если Hermes на другом сервере — не твой случай.</span></li>
+        <li>Скачай из релиза <code>suflyor-hermes-plugin.zip</code>, распакуй, внутри запусти <code>install.ps1</code> (напечатает шаги; там же <code>README.md</code> с деталями).</li>
+        <li>В <code>~/.hermes/config.yaml</code>: <code>plugins:&nbsp;enabled:&nbsp;[suflyor]</code>. В <code>~/.hermes/.env</code>: <code>SUFLYOR_BRIDGE_TOKEN=&lt;токен&gt;</code> (+ <code>SUFLYOR_BRIDGE_URL=http://127.0.0.1:8654</code>). Перезапусти Hermes.</li>
         <li>Для ② — включи Hermes API-сервер (в config.yaml <code>platforms.api_server.enabled:true</code> + <code>extra.key</code>), этот же ключ вставь в suflyor → Настройки → Hermes.</li>
       </ol>
-      Подробности — <code>integrations/hermes-plugin/README.md</code>.
     </div>
   </div>
 
@@ -166,7 +166,7 @@
     var html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
     var blob = new Blob([html], { type: 'text/html' });
     var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = 'retest-hermes-2026-07-09-filled.html'; a.click();
+    a.download = 'retest-hermes-v0.32.0-filled.html'; a.click();
   };
 })();
 </script>

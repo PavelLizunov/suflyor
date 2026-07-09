@@ -1303,7 +1303,10 @@ pub(crate) fn populate_token_status(
     win.set_hermes_api_test_result(SharedString::default());
     win.set_hermes_profile_status(SharedString::default());
     win.set_hermes_bridge_status(SharedString::from(
-        crate::settings_hermes::current_bridge_status(c.hermes_bridge_port),
+        crate::settings_hermes::current_bridge_status(&c.hermes_bridge_host, c.hermes_bridge_port),
+    ));
+    win.set_hermes_bridge_remote(!overlay_backend::bridge::is_loopback_host(
+        &c.hermes_bridge_host,
     ));
     // Phase E6 v20 — load tile opacity from config so the slider
     // reflects the saved value on Settings re-open.

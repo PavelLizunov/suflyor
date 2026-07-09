@@ -333,9 +333,12 @@ export component SettingsWindow inherits Window {
     in-out property <bool> hermes-bridge-enabled: false;
     in-out property <string> hermes-bridge-port: "8654";
     in-out property <string> hermes-bridge-token: "";
+    in-out property <string> hermes-bridge-host: "127.0.0.1";
+    in-out property <bool> hermes-bridge-remote: false;   // true = bind host не loopback → предупреждение
     in-out property <string> hermes-bridge-status: "выключен";
     callback hermes-bridge-toggled(bool);
     callback hermes-bridge-port-save(string);
+    callback hermes-bridge-host-save(string);
     callback hermes-bridge-regen-token();
     // Hermes API (suflyor → Hermes): url/key + test + call-profile prep.
     in-out property <string> hermes-api-url: "";
@@ -2586,7 +2589,31 @@ export component SettingsWindow inherits Window {
                                 wrap: word-wrap;
                             }
                             Text {
-                                text: @tr("Port (loopback):");
+                                text: @tr("Bind host — leave 127.0.0.1 for a Hermes on THIS machine; for a REMOTE Hermes over Tailscale set this machine's Tailscale IP (100.x) or 0.0.0.0:");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                LineEdit {
+                                    placeholder-text: "127.0.0.1";
+                                    text <=> root.hermes-bridge-host;
+                                    horizontal-stretch: 1;
+                                }
+                                Button {
+                                    text: @tr("Save");
+                                    clicked => { root.hermes-bridge-host-save(root.hermes-bridge-host); }
+                                }
+                            }
+                            if root.hermes-bridge-remote : Text {
+                                text: @tr("⚠ Bridge is reachable off this machine — keep it on a trusted network (Tailscale) only; the token is required.");
+                                font-size: 11px;
+                                color: Theme.warning;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: @tr("Port:");
                                 font-size: 11px;
                                 color: Theme.text-secondary;
                             }

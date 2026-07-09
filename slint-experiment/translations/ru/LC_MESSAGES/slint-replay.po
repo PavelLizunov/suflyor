@@ -1540,3 +1540,13 @@ msgstr "напр. Собес в Acme, роль Senior SRE"
 
 msgid "Prepare profile (Hermes)"
 msgstr "Подготовить профиль (Hermes)"
+
+# ТЗ 2026-07-09 — Hermes bridge bind host (Tailscale / remote Hermes)
+msgid "Bind host — leave 127.0.0.1 for a Hermes on THIS machine; for a REMOTE Hermes over Tailscale set this machine's Tailscale IP (100.x) or 0.0.0.0:"
+msgstr "Хост привязки — оставь 127.0.0.1, если Hermes на ЭТОЙ машине; для УДАЛЁННОГО Hermes через Tailscale впиши Tailscale-IP этой машины (100.x) или 0.0.0.0:"
+
+msgid "⚠ Bridge is reachable off this machine — keep it on a trusted network (Tailscale) only; the token is required."
+msgstr "⚠ Мост доступен с других машин — держи его только в доверенной сети (Tailscale); токен обязателен."
+
+msgid "Port:"
+msgstr "Порт:"

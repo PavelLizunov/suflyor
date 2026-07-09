@@ -52,6 +52,24 @@ pub struct BridgeHandle {
     thread: Option<std::thread::JoinHandle<()>>,
 }
 
+/// Normalize the configured bind host: blank → loopback default. Trimmed so a
+/// stray space in the field can't make `tiny_http` fail to resolve.
+fn bind_host(configured: &str) -> String {
+    let h = configured.trim();
+    if h.is_empty() {
+        "127.0.0.1".to_string()
+    } else {
+        h.to_string()
+    }
+}
+
+/// True when `host` is a loopback address (or blank → default loopback). Used by
+/// Settings to decide whether to warn that the bridge is reachable off-machine.
+#[must_use]
+pub fn is_loopback_host(host: &str) -> bool {
+    matches!(bind_host(host).as_str(), "127.0.0.1" | "localhost" | "::1")
+}
+
 /// Generate a fresh bridge token — 32 lowercase hex chars (16 bytes of OS
 /// entropy). Used by the Settings «сгенерировать токен» button. Falls back to a
 /// time-seeded value only if the OS RNG is unavailable (never blank, so the
@@ -84,9 +102,10 @@ impl BridgeHandle {
 /// serving unauthenticated) when the configured token is blank, and on a busy
 /// port. The error string is safe to show in Settings.
 pub fn start(cfg: SharedConfig) -> Result<BridgeHandle, String> {
-    let (port, token) = {
+    let (host, port, token) = {
         let c = cfg.read();
         (
+            bind_host(&c.hermes_bridge_host),
             c.hermes_bridge_port,
             c.hermes_bridge_token.trim().to_string(),
         )
@@ -94,14 +113,18 @@ pub fn start(cfg: SharedConfig) -> Result<BridgeHandle, String> {
     if token.is_empty() {
         return Err("токен пуст — сгенерируйте токен".to_string());
     }
-    let server = tiny_http::Server::http(("127.0.0.1", port))
-        .map_err(|_| format!("порт {port} занят или недоступен"))?;
+    // Bind to the configured host: `127.0.0.1` (default; loopback-only) or, for a
+    // REMOTE Hermes over Tailscale, the machine's Tailscale IP / `0.0.0.0`. A
+    // non-loopback bind exposes the (token-gated, read-mostly) API on that
+    // interface — Settings warns when the host isn't loopback.
+    let server = tiny_http::Server::http((host.as_str(), port))
+        .map_err(|_| format!("{host}:{port} занят или недоступен"))?;
     let stop = Arc::new(AtomicBool::new(false));
     let stop_c = stop.clone();
     let thread = std::thread::Builder::new()
         .name("hermes-bridge".into())
         .spawn(move || {
-            log::info!("[bridge] listening on 127.0.0.1:{port}");
+            log::info!("[bridge] listening on {host}:{port}");
             while !stop_c.load(Ordering::Relaxed) {
                 match server.recv_timeout(std::time::Duration::from_millis(300)) {
                     Ok(Some(req)) => handle_request(req, &cfg, &token),

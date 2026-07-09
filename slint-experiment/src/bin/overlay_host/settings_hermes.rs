@@ -26,9 +26,14 @@ thread_local! {
 /// RU status line reflecting the LIVE bridge state (thread-local handle), for the
 /// Settings label. Used by `populate_token_status` on every (re)open so the label
 /// is never stale, and by the seed in `wire_hermes_settings`.
-pub(crate) fn current_bridge_status(port: u16) -> String {
+pub(crate) fn current_bridge_status(host: &str, port: u16) -> String {
     if BRIDGE.with(|b| b.borrow().is_some()) {
-        format!("включён · 127.0.0.1:{port}")
+        let h = if host.trim().is_empty() {
+            "127.0.0.1"
+        } else {
+            host.trim()
+        };
+        format!("включён · {h}:{port}")
     } else {
         "выключен".to_string()
     }
@@ -51,9 +56,12 @@ pub(crate) fn apply_bridge_state(cfg: &overlay_backend::config::SharedConfig) ->
     }
     match bridge::start(cfg.clone()) {
         Ok(handle) => {
-            let port = cfg.read().hermes_bridge_port;
+            let (host, port) = {
+                let c = cfg.read();
+                (c.hermes_bridge_host.clone(), c.hermes_bridge_port)
+            };
             BRIDGE.with(|b| *b.borrow_mut() = Some(handle));
-            format!("включён · 127.0.0.1:{port}")
+            current_bridge_status(&host, port)
         }
         Err(e) => format!("ошибка: {e}"),
     }
@@ -72,12 +80,17 @@ pub(crate) fn wire_hermes_settings(
         win.set_hermes_bridge_enabled(c.hermes_bridge_enabled);
         win.set_hermes_bridge_port(SharedString::from(c.hermes_bridge_port.to_string()));
         win.set_hermes_bridge_token(SharedString::from(c.hermes_bridge_token.clone()));
+        win.set_hermes_bridge_host(SharedString::from(c.hermes_bridge_host.clone()));
+        win.set_hermes_bridge_remote(!bridge::is_loopback_host(&c.hermes_bridge_host));
         win.set_hermes_api_url(SharedString::from(c.hermes_api_url.clone()));
         win.set_hermes_api_key(SharedString::from(c.hermes_api_key.clone()));
     }
     // Reflect the CURRENT live state (boot may have started it already).
-    let port = cfg.read().hermes_bridge_port;
-    win.set_hermes_bridge_status(SharedString::from(current_bridge_status(port)));
+    let (host, port) = {
+        let c = cfg.read();
+        (c.hermes_bridge_host.clone(), c.hermes_bridge_port)
+    };
+    win.set_hermes_bridge_status(SharedString::from(current_bridge_status(&host, port)));
 
     // -- toggle: persist + start/stop live --
     {
@@ -141,6 +154,25 @@ pub(crate) fn wire_hermes_settings(
             let status = apply_bridge_state(&cfg_c);
             if let Some(w) = weak.upgrade() {
                 w.set_hermes_bridge_token(SharedString::from(token));
+                w.set_hermes_bridge_status(SharedString::from(status));
+            }
+        });
+    }
+
+    // -- bind host save (re-applies the bridge if running; updates the warning) --
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_hermes_bridge_host_save(move |txt| {
+            let host = txt.trim().to_string();
+            {
+                let mut c = cfg_c.write();
+                c.hermes_bridge_host = host.clone();
+                let _ = overlay_backend::config::save(&c);
+            }
+            let status = apply_bridge_state(&cfg_c);
+            if let Some(w) = weak.upgrade() {
+                w.set_hermes_bridge_remote(!bridge::is_loopback_host(&host));
                 w.set_hermes_bridge_status(SharedString::from(status));
             }
         });

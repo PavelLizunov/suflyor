@@ -392,6 +392,12 @@ pub struct Config {
     #[serde(default = "default_hermes_bridge_port")]
     pub hermes_bridge_port: u16,
     pub hermes_bridge_token: String,
+    /// Bind host for the bridge. Default `127.0.0.1` (loopback — Hermes on the
+    /// SAME machine). For a REMOTE Hermes over Tailscale, set this machine's
+    /// Tailscale IP (100.x.y.z) or `0.0.0.0`. Non-loopback exposes the token-gated
+    /// API on that interface (Settings warns).
+    #[serde(default = "default_hermes_bridge_host")]
+    pub hermes_bridge_host: String,
 
     /// Hermes API-сервер (обратное направление: suflyor как клиент агента —
     /// подготовка профиля созвона). Дефолт — локальный Hermes gateway.
@@ -593,6 +599,7 @@ impl Config {
             hermes_bridge_enabled: false,
             hermes_bridge_port: default_hermes_bridge_port(),
             hermes_bridge_token: String::new(),
+            hermes_bridge_host: default_hermes_bridge_host(),
             hermes_api_url: default_hermes_api_url(),
             hermes_api_key: String::new(),
             color_scheme: 0,
@@ -994,6 +1001,11 @@ fn default_hermes_bridge_port() -> u16 {
     // Off the app's other local ports (llama.cpp 8080, Hermes API 8642,
     // e5-sidecar 8082 из ADR) — deliberately distinct.
     8654
+}
+
+fn default_hermes_bridge_host() -> String {
+    // Loopback-only by default — safe; Hermes on the same machine reaches it.
+    "127.0.0.1".into()
 }
 
 fn default_hermes_api_url() -> String {
