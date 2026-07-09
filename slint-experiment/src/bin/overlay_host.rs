@@ -295,6 +295,13 @@ use settings_memory::*;
 mod settings_ai;
 use settings_ai::*;
 
+// The Settings → Hermes tab (bridge toggle/port/token + Hermes API url/key +
+// «Подготовить профиль») + the process-lived bridge handle. Referenced by the
+// fully-qualified `settings_hermes::` path (boot auto-start + open_settings
+// wiring), so no glob re-export.
+#[path = "overlay_host/settings_hermes.rs"]
+mod settings_hermes;
+
 // The server-settings import/export Settings-tab callbacks (server-only export,
 // the two-step import preview, Apply, Cancel) live in their own file alongside
 // the binary (P1 domain split of `settings_controller.rs`). `use
@@ -745,6 +752,14 @@ fn main() -> Result<(), slint::PlatformError> {
     // Phase C — load config once at startup. SharedConfig (Arc<RwLock>)
     // because Settings tab will eventually mutate it.
     let cfg = config::shared();
+
+    // Hermes bridge (ТЗ 2026-07-09): auto-start the loopback API server if the
+    // user left it enabled (settings_hermes owns the process-lived handle). No-op
+    // + safe status when disabled/blank-token; never blocks boot.
+    {
+        let status = settings_hermes::apply_bridge_state(&cfg);
+        eprintln!("[overlay-host] hermes bridge: {status}");
+    }
 
     // Read-aloud — initialize the process-global SAPI TTS engine once (voice +
     // rate from config; empty voice = auto-pick a Russian voice). The COM init +

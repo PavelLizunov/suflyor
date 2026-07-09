@@ -1,0 +1,16 @@
+name: suflyor
+version: 0.1.0
+description: "Read (and lightly write) the local suflyor interview overlay — recent calls, transcripts, summaries, full-text search, approved memory, and profiles — over its loopback bridge. Reads are text-only (no audio/screenshots). Writes are narrow: a memory SUGGESTION (lands in suflyor's approval queue; the human still approves) and a call-profile upsert. Configure SUFLYOR_BRIDGE_URL + SUFLYOR_BRIDGE_TOKEN (token shown in suflyor → Настройки → Hermes)."
+author: suflyor
+kind: standalone
+provides_tools:
+  - suflyor_status
+  - suflyor_recent_sessions
+  - suflyor_get_transcript
+  - suflyor_get_summary
+  - suflyor_search
+  - suflyor_get_memory
+  - suflyor_suggest_memory
+  - suflyor_get_profiles
+  - suflyor_set_profile
+provides_hooks: []

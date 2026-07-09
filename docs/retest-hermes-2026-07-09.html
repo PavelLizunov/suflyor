@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ru"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>suflyor × Hermes — приёмка интеграции</title>
+<style>
+  :root { --bg:#151B23; --card:#1c232d; --ink:#E8EEF4; --muted:#9fb0c0; --line:#2b3644;
+          --accent:#4C8DFF; --ok:#3fb950; --bad:#f85149; --skip:#8a97a6; --warn:#E3B341; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; }
+  header { position:sticky; top:0; z-index:5; background:#10151c; border-bottom:1px solid var(--line);
+           padding:14px 20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; font-weight:650; }
+  header .sub { color:var(--muted); font-size:13px; }
+  .spacer { flex:1; }
+  button.export { background:var(--accent); color:#06101f; border:0; border-radius:7px; padding:9px 16px;
+                  font-weight:650; font-size:14px; cursor:pointer; }
+  button.export:hover { filter:brightness(1.1); }
+  main { max-width:920px; margin:0 auto; padding:20px; }
+  .intro { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:22px; }
+  .intro p { margin:6px 0; } .intro code, .intro b code { background:#0e131a; padding:2px 6px; border-radius:4px; color:#cfe0ff; font-size:13px; }
+  h2 { font-size:16px; margin:26px 0 12px; padding-bottom:6px; border-bottom:1px solid var(--line); color:#cfe0ff; }
+  .steps { background:#0e131a; border:1px solid var(--line); border-radius:8px; padding:12px 16px; margin:10px 0 18px; font-size:13.5px; }
+  .steps code { color:#cfe0ff; } .steps ol { margin:6px 0 0 18px; padding:0; } .steps li { margin:4px 0; }
+  .item { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin:12px 0; }
+  .item .q { font-weight:600; margin-bottom:4px; }
+  .item .how { color:var(--muted); font-size:13.5px; margin-bottom:10px; }
+  .item .how b { color:var(--ink); } .item .how code { background:#0e131a; padding:1px 5px; border-radius:4px; color:#cfe0ff; }
+  .statuses { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .statuses label { cursor:pointer; border:1px solid var(--line); border-radius:20px; padding:5px 13px; font-size:13px;
+                    user-select:none; display:inline-flex; align-items:center; gap:6px; background:#0e131a; }
+  .statuses input { display:none; }
+  .statuses label.ok.sel   { border-color:var(--ok);   background:rgba(63,185,80,.16);  color:#9be7a8; }
+  .statuses label.bad.sel  { border-color:var(--bad);  background:rgba(248,81,73,.16);  color:#ffb3ad; }
+  .statuses label.skip.sel { border-color:var(--skip); background:rgba(138,151,166,.16); color:#c3ccd6; }
+  textarea { width:100%; background:#0e131a; color:var(--ink); border:1px solid var(--line); border-radius:7px;
+             padding:8px 10px; font:14px/1.45 inherit; resize:vertical; min-height:44px; }
+  .shot { margin-top:10px; }
+  .drop { border:1.5px dashed var(--line); border-radius:8px; padding:12px; text-align:center; color:var(--muted); font-size:13px; cursor:pointer; transition:.12s; }
+  .drop:hover, .drop.over { border-color:var(--accent); color:#cfe0ff; background:rgba(76,141,255,.06); }
+  .shots { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+  .shots figure { margin:0; position:relative; border:1px solid var(--line); border-radius:7px; overflow:hidden; max-width:240px; }
+  .shots img { display:block; max-width:100%; height:auto; }
+  .shots .rm { position:absolute; top:4px; right:4px; background:rgba(0,0,0,.6); color:#fff; border:0; border-radius:5px; width:24px; height:24px; cursor:pointer; font-size:15px; line-height:1; }
+  .tag { font-size:11px; font-weight:700; padding:2px 7px; border-radius:5px; margin-right:8px; vertical-align:middle; background:rgba(76,141,255,.2); color:#a9c9ff; }
+  .tag.r { background:rgba(63,185,80,.18); color:#9be7a8; } .tag.w { background:rgba(227,179,65,.2); color:#f0d38a; }
+  footer { max-width:920px; margin:10px auto 60px; padding:0 20px; color:var(--muted); font-size:12.5px; }
+  @media print { header .export { display:none; } .drop { display:none; } }
+</style>
+</head>
+<body>
+<header>
+  <div><h1>suflyor × Hermes — приёмка</h1>
+    <div class="sub">Мост (агент читает suflyor) + API (suflyor дергает агента для профиля)</div></div>
+  <div class="spacer"></div>
+  <button class="export" onclick="exportReport()">Скачать отчёт</button>
+</header>
+
+<main>
+  <div class="intro">
+    <p><b>Что это.</b> Двусторонний локальный мост между suflyor и твоим Hermes-агентом. Всё <b>localhost-only</b> и <b>по умолчанию выключено</b>.</p>
+    <p><b>①&nbsp;Мост (Hermes → suflyor):</b> агент читает созвоны/память/профили и может предлагать факты в память (с твоим одобрением) и создавать профили.</p>
+    <p><b>②&nbsp;API (suflyor → Hermes):</b> кнопка «Подготовить профиль» отдаёт вводную агенту (он ресёрчит) и пишет активный профиль. Живые ответы это НЕ трогает.</p>
+    <div class="steps"><b>Разовая настройка перед тестом:</b>
+      <ol>
+        <li>В suflyor: <b>Настройки → Hermes</b> → включи «<b>Мост для Hermes</b>» → скопируй <b>токен</b>.</li>
+        <li>Установи плагин: в репозитории запусти <code>integrations\hermes-plugin\install.ps1</code> (напечатает шаги).</li>
+        <li>В <code>~/.hermes/config.yaml</code>: <code>plugins:&nbsp;enabled:&nbsp;[suflyor]</code>. В <code>~/.hermes/.env</code>: <code>SUFLYOR_BRIDGE_TOKEN=&lt;токен&gt;</code> (+ URL). Перезапусти Hermes.</li>
+        <li>Для ② — включи Hermes API-сервер (в config.yaml <code>platforms.api_server.enabled:true</code> + <code>extra.key</code>), этот же ключ вставь в suflyor → Настройки → Hermes.</li>
+      </ol>
+      Подробности — <code>integrations/hermes-plugin/README.md</code>.
+    </div>
+  </div>
+
+  <h2>🩺 Базовая связь</h2>
+  <div class="item" data-id="H1" tabindex="0">
+    <div class="q"><span class="tag">H1</span>Мост включается, статус зелёный</div>
+    <div class="how">Настройки → Hermes → «Мост для Hermes» ON → статус становится <code>включён · 127.0.0.1:8654</code>. Токен показан (не пустой). Выключение → <code>выключен</code>.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_H1" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_H1" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_H1" value="skip">⏭</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ скриншот</div><div class="shots"></div></div></div>
+  <div class="item" data-id="H2" tabindex="0">
+    <div class="q"><span class="tag">H2</span>Hermes видит плагин, <code>/suflyor</code> отвечает</div>
+    <div class="how">После установки+перезапуска: <code>hermes plugins list</code> → <b>suflyor enabled</b>. В чате <code>/suflyor</code> → «suflyor подключён (версия …)».</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_H2" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_H2" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_H2" value="skip">⏭</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ скриншот</div><div class="shots"></div></div></div>
+
+  <h2>① Агент читает suflyor</h2>
+  <div class="item" data-id="R1" tabindex="0">
+    <div class="q"><span class="tag r">read</span>«Что было на последнем созвоне?»</div>
+    <div class="how">Спроси Hermes в чате. Он вызывает <code>suflyor_recent_sessions</code> + <code>suflyor_get_summary/transcript</code> и пересказывает реальный созвон.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_R1" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_R1" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_R1" value="skip">⏭</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ скриншот</div><div class="shots"></div></div></div>
+  <div class="item" data-id="R2" tabindex="0">
+    <div class="q"><span class="tag r">read</span>Поиск + память</div>
+    <div class="how">«Найди во всех созвонах, где обсуждали X» (→ <code>suflyor_search</code>). «Что в моей памяти про людей?» (→ <code>suflyor_get_memory</code>).</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_R2" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_R2" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_R2" value="skip">⏭</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="shots"></div></div></div>
+  <div class="item" data-id="W1" tabindex="0">
+    <div class="q"><span class="tag w">write</span>Предложение в память идёт В ОЧЕРЕДЬ (не напрямую)</div>
+    <div class="how">Попроси Hermes: «предложи в память suflyor, что …» (→ <code>suflyor_suggest_memory</code>). В suflyor это должно появиться в <b>очереди предложений</b> раздела «Память» — на твоё одобрение, НЕ сразу в одобренной.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_W1" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_W1" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_W1" value="skip">⏭</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ скриншот</div><div class="shots"></div></div></div>
+
+  <h2>② suflyor дергает агента (профиль)</h2>
+  <div class="item" data-id="P1" tabindex="0">
+    <div class="q"><span class="tag">P1</span>«Проверить» связь с Hermes API</div>
+    <div class="how">Настройки → Hermes → вставь URL <code>http://127.0.0.1:8642/v1</code> + ключ (Сохрани) → «Проверить» → <code>[ok] …</code>.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_P1" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_P1" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_P1" value="skip">⏭</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ скриншот</div><div class="shots"></div></div></div>
+  <div class="item" data-id="P2" tabindex="0">
+    <div class="q"><span class="tag w">write</span>«Подготовить профиль (Hermes)»</div>
+    <div class="how">Впиши вводную (напр. «Собес в Acme, роль Senior SRE») → «Подготовить профиль». Статус: «Hermes готовит… (долго)» → через время «готово: профиль «…» создан и активен». Проверь в Профилях — новый активный профиль со справкой.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_P2" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_P2" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_P2" value="skip">⏭</label></div><textarea placeholder="Долго ли? Качество справки?" data-role="comment"></textarea><div class="shot"><div class="drop">＋ скриншот</div><div class="shots"></div></div></div>
+  <div class="item" data-id="P3" tabindex="0">
+    <div class="q"><span class="tag r">read</span>Агент создаёт/меняет профиль обратно</div>
+    <div class="how">Из чата Hermes: «создай в suflyor профиль для собеса в компанию X и сделай активным» (→ <code>suflyor_set_profile</code>). В suflyor профиль появляется/обновляется + активен.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_P3" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_P3" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_P3" value="skip">⏭</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="shots"></div></div></div>
+
+  <h2>🔒 Безопасность / регресс</h2>
+  <div class="item" data-id="S1" tabindex="0">
+    <div class="q"><span class="tag">S1</span>Без токена/выключенный мост — молчит</div>
+    <div class="how">Выключи мост → запрос из Hermes должен вернуть «мост недоступен». (Опц.) Проверь, что мост НЕ отвечает на IP машины в LAN, только на 127.0.0.1.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_S1" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_S1" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_S1" value="skip">⏭</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="shots"></div></div></div>
+  <div class="item" data-id="S2" tabindex="0">
+    <div class="q"><span class="tag">S2</span>Остальное suflyor не сломалось</div>
+    <div class="how">Живые ответы (F9), скрины (F8), стенограмма, память — работают как раньше; вкладка Hermes не мешает другим настройкам.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_S2" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_S2" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_S2" value="skip">⏭</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="shots"></div></div></div>
+  <div class="item" data-id="GEN" tabindex="0">
+    <div class="q">Что-то ещё</div>
+    <div class="how">Идеи/замечания по интеграции.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_GEN" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_GEN" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_GEN" value="skip">⏭</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ скриншот</div><div class="shots"></div></div></div>
+</main>
+
+<footer>suflyor × Hermes · приёмка интеграции 2026-07-09 · план: docs/goal-hermes-integration-2026-07-09.md · плагин: integrations/hermes-plugin/</footer>
+
+<script>
+(function () {
+  document.querySelectorAll('.statuses').forEach(function (grp) {
+    grp.querySelectorAll('label').forEach(function (lab) {
+      lab.addEventListener('click', function () {
+        grp.querySelectorAll('label').forEach(function (l) { l.classList.remove('sel'); });
+        lab.classList.add('sel'); lab.querySelector('input').checked = true;
+      });
+    });
+  });
+  function addShot(shots, src) {
+    var fig = document.createElement('figure');
+    var img = document.createElement('img'); img.src = src;
+    var rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = '×';
+    rm.onclick = function () { fig.remove(); };
+    fig.appendChild(img); fig.appendChild(rm); shots.appendChild(fig);
+  }
+  function fileToShot(shots, file) {
+    if (!file || file.type.indexOf('image') !== 0) return;
+    var r = new FileReader(); r.onload = function (e) { addShot(shots, e.target.result); }; r.readAsDataURL(file);
+  }
+  document.querySelectorAll('.shot').forEach(function (shot) {
+    var drop = shot.querySelector('.drop'); var shots = shot.querySelector('.shots');
+    if (!drop) return;
+    var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.style.display = 'none';
+    drop.appendChild(inp);
+    drop.addEventListener('click', function () { inp.click(); });
+    inp.addEventListener('change', function () { Array.from(inp.files).forEach(function (f) { fileToShot(shots, f); }); inp.value = ''; });
+    drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.classList.add('over'); });
+    drop.addEventListener('dragleave', function () { drop.classList.remove('over'); });
+    drop.addEventListener('drop', function (e) { e.preventDefault(); drop.classList.remove('over'); Array.from(e.dataTransfer.files).forEach(function (f) { fileToShot(shots, f); }); });
+    shot.closest('.item').addEventListener('paste', function (e) { Array.from(e.clipboardData.items).forEach(function (it) { if (it.type.indexOf('image') === 0) fileToShot(shots, it.getAsFile()); }); });
+  });
+  window.exportReport = function () {
+    document.querySelectorAll('textarea').forEach(function (t) { t.setAttribute('data-val', t.value); t.textContent = t.value; });
+    document.querySelectorAll('input[type=radio]').forEach(function (i) { if (i.checked) i.setAttribute('checked', 'checked'); else i.removeAttribute('checked'); });
+    var html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+    var blob = new Blob([html], { type: 'text/html' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'retest-hermes-2026-07-09-filled.html'; a.click();
+  };
+})();
+</script>
+</body></html>

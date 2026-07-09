@@ -405,6 +405,7 @@ pub(crate) fn open_settings(
     // (`ModelTarget` + `fetch_models` moved with it). The install/updater
     // closures below stay in open_settings (separate later wave).
     wire_ai_settings(&win, cfg);
+    crate::settings_hermes::wire_hermes_settings(&win, cfg);
 
     // ===== V4 — vision (screenshot) channel: provider switch + field saves + test =====
     // Extracted to settings_vision.rs (P1 domain split) — wired verbatim there.
@@ -1296,6 +1297,14 @@ pub(crate) fn populate_token_status(
     };
     win.set_ai_bearer_status(SharedString::from(ai_status));
     win.set_groq_api_key_status(SharedString::from(groq_status));
+    // ТЗ 2026-07-09 — Hermes tab transient status props on every (re)open: clear
+    // the action results (stale «готово…» must not linger) and refresh the LIVE
+    // bridge status (the reused window keeps its old text otherwise).
+    win.set_hermes_api_test_result(SharedString::default());
+    win.set_hermes_profile_status(SharedString::default());
+    win.set_hermes_bridge_status(SharedString::from(
+        crate::settings_hermes::current_bridge_status(c.hermes_bridge_port),
+    ));
     // Phase E6 v20 — load tile opacity from config so the slider
     // reflects the saved value on Settings re-open.
     win.set_tile_body_opacity(c.tile_body_opacity);

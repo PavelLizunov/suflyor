@@ -327,6 +327,27 @@ export component SettingsWindow inherits Window {
     in-out property <string> groq-api-key-status: "(loading...)";
     in-out property <string> groq-api-key-input: "";
     in-out property <string> ai-base-url-input: "";
+
+    // ТЗ 2026-07-09 — Hermes integration tab (settings_hermes.rs).
+    // Bridge (Hermes → suflyor): loopback server the local agent reads from.
+    in-out property <bool> hermes-bridge-enabled: false;
+    in-out property <string> hermes-bridge-port: "8654";
+    in-out property <string> hermes-bridge-token: "";
+    in-out property <string> hermes-bridge-status: "выключен";
+    callback hermes-bridge-toggled(bool);
+    callback hermes-bridge-port-save(string);
+    callback hermes-bridge-regen-token();
+    // Hermes API (suflyor → Hermes): url/key + test + call-profile prep.
+    in-out property <string> hermes-api-url: "";
+    in-out property <string> hermes-api-key: "";
+    in-out property <string> hermes-api-test-result: "";
+    in-out property <string> hermes-profile-seed: "";
+    in-out property <string> hermes-profile-status: "";
+    callback hermes-api-url-save(string);
+    callback hermes-api-key-save(string);
+    callback hermes-api-test();
+    callback hermes-prepare-profile(string);
+
     // Phase E10.1 — cloud model dropdown from GET {ai_base_url}/models.
     in-out property <[string]> ai-models: [];
     in-out property <int> ai-model-index: 0;
@@ -758,6 +779,11 @@ export component SettingsWindow inherits Window {
                 NavItem {
                     label: @tr("Knowledge base"); icon: @image-url("../assets/icons/knowledge.svg"); tab-index: 9;
                     active: root.active-tab == 9;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
+                }
+                NavItem {
+                    label: @tr("Hermes"); icon: @image-url("../assets/icons/ai.svg"); tab-index: 16;
+                    active: root.active-tab == 16;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
 
@@ -2538,6 +2564,143 @@ export component SettingsWindow inherits Window {
                         }
                         }
                     }
+                    if root.active-tab == 16 : VerticalLayout {
+                        spacing: 10px;
+                        SettingsCard {
+                            title: @tr("Hermes — bridge (agent reads suflyor)");
+                            Text {
+                                text: @tr("Let a LOCAL Hermes agent read your calls, memory and profiles over a loopback API. Off by default; localhost-only; needs the token below.");
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            DarkCheck {
+                                text: @tr("Bridge for Hermes");
+                                checked <=> root.hermes-bridge-enabled;
+                                toggled(v) => { root.hermes-bridge-toggled(v); }
+                            }
+                            Text {
+                                text: @tr("Status:") + " " + root.hermes-bridge-status;
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: @tr("Port (loopback):");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                LineEdit {
+                                    placeholder-text: "8654";
+                                    text <=> root.hermes-bridge-port;
+                                    horizontal-stretch: 1;
+                                }
+                                Button {
+                                    text: @tr("Save");
+                                    clicked => { root.hermes-bridge-port-save(root.hermes-bridge-port); }
+                                }
+                            }
+                            Text {
+                                text: @tr("Token (paste into Hermes ~/.hermes/.env as SUFLYOR_BRIDGE_TOKEN):");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                LineEdit {
+                                    text <=> root.hermes-bridge-token;
+                                    read-only: true;
+                                    horizontal-stretch: 1;
+                                }
+                                Button {
+                                    text: @tr("Generate");
+                                    clicked => { root.hermes-bridge-regen-token(); }
+                                }
+                            }
+                        }
+                        SettingsCard {
+                            title: @tr("Hermes — API (suflyor asks the agent)");
+                            Text {
+                                text: @tr("Point at the local Hermes API server to prepare a call profile with the agent (it can research). Slow, agentic — never used for live answers.");
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: @tr("Hermes API URL:");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                LineEdit {
+                                    placeholder-text: "http://127.0.0.1:8642/v1";
+                                    text <=> root.hermes-api-url;
+                                    horizontal-stretch: 1;
+                                }
+                                Button {
+                                    text: @tr("Save");
+                                    clicked => { root.hermes-api-url-save(root.hermes-api-url); }
+                                }
+                            }
+                            Text {
+                                text: @tr("Hermes API key (API_SERVER_KEY):");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                LineEdit {
+                                    placeholder-text: @tr("paste API_SERVER_KEY then Save");
+                                    text <=> root.hermes-api-key;
+                                    input-type: password;
+                                    horizontal-stretch: 1;
+                                }
+                                Button {
+                                    text: @tr("Save");
+                                    clicked => { root.hermes-api-key-save(root.hermes-api-key); }
+                                }
+                                Button {
+                                    text: @tr("Test");
+                                    clicked => { root.hermes-api-test(); }
+                                }
+                            }
+                            if root.hermes-api-test-result != "" : Text {
+                                text: root.hermes-api-test-result;
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                            Rectangle { background: Theme.border; height: 1px; }
+                            Text {
+                                text: @tr("Prepare a call profile — describe the call, the agent researches it into an active profile:");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                LineEdit {
+                                    placeholder-text: @tr("e.g. Interview at Acme, Senior SRE role");
+                                    text <=> root.hermes-profile-seed;
+                                    horizontal-stretch: 1;
+                                }
+                                Button {
+                                    text: @tr("Prepare profile (Hermes)");
+                                    clicked => { root.hermes-prepare-profile(root.hermes-profile-seed); }
+                                }
+                            }
+                            if root.hermes-profile-status != "" : Text {
+                                text: root.hermes-profile-status;
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
                     if root.active-tab == 12 : VerticalLayout {
                         spacing: 10px;
                         SettingsCard {
@@ -2958,6 +3121,7 @@ export component SettingsWindow inherits Window {
                idx == 12 ? @tr("STT") :
                idx == 13 ? @tr("Diagnostics") :
                idx == 14 ? @tr("Memory") :
+               idx == 16 ? @tr("Hermes") :
                "—";
     }
 }

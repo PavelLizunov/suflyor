@@ -95,6 +95,8 @@ rusqlite = { version = "0.40.0", features = ["bundled"] }
 # writes the per-channel session WAVs at runtime. Tests still use it freely
 # (a [dependencies] entry is visible to the test target too).
 hound = "3"
+tiny_http = "0.12"
+getrandom = "0.2"
 
 [dev-dependencies]
 tempfile = "3"

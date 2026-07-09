@@ -384,6 +384,21 @@ pub struct Config {
     /// from an unplugged monitor falls back to center).
     pub text_ask_pos: Option<(i32, i32)>,
 
+    /// Hermes-интеграция (ТЗ 2026-07-09, docs/goal-hermes-integration-2026-07-09.md).
+    /// Мост: loopback-only HTTP API, по которому ЛОКАЛЬНЫЙ Hermes-агент читает
+    /// созвоны/память/профили suflyor. ВЫКЛЮЧЕН по умолчанию; без токена не
+    /// стартует. Токен — секрет уровня `ai_bearer` (никогда не логировать).
+    pub hermes_bridge_enabled: bool,
+    #[serde(default = "default_hermes_bridge_port")]
+    pub hermes_bridge_port: u16,
+    pub hermes_bridge_token: String,
+
+    /// Hermes API-сервер (обратное направление: suflyor как клиент агента —
+    /// подготовка профиля созвона). Дефолт — локальный Hermes gateway.
+    #[serde(default = "default_hermes_api_url")]
+    pub hermes_api_url: String,
+    pub hermes_api_key: String,
+
     /// Active colour scheme for the Slint design tokens (`theme.slint`).
     /// 0 = Glacier (default, cool graphite + blue accent), 1 = Graphite
     /// (warm charcoal + teal), 2 = Obsidian (blue-black + violet), 3 =
@@ -575,6 +590,11 @@ impl Config {
             auto_tiles_enabled: true,
             ui_language: default_ui_language(),
             text_ask_pos: None,
+            hermes_bridge_enabled: false,
+            hermes_bridge_port: default_hermes_bridge_port(),
+            hermes_bridge_token: String::new(),
+            hermes_api_url: default_hermes_api_url(),
+            hermes_api_key: String::new(),
             color_scheme: 0,
             tile_font_size: default_tile_font_size(),
             snippets: default_snippets(),
@@ -968,6 +988,18 @@ fn default_ui_language() -> String {
     // (user is Russian-speaking; original Settings copy is Russian).
     // EN is opt-in via Settings → Interface → Язык интерфейса.
     "ru".into()
+}
+
+fn default_hermes_bridge_port() -> u16 {
+    // Off the app's other local ports (llama.cpp 8080, Hermes API 8642,
+    // e5-sidecar 8082 из ADR) — deliberately distinct.
+    8654
+}
+
+fn default_hermes_api_url() -> String {
+    // The local Hermes gateway API server (gateway/platforms/api_server.py
+    // DEFAULT_HOST/PORT). OpenAI-совместимый /v1.
+    "http://127.0.0.1:8642/v1".into()
 }
 
 fn default_tile_font_size() -> u32 {
