@@ -378,6 +378,12 @@ pub struct Config {
     #[serde(default = "default_ui_language")]
     pub ui_language: String,
 
+    /// ТЗ 2026-07-06 (C) — last user-dragged position of the text-ask input
+    /// window (physical px, top-left). `None` = never dragged → centered as
+    /// before. Validated against visible monitors on restore (a stale position
+    /// from an unplugged monitor falls back to center).
+    pub text_ask_pos: Option<(i32, i32)>,
+
     /// Active colour scheme for the Slint design tokens (`theme.slint`).
     /// 0 = Glacier (default, cool graphite + blue accent), 1 = Graphite
     /// (warm charcoal + teal), 2 = Obsidian (blue-black + violet), 3 =
@@ -568,6 +574,7 @@ impl Config {
             trigger_keywords: default_trigger_keywords(),
             auto_tiles_enabled: true,
             ui_language: default_ui_language(),
+            text_ask_pos: None,
             color_scheme: 0,
             tile_font_size: default_tile_font_size(),
             snippets: default_snippets(),

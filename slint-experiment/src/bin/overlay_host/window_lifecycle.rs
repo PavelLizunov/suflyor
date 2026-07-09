@@ -149,6 +149,35 @@ where
     W: slint::ComponentHandle + 'static,
     F: Fn(windows::Win32::Foundation::HWND) + 'static,
 {
+    present_window_stealth_aware_at(win, None, decorate);
+}
+
+/// ТЗ 2026-07-06 (C) — true if a saved top-left position still lands on a
+/// visible monitor (with a small slack so a title bar dragged flush to an edge
+/// still counts). A stale position from an unplugged monitor fails → the
+/// caller centers instead. Pure — unit-tested below.
+fn pos_on_visible_monitor(pos: (i32, i32), monitors: &[slint_replay::win32::MonitorRect]) -> bool {
+    const SLACK: i32 = 8;
+    monitors.iter().any(|m| {
+        pos.0 >= m.left - SLACK
+            && pos.0 < m.right - SLACK
+            && pos.1 >= m.top - SLACK
+            && pos.1 < m.bottom - SLACK
+    })
+}
+
+/// `present_window_stealth_aware` with an optional RESTORED position: `Some` +
+/// still-visible → reveal there instead of centering (both the native reveal
+/// and the degraded Slint fallback honor it). Everything else is identical —
+/// callers without a saved position use the plain wrapper above.
+pub(crate) fn present_window_stealth_aware_at<W, F>(
+    win: &W,
+    saved_pos: Option<(i32, i32)>,
+    decorate: F,
+) where
+    W: slint::ComponentHandle + 'static,
+    F: Fn(windows::Win32::Foundation::HWND) + 'static,
+{
     // G1 — layout-independent Ctrl+C/V/X/A/Z/Y for every editable field on this window
     // (winit key filter; idempotent). Covers Settings / palette / text_ask / wizard /
     // help / archive / transcript — all the aux windows funnel through here.
@@ -175,11 +204,14 @@ where
             let _ = set_stealth(hwnd, true);
         }
         // The off-screen frame is now painted + decorated (+ WDA under stealth):
-        // reveal it centered on the picked monitor using the real HiDPI-aware
-        // size, so the first ON-SCREEN frame is already complete (no flash).
+        // reveal it at the RESTORED position when one is saved and still visible
+        // (ТЗ 2026-07-06 C), else centered on the picked monitor using the real
+        // HiDPI-aware size, so the first ON-SCREEN frame is already complete.
         let (_x, _y, w_px, h_px) = get_window_rect(hwnd).unwrap_or((0, 0, 460, 360));
         let monitors = enum_monitors();
-        if let Some(mon) = pick_monitor(&monitors) {
+        if let Some((sx, sy)) = saved_pos.filter(|p| pos_on_visible_monitor(*p, &monitors)) {
+            let _ = move_window_pos_only(hwnd, sx, sy);
+        } else if let Some(mon) = pick_monitor(&monitors) {
             let cx = (mon.left + (mon.width() - w_px) / 2).max(mon.left + 8);
             let cy = (mon.top + (mon.height() - h_px) / 2).max(mon.top + 8);
             let _ = move_window_pos_only(hwnd, cx, cy);
@@ -210,7 +242,10 @@ where
              fallback (no native decorate/center)"
         );
         let monitors = enum_monitors();
-        if let Some(mon) = pick_monitor(&monitors) {
+        if let Some((sx, sy)) = saved_pos.filter(|p| pos_on_visible_monitor(*p, &monitors)) {
+            w.window()
+                .set_position(slint::PhysicalPosition::new(sx, sy));
+        } else if let Some(mon) = pick_monitor(&monitors) {
             let cx = (mon.left + (mon.width() - 460) / 2).max(mon.left + 8);
             let cy = (mon.top + (mon.height() - 360) / 2).max(mon.top + 8);
             w.window()
@@ -466,5 +501,48 @@ impl WindowRegistry {
     /// `refresh_open_tiles` for callers that already hold a concrete bar handle.
     pub(crate) fn refresh_tiles_chip(&self, overlay: &OverlayBarWindow) {
         overlay.set_open_tiles(self.tiles.borrow().len() as i32);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pos_on_visible_monitor;
+    use slint_replay::win32::MonitorRect;
+
+    /// The owner's real dual-monitor layout: landscape primary 1920×1080 at
+    /// (0,0) + PORTRAIT secondary 1200×1920 at negative x.
+    fn owner_monitors() -> Vec<MonitorRect> {
+        vec![
+            MonitorRect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+                is_primary: true,
+            },
+            MonitorRect {
+                left: -1200,
+                top: 0,
+                right: 0,
+                bottom: 1920,
+                is_primary: false,
+            },
+        ]
+    }
+
+    #[test]
+    fn saved_pos_validation_covers_owner_layout() {
+        let mons = owner_monitors();
+        assert!(pos_on_visible_monitor((300, 200), &mons)); // on primary
+        assert!(pos_on_visible_monitor((-800, 1500), &mons)); // portrait at negative x
+        assert!(pos_on_visible_monitor((-4, 0), &mons)); // edge slack (8px)
+        assert!(!pos_on_visible_monitor((2500, 200), &mons)); // right of everything
+        assert!(!pos_on_visible_monitor((300, 1300), &mons)); // below primary, x not on portrait
+                                                              // Monitor unplugged (stale saved pos) → nothing visible → fallback to center.
+        assert!(!pos_on_visible_monitor(
+            (-800, 1500),
+            &owner_monitors()[..1]
+        ));
+        assert!(!pos_on_visible_monitor((100, 100), &[])); // no monitors at all
     }
 }

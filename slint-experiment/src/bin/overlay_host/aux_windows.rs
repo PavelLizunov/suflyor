@@ -20,11 +20,12 @@ use super::transcript_player;
 use super::{
     apply_scheme_palette, apply_scheme_text_ask, apply_tile_hwnd_with_monitor, clamp_scheme,
     drag_begin, drag_update, fire_f9_ask, focus_window, global_scheme, grab_hwnd, kb, markdown,
-    present_tile_window, present_window_stealth_aware, refresh_open_tiles, toggle_tile_maximize,
-    ui, wire_tile_drag, Arc, ArchiveRow, ArchiveWindow, AskRoute, ComponentHandle, HelpWindow,
-    MarkdownBlock, ModelRc, OverlayBarBridge, OverlayBarWindow, PaletteResult, PaletteWindow, Rc,
-    RefCell, RuntimeEvents, SharedSlintRuntime, SharedString, SpeakerRow, TextAskWindow,
-    TileWindow, TileWindows, TranscriptLine, TranscriptWindow, VecModel,
+    present_tile_window, present_window_stealth_aware, present_window_stealth_aware_at,
+    refresh_open_tiles, toggle_tile_maximize, ui, wire_tile_drag, Arc, ArchiveRow, ArchiveWindow,
+    AskRoute, ComponentHandle, HelpWindow, MarkdownBlock, ModelRc, OverlayBarBridge,
+    OverlayBarWindow, PaletteResult, PaletteWindow, Rc, RefCell, RuntimeEvents, SharedSlintRuntime,
+    SharedString, SpeakerRow, TextAskWindow, TileWindow, TileWindows, TranscriptLine,
+    TranscriptWindow, VecModel,
 };
 use overlay_backend::persistence::{
     open_default_store, AiTurn, Diarization, SearchHit, Session, Store, Utterance,
@@ -81,12 +82,32 @@ fn text_ask_profile_label(cfg: &overlay_backend::config::SharedConfig) -> String
     }
 }
 
+/// ТЗ 2026-07-06 (C) — persist the text-ask window's current top-left so the
+/// next open restores it (`present_window_stealth_aware_at`). Called on submit
+/// and cancel (the window is dropped right after, so this is the last chance to
+/// read the rect). No-op when the position is unchanged — avoids a config
+/// rewrite on every plain open/close.
+fn persist_text_ask_pos(win: &TextAskWindow, cfg: &overlay_backend::config::SharedConfig) {
+    let Ok(hwnd) = grab_hwnd(win.window()) else {
+        return;
+    };
+    let Ok((x, y, _, _)) = slint_replay::win32::get_window_rect(hwnd) else {
+        return;
+    };
+    let mut c = cfg.write();
+    if c.text_ask_pos != Some((x, y)) {
+        c.text_ask_pos = Some((x, y));
+        let _ = overlay_backend::config::save(&c);
+    }
+}
+
 /// V0.8.3 — "Написать": open (or re-focus) the small text-input window. On
 /// submit it routes the typed text through `fire_f9_ask(.., Some(text))`, so the
 /// whole tile-create + stream + cost + journal + follow-up pipeline is reused →
 /// the answer lands in a standard tile. Stealth (WDA) + on-screen placement come
-/// from `present_window_stealth_aware`; the decorate closure also grabs keyboard
-/// focus so the user can type immediately. Esc (or submit) hides + drops it.
+/// from `present_window_stealth_aware_at` (restoring the last dragged position,
+/// ТЗ 2026-07-06 C); the decorate closure also grabs keyboard focus so the user
+/// can type immediately. Esc (or submit) persists the position + hides + drops.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn open_text_ask(
     slot_ref: &Rc<RefCell<Option<TextAskWindow>>>,
@@ -146,6 +167,7 @@ pub(crate) fn open_text_ask(
                 );
             }
             if let Some(w) = weak.upgrade() {
+                persist_text_ask_pos(&w, &cfg_c);
                 let _ = w.hide();
             }
             *slot.borrow_mut() = None;
@@ -154,14 +176,39 @@ pub(crate) fn open_text_ask(
     {
         let weak = win.as_weak();
         let slot = slot_ref.clone();
+        let cfg_c = cfg.clone();
         win.on_cancelled(move || {
             if let Some(w) = weak.upgrade() {
+                persist_text_ask_pos(&w, &cfg_c);
                 let _ = w.hide();
             }
             *slot.borrow_mut() = None;
         });
     }
-    present_window_stealth_aware(&win, |hwnd| {
+    // ТЗ 2026-07-06 (C) — frameless drag (cursor-delta, same as help/wizard);
+    // the header row is the handle.
+    {
+        let weak = win.as_weak();
+        win.on_drag_start_requested(move || {
+            if let Some(w) = weak.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(w.window()) {
+                    drag_begin(hwnd);
+                }
+            }
+        });
+        let weak_move = win.as_weak();
+        win.on_drag_moved(move || {
+            if let Some(w) = weak_move.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(w.window()) {
+                    drag_update(hwnd);
+                }
+            }
+        });
+    }
+    // Restore the last dragged position (validated against visible monitors
+    // inside; stale/None → centered as before).
+    let saved_pos = cfg.read().text_ask_pos;
+    present_window_stealth_aware_at(&win, saved_pos, |hwnd| {
         // Keep these transient overlay windows out of the taskbar + Alt-Tab,
         // like the bar/tiles — otherwise under stealth they leak an existence
         // entry while open (content is WDA-hidden, but the window button isn't).

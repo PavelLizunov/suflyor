@@ -54,6 +54,10 @@ export component TextAskWindow inherits Window {
     callback submitted(string);
     // Emitted on Esc — the host hides + drops the window.
     callback cancelled();
+    // ТЗ 2026-07-06 (C) — frameless drag (cursor-delta, same as help/wizard):
+    // the header row is the handle; the host persists the position on close.
+    callback drag-start-requested();
+    callback drag-moved();
 
     forward-focus: input;
 
@@ -90,29 +94,51 @@ export component TextAskWindow inherits Window {
             spacing: 10px;
             HorizontalLayout {
                 spacing: Metrics.space-sm;   // was 8px
-                IconSlot {
-                    icon: @image-url("../assets/icons/pencil.svg");
-                    tint: Theme.accent;
-                    glyph-size: 15px;
-                    slot-size: 18px;
-                }
-                Text {
-                    text: "Напишите вопрос ассистенту";
-                    color: Theme.text-secondary;
-                    font-size: Metrics.font-body;   // was 12px
-                    font-weight: 600;
-                    vertical-alignment: center;
-                }
-                // v0.10.1 — active profile/persona (applies to the typed answer
-                // too, identically to voice). Right-aligned, muted, elides.
-                Text {
-                    text: root.active-profile;
-                    color: Theme.text-muted;
-                    font-size: 11px;
-                    vertical-alignment: center;
-                    horizontal-alignment: right;
+                // ТЗ 2026-07-06 (C) — drag handle BEHIND the header content
+                // (help.slint pattern): the TouchArea drags; the CloseButton
+                // stays a sibling on top so its clicks are its own.
+                Rectangle {
                     horizontal-stretch: 1;
-                    overflow: elide;
+                    height: 20px;
+                    TouchArea {
+                        mouse-cursor: grab;
+                        pointer-event(ev) => {
+                            if (ev.button == PointerEventButton.left
+                                && ev.kind == PointerEventKind.down) {
+                                root.drag-start-requested();
+                            }
+                        }
+                        moved => {
+                            if (self.pressed) { root.drag-moved(); }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: Metrics.space-sm;
+                        IconSlot {
+                            icon: @image-url("../assets/icons/pencil.svg");
+                            tint: Theme.accent;
+                            glyph-size: 15px;
+                            slot-size: 18px;
+                        }
+                        Text {
+                            text: "Напишите вопрос ассистенту";
+                            color: Theme.text-secondary;
+                            font-size: Metrics.font-body;   // was 12px
+                            font-weight: 600;
+                            vertical-alignment: center;
+                        }
+                        // v0.10.1 — active profile/persona (applies to the typed
+                        // answer too, identically to voice). Right-aligned, muted.
+                        Text {
+                            text: root.active-profile;
+                            color: Theme.text-muted;
+                            font-size: 11px;
+                            vertical-alignment: center;
+                            horizontal-alignment: right;
+                            horizontal-stretch: 1;
+                            overflow: elide;
+                        }
+                    }
                 }
                 // V0.8.4 — explicit close (= Esc). Shared CloseButton.
                 CloseButton {
