@@ -1,6 +1,6 @@
 //! ТЗ2b — in-app playback of a session's mixed recording, driving the transcript
 //! window's mini-player (play/pause, seek-bar, click-line → seek). rodio provides
-//! the output (OutputStream + Sink); we feed the already-mixed i16 PCM
+//! the output (MixerDeviceSink + Player); we feed the already-mixed i16 PCM
 //! (`overlay_backend::session_audio`) through a cheap `Arc<[i16]>` cursor source
 //! and implement SEEK by restarting that source at a new offset — rodio's
 //! per-source seek support varies, and restarting keeps the position math entirely
@@ -13,8 +13,9 @@
 //! under stealth / screen-share, like the clipboard copy.
 
 use overlay_backend::session_audio::{ms_for_sample, sample_for_ms};
-use rodio::{OutputStream, OutputStreamHandle, Sink};
+use rodio::{DeviceSinkBuilder, MixerDeviceSink, Player};
 use std::cell::RefCell;
+use std::num::{NonZeroU16, NonZeroU32};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -28,9 +29,12 @@ struct PcmCursor {
 }
 
 impl Iterator for PcmCursor {
-    type Item = i16;
-    fn next(&mut self) -> Option<i16> {
-        let s = self.pcm.get(self.pos).copied();
+    type Item = f32;
+    fn next(&mut self) -> Option<f32> {
+        let s = self
+            .pcm
+            .get(self.pos)
+            .map(|sample| f32::from(*sample) / 32768.0);
         if s.is_some() {
             self.pos += 1;
         }
@@ -39,14 +43,14 @@ impl Iterator for PcmCursor {
 }
 
 impl rodio::Source for PcmCursor {
-    fn current_frame_len(&self) -> Option<usize> {
+    fn current_span_len(&self) -> Option<usize> {
         None
     }
-    fn channels(&self) -> u16 {
-        1
+    fn channels(&self) -> NonZeroU16 {
+        NonZeroU16::MIN
     }
-    fn sample_rate(&self) -> u32 {
-        self.sample_rate
+    fn sample_rate(&self) -> NonZeroU32 {
+        NonZeroU32::new(self.sample_rate).unwrap_or(NonZeroU32::MIN)
     }
     fn total_duration(&self) -> Option<std::time::Duration> {
         None
@@ -127,7 +131,7 @@ impl StretchSource {
             for _ in 0..WSOLA_CHUNK {
                 match self.cursor.next() {
                     Some(s) => {
-                        inbuf.push(f32::from(s) / 32768.0);
+                        inbuf.push(s);
                         fresh += 1;
                     }
                     None => break,
@@ -174,26 +178,26 @@ impl StretchSource {
 }
 
 impl Iterator for StretchSource {
-    type Item = i16;
-    fn next(&mut self) -> Option<i16> {
+    type Item = f32;
+    fn next(&mut self) -> Option<f32> {
         if self.read >= self.out.len() && !self.refill() {
             return None;
         }
         let s = self.out[self.read];
         self.read += 1;
-        Some((s.clamp(-1.0, 1.0) * 32767.0) as i16)
+        Some(s.clamp(-1.0, 1.0))
     }
 }
 
 impl rodio::Source for StretchSource {
-    fn current_frame_len(&self) -> Option<usize> {
+    fn current_span_len(&self) -> Option<usize> {
         None
     }
-    fn channels(&self) -> u16 {
-        1
+    fn channels(&self) -> NonZeroU16 {
+        NonZeroU16::MIN
     }
-    fn sample_rate(&self) -> u32 {
-        self.sample_rate
+    fn sample_rate(&self) -> NonZeroU32 {
+        NonZeroU32::new(self.sample_rate).unwrap_or(NonZeroU32::MIN)
     }
     fn total_duration(&self) -> Option<std::time::Duration> {
         None
@@ -205,9 +209,8 @@ pub(crate) struct TranscriptPlayer {
     // Held ONLY to keep the audio device open — dropping it stops all playback —
     // so it is never read after construction.
     #[allow(dead_code)]
-    stream: OutputStream,
-    handle: OutputStreamHandle,
-    sink: Sink,
+    stream: MixerDeviceSink,
+    player: Player,
     pcm: Arc<[i16]>,
     sample_rate: u32,
     /// Sample the current source started at (set on (re)start / seek).
@@ -236,13 +239,13 @@ impl TranscriptPlayer {
     /// Build a player for already-mixed PCM. Errors if there is no default audio
     /// device (the caller then leaves the mini-player hidden).
     pub(crate) fn new(pcm: Vec<i16>, sample_rate: u32) -> anyhow::Result<Self> {
-        let (stream, handle) = OutputStream::try_default()?;
-        let sink = Sink::try_new(&handle)?;
-        sink.pause();
+        let mut stream = DeviceSinkBuilder::open_default_sink()?;
+        stream.log_on_drop(false);
+        let player = Player::connect_new(stream.mixer());
+        player.pause();
         Ok(Self {
             stream,
-            handle,
-            sink,
+            player,
             pcm: Arc::from(pcm),
             sample_rate,
             origin_sample: 0,
@@ -286,39 +289,38 @@ impl TranscriptPlayer {
 
     /// Replace the source with one starting at sample `from` and reset the cursor.
     /// Caller sets the play/pause state afterwards.
-    fn load_from(&mut self, from: usize) -> anyhow::Result<()> {
+    fn load_from(&mut self, from: usize) {
         let from = from.min(self.total());
-        self.sink.stop();
-        let sink = Sink::try_new(&self.handle)?;
-        // A fresh sink defaults to gain 1.0 → re-apply the current volume.
-        sink.set_volume(self.volume);
+        self.player.stop();
+        let player = Player::connect_new(self.stream.mixer());
+        player.set_volume(self.volume);
         // Phase 2b (A): 1.0× feeds the bare cursor (bit-exact, zero-latency);
         // otherwise route through the pitch-preserving time-stretch adapter. We do NOT
         // call sink.set_speed — that resample path (the "chipmunk") is exactly what the
         // adapter replaces; the sink stays at native rate and the position clock
         // (which already scales by speed) is unchanged.
         if (self.speed - 1.0).abs() < f32::EPSILON {
-            sink.append(PcmCursor {
+            player.append(PcmCursor {
                 pcm: self.pcm.clone(),
                 pos: from,
                 sample_rate: self.sample_rate,
             });
         } else {
-            sink.append(StretchSource::new(
+            player.append(StretchSource::new(
                 self.pcm.clone(),
                 from,
                 self.sample_rate,
                 self.speed,
             ));
         }
-        self.sink = sink;
+        player.pause();
+        self.player = player;
         self.origin_sample = from;
         self.cursor_sample = from;
-        Ok(())
     }
 
     /// Start or resume playback. At/after the end → restart from the beginning.
-    pub(crate) fn play(&mut self) -> anyhow::Result<()> {
+    pub(crate) fn play(&mut self) {
         // Sync the cursor to the LIVE position first: a clip that reached its
         // natural end leaves `cursor_sample` at the last source's START (it is not
         // advanced while playing), so without this the end check below would miss
@@ -331,60 +333,56 @@ impl TranscriptPlayer {
         };
         // A fresh source from the cursor keeps origin/position in lockstep with the
         // audio (no drift between the sink's internal cursor and our clock).
-        self.load_from(from)?;
-        self.sink.play();
+        self.load_from(from);
+        self.player.play();
         self.play_started = Some(Instant::now());
-        Ok(())
     }
 
     /// Halt playback, freezing the cursor at the current position.
     pub(crate) fn pause(&mut self) {
         self.cursor_sample = self.position_sample();
         self.play_started = None;
-        self.sink.pause();
+        self.player.pause();
     }
 
     /// Play/pause toggle for the mini-player button.
-    pub(crate) fn toggle(&mut self) -> anyhow::Result<()> {
+    pub(crate) fn toggle(&mut self) {
         if self.is_playing() {
             self.pause();
-            Ok(())
         } else {
-            self.play()
+            self.play();
         }
     }
 
     /// Seek to a session-relative offset (ms), preserving the play/pause state.
     /// A timecode past the end clamps to the end (via `sample_for_ms`).
-    pub(crate) fn seek_ms(&mut self, ms: i64) -> anyhow::Result<()> {
+    pub(crate) fn seek_ms(&mut self, ms: i64) {
         let sample = sample_for_ms(ms, self.sample_rate, self.total());
         if self.play_started.is_some() {
-            self.load_from(sample)?;
-            self.sink.play();
+            self.load_from(sample);
+            self.player.play();
             self.play_started = Some(Instant::now());
         } else {
             self.cursor_sample = sample;
             self.origin_sample = sample;
         }
-        Ok(())
     }
 
     /// Set the playback rate (clamped 0.5–3.0×). While playing, the elapsed time so
     /// far was clocked at the OLD rate, so we re-anchor: freeze the live position,
     /// then reload from there at the new rate (load_from resets origin + restarts the
     /// clock). Paused → just store it; the next play()/load_from applies it.
-    pub(crate) fn set_speed(&mut self, speed: f32) -> anyhow::Result<()> {
+    pub(crate) fn set_speed(&mut self, speed: f32) {
         let speed = speed.clamp(0.5, 3.0);
         let cur = self.position_sample();
         self.speed = speed;
         if self.play_started.is_some() {
-            self.load_from(cur)?;
-            self.sink.play();
+            self.load_from(cur);
+            self.player.play();
             self.play_started = Some(Instant::now());
         } else {
             self.cursor_sample = cur;
         }
-        Ok(())
     }
 
     /// Set the output gain (clamped 0–3×, matching the UI slider max; >1 boosts quiet
@@ -392,7 +390,7 @@ impl TranscriptPlayer {
     /// sink built by a seek.
     pub(crate) fn set_volume(&mut self, volume: f32) {
         self.volume = volume.clamp(0.0, 3.0);
-        self.sink.set_volume(self.volume);
+        self.player.set_volume(self.volume);
     }
 }
 
@@ -455,9 +453,7 @@ pub(crate) fn is_playing() -> bool {
 pub(crate) fn toggle() {
     PLAYER.with(|p| {
         if let Some(pl) = p.borrow_mut().as_mut() {
-            if let Err(e) = pl.toggle() {
-                eprintln!("[overlay-host] transcript player toggle failed: {e}");
-            }
+            pl.toggle();
         }
     });
 }
@@ -467,14 +463,9 @@ pub(crate) fn toggle() {
 pub(crate) fn seek_and_play(ms: i64) {
     PLAYER.with(|p| {
         if let Some(pl) = p.borrow_mut().as_mut() {
-            if let Err(e) = pl.seek_ms(ms) {
-                eprintln!("[overlay-host] transcript player seek failed: {e}");
-                return;
-            }
+            pl.seek_ms(ms);
             if !pl.is_playing() {
-                if let Err(e) = pl.play() {
-                    eprintln!("[overlay-host] transcript player play failed: {e}");
-                }
+                pl.play();
             }
         }
     });
@@ -486,9 +477,7 @@ pub(crate) fn seek_fraction(frac: f32) {
         if let Some(pl) = p.borrow_mut().as_mut() {
             let total = pl.total_ms();
             let ms = (f64::from(frac.clamp(0.0, 1.0)) * total as f64) as i64;
-            if let Err(e) = pl.seek_ms(ms) {
-                eprintln!("[overlay-host] transcript player seek failed: {e}");
-            }
+            pl.seek_ms(ms);
         }
     });
 }
@@ -498,9 +487,7 @@ pub(crate) fn seek_fraction(frac: f32) {
 pub(crate) fn set_speed(speed: f32) {
     PLAYER.with(|p| {
         if let Some(pl) = p.borrow_mut().as_mut() {
-            if let Err(e) = pl.set_speed(speed) {
-                eprintln!("[overlay-host] transcript player set_speed failed: {e}");
-            }
+            pl.set_speed(speed);
         }
     });
 }
@@ -538,6 +525,8 @@ pub(crate) fn set_poll_timer(timer: slint::Timer) {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
+
     use super::*;
     use std::sync::Arc;
 
@@ -575,5 +564,22 @@ mod tests {
             (n_in / 3 * 8 / 10..=n_in / 3 * 12 / 10).contains(&n3),
             "3x output len {n3} not ~third of {n_in}"
         );
+    }
+
+    #[test]
+    #[ignore = "live: opens the default Windows audio device"]
+    fn live_rodio_device_smoke() {
+        let sample_rate = 16_000;
+        let pcm = (0..sample_rate)
+            .map(|i| {
+                let phase = i as f32 * 440.0 * std::f32::consts::TAU / sample_rate as f32;
+                (phase.sin() * 500.0) as i16
+            })
+            .collect();
+        let mut player = TranscriptPlayer::new(pcm, sample_rate).expect("open audio device");
+        player.set_speed(2.0);
+        player.play();
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        assert!(player.position_ms() > 0);
     }
 }
