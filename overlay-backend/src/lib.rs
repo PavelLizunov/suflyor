@@ -35,5 +35,6 @@ pub mod stt;
 pub mod summary_source;
 pub mod tts;
 pub mod tts_install;
+pub mod tts_normalize;
 pub mod update;
 pub mod vision;
