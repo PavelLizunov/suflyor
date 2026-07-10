@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Q5.1/Q5.3 — приёмка плеера</title>
+<style>body{max-width:900px;margin:32px auto;padding:0 18px;font:16px/1.5 system-ui;background:#101722;color:#edf3f8}li{margin:12px 0}input{width:19px;height:19px;vertical-align:middle;margin-right:9px}.note{color:#aebdca}textarea{width:100%;min-height:100px;background:#0a1018;color:inherit;border:1px solid #44566a;border-radius:8px;padding:10px;box-sizing:border-box}</style>
+<h1>Плеер: WSOLA + rodio 0.22 + timestretch 0.5</h1>
+<p class="note">Автотесты проверяют multichunk 2×/3× и живое открытие WASAPI. Этот лист — обязательная слуховая приёмка владельцем на реальной записи.</p>
+<ol>
+  <li><label><input type="checkbox">1×: естественный голос, старт/пауза/возобновление/seek работают.</label></li>
+  <li><label><input type="checkbox">1.25×: высота голоса не меняется, щелчков нет.</label></li>
+  <li><label><input type="checkbox">2×: нет периодического шва примерно раз в секунду.</label></li>
+  <li><label><input type="checkbox">3×: нет периодического шва, речь остаётся разборчивой.</label></li>
+  <li><label><input type="checkbox">Громкость меняется плавно и mute/unmute не ломает воспроизведение.</label></li>
+  <li><label><input type="checkbox">Повторное открытие записи после stop создаёт новый player без ошибки устройства.</label></li>
+</ol>
+<textarea placeholder="Запись, таймкод и замечания"></textarea>
+</html>
