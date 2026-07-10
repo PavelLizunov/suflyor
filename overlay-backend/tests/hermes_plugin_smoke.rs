@@ -39,4 +39,19 @@ fn install_into_scratch_hermes_home() {
             .expect("re-install failed");
     println!("again: {again}");
     assert!(again.contains("уже включён"));
+
+    // «Взять ключ из локального Hermes»: first run creates api_server+key,
+    // second run reads the SAME key back without touching the file.
+    let (key1, changed1) =
+        overlay_backend::hermes_install::ensure_api_server().expect("api setup failed");
+    println!("api key created: changed={changed1}");
+    assert!(changed1);
+    assert!(!key1.is_empty());
+    let (key2, changed2) =
+        overlay_backend::hermes_install::ensure_api_server().expect("api re-read failed");
+    assert!(!changed2);
+    assert_eq!(key1, key2);
+    let cfg2 = std::fs::read_to_string(root.join("config.yaml")).expect("config re-read");
+    assert!(cfg2.contains("api_server:"));
+    assert!(cfg2.contains("enabled: true"));
 }

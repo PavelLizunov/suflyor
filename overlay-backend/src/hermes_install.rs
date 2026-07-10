@@ -120,6 +120,281 @@ pub fn install_plugin(bridge_url: &str, token: &str) -> Result<String, String> {
     }
 }
 
+/// Ensure the local Hermes API server is enabled with a key, creating both
+/// when missing (the «Настроить локальный Hermes» button — the tester should
+/// never have to hand-edit YAML to learn what an API_SERVER_KEY is).
+/// Returns `(key, changed)`; `changed` says config.yaml was rewritten (⇒ the
+/// user must restart Hermes).
+pub fn ensure_api_server() -> Result<(String, bool), String> {
+    let home = hermes_home().ok_or_else(|| "не найден домашний каталог Hermes".to_string())?;
+    if !home.is_dir() {
+        return Err(format!(
+            "Hermes не найден на этой машине (нет {})",
+            home.display()
+        ));
+    }
+    let cfg_path = home.join("config.yaml");
+    let old = match std::fs::read_to_string(&cfg_path) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(format!("чтение config.yaml: {e}")),
+    };
+    match ensure_api_server_text(&old, crate::bridge::generate_token) {
+        ApiEdit::Ready(key) => Ok((key, false)),
+        ApiEdit::Updated(text, key) => {
+            std::fs::write(&cfg_path, text).map_err(|e| format!("запись config.yaml: {e}"))?;
+            Ok((key, true))
+        }
+        ApiEdit::Unsupported => Err(
+            "config.yaml нестандартный — пропиши platforms.api_server.extra.key вручную"
+                .to_string(),
+        ),
+    }
+}
+
+/// Result of the api_server config edit.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ApiEdit {
+    /// Server already enabled with this key — nothing written.
+    Ready(String),
+    /// New file content + the key now in effect.
+    Updated(String, String),
+    /// Shapes we refuse to touch (flow mappings, odd scalars).
+    Unsupported,
+}
+
+/// Enable `platforms.api_server` + ensure `extra.key` via a conservative
+/// line edit (same philosophy as [`enable_in_config_text`]): only bare
+/// block-style keys are edited; anything exotic → [`ApiEdit::Unsupported`].
+pub fn ensure_api_server_text(existing: &str, gen_key: impl Fn() -> String) -> ApiEdit {
+    let eol = eol_of(existing);
+    let normalized = existing.replace("\r\n", "\n");
+    let lines: Vec<&str> = normalized.split('\n').collect();
+
+    let bare_key_at = |l: &str, name: &str| -> bool {
+        let no_comment = l.split('#').next().unwrap_or("");
+        no_comment.trim_end().trim_start() == format!("{name}:")
+    };
+    // Top-level `platforms:` (column 0, no inline value, not a comment).
+    let platforms_idx = lines
+        .iter()
+        .position(|l| indent_of(l) == 0 && bare_key_at(l, "platforms"));
+    // A top-level `platforms: {...}` flow form → refuse.
+    if platforms_idx.is_none()
+        && lines.iter().any(|l| {
+            indent_of(l) == 0
+                && l.trim_start().starts_with("platforms:")
+                && !l
+                    .split('#')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .trim_start_matches("platforms:")
+                    .trim()
+                    .is_empty()
+        })
+    {
+        return ApiEdit::Unsupported;
+    }
+
+    let Some(pidx) = platforms_idx else {
+        // No platforms block — append a fresh one (the stock hermes config).
+        let key = gen_key();
+        let mut out = normalized.trim_end_matches('\n').to_string();
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out.push_str(&format!(
+            "platforms:\n  api_server:\n    enabled: true\n    extra:\n      key: \"{key}\"\n"
+        ));
+        return finish_api(out, eol, key);
+    };
+
+    // The platforms block: up to the next top-level key.
+    let mut block_end = lines.len();
+    for (i, l) in lines.iter().enumerate().skip(pidx + 1) {
+        if !l.trim().is_empty() && indent_of(l) == 0 {
+            block_end = i;
+            break;
+        }
+    }
+    let api_idx = lines
+        .iter()
+        .enumerate()
+        .take(block_end)
+        .skip(pidx + 1)
+        .find(|(_, l)| bare_key_at(l, "api_server"))
+        .map(|(i, _)| i);
+
+    let mut out_lines: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
+
+    let Some(aidx) = api_idx else {
+        // platforms: exists, api_server doesn't — insert the whole sub-block.
+        if lines
+            .iter()
+            .take(block_end)
+            .skip(pidx + 1)
+            .any(|l| l.trim_start().starts_with("api_server:"))
+        {
+            return ApiEdit::Unsupported; // flow / inline form
+        }
+        let key = gen_key();
+        let pad = " ".repeat(indent_of(lines[pidx]) + 2);
+        out_lines.insert(pidx + 1, format!("{pad}api_server:"));
+        out_lines.insert(pidx + 2, format!("{pad}  enabled: true"));
+        out_lines.insert(pidx + 3, format!("{pad}  extra:"));
+        out_lines.insert(pidx + 4, format!("{pad}    key: \"{key}\""));
+        return finish_api(out_lines.join("\n"), eol, key);
+    };
+
+    // api_server block bounds: deeper-indented lines only.
+    let a_indent = indent_of(lines[aidx]);
+    let mut a_end = block_end;
+    for (i, l) in lines.iter().enumerate().take(block_end).skip(aidx + 1) {
+        if !l.trim().is_empty() && indent_of(l) <= a_indent {
+            a_end = i;
+            break;
+        }
+    }
+
+    // Locate enabled: / extra: inside it (original indices).
+    let mut enabled_idx: Option<usize> = None;
+    let mut extra_idx: Option<usize> = None;
+    for (i, l) in lines.iter().enumerate().take(a_end).skip(aidx + 1) {
+        let t = l.split('#').next().unwrap_or("").trim();
+        if t.starts_with("enabled:") && enabled_idx.is_none() {
+            enabled_idx = Some(i);
+        }
+        if t.starts_with("extra:") && extra_idx.is_none() {
+            extra_idx = Some(i);
+        }
+    }
+
+    // Plan edits on ORIGINAL indices; apply bottom-up so nothing shifts.
+    let mut replaces: Vec<(usize, String)> = Vec::new();
+    let mut inserts: Vec<(usize, Vec<String>)> = Vec::new();
+
+    match enabled_idx {
+        Some(ei) => {
+            let val = lines[ei]
+                .split('#')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .trim_start_matches("enabled:")
+                .trim()
+                .to_string();
+            match val.as_str() {
+                "true" => {}
+                "false" => {
+                    let pad = " ".repeat(indent_of(lines[ei]));
+                    replaces.push((ei, format!("{pad}enabled: true")));
+                }
+                _ => return ApiEdit::Unsupported,
+            }
+        }
+        None => {
+            let pad = " ".repeat(a_indent + 2);
+            inserts.push((aidx, vec![format!("{pad}enabled: true")]));
+        }
+    }
+
+    let key = match extra_idx {
+        Some(xi) => {
+            let after = lines[xi]
+                .split('#')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .trim_start_matches("extra:")
+                .trim()
+                .to_string();
+            if !after.is_empty() {
+                return ApiEdit::Unsupported; // extra: {...}
+            }
+            let x_indent = indent_of(lines[xi]);
+            let mut x_end = a_end;
+            for (i, l) in lines.iter().enumerate().take(a_end).skip(xi + 1) {
+                if !l.trim().is_empty() && indent_of(l) <= x_indent {
+                    x_end = i;
+                    break;
+                }
+            }
+            let key_idx = lines
+                .iter()
+                .enumerate()
+                .take(x_end)
+                .skip(xi + 1)
+                .find(|(_, l)| l.split('#').next().unwrap_or("").trim().starts_with("key:"))
+                .map(|(i, _)| i);
+            match key_idx {
+                Some(ki) => {
+                    let val = lines[ki]
+                        .split('#')
+                        .next()
+                        .unwrap_or("")
+                        .trim()
+                        .trim_start_matches("key:")
+                        .trim()
+                        .trim_matches('"')
+                        .trim_matches('\'')
+                        .to_string();
+                    if val.is_empty() {
+                        let key = gen_key();
+                        let pad = " ".repeat(indent_of(lines[ki]));
+                        replaces.push((ki, format!("{pad}key: \"{key}\"")));
+                        key
+                    } else {
+                        val
+                    }
+                }
+                None => {
+                    let key = gen_key();
+                    let pad = " ".repeat(x_indent + 2);
+                    inserts.push((xi, vec![format!("{pad}key: \"{key}\"")]));
+                    key
+                }
+            }
+        }
+        None => {
+            let key = gen_key();
+            let pad = " ".repeat(a_indent + 2);
+            inserts.push((
+                aidx,
+                vec![format!("{pad}extra:"), format!("{pad}  key: \"{key}\"")],
+            ));
+            key
+        }
+    };
+
+    if replaces.is_empty() && inserts.is_empty() {
+        return ApiEdit::Ready(key);
+    }
+    for (i, text) in replaces {
+        out_lines[i] = text;
+    }
+    // Bottom-up so earlier insertion points stay valid.
+    inserts.sort_by_key(|(i, _)| std::cmp::Reverse(*i));
+    for (i, rows) in inserts {
+        for (n, row) in rows.into_iter().enumerate() {
+            out_lines.insert(i + 1 + n, row);
+        }
+    }
+    finish_api(out_lines.join("\n"), eol, key)
+}
+
+/// Re-apply EOL style and wrap as `Updated(text, key)`.
+fn finish_api(text: String, eol: &str, key: String) -> ApiEdit {
+    let mut t = text;
+    if !t.ends_with('\n') {
+        t.push('\n');
+    }
+    if eol == "\r\n" {
+        t = t.replace('\n', "\r\n");
+    }
+    ApiEdit::Updated(t, key)
+}
+
 /// Result of the conservative `config.yaml` text edit.
 #[derive(Debug, PartialEq, Eq)]
 pub enum EnableEdit {
@@ -468,6 +743,118 @@ mod tests {
             t,
             "plugins:\n  enabled:\n    - suflyor\n  disabled: []\nother:\n  enabled:\n    - x\n"
         );
+    }
+
+    fn genkey() -> String {
+        "GENKEY".to_string()
+    }
+
+    #[test]
+    fn api_appends_block_to_stock_config() {
+        // The stock hermes config has NO uncommented `platforms:` — only the
+        // commented example block (mirrors the real 73KB template).
+        let src = "agent:\n  model: x\n#   platforms:\n#     api_server:\n#       enabled: true\n";
+        let ApiEdit::Updated(t, key) = ensure_api_server_text(src, genkey) else {
+            panic!("expected Updated")
+        };
+        assert_eq!(key, "GENKEY");
+        assert!(t.ends_with(
+            "platforms:\n  api_server:\n    enabled: true\n    extra:\n      key: \"GENKEY\"\n"
+        ));
+        assert!(t.contains("#   platforms:")); // comments untouched
+    }
+
+    #[test]
+    fn api_inserts_under_existing_platforms() {
+        let src = "platforms:\n  telegram:\n    enabled: true\ntop: 1\n";
+        let ApiEdit::Updated(t, _) = ensure_api_server_text(src, genkey) else {
+            panic!("expected Updated")
+        };
+        assert_eq!(
+            t,
+            "platforms:\n  api_server:\n    enabled: true\n    extra:\n      key: \"GENKEY\"\n  telegram:\n    enabled: true\ntop: 1\n"
+        );
+    }
+
+    #[test]
+    fn api_flips_enabled_false_keeps_key() {
+        let src =
+            "platforms:\n  api_server:\n    enabled: false\n    extra:\n      key: \"OLDKEY\"\n";
+        let ApiEdit::Updated(t, key) = ensure_api_server_text(src, genkey) else {
+            panic!("expected Updated")
+        };
+        assert_eq!(key, "OLDKEY");
+        assert!(t.contains("    enabled: true\n"));
+        assert!(t.contains("key: \"OLDKEY\""));
+    }
+
+    #[test]
+    fn api_ready_when_all_set() {
+        let src = "platforms:\n  api_server:\n    enabled: true\n    extra:\n      key: mykey\n";
+        assert_eq!(
+            ensure_api_server_text(src, genkey),
+            ApiEdit::Ready("mykey".to_string())
+        );
+    }
+
+    #[test]
+    fn api_inserts_missing_enabled_keeps_key() {
+        let src = "platforms:\n  api_server:\n    extra:\n      key: \"K1\"\n";
+        let ApiEdit::Updated(t, key) = ensure_api_server_text(src, genkey) else {
+            panic!("expected Updated")
+        };
+        assert_eq!(key, "K1");
+        assert!(t.contains("    enabled: true\n"));
+    }
+
+    #[test]
+    fn api_fills_empty_key() {
+        let src = "platforms:\n  api_server:\n    enabled: true\n    extra:\n      key: \"\"\n";
+        let ApiEdit::Updated(t, key) = ensure_api_server_text(src, genkey) else {
+            panic!("expected Updated")
+        };
+        assert_eq!(key, "GENKEY");
+        assert!(t.contains("      key: \"GENKEY\"\n"));
+    }
+
+    #[test]
+    fn api_missing_extra_added() {
+        let src = "platforms:\n  api_server:\n    enabled: true\n";
+        let ApiEdit::Updated(t, _) = ensure_api_server_text(src, genkey) else {
+            panic!("expected Updated")
+        };
+        assert_eq!(
+            t,
+            "platforms:\n  api_server:\n    extra:\n      key: \"GENKEY\"\n    enabled: true\n"
+        );
+    }
+
+    #[test]
+    fn api_flow_forms_unsupported() {
+        assert_eq!(
+            ensure_api_server_text("platforms: {api_server: {enabled: true}}\n", genkey),
+            ApiEdit::Unsupported
+        );
+        assert_eq!(
+            ensure_api_server_text(
+                "platforms:\n  api_server:\n    enabled: true\n    extra: {key: x}\n",
+                genkey
+            ),
+            ApiEdit::Unsupported
+        );
+        assert_eq!(
+            ensure_api_server_text("platforms:\n  api_server:\n    enabled: maybe\n", genkey),
+            ApiEdit::Unsupported
+        );
+    }
+
+    #[test]
+    fn api_crlf_preserved() {
+        let src = "top: 1\r\n";
+        let ApiEdit::Updated(t, _) = ensure_api_server_text(src, genkey) else {
+            panic!("expected Updated")
+        };
+        assert!(t.contains("platforms:\r\n  api_server:\r\n"));
     }
 
     #[test]

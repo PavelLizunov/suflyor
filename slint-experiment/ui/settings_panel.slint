@@ -347,6 +347,9 @@ export component SettingsWindow inherits Window {
     in-out property <string> hermes-api-url: "";
     in-out property <string> hermes-api-key: "";
     in-out property <string> hermes-api-test-result: "";
+    // «Взять ключ из локального Hermes» — авто-настройка api_server.
+    in-out property <string> hermes-api-setup-status: "";
+    callback hermes-api-setup();
     in-out property <string> hermes-profile-seed: "";
     in-out property <string> hermes-profile-status: "";
     callback hermes-api-url-save(string);
@@ -2573,6 +2576,21 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 16 : VerticalLayout {
                         spacing: 10px;
                         SettingsCard {
+                            title: @tr("What you get after setup");
+                            Text {
+                                text: @tr("① Ask your Hermes agent about your calls in ITS chat, in plain words: \"what was my last call about?\", \"search my calls for the salary talk\", \"suggest to suflyor memory that Timur is the team lead\", \"prepare a call profile for an interview at Acme and set it active\".");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: @tr("② Right here below: type a brief into «Prepare a call profile» — the agent researches it and activates the profile, and live answers on the call will use it.");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                        }
+                        SettingsCard {
                             title: @tr("Hermes — bridge (agent reads suflyor)");
                             Text {
                                 text: @tr("Let a LOCAL Hermes agent read your calls, memory and profiles over a loopback API. Off by default; localhost-only; needs the token below.");
@@ -2721,6 +2739,26 @@ export component SettingsWindow inherits Window {
                             }
                             if root.hermes-api-test-result != "" : Text {
                                 text: root.hermes-api-test-result;
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: @tr("Don't know the key? For a Hermes on THIS machine the button below enables its API server, creates the key and fills it in here. Then restart Hermes.");
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: @tr("Get the key from local Hermes");
+                                    clicked => { root.hermes-api-setup(); }
+                                }
+                                Rectangle { horizontal-stretch: 1; }
+                            }
+                            if root.hermes-api-setup-status != "" : Text {
+                                text: root.hermes-api-setup-status;
                                 font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;

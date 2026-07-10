@@ -237,6 +237,46 @@ pub(crate) fn wire_hermes_settings(
         });
     }
 
+    // -- «Взять ключ из локального Hermes» (тестер не обязан знать, что такое
+    // API_SERVER_KEY): включает platforms.api_server в конфиге ЛОКАЛЬНОГО
+    // Hermes, создаёт/читает ключ и вписывает его в suflyor. --
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_hermes_api_setup(move || {
+            let Some(w) = weak.upgrade() else { return };
+            w.set_hermes_api_setup_status(SharedString::from("настраиваю…"));
+            let cfg_save = cfg_c.clone();
+            let weak_res = w.as_weak();
+            std::thread::spawn(move || {
+                let result = overlay_backend::hermes_install::ensure_api_server();
+                let _ = slint::invoke_from_event_loop(move || {
+                    let Some(w) = weak_res.upgrade() else { return };
+                    match result {
+                        Ok((key, changed)) => {
+                            {
+                                let mut c = cfg_save.write();
+                                c.hermes_api_key = key.clone();
+                                let _ = overlay_backend::config::save(&c);
+                            }
+                            w.set_hermes_api_key(SharedString::from(key));
+                            w.set_hermes_api_setup_status(SharedString::from(if changed {
+                                "готово: API-сервер включён, ключ создан и вписан — перезапусти Hermes"
+                            } else {
+                                "готово: ключ взят из Hermes и вписан сюда"
+                            }));
+                        }
+                        Err(e) => {
+                            w.set_hermes_api_setup_status(SharedString::from(format!(
+                                "ошибка: {e}"
+                            )));
+                        }
+                    }
+                });
+            });
+        });
+    }
+
     // -- connection test. NOT ai::test_connection (10s timeout): the Hermes
     // gateway runs a FULL agentic turn even for a 1-token ping (huge system
     // prompt → slow prefill), so 10s false-negatives on a healthy setup.

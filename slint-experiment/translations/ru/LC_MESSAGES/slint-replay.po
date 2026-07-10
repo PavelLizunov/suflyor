@@ -1554,3 +1554,20 @@ msgstr "⚠ Мост доступен с других машин — держи 
 
 msgid "Port:"
 msgstr "Порт:"
+
+# 2026-07-10 — авто-настройка ключа Hermes API (тестер не знает, где взять ключ)
+msgid "Don't know the key? For a Hermes on THIS machine the button below enables its API server, creates the key and fills it in here. Then restart Hermes."
+msgstr "Не знаешь, где взять ключ? Для Hermes на ЭТОЙ машине кнопка ниже сама включит его API-сервер, создаст ключ и впишет его сюда. После — перезапусти Hermes."
+
+msgid "Get the key from local Hermes"
+msgstr "Взять ключ из локального Hermes"
+
+# 2026-07-10 — сценарий использования Hermes-вкладки («после добавления не ясен»)
+msgid "What you get after setup"
+msgstr "Что даёт после настройки"
+
+msgid "① Ask your Hermes agent about your calls in ITS chat, in plain words: \"what was my last call about?\", \"search my calls for the salary talk\", \"suggest to suflyor memory that Timur is the team lead\", \"prepare a call profile for an interview at Acme and set it active\"."
+msgstr "① Спрашивай своего Hermes-агента о созвонах в ЕГО чате, обычными словами: «что было на последнем созвоне?», «найди в созвонах, где обсуждали зарплату», «предложи в память suflyor, что Тимур — тимлид», «подготовь профиль для собеса в Acme и сделай активным»."
+
+msgid "② Right here below: type a brief into «Prepare a call profile» — the agent researches it and activates the profile, and live answers on the call will use it."
+msgstr "② Прямо здесь ниже: впиши вводную в «Подготовить профиль созвона» — агент ресёрчит её, включает профиль, и живые ответы на созвоне будут его использовать."

@@ -59,15 +59,15 @@
 <main>
   <div class="intro">
     <p><b>Что это.</b> Двусторонний локальный мост между suflyor и твоим Hermes-агентом. Всё <b>localhost-only</b> и <b>по умолчанию выключено</b>.</p>
-    <p><b>①&nbsp;Мост (Hermes → suflyor):</b> агент читает созвоны/память/профили и может предлагать факты в память (с твоим одобрением) и создавать профили.</p>
-    <p><b>②&nbsp;API (suflyor → Hermes):</b> кнопка «Подготовить профиль» отдаёт вводную агенту (он ресёрчит) и пишет активный профиль. Живые ответы это НЕ трогает.</p>
+    <p><b>①&nbsp;Мост (Hermes → suflyor):</b> агент читает созвоны/память/профили. <b>Как пользоваться:</b> спрашивай Hermes в ЕГО чате обычными словами — «что было на последнем созвоне?», «найди в созвонах, где обсуждали зарплату», «предложи в память suflyor, что Тимур — тимлид».</p>
+    <p><b>②&nbsp;API (suflyor → Hermes):</b> в suflyor (Настройки → Hermes) впиши вводную в «Подготовить профиль» — агент ресёрчит и включает профиль созвона; живые ответы дальше используют его. Сам live-путь ответов это НЕ трогает.</p>
     <div class="steps"><b>Разовая настройка перед тестом (всё из приложения, никаких скриптов):</b>
       <ol>
         <li><b>Установи свежий билд</b> из релиза: <code>suflyor-slint-setup.exe</code> (двойной клик, дойди до конца), затем запусти suflyor из меню Пуск. Проверяем именно УСТАНОВЛЕННУЮ версию.</li>
         <li>В suflyor: <b>Настройки → Hermes</b> → включи «<b>Мост для Hermes</b>» (токен появится сам). Поле «<b>Хост привязки</b>» оставь <code>127.0.0.1</code> — твой Hermes на этой же машине.</li>
         <li>Нажми «<b>Установить плагин в Hermes</b>» → статус «готово: плагин установлен и включён…». Кнопка сама кладёт файлы плагина, прописывает токен и включает его в Hermes.</li>
         <li><b>Перезапусти Hermes.</b></li>
-        <li>Для ② — включи Hermes API-сервер: в конфиге Hermes (<code>%LOCALAPPDATA%\hermes\config.yaml</code>) поставь <code>platforms.api_server.enabled:&nbsp;true</code> + <code>extra.key:&nbsp;&lt;свой секрет&gt;</code>, перезапусти Hermes, этот же ключ вставь в suflyor → Настройки → Hermes.</li>
+        <li>Для ② — в секции «Hermes — API» нажми «<b>Взять ключ из локального Hermes</b>» (кнопка сама включит API-сервер Hermes, создаст ключ и впишет его в поле) → <b>ещё раз перезапусти Hermes</b>. Руками ничего искать не нужно.</li>
       </ol>
     </div>
   </div>
@@ -103,7 +103,7 @@
   <h2>② suflyor дергает агента (профиль)</h2>
   <div class="item" data-id="P1" tabindex="0">
     <div class="q"><span class="tag">P1</span>«Проверить» связь с Hermes API</div>
-    <div class="how">Настройки → Hermes → вставь URL <code>http://127.0.0.1:8642/v1</code> + ключ (Сохрани) → «Проверить» → <code>[ok] …</code>.</div>
+    <div class="how">Настройки → Hermes: URL оставь дефолтный <code>http://127.0.0.1:8642/v1</code>; ключ возьми кнопкой «<b>Взять ключ из локального Hermes</b>» (статус «готово…», Hermes перезапусти) → «Проверить». Это <b>агентный вызов — может идти до пары минут</b>, дождись → <code>[ok] агент ответил</code>.</div>
     <div class="statuses"><label class="ok"><input type="radio" name="st_P1" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_P1" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_P1" value="skip">⏭</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ скриншот</div><div class="shots"></div></div></div>
   <div class="item" data-id="P2" tabindex="0">
     <div class="q"><span class="tag w">write</span>«Подготовить профиль (Hermes)»</div>

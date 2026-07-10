@@ -1301,6 +1301,7 @@ pub(crate) fn populate_token_status(
     // the action results (stale «готово…» must not linger) and refresh the LIVE
     // bridge status (the reused window keeps its old text otherwise).
     win.set_hermes_api_test_result(SharedString::default());
+    win.set_hermes_api_setup_status(SharedString::default());
     win.set_hermes_profile_status(SharedString::default());
     win.set_hermes_plugin_install_status(SharedString::default());
     win.set_hermes_bridge_status(SharedString::from(
