@@ -2158,7 +2158,7 @@ fn wire_transcript_diarization(
         .borrow()
         .as_ref()
         .map(|d| (d.num_speakers.max(1) as i32).clamp(1, 8))
-        .unwrap_or(2);
+        .unwrap_or(0);
     win.set_speaker_count(default_count);
     // Reset the rename list too (the window is reused) — masked while by-voice=false,
     // but defends against a stale prior-session list if the gating ever changes.
@@ -2235,7 +2235,7 @@ fn wire_transcript_diarization(
             if w.get_diarizing() {
                 return;
             }
-            let count = w.get_speaker_count().clamp(1, 8);
+            let count = w.get_speaker_count().clamp(0, 8);
             w.set_diarizing(true);
             w.set_diar_status(SharedString::from("Определение говорящих…"));
 

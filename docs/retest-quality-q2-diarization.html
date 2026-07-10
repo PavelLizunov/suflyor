@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>suflyor — приёмка диаризации</title><style>
+body{max-width:1000px;margin:28px auto;padding:0 20px;background:#151b23;color:#e8eef4;font:14px/1.45 Segoe UI,sans-serif}p{color:#aebccc}table{width:100%;border-collapse:collapse;background:#1c232d;margin:12px 0 24px}th,td{border:1px solid #34404e;padding:8px;text-align:left}th{color:#bcd2ff}input{width:18px;height:18px}textarea{width:100%;min-height:72px;background:#10161e;color:#e8eef4;border:1px solid #34404e}</style></head><body>
+<h1>Q2 — качество определения говорящих</h1>
+<h2>Автоматическая проверка</h2><p>Постобработка: merge &lt;0.6 с, attach/drop &lt;0.4 с — 4/4 unit-теста. Auto-N: sweep 2..6, отсев кластеров &lt;2% речи (минимум 1.5 с), остановка на вырожденном кластере или скачке переключений — 3/3 unit-теста.</p>
+<table><thead><tr><th>Созвон</th><th>WeSpeaker</th><th>ERes2Net</th><th>Решение</th></tr></thead><tbody>
+<tr><td>A</td><td>276 сегм., 134 переключения</td><td>277 сегм., 141 переключение</td><td>WeSpeaker стабильнее</td></tr>
+<tr><td>B</td><td>1 сегм., 0 переключений</td><td>1 сегм., 0 переключений</td><td>равно</td></tr>
+<tr><td>C</td><td>120 сегм., 23 переключения</td><td>135 сегм., 69 переключений</td><td>WeSpeaker стабильнее</td></tr>
+</tbody></table><p><b>Итог A/B:</b> ERes2Net не показал стабильного улучшения, поэтому SHA-pinned WeSpeaker оставлен.</p>
+<h2>LISTEN — 20 реплик</h2><p>Открой Архив → созвон → «По голосам» → Авто → «Определить говорящих». Для 20 последовательных реплик отметь правильного говорящего; внизу запиши итог до/после.</p>
+<table><thead><tr><th>#</th><th>Правильно</th><th>Ожидался</th><th>Получен</th></tr></thead><tbody id="rows"></tbody></table>
+<p>До: <input size="5"> / 20 &nbsp; После: <input size="5"> / 20</p><textarea placeholder="Комментарий тестера"></textarea>
+<script>document.querySelector('#rows').innerHTML=Array.from({length:20},(_,i)=>`<tr><td>${i+1}</td><td><input type="checkbox"></td><td contenteditable></td><td contenteditable></td></tr>`).join('')</script></body></html>
