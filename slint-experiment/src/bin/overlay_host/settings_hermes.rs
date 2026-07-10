@@ -237,29 +237,42 @@ pub(crate) fn wire_hermes_settings(
         });
     }
 
-    // -- connection test (reuse ai::test_connection; model "hermes-agent") --
+    // -- connection test. NOT ai::test_connection (10s timeout): the Hermes
+    // gateway runs a FULL agentic turn even for a 1-token ping (huge system
+    // prompt → slow prefill), so 10s false-negatives on a healthy setup.
+    // ai::complete carries the 180s budget the agent path actually needs. --
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_hermes_api_test(move || {
             let Some(w) = weak.upgrade() else { return };
-            w.set_hermes_api_test_result(SharedString::from("проверка…"));
+            w.set_hermes_api_test_result(SharedString::from(
+                "проверка… (агентный вызов — до пары минут)",
+            ));
             let (url, key) = {
                 let c = cfg_c.read();
                 (c.hermes_api_url.clone(), c.hermes_api_key.clone())
             };
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
+                let messages = vec![overlay_backend::ai::ChatMessage {
+                    role: "user".to_string(),
+                    content: overlay_backend::ai::MessageContent::Text(
+                        "Ответь одним словом: ok".to_string(),
+                    ),
+                }];
                 let msg = match tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
                 {
-                    Ok(rt) => match rt.block_on(overlay_backend::ai::test_connection(
-                        url,
-                        key,
-                        "hermes-agent".to_string(),
+                    Ok(rt) => match rt.block_on(overlay_backend::ai::complete(
+                        &url,
+                        &key,
+                        "hermes-agent",
+                        messages,
+                        16,
                     )) {
-                        Ok(s) => format!("[ok] {s}"),
+                        Ok(_) => "[ok] агент ответил".to_string(),
                         Err(e) => format!("[err] {e:#}").chars().take(90).collect(),
                     },
                     Err(e) => format!("[err] runtime: {e}"),
