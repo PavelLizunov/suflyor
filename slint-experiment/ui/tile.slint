@@ -120,7 +120,7 @@ export component TileWindow inherits Window {
     // Phase E6 v17 — pinned bool: changes pin button visual; Rust
     // toggles on click. Maximize bool: Rust resizes window via Win32.
     in-out property <bool> pinned: false;
-    in-out property <bool> maximized: false;
+    in-out property <bool> tile-maximized: false;
     // Phase E6 v20 — body opacity (0.5..1.0). Lets the user see
     // through tiles to the meeting window underneath. Wired to
     // cfg.tile_body_opacity via Settings → Stealth slider.
@@ -526,7 +526,7 @@ export component TileWindow inherits Window {
                         clicked => { root.maximize-clicked(); }
                     }
                     Image {
-                        source: root.maximized
+                        source: root.tile-maximized
                             ? @image-url("../assets/icons/restore.svg")
                             : @image-url("../assets/icons/maximize.svg");
                         colorize: Theme.text-primary;

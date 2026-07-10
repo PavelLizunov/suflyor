@@ -44,7 +44,7 @@ path = "src/bin/overlay_host.rs"
 [build-dependencies]
 # Compiles ui/*.slint into Rust at build time. include_modules!() in
 # src/main.rs pulls the generated code in.
-slint-build = "1.16"
+slint-build = "1.17"
 # Embeds assets/icon.ico into the .exe (Explorer + taskbar). Best-effort:
 # build.rs ignores its error so a missing Windows SDK rc.exe never breaks
 # the build — the NSIS installer also sets the shortcut icon directly.
@@ -55,11 +55,12 @@ winresource = "0.1"
 # need no system deps (no GTK/X11). `raw-window-handle-06` exposes the
 # native HWND so the overlay-spike binary can call Win32 SetWindowLongPtrW
 # directly.
-slint = { version = "1.16", features = [
+slint = { version = "1.17", features = [
     "raw-window-handle-06",
+    "mcp",
     # G1 (2026-07-03) — per-window winit event filter for layout-independent Ctrl+C/V/X/A
     # (see src/bin/overlay_host/kbd_shortcuts.rs). Slint's purpose-built interception point;
-    # pinned at 1.16 so the "unstable" API surface is fixed for us.
+    # Keep compile-checking this unstable API on every Slint update.
     "unstable-winit-030",
 ] }
 
@@ -99,15 +100,6 @@ windows = { version = "0.62", features = [
     # so every eprintln! would otherwise be discarded — testers got empty logs).
     "Win32_System_Console",
 ] }
-
-# Phase 0.5 MCP spike: per docs.rs/i-slint-backend-testing 1.16, the
-# `mcp` feature actually belongs on `i-slint-backend-selector` (the
-# crate that wires Slint's runtime backend), not on the testing crate.
-# Slint pulls i-slint-backend-selector transitively; declaring it as a
-# direct dep with `mcp` enables the server via cargo feature unification.
-# With this enabled, setting SLINT_EMIT_DEBUG_INFO=1 + SLINT_MCP_PORT=N
-# at runtime starts an MCP server listening on N.
-i-slint-backend-selector = { version = "=1.16.1", features = ["mcp"] }
 
 # Phase 0.5 markdown spike: CommonMark + GFM parser. Already a transitive
 # dep of slint-build, so no new third-party risk.
@@ -152,15 +144,13 @@ path = "../overlay-backend"
 
 [dev-dependencies]
 # i-slint-backend-testing is the OFFICIAL test framework (not
-# "slint-testing"). The MCP server does NOT live here — Phase 0.5 spike
-# 2 confirmed the `mcp` feature actually belongs on
-# `i-slint-backend-selector` (a [dependencies] entry above). With that
-# enabled, running the live binary with SLINT_EMIT_DEBUG_INFO=1 +
+# "slint-testing"). With Slint 1.17 the `mcp` feature is enabled directly on
+# `slint`; running the live binary with SLINT_EMIT_DEBUG_INFO=1 +
 # SLINT_MCP_PORT=N starts the embedded MCP server at
 # http://127.0.0.1:N/mcp. Claude Code (any MCP-capable agent) can then
 # inspect the UI tree, take screenshots, click, and type — replaces
 # visual_check.ps1 + computer-use.
-i-slint-backend-testing = "1.16"
+i-slint-backend-testing = "1.17"
 
 [lints.clippy]
 # Tier 3 lint baseline (unwrap/expect/panic denied). `deny` (not `forbid`) so
