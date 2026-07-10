@@ -61,13 +61,13 @@
     <p><b>Что это.</b> Двусторонний локальный мост между suflyor и твоим Hermes-агентом. Всё <b>localhost-only</b> и <b>по умолчанию выключено</b>.</p>
     <p><b>①&nbsp;Мост (Hermes → suflyor):</b> агент читает созвоны/память/профили и может предлагать факты в память (с твоим одобрением) и создавать профили.</p>
     <p><b>②&nbsp;API (suflyor → Hermes):</b> кнопка «Подготовить профиль» отдаёт вводную агенту (он ресёрчит) и пишет активный профиль. Живые ответы это НЕ трогает.</p>
-    <div class="steps"><b>Разовая настройка перед тестом:</b>
+    <div class="steps"><b>Разовая настройка перед тестом (всё из приложения, никаких скриптов):</b>
       <ol>
         <li><b>Установи свежий билд</b> из релиза: <code>suflyor-slint-setup.exe</code> (двойной клик, дойди до конца), затем запусти suflyor из меню Пуск. Проверяем именно УСТАНОВЛЕННУЮ версию.</li>
-        <li>В suflyor: <b>Настройки → Hermes</b> → включи «<b>Мост для Hermes</b>» → скопируй <b>токен</b>. Поле «<b>Хост привязки</b>» оставь как есть — <code>127.0.0.1</code> (твой Hermes на этой же машине). <span style="color:var(--muted)">Оно нужно только если Hermes на другом сервере — не твой случай.</span></li>
-        <li>Скачай из релиза <code>suflyor-hermes-plugin.zip</code>, распакуй, внутри запусти <code>install.ps1</code> (напечатает шаги; там же <code>README.md</code> с деталями).</li>
-        <li>В <code>~/.hermes/config.yaml</code>: <code>plugins:&nbsp;enabled:&nbsp;[suflyor]</code>. В <code>~/.hermes/.env</code>: <code>SUFLYOR_BRIDGE_TOKEN=&lt;токен&gt;</code> (+ <code>SUFLYOR_BRIDGE_URL=http://127.0.0.1:8654</code>). Перезапусти Hermes.</li>
-        <li>Для ② — включи Hermes API-сервер (в config.yaml <code>platforms.api_server.enabled:true</code> + <code>extra.key</code>), этот же ключ вставь в suflyor → Настройки → Hermes.</li>
+        <li>В suflyor: <b>Настройки → Hermes</b> → включи «<b>Мост для Hermes</b>» (токен появится сам). Поле «<b>Хост привязки</b>» оставь <code>127.0.0.1</code> — твой Hermes на этой же машине.</li>
+        <li>Нажми «<b>Установить плагин в Hermes</b>» → статус «готово: плагин установлен и включён…». Кнопка сама кладёт файлы плагина, прописывает токен и включает его в Hermes.</li>
+        <li><b>Перезапусти Hermes.</b></li>
+        <li>Для ② — включи Hermes API-сервер: в конфиге Hermes (<code>%LOCALAPPDATA%\hermes\config.yaml</code>) поставь <code>platforms.api_server.enabled:&nbsp;true</code> + <code>extra.key:&nbsp;&lt;свой секрет&gt;</code>, перезапусти Hermes, этот же ключ вставь в suflyor → Настройки → Hermes.</li>
       </ol>
     </div>
   </div>
@@ -77,9 +77,13 @@
     <div class="q"><span class="tag">H1</span>Мост включается, статус зелёный</div>
     <div class="how">Настройки → Hermes → «Мост для Hermes» ON → статус становится <code>включён · 127.0.0.1:8654</code>. Токен показан (не пустой). Выключение → <code>выключен</code>.</div>
     <div class="statuses"><label class="ok"><input type="radio" name="st_H1" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_H1" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_H1" value="skip">⏭</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ скриншот</div><div class="shots"></div></div></div>
+  <div class="item" data-id="H1b" tabindex="0">
+    <div class="q"><span class="tag">H1b</span>Кнопка «Установить плагин в Hermes» отрабатывает</div>
+    <div class="how">Настройки → Hermes → «Установить плагин в Hermes» → статус «<code>готово: плагин установлен и включён — перезапусти Hermes</code>». Нажми ещё раз → «<code>готово: плагин обновлён (уже включён)…</code>» (повторный клик безопасен). Никаких скриптов/распаковок руками.</div>
+    <div class="statuses"><label class="ok"><input type="radio" name="st_H1b" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_H1b" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_H1b" value="skip">⏭</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ скриншот</div><div class="shots"></div></div></div>
   <div class="item" data-id="H2" tabindex="0">
     <div class="q"><span class="tag">H2</span>Hermes видит плагин, <code>/suflyor</code> отвечает</div>
-    <div class="how">После установки+перезапуска: <code>hermes plugins list</code> → <b>suflyor enabled</b>. В чате <code>/suflyor</code> → «suflyor подключён (версия …)».</div>
+    <div class="how">После кнопки установки + перезапуска Hermes: <code>hermes plugins list</code> → <b>suflyor enabled</b>. В чате <code>/suflyor</code> → «suflyor подключён (версия …)».</div>
     <div class="statuses"><label class="ok"><input type="radio" name="st_H2" value="ok">✅ ок</label><label class="bad"><input type="radio" name="st_H2" value="bad">❌ проблема</label><label class="skip"><input type="radio" name="st_H2" value="skip">⏭</label></div><textarea placeholder="Комментарий…" data-role="comment"></textarea><div class="shot"><div class="drop">＋ скриншот</div><div class="shots"></div></div></div>
 
   <h2>① Агент читает suflyor</h2>
@@ -166,7 +170,7 @@
     var html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
     var blob = new Blob([html], { type: 'text/html' });
     var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = 'retest-hermes-v0.32.0-filled.html'; a.click();
+    a.download = 'retest-hermes-v0.33.0-filled.html'; a.click();
   };
 })();
 </script>

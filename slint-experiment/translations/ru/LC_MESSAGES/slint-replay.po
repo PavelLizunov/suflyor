@@ -1508,11 +1508,15 @@ msgstr "Мост для Hermes"
 msgid "Status:"
 msgstr "Статус:"
 
-msgid "Port (loopback):"
-msgstr "Порт (loopback):"
+msgid "Token (the install button below writes it into Hermes automatically):"
+msgstr "Токен (кнопка установки ниже сама пропишет его в Hermes):"
 
-msgid "Token (paste into Hermes ~/.hermes/.env as SUFLYOR_BRIDGE_TOKEN):"
-msgstr "Токен (вставь в Hermes ~/.hermes/.env как SUFLYOR_BRIDGE_TOKEN):"
+# ТЗ 2026-07-10 — установка плагина ТОЛЬКО из приложения (без zip/скриптов)
+msgid "One click installs the agent plugin into the Hermes on THIS machine (files + token + enable). Then restart Hermes."
+msgstr "Один клик ставит плагин в Hermes на ЭТОЙ машине (файлы + токен + включение). После — перезапусти Hermes."
+
+msgid "Install plugin into Hermes"
+msgstr "Установить плагин в Hermes"
 
 msgid "Hermes — API (suflyor asks the agent)"
 msgstr "Hermes — API (suflyor спрашивает агента)"

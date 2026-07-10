@@ -1302,6 +1302,7 @@ pub(crate) fn populate_token_status(
     // bridge status (the reused window keeps its old text otherwise).
     win.set_hermes_api_test_result(SharedString::default());
     win.set_hermes_profile_status(SharedString::default());
+    win.set_hermes_plugin_install_status(SharedString::default());
     win.set_hermes_bridge_status(SharedString::from(
         crate::settings_hermes::current_bridge_status(&c.hermes_bridge_host, c.hermes_bridge_port),
     ));

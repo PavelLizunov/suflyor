@@ -1,14 +1,14 @@
 # suflyor ↔ Hermes integration
 
-Two-way bridge between **suflyor** (the local Windows interview overlay) and a
-**local Hermes agent**. Design + rationale: `../../docs/goal-hermes-integration-2026-07-09.md`.
+Two-way bridge between **suflyor** (the Windows interview overlay) and a
+**Hermes agent**. Design + rationale: `../../docs/goal-hermes-integration-2026-07-09.md`.
 
 ```
-Hermes agent ──(HTTP, loopback, bearer)──▶ suflyor bridge :8654   (Hermes reads calls/memory/profiles)
+Hermes agent ──(HTTP, bearer)──▶ suflyor bridge :8654   (Hermes reads calls/memory/profiles)
 suflyor      ──(HTTP, /v1/chat/completions)──▶ Hermes API :8642   (suflyor asks Hermes to prep a call profile)
 ```
 
-Both directions are **local-only** and **off by default**. suflyor never exposes
+Both directions are **off by default**. suflyor never exposes
 audio/screenshots/secrets; Hermes writes are narrow (a memory *suggestion* that
 you still approve, and a call-profile upsert).
 
@@ -16,28 +16,41 @@ you still approve, and a call-profile upsert).
 
 ## Direction 1 — Hermes reads suflyor (the plugin)
 
-### Install
-```powershell
-# in the suflyor repo:
-integrations\hermes-plugin\install.ps1
-```
-This copies `suflyor/` → `~/.hermes/plugins/suflyor/`. Then follow the two config
-steps it prints:
+### Install — Hermes on the SAME machine (one click, no scripts)
 
-1. **Enable** in `~/.hermes/config.yaml`:
-   ```yaml
-   plugins:
-     enabled:
-       - suflyor
+In suflyor: **Настройки → Hermes** → enable «Мост для Hermes» → press
+**«Установить плагин в Hermes»** → restart Hermes. The button (backed by
+`overlay-backend/src/hermes_install.rs`, plugin sources embedded in the binary):
+
+1. writes `plugin.yaml` + `__init__.py` into `<hermes home>/plugins/suflyor/`;
+2. line-merges `SUFLYOR_BRIDGE_URL` / `SUFLYOR_BRIDGE_TOKEN` into `<hermes home>/.env`
+   (nothing else in the file is touched);
+3. adds `suflyor` to `plugins.enabled` in `<hermes home>/config.yaml` via a
+   conservative text edit (comments preserved; exotic YAML shapes are left
+   alone with a hint to run `hermes plugins enable suflyor`).
+
+Hermes home = `HERMES_HOME` env var, else `%LOCALAPPDATA%\hermes` on Windows /
+`~/.hermes` elsewhere — same resolution as hermes-agent itself.
+
+Verify: `hermes plugins list` shows `suflyor` enabled; `/suflyor` in chat
+prints “suflyor подключён”.
+
+### Install — REMOTE Hermes (e.g. over Tailscale)
+
+The in-app button installs into the *local* Hermes only. For a Hermes running
+on another server:
+
+1. In suflyor: Настройки → Hermes → set **«Хост привязки»** to this machine's
+   Tailscale IP (`100.x.y.z`) or `0.0.0.0`, enable the bridge, copy the token.
+2. Copy this directory's `suflyor/` folder to the server:
+   `~/.hermes/plugins/suflyor/` (Linux default home).
+3. On the server, append to `~/.hermes/.env`:
    ```
-2. **Token** in `~/.hermes/.env` (get it from suflyor → Настройки → Hermes, after
-   enabling «Мост для Hermes»):
-   ```
-   SUFLYOR_BRIDGE_URL=http://127.0.0.1:8654
+   SUFLYOR_BRIDGE_URL=http://<tailscale-ip-of-the-windows-machine>:8654
    SUFLYOR_BRIDGE_TOKEN=<token from suflyor settings>
    ```
-Restart Hermes. Verify: `hermes plugins list` shows `suflyor` enabled; `/suflyor`
-in chat prints “suflyor подключён”.
+4. `hermes plugins enable suflyor` (or add `suflyor` to `plugins.enabled` in
+   `~/.hermes/config.yaml`), restart Hermes.
 
 ### Tools Hermes gets
 | Tool | What |
@@ -69,7 +82,7 @@ active profile. This is a *slow* agentic call — it never touches suflyor's liv
 answer path (that stays fast/local).
 
 ### Enable the Hermes API server (once)
-In `~/.hermes/config.yaml`:
+In the Hermes `config.yaml` (`%LOCALAPPDATA%\hermes\config.yaml` on Windows):
 ```yaml
 platforms:
   api_server:
@@ -85,9 +98,11 @@ handoff); no extra model config needed for suflyor.
 ---
 
 ## Security
-- suflyor bridge: `127.0.0.1` only, bearer required (blank token ⇒ refuses to
-  start), text-only reads, body-capped, generic errors, bodies never logged.
+- suflyor bridge: bearer required (blank token ⇒ refuses to start), text-only
+  reads, body-capped, generic errors, bodies never logged. Binds to
+  `127.0.0.1` by default; a non-loopback bind host (Tailscale scenario) shows
+  a warning in Settings — keep it on a trusted network only.
 - Hermes API server can drive terminal/file tools — keep it on loopback with a
   strong key; do **not** bind it to the LAN.
 - The plugin has zero third-party deps (stdlib `urllib`), reads its token at call
-  time, and forces no-proxy for the localhost bridge.
+  time, and forces no-proxy for a localhost bridge.

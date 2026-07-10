@@ -73,3 +73,26 @@ P1 конфиг+bridge.rs+тесты → P2 wiring в host + Настройки 
 P3 подготовка профиля → P4 плагин+инсталл+README → gate → build/install/relaunch →
 retest-HTML. Бэклог (не сейчас): AskRoute::Agent для «спросить агента» с тайла;
 /runs+SSE прогресс; LiteLLM-роутинг.
+
+---
+
+## P5 (2026-07-10) — установка плагина ТОЛЬКО из приложения
+
+Владелец отклонил поток «zip + install.ps1»: «запуск и установка всего должно
+проходить исключительно из приложения». Реализовано:
+
+- `overlay-backend/src/hermes_install.rs` — плагин зашит в бинарь
+  (`include_str!`); кнопка пишет файлы в `<hermes home>/plugins/suflyor/`,
+  line-merge'ит `SUFLYOR_BRIDGE_URL/TOKEN` в `.env` и включает `suflyor` в
+  `plugins.enabled` конфига **текстовой правкой** (комментарии пользователя
+  сохраняются; `hermes plugins enable` пере-дампил бы весь YAML). Экзотика
+  (flow-списки) не трогается — подсказка выполнить CLI вручную.
+- Hermes home = `HERMES_HOME` → `%LOCALAPPDATA%\hermes` (Windows-дефолт
+  hermes-agent; НЕ `~/.hermes` — прежний install.ps1 целил в неправильный
+  каталог и удалён).
+- Кнопка «Установить плагин в Hermes» во вкладке Hermes; токен минтится при
+  первом использовании; статус идемпотентного повторного клика — «обновлён».
+- Удалённый Hermes (Tailscale, кейс владельца): кнопка не применима — ручной
+  путь в `integrations/hermes-plugin/README.md`.
+- Релиз v0.33.0: ассет только `suflyor-slint-setup.exe` (zip плагина больше
+  не нужен). Приёмка: `docs/retest-hermes-v0.33.0.html` (новый пункт H1b).

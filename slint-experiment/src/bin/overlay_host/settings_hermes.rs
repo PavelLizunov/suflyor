@@ -159,6 +159,47 @@ pub(crate) fn wire_hermes_settings(
         });
     }
 
+    // -- «Установить плагин в Hermes» (ТЗ 2026-07-10: установка ТОЛЬКО из
+    // приложения — файлы + .env + config.yaml, см. hermes_install.rs) --
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_hermes_plugin_install(move || {
+            let Some(w) = weak.upgrade() else { return };
+            w.set_hermes_plugin_install_status(SharedString::from("устанавливаю…"));
+            // The .env write needs a real token — mint on first use, exactly
+            // like the enable-toggle does.
+            let (host, port, token, bridge_on) = {
+                let mut c = cfg_c.write();
+                if c.hermes_bridge_token.trim().is_empty() {
+                    c.hermes_bridge_token = bridge::generate_token();
+                    let _ = overlay_backend::config::save(&c);
+                }
+                (
+                    c.hermes_bridge_host.clone(),
+                    c.hermes_bridge_port,
+                    c.hermes_bridge_token.clone(),
+                    c.hermes_bridge_enabled,
+                )
+            };
+            w.set_hermes_bridge_token(SharedString::from(token.clone()));
+            let url = overlay_backend::hermes_install::bridge_url_for_env(&host, port);
+            let weak_res = w.as_weak();
+            std::thread::spawn(move || {
+                let msg = match overlay_backend::hermes_install::install_plugin(&url, &token) {
+                    Ok(s) if bridge_on => s,
+                    Ok(s) => format!("{s} · и включи «Мост для Hermes» выше"),
+                    Err(e) => format!("ошибка: {e}"),
+                };
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = weak_res.upgrade() {
+                        w.set_hermes_plugin_install_status(SharedString::from(msg));
+                    }
+                });
+            });
+        });
+    }
+
     // -- bind host save (re-applies the bridge if running; updates the warning) --
     {
         let cfg_c = cfg.clone();

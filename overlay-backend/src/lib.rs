@@ -15,6 +15,7 @@ pub mod diarize;
 pub(crate) mod download;
 pub mod events;
 pub mod health;
+pub mod hermes_install;
 pub(crate) mod http_log;
 pub mod journal;
 pub mod kb;

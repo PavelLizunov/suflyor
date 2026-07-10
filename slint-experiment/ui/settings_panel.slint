@@ -340,6 +340,9 @@ export component SettingsWindow inherits Window {
     callback hermes-bridge-port-save(string);
     callback hermes-bridge-host-save(string);
     callback hermes-bridge-regen-token();
+    // In-app plugin install (files + .env + config.yaml on THIS machine).
+    in-out property <string> hermes-plugin-install-status: "";
+    callback hermes-plugin-install();
     // Hermes API (suflyor → Hermes): url/key + test + call-profile prep.
     in-out property <string> hermes-api-url: "";
     in-out property <string> hermes-api-key: "";
@@ -2630,7 +2633,7 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                             Text {
-                                text: @tr("Token (paste into Hermes ~/.hermes/.env as SUFLYOR_BRIDGE_TOKEN):");
+                                text: @tr("Token (the install button below writes it into Hermes automatically):");
                                 font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
@@ -2646,6 +2649,27 @@ export component SettingsWindow inherits Window {
                                     text: @tr("Generate");
                                     clicked => { root.hermes-bridge-regen-token(); }
                                 }
+                            }
+                            Text {
+                                text: @tr("One click installs the agent plugin into the Hermes on THIS machine (files + token + enable). Then restart Hermes.");
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: @tr("Install plugin into Hermes");
+                                    primary: true;
+                                    clicked => { root.hermes-plugin-install(); }
+                                }
+                                Rectangle { horizontal-stretch: 1; }
+                            }
+                            if root.hermes-plugin-install-status != "" : Text {
+                                text: root.hermes-plugin-install-status;
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
                             }
                         }
                         SettingsCard {
