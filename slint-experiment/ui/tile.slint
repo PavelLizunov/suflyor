@@ -7,6 +7,7 @@
 
 import { Button, LineEdit, ScrollView, TextEdit, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { Metrics } from "metrics.slint";
 import { CloseButton, SelectableText } from "controls.slint";
 
 // MarkdownBlock is shared with markdown_spike — defined here in the
@@ -258,14 +259,14 @@ export component TileWindow inherits Window {
         // screenshot). 0.98 kills the visible bleed but keeps a hint of depth;
         // the body-opacity slider below still gives an INTENTIONAL fade.
         background: Theme.bg-surface.with-alpha(0.98);
-        border-radius: 10px;
-        border-width: 1px;
+        border-radius: Metrics.radius-control;
+        border-width: Metrics.border-thin;
         border-color: Theme.border;
         opacity: root.body-opacity;
 
         VerticalLayout {
-            padding: 10px;
-            spacing: 6px;
+            padding: Metrics.space-md;
+            spacing: Metrics.space-sm;
 
             // ===== Chrome row =====
             // Phase E6 v8 — RESTRUCTURED to fix the "pin/X buttons
@@ -278,7 +279,7 @@ export component TileWindow inherits Window {
             // region; buttons live OUTSIDE that Rectangle so their
             // internal TouchArea is the only one in the click path.
             HorizontalLayout {
-                spacing: 6px;
+                spacing: Metrics.space-sm;
                 height: 30px;
                 // Title + drag-handle area — stretches to fill
                 // remaining width on the LEFT of the source-label +
@@ -301,7 +302,7 @@ export component TileWindow inherits Window {
                     Text {
                         x: 0;
                         text: @tr("#{}  {}", root.sequence, root.tile-title);
-                        font-size: 12px;
+                        font-size: Metrics.font-body;
                         font-weight: 700;
                         color: Theme.text-primary;
                         vertical-alignment: center;
@@ -592,7 +593,7 @@ export component TileWindow inherits Window {
                 viewport-width: self.width;
                 min-height: 0px; // RS2: scroll inside the fixed tile, never grow the window (see below)
                 VerticalLayout {
-                    spacing: 4px;
+                    spacing: Metrics.space-xs;
                     // A2 fix (retest r2): right inset so the per-block ⭐ gutter clears the
                     // ScrollView scrollbar on long/scrolling answers (tester: the stars
                     // "compete with the scroll" and get hard to click).
@@ -608,7 +609,7 @@ export component TileWindow inherits Window {
                         // H1
                         if block.kind == 1 : SelectableText {
                             text: block.text;
-                            font-size: 18px;
+                            font-size: Metrics.font-heading;
                             font-weight: 700;
                             text-color: Theme.text-primary;
                             wrap: word-wrap;
@@ -637,7 +638,7 @@ export component TileWindow inherits Window {
                             spacing: 4px;
                             SelectableText {
                                 text: block.text;
-                                font-size: 12px;
+                                font-size: Metrics.font-body;
                                 text-color: Theme.text-secondary;
                                 wrap: word-wrap;
                                 horizontal-stretch: 1;
@@ -651,16 +652,16 @@ export component TileWindow inherits Window {
                         // Bullet
                         if block.kind == 4 : HorizontalLayout {
                             padding-left: 12px;
-                            spacing: 6px;
+                            spacing: Metrics.space-sm;
                             Text {
                                 text: "•";
-                                font-size: 12px;
+                                font-size: Metrics.font-body;
                                 color: Theme.accent;
                                 width: 10px;
                             }
                             SelectableText {
                                 text: block.text;
-                                font-size: 12px;
+                                font-size: Metrics.font-body;
                                 text-color: Theme.text-secondary;
                                 wrap: word-wrap;
                                 horizontal-stretch: 1;
@@ -679,14 +680,14 @@ export component TileWindow inherits Window {
                             border-color: Theme.border;
                             clip: true;
                             VerticalLayout {
-                                padding: 8px;
-                                spacing: 4px;
+                                padding: Metrics.space-sm;
+                                spacing: Metrics.space-xs;
                                 // Header: language label (left) + per-block copy
                                 // button (right). The button copies THIS block's
                                 // clean code — `block.text` is the fence-stripped
                                 // body, so no backticks reach the clipboard.
                                 HorizontalLayout {
-                                    spacing: 6px;
+                                    spacing: Metrics.space-sm;
                                     Text {
                                         text: block.lang;
                                         font-size: 9px;
@@ -748,7 +749,7 @@ export component TileWindow inherits Window {
                             border-width: 1px;
                             border-color: Theme.border;
                             VerticalLayout {
-                                padding: 8px;
+                                padding: Metrics.space-sm;
                                 SelectableText {
                                     text: block.text;
                                     font-size: 11px;
@@ -778,7 +779,7 @@ export component TileWindow inherits Window {
                     padding-right: 14px;
                     SelectableText {
                         text: root.select-text;
-                        font-size: 12px;
+                        font-size: Metrics.font-body;
                         text-color: Theme.text-secondary;
                         wrap: word-wrap;
                         capture(a, c) => {
@@ -793,7 +794,7 @@ export component TileWindow inherits Window {
             // tester accepted on the transcript); N>1 saves each marked block as its
             // own fact (edit later in Настройки → Память).
             if root.marked-count >= 1 || root.capture-pending : VerticalLayout {
-                spacing: 4px;
+                spacing: Metrics.space-xs;
                 // Editor: the single-mark trim buffer OR a pending selection. A BOUNDED, scrollable
                 // multi-line TextEdit (was a LineEdit) — a big captured selection is editable + scrolls
                 // WITHIN 160px instead of filling the area and pushing «В память»/«Отмена» off (RS2).
@@ -804,7 +805,7 @@ export component TileWindow inherits Window {
                     max-height: 160px;
                 }
                 HorizontalLayout {
-                    spacing: 6px;
+                    spacing: Metrics.space-sm;
                     Rectangle { horizontal-stretch: 1; }
                     Button {
                         text: root.capture-pending ? @tr("To memory") : @tr("To memory ({})", root.marked-count);
@@ -835,7 +836,7 @@ export component TileWindow inherits Window {
             // → button sends; both are disabled while the answer streams.
             // User: "нет возможности продолжить диалог в рамках тайла".
             if root.convo-id >= 0 : HorizontalLayout {
-                spacing: 6px;
+                spacing: Metrics.space-sm;
                 LineEdit {
                     placeholder-text: @tr("Continue the dialog…");
                     text <=> root.followup-text;

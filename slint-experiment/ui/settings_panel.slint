@@ -18,6 +18,7 @@
 
 import { Button, LineEdit, ScrollView, SpinBox, ComboBox, Slider, TextEdit, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { Metrics } from "metrics.slint";
 import { CloseButton } from "controls.slint";
 
 component IconSlot inherits Rectangle {
@@ -134,7 +135,7 @@ export component DarkCheck inherits Rectangle {
         }
         Text {
             text: root.text;
-            font-size: 12px;
+            font-size: Metrics.font-body;
             color: Theme.text-primary;
             vertical-alignment: center;
             wrap: word-wrap;
@@ -164,16 +165,16 @@ component SettingsCard inherits Rectangle {
     // rounded border even if a child reports an over-wide min-width.
     horizontal-stretch: 1;
     background: Theme.bg-elevated;
-    border-radius: 10px;
-    border-width: 1px;
+    border-radius: Metrics.radius-control;
+    border-width: Metrics.border-thin;
     border-color: Theme.border;
     clip: true;
     VerticalLayout {
-        padding: 12px;
-        spacing: 8px;
+        padding: Metrics.space-md;
+        spacing: Metrics.space-sm;
         if root.title != "" : Text {
             text: root.title;
-            font-size: 12px;
+            font-size: Metrics.font-body;
             font-weight: 700;
             color: Theme.text-secondary;
         }
@@ -227,7 +228,7 @@ component NavItem inherits Rectangle {
     }
     HorizontalLayout {
         padding-left: 10px;
-        spacing: 8px;
+        spacing: Metrics.space-sm;
         IconSlot {
             icon: root.icon;
             tint: root.active ? Theme.accent : Theme.text-secondary;
@@ -237,7 +238,7 @@ component NavItem inherits Rectangle {
         }
         Text {
             text: root.label;
-            font-size: 12px;
+            font-size: Metrics.font-body;
             color: root.active ? Theme.accent : Theme.text-secondary;
             vertical-alignment: center;
             animate color { duration: 120ms; }
@@ -674,8 +675,8 @@ export component SettingsWindow inherits Window {
     // moved here from the Window (which is now transparent).
     Rectangle {
         background: Theme.bg-surface;
-        border-radius: 12px;
-        border-width: 1px;
+        border-radius: Metrics.radius-panel;
+        border-width: Metrics.border-thin;
         border-color: Theme.border;
         clip: true;
 
@@ -691,7 +692,7 @@ export component SettingsWindow inherits Window {
             border-width: 0px;
 
             VerticalLayout {
-                padding: 8px;
+                padding: Metrics.space-sm;
                 spacing: 2px;
 
                 // "Settings" header doubles as the window drag handle
@@ -840,8 +841,8 @@ export component SettingsWindow inherits Window {
                     // sits at the bottom of the nav rather than in a corner.
                     // Danger tint on hover.
                     height: 32px;
-                    border-radius: 8px;
-                    border-width: 1px;
+                    border-radius: Metrics.radius-field;
+                    border-width: Metrics.border-thin;
                     border-color: closeta.has-hover ? Theme.danger.with-alpha(0.55) : Theme.border-strong;
                     background: closeta.has-hover ? Theme.danger.with-alpha(0.13) : transparent;
                     animate background, border-color { duration: 120ms; }
@@ -860,7 +861,7 @@ export component SettingsWindow inherits Window {
                         }
                         Text {
                             text: @tr("Close");
-                            font-size: 12px;
+                            font-size: Metrics.font-body;
                             color: Theme.text-secondary;
                             vertical-alignment: center;
                         }
@@ -897,13 +898,13 @@ export component SettingsWindow inherits Window {
             }
             ScrollView {
                 VerticalLayout {
-                    padding: 16px;
-                    spacing: 10px;
+                    padding: Metrics.space-lg;
+                    spacing: Metrics.space-md;
 
                     // Header
                     Text {
                         text: tab-name-for(root.active-tab);
-                        font-size: 18px;
+                        font-size: Metrics.font-heading;
                         font-weight: 700;
                         color: Theme.text-primary;
                     }
