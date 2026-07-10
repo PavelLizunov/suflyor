@@ -1,0 +1,4 @@
+#!/bin/sh
+# Agent-agnostic gate: clippy -D warnings + tests (all crates) before push.
+root="$(git rev-parse --show-toplevel)" || exit 1
+exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$root/scripts/git-gate-native.ps1" push

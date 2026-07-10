@@ -1,0 +1,6 @@
+#!/bin/sh
+# Agent-agnostic gate (Codex, Claude, humans): fast fmt check on commit.
+# Full clippy+tests run on pre-push. Enable once per clone:
+#   git config core.hooksPath .githooks
+root="$(git rev-parse --show-toplevel)" || exit 1
+exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$root/scripts/git-gate-native.ps1" commit
