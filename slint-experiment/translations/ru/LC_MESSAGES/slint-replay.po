@@ -1549,8 +1549,8 @@ msgstr "Подготовить профиль (Hermes)"
 msgid "Bind host — leave 127.0.0.1 for a Hermes on THIS machine; for a REMOTE Hermes over Tailscale set this machine's Tailscale IP (100.x) or 0.0.0.0:"
 msgstr "Хост привязки — оставь 127.0.0.1, если Hermes на ЭТОЙ машине; для УДАЛЁННОГО Hermes через Tailscale впиши Tailscale-IP этой машины (100.x) или 0.0.0.0:"
 
-msgid "⚠ Bridge is reachable off this machine — keep it on a trusted network (Tailscale) only; the token is required."
-msgstr "⚠ Мост доступен с других машин — держи его только в доверенной сети (Tailscale); токен обязателен."
+msgid "[!] Bridge is reachable off this machine — keep it on a trusted network (Tailscale) only; the token is required."
+msgstr "[!] Мост доступен с других машин — держи его только в доверенной сети (Tailscale); токен обязателен."
 
 msgid "Port:"
 msgstr "Порт:"
@@ -1566,8 +1566,8 @@ msgstr "Взять ключ из локального Hermes"
 msgid "What you get after setup"
 msgstr "Что даёт после настройки"
 
-msgid "① Ask your Hermes agent about your calls in ITS chat, in plain words: \"what was my last call about?\", \"search my calls for the salary talk\", \"suggest to suflyor memory that Timur is the team lead\", \"prepare a call profile for an interview at Acme and set it active\"."
-msgstr "① Спрашивай своего Hermes-агента о созвонах в ЕГО чате, обычными словами: «что было на последнем созвоне?», «найди в созвонах, где обсуждали зарплату», «предложи в память suflyor, что Тимур — тимлид», «подготовь профиль для собеса в Acme и сделай активным»."
+msgid "1) Ask your Hermes agent about your calls in ITS chat, in plain words: \"what was my last call about?\", \"search my calls for the salary talk\", \"suggest to suflyor memory that Timur is the team lead\", \"prepare a call profile for an interview at Acme and set it active\"."
+msgstr "1) Спрашивай своего Hermes-агента о созвонах в ЕГО чате, обычными словами: «что было на последнем созвоне?», «найди в созвонах, где обсуждали зарплату», «предложи в память suflyor, что Тимур — тимлид», «подготовь профиль для собеса в Acme и сделай активным»."
 
-msgid "② Right here below: type a brief into «Prepare a call profile» — the agent researches it and activates the profile, and live answers on the call will use it."
-msgstr "② Прямо здесь ниже: впиши вводную в «Подготовить профиль созвона» — агент ресёрчит её, включает профиль, и живые ответы на созвоне будут его использовать."
+msgid "2) Right here below: type a brief into «Prepare a call profile» — the agent researches it and activates the profile, and live answers on the call will use it."
+msgstr "2) Прямо здесь ниже: впиши вводную в «Подготовить профиль созвона» — агент ресёрчит её, включает профиль, и живые ответы на созвоне будут его использовать."

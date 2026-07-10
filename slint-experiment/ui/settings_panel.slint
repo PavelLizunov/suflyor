@@ -2578,13 +2578,13 @@ export component SettingsWindow inherits Window {
                         SettingsCard {
                             title: @tr("What you get after setup");
                             Text {
-                                text: @tr("① Ask your Hermes agent about your calls in ITS chat, in plain words: \"what was my last call about?\", \"search my calls for the salary talk\", \"suggest to suflyor memory that Timur is the team lead\", \"prepare a call profile for an interview at Acme and set it active\".");
+                                text: @tr("1) Ask your Hermes agent about your calls in ITS chat, in plain words: \"what was my last call about?\", \"search my calls for the salary talk\", \"suggest to suflyor memory that Timur is the team lead\", \"prepare a call profile for an interview at Acme and set it active\".");
                                 font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
                             Text {
-                                text: @tr("② Right here below: type a brief into «Prepare a call profile» — the agent researches it and activates the profile, and live answers on the call will use it.");
+                                text: @tr("2) Right here below: type a brief into «Prepare a call profile» — the agent researches it and activates the profile, and live answers on the call will use it.");
                                 font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
@@ -2628,7 +2628,7 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                             if root.hermes-bridge-remote : Text {
-                                text: @tr("⚠ Bridge is reachable off this machine — keep it on a trusted network (Tailscale) only; the token is required.");
+                                text: @tr("[!] Bridge is reachable off this machine — keep it on a trusted network (Tailscale) only; the token is required.");
                                 font-size: 11px;
                                 color: Theme.warning;
                                 wrap: word-wrap;
