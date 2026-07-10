@@ -84,7 +84,14 @@ Do NOT bypass with --no-verify.
    UI changes additionally get validated visually by the owner/tester —
    note any surface you changed so they know where to look.
 
-## Current agent task queue
+## Resuming an in-flight session
+
+**Start here:** `docs/CODEX_HANDOFF.md` — the live state (current branch, what
+is done/committed, gate status) and the exact push runbook + guardrails.
+`docs/state-and-plan.md` points to it. Read it before touching anything: this
+checkout is SHARED with a Claude Code session, so `git status`/`git log` first.
+
+## Agent task queue
 
 See `docs/AGENT_TASKS.md` — self-contained tasks with acceptance criteria,
 sized for one session each.
