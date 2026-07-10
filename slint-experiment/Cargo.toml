@@ -108,7 +108,7 @@ pulldown-cmark = { version = "0.13", default-features = false, features = ["html
 # Phase D2 — global F4 hotkey. global-hotkey is maintained by the
 # tauri-apps org (Tauri itself uses it). Provides a thread-safe
 # event channel that UI code can poll from a Slint Timer.
-global-hotkey = "0.6"
+global-hotkey = "0.8"
 
 # Phase E6 v28 — native file dialogs for Settings import/export.
 # rfd (PolyMeilex) wraps the OS-native picker (IFileDialog on Windows);
