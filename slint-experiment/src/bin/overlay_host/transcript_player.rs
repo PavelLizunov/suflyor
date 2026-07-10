@@ -56,9 +56,9 @@ impl rodio::Source for PcmCursor {
 /// Fresh input samples pulled per WSOLA `process()` call (~1 s at 16 kHz). Each call
 /// is a few ms of CPU on the rodio pull thread.
 const WSOLA_CHUNK: usize = 16_384;
-/// Output samples crossfaded at chunk boundaries (~8 ms at 16 kHz) to hide the seam
+/// Output samples crossfaded at chunk boundaries (~16 ms at 16 kHz) to hide the seam
 /// between the two independent WSOLA renders of the re-fed overlap.
-const XFADE_OUT: usize = 128;
+const XFADE_OUT: usize = 256;
 
 /// Phase 2b (A) — pitch-preserving playback-rate adapter. Wraps `PcmCursor` (still
 /// indexed in ORIGINAL samples) and time-stretches its output via the crate's
