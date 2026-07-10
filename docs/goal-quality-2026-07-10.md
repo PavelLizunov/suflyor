@@ -151,3 +151,20 @@ VoIP-звуке размывают атрибуцию.
 Ручные слуховые пункты не подменены автоматическим утверждением: код, модели,
 реальные offline-прогоны и checklists готовы, окончательные отметки LISTEN и
 20-репличной разметки делает владелец/тестер, как прямо задано в секциях Q1/Q2/Q5.
+
+### Финальная верификация
+
+- `scripts/ci.ps1`: PASS, 822.6с; fmt/clippy/test зелёные для всех трёх crate;
+  backend 478 passed, TTS 9 passed, UI/guards зелёные. `cargo deny`:
+  advisories+bans+sources+licenses PASS ×3.
+- Release: `overlay-host.exe` 69,111,296 bytes,
+  SHA-256 `FF53FAD1DECF166FD2B80367E42159872F1128436B88F555CD0F7A49DFF5B922`;
+  `suflyor-tts.exe` 17,657,344 bytes,
+  SHA-256 `CA5A1B8DE2EA50EE447880FE879BD88E228676473AA49C220AB027C27D52FD41`.
+- Installer: `target/release/bundle/suflyor-slint-setup.exe`, 23,222,928 bytes,
+  NSIS 3.12 exit 0, SHA-256
+  `A6160D8B41D2B7630AE0991154226D45DC552C41215A7DCF5CD8C66205CA5569`.
+- Live smoke: Diagnostics сообщает «Глобальные хоткеи — Готов» (ни одной
+  failed-регистрации из таблицы 13 клавиш); оба rfd Save/Open dialog открылись
+  и штатно отменились; ignored `live_rodio_device_smoke` прошёл на WASAPI;
+  release `overlay-host` и `suflyor-tts` запущены.
