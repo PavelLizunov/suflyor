@@ -1,19 +1,17 @@
 # cargo-deny — supply-chain gate for an app that does network egress AND
 # downloads-and-runs an installer. Per-crate (no workspace): run
 #   cargo deny --manifest-path <crate>/Cargo.toml check advisories bans sources
-# CI runs the same in .github/workflows/security.yml. `licenses` is left out of
-# the CI command for now (warn-only locally) — flip it on once the dep-tree
-# licenses are reviewed against the allow-list below.
+# CI runs the same in .github/workflows/security.yml, including the reviewed
+# license allow-list below.
 
 [advisories]
 yanked = "deny"
 # RUSTSEC vulnerabilities are denied by default (the advisory DB is fetched at
 # check time). The ignores below are UNMAINTAINED notices — not vulnerabilities —
 # on transitive crates pulled by slint/winit that we don't control and can't
-# replace. CI still fails on a real advisory; it just won't nag about a
-# dependency's maintenance status. Re-check when bumping slint.
+# replace. CI still fails on a real advisory. Slint 1.17 removed the old
+# generational-arena exception; the four entries below remain in its tree.
 ignore = [
-    "RUSTSEC-2024-0014", # generational-arena — archived/unmaintained (via slint)
     "RUSTSEC-2024-0436", # paste — no longer maintained (via slint/winit)
     "RUSTSEC-2026-0192", # ttf-parser — unmaintained (via slint font rendering)
     "RUSTSEC-2026-0194", # quick-xml — quadratic duplicate-attr-name check (DoS). Transitive via slint (bundled-SVG parsing) / atspi (Linux-only a11y, not built on Windows). We parse only our OWN compiled-in SVG/.slint, never untrusted XML → not reachable.
@@ -42,6 +40,12 @@ allow = [
   "MPL-2.0",
   "CC0-1.0",
   "0BSD",
+  "GPL-3.0-only",
+  "GPL-3.0-or-later",
+  "CDLA-Permissive-2.0",
+  "BSL-1.0",
+  "NCSA",
+  "Unlicense", # ksni via Slint on Linux; OSI-approved public-domain license
 ]
 confidence-threshold = 0.8
 

@@ -34,6 +34,5 @@ jobs:
           tool: cargo-deny
       # Manual invocation (not the action) for full arg-order control: `--config`
       # is a `check` SUBCOMMAND option (not global), and a per-crate manifest does
-      # NOT auto-find the repo-root deny.toml. advisories + bans + sources
-      # (licenses left out for now — see deny.toml).
-      - run: cargo deny --manifest-path ${{ matrix.crate }}/Cargo.toml check --config deny.toml advisories bans sources
+      # NOT auto-find the repo-root deny.toml.
+      - run: cargo deny --manifest-path ${{ matrix.crate }}/Cargo.toml check --config deny.toml advisories bans sources licenses
