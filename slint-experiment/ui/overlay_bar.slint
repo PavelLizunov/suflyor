@@ -653,7 +653,7 @@ export component OverlayBarWindow inherits Window {
                 clicked => { root.mic-toggle-clicked(); }
             }
             LiveChip {
-                icon: @image-url("../assets/icons/speaker.svg");
+                icon: @image-url("../assets/icons/system-audio.svg");
                 has-icon: true;
                 a11y: "System audio capture";
                 active: root.sys-active;
@@ -675,7 +675,7 @@ export component OverlayBarWindow inherits Window {
                 released => { root.ptt-mic-released(); }
             }
             RecordBtn {
-                icon: @image-url("../assets/icons/speaker.svg");
+                icon: @image-url("../assets/icons/system-audio.svg");
                 has-icon: true;
                 label: @tr("grab");
                 accent: Theme.accent;
@@ -690,7 +690,7 @@ export component OverlayBarWindow inherits Window {
             Chip {
                 icon: root.timer-active
                     ? @image-url("../assets/icons/stop.svg")
-                    : @image-url("../assets/icons/play.svg");
+                    : @image-url("../assets/icons/session-start.svg");
                 has-icon: true;
                 label: root.timer-active ? root.timer-label : @tr("start");
                 active: root.timer-active;
@@ -1088,7 +1088,7 @@ export component OverlayBarWindow inherits Window {
                 }
                 // захватить — hold to record THEM (system audio) → STT → AI.
                 RecordBtn {
-                    icon: @image-url("../assets/icons/speaker.svg");
+                    icon: @image-url("../assets/icons/system-audio.svg");
                     has-icon: true;
                     label: @tr("grab");
                     accent: Theme.accent;
@@ -1100,7 +1100,7 @@ export component OverlayBarWindow inherits Window {
                 Chip {
                     icon: root.timer-active
                         ? @image-url("../assets/icons/stop.svg")
-                        : @image-url("../assets/icons/play.svg");
+                        : @image-url("../assets/icons/session-start.svg");
                     has-icon: true;
                     label: root.timer-active ? root.timer-label : @tr("start");
                     active: root.timer-active;
