@@ -87,7 +87,7 @@ pub fn get_in(root: &Path, session_id: &str) -> Option<String> {
     load_in(root)
         .get(session_id)
         .map(|e| e.name.clone())
-        .filter(|n| !n.is_empty())
+        .filter(|n| !n.trim().is_empty())
 }
 
 /// Convenience: set against `%APPDATA%\suflyor`. Best-effort — a failed write is
@@ -126,6 +126,15 @@ mod tests {
         // Replace.
         set_in(&dir, "sess-1", "Новое имя", 200).unwrap();
         assert_eq!(get_in(&dir, "sess-1").as_deref(), Some("Новое имя"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn whitespace_only_title_reads_as_none() {
+        let dir = std::env::temp_dir().join(format!("sn_ws_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        set_in(&dir, "sess-blank", "    ", 100).unwrap();
+        assert_eq!(get_in(&dir, "sess-blank"), None);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
