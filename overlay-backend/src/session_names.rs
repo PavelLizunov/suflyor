@@ -87,7 +87,7 @@ pub fn get_in(root: &Path, session_id: &str) -> Option<String> {
     load_in(root)
         .get(session_id)
         .map(|e| e.name.clone())
-        .filter(|n| !n.trim().is_empty())
+        .filter(|n| !n.is_empty())
 }
 
 /// Convenience: set against `%APPDATA%\suflyor`. Best-effort — a failed write is
