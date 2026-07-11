@@ -45,7 +45,8 @@ with `cargo test --lib`; that skips integration guard tests.
 
 ```
 slint-experiment/        # the product: `overlay-host` binary
-  src/bin/overlay_host.rs # multi-window manager + all callback wiring
+  src/bin/overlay_host.rs # thin entrypoint
+  src/bin/overlay_host/   # multi-window manager, callbacks, settings, tiles, diagnostics
   src/                    # app_state, slint_session, win32 (HWND helpers), markdown, …
   ui/*.slint              # overlay_bar / tile / palette / settings_panel + tokens
   translations/ru/…/*.po  # bundled RU translation (gettext-style, msgctxt-free)
