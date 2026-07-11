@@ -147,7 +147,7 @@ fn cascade_cycle(
 /// развернуть, нужно отдельной кнопкой или даб-кликом". Maximized
 /// tile is 800×600 (~1.7× default); restored back to 460×360. Uses
 /// Win32 SetWindowPos with current position so the tile expands in
-/// place from its top-left corner. Flips tile.maximized so the
+/// place from its top-left corner. Flips tile.tile-maximized so the
 /// button glyph updates.
 pub(crate) fn toggle_tile_maximize(hwnd: windows::Win32::Foundation::HWND, tile: &TileWindow) {
     // Phase E6 v18 fix — use Slint's window().set_size() not raw
@@ -157,10 +157,10 @@ pub(crate) fn toggle_tile_maximize(hwnd: windows::Win32::Foundation::HWND, tile:
     // → user clicks hit dead space. set_size goes through the Slint
     // engine which both updates the OS window AND re-runs layout.
     // Fixes: "когда я развернул окно, другой его функционал завис".
-    let new = !tile.get_maximized();
+    let new = !tile.get_tile_maximized();
     let (w, h): (f32, f32) = if new { (800.0, 600.0) } else { (460.0, 360.0) };
     tile.window().set_size(slint::LogicalSize::new(w, h));
-    tile.set_maximized(new);
+    tile.set_tile_maximized(new);
 
     // Phase E6 v45 — keep the resized tile fully on-screen. Growing in
     // place from the top-left pushed tiles near a screen edge/corner off

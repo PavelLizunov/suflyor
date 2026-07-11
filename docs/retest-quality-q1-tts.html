@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>suflyor — приёмка чисел в озвучке</title>
+<style>
+  body{max-width:900px;margin:32px auto;padding:0 20px;background:#151b23;color:#e8eef4;font:15px/1.5 Segoe UI,sans-serif}
+  h1{font-size:24px} p{color:#aebccc} table{width:100%;border-collapse:collapse;background:#1c232d}
+  th,td{padding:10px 12px;border:1px solid #34404e;text-align:left} th{color:#bcd2ff}
+  input{width:20px;height:20px} code{color:#d5e4ff} textarea{width:100%;min-height:80px;background:#10161e;color:#e8eef4;border:1px solid #34404e}
+</style>
+</head>
+<body>
+<h1>Q1 — числа в neural-озвучке</h1>
+<p>Запусти свежую сборку, создай ответ-тайл с каждой фразой и нажми кнопку озвучки. Отметь строку, если числа произнесены словами без чтения отдельных цифр.</p>
+<table>
+<thead><tr><th>Ок</th><th>Контрольная фраза</th><th>Что услышать</th></tr></thead>
+<tbody>
+<tr><td><input type="checkbox"></td><td><code>У нас 123 задачи.</code></td><td>сто двадцать три</td></tr>
+<tr><td><input type="checkbox"></td><td><code>Готово на 45%.</code></td><td>сорок пять процентов</td></tr>
+<tr><td><input type="checkbox"></td><td><code>Готово на 2 %.</code></td><td>два процента</td></tr>
+<tr><td><input type="checkbox"></td><td><code>Созвон в 14:30.</code></td><td>четырнадцать тридцать</td></tr>
+<tr><td><input type="checkbox"></td><td><code>Поддерживаем v0.33.0.</code></td><td>вэ ноль тридцать три ноль</td></tr>
+<tr><td><input type="checkbox"></td><td><code>Диапазон 3–5 дней.</code></td><td>три — пять</td></tr>
+<tr><td><input type="checkbox"></td><td><code>Версия API 3.5.</code></td><td>три и пять</td></tr>
+<tr><td><input type="checkbox"></td><td><code>Температура -25 градусов.</code></td><td>минус двадцать пять</td></tr>
+<tr><td><input type="checkbox"></td><td><code>Нас 21002 человека.</code></td><td>двадцать одна тысяча два</td></tr>
+<tr><td><input type="checkbox"></td><td><code>API v0.33.0 готов на 45%.</code></td><td>смешанная RU/EN фраза без сырых цифр</td></tr>
+</tbody>
+</table>
+<h2>Комментарий</h2><textarea></textarea>
+</body>
+</html>

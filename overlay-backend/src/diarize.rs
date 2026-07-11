@@ -40,6 +40,9 @@ const WINDOW_CAP_MS: i64 = 30_000;
 /// enough to catch real gaps, large enough not to cry wolf on skew/rounding.
 const TIMELINE_TOL_MS: i64 = 5_000;
 
+const AUTO_MIN_SPEAKERS: i32 = 2;
+const AUTO_MAX_SPEAKERS: i32 = 6;
+
 /// Coarse progress for the archive UI (mirrors `re_transcribe::Progress`).
 #[derive(Debug, Clone)]
 pub enum Progress {
@@ -126,14 +129,29 @@ pub fn run_diarization(
     }
     guard_wav_len(&wav)?;
 
-    on_progress(Progress::Step("Определение говорящих…".to_string()));
     let exe = crate::tts::sidecar_exe_path();
-    let stdout = run_sidecar(&exe, &wav, &seg, &emb, num_speakers)?;
-    let parsed: SidecarOut =
-        serde_json::from_str(stdout.trim()).context("parse diarizer output")?;
-
     let windows = system_windows(utts);
-    let (segments, real_speakers) = filter_and_renumber(&parsed.segments, &windows);
+    let (segments, real_speakers) = if num_speakers > 0 {
+        on_progress(Progress::Step("Определение говорящих…".to_string()));
+        let stdout = run_sidecar(&exe, &wav, &seg, &emb, num_speakers)?;
+        let parsed: SidecarOut =
+            serde_json::from_str(stdout.trim()).context("parse diarizer output")?;
+        filter_and_renumber(&parsed.segments, &windows)
+    } else {
+        let mut candidates = Vec::new();
+        for count in AUTO_MIN_SPEAKERS..=AUTO_MAX_SPEAKERS {
+            on_progress(Progress::Step(format!(
+                "Автоподбор говорящих: {count}/{AUTO_MAX_SPEAKERS}…"
+            )));
+            let stdout = run_sidecar(&exe, &wav, &seg, &emb, count)?;
+            let parsed: SidecarOut =
+                serde_json::from_str(stdout.trim()).context("parse diarizer output")?;
+            candidates.push(auto_candidate(count, &parsed.segments, &windows));
+        }
+        let best = choose_auto_candidate(candidates)
+            .context("no speakers detected during automatic selection")?;
+        (best.segments, best.speakers)
+    };
     // Guard the silent dead-end: if EVERY cluster was dropped (no speech, or the
     // transcript has no aligned timecodes), fail loudly so the UI can prompt a
     // re-run instead of persisting a "success" with nothing to show.
@@ -148,6 +166,57 @@ pub fn run_diarization(
         segments,
         speaker_names: std::collections::BTreeMap::new(),
     })
+}
+
+struct AutoCandidate {
+    forced: i32,
+    segments: Vec<DiarSegment>,
+    speakers: i64,
+    switches: usize,
+}
+
+fn auto_candidate(
+    forced: i32,
+    raw: &[DiarSegment],
+    windows: &[(usize, i64, i64)],
+) -> AutoCandidate {
+    let (clean, _) = filter_and_renumber(raw, windows);
+    let total_ms: i64 = clean.iter().map(|s| s.end_ms - s.start_ms).sum();
+    let min_ms = (total_ms / 50).max(1_500);
+    let mut duration = std::collections::HashMap::<i32, i64>::new();
+    for seg in &clean {
+        *duration.entry(seg.speaker).or_default() += seg.end_ms - seg.start_ms;
+    }
+    let retained: Vec<DiarSegment> = clean
+        .into_iter()
+        .filter(|seg| duration.get(&seg.speaker).copied().unwrap_or_default() >= min_ms)
+        .collect();
+    let (segments, speakers) = filter_and_renumber(&retained, windows);
+    let switches = segments
+        .windows(2)
+        .filter(|pair| pair[0].speaker != pair[1].speaker)
+        .count();
+    AutoCandidate {
+        forced,
+        segments,
+        speakers,
+        switches,
+    }
+}
+
+fn choose_auto_candidate(candidates: Vec<AutoCandidate>) -> Option<AutoCandidate> {
+    let mut iter = candidates.into_iter();
+    let mut best = iter.find(|candidate| candidate.speakers > 0)?;
+    for candidate in iter {
+        let degenerate =
+            candidate.speakers < i64::from(candidate.forced) || candidate.speakers <= best.speakers;
+        let fragmented = candidate.switches > best.switches.saturating_mul(2).saturating_add(5);
+        if degenerate || fragmented {
+            break;
+        }
+        best = candidate;
+    }
+    Some(best)
 }
 
 /// Refuse a `system.wav` over [`MAX_DIAR_SECS`] (cheap header read — no decode).
@@ -414,5 +483,47 @@ mod tests {
         ];
         let a = align_all(&utts, &segs);
         assert_eq!(a, vec![None, Some(0), Some(1)]);
+    }
+
+    fn candidate(forced: i32, speakers: i64, switches: usize) -> AutoCandidate {
+        AutoCandidate {
+            forced,
+            segments: vec![seg(0, 1, 0)],
+            speakers,
+            switches,
+        }
+    }
+
+    #[test]
+    fn auto_selection_stops_before_degenerate_cluster() {
+        let chosen = choose_auto_candidate(vec![
+            candidate(2, 2, 8),
+            candidate(3, 3, 12),
+            candidate(4, 3, 13),
+        ])
+        .unwrap();
+        assert_eq!(chosen.forced, 3);
+    }
+
+    #[test]
+    fn auto_selection_stops_before_fragmentation_jump() {
+        let chosen = choose_auto_candidate(vec![
+            candidate(2, 2, 10),
+            candidate(3, 3, 15),
+            candidate(4, 4, 40),
+        ])
+        .unwrap();
+        assert_eq!(chosen.forced, 3);
+    }
+
+    #[test]
+    fn auto_selection_keeps_highest_stable_candidate() {
+        let chosen = choose_auto_candidate(vec![
+            candidate(2, 2, 10),
+            candidate(3, 3, 14),
+            candidate(4, 4, 18),
+        ])
+        .unwrap();
+        assert_eq!(chosen.forced, 4);
     }
 }

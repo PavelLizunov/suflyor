@@ -89,16 +89,16 @@ component Chip inherits Rectangle {
             ? accent.with-alpha(0.34)
             : (ta.has-hover ? Theme.border-strong.with-alpha(0.22) : transparent));
     border-color: active ? accent : (ta.has-hover ? accent.with-alpha(0.6) : Theme.border-strong);
-    border-width: 1px;
+    border-width: Metrics.border-thin;
     border-radius: Metrics.radius-control;
-    height: 22px;
+    height: Metrics.control-md;
     horizontal-stretch: 0;
     animate background { duration: 80ms; }
 
     HorizontalLayout {
-        padding-left: 8px;
-        padding-right: 8px;
-        spacing: 4px;
+        padding-left: Metrics.space-sm;
+        padding-right: Metrics.space-sm;
+        spacing: Metrics.space-xs;
         alignment: center;
         if root.has-icon : IconSlot {
             icon: root.icon;
@@ -110,7 +110,7 @@ component Chip inherits Rectangle {
         if root.label != "" : Text {
             text: label;
             font-family: root.mono ? Theme.font-mono : "";
-            font-size: 11px;
+            font-size: Metrics.font-label;
             color: active ? accent : Theme.text-secondary;
             vertical-alignment: center;
         }
@@ -140,9 +140,9 @@ component LockChip inherits Rectangle {
             ? accent.with-alpha(0.34)
             : (ta.has-hover ? Theme.border-strong.with-alpha(0.22) : transparent));
     border-color: locked ? accent : (ta.has-hover ? accent.with-alpha(0.6) : Theme.border-strong);
-    border-width: 1px;
+    border-width: Metrics.border-thin;
     border-radius: Metrics.radius-control;
-    height: 22px;
+    height: Metrics.control-md;
     min-width: 30px;
     horizontal-stretch: 0;
     animate background { duration: 80ms; }
@@ -202,9 +202,9 @@ component LiveChip inherits Rectangle {
     height: 22px;
 
     HorizontalLayout {
-        padding-left: 6px;
-        padding-right: 8px;
-        spacing: 4px;
+        padding-left: Metrics.space-sm;
+        padding-right: Metrics.space-sm;
+        spacing: Metrics.space-xs;
         // Dot indicator
         Rectangle {
             width: 6px;
@@ -222,7 +222,7 @@ component LiveChip inherits Rectangle {
         }
         if root.label != "" : Text {
             text: label;
-            font-size: 11px;
+            font-size: Metrics.font-label;
             color: active ? accent : Theme.text-secondary;
             vertical-alignment: center;
         }
@@ -267,9 +267,9 @@ component RecordBtn inherits Rectangle {
 
     background: recording ? Theme.danger.with-alpha(0.2) : transparent;
     border-color: recording ? Theme.danger : Theme.border-strong;
-    border-width: 1px;
+    border-width: Metrics.border-thin;
     border-radius: Metrics.radius-control;
-    height: 22px;
+    height: Metrics.control-md;
     horizontal-stretch: 0;
     animate background, border-color { duration: 120ms; }
 
@@ -282,9 +282,9 @@ component RecordBtn inherits Rectangle {
     }
 
     HorizontalLayout {
-        padding-left: 7px;
-        padding-right: 8px;
-        spacing: 5px;
+        padding-left: Metrics.space-sm;
+        padding-right: Metrics.space-sm;
+        spacing: Metrics.space-xs;
         // Record dot: filled red while recording; a SQUARE (border-radius 0)
         // once locked to read as a "stop" affordance; hollow accent ring idle.
         Rectangle {
@@ -305,7 +305,7 @@ component RecordBtn inherits Rectangle {
         }
         Text {
             text: root.label;
-            font-size: 11px;
+            font-size: Metrics.font-label;
             color: root.recording ? Theme.danger : Theme.text-secondary;
             vertical-alignment: center;
         }
@@ -653,7 +653,7 @@ export component OverlayBarWindow inherits Window {
                 clicked => { root.mic-toggle-clicked(); }
             }
             LiveChip {
-                icon: @image-url("../assets/icons/speaker.svg");
+                icon: @image-url("../assets/icons/system-audio.svg");
                 has-icon: true;
                 a11y: "System audio capture";
                 active: root.sys-active;
@@ -675,7 +675,7 @@ export component OverlayBarWindow inherits Window {
                 released => { root.ptt-mic-released(); }
             }
             RecordBtn {
-                icon: @image-url("../assets/icons/speaker.svg");
+                icon: @image-url("../assets/icons/system-audio.svg");
                 has-icon: true;
                 label: @tr("grab");
                 accent: Theme.accent;
@@ -690,7 +690,7 @@ export component OverlayBarWindow inherits Window {
             Chip {
                 icon: root.timer-active
                     ? @image-url("../assets/icons/stop.svg")
-                    : @image-url("../assets/icons/play.svg");
+                    : @image-url("../assets/icons/session-start.svg");
                 has-icon: true;
                 label: root.timer-active ? root.timer-label : @tr("start");
                 active: root.timer-active;
@@ -1088,7 +1088,7 @@ export component OverlayBarWindow inherits Window {
                 }
                 // захватить — hold to record THEM (system audio) → STT → AI.
                 RecordBtn {
-                    icon: @image-url("../assets/icons/speaker.svg");
+                    icon: @image-url("../assets/icons/system-audio.svg");
                     has-icon: true;
                     label: @tr("grab");
                     accent: Theme.accent;
@@ -1100,7 +1100,7 @@ export component OverlayBarWindow inherits Window {
                 Chip {
                     icon: root.timer-active
                         ? @image-url("../assets/icons/stop.svg")
-                        : @image-url("../assets/icons/play.svg");
+                        : @image-url("../assets/icons/session-start.svg");
                     has-icon: true;
                     label: root.timer-active ? root.timer-label : @tr("start");
                     active: root.timer-active;

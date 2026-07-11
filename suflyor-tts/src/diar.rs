@@ -22,6 +22,7 @@ use sherpa_onnx::{
 };
 
 /// One diarized span: `[start_ms, end_ms)` attributed to speaker index `sp`.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Segment {
     pub start_ms: i64,
     pub end_ms: i64,
@@ -182,7 +183,35 @@ fn diarize(
             sp: s.speaker,
         })
         .collect();
+    let segments = postprocess(segments);
     Ok((n, segments))
+}
+
+/// Smooth short speaker flicker and join same-speaker spans separated by a small gap.
+fn postprocess(segments: Vec<Segment>) -> Vec<Segment> {
+    const MERGE_GAP_MS: i64 = 600;
+    const FRAGMENT_MS: i64 = 400;
+    const ATTACH_GAP_MS: i64 = 300;
+
+    let mut out: Vec<Segment> = Vec::with_capacity(segments.len());
+    for segment in segments {
+        if segment.end_ms - segment.start_ms < FRAGMENT_MS {
+            if let Some(previous) = out.last_mut() {
+                if segment.start_ms - previous.end_ms < ATTACH_GAP_MS {
+                    previous.end_ms = previous.end_ms.max(segment.end_ms);
+                }
+            }
+            continue;
+        }
+        if let Some(previous) = out.last_mut() {
+            if previous.sp == segment.sp && segment.start_ms - previous.end_ms < MERGE_GAP_MS {
+                previous.end_ms = previous.end_ms.max(segment.end_ms);
+                continue;
+            }
+        }
+        out.push(segment);
+    }
+    out
 }
 
 /// Serialize as the stdout JSON contract. Hand-rolled (the sidecar has no serde;
@@ -289,5 +318,47 @@ mod tests {
         let mut thr = base.map(String::from).to_vec();
         thr.extend(["--threshold".into(), "nope".into()]);
         assert!(parse_args(&thr).is_err());
+    }
+
+    fn seg(start_ms: i64, end_ms: i64, sp: i32) -> Segment {
+        Segment {
+            start_ms,
+            end_ms,
+            sp,
+        }
+    }
+
+    #[test]
+    fn postprocess_merges_same_speaker_across_short_gap() {
+        assert_eq!(
+            postprocess(vec![seg(0, 1_000, 0), seg(1_500, 2_500, 0)]),
+            vec![seg(0, 2_500, 0)]
+        );
+    }
+
+    #[test]
+    fn postprocess_attaches_short_fragment_to_previous() {
+        assert_eq!(
+            postprocess(vec![
+                seg(0, 1_000, 0),
+                seg(1_100, 1_350, 1),
+                seg(1_400, 2_000, 0),
+            ]),
+            vec![seg(0, 2_000, 0)]
+        );
+    }
+
+    #[test]
+    fn postprocess_drops_isolated_short_fragment() {
+        assert_eq!(
+            postprocess(vec![seg(0, 500, 0), seg(1_000, 1_200, 1)]),
+            vec![seg(0, 500, 0)]
+        );
+    }
+
+    #[test]
+    fn postprocess_keeps_sorted_nonoverlapping_segments() {
+        let input = vec![seg(0, 500, 0), seg(700, 1_200, 1), seg(2_000, 2_600, 1)];
+        assert_eq!(postprocess(input.clone()), input);
     }
 }

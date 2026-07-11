@@ -1,6 +1,6 @@
 # Goal — качество: озвучка, диаризация, иконки, ровность UI (план Q1–Q5)
 
-**Дата:** 2026-07-10 · **Статус:** ПЛАН (утверждается владельцем) · Исполнение по
+**Дата:** 2026-07-10 · **Статус:** ИСПОЛНЕНО (ручная LISTEN/разметка — в retest HTML) · Исполнение по
 методологии: каждая фаза = гейт + self-review + live-смок + HTML-приёмка на
 изменённое; релизы копим (Hermes-очередь уже ждёт как v0.34.0; качество — следующий
 пакет). Разведка кода выполнена — пункты ниже подтверждены фактами, не догадками.
@@ -117,3 +117,54 @@ VoIP-звуке размывают атрибуцию.
 5. **Q5.1** прослушка WSOLA → **Q5.2** Slint 1.17 → Q2.3 авто-N → Q5.3.
 
 Каждый пункт — отдельный коммит с гейтом; релиз-пакеты копим (после v0.34.0).
+
+---
+
+## Результат исполнения 2026-07-10
+
+- **Q1 — DONE (`a13f671`)**: neural-only нормализация чисел, процентов,
+  времени, диапазонов, версий и десятичных; 16 unit-тестов; 10 фраз для
+  слуховой приёмки в `retest-quality-q1-tts.html`.
+- **Q2.1 — DONE (`c7c9b95`)**: склейка зазоров <0.6с и обработка осколков
+  <0.4с, 4 unit-теста. **Q2.2 — DONE (исследование)**: WeSpeaker и ERes2Net
+  сравнены на трёх реальных созвонах; ERes2Net дал больше переключений на двух
+  из трёх, поэтому pinned WeSpeaker сохранён. **Q2.3 — DONE (`36a0ae3`)**:
+  sweep N=2..6, отсев вырожденных кластеров и fragmentation-elbow; реальный
+  12-минутный прогон выбрал N=2. Человеческая разметка 20 реплик вынесена в
+  `retest-quality-q2-diarization.html`.
+- **Q3 — DONE (`f5eb3fb`)**: все SVG на сетке 16/1.6, новые раздельные
+  voice/system/session-start иконки, guard-тест, README и галерея
+  `retest-quality-q3-icons.html` (45 карточек, 0 broken).
+- **Q4 — DONE (`5bd38bf`)**: общие spacing-токены применены к Settings,
+  tile и bar; конвенция записана в `design-system.md`. CopyFromScreen-галерея
+  16 вкладок + bar + archive + tile: `retest-quality-q4-ui.html`.
+- **Q5.1 — DONE (`26e81ad`)**: WSOLA crossfade расширен до 256 samples;
+  multichunk 2×/3× тест зелёный, слуховой лист —
+  `retest-quality-q5-player.html`. **Q5.2 — DONE (`9b55ad5`)**: Slint 1.17.1,
+  MCP initialize/list/screenshot работает; accessibility tree остаётся пустым,
+  поэтому Q4 снят через HWND/CopyFromScreen. **Q5.3 — DONE**: Phase 0
+  `045342d`, global-hotkey `af22431`, rfd `610347a`, reqwest `1448bb4`,
+  rodio+timestretch `c86644b`, sha2 `c64a0bc`; cargo-deny зелёный ×3.
+  **Q5.4 — DONE как решение:** FTS5 намеренно не внедряется до порога
+  150–200 фактов, как требует charter.
+
+Ручные слуховые пункты не подменены автоматическим утверждением: код, модели,
+реальные offline-прогоны и checklists готовы, окончательные отметки LISTEN и
+20-репличной разметки делает владелец/тестер, как прямо задано в секциях Q1/Q2/Q5.
+
+### Финальная верификация
+
+- `scripts/ci.ps1`: PASS, 822.6с; fmt/clippy/test зелёные для всех трёх crate;
+  backend 478 passed, TTS 9 passed, UI/guards зелёные. `cargo deny`:
+  advisories+bans+sources+licenses PASS ×3.
+- Release: `overlay-host.exe` 69,111,296 bytes,
+  SHA-256 `FF53FAD1DECF166FD2B80367E42159872F1128436B88F555CD0F7A49DFF5B922`;
+  `suflyor-tts.exe` 17,657,344 bytes,
+  SHA-256 `CA5A1B8DE2EA50EE447880FE879BD88E228676473AA49C220AB027C27D52FD41`.
+- Installer: `target/release/bundle/suflyor-slint-setup.exe`, 23,222,928 bytes,
+  NSIS 3.12 exit 0, SHA-256
+  `A6160D8B41D2B7630AE0991154226D45DC552C41215A7DCF5CD8C66205CA5569`.
+- Live smoke: Diagnostics сообщает «Глобальные хоткеи — Готов» (ни одной
+  failed-регистрации из таблицы 13 клавиш); оба rfd Save/Open dialog открылись
+  и штатно отменились; ignored `live_rodio_device_smoke` прошёл на WASAPI;
+  release `overlay-host` и `suflyor-tts` запущены.

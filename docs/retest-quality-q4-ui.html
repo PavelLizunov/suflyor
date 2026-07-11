@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Q4 — галерея ровности UI</title>
+<style>
+  :root { color-scheme: dark; font: 15px/1.45 system-ui, sans-serif; background:#0b1118; color:#e5edf5 }
+  body { max-width:1600px; margin:auto; padding:24px }
+  h1 { margin:0 0 8px } .hint { color:#9fb0c2; margin-bottom:24px }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(420px,1fr)); gap:18px }
+  article { background:#111a24; border:1px solid #2b3948; border-radius:12px; padding:12px }
+  img { display:block; width:100%; height:auto; background:#05080c; border-radius:7px }
+  label { display:flex; gap:9px; align-items:center; font-weight:650; margin:10px 0 8px }
+  textarea { width:100%; min-height:54px; box-sizing:border-box; resize:vertical; background:#0b1118; color:inherit; border:1px solid #405166; border-radius:7px; padding:8px }
+  input { width:18px; height:18px }
+</style>
+<h1>Q4 — ровность интерфейса</h1>
+<p class="hint">CopyFromScreen, 1920×1080, свежий профиль без пользовательских данных. Отметьте кадр после проверки; неровности опишите в поле. Состояния: 16 вкладок Settings, бар, пустой архив и generic error-tile.</p>
+<main class="grid">
+  <article><img src="reference-shots/quality-2026-07-10/00-overlay-bar.png"><label><input type="checkbox">Бар</label><textarea placeholder="Замечания"></textarea></article>
+  <article><img src="reference-shots/quality-2026-07-10/01-profile-context.png"><label><input type="checkbox">Профиль + контекст</label><textarea placeholder="Замечания"></textarea></article>
+  <article><img src="reference-shots/quality-2026-07-10/02-coaching.png"><label><input type="checkbox">Коучинг</label><textarea placeholder="Замечания"></textarea></article>
+  <article><img src="reference-shots/quality-2026-07-10/03-components.png"><label><input type="checkbox">Компоненты</label><textarea placeholder="Замечания"></textarea></article>
+  <article><img src="reference-shots/quality-2026-07-10/04-ai-bridge.png"><label><input type="checkbox">AI мост</label><textarea placeholder="Замечания"></textarea></article>
+  <article><img src="reference-shots/quality-2026-07-10/05-stt.png"><label><input type="checkbox">STT</label><textarea placeholder="Замечания"></textarea></article>
+  <article><img src="reference-shots/quality-2026-07-10/06-tts.png"><label><input type="checkbox">TTS</label><textarea placeholder="Замечания"></textarea></article>
+  <article><img src="reference-shots/quality-2026-07-10/07-auto-tiles.png"><label><input type="checkbox">Авто-тайлы</label><textarea placeholder="Замечания"></textarea></article>
+  <article><img src="reference-shots/quality-2026-07-10/08-knowledge-base.png"><label><input type="checkbox">База знаний</label><textarea placeholder="Замечания"></textarea></article>
+  <article><img src="reference-shots/quality-2026-07-10/09-hermes.png"><label><input type="checkbox">Hermes</label><textarea placeholder="Замечания"></textarea></article>
+  <article><img src="reference-shots/quality-2026-07-10/10-audio.png"><label><input type="checkbox">Аудио</label><textarea placeholder="Замечания"></textarea></article>
+  <article><img src="reference-shots/quality-2026-07-10/11-interface.png"><label><input type="checkbox">Интерфейс</label><textarea placeholder="Замечания"></textarea></article>
+  <article><img src="reference-shots/quality-2026-07-10/12-hotkeys.png"><label><input type="checkbox">Хоткеи</label><textarea placeholder="Замечания"></textarea></article>
+  <article><img src="reference-shots/quality-2026-07-10/13-privacy.png"><label><input type="checkbox">Скрытность</label><textarea placeholder="Замечания"></textarea></article>
+  <article><img src="reference-shots/quality-2026-07-10/14-updates.png"><label><input type="checkbox">Обновления</label><textarea placeholder="Замечания"></textarea></article>
+  <article><img src="reference-shots/quality-2026-07-10/15-diagnostics.png"><label><input type="checkbox">Диагностика</label><textarea placeholder="Замечания"></textarea></article>
+  <article><img src="reference-shots/quality-2026-07-10/16-memory.png"><label><input type="checkbox">Память</label><textarea placeholder="Замечания"></textarea></article>
+  <article><img src="reference-shots/quality-2026-07-10/17-archive-empty.png"><label><input type="checkbox">Архив — пустое состояние</label><textarea placeholder="Замечания"></textarea></article>
+  <article><img src="reference-shots/quality-2026-07-10/18-tile-error-state.png"><label><input type="checkbox">Тайл — generic error-state</label><textarea placeholder="Замечания"></textarea></article>
+</main>
+<script>
+  const key='suflyor-q4-ui-2026-07-10';
+  const fields=[...document.querySelectorAll('input,textarea')];
+  const saved=JSON.parse(localStorage.getItem(key)||'[]');
+  fields.forEach((f,i)=>{ if(saved[i]!==undefined) f.type==='checkbox' ? f.checked=saved[i] : f.value=saved[i]; f.addEventListener('input',()=>localStorage.setItem(key,JSON.stringify(fields.map(x=>x.type==='checkbox'?x.checked:x.value)))) });
+</script>
+</html>

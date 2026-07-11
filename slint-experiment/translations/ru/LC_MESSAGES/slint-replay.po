@@ -1571,3 +1571,6 @@ msgstr "1) Спрашивай своего Hermes-агента о созвона
 
 msgid "2) Right here below: type a brief into «Prepare a call profile» — the agent researches it and activates the profile, and live answers on the call will use it."
 msgstr "2) Прямо здесь ниже: впиши вводную в «Подготовить профиль созвона» — агент ресёрчит её, включает профиль, и живые ответы на созвоне будут его использовать."
+
+msgid "Auto"
+msgstr "Авто"

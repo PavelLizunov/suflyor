@@ -377,7 +377,7 @@ impl Tts {
     /// (a tile answer) — it is cleaned to spoken text first so the synthesizer
     /// voices words, not `**` / backticks / `#`.
     pub fn speak(&self, text: &str) {
-        let spoken = speech_text::to_speech(text);
+        let spoken = crate::tts_normalize::normalize_for_speech(&speech_text::to_speech(text));
         if spoken.trim().is_empty() {
             return;
         }

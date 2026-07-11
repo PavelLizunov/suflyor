@@ -477,7 +477,7 @@ export component TranscriptWindow inherits Window {
                             border-radius: 6px;
                             border-width: 1px;
                             border-color: Theme.border;
-                            TouchArea { clicked => { if (root.speaker-count > 1) { root.speaker-count -= 1; } } }
+                            TouchArea { clicked => { if (root.speaker-count > 0) { root.speaker-count -= 1; } } }
                             Text {
                                 text: "−";
                                 font-size: Metrics.font-body;
@@ -487,7 +487,7 @@ export component TranscriptWindow inherits Window {
                             }
                         }
                         Text {
-                            text: "\{root.speaker-count}";
+                            text: root.speaker-count == 0 ? @tr("Auto") : "\{root.speaker-count}";
                             width: 22px;
                             font-size: Metrics.font-body;
                             font-weight: 700;
@@ -912,7 +912,7 @@ export component TranscriptWindow inherits Window {
                     VerticalLayout {
                         alignment: center;
                         Image {
-                            source: @image-url("../assets/icons/speaker.svg");
+                            source: @image-url("../assets/icons/voice.svg");
                             colorize: Theme.accent;
                             width: 13px;
                             height: 13px;
