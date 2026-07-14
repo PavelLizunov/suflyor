@@ -93,7 +93,7 @@ rusqlite = { version = "0.40.0", features = ["bundled"] }
 # (a [dependencies] entry is visible to the test target too).
 hound = "3"
 tiny_http = "0.12"
-getrandom = "0.2"
+getrandom = "0.4"
 
 [dev-dependencies]
 tempfile = "3"
