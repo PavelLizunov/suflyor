@@ -134,7 +134,7 @@ clipboard-win = "5"
 # and implement SEEK by re-slicing the buffer, so NO file decoders are needed —
 # default-features off keeps the dep tree (and the cargo-deny surface) lean.
 rodio = { version = "0.22", default-features = false, features = ["playback"] }
-timestretch = "0.5.0"
+timestretch = "0.7.0"
 
 # overlay-backend — the shared no-UI crate (audio, STT, AI, journal,
 # KB, screenshot, config, runtime + health.rs). This binary is its
