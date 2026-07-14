@@ -43,8 +43,8 @@ Do NOT bypass with --no-verify.
 ## Hard rules
 
 - **Never publish a GitHub release, never `gh release`, never push tags.**
-  Releases are owner-triggered only. Pushing to master is allowed only when
-  the task explicitly says so; default to a `codex/<task>` branch + PR.
+  Releases are owner-triggered only. Direct pushes to `master` are forbidden;
+  use a `codex/<task>` branch + PR.
 - **Work on a branch `codex/<short-task-name>`**, one task = one branch =
   one coherent deliverable. Claude Code sessions share this checkout —
   branches prevent the commit races we've already been burned by.

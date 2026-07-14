@@ -31,32 +31,28 @@ scripts\build-slint-release.ps1 -Installer
 
 ## Tests / gates
 
-Both crates must pass before any commit (the `.claude/hooks/git-gate.ps1` hook enforces this):
+All three crates must pass before any commit. Run the same full gate as CI:
 
-```bash
-# slint-experiment (UI + orchestration)
-cargo fmt   --manifest-path slint-experiment/Cargo.toml --all -- --check
-cargo clippy --manifest-path slint-experiment/Cargo.toml --all-targets -- -D warnings
-cargo test  --manifest-path slint-experiment/Cargo.toml --lib
-
-# overlay-backend (shared logic — audio/stt/ai/journal/kb/config/runtime)
-cargo fmt   --manifest-path overlay-backend/Cargo.toml --all -- --check
-cargo clippy --manifest-path overlay-backend/Cargo.toml --all-targets -- -D warnings
-cargo test  --manifest-path overlay-backend/Cargo.toml --lib
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci.ps1
 ```
 
-`scripts\ci.ps1` runs all of the above in one shot.
+It runs fmt, clippy with warnings denied, full tests for `overlay-backend`,
+`slint-experiment`, and `suflyor-tts`, plus the i18n guard. Do not replace it
+with `cargo test --lib`; that skips integration guard tests.
 
 ## Project layout
 
 ```
 slint-experiment/        # the product: `overlay-host` binary
-  src/bin/overlay_host.rs # multi-window manager + all callback wiring
+  src/bin/overlay_host.rs # thin entrypoint
+  src/bin/overlay_host/   # multi-window manager, callbacks, settings, tiles, diagnostics
   src/                    # app_state, slint_session, win32 (HWND helpers), markdown, …
   ui/*.slint              # overlay_bar / tile / palette / settings_panel + tokens
   translations/ru/…/*.po  # bundled RU translation (gettext-style, msgctxt-free)
 overlay-backend/         # shared crate (no UI): audio, stt, ai, journal, kb, config, runtime
   knowledge/*.md          # embedded KB (~1696 entries) — glossary + commands + patterns
+suflyor-tts/             # separate read-aloud/diarization sidecar (must stay a separate process)
 scripts/                 # build-slint-release.ps1, ci.ps1, capture/click helpers
 docs/                    # ADRs + migration history (the React→Slint move)
 .claude/                 # Claude Code hooks (git-gate, etc.)
@@ -78,13 +74,15 @@ README.md                # user-facing
 
 ## Version bump / release
 
-1. `slint-experiment/Cargo.toml` — `version = "X.Y.Z"`
-2. `scripts/slint-installer.nsi` — `PRODUCT_VERSION`
-3. `scripts\build-slint-release.ps1 -Installer`, then `gh release create vX.Y.Z … suflyor-slint-setup.exe`
+Releases and tags are owner-triggered only. When explicitly requested, keep
+`slint-experiment/Cargo.toml` and `scripts/slint-installer.nsi`
+(`PRODUCT_VERSION`) in sync, run the full gate, then build with
+`scripts\build-slint-release.ps1 -Installer`. Do not publish or push a tag
+without the owner's explicit command.
 
 ## Security
 
-- `config.json` at `%APPDATA%\overlay-mvp\config.json` holds live `groq_api_key` + `ai_bearer`. NEVER print these to chat / logs / screenshots.
+- `%APPDATA%\suflyor\config.json` holds live API credentials. NEVER print its contents to chat, logs, or screenshots.
 - The diagnostic dump (Settings → Updates) blanks secrets before writing.
 
 ## License
