@@ -16,7 +16,7 @@ import { DarkCheck } from "settings_panel.slint";
 // One transcript row, built in Rust from a session's utterances.
 export struct TranscriptLine {
     offset-label: string, // "02:15" session-relative, or "" if start unknown
-    speaker: string,      // «Система» | «Микрофон» (role view) OR «Вы» / «Тимур» / «Говорящий 2» (voice view)
+    speaker: string,      // role label OR one/multiple significant voices («Говорящий 1 + Говорящий 2»)
     speaker-color: color, // D3 — colour of the speaker label (accent in role view; per-speaker in «По голосам»)
     text: string,
     checked: bool,        // ТЗ1 — per-line selection for "Copy selected" (clipboard)
@@ -727,7 +727,8 @@ export component TranscriptWindow inherits Window {
                                     // the per-speaker palette colour Rust set on the line.
                                     color: root.by-voice ? line.speaker-color : Theme.accent;
                                     vertical-alignment: top;
-                                    width: 84px;
+                                    width: root.by-voice ? 120px : 84px;
+                                    wrap: word-wrap;
                                 }
                                 // ТЗ 2026-07-03 — selectable (read-only TextInput):
                                 // drag-select → right-click Copy / ⭐-to-memory. Clicks

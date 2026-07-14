@@ -1947,15 +1947,15 @@ fn apply_role_labels(model: &Rc<VecModel<TranscriptLine>>, utts: &[Utterance]) {
     }
 }
 
-/// Relabel every row for «По голосам»: mic → «Вы»; a system line → its aligned
-/// speaker (rename / «Говорящий N») + palette colour; an unattributed system line →
-/// «Система».
+/// Relabel every row for «По голосам»: mic → «Вы»; a system line → every
+/// significantly overlapping speaker (one long STT block can contain a turn change);
+/// an unattributed system line → «Система».
 fn apply_voice_labels(
     model: &Rc<VecModel<TranscriptLine>>,
     utts: &[Utterance],
     diar: &Diarization,
 ) {
-    let align = overlay_backend::diarize::align_all(utts, &diar.segments);
+    let align = overlay_backend::diarize::align_all_speakers(utts, &diar.segments);
     for i in 0..model.row_count() {
         let Some(mut row) = model.row_data(i) else {
             continue;
@@ -1964,9 +1964,17 @@ fn apply_voice_labels(
         if mic {
             row.speaker = SharedString::from("Вы");
             row.speaker_color = neutral_speaker_color();
-        } else if let Some(Some(id)) = align.get(i) {
-            row.speaker = SharedString::from(speaker_label(*id, &diar.speaker_names));
-            row.speaker_color = speaker_palette(*id);
+        } else if let Some(ids) = align.get(i).filter(|ids| !ids.is_empty()) {
+            let labels: Vec<String> = ids
+                .iter()
+                .map(|id| speaker_label(*id, &diar.speaker_names))
+                .collect();
+            row.speaker = SharedString::from(labels.join(" + "));
+            row.speaker_color = if ids.len() == 1 {
+                speaker_palette(ids[0])
+            } else {
+                neutral_speaker_color()
+            };
         } else {
             row.speaker = SharedString::from("Система");
             row.speaker_color = neutral_speaker_color();
@@ -1977,8 +1985,8 @@ fn apply_voice_labels(
 
 /// The rename-list rows: the display speakers that actually attribute ≥1 system line.
 fn speaker_rows(diar: &Diarization, utts: &[Utterance]) -> Vec<SpeakerRow> {
-    let align = overlay_backend::diarize::align_all(utts, &diar.segments);
-    let mut ids: Vec<i32> = align.iter().filter_map(|o| *o).collect();
+    let align = overlay_backend::diarize::align_all_speakers(utts, &diar.segments);
+    let mut ids: Vec<i32> = align.into_iter().flatten().collect();
     ids.sort_unstable();
     ids.dedup();
     ids.into_iter()
@@ -2240,16 +2248,22 @@ fn wire_transcript_diarization(
             w.set_diar_status(SharedString::from("Определение говорящих…"));
 
             let slot: Arc<Mutex<Option<Result<Diarization, String>>>> = Arc::new(Mutex::new(None));
+            let progress: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
             let utts_owned: Vec<Utterance> = utts_c.as_ref().clone();
             {
                 let slot_w = slot.clone();
+                let progress_w = progress.clone();
                 let sid_w = sid.clone();
                 rt.spawn_blocking(move || {
                     let r = overlay_backend::diarize::run_diarization(
                         &sid_w,
                         count,
                         &utts_owned,
-                        &|_: overlay_backend::diarize::Progress| {},
+                        &|overlay_backend::diarize::Progress::Step(message)| {
+                            if let Ok(mut value) = progress_w.lock() {
+                                *value = Some(message);
+                            }
+                        },
                     )
                     .map_err(|e| format!("{e:#}"));
                     if let Ok(mut g) = slot_w.lock() {
@@ -2268,6 +2282,11 @@ fn wire_transcript_diarization(
                 slint::TimerMode::Repeated,
                 std::time::Duration::from_millis(200),
                 move || {
+                    if let Some(message) = progress.lock().ok().and_then(|mut value| value.take()) {
+                        if let Some(w) = weak_p.upgrade() {
+                            w.set_diar_status(SharedString::from(message));
+                        }
+                    }
                     let done = slot.lock().ok().and_then(|mut g| g.take());
                     let Some(result) = done else {
                         return;

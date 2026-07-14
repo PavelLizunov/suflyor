@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>suflyor v0.34.0 — ручная приёмка перед релизом</title>
+<style>
+  :root{color-scheme:dark;font:15px/1.5 "Segoe UI",system-ui,sans-serif;background:#0b1118;color:#e7edf4}
+  *{box-sizing:border-box}body{max-width:1180px;margin:auto;padding:28px 20px 70px}
+  h1{margin:0 0 6px;font-size:28px}h2{margin:34px 0 12px;font-size:21px}h3{margin:0 0 7px;font-size:17px}
+  p{margin:6px 0}.muted{color:#9eacba}.ok{color:#67d391}.warn{color:#ffca72}.bad{color:#ff7b72}
+  .top,.card,.decision{background:#121b25;border:1px solid #2b3948;border-radius:12px;padding:16px}
+  .top{display:flex;gap:18px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:2;box-shadow:0 8px 24px #05080cb8}
+  .progress{min-width:230px}.bar{height:8px;background:#263342;border-radius:99px;overflow:hidden;margin-top:7px}.bar>span{display:block;height:100%;width:0;background:#4d9fff;transition:width .2s}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:12px}.card{height:100%}
+  label.check{display:grid;grid-template-columns:22px 1fr;gap:9px;align-items:start;margin:10px 0}
+  input[type=checkbox],input[type=radio]{width:18px;height:18px;margin-top:2px;accent-color:#4d9fff}
+  input[type=text],textarea,select{width:100%;background:#0a1017;color:inherit;border:1px solid #405166;border-radius:7px;padding:8px;font:inherit}
+  textarea{min-height:72px;resize:vertical}.meta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+  .icons{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:12px}
+  .icon-card{background:#121b25;border:1px solid #2b3948;border-radius:12px;padding:14px}
+  .icon-head{display:grid;grid-template-columns:62px 1fr;gap:13px;align-items:center}.icon-box{width:62px;height:62px;display:grid;place-items:center;background:#1c2733;border:1px solid #405166;border-radius:10px}
+  .icon-box img{width:44px;height:44px}.score{color:#ffca72;font-weight:700}.verdict{margin:10px 0}.criteria{font-size:13px;color:#aebccc;padding-left:18px}
+  .decision{border-color:#49637e}.decision label{margin-right:18px}.links a{color:#83b7ff;margin-right:14px;white-space:nowrap}
+  code{color:#cfe1ff}.callout{border-left:3px solid #ffca72;padding:8px 12px;background:#211d16;margin:12px 0}
+  button{background:#25364a;color:#edf4fb;border:1px solid #4a6077;border-radius:7px;padding:8px 12px;cursor:pointer}
+  .report-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}.copy-status{color:#67d391;min-height:1.5em}
+  #report-text{min-height:240px;font:13px/1.45 Consolas,monospace}
+  details{margin:12px 0;background:#101821;border:1px solid #2b3948;border-radius:10px;padding:12px}summary{cursor:pointer;font-size:17px;font-weight:700;color:#cfe1ff}
+  table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border:1px solid #334354;padding:8px;text-align:left;vertical-align:top}th{color:#bcd2ff;background:#16212d}
+  .detail-icons{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:9px;margin-top:12px}.detail-icon{background:#16212d;border:1px solid #334354;border-radius:8px;padding:10px}.detail-icon img{display:block;width:38px;height:38px;margin-bottom:7px}
+  .shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:12px;margin-top:12px}.shot{background:#16212d;border:1px solid #334354;border-radius:9px;padding:10px}.shot img{display:block;width:100%;height:auto;border-radius:6px;background:#05080c}.shot textarea{min-height:48px;margin-top:7px}
+  @media(max-width:650px){.top{position:static;display:block}.progress{margin-top:12px}.meta{grid-template-columns:1fr}}
+  @media print{.top{position:static;box-shadow:none}button{display:none}body{max-width:none}.card,.icon-card,.decision{break-inside:avoid}}
+</style>
+</head>
+<body>
+<h1>suflyor v0.34.0 — приёмка перед релизом</h1>
+<p class="muted">Отмечайте только то, что проверили лично. Состояние сохраняется в браузере автоматически.</p>
+
+<section class="top">
+  <div><b>Решение:</b> <span id="decision-label" class="warn">не принято</span><br><span class="muted">Installer: 23 235 485 bytes · SHA-256: <code>6D707BA7…56716DF6</code></span></div>
+  <div class="progress"><b id="progress-text">0 / 0 проверок</b><div class="bar"><span id="progress-bar"></span></div></div>
+  <div><button type="button" id="copy-report">Копировать отчёт</button> <button type="button" id="download-report">Скачать TXT</button> <button type="button" onclick="window.print()">Печать / PDF</button> <button type="button" id="reset">Сбросить</button></div>
+</section>
+
+<div class="meta">
+  <label>Тестер<input id="tester" type="text" data-save placeholder="Имя"></label>
+  <label>Дата<input id="test-date" type="text" data-save placeholder="ГГГГ-ММ-ДД"></label>
+</div>
+
+<h2>1. Релизный smoke — блокеры</h2>
+<div class="grid">
+  <section class="card">
+    <h3>Установка и запуск</h3>
+    <label class="check"><input type="checkbox" data-check><span>Установка поверх v0.33.0 проходит без ошибки; настройки и история сохранены.</span></label>
+    <label class="check"><input type="checkbox" data-check><span>В Настройки → Обновления/Диагностика отображается версия <b>0.34.0</b>.</span></label>
+    <label class="check"><input type="checkbox" data-check><span>После перезапуска открываются bar, Settings, тайл и Архив; нет зависания или пустого окна.</span></label>
+    <label class="check"><input type="checkbox" data-check><span>Диагностика: все 13 хоткеев зарегистрированы, DWM/прозрачность работают.</span></label>
+  </section>
+  <section class="card">
+    <h3>Два пункта повторной проверки</h3>
+    <div class="callout">В подготовительном smoke локальный AI ответил HTTP 503, а тест системного звука не получил сигнал. Приложение не упало, но перед публикацией эти два пути нужно проверить на рабочем окружении.</div>
+    <label class="check"><input type="checkbox" data-check><span>Настройки → AI мост: тест соединения успешен и реальный запрос создаёт тайл с ответом.</span></label>
+    <label class="check"><input type="checkbox" data-check><span>Настройки → Аудио: микрофон и системный звук показывают сигнал; короткая сессия записывает оба канала.</span></label>
+  </section>
+</div>
+
+<h2>2. Новая функциональность Q1–Q5</h2>
+<div class="grid">
+  <section class="card">
+    <h3>Q1 — neural TTS</h3>
+    <label class="check"><input type="checkbox" data-check><span><code>123</code>, <code>45%</code>, <code>14:30</code>, <code>v0.34.0</code> произносятся словами, не отдельными цифрами.</span></label>
+    <label class="check"><input type="checkbox" data-check><span>Диапазон <code>3–5</code>, десятичное <code>3.5</code> и отрицательное <code>-25</code> звучат понятно.</span></label>
+    <label class="check"><input type="checkbox" data-check><span>SAPI fallback не ухудшился.</span></label>
+  </section>
+  <section class="card">
+    <h3>Q2 — диаризация</h3>
+    <label class="check"><input type="checkbox" data-check><span>На реальном созвоне Auto показывает этапы и выбирает разумное число говорящих; reference 6:29 обработан примерно за 1:41.</span></label>
+    <label class="check"><input type="checkbox" data-check><span>Длинный STT-блок со сменой голоса показывает несколько значимых подписей, например «Говорящий 1 + Говорящий 2».</span></label>
+    <label class="check"><input type="checkbox" data-check><span>Имена/цвета говорящих остаются стабильными при навигации по архиву.</span></label>
+  </section>
+  <section class="card">
+    <h3>Q4 — ровность UI</h3>
+    <label class="check"><input type="checkbox" data-check><span>Settings: карточки, подписи, поля и кнопки имеют ровные отступы; текст не обрезан.</span></label>
+    <label class="check"><input type="checkbox" data-check><span>Overlay bar: иконки центрированы, активные состояния читаемы, элементы не прыгают.</span></label>
+    <label class="check"><input type="checkbox" data-check><span>Тайл и Архив: нет переполнения, tofu-квадратов и наложения элементов.</span></label>
+  </section>
+  <section class="card">
+    <h3>Q5 — плеер</h3>
+    <label class="check"><input type="checkbox" data-check><span>1×/1.25×: голос естественный; play/pause/seek работают.</span></label>
+    <label class="check"><input type="checkbox" data-check><span>2×/3×: нет периодического шва или щелчка, речь остаётся разборчивой.</span></label>
+    <label class="check"><input type="checkbox" data-check><span>Громкость, mute и повторное открытие записи не ломают воспроизведение.</span></label>
+  </section>
+</div>
+
+<h2>3. Новые и изменённые SVG — оценка Codex + ваше решение</h2>
+<p class="muted">Автоматический guard подтвердил сетку 16×16 и stroke 1.6. Ниже — визуальная оценка по исходникам и UI-кадрам; окончательное решение остаётся за владельцем.</p>
+<div class="icons">
+  <section class="icon-card">
+    <div class="icon-head"><div class="icon-box"><img src="../slint-experiment/assets/icons/star.svg" alt="star"></div><div><h3>star.svg</h3><span class="score">4 / 5 — принять</span></div></div>
+    <ul class="criteria"><li>Сетка и симметрия исправлены.</li><li>Силуэт узнаваем.</li><li>На 16 px внутренние углы выглядят чуть плотнее остальных иконок.</li></ul>
+    <label>Ваше решение<select data-save data-verdict><option value="">Не выбрано</option><option>Принять</option><option>Доработать</option><option>Отклонить</option></select></label>
+    <textarea data-save placeholder="Что именно изменить"></textarea>
+  </section>
+  <section class="icon-card">
+    <div class="icon-head"><div class="icon-box"><img src="../slint-experiment/assets/icons/voice.svg" alt="voice"></div><div><h3>voice.svg</h3><span class="score">4.5 / 5 — принять</span></div></div>
+    <ul class="criteria"><li>Человек + звуковые волны ясно обозначают озвучку.</li><li>Хорошо отличается от микрофона.</li><li>Правая сторона немного тяжелее из-за двух волн — проверить в sidebar при 100% DPI.</li></ul>
+    <label>Ваше решение<select data-save data-verdict><option value="">Не выбрано</option><option>Принять</option><option>Доработать</option><option>Отклонить</option></select></label>
+    <textarea data-save placeholder="Что именно изменить"></textarea>
+  </section>
+  <section class="icon-card">
+    <div class="icon-head"><div class="icon-box"><img src="../slint-experiment/assets/icons/system-audio.svg" alt="system audio"></div><div><h3>system-audio.svg</h3><span class="score">5 / 5 — повторная оценка</span></div></div>
+    <ul class="criteria"><li>Перерисован после замечания владельца.</li><li>Стандартный динамик с двумя звуковыми волнами, как в Windows.</li><li>Понятен без расшифровки и отличается от mic/voice.</li></ul>
+    <label>Ваше решение<select data-save data-verdict><option value="">Не выбрано</option><option>Принять</option><option>Доработать</option><option>Отклонить</option></select></label>
+    <textarea data-save placeholder="Что именно изменить"></textarea>
+  </section>
+  <section class="icon-card">
+    <div class="icon-head"><div class="icon-box"><img src="../slint-experiment/assets/icons/session-start.svg" alt="session start"></div><div><h3>session-start.svg</h3><span class="score">5 / 5 — принять</span></div></div>
+    <ul class="criteria"><li>Play в окружности сразу читается как запуск сессии.</li><li>Отличается от обычного player play.</li><li>Баланс и центрирование соответствуют набору.</li></ul>
+    <label>Ваше решение<select data-save data-verdict><option value="">Не выбрано</option><option>Принять</option><option>Доработать</option><option>Отклонить</option></select></label>
+    <textarea data-save placeholder="Что именно изменить"></textarea>
+  </section>
+</div>
+
+<p class="links"><b>Подробные проверки:</b> теперь встроены в эту страницу без переходов. <a href="#details">Перейти к ним</a></p>
+
+<h2>4. Итог владельца</h2>
+<section class="decision">
+  <p><b>Все блокирующие пункты должны быть отмечены, а для четырёх SVG выбрано решение.</b></p>
+  <label><input type="radio" name="release" value="Релизить" data-save> Релизить</label>
+  <label><input type="radio" name="release" value="Релизить с мелкими замечаниями" data-save> Релизить с мелкими замечаниями</label>
+  <label><input type="radio" name="release" value="Стоп" data-save> Стоп</label>
+  <textarea id="final-notes" data-save placeholder="Блокеры, замечания, номера SVG и таймкоды" style="margin-top:14px"></textarea>
+</section>
+
+<h2>5. Передать результат</h2>
+<section class="card">
+  <p>Нажмите «Копировать отчёт» и вставьте текст в чат. Если браузер запрещает доступ к буферу, скачайте TXT или скопируйте текст из поля вручную.</p>
+  <div class="report-actions"><button type="button" id="copy-report-bottom">Копировать отчёт</button><button type="button" id="download-report-bottom">Скачать TXT</button><span id="copy-status" class="copy-status"></span></div>
+  <textarea id="report-text" readonly aria-label="Готовый отчёт"></textarea>
+</section>
+
+<h2 id="details">6. Подробные проверки — без переходов</h2>
+<p class="muted">Раскройте нужный блок. Все отметки, поля и замечания также сохраняются и попадают в общий текстовый отчёт.</p>
+
+<details>
+  <summary>Q1 — 10 контрольных TTS-фраз</summary>
+  <table><thead><tr><th>ОК</th><th>Фраза</th><th>Ожидается</th></tr></thead><tbody id="tts-details"></tbody></table>
+</details>
+
+<details>
+  <summary>Q2 — разметка 20 реплик диаризации</summary>
+  <p class="muted">Архив → созвон → «По голосам» → Auto → «Определить говорящих».</p>
+  <table><thead><tr><th>#</th><th>ОК</th><th>Ожидался</th><th>Получен</th></tr></thead><tbody id="diar-details"></tbody></table>
+</details>
+
+<details>
+  <summary>Q3 — галерея всех 45 SVG</summary>
+  <label class="check"><input type="checkbox" data-detail-check data-key="all-icons-reviewed" data-detail-label="Просмотрены все 45 SVG"><span>Все 45 SVG просмотрены при масштабе 100%; ниже отмечены только требующие доработки.</span></label>
+  <div class="detail-icons" id="icon-details"></div>
+</details>
+
+<details>
+  <summary>Q4 — 19 UI-кадров</summary>
+  <div class="shots" id="ui-details"></div>
+</details>
+
+<details>
+  <summary>Q5 — полный LISTEN плеера</summary>
+  <div id="player-details"></div>
+</details>
+
+<script>
+  const ttsCases=[
+    ['У нас 123 задачи.','сто двадцать три'],['Готово на 45%.','сорок пять процентов'],['Готово на 2 %.','два процента'],['Созвон в 14:30.','четырнадцать тридцать'],['Поддерживаем v0.34.0.','вэ ноль тридцать четыре ноль'],['Диапазон 3–5 дней.','три — пять'],['Версия API 3.5.','три и пять'],['Температура -25 градусов.','минус двадцать пять'],['Нас 21002 человека.','двадцать одна тысяча два'],['API v0.34.0 готов на 45%.','смешанная RU/EN фраза без сырых цифр']
+  ];
+  document.querySelector('#tts-details').innerHTML=ttsCases.map((x,i)=>`<tr><td><input type="checkbox" data-detail-check data-key="tts-${i}" data-detail-label="TTS: ${x[0]}"></td><td><code>${x[0]}</code></td><td>${x[1]}</td></tr>`).join('');
+  document.querySelector('#diar-details').innerHTML=Array.from({length:20},(_,i)=>`<tr class="diar-row"><td>${i+1}</td><td><input type="checkbox" data-detail-check data-key="diar-ok-${i}" data-detail-label="Диаризация, реплика ${i+1}"></td><td><input type="text" data-save data-key="diar-want-${i}" aria-label="Реплика ${i+1}, ожидался"></td><td><input type="text" data-save data-key="diar-got-${i}" aria-label="Реплика ${i+1}, получен"></td></tr>`).join('');
+  const iconNames='ai archive arrow-up audio brain bubble camera check coach copy diag flame gear grip kb knowledge lock maximize mic micslash minimize monitor more pause pencil play plus refresh restart restore select-text session-start sos star stealth stop stt summary system-audio tiles trash update user voice x'.split(' ');
+  document.querySelector('#icon-details').innerHTML=iconNames.map(name=>`<label class="detail-icon"><img src="../slint-experiment/assets/icons/${name}.svg" alt=""><input type="checkbox" data-save data-icon-redraw data-key="icon-redraw-${name}"> ${name}.svg — доработать</label>`).join('');
+  const uiShots=[['00-overlay-bar.png','Overlay bar'],['01-profile-context.png','Профиль + контекст'],['02-coaching.png','Коучинг'],['03-components.png','Компоненты'],['04-ai-bridge.png','AI мост'],['05-stt.png','STT'],['06-tts.png','TTS'],['07-auto-tiles.png','Авто-тайлы'],['08-knowledge-base.png','База знаний'],['09-hermes.png','Hermes'],['10-audio.png','Аудио'],['11-interface.png','Интерфейс'],['12-hotkeys.png','Хоткеи'],['13-privacy.png','Скрытность'],['14-updates.png','Обновления'],['15-diagnostics.png','Диагностика'],['16-memory.png','Память'],['17-archive-empty.png','Архив — пусто'],['18-tile-error-state.png','Тайл — ошибка']];
+  document.querySelector('#ui-details').innerHTML=uiShots.map((x,i)=>`<article class="shot"><img src="reference-shots/quality-2026-07-10/${x[0]}" alt="${x[1]}"><label class="check"><input type="checkbox" data-detail-check data-key="ui-${i}" data-detail-label="UI: ${x[1]}"><span>${x[1]}</span></label><textarea data-save data-detail-note="UI ${x[1]}" data-key="ui-note-${i}" placeholder="Замечания"></textarea></article>`).join('');
+  const playerCases=['1×: естественный голос; старт/пауза/возобновление/seek работают.','1.25×: высота голоса не меняется, щелчков нет.','2×: нет периодического шва примерно раз в секунду.','3×: нет периодического шва, речь остаётся разборчивой.','Громкость меняется плавно; mute/unmute не ломает воспроизведение.','Повторное открытие записи после stop создаёт новый player без ошибки устройства.'];
+  document.querySelector('#player-details').innerHTML=playerCases.map((text,i)=>`<label class="check"><input type="checkbox" data-detail-check data-key="player-${i}" data-detail-label="Плеер: ${text}"><span>${text}</span></label>`).join('');
+
+  const key='suflyor-retest-v0.34.0';
+  const saved=JSON.parse(localStorage.getItem(key)||'{}');
+  const fields=[...document.querySelectorAll('[data-save],[data-check],[data-detail-check]')];
+  function idOf(el,i){return el.dataset.key?`key:${el.dataset.key}`:el.name?`name:${el.name}:${el.value}`:`field:${i}`}
+  fields.forEach((el,i)=>{const id=idOf(el,i);if(saved[id]!==undefined){if(el.type==='checkbox'||el.type==='radio')el.checked=saved[id];else el.value=saved[id]}el.addEventListener('input',save)});
+  function save(){const state={};fields.forEach((el,i)=>state[idOf(el,i)]=(el.type==='checkbox'||el.type==='radio')?el.checked:el.value);localStorage.setItem(key,JSON.stringify(state));update()}
+  function buildReport(){
+    const lines=[
+      'suflyor v0.34.0 — результат ручной приёмки',
+      `Тестер: ${document.querySelector('#tester').value||'—'}`,
+      `Дата: ${document.querySelector('#test-date').value||'—'}`,
+      ''
+    ];
+    document.querySelectorAll('h2').forEach(heading=>{
+      if(heading.textContent.startsWith('5.')||heading.textContent.startsWith('6.'))return;
+      lines.push(heading.textContent.trim());
+      let node=heading.nextElementSibling;
+      while(node&&node.tagName!=='H2'){
+        node.querySelectorAll?.('[data-check]').forEach(box=>{
+          const text=box.closest('label')?.innerText.trim()||'Проверка';
+          lines.push(`${box.checked?'[OK]':'[ ]'} ${text}`);
+        });
+        node.querySelectorAll?.('.icon-card').forEach(card=>{
+          const name=card.querySelector('h3')?.textContent.trim()||'SVG';
+          const verdict=card.querySelector('select')?.value||'не выбрано';
+          const note=card.querySelector('textarea')?.value.trim();
+          lines.push(`[SVG] ${name}: ${verdict}${note?` — ${note}`:''}`);
+        });
+        node=node.nextElementSibling;
+      }
+      lines.push('');
+    });
+    const chosen=document.querySelector('input[name=release]:checked');
+    lines.push(`ИТОГ: ${chosen?.value||'не выбран'}`);
+    const notes=document.querySelector('#final-notes').value.trim();
+    if(notes)lines.push(`Комментарий: ${notes}`);
+    lines.push('','ПОДРОБНЫЕ ПРОВЕРКИ');
+    document.querySelectorAll('[data-detail-check]').forEach(box=>lines.push(`${box.checked?'[OK]':'[ ]'} ${box.dataset.detailLabel||'Проверка'}`));
+    document.querySelectorAll('.diar-row').forEach((row,i)=>{const values=row.querySelectorAll('input[type=text]');if(values[0].value||values[1].value)lines.push(`Реплика ${i+1}: ожидался «${values[0].value||'—'}», получен «${values[1].value||'—'}»`)});
+    const redraw=[...document.querySelectorAll('[data-icon-redraw]:checked')].map(x=>x.closest('label').innerText.replace(' — доработать','').trim());
+    lines.push(`SVG на доработку: ${redraw.length?redraw.join(', '):'нет отмеченных'}`);
+    document.querySelectorAll('[data-detail-note]').forEach(note=>{if(note.value.trim())lines.push(`${note.dataset.detailNote}: ${note.value.trim()}`)});
+    return lines.join('\n').replace(/\n{3,}/g,'\n\n');
+  }
+  function update(){const checks=[...document.querySelectorAll('[data-check]')];const done=checks.filter(x=>x.checked).length;document.querySelector('#progress-text').textContent=`${done} / ${checks.length} проверок`;document.querySelector('#progress-bar').style.width=`${checks.length?done/checks.length*100:0}%`;const chosen=document.querySelector('input[name=release]:checked');const label=document.querySelector('#decision-label');label.textContent=chosen?chosen.value:'не принято';label.className=chosen?.value==='Стоп'?'bad':chosen?'ok':'warn';document.querySelector('#report-text').value=buildReport()}
+  async function copyReport(){
+    const text=buildReport();
+    let copied=false;
+    try{await navigator.clipboard.writeText(text);copied=true}catch{}
+    if(!copied){const area=document.createElement('textarea');area.value=text;area.style.position='fixed';area.style.opacity='0';document.body.append(area);area.select();copied=document.execCommand('copy');area.remove()}
+    const status=document.querySelector('#copy-status');status.textContent=copied?'Отчёт скопирован — вставьте его в чат.':'Автокопирование запрещено браузером: скопируйте текст из поля ниже.';
+  }
+  function downloadReport(){const url=URL.createObjectURL(new Blob([buildReport()],{type:'text/plain;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download='suflyor-v0.34.0-retest.txt';link.click();URL.revokeObjectURL(url)}
+  document.querySelectorAll('#copy-report,#copy-report-bottom').forEach(x=>x.addEventListener('click',copyReport));
+  document.querySelectorAll('#download-report,#download-report-bottom').forEach(x=>x.addEventListener('click',downloadReport));
+  document.querySelector('#reset').addEventListener('click',()=>{if(confirm('Сбросить все отметки и комментарии?')){localStorage.removeItem(key);location.reload()}});
+  update();
+</script>
+</body>
+</html>
