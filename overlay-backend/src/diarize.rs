@@ -15,6 +15,7 @@
 
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::time::Instant;
 
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
@@ -42,6 +43,7 @@ const TIMELINE_TOL_MS: i64 = 5_000;
 
 const AUTO_MIN_SPEAKERS: i32 = 2;
 const AUTO_MAX_SPEAKERS: i32 = 6;
+const MULTI_SPEAKER_MIN_OVERLAP_MS: i64 = 400;
 
 /// Coarse progress for the archive UI (mirrors `re_transcribe::Progress`).
 #[derive(Debug, Clone)]
@@ -115,6 +117,7 @@ pub fn run_diarization(
     utts: &[Utterance],
     on_progress: &impl Fn(Progress),
 ) -> Result<Diarization> {
+    let started = Instant::now();
     let seg = crate::diar_install::seg_model_path()
         .filter(|p| p.is_file())
         .context("segmentation model not installed")?;
@@ -133,23 +136,38 @@ pub fn run_diarization(
     let windows = system_windows(utts);
     let (segments, real_speakers) = if num_speakers > 0 {
         on_progress(Progress::Step("Определение говорящих…".to_string()));
+        let pass = Instant::now();
         let stdout = run_sidecar(&exe, &wav, &seg, &emb, num_speakers)?;
+        log::info!(
+            "diarization: fixed N={num_speakers} completed in {:.1}s",
+            pass.elapsed().as_secs_f32()
+        );
         let parsed: SidecarOut =
             serde_json::from_str(stdout.trim()).context("parse diarizer output")?;
         filter_and_renumber(&parsed.segments, &windows)
     } else {
-        let mut candidates = Vec::new();
+        let mut best = None;
         for count in AUTO_MIN_SPEAKERS..=AUTO_MAX_SPEAKERS {
             on_progress(Progress::Step(format!(
                 "Автоподбор говорящих: {count}/{AUTO_MAX_SPEAKERS}…"
             )));
+            let pass = Instant::now();
             let stdout = run_sidecar(&exe, &wav, &seg, &emb, count)?;
+            log::info!(
+                "diarization: auto N={count} completed in {:.1}s",
+                pass.elapsed().as_secs_f32()
+            );
             let parsed: SidecarOut =
                 serde_json::from_str(stdout.trim()).context("parse diarizer output")?;
-            candidates.push(auto_candidate(count, &parsed.segments, &windows));
+            if !consider_auto_candidate(
+                &mut best,
+                auto_candidate(count, &parsed.segments, &windows),
+            ) {
+                log::info!("diarization: auto sweep stopped before N={count}");
+                break;
+            }
         }
-        let best = choose_auto_candidate(candidates)
-            .context("no speakers detected during automatic selection")?;
+        let best = best.context("no speakers detected during automatic selection")?;
         (best.segments, best.speakers)
     };
     // Guard the silent dead-end: if EVERY cluster was dropped (no speech, or the
@@ -158,6 +176,10 @@ pub fn run_diarization(
     if real_speakers == 0 {
         bail!("no speakers detected (no speech, or transcript has no aligned timecodes)");
     }
+    log::info!(
+        "diarization: completed in {:.1}s, speakers={real_speakers}",
+        started.elapsed().as_secs_f32()
+    );
     Ok(Diarization {
         session_id: session_id.to_string(),
         created_at_ms: crate::journal::now_unix_ms() as i64,
@@ -204,19 +226,34 @@ fn auto_candidate(
     }
 }
 
+/// Feed one forced-N result into the auto selector. `false` means the candidate
+/// is already worse than the current best, so later N values must not be run.
+fn consider_auto_candidate(best: &mut Option<AutoCandidate>, candidate: AutoCandidate) -> bool {
+    let Some(current) = best.as_ref() else {
+        if candidate.speakers > 0 {
+            *best = Some(candidate);
+        }
+        return true;
+    };
+    let degenerate =
+        candidate.speakers < i64::from(candidate.forced) || candidate.speakers <= current.speakers;
+    let fragmented = candidate.switches > current.switches.saturating_mul(2).saturating_add(5);
+    if degenerate || fragmented {
+        return false;
+    }
+    *best = Some(candidate);
+    true
+}
+
+#[cfg(test)]
 fn choose_auto_candidate(candidates: Vec<AutoCandidate>) -> Option<AutoCandidate> {
-    let mut iter = candidates.into_iter();
-    let mut best = iter.find(|candidate| candidate.speakers > 0)?;
-    for candidate in iter {
-        let degenerate =
-            candidate.speakers < i64::from(candidate.forced) || candidate.speakers <= best.speakers;
-        let fragmented = candidate.switches > best.switches.saturating_mul(2).saturating_add(5);
-        if degenerate || fragmented {
+    let mut best = None;
+    for candidate in candidates {
+        if !consider_auto_candidate(&mut best, candidate) {
             break;
         }
-        best = candidate;
     }
-    Some(best)
+    best
 }
 
 /// Refuse a `system.wav` over [`MAX_DIAR_SECS`] (cheap header read — no decode).
@@ -307,7 +344,36 @@ fn max_overlap_speaker(start_ms: i64, end_ms: i64, segments: &[DiarSegment]) -> 
     best
 }
 
-/// Phantom filter + renumber. Keeps only speakers that WIN (max-overlap) ≥ 1
+/// Speakers with a meaningful overlap in one utterance window, ordered by first
+/// appearance. Tiny boundary slivers are ignored; a very short window falls back
+/// to its dominant speaker so it never loses an otherwise valid label.
+fn overlap_speakers(start_ms: i64, end_ms: i64, segments: &[DiarSegment]) -> Vec<i32> {
+    let mut overlaps = Vec::<(i32, i64)>::new();
+    for segment in segments {
+        let overlap = end_ms.min(segment.end_ms) - start_ms.max(segment.start_ms);
+        if overlap <= 0 {
+            continue;
+        }
+        if let Some((_, total)) = overlaps.iter_mut().find(|(id, _)| *id == segment.speaker) {
+            *total += overlap;
+        } else {
+            overlaps.push((segment.speaker, overlap));
+        }
+    }
+    let mut speakers: Vec<i32> = overlaps
+        .into_iter()
+        .filter(|(_, overlap)| *overlap >= MULTI_SPEAKER_MIN_OVERLAP_MS)
+        .map(|(speaker, _)| speaker)
+        .collect();
+    if speakers.is_empty() {
+        if let Some(speaker) = max_overlap_speaker(start_ms, end_ms, segments) {
+            speakers.push(speaker);
+        }
+    }
+    speakers
+}
+
+/// Phantom filter + renumber. Keeps only speakers with meaningful overlap in ≥1
 /// utterance window — dropping clusters that never attribute a line (the app's own
 /// TTS voice in system.wav, hold-music, notification pings). Renumbers survivors to
 /// `0..M` by first appearance (segments sorted by start). Returns `(clean segments,
@@ -319,9 +385,7 @@ fn filter_and_renumber(
 ) -> (Vec<DiarSegment>, i64) {
     let mut winners: std::collections::BTreeSet<i32> = std::collections::BTreeSet::new();
     for &(_, s, e) in windows {
-        if let Some(sp) = max_overlap_speaker(s, e, raw) {
-            winners.insert(sp);
-        }
+        winners.extend(overlap_speakers(s, e, raw));
     }
     let mut kept: Vec<DiarSegment> = raw
         .iter()
@@ -355,6 +419,20 @@ pub fn align_all(utts: &[Utterance], segments: &[DiarSegment]) -> Vec<Option<i32
     for (idx, s, e) in system_windows(utts) {
         if idx < result.len() {
             result[idx] = max_overlap_speaker(s, e, segments);
+        }
+    }
+    result
+}
+
+/// Per-utterance significant speakers. Unlike [`align_all`], this preserves a
+/// real speaker change inside one long STT block instead of hiding every voice
+/// except the dominant one.
+#[must_use]
+pub fn align_all_speakers(utts: &[Utterance], segments: &[DiarSegment]) -> Vec<Vec<i32>> {
+    let mut result = vec![Vec::new(); utts.len()];
+    for (idx, start, end) in system_windows(utts) {
+        if idx < result.len() {
+            result[idx] = overlap_speakers(start, end, segments);
         }
     }
     result
@@ -424,6 +502,14 @@ mod tests {
     }
 
     #[test]
+    fn overlap_speakers_keeps_real_changes_and_ignores_boundary_slivers() {
+        let segs = [seg(0, 900, 0), seg(900, 1800, 1), seg(1900, 2500, 2)];
+        assert_eq!(overlap_speakers(0, 1800, &segs), vec![0, 1]);
+        assert_eq!(overlap_speakers(1000, 2000, &segs), vec![1]);
+        assert_eq!(overlap_speakers(1900, 2100, &segs), vec![2]);
+    }
+
+    #[test]
     fn system_windows_bounds_by_next_and_cap() {
         let utts = [
             utt("mic", Some(100)),     // skipped (mic)
@@ -459,6 +545,14 @@ mod tests {
     }
 
     #[test]
+    fn filter_keeps_secondary_speaker_inside_one_long_utterance() {
+        let raw = [seg(0, 4_000, 0), seg(4_000, 6_000, 1)];
+        let (clean, count) = filter_and_renumber(&raw, &[(0, 0, 6_000)]);
+        assert_eq!(count, 2);
+        assert_eq!(clean, raw);
+    }
+
+    #[test]
     fn filter_returns_zero_when_everything_is_dropped() {
         // No windows (no system utterances with audio_ms) → no winners → all dropped.
         // This is the condition run_diarization turns into a loud error, not an
@@ -483,6 +577,13 @@ mod tests {
         ];
         let a = align_all(&utts, &segs);
         assert_eq!(a, vec![None, Some(0), Some(1)]);
+    }
+
+    #[test]
+    fn align_all_speakers_reports_multiple_voices_in_one_block() {
+        let segs = [seg(0, 1_000, 0), seg(1_000, 2_000, 1)];
+        let utts = [utt("system", Some(0))];
+        assert_eq!(align_all_speakers(&utts, &segs), vec![vec![0, 1]]);
     }
 
     fn candidate(forced: i32, speakers: i64, switches: usize) -> AutoCandidate {
