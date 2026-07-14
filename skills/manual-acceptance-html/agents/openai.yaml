@@ -1,0 +1,4 @@
+interface:
+  display_name: "Manual Acceptance HTML"
+  short_description: "Build self-contained manual acceptance checklists"
+  default_prompt: "Use $manual-acceptance-html to create an interactive HTML acceptance checklist from this goal."
