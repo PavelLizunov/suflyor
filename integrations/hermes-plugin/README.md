@@ -67,8 +67,8 @@ on another server:
 
 For `suflyor_recent_sessions` and `suflyor_search`, `limit` defaults to 10.
 The plugin clamps numeric values to `1..50` (zero/negative → 1, over 50 →
-50); missing or nonnumeric values safely fall back to 10. The dependency-free
-unit tests can be run from the repository root with:
+50); missing, nonnumeric, or boolean values safely fall back to 10. The
+dependency-free unit tests can be run from the repository root with:
 
 ```sh
 python3 -m unittest discover -s integrations/hermes-plugin/tests -p "test_*.py"

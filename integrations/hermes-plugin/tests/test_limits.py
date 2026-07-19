@@ -19,6 +19,8 @@ LIMIT_CASES = (
     ("negative", -7, 1),
     ("too large", 51, 50),
     ("nonnumeric", "many", 10),
+    ("boolean false", False, 10),
+    ("boolean true", True, 10),
     ("in range", 24, 24),
     ("numeric string", "12", 12),
 )

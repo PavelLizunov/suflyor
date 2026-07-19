@@ -71,6 +71,8 @@ def _pretty(obj) -> str:
 
 def _normalize_limit(value) -> int:
     """Return an integer limit clamped to the bridge's safe range."""
+    if isinstance(value, bool):
+        return _DEFAULT_LIMIT
     try:
         limit = int(value)
     except (TypeError, ValueError, OverflowError):
