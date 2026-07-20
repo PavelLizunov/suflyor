@@ -23,6 +23,9 @@ import urllib.request
 
 _DEFAULT_URL = "http://127.0.0.1:8654"
 _TIMEOUT = 15
+_DEFAULT_LIMIT = 10
+_MIN_LIMIT = 1
+_MAX_LIMIT = 50
 
 
 def _base_url() -> str:
@@ -66,6 +69,17 @@ def _pretty(obj) -> str:
     return json.dumps(obj, ensure_ascii=False, indent=2)
 
 
+def _normalize_limit(value) -> int:
+    """Return an integer limit clamped to the bridge's safe range."""
+    if isinstance(value, bool):
+        return _DEFAULT_LIMIT
+    try:
+        limit = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return _DEFAULT_LIMIT
+    return max(_MIN_LIMIT, min(limit, _MAX_LIMIT))
+
+
 # ── tool handlers ───────────────────────────────────────────────────────────
 # Each takes the tool-args dict and returns a human/LLM-readable string.
 
@@ -77,7 +91,7 @@ def _h_status(_args: dict) -> str:
 
 
 def _h_recent(args: dict) -> str:
-    limit = int(args.get("limit", 10) or 10)
+    limit = _normalize_limit(args.get("limit"))
     r = _request("GET", "/sessions", params={"limit": limit})
     if "_error" in r:
         return r["_error"]
@@ -121,7 +135,7 @@ def _h_search(args: dict) -> str:
     q = str(args.get("query", "")).strip()
     if not q:
         return "Нужен query."
-    limit = int(args.get("limit", 10) or 10)
+    limit = _normalize_limit(args.get("limit"))
     r = _request("GET", "/search", params={"q": q, "limit": limit})
     if "_error" in r:
         return r["_error"]
