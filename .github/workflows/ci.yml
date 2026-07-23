@@ -23,7 +23,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  gate:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if git diff --name-only --no-renames "$BASE_SHA" "$HEAD_SHA" |
+            grep -Ev '\.md$' | grep -q .; then
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "rust=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  rust:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -65,3 +88,15 @@ jobs:
         run: cargo clippy --manifest-path suflyor-tts/Cargo.toml --all-targets -- -D warnings
       - name: tts test
         run: cargo test --manifest-path suflyor-tts/Cargo.toml
+
+  # Stable required check: docs-only PRs never allocate a Windows runner.
+  gate:
+    if: always()
+    needs: [changes, rust]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RUST_NEEDED: ${{ needs.changes.outputs.rust }}
+          RUST_RESULT: ${{ needs.rust.result }}
+        run: |
+          test "$RUST_NEEDED" != "true" || test "$RUST_RESULT" = "success"
