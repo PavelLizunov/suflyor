@@ -1,0 +1,1 @@
+Temporary pull-request fixture used to measure the existing warm Rust cache without changing product code.
