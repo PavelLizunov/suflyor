@@ -9,6 +9,16 @@
 # Windows-only by design — the product is pure Win32 + WASAPI + Slint. Mirrors
 # the local gate's 5 layers (fmt --check, clippy -D warnings, FULL cargo test —
 # NOT --lib, so the tests/ guard tests run) for BOTH standalone crates.
+#
+# Selected-path contract (docs-only fast path):
+#   Classification lives in .github/scripts/is-docs-only.sh (single source of
+#   truth, shared with security.yml).  A PR is docs-only when EVERY changed
+#   path in the raw git diff (--name-only --no-renames base..head) matches
+#   *.md OR lives under docs/.  Any other path — Rust source, Cargo.toml /
+#   Cargo.lock, *.slint, workflow YAML, scripts/, deny.toml, .gitleaks.toml,
+#   etc. — selects the full-CI path.  Detection never reads PR title, body,
+#   or labels.  Docs-only PRs skip the Windows rust job; the gate still
+#   concludes green.  Classifier failure fails the gate (fail-closed).
 name: CI
 
 on:
@@ -17,7 +27,8 @@ on:
   pull_request:
     branches: [master]
 
-# A newer push to the same ref cancels the in-flight run.
+# A newer push to the same ref cancels the in-flight run; the replacement
+# run emits its own gate check for the new HEAD.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -26,23 +37,23 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      rust: ${{ steps.filter.outputs.rust }}
+      rust: ${{ steps.classify.outputs.rust }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - id: filter
+      - id: classify
         shell: bash
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.sha }}
         run: |
-          if git diff --name-only --no-renames "$BASE_SHA" "$HEAD_SHA" |
-            grep -Ev '\.md$' | grep -q .; then
-            echo "rust=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "rust=false" >> "$GITHUB_OUTPUT"
-          fi
+          result="$(bash .github/scripts/is-docs-only.sh "$BASE_SHA" "$HEAD_SHA")"
+          case "$result" in
+            true)  echo "rust=false" >> "$GITHUB_OUTPUT" ;;
+            false) echo "rust=true"  >> "$GITHUB_OUTPUT" ;;
+            *) echo "unexpected classifier output: '$result'" >&2; exit 1 ;;
+          esac
 
   rust:
     needs: changes
@@ -92,14 +103,40 @@ jobs:
       - name: tts test
         run: cargo test --manifest-path suflyor-tts/Cargo.toml
 
-  # Stable required check: docs-only PRs never allocate a Windows runner.
+  # Stable required context: "gate".  `if: always()` is load-bearing:
+  # docs-only PRs skip the rust job, and without always() GitHub would skip
+  # gate too (a needed job was skipped), leaving the required context missing.
+  # With always(), gate runs, validates the selector, and concludes.
   gate:
     if: always()
     needs: [changes, rust]
     runs-on: ubuntu-latest
     steps:
       - env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
           RUST_NEEDED: ${{ needs.changes.outputs.rust }}
           RUST_RESULT: ${{ needs.rust.result }}
         run: |
+          # The path selector must have completed — without its output we
+          # cannot distinguish "docs-only, rust legitimately skipped" from
+          # "changes job crashed, rust never scheduled".  Fail closed.
+          test "$CHANGES_RESULT" = "success" || exit 1
+          case "$RUST_NEEDED" in
+            true|false) ;;
+            *) echo "invalid rust value: '$RUST_NEEDED'" >&2; exit 1 ;;
+          esac
+          # Docs-only (rust != true): gate passes regardless of rust result
+          # (rust is expected to be "skipped").
+          # Code/mixed (rust == true): rust must have succeeded.
           test "$RUST_NEEDED" != "true" || test "$RUST_RESULT" = "success"
+
+  # Advisory regression tests for the path selector and gate logic.
+  # Uses only bash + git already on the runner — no downloads.
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docs-only classifier regression test
+        run: bash .github/scripts/test-docs-only-detection.sh
+      - name: gate logic regression test
+        run: bash .github/scripts/test-gate-logic.sh

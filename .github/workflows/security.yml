@@ -1,5 +1,12 @@
 # Supply-chain + secret scanning. Separate from ci.yml (the fmt/clippy/test
 # build gate) so a slow advisory-DB fetch never blocks fast build feedback.
+#
+# Docs-only fast path: classification lives in .github/scripts/is-docs-only.sh
+# (same script ci.yml uses — single source of truth).  Docs-only PRs still run
+# gitleaks (docs can contain secrets) but skip the cargo-deny matrix via a
+# fail-closed no-op: the job is scheduled, validates the selector output, and
+# succeeds without checkout/install/cargo-deny.  Code/mixed/unknown/selector
+# failure runs the exact existing cargo-deny command or fails the context.
 name: security
 
 on:
@@ -11,6 +18,32 @@ on:
     - cron: "0 6 * * 1" # weekly — catch a freshly-disclosed advisory between releases
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: classify
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          # Scheduled runs have no base..head diff — always run full checks.
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          result="$(bash .github/scripts/is-docs-only.sh "$BASE_SHA" "$HEAD_SHA")"
+          case "$result" in
+            true|false) echo "docs_only=$result" >> "$GITHUB_OUTPUT" ;;
+            *) echo "unexpected classifier output: '$result'" >&2; exit 1 ;;
+          esac
+
   gitleaks:
     runs-on: ubuntu-latest
     steps:
@@ -22,16 +55,43 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
 
+  # Required contexts: "cargo-deny (overlay-backend)", "cargo-deny
+  # (slint-experiment)", "cargo-deny (suflyor-tts)".  The job always runs
+  # (if: always()) so every matrix context is created and concludes for every
+  # PR.  Docs-only: validate selector → succeed (no checkout/install/deny).
+  # Code/mixed: validate selector → checkout → install → cargo-deny.
+  # Selector failure or invalid output: fail closed.
   cargo-deny:
+    if: always()
+    needs: changes
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         crate: [overlay-backend, slint-experiment, suflyor-tts]
     steps:
+      - name: Validate path selector
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+        run: |
+          # Fail closed: the selector must have completed and emitted a
+          # valid value.  Without this, a crashed selector would silently
+          # skip cargo-deny.
+          test "$CHANGES_RESULT" = "success" || exit 1
+          case "$DOCS_ONLY" in
+            true|false) ;;
+            *) echo "invalid docs_only value: '$DOCS_ONLY'" >&2; exit 1 ;;
+          esac
+          if [ "$DOCS_ONLY" = "true" ]; then
+            echo "docs-only change — cargo-deny not needed for ${{ matrix.crate }}"
+          fi
       - uses: actions/checkout@v4
+        if: success() && needs.changes.outputs.docs_only == 'false'
       - uses: taiki-e/install-action@v2
+        if: success() && needs.changes.outputs.docs_only == 'false'
         with:
           tool: cargo-deny
       # A per-crate manifest does not auto-find the repo-root deny.toml.
       - run: cargo deny --manifest-path ${{ matrix.crate }}/Cargo.toml --config deny.toml check advisories bans sources licenses
+        if: success() && needs.changes.outputs.docs_only == 'false'
