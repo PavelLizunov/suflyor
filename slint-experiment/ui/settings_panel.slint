@@ -2206,9 +2206,17 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                             Text {
-                                text: root.ai-local-quality
-                                    ? @tr("[!] Selected 12B: the model uses about 6.3 GiB on disk; vision adds about 167 MiB. The measured setup used about 9.5 GB of VRAM, but actual runtime memory depends on the PC.")
-                                    : @tr("[!] Selected 4B: the model uses about 4.6 GiB on disk; vision adds about 1.8 GiB (about 6.4 GiB total). Runtime RAM/VRAM is additional and is not calibrated for every Windows GPU.");
+                                // Match the backend's model choice: a stale 12B
+                                // preference falls back to 4B unless the complete
+                                // 12B file is present. Its vision projector is
+                                // optional, so only count it when it is installed.
+                                text: root.ai-local-quality && root.quality-model-present
+                                    ? root.quality-vision-present
+                                        ? @tr("[!] Selected 12B: the model uses about 6.3 GiB on disk; the installed vision projector adds about 167 MiB. The measured setup used about 9.5 GB of VRAM, but actual runtime memory depends on the PC.")
+                                        : @tr("[!] Selected 12B: the model uses about 6.3 GiB on disk. Its optional 167 MiB vision projector is not installed, so the 12B runs text-only. The measured setup used about 9.5 GB of VRAM, but actual runtime memory depends on the PC.")
+                                    : root.ai-local-quality
+                                        ? @tr("[!] 12B is selected, but its complete model file is unavailable, so local AI falls back to 4B: 4.6 GiB on disk plus about 1.8 GiB for vision (about 6.4 GiB total). Runtime RAM/VRAM is additional and is not calibrated for every Windows GPU.")
+                                        : @tr("[!] Selected 4B: the model uses about 4.6 GiB on disk; vision adds about 1.8 GiB (about 6.4 GiB total). Runtime RAM/VRAM is additional and is not calibrated for every Windows GPU.");
                                 font-size: 11px;
                                 color: Theme.warning;
                                 wrap: word-wrap;

@@ -754,8 +754,14 @@ msgstr "Скачать умную модель (6,3 ГиБ)"
 msgid "Downloading…"
 msgstr "Загрузка…"
 
-msgid "[!] Selected 12B: the model uses about 6.3 GiB on disk; vision adds about 167 MiB. The measured setup used about 9.5 GB of VRAM, but actual runtime memory depends on the PC."
-msgstr "[!] Выбрана 12B: модель занимает около 6,3 ГиБ на диске, зрение добавляет около 167 МиБ. На измеренном ПК использовалось около 9,5 ГБ VRAM, но реальный расход памяти зависит от компьютера."
+msgid "[!] Selected 12B: the model uses about 6.3 GiB on disk; the installed vision projector adds about 167 MiB. The measured setup used about 9.5 GB of VRAM, but actual runtime memory depends on the PC."
+msgstr "[!] Выбрана 12B: модель занимает около 6,3 ГиБ на диске; установленный проектор зрения добавляет около 167 МиБ. На измеренном ПК использовалось около 9,5 ГБ VRAM, но реальный расход памяти зависит от компьютера."
+
+msgid "[!] Selected 12B: the model uses about 6.3 GiB on disk. Its optional 167 MiB vision projector is not installed, so the 12B runs text-only. The measured setup used about 9.5 GB of VRAM, but actual runtime memory depends on the PC."
+msgstr "[!] Выбрана 12B: модель занимает около 6,3 ГиБ на диске. Её необязательный проектор зрения на 167 МиБ не установлен, поэтому 12B работает только с текстом. На измеренном ПК использовалось около 9,5 ГБ VRAM, но реальный расход памяти зависит от компьютера."
+
+msgid "[!] 12B is selected, but its complete model file is unavailable, so local AI falls back to 4B: 4.6 GiB on disk plus about 1.8 GiB for vision (about 6.4 GiB total). Runtime RAM/VRAM is additional and is not calibrated for every Windows GPU."
+msgstr "[!] Выбрана 12B, но её полный файл модели недоступен, поэтому локальный AI переключается на 4B: 4,6 ГиБ на диске плюс около 1,8 ГиБ для зрения (всего около 6,4 ГиБ). Для работы дополнительно нужны RAM/VRAM; расход измерен не для каждой видеокарты Windows."
 
 msgid "[!] Selected 4B: the model uses about 4.6 GiB on disk; vision adds about 1.8 GiB (about 6.4 GiB total). Runtime RAM/VRAM is additional and is not calibrated for every Windows GPU."
 msgstr "[!] Выбрана 4B: модель занимает около 4,6 ГиБ на диске, зрение добавляет около 1,8 ГиБ (всего около 6,4 ГиБ). Для работы дополнительно нужны RAM/VRAM; расход измерен не для каждой видеокарты Windows."
