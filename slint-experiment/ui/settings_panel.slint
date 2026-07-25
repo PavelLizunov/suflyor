@@ -2224,15 +2224,15 @@ export component SettingsWindow inherits Window {
                                 // The backend assigns every state only after its
                                 // matching model/projector completeness checks.
                                 text: root.local-model-resource-state == 5
-                                    ? @tr("[!] Selected Gemma 12B: about 6.3 GiB on disk plus its installed 167 MiB vision projector. The measured setup used about 9.5 GB of VRAM; actual runtime memory depends on the PC.")
+                                    ? @tr("[!] Selected Gemma 12B: about 6.3 GiB on disk plus its installed 167 MiB vision projector. It needs at least 10 GiB of free VRAM for GPU use, or 16 GiB of available RAM for a slow CPU fallback.")
                                     : root.local-model-resource-state == 4
-                                        ? @tr("[!] Selected Gemma 12B: about 6.3 GiB on disk. Its vision projector is unavailable or cannot run on this engine, so the model runs text-only. The measured setup used about 9.5 GB of VRAM; actual runtime memory depends on the PC.")
+                                        ? @tr("[!] Selected Gemma 12B: about 6.3 GiB on disk. Its vision projector is unavailable or cannot run on this engine, so the model runs text-only. It needs at least 10 GiB of free VRAM for GPU use, or 16 GiB of available RAM for a slow CPU fallback.")
                                         : root.local-model-resource-state == 3
-                                            ? @tr("[!] Gemma 12B is selected, but its complete model file is unavailable, so local AI falls back to Gemma 4B.")
+                                            ? @tr("[!] Gemma 12B is selected, but its complete model file is unavailable, so local AI falls back to Gemma 4B. Gemma 4B needs at least 6 GiB of free VRAM for GPU use, or 12 GiB of available RAM for CPU fallback.")
                                             : root.local-model-resource-state == 2
-                                                ? @tr("[!] Selected Gemma 4B: about 4.6 GiB on disk plus its installed 1.8 GiB vision projector (about 6.4 GiB total). Runtime RAM/VRAM is additional and depends on the PC.")
+                                                ? @tr("[!] Selected Gemma 4B: about 4.6 GiB on disk plus its installed 1.8 GiB vision projector (about 6.4 GiB total). It needs at least 6 GiB of free VRAM for GPU use, or 12 GiB of available RAM for CPU fallback.")
                                                 : root.local-model-resource-state == 1
-                                                    ? @tr("[!] Selected Gemma 4B: about 4.6 GiB on disk. Its vision projector is unavailable, so the model runs text-only. Runtime RAM/VRAM is additional and depends on the PC.")
+                                                    ? @tr("[!] Selected Gemma 4B: about 4.6 GiB on disk. Its vision projector is unavailable, so the model runs text-only. It needs at least 6 GiB of free VRAM for GPU use, or 12 GiB of available RAM for CPU fallback.")
                                                     : @tr("[!] Resource requirements are unavailable for the selected local model. Check its provider's model card; Suflyor does not apply Gemma estimates to custom or Ollama models.");
                                 font-size: 11px;
                                 color: Theme.warning;
