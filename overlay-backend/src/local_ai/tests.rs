@@ -1,5 +1,5 @@
 //! Unit tests for `local_ai.rs`, split out to keep the module file lean.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use super::*;
 
 fn asset(name: &str) -> GhAsset {
@@ -8,6 +8,10 @@ fn asset(name: &str) -> GhAsset {
         browser_download_url: format!("https://example/{name}"),
         size: 123,
     }
+}
+
+fn make_complete(path: &Path, len: u64) {
+    std::fs::File::create(path).unwrap().set_len(len).unwrap();
 }
 
 /// v0.18.0 — the "smarter/faster" model picker. The 12B is chosen ONLY when
@@ -37,6 +41,23 @@ fn quality_model_present_rejects_truncated_file() {
     assert!(!quality_model_present(root), "absent file → not present");
     std::fs::write(quality_gguf_path(root), b"partial").unwrap();
     assert!(!quality_model_present(root), "truncated file → not present");
+}
+
+/// An interrupted projector must be treated exactly like a missing one by both
+/// the Settings warning and the launcher. A sparse exact-size file is enough
+/// for this metadata-only test; download integrity remains SHA-256-verified.
+#[test]
+fn quality_vision_present_rejects_partial_file() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let llama = root.join("llama.cpp");
+    std::fs::create_dir_all(&llama).unwrap();
+    let projector = llama.join(GEMMA12_MMPROJ_FILE);
+
+    std::fs::write(&projector, b"partial").unwrap();
+    assert!(!quality_vision_present(root));
+    make_complete(&projector, GEMMA12_MMPROJ_SIZE);
+    assert!(quality_vision_present(root));
 }
 
 #[test]
@@ -84,27 +105,211 @@ fn local_model_label_distinguishes_fast_and_smart() {
 fn mmproj_attach_rules_e4b_and_gated_12b() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();
-    // E4B projector absent → text-only; present → attached.
+    // E4B projector absent or partial → text-only; only a complete one attaches.
     assert!(mmproj_for_model(dir, &dir.join(GEMMA_FILE)).is_none());
     std::fs::write(dir.join(MMPROJ_FILE), b"x").unwrap();
+    assert!(mmproj_for_model(dir, &dir.join(GEMMA_FILE)).is_none());
+    make_complete(&dir.join(MMPROJ_FILE), MMPROJ_SIZE);
     assert_eq!(
         mmproj_for_model(dir, &dir.join(GEMMA_FILE)),
         Some(dir.join(MMPROJ_FILE))
     );
-    // 12B projector present but NO build stamp → engine assumed too old → none.
+    // 12B partial projector is never attached, even with a capable engine.
     std::fs::write(dir.join(GEMMA12_MMPROJ_FILE), b"x").unwrap();
-    assert!(mmproj_for_model(dir, &dir.join(GEMMA12_FILE)).is_none());
-    // An OLD build stamp (< floor) → still none (would crash-loop).
-    std::fs::write(dir.join(".llama-build"), b"b9410").unwrap();
-    assert!(mmproj_for_model(dir, &dir.join(GEMMA12_FILE)).is_none());
-    // A gemma4uv-capable build → 12B finally gets its projector.
     std::fs::write(dir.join(".llama-build"), format!("b{GEMMA4UV_MIN_BUILD}")).unwrap();
+    assert!(mmproj_for_model(dir, &dir.join(GEMMA12_FILE)).is_none());
+    // A complete projector with a capable engine finally attaches.
+    make_complete(&dir.join(GEMMA12_MMPROJ_FILE), GEMMA12_MMPROJ_SIZE);
     assert_eq!(
         mmproj_for_model(dir, &dir.join(GEMMA12_FILE)),
         Some(dir.join(GEMMA12_MMPROJ_FILE))
     );
     // Non-Gemma model never gets a Gemma projector.
     assert!(mmproj_for_model(dir, &dir.join("qwen2.5-7b.gguf")).is_none());
+}
+
+#[test]
+fn resource_state_follows_selected_model_not_quality_preference() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let llama = root.join("llama.cpp");
+    std::fs::create_dir_all(&llama).unwrap();
+
+    // Unknown server-managed ids never receive Gemma's disk/VRAM estimates.
+    assert_eq!(
+        local_model_resource_state(root, "qwen2.5:7b-instruct"),
+        LocalModelResourceState::Unknown
+    );
+    assert_eq!(
+        local_model_resource_state(root, "ollama/custom-model"),
+        LocalModelResourceState::Unknown
+    );
+
+    assert_eq!(
+        local_model_resource_state(root, GEMMA_FILE),
+        LocalModelResourceState::Gemma4Text
+    );
+    make_complete(&llama.join(MMPROJ_FILE), MMPROJ_SIZE);
+    assert_eq!(
+        local_model_resource_state(root, GEMMA_FILE),
+        LocalModelResourceState::Gemma4Vision
+    );
+
+    assert_eq!(
+        local_model_resource_state(root, GEMMA12_FILE),
+        LocalModelResourceState::Gemma12Unavailable
+    );
+    make_complete(&llama.join(GEMMA12_FILE), GEMMA12_SIZE);
+    assert_eq!(
+        local_model_resource_state(root, GEMMA12_FILE),
+        LocalModelResourceState::Gemma12Text
+    );
+    make_complete(&llama.join(GEMMA12_MMPROJ_FILE), GEMMA12_MMPROJ_SIZE);
+    std::fs::write(llama.join(".llama-build"), format!("b{GEMMA4UV_MIN_BUILD}")).unwrap();
+    assert_eq!(
+        local_model_resource_state(root, GEMMA12_FILE),
+        LocalModelResourceState::Gemma12Vision
+    );
+
+    // The resource states are backed by the launcher's pinned asset constants,
+    // not independent UI literals. Unknown/custom ids deliberately have none.
+    assert!(local_model_resources(LocalModelResourceState::Unknown).is_none());
+    assert_eq!(
+        local_model_resources(LocalModelResourceState::Gemma4Vision),
+        Some(LocalModelResources {
+            model_bytes: GEMMA_SIZE,
+            vision_projector_bytes: Some(MMPROJ_SIZE),
+            measured_vram_bytes: None,
+        })
+    );
+    assert_eq!(
+        local_model_resources(LocalModelResourceState::Gemma12Vision),
+        Some(LocalModelResources {
+            model_bytes: GEMMA12_SIZE,
+            vision_projector_bytes: Some(GEMMA12_MMPROJ_SIZE),
+            measured_vram_bytes: Some(GEMMA12_MEASURED_VRAM_BYTES),
+        })
+    );
+}
+
+#[test]
+fn model_switch_requires_expected_model_and_completion() {
+    let expected = "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf";
+    let models = format!(r#"{{"data":[{{"id":"{expected}"}}]}}"#);
+    let completion = r#"{"choices":[{"message":{"content":"ok"}}]}"#;
+
+    assert!(expected_model_is_ready(
+        true, &models, expected, true, completion
+    ));
+    assert!(
+        !expected_model_is_ready(false, &models, expected, true, completion),
+        "an HTTP 404/503 must not count as a ready model list"
+    );
+    assert!(
+        !expected_model_is_ready(true, r#"{"error":"loading"}"#, expected, true, completion),
+        "a successful-looking body without the expected model is not ready"
+    );
+    assert!(
+        !expected_model_is_ready(
+            true,
+            r#"{"data":[{"id":"other-model"}]}"#,
+            expected,
+            true,
+            completion
+        ),
+        "a different loaded model is not a successful switch"
+    );
+    assert!(
+        !expected_model_is_ready(true, &models, expected, false, r#"{"error":"loading"}"#),
+        "a 404/503 completion must not count as ready"
+    );
+    assert!(
+        !expected_model_is_ready(true, &models, expected, true, r#"{"choices":{}}"#),
+        "a malformed completion payload must not count as ready"
+    );
+    assert!(
+        !expected_model_is_ready(true, &models, expected, true, r#"{"choices":[{}]}"#),
+        "a choices array without a message object must not count as ready"
+    );
+
+    // A warming server can legitimately emit several 503s before succeeding;
+    // each failed probe remains false and a later fully valid probe turns ready.
+    assert!(!expected_model_is_ready(
+        false,
+        r#"{"error":"loading"}"#,
+        expected,
+        false,
+        r#"{"error":"loading"}"#
+    ));
+    assert!(expected_model_is_ready(
+        true, &models, expected, true, completion
+    ));
+}
+
+#[test]
+fn failed_switch_keeps_or_restores_the_previous_model() {
+    assert_eq!(switch_attempt_outcome(true, false), ModelSwitch::Switched);
+    assert_eq!(switch_attempt_outcome(false, true), ModelSwitch::RolledBack);
+    assert_eq!(
+        switch_attempt_outcome(false, false),
+        ModelSwitch::FailedToStart
+    );
+    assert!(switch_commits_choice(ModelSwitch::Switched));
+    assert!(!switch_commits_choice(ModelSwitch::RolledBack));
+    assert!(!switch_commits_choice(ModelSwitch::PortBusy));
+    assert!(!switch_commits_choice(ModelSwitch::TargetUnavailable));
+    assert!(!switch_commits_choice(ModelSwitch::FailedToStart));
+}
+
+#[test]
+fn rollback_profile_preserves_the_previous_vision_mode() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let llama = root.join("llama.cpp");
+    std::fs::create_dir_all(&llama).unwrap();
+
+    assert_eq!(
+        local_model_profile(root, false),
+        LocalModelProfile::text_only(false)
+    );
+    make_complete(&llama.join(MMPROJ_FILE), MMPROJ_SIZE);
+    assert_eq!(
+        local_model_profile(root, false),
+        LocalModelProfile {
+            prefer_quality: false,
+            use_vision: true,
+        }
+    );
+
+    // A projector downloaded only for the failed 12B relaunch must not alter
+    // the pre-download text-only rollback profile.
+    assert_eq!(
+        LocalModelProfile::text_only(true),
+        LocalModelProfile {
+            prefer_quality: true,
+            use_vision: false,
+        }
+    );
+}
+
+#[test]
+fn exited_child_aborts_switch_readiness() {
+    #[cfg(windows)]
+    let mut child = std::process::Command::new("cmd.exe")
+        .args(["/C", "exit", "0"])
+        .spawn()
+        .unwrap();
+    #[cfg(not(windows))]
+    let mut child = std::process::Command::new("sh")
+        .args(["-c", "exit 0"])
+        .spawn()
+        .unwrap();
+    let _ = child.wait().unwrap();
+    let mut children = vec![child];
+    assert!(
+        !launched_children_alive(&mut children),
+        "a dead launched child must fail the readiness transaction"
+    );
 }
 
 #[test]

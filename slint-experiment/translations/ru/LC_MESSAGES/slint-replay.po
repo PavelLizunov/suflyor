@@ -736,6 +736,9 @@ msgstr "Устанавливает локальный стек на этот П�
 msgid "Local model: speed vs quality. Switching restarts the local server (~5s)."
 msgstr "Локальная модель: скорость или качество. Переключение перезапускает локальный сервер (~5с)."
 
+msgid "Gemma 4B/12B controls manage only Suflyor's built-in llama.cpp server. The selected external model above is used for new answers."
+msgstr "Управление Gemma 4B/12B работает только со встроенным сервером llama.cpp Suflyor. Для новых ответов используется выбранная выше внешняя модель."
+
 msgid "Faster (4B)"
 msgstr "Быстрее (4B)"
 
@@ -765,6 +768,24 @@ msgstr "[!] Выбрана 12B, но её полный файл модели н�
 
 msgid "[!] Selected 4B: the model uses about 4.6 GiB on disk; vision adds about 1.8 GiB (about 6.4 GiB total). Runtime RAM/VRAM is additional and is not calibrated for every Windows GPU."
 msgstr "[!] Выбрана 4B: модель занимает около 4,6 ГиБ на диске, зрение добавляет около 1,8 ГиБ (всего около 6,4 ГиБ). Для работы дополнительно нужны RAM/VRAM; расход измерен не для каждой видеокарты Windows."
+
+msgid "[!] Selected Gemma 12B: about 6.3 GiB on disk plus its installed 167 MiB vision projector. The measured setup used about 9.5 GB of VRAM; actual runtime memory depends on the PC."
+msgstr "[!] Выбрана Gemma 12B: около 6,3 ГиБ на диске и установленный проектор зрения на 167 МиБ. На измеренном ПК использовалось около 9,5 ГБ VRAM; реальный расход памяти зависит от компьютера."
+
+msgid "[!] Selected Gemma 12B: about 6.3 GiB on disk. Its vision projector is unavailable or cannot run on this engine, so the model runs text-only. The measured setup used about 9.5 GB of VRAM; actual runtime memory depends on the PC."
+msgstr "[!] Выбрана Gemma 12B: около 6,3 ГиБ на диске. Проектор зрения недоступен или не работает с этим движком, поэтому модель работает только с текстом. На измеренном ПК использовалось около 9,5 ГБ VRAM; реальный расход памяти зависит от компьютера."
+
+msgid "[!] Gemma 12B is selected, but its complete model file is unavailable, so local AI falls back to Gemma 4B."
+msgstr "[!] Выбрана Gemma 12B, но её полный файл модели недоступен, поэтому локальный AI переключается на Gemma 4B."
+
+msgid "[!] Selected Gemma 4B: about 4.6 GiB on disk plus its installed 1.8 GiB vision projector (about 6.4 GiB total). Runtime RAM/VRAM is additional and depends on the PC."
+msgstr "[!] Выбрана Gemma 4B: около 4,6 ГиБ на диске и установленный проектор зрения на 1,8 ГиБ (всего около 6,4 ГиБ). Для работы дополнительно нужны RAM/VRAM; расход зависит от компьютера."
+
+msgid "[!] Selected Gemma 4B: about 4.6 GiB on disk. Its vision projector is unavailable, so the model runs text-only. Runtime RAM/VRAM is additional and depends on the PC."
+msgstr "[!] Выбрана Gemma 4B: около 4,6 ГиБ на диске. Проектор зрения недоступен, поэтому модель работает только с текстом. Для работы дополнительно нужны RAM/VRAM; расход зависит от компьютера."
+
+msgid "[!] Resource requirements are unavailable for the selected local model. Check its provider's model card; Suflyor does not apply Gemma estimates to custom or Ollama models."
+msgstr "[!] Требования к ресурсам для выбранной локальной модели неизвестны. Проверьте карточку модели у поставщика: Suflyor не применяет оценки Gemma к пользовательским моделям или Ollama."
 
 msgid "12B vision projector installed — used when the 12B is the active model."
 msgstr "Проектор зрения 12B установлен — задействуется, когда активна модель 12B."

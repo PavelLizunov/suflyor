@@ -1135,8 +1135,12 @@ fn main() -> Result<(), slint::PlatformError> {
                         s.local_ai_lock.clone()
                     };
                     let guard = lifecycle_lock.lock().unwrap_or_else(|p| p.into_inner());
-                    let (_outcome, started) =
-                        overlay_backend::local_ai::switch_local_model(&root, prefer_quality, false);
+                    let (_outcome, started) = overlay_backend::local_ai::switch_local_model(
+                        &root,
+                        overlay_backend::local_ai::local_model_profile(&root, prefer_quality),
+                        prefer_quality,
+                        false,
+                    );
                     drop(guard);
                     if !started.is_empty() {
                         state_w
