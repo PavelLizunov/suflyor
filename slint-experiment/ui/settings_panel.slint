@@ -2178,21 +2178,21 @@ export component SettingsWindow inherits Window {
                             HorizontalLayout {
                                 spacing: 6px;
                                 Button {
-                                    text: root.ai-local-quality ? @tr("Faster (4B)") : @tr("● Faster (4B)");
+                                    text: root.ai-local-quality ? @tr("Faster (4B)") : @tr("[on] Faster (4B)");
                                     enabled: root.ai-local-quality && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
                                     clicked => {
                                         root.model-quality-changed(false);
                                     }
                                 }
                                 if root.quality-model-present : Button {
-                                    text: root.ai-local-quality ? @tr("● Smarter (12B)") : @tr("Smarter (12B)");
+                                    text: root.ai-local-quality ? @tr("[on] Smarter (12B)") : @tr("Smarter (12B)");
                                     enabled: !root.ai-local-quality && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
                                     clicked => {
                                         root.model-quality-changed(true);
                                     }
                                 }
                                 if !root.quality-model-present : Button {
-                                    text: root.quality-downloading ? @tr("Downloading…") : @tr("Download smart model (6 GB)");
+                                    text: root.quality-downloading ? @tr("Downloading…") : @tr("Download smarter model (6.3 GiB)");
                                     enabled: !root.quality-downloading && !root.local-ai-installing;
                                     clicked => {
                                         root.download-quality-clicked();
@@ -2206,9 +2206,11 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                             Text {
-                                text: @tr("The 12B model is noticeably smarter but ~2× slower and needs ~10 GB of video memory (VRAM). On a weaker GPU keep 4B.");
+                                text: root.ai-local-quality
+                                    ? @tr("[!] Selected 12B: the model uses about 6.3 GiB on disk; vision adds about 167 MiB. The measured setup used about 9.5 GB of VRAM, but actual runtime memory depends on the PC.")
+                                    : @tr("[!] Selected 4B: the model uses about 4.6 GiB on disk; vision adds about 1.8 GiB (about 6.4 GiB total). Runtime RAM/VRAM is additional and is not calibrated for every Windows GPU.");
                                 font-size: 11px;
-                                color: Theme.text-muted;
+                                color: Theme.warning;
                                 wrap: word-wrap;
                             }
                             if root.quality-status != "" : Text {
@@ -2287,7 +2289,7 @@ export component SettingsWindow inherits Window {
                             // ----- one-click in-app local-AI installer -----
                             Rectangle { background: Theme.border; height: 1px; }
                             Text {
-                                text: @tr("Installs the local stack on this PC (~6 GB total): llama.cpp + Gemma-4-E4B (~5 GB; needs ~6 GB VRAM on GPU), whisper.cpp + Whisper-turbo (~0.9 GB), GigaAM-v3 (~0.2 GB). With NVIDIA it picks the CUDA build, otherwise CPU. Models you already have are reused, not re-downloaded.");
+                                text: @tr("Installs the local stack on this PC: about 7.4 GiB of model files plus engine binaries (Gemma 4B + vision: 6.4 GiB; Whisper: 0.8 GiB; GigaAM: 0.2 GiB). Runtime RAM/VRAM is additional. With NVIDIA it picks CUDA, otherwise CPU. Existing models are reused.");
                                 font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;

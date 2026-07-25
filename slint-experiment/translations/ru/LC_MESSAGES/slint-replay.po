@@ -730,8 +730,8 @@ msgstr "Модели не найдены — запустите локальны
 msgid "local server bearer token (optional)"
 msgstr "bearer-токен локального сервера (необязательно)"
 
-msgid "Installs the local stack on this PC (~6 GB total): llama.cpp + Gemma-4-E4B (~5 GB; needs ~6 GB VRAM on GPU), whisper.cpp + Whisper-turbo (~0.9 GB), GigaAM-v3 (~0.2 GB). With NVIDIA it picks the CUDA build, otherwise CPU. Models you already have are reused, not re-downloaded."
-msgstr "Устанавливает локальный стек на этот ПК (~6 ГБ всего): llama.cpp + Gemma-4-E4B (~5 ГБ; нужно ~6 ГБ VRAM на GPU), whisper.cpp + Whisper-turbo (~0.9 ГБ), GigaAM-v3 (~0.2 ГБ). С NVIDIA выбирается сборка CUDA, иначе CPU. Уже скачанные модели переиспользуются, не качаются заново."
+msgid "Installs the local stack on this PC: about 7.4 GiB of model files plus engine binaries (Gemma 4B + vision: 6.4 GiB; Whisper: 0.8 GiB; GigaAM: 0.2 GiB). Runtime RAM/VRAM is additional. With NVIDIA it picks CUDA, otherwise CPU. Existing models are reused."
+msgstr "Устанавливает локальный стек на этот ПК: около 7,4 ГиБ файлов моделей плюс движки (Gemma 4B со зрением: 6,4 ГиБ; Whisper: 0,8 ГиБ; GigaAM: 0,2 ГиБ). Для работы дополнительно нужны RAM/VRAM. С NVIDIA выбирается CUDA, иначе CPU. Уже скачанные модели переиспользуются."
 
 msgid "Local model: speed vs quality. Switching restarts the local server (~5s)."
 msgstr "Локальная модель: скорость или качество. Переключение перезапускает локальный сервер (~5с)."
@@ -739,23 +739,26 @@ msgstr "Локальная модель: скорость или качеств�
 msgid "Faster (4B)"
 msgstr "Быстрее (4B)"
 
-msgid "● Faster (4B)"
-msgstr "● Быстрее (4B)"
+msgid "[on] Faster (4B)"
+msgstr "[выбрано] Быстрее (4B)"
 
 msgid "Smarter (12B)"
 msgstr "Умнее (12B)"
 
-msgid "● Smarter (12B)"
-msgstr "● Умнее (12B)"
+msgid "[on] Smarter (12B)"
+msgstr "[выбрано] Умнее (12B)"
 
-msgid "Download smart model (6 GB)"
-msgstr "Скачать умную модель (6 ГБ)"
+msgid "Download smarter model (6.3 GiB)"
+msgstr "Скачать умную модель (6,3 ГиБ)"
 
 msgid "Downloading…"
 msgstr "Загрузка…"
 
-msgid "The 12B model is noticeably smarter but ~2× slower and needs ~10 GB of video memory (VRAM). On a weaker GPU keep 4B."
-msgstr "Модель 12B заметно умнее, но примерно вдвое медленнее и требует ~10 ГБ видеопамяти (VRAM). На слабой видеокарте оставьте 4B."
+msgid "[!] Selected 12B: the model uses about 6.3 GiB on disk; vision adds about 167 MiB. The measured setup used about 9.5 GB of VRAM, but actual runtime memory depends on the PC."
+msgstr "[!] Выбрана 12B: модель занимает около 6,3 ГиБ на диске, зрение добавляет около 167 МиБ. На измеренном ПК использовалось около 9,5 ГБ VRAM, но реальный расход памяти зависит от компьютера."
+
+msgid "[!] Selected 4B: the model uses about 4.6 GiB on disk; vision adds about 1.8 GiB (about 6.4 GiB total). Runtime RAM/VRAM is additional and is not calibrated for every Windows GPU."
+msgstr "[!] Выбрана 4B: модель занимает около 4,6 ГиБ на диске, зрение добавляет около 1,8 ГиБ (всего около 6,4 ГиБ). Для работы дополнительно нужны RAM/VRAM; расход измерен не для каждой видеокарты Windows."
 
 msgid "12B vision projector installed — used when the 12B is the active model."
 msgstr "Проектор зрения 12B установлен — задействуется, когда активна модель 12B."
