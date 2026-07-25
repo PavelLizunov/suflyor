@@ -913,11 +913,29 @@ fn stop_listener_on_port(port: &str, root: &Path) -> bool {
         return true; // can't enumerate — best-effort; let the bind attempt decide
     };
     let text = String::from_utf8_lossy(&out.stdout);
+    reclaim_owned_listeners(&text, port, root, exe_path_for_pid, kill_pid_tree)
+}
+
+/// Reclaim listeners on `port` that belong to this installation. Kept separate
+/// from the OS probes so the owner-aware recovery rule can be tested without
+/// killing a real process from the test runner.
+#[cfg(windows)]
+fn reclaim_owned_listeners<F, K>(
+    netstat: &str,
+    port: &str,
+    root: &Path,
+    mut exe_path: F,
+    mut kill: K,
+) -> bool
+where
+    F: FnMut(&str) -> Option<String>,
+    K: FnMut(&str) -> bool,
+{
     let suffix = format!(":{port}");
     let root_lc = root.to_string_lossy().to_lowercase();
     let mut killed: Vec<String> = Vec::new();
     let mut free_of_strangers = true;
-    for line in text.lines() {
+    for line in netstat.lines() {
         // Columns: Proto  LocalAddr  ForeignAddr  State  PID
         let cols: Vec<&str> = line.split_whitespace().collect();
         if cols.len() >= 5
@@ -928,9 +946,9 @@ fn stop_listener_on_port(port: &str, root: &Path) -> bool {
             if pid == "0" || killed.iter().any(|k| k == pid) {
                 continue;
             }
-            match exe_path_for_pid(pid) {
+            match exe_path(pid) {
                 Some(p) if path_is_under_root(&p, &root_lc) => {
-                    let _ = kill_pid_tree(pid);
+                    let _ = kill(pid);
                     killed.push(pid.to_string());
                 }
                 other => {
@@ -1106,22 +1124,53 @@ pub fn llama_reachable() -> bool {
 /// runtime watchdog. If llama already answers (even a mid-load 503) we leave
 /// it ALONE: killing a healthy/warming server would defeat warm-up and drop
 /// in-flight requests. Only a truly-dead port triggers a clean owner-aware
-/// free + relaunch via [`switch_local_model`], which POLLS until the fresh
-/// server answers and returns the honest [`ModelSwitch`]. Whisper (:8081) is
-/// never touched here (boot launches STT separately). Call from a worker
-/// thread (blocks up to ~21 s on the relaunch+poll path).
+/// free + relaunch, which POLLS until the fresh server answers and returns the
+/// honest [`ModelSwitch`]. Whisper (:8081) is never touched here (boot launches
+/// STT separately). Call from a worker thread (blocks up to ~21 s on the
+/// relaunch+poll path).
 #[must_use]
 pub fn ensure_llama_serving(root: &Path, prefer_quality: bool) -> (ModelSwitch, Vec<Child>) {
     if llama_reachable() {
         // Alive (serving or cold-loading) — do not disturb.
         return (ModelSwitch::Switched, Vec::new());
     }
+    recover_dead_llama(
+        root,
+        prefer_quality,
+        free_llama_port,
+        |root, prefer_quality| ensure_servers_inner(root, true, false, prefer_quality, true),
+        |expected, started| wait_for_expected_llama(expected, Duration::from_secs(20), started),
+    )
+}
+
+/// Owner-aware recovery for a dead llama endpoint. A process can still own
+/// :8080 while failing health checks, so freeing managed listeners has to happen
+/// before attempting the replacement. `start` receives the persisted quality
+/// preference; the shared launcher resolves a missing/incomplete 12B to 4B.
+fn recover_dead_llama<F, S, W>(
+    root: &Path,
+    prefer_quality: bool,
+    mut free_port: F,
+    mut start: S,
+    mut wait_ready: W,
+) -> (ModelSwitch, Vec<Child>)
+where
+    F: FnMut(&Path) -> bool,
+    S: FnMut(&Path, bool) -> Vec<Child>,
+    W: FnMut(&str, &mut [Child]) -> bool,
+{
     // There is no live previous server to roll back to here: this is a boot or
     // watchdog recovery, so launch the selected model directly and report only
     // a fully ready expected model as success.
+    if !free_port(root) {
+        return (ModelSwitch::PortBusy, Vec::new());
+    }
+    // A just-killed managed listener needs a moment to release :8080 before
+    // the replacement binds it.
+    std::thread::sleep(Duration::from_millis(800));
     let expected = active_local_model_name(root, prefer_quality);
-    let mut started = ensure_servers_inner(root, true, false, prefer_quality, true);
-    if wait_for_expected_llama(&expected, Duration::from_secs(20), &mut started) {
+    let mut started = start(root, prefer_quality);
+    if wait_ready(&expected, &mut started) {
         (ModelSwitch::Switched, started)
     } else {
         terminate_servers(started);

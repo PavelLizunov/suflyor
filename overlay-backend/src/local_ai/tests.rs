@@ -78,6 +78,54 @@ fn active_local_model_name_reports_e4b_when_not_quality() {
     assert_eq!(active_local_model_name(tmp.path(), true), GEMMA_FILE);
 }
 
+/// Boot/watchdog recovery receives the persisted quality preference, but must
+/// launch the 4B fallback if the optional 12B disappeared or was left partial.
+/// This exercises the recovery transaction end-to-end with its OS operations
+/// injected: release the managed listener, choose the launch model, then wait
+/// for that exact model to become ready.
+#[test]
+fn persisted_12b_boot_recovers_with_4b_when_the_file_is_missing_or_incomplete() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let llama_dir = root.join("llama.cpp");
+    std::fs::create_dir_all(&llama_dir).unwrap();
+    make_complete(&llama_dir.join(GEMMA_FILE), GEMMA_SIZE);
+
+    for incomplete in [false, true] {
+        if incomplete {
+            std::fs::write(llama_dir.join(GEMMA12_FILE), b"partial").unwrap();
+        }
+        let mut released_port = false;
+        let mut launched_model = None;
+        let (outcome, started) = recover_dead_llama(
+            root,
+            true,
+            |_| {
+                released_port = true;
+                true
+            },
+            |root, prefer_quality| {
+                let gguf = selected_llama_gguf(&root.join("llama.cpp"), prefer_quality);
+                if selected_model_is_complete(&gguf) {
+                    launched_model = gguf
+                        .file_name()
+                        .map(|name| name.to_string_lossy().into_owned());
+                }
+                Vec::new()
+            },
+            |expected, _| expected == GEMMA_FILE,
+        );
+        assert_eq!(outcome, ModelSwitch::Switched);
+        assert!(started.is_empty());
+        assert!(
+            released_port,
+            "recovery must clean the old managed listener"
+        );
+        assert_eq!(launched_model.as_deref(), Some(GEMMA_FILE));
+        let _ = std::fs::remove_file(llama_dir.join(GEMMA12_FILE));
+    }
+}
+
 /// The bar must show the fast vs smart model distinctly. Pin the friendly
 /// label against the ACTUAL shipped GGUF constants (so a future filename
 /// rename that breaks the mapping fails here) plus the 12B-before-4B order
@@ -627,6 +675,29 @@ fn path_is_under_root_rejects_sibling_prefix() {
         root
     ));
     assert!(!path_is_under_root("", root));
+}
+
+#[cfg(windows)]
+#[test]
+fn hung_under_root_listener_is_reclaimed_before_relaunch() {
+    let root = Path::new(r"C:\Users\Me\suflyor-local-ai");
+    let netstat = "\
+  Proto  Local Address          Foreign Address        State           PID
+  TCP    127.0.0.1:8080         0.0.0.0:0              LISTENING       31337
+";
+    let killed = std::cell::RefCell::new(Vec::new());
+    let free = reclaim_owned_listeners(
+        netstat,
+        "8080",
+        root,
+        |_| Some(r"C:\Users\Me\suflyor-local-ai\llama.cpp\llama-server.exe".to_string()),
+        |pid| {
+            killed.borrow_mut().push(pid.to_string());
+            true
+        },
+    );
+    assert!(free, "an owned hung listener must not block recovery");
+    assert_eq!(killed.into_inner(), vec!["31337"]);
 }
 
 #[test]
