@@ -1109,7 +1109,10 @@ fn main() -> Result<(), slint::PlatformError> {
                 let (want_llama, requested_quality) = {
                     let c = cfg_w.read();
                     (
-                        c.ai_provider == "local" && c.ai_local_base_url.contains(":8080"),
+                        c.ai_provider == "local"
+                            && overlay_backend::local_ai::is_managed_llama_endpoint(
+                                &c.ai_local_base_url,
+                            ),
                         c.ai_local_quality,
                     )
                 };
@@ -1228,7 +1231,10 @@ fn main() -> Result<(), slint::PlatformError> {
                 let (want_llama, prefer_quality) = {
                     let c = cfg_w.read();
                     (
-                        c.ai_provider == "local" && c.ai_local_base_url.contains(":8080"),
+                        c.ai_provider == "local"
+                            && overlay_backend::local_ai::is_managed_llama_endpoint(
+                                &c.ai_local_base_url,
+                            ),
                         c.ai_local_quality,
                     )
                 };

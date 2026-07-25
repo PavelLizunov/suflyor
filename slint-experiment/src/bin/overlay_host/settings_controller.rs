@@ -1390,7 +1390,7 @@ pub(crate) fn populate_token_status(
     win.set_ai_provider_index(i32::from(c.ai_provider == "local"));
     win.set_ai_local_base_url_input(SharedString::from(c.ai_local_base_url.clone()));
     let managed_local_server =
-        c.ai_local_base_url.trim_end_matches('/') == overlay_backend::local_ai::LLAMA_BASE_URL;
+        overlay_backend::local_ai::is_managed_llama_endpoint(&c.ai_local_base_url);
     win.set_managed_local_server(managed_local_server);
     // #E10.1 — seed both model dropdowns (cloud bridge + local) with the saved
     // model so each shows immediately; the full lists are fetched from
@@ -1419,9 +1419,20 @@ pub(crate) fn populate_token_status(
     win.set_ai_local_models(seed_one(&effective_local_model));
     win.set_ai_local_model_index(0);
     win.set_local_model_resource_state(
-        overlay_backend::local_ai::local_model_resource_state(&local_root, &effective_local_model)
-            .ui_code(),
+        overlay_backend::local_ai::local_model_resource_state(
+            &local_root,
+            &c.ai_local_base_url,
+            &effective_local_model,
+        )
+        .ui_code(),
     );
+    win.set_local_model_resource_warning(SharedString::from(
+        overlay_backend::local_ai::local_model_resource_warning(
+            &local_root,
+            &c.ai_local_base_url,
+            &effective_local_model,
+        ),
+    ));
     win.set_ai_local_vision(c.ai_local_vision);
     win.set_vision_phonetics(c.vision_phonetics);
     win.set_vision_test_practice(c.vision_test_practice);

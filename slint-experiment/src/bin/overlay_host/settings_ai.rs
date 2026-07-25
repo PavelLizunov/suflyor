@@ -263,15 +263,32 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
             let base_url = v.trim().to_string();
             let mut c = cfg_c.write();
             c.ai_local_base_url = base_url.clone();
+            let selected_model = c.ai_local_model.clone();
             if let Err(e) = overlay_backend::config::save(&c) {
                 eprintln!("[overlay-host] ai_local_base_url save failed: {e:#}");
                 return;
             }
             drop(c);
             if let Some(w) = weak.upgrade() {
-                w.set_managed_local_server(
-                    base_url.trim_end_matches('/') == overlay_backend::local_ai::LLAMA_BASE_URL,
+                let root = overlay_backend::local_ai::default_root();
+                w.set_managed_local_server(overlay_backend::local_ai::is_managed_llama_endpoint(
+                    &base_url,
+                ));
+                w.set_local_model_resource_state(
+                    overlay_backend::local_ai::local_model_resource_state(
+                        &root,
+                        &base_url,
+                        &selected_model,
+                    )
+                    .ui_code(),
                 );
+                w.set_local_model_resource_warning(SharedString::from(
+                    overlay_backend::local_ai::local_model_resource_warning(
+                        &root,
+                        &base_url,
+                        &selected_model,
+                    ),
+                ));
             }
             // #E10.1 — re-query models against the new URL.
             fetch_models(weak.clone(), cfg_c.clone(), ModelTarget::Local);
@@ -304,9 +321,14 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
             drop(c);
             if let Some(w) = weak.upgrade() {
                 let root = overlay_backend::local_ai::default_root();
+                let base_url = cfg_c.read().ai_local_base_url.clone();
                 w.set_local_model_resource_state(
-                    overlay_backend::local_ai::local_model_resource_state(&root, &m).ui_code(),
+                    overlay_backend::local_ai::local_model_resource_state(&root, &base_url, &m)
+                        .ui_code(),
                 );
+                w.set_local_model_resource_warning(SharedString::from(
+                    overlay_backend::local_ai::local_model_resource_warning(&root, &base_url, &m),
+                ));
             }
             diag!("ai_local_model selected: {m}");
         });

@@ -29,6 +29,19 @@
 //! imported explicitly below (`active_stack_label` stays in `overlay_host.rs`).
 use super::{active_stack_label, ComponentHandle, OverlayBarWindow, SettingsWindow, SharedString};
 
+fn local_model_resource_data(
+    root: &std::path::Path,
+    base_url: &str,
+    model: &str,
+) -> (i32, SharedString) {
+    (
+        overlay_backend::local_ai::local_model_resource_state(root, base_url, model).ui_code(),
+        SharedString::from(overlay_backend::local_ai::local_model_resource_warning(
+            root, base_url, model,
+        )),
+    )
+}
+
 /// Wire the local-AI installer Settings callbacks onto the Settings window.
 /// Moved VERBATIM out of `open_settings` (P1 domain split) — same captures, same
 /// behavior. Beyond `win` + `cfg`, the install closure captures `state` (for the
@@ -145,10 +158,11 @@ pub(crate) fn wire_local_ai(
                 match overlay_backend::local_ai::install(&opts, &cancel, &on) {
                     Ok(res) => {
                         let model = res.ai_local_model.clone();
-                        let resource_state = overlay_backend::local_ai::local_model_resource_state(
-                            &opts.root, &model,
-                        )
-                        .ui_code();
+                        let (resource_state, resource_warning) = local_model_resource_data(
+                            &opts.root,
+                            overlay_backend::local_ai::LLAMA_BASE_URL,
+                            &model,
+                        );
                         let gigaam_dir = res.stt_gigaam_dir.clone();
                         let on_gpu = res.on_gpu;
                         {
@@ -180,6 +194,7 @@ pub(crate) fn wire_local_ai(
                                 ));
                                 w.set_managed_local_server(true);
                                 w.set_local_model_resource_state(resource_state);
+                                w.set_local_model_resource_warning(resource_warning);
                                 w.set_stt_provider_index(2);
                                 w.set_stt_whisper_url_input(SharedString::from(
                                     overlay_backend::local_ai::WHISPER_BASE_URL,
@@ -279,9 +294,9 @@ pub(crate) fn wire_local_ai(
             };
             w.set_model_switching(true);
             w.set_quality_status(SharedString::from(if want_quality {
-                "Переключаю на умную модель (12B)…"
+                "Переключаю на умную модель (12B). Проверка запуска займёт до 2 минут; если она не удастся, восстановление предыдущей модели может занять ещё до 2 минут."
             } else {
-                "Переключаю на быструю модель (4B)…"
+                "Переключаю на быструю модель (4B). Проверка запуска займёт до 2 минут; если она не удастся, восстановление предыдущей модели может занять ещё до 2 минут."
             }));
             let cfg_t = cfg_c.clone();
             let state_t = state_c.clone();
@@ -344,10 +359,11 @@ pub(crate) fn wire_local_ai(
                 // cfg.ai_local_model; the request "model" field is ignored by
                 // single-model llama.cpp). On failure nothing is persisted, so
                 // the next launch still starts the model that's actually running.
-                let selected_resource_state = switched.then(|| {
+                let selected_resource_data = switched.then(|| {
                     let model =
                         overlay_backend::local_ai::active_local_model_name(&root, want_quality);
-                    overlay_backend::local_ai::local_model_resource_state(&root, &model).ui_code()
+                    let base_url = cfg_t.read().ai_local_base_url.clone();
+                    local_model_resource_data(&root, &base_url, &model)
                 });
                 if switched {
                     let mut c = cfg_t.write();
@@ -375,14 +391,15 @@ pub(crate) fn wire_local_ai(
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak_done.upgrade() {
                         w.set_model_switching(false);
-                        if let Some(resource_state) = selected_resource_state {
+                        if let Some((resource_state, resource_warning)) = selected_resource_data {
                             w.set_ai_local_quality(want_quality);
                             w.set_local_model_resource_state(resource_state);
+                            w.set_local_model_resource_warning(resource_warning);
                         }
                         w.set_quality_status(SharedString::from(match outcome {
                             overlay_backend::local_ai::ModelSwitch::Switched => {
                                 if want_quality {
-                                    "Готово: умная модель (12B). Первый ответ может грузиться ~5 с."
+                                    "Готово: умная модель (12B). Проверка запуска может занять до 2 минут; при ошибке восстановление предыдущей модели займёт ещё до 2 минут."
                                 } else {
                                     "Готово: быстрая модель (4B)."
                                 }
@@ -485,10 +502,11 @@ pub(crate) fn wire_local_ai(
                 };
                 let root = overlay_backend::local_ai::default_root();
                 let res = overlay_backend::local_ai::download_quality_model(&root, &cancel, &on);
-                let resource_state = res.as_ref().ok().map(|_| {
+                let resource_data = res.as_ref().ok().map(|_| {
                     let model =
                         overlay_backend::local_ai::active_local_model_name(&root, selected_quality);
-                    overlay_backend::local_ai::local_model_resource_state(&root, &model).ui_code()
+                    let base_url = cfg_t.read().ai_local_base_url.clone();
+                    local_model_resource_data(&root, &base_url, &model)
                 });
                 let weak_done = weak_t.clone();
                 let _ = slint::invoke_from_event_loop(move || {
@@ -498,8 +516,9 @@ pub(crate) fn wire_local_ai(
                         Ok(()) => {
                             w.set_quality_progress(1.0);
                             w.set_quality_model_present(true);
-                            if let Some(resource_state) = resource_state {
+                            if let Some((resource_state, resource_warning)) = resource_data {
                                 w.set_local_model_resource_state(resource_state);
+                                w.set_local_model_resource_warning(resource_warning);
                             }
                             w.set_quality_status(SharedString::from(
                                 "Умная модель загружена. Нажмите «Умнее (12B)», чтобы включить.",
@@ -627,17 +646,9 @@ pub(crate) fn wire_local_ai(
                 } else {
                     false
                 };
-                let resource_state = res.as_ref().ok().map(|_| {
+                let resource_data = res.as_ref().ok().map(|_| {
                     let c = cfg_t.read();
-                    if c.ai_local_quality && !restarted {
-                        overlay_backend::local_ai::LocalModelResourceState::Gemma12Text.ui_code()
-                    } else {
-                        overlay_backend::local_ai::local_model_resource_state(
-                            &root,
-                            &c.ai_local_model,
-                        )
-                        .ui_code()
-                    }
+                    local_model_resource_data(&root, &c.ai_local_base_url, &c.ai_local_model)
                 });
                 let weak_done = weak_t.clone();
                 let _ = slint::invoke_from_event_loop(move || {
@@ -646,8 +657,9 @@ pub(crate) fn wire_local_ai(
                     match res {
                         Ok(()) => {
                             w.set_quality_vision_present(true);
-                            if let Some(resource_state) = resource_state {
+                            if let Some((resource_state, resource_warning)) = resource_data {
                                 w.set_local_model_resource_state(resource_state);
+                                w.set_local_model_resource_warning(resource_warning);
                             }
                             w.set_vision12b_status(SharedString::from(if restarted {
                                 "Зрение 12B включено — F8 теперь работает на 12B."
@@ -763,10 +775,9 @@ pub(crate) fn wire_local_ai(
                 }
                 let build = overlay_backend::local_ai::installed_engine_build(&root);
                 let supported = overlay_backend::local_ai::quality_vision_supported(&root);
-                let resource_state = {
+                let resource_data = {
                     let c = cfg_t.read();
-                    overlay_backend::local_ai::local_model_resource_state(&root, &c.ai_local_model)
-                        .ui_code()
+                    local_model_resource_data(&root, &c.ai_local_base_url, &c.ai_local_model)
                 };
                 let weak_done = weak_t.clone();
                 let _ = slint::invoke_from_event_loop(move || {
@@ -777,7 +788,8 @@ pub(crate) fn wire_local_ai(
                     }
                     // The engine may now (or no longer) support 12B vision.
                     w.set_quality_vision_supported(supported);
-                    w.set_local_model_resource_state(resource_state);
+                    w.set_local_model_resource_state(resource_data.0);
+                    w.set_local_model_resource_warning(resource_data.1);
                     let msg = match res {
                         Ok(overlay_backend::local_ai::EngineUpdate::UpToDate { .. }) => {
                             "Движок уже последней версии.".to_string()

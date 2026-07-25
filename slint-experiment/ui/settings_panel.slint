@@ -426,6 +426,9 @@ export component SettingsWindow inherits Window {
     // from the exact known GGUF/projector files; 0 means a custom model whose
     // requirements are not known and must never receive a Gemma estimate.
     in-out property <int> local-model-resource-state: 0;
+    // Backend-rendered warning backed by the pinned model resource data. Keeping
+    // the figures out of Slint prevents the UI from drifting from the launcher.
+    in-out property <string> local-model-resource-warning: "";
     in-out property <bool> ai-local-vision: false;
     // E10 — local-model "thinking"/reasoning toggle. Off (default) sends
     // enable_thinking=false for faster answers; on lets the model reason.
@@ -2177,7 +2180,7 @@ export component SettingsWindow inherits Window {
                             // ----- v0.18.0 — local model: faster (4B) vs smarter (12B) -----
                             Rectangle { background: Theme.border; height: 1px; }
                             Text {
-                                text: @tr("Local model: speed vs quality. Switching restarts the local server (~5s).");
+                                text: @tr("Local model: speed vs quality. Starting the requested model can take up to two minutes; restoring the previous one after a failed switch can take another two minutes.");
                                 font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
@@ -2219,21 +2222,7 @@ export component SettingsWindow inherits Window {
                                 wrap: word-wrap;
                             }
                             Text {
-                                // This follows the dropdown's selected model,
-                                // not the separate built-in 4B/12B preference.
-                                // The backend assigns every state only after its
-                                // matching model/projector completeness checks.
-                                text: root.local-model-resource-state == 5
-                                    ? @tr("[!] Selected Gemma 12B: about 6.3 GiB on disk plus its installed 167 MiB vision projector. It needs at least 10 GiB of free VRAM for GPU use, or 16 GiB of available RAM for a slow CPU fallback.")
-                                    : root.local-model-resource-state == 4
-                                        ? @tr("[!] Selected Gemma 12B: about 6.3 GiB on disk. Its vision projector is unavailable or cannot run on this engine, so the model runs text-only. It needs at least 10 GiB of free VRAM for GPU use, or 16 GiB of available RAM for a slow CPU fallback.")
-                                        : root.local-model-resource-state == 3
-                                            ? @tr("[!] Gemma 12B is selected, but its complete model file is unavailable, so local AI falls back to Gemma 4B. Gemma 4B needs at least 6 GiB of free VRAM for GPU use, or 12 GiB of available RAM for CPU fallback.")
-                                            : root.local-model-resource-state == 2
-                                                ? @tr("[!] Selected Gemma 4B: about 4.6 GiB on disk plus its installed 1.8 GiB vision projector (about 6.4 GiB total). It needs at least 6 GiB of free VRAM for GPU use, or 12 GiB of available RAM for CPU fallback.")
-                                                : root.local-model-resource-state == 1
-                                                    ? @tr("[!] Selected Gemma 4B: about 4.6 GiB on disk. Its vision projector is unavailable, so the model runs text-only. It needs at least 6 GiB of free VRAM for GPU use, or 12 GiB of available RAM for CPU fallback.")
-                                                    : @tr("[!] Resource requirements are unavailable for the selected local model. Check its provider's model card; Suflyor does not apply Gemma estimates to custom or Ollama models.");
+                                text: root.local-model-resource-warning;
                                 font-size: 11px;
                                 color: Theme.warning;
                                 wrap: word-wrap;

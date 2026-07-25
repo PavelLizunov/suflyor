@@ -102,6 +102,42 @@ pub const LLAMA_BASE_URL: &str = "http://127.0.0.1:8080/v1";
 pub const WHISPER_BASE_URL: &str = "http://127.0.0.1:8081/v1";
 const LLAMA_PORT: &str = "8080";
 const WHISPER_PORT: &str = "8081";
+
+/// True only for the loopback OpenAI endpoint reserved for Suflyor's bundled
+/// llama.cpp server. A port number alone is not ownership: users may point the
+/// Local provider at an Ollama, LAN, or other custom server on the same port.
+///
+/// `localhost` and IPv6 loopback are accepted as equivalent spellings so the
+/// Settings controls, boot, and watchdog use one loopback-aware policy. The
+/// server itself still binds to `127.0.0.1`; this predicate decides only whether
+/// Suflyor may manage its bundled model/profile controls.
+#[must_use]
+pub fn is_managed_llama_endpoint(base_url: &str) -> bool {
+    let url = base_url.trim();
+    let Some(without_scheme) = url.strip_prefix("http://") else {
+        return false;
+    };
+    let (authority, path) = without_scheme
+        .split_once('/')
+        .map_or((without_scheme, ""), |(authority, path)| (authority, path));
+    if !matches!(format!("/{path}").trim_end_matches('/'), "/v1") {
+        return false;
+    }
+
+    let Some((host, port)) = authority
+        .strip_prefix('[')
+        .and_then(|rest| rest.split_once("]:"))
+        .or_else(|| authority.rsplit_once(':'))
+    else {
+        return false;
+    };
+    port == LLAMA_PORT
+        && matches!(
+            host.to_ascii_lowercase().as_str(),
+            "127.0.0.1" | "localhost" | "::1"
+        )
+}
+
 /// A 12B cold load on the CPU fallback can legitimately take much longer than
 /// a small HTTP probe. Keep strict model+completion readiness in line with
 /// install warm-up, including rollback after a failed switch.
@@ -238,15 +274,6 @@ fn detect_non_nvidia_gpu() -> bool {
     ["radeon", "amd", "intel", "arc"]
         .iter()
         .any(|k| names.contains(k))
-}
-
-/// `-ngl` for a GPU kind: offload all layers for any GPU build, CPU-only otherwise.
-fn gpu_ngl(gpu: GpuKind) -> &'static str {
-    if gpu == GpuKind::None {
-        "0"
-    } else {
-        "99"
-    }
 }
 
 /// Write the installer's resulting endpoints/models into a `Config`, switching
@@ -496,29 +523,12 @@ pub fn install(
         let gguf_s = gguf.to_string_lossy().into_owned();
         let mmproj = llama_dir.join(MMPROJ_FILE);
         let mmproj_s = mmproj.to_string_lossy().into_owned();
-        let ngl = gpu_ngl(gpu);
-        let mut args: Vec<&str> = vec![
-            "-m",
-            &gguf_s,
-            "--alias",
-            GEMMA_FILE,
-            "--host",
-            "127.0.0.1",
-            "--port",
-            LLAMA_PORT,
-            "-ngl",
-            ngl,
-            "-c",
-            "8192",
-            "--jinja",
-        ];
         // Gemma 4 is multimodal — load the projector so the same server reads
         // images (F8 vision). Guarded so a projector-less install still starts.
-        if complete_file(&mmproj, MMPROJ_SIZE) {
-            args.push("--mmproj");
-            args.push(&mmproj_s);
-        }
-        let child = launch_hidden(&exe, &args)?;
+        let projector = complete_file(&mmproj, MMPROJ_SIZE).then_some(mmproj_s.as_str());
+        let args = llama_server_args(&gguf_s, GEMMA_FILE, projector);
+        let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        let child = launch_hidden(&exe, &arg_refs)?;
         servers.push(child);
     }
     if !opts.skip_whisper {
@@ -595,26 +605,10 @@ pub fn install(
                 let gguf2_s = gguf2.to_string_lossy().into_owned();
                 let mmproj2 = llama_dir.join(MMPROJ_FILE);
                 let mmproj2_s = mmproj2.to_string_lossy().into_owned();
-                let mut cpu_args: Vec<&str> = vec![
-                    "-m",
-                    &gguf2_s,
-                    "--alias",
-                    GEMMA_FILE,
-                    "--host",
-                    "127.0.0.1",
-                    "--port",
-                    LLAMA_PORT,
-                    "-ngl",
-                    "0",
-                    "-c",
-                    "8192",
-                    "--jinja",
-                ];
-                if complete_file(&mmproj2, MMPROJ_SIZE) {
-                    cpu_args.push("--mmproj");
-                    cpu_args.push(&mmproj2_s);
-                }
-                servers.push(launch_hidden(&exe2, &cpu_args)?);
+                let projector = complete_file(&mmproj2, MMPROJ_SIZE).then_some(mmproj2_s.as_str());
+                let cpu_args = llama_server_cpu_args(&gguf2_s, GEMMA_FILE, projector);
+                let arg_refs: Vec<&str> = cpu_args.iter().map(String::as_str).collect();
+                servers.push(launch_hidden(&exe2, &arg_refs)?);
                 wait_ready(&format!("{LLAMA_BASE_URL}/models"), 120).context(NOT_READY_RU)?;
                 verify_llama_ready(on).context(NOT_READY_RU)?;
                 effective_gpu = GpuKind::None;
@@ -1331,15 +1325,49 @@ pub enum LocalModelResourceState {
     Gemma12Vision,
 }
 
-/// Exact byte counts behind a known built-in model's user-facing estimate.
-/// Custom server models intentionally return no value because their
-/// quantization and sidecar assets are not under Suflyor's control.
+/// Provenance for a model-memory figure. Keep the source alongside the number:
+/// the UI must never turn a benchmark observation into a universal minimum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResourceProvenance {
+    /// Unsloth's Gemma 4 GGUF inference-hardware table. Its figures are total
+    /// available memory (RAM + VRAM, or unified memory), not separate limits.
+    UnslothGemma4GgufHardwareGuide,
+    /// A Suflyor launch benchmark, useful as an observation only.
+    SuflyorLaunchBenchmark,
+}
+
+/// A sourced recommendation for total memory available to inference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TotalMemoryRequirement {
+    pub minimum_bytes: u64,
+    pub maximum_bytes: u64,
+    pub provenance: ResourceProvenance,
+}
+
+/// A measured GPU-memory observation, explicitly distinct from a requirement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ObservedGpuMemory {
+    pub bytes: u64,
+    pub provenance: ResourceProvenance,
+}
+
+/// Exact byte counts and sourced memory information behind a known built-in
+/// model's user-facing estimate. Custom/external server models intentionally
+/// return no value because their quantization and sidecar assets are not under
+/// Suflyor's control.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LocalModelResources {
     pub model_bytes: u64,
     pub vision_projector_bytes: Option<u64>,
-    pub measured_vram_bytes: Option<u64>,
+    pub total_memory_requirement: Option<TotalMemoryRequirement>,
+    pub observed_gpu_memory: Option<ObservedGpuMemory>,
 }
+
+/// Unsloth's 4-bit E4B guidance is 5.5-6 GB of *combined* available memory.
+/// These deliberately use decimal GB because that is the unit in the cited
+/// table, rather than silently converting it to a different GiB threshold.
+const GEMMA4_E4B_TOTAL_MEMORY_MIN_BYTES: u64 = 5_500_000_000;
+const GEMMA4_E4B_TOTAL_MEMORY_MAX_BYTES: u64 = 6_000_000_000;
 
 impl LocalModelResourceState {
     /// Stable compact value for the Slint property that renders the localized
@@ -1359,9 +1387,9 @@ impl LocalModelResourceState {
     }
 }
 
-/// Return source-of-truth resource values for a known state. The Settings UI
-/// uses the state's compact code for translated prose; tests bind those states
-/// to the same pinned byte constants that the launcher validates.
+/// Return source-of-truth resource values for a known state. Settings derives
+/// its backend-rendered warning from these values; tests bind the states to the
+/// same pinned byte constants that the launcher validates.
 #[must_use]
 pub const fn local_model_resources(state: LocalModelResourceState) -> Option<LocalModelResources> {
     match state {
@@ -1369,32 +1397,58 @@ pub const fn local_model_resources(state: LocalModelResourceState) -> Option<Loc
         LocalModelResourceState::Gemma4Text => Some(LocalModelResources {
             model_bytes: GEMMA_SIZE,
             vision_projector_bytes: None,
-            measured_vram_bytes: None,
+            total_memory_requirement: Some(TotalMemoryRequirement {
+                minimum_bytes: GEMMA4_E4B_TOTAL_MEMORY_MIN_BYTES,
+                maximum_bytes: GEMMA4_E4B_TOTAL_MEMORY_MAX_BYTES,
+                provenance: ResourceProvenance::UnslothGemma4GgufHardwareGuide,
+            }),
+            observed_gpu_memory: None,
         }),
         LocalModelResourceState::Gemma4Vision => Some(LocalModelResources {
             model_bytes: GEMMA_SIZE,
             vision_projector_bytes: Some(MMPROJ_SIZE),
-            measured_vram_bytes: None,
+            total_memory_requirement: Some(TotalMemoryRequirement {
+                minimum_bytes: GEMMA4_E4B_TOTAL_MEMORY_MIN_BYTES,
+                maximum_bytes: GEMMA4_E4B_TOTAL_MEMORY_MAX_BYTES,
+                provenance: ResourceProvenance::UnslothGemma4GgufHardwareGuide,
+            }),
+            observed_gpu_memory: None,
         }),
         LocalModelResourceState::Gemma12Text => Some(LocalModelResources {
             model_bytes: GEMMA12_SIZE,
             vision_projector_bytes: None,
-            measured_vram_bytes: Some(GEMMA12_MEASURED_VRAM_BYTES),
+            total_memory_requirement: None,
+            observed_gpu_memory: Some(ObservedGpuMemory {
+                bytes: GEMMA12_MEASURED_VRAM_BYTES,
+                provenance: ResourceProvenance::SuflyorLaunchBenchmark,
+            }),
         }),
         LocalModelResourceState::Gemma12Vision => Some(LocalModelResources {
             model_bytes: GEMMA12_SIZE,
             vision_projector_bytes: Some(GEMMA12_MMPROJ_SIZE),
-            measured_vram_bytes: Some(GEMMA12_MEASURED_VRAM_BYTES),
+            total_memory_requirement: None,
+            observed_gpu_memory: Some(ObservedGpuMemory {
+                bytes: GEMMA12_MEASURED_VRAM_BYTES,
+                provenance: ResourceProvenance::SuflyorLaunchBenchmark,
+            }),
         }),
     }
 }
 
 /// Return the resource-warning state for the model id currently selected in
 /// Settings. This intentionally recognises only Suflyor's exact pinned GGUF
-/// names: a Qwen/Ollama/custom id may use a different quantization, context
-/// size, or vision sidecar, so showing a Gemma estimate would be misleading.
+/// names *at Suflyor's managed endpoint*: a Qwen/Ollama/custom id, including a
+/// custom server that happens to advertise the same Gemma basename, may use a
+/// different quantization, context size, or vision sidecar.
 #[must_use]
-pub fn local_model_resource_state(root: &Path, model_id: &str) -> LocalModelResourceState {
+pub fn local_model_resource_state(
+    root: &Path,
+    base_url: &str,
+    model_id: &str,
+) -> LocalModelResourceState {
+    if !is_managed_llama_endpoint(base_url) {
+        return LocalModelResourceState::Unknown;
+    }
     let model = model_id.trim();
     if model.eq_ignore_ascii_case(GEMMA_FILE) {
         if complete_file(&root.join("llama.cpp").join(MMPROJ_FILE), MMPROJ_SIZE) {
@@ -1413,6 +1467,79 @@ pub fn local_model_resource_state(root: &Path, model_id: &str) -> LocalModelReso
     } else {
         LocalModelResourceState::Unknown
     }
+}
+
+fn format_gib(bytes: u64) -> String {
+    format!("{:.1}", bytes as f64 / GIB as f64)
+}
+
+fn format_decimal_gb(bytes: u64) -> String {
+    format!("{:.1}", bytes as f64 / 1_000_000_000.0)
+}
+
+fn resource_warning_for_state(state: LocalModelResourceState) -> String {
+    let Some(resources) = local_model_resources(state) else {
+        return "[!] Требования к ресурсам для выбранной локальной модели неизвестны. Проверьте карточку модели у поставщика: Suflyor не применяет данные встроенной Gemma к внешним или пользовательским endpoint.".to_string();
+    };
+    let model_name = match state {
+        LocalModelResourceState::Gemma4Text | LocalModelResourceState::Gemma4Vision => "Gemma 4B",
+        LocalModelResourceState::Gemma12Text | LocalModelResourceState::Gemma12Vision => {
+            "Gemma 12B"
+        }
+        LocalModelResourceState::Unknown | LocalModelResourceState::Gemma12Unavailable => {
+            "local model"
+        }
+    };
+    let vision = resources.vision_projector_bytes.map_or_else(
+        || " Модель работает только с текстом: проектор зрения недоступен.".to_string(),
+        |bytes| {
+            format!(
+                " плюс установленный проектор зрения {} GiB.",
+                format_gib(bytes)
+            )
+        },
+    );
+    let memory = if let Some(requirement) = resources.total_memory_requirement {
+        debug_assert_eq!(
+            requirement.provenance,
+            ResourceProvenance::UnslothGemma4GgufHardwareGuide
+        );
+        format!(
+            " Рекомендация Unsloth для Gemma 4 GGUF: {}-{} GB общей доступной памяти (RAM + VRAM или unified memory), а не отдельные пороги CPU/GPU. Движок может частично выгрузить модель в RAM; генерация будет медленнее.",
+            format_decimal_gb(requirement.minimum_bytes),
+            format_decimal_gb(requirement.maximum_bytes),
+        )
+    } else if let Some(observed) = resources.observed_gpu_memory {
+        debug_assert_eq!(
+            observed.provenance,
+            ResourceProvenance::SuflyorLaunchBenchmark
+        );
+        format!(
+            " Для этого 12B QAT GGUF нет закреплённого источника минимальной общей памяти. В тесте Suflyor наблюдалось около {} GB GPU-памяти; фактическое потребление меняется с контекстом и выгрузкой.",
+            format_decimal_gb(observed.bytes),
+        )
+    } else {
+        String::new()
+    };
+    format!(
+        "[!] Выбрана {model_name}: около {} GiB на диске.{vision}{memory}",
+        format_gib(resources.model_bytes),
+    )
+}
+
+/// Build the Settings warning from the same endpoint-qualified resource data
+/// used by the launcher. This keeps model requirements out of Slint literals.
+#[must_use]
+pub fn local_model_resource_warning(root: &Path, base_url: &str, model_id: &str) -> String {
+    let state = local_model_resource_state(root, base_url, model_id);
+    if state == LocalModelResourceState::Gemma12Unavailable {
+        let fallback = resource_warning_for_state(LocalModelResourceState::Gemma4Text);
+        return format!(
+            "[!] Выбрана Gemma 12B, но её полный файл недоступен; локальный AI использует Gemma 4B. {}",
+            fallback.trim_start_matches("[!] ")
+        );
+    }
+    resource_warning_for_state(state)
 }
 
 /// Pick which llama GGUF to load: the 12B ONLY when the user asked for it AND
@@ -2003,8 +2130,6 @@ fn ensure_servers_inner(
     attach_projector: bool,
 ) -> Vec<Child> {
     let mut started = Vec::new();
-    // Any GPU (NVIDIA CUDA or AMD/Intel Vulkan build) → offload; else CPU (Баг2).
-    let use_gpu = detect_gpu() != GpuKind::None;
     // NOTE: deliberately launch-only — do NOT kill+relaunch a server that is
     // already answering. Live smoke showed that relaunching the (warm) server on
     // startup defeats the model warm-up (the warm-up then hits a cold-loading
@@ -2030,27 +2155,9 @@ fn ensure_servers_inner(
                     .file_name()
                     .map(|name| name.to_string_lossy().into_owned())
                     .unwrap_or_default();
-                let ngl = if use_gpu { "99" } else { "0" };
-                let mut args: Vec<&str> = vec![
-                    "-m",
-                    &gguf_s,
-                    "--alias",
-                    &model_alias,
-                    "--host",
-                    "127.0.0.1",
-                    "--port",
-                    LLAMA_PORT,
-                    "-ngl",
-                    ngl,
-                    "-c",
-                    "8192",
-                    "--jinja",
-                ];
-                if let Some(p) = &mmproj_s {
-                    args.push("--mmproj");
-                    args.push(p.as_str());
-                }
-                if let Ok(child) = launch_hidden(&exe, &args) {
+                let args = llama_server_args(&gguf_s, &model_alias, mmproj_s.as_deref());
+                let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+                if let Ok(child) = launch_hidden(&exe, &arg_refs) {
                     started.push(child);
                 }
             }
@@ -2082,6 +2189,45 @@ fn ensure_servers_inner(
         }
     }
     started
+}
+
+/// Command line for the bundled llama server. Deliberately omit
+/// `--n-gpu-layers`: on current llama.cpp it leaves parameter fitting enabled,
+/// allowing a hybrid RAM/VRAM fit instead of forcing all layers into an
+/// insufficient GPU. CPU-only installations retain llama.cpp's own default.
+fn llama_server_args(model: &str, alias: &str, mmproj: Option<&str>) -> Vec<String> {
+    let mut args = vec![
+        "-m".to_string(),
+        model.to_string(),
+        "--alias".to_string(),
+        alias.to_string(),
+        "--host".to_string(),
+        "127.0.0.1".to_string(),
+        "--port".to_string(),
+        LLAMA_PORT.to_string(),
+        "-c".to_string(),
+        "8192".to_string(),
+        "--jinja".to_string(),
+    ];
+    if let Some(projector) = mmproj {
+        args.push("--mmproj".to_string());
+        args.push(projector.to_string());
+    }
+    args
+}
+
+/// CPU recovery after a failed initial GPU install is the one deliberate
+/// override: the first launch already proved that automatic fitting did not
+/// produce a usable server, so force a conservative CPU-only retry.
+fn llama_server_cpu_args(model: &str, alias: &str, mmproj: Option<&str>) -> Vec<String> {
+    let mut args = llama_server_args(model, alias, mmproj);
+    let position = args
+        .iter()
+        .position(|arg| arg == "--jinja")
+        .unwrap_or(args.len());
+    args.insert(position, "-ngl".to_string());
+    args.insert(position + 1, "0".to_string());
+    args
 }
 
 // ---- GitHub release asset selection ---------------------------------------

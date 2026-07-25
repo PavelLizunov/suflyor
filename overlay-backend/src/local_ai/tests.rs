@@ -205,37 +205,43 @@ fn resource_state_follows_selected_model_not_quality_preference() {
 
     // Unknown server-managed ids never receive Gemma's disk/VRAM estimates.
     assert_eq!(
-        local_model_resource_state(root, "qwen2.5:7b-instruct"),
+        local_model_resource_state(root, LLAMA_BASE_URL, "qwen2.5:7b-instruct"),
         LocalModelResourceState::Unknown
     );
     assert_eq!(
-        local_model_resource_state(root, "ollama/custom-model"),
+        local_model_resource_state(root, LLAMA_BASE_URL, "ollama/custom-model"),
+        LocalModelResourceState::Unknown
+    );
+    // A remote/custom endpoint can advertise the same basename as Suflyor's
+    // bundled model, but its quantization/assets are not ours to estimate.
+    assert_eq!(
+        local_model_resource_state(root, "http://10.0.0.5:8080/v1", GEMMA_FILE),
         LocalModelResourceState::Unknown
     );
 
     assert_eq!(
-        local_model_resource_state(root, GEMMA_FILE),
+        local_model_resource_state(root, LLAMA_BASE_URL, GEMMA_FILE),
         LocalModelResourceState::Gemma4Text
     );
     make_complete(&llama.join(MMPROJ_FILE), MMPROJ_SIZE);
     assert_eq!(
-        local_model_resource_state(root, GEMMA_FILE),
+        local_model_resource_state(root, LLAMA_BASE_URL, GEMMA_FILE),
         LocalModelResourceState::Gemma4Vision
     );
 
     assert_eq!(
-        local_model_resource_state(root, GEMMA12_FILE),
+        local_model_resource_state(root, LLAMA_BASE_URL, GEMMA12_FILE),
         LocalModelResourceState::Gemma12Unavailable
     );
     make_complete(&llama.join(GEMMA12_FILE), GEMMA12_SIZE);
     assert_eq!(
-        local_model_resource_state(root, GEMMA12_FILE),
+        local_model_resource_state(root, LLAMA_BASE_URL, GEMMA12_FILE),
         LocalModelResourceState::Gemma12Text
     );
     make_complete(&llama.join(GEMMA12_MMPROJ_FILE), GEMMA12_MMPROJ_SIZE);
     std::fs::write(llama.join(".llama-build"), format!("b{GEMMA4UV_MIN_BUILD}")).unwrap();
     assert_eq!(
-        local_model_resource_state(root, GEMMA12_FILE),
+        local_model_resource_state(root, LLAMA_BASE_URL, GEMMA12_FILE),
         LocalModelResourceState::Gemma12Vision
     );
 
@@ -247,7 +253,12 @@ fn resource_state_follows_selected_model_not_quality_preference() {
         Some(LocalModelResources {
             model_bytes: GEMMA_SIZE,
             vision_projector_bytes: Some(MMPROJ_SIZE),
-            measured_vram_bytes: None,
+            total_memory_requirement: Some(TotalMemoryRequirement {
+                minimum_bytes: GEMMA4_E4B_TOTAL_MEMORY_MIN_BYTES,
+                maximum_bytes: GEMMA4_E4B_TOTAL_MEMORY_MAX_BYTES,
+                provenance: ResourceProvenance::UnslothGemma4GgufHardwareGuide,
+            }),
+            observed_gpu_memory: None,
         })
     );
     assert_eq!(
@@ -255,8 +266,79 @@ fn resource_state_follows_selected_model_not_quality_preference() {
         Some(LocalModelResources {
             model_bytes: GEMMA12_SIZE,
             vision_projector_bytes: Some(GEMMA12_MMPROJ_SIZE),
-            measured_vram_bytes: Some(GEMMA12_MEASURED_VRAM_BYTES),
+            total_memory_requirement: None,
+            observed_gpu_memory: Some(ObservedGpuMemory {
+                bytes: GEMMA12_MEASURED_VRAM_BYTES,
+                provenance: ResourceProvenance::SuflyorLaunchBenchmark,
+            }),
         })
+    );
+}
+
+#[test]
+fn managed_llama_endpoint_is_loopback_aware_and_rejects_custom_servers() {
+    for endpoint in [
+        LLAMA_BASE_URL,
+        "http://127.0.0.1:8080/v1/",
+        "http://localhost:8080/v1",
+        "http://[::1]:8080/v1",
+    ] {
+        assert!(
+            is_managed_llama_endpoint(endpoint),
+            "expected bundled endpoint: {endpoint}"
+        );
+    }
+    for endpoint in [
+        "http://10.0.0.5:8080/v1",
+        "http://192.168.1.2:8080/v1",
+        "http://127.0.0.1:11434/v1",
+        "https://127.0.0.1:8080/v1",
+        "http://127.0.0.1:8080/not-v1",
+    ] {
+        assert!(
+            !is_managed_llama_endpoint(endpoint),
+            "must not manage custom endpoint: {endpoint}"
+        );
+    }
+}
+
+#[test]
+fn resource_warnings_use_sourced_combined_memory_and_observations() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let llama = root.join("llama.cpp");
+    std::fs::create_dir_all(&llama).unwrap();
+
+    let e4b = local_model_resource_warning(root, LLAMA_BASE_URL, GEMMA_FILE);
+    assert!(e4b.contains("5.5-6.0 GB общей доступной памяти (RAM + VRAM"));
+    assert!(e4b.contains("не отдельные пороги CPU/GPU"));
+
+    make_complete(&llama.join(GEMMA12_FILE), GEMMA12_SIZE);
+    let twelve_b = local_model_resource_warning(root, LLAMA_BASE_URL, GEMMA12_FILE);
+    assert!(twelve_b.contains("нет закреплённого источника минимальной общей памяти"));
+    assert!(twelve_b.contains("9.5 GB GPU-памяти"));
+
+    let remote = local_model_resource_warning(root, "http://10.0.0.5:8080/v1", GEMMA_FILE);
+    assert!(remote.contains("внешним или пользовательским endpoint"));
+}
+
+#[test]
+fn llama_server_arguments_leave_gpu_layer_fitting_to_llama_cpp() {
+    let args = llama_server_args("model.gguf", "model.gguf", Some("vision.gguf"));
+    assert!(args
+        .windows(2)
+        .any(|pair| pair == ["--mmproj", "vision.gguf"]));
+    assert!(
+        !args
+            .iter()
+            .any(|arg| arg == "-ngl" || arg == "--n-gpu-layers"),
+        "explicit GPU layer counts disable llama.cpp parameter fitting"
+    );
+
+    let cpu_args = llama_server_cpu_args("model.gguf", "model.gguf", None);
+    assert!(
+        cpu_args.windows(2).any(|pair| pair == ["-ngl", "0"]),
+        "a failed initial GPU launch must retain its explicit CPU retry"
     );
 }
 
