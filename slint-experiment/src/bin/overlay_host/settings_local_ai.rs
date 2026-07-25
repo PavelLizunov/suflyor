@@ -760,6 +760,11 @@ pub(crate) fn wire_local_ai(
                 }
                 let build = overlay_backend::local_ai::installed_engine_build(&root);
                 let supported = overlay_backend::local_ai::quality_vision_supported(&root);
+                let resource_state = {
+                    let c = cfg_t.read();
+                    overlay_backend::local_ai::local_model_resource_state(&root, &c.ai_local_model)
+                        .ui_code()
+                };
                 let weak_done = weak_t.clone();
                 let _ = slint::invoke_from_event_loop(move || {
                     let Some(w) = weak_done.upgrade() else { return };
@@ -769,6 +774,7 @@ pub(crate) fn wire_local_ai(
                     }
                     // The engine may now (or no longer) support 12B vision.
                     w.set_quality_vision_supported(supported);
+                    w.set_local_model_resource_state(resource_state);
                     let msg = match res {
                         Ok(overlay_backend::local_ai::EngineUpdate::UpToDate { .. }) => {
                             "Движок уже последней версии.".to_string()
