@@ -435,6 +435,7 @@ pub(crate) fn wire_local_ai(
     // the user taps it to switch (no auto-switch, so a background download can't
     // swap the model mid-call).
     {
+        let cfg_c = cfg.clone();
         let state_c = state.clone();
         let weak = win.as_weak();
         win.on_download_quality_clicked(move || {
@@ -464,6 +465,7 @@ pub(crate) fn wire_local_ai(
                 s.local_ai_cancel.clone()
             };
             cancel.store(false, std::sync::atomic::Ordering::Relaxed);
+            let cfg_t = cfg_c.clone();
             let weak_t = w.as_weak();
             std::thread::spawn(move || {
                 let _busy_guard = busy_guard; // frees local_ai_busy on exit incl. panic
