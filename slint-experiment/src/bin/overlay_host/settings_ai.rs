@@ -260,13 +260,19 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_ai_local_base_url_save(move |v| {
+            let base_url = v.trim().to_string();
             let mut c = cfg_c.write();
-            c.ai_local_base_url = v.trim().to_string();
+            c.ai_local_base_url = base_url.clone();
             if let Err(e) = overlay_backend::config::save(&c) {
                 eprintln!("[overlay-host] ai_local_base_url save failed: {e:#}");
                 return;
             }
             drop(c);
+            if let Some(w) = weak.upgrade() {
+                w.set_managed_local_server(
+                    base_url.trim_end_matches('/') == overlay_backend::local_ai::LLAMA_BASE_URL,
+                );
+            }
             // #E10.1 — re-query models against the new URL.
             fetch_models(weak.clone(), cfg_c.clone(), ModelTarget::Local);
         });
@@ -283,6 +289,7 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
     }
     {
         let cfg_c = cfg.clone();
+        let weak = win.as_weak();
         win.on_ai_local_model_selected(move |model| {
             let m = model.trim().to_string();
             if m.is_empty() {
@@ -293,6 +300,13 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
             if let Err(e) = overlay_backend::config::save(&c) {
                 eprintln!("[overlay-host] ai_local_model save failed: {e:#}");
                 return;
+            }
+            drop(c);
+            if let Some(w) = weak.upgrade() {
+                let root = overlay_backend::local_ai::default_root();
+                w.set_local_model_resource_state(
+                    overlay_backend::local_ai::local_model_resource_state(&root, &m).ui_code(),
+                );
             }
             diag!("ai_local_model selected: {m}");
         });

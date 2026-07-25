@@ -67,6 +67,9 @@ const GEMMA12_MMPROJ_FILE: &str = "mmproj-12b-F16.gguf";
 const GEMMA12_MMPROJ_SIZE: u64 = 175_115_840;
 const GEMMA12_MMPROJ_SHA256: &str =
     "ecc4e93128da8363b7dbf2193eab98cf1142353f52ceaa0c95c0872997aaadd3";
+/// Peak VRAM observed for the shipped 12B profile during the documented
+/// benchmark. It is an observation, not a universal minimum/recommendation.
+const GEMMA12_MEASURED_VRAM_BYTES: u64 = 9_500_000_000;
 /// Minimum llama.cpp release build (the `bNNNN` tag) that can load the 12B's
 /// "gemma4uv" projector. Below this we keep the 12B text-only (no crash).
 const GEMMA4UV_MIN_BUILD: u32 = 9626;
@@ -493,6 +496,8 @@ pub fn install(
         let mut args: Vec<&str> = vec![
             "-m",
             &gguf_s,
+            "--alias",
+            GEMMA_FILE,
             "--host",
             "127.0.0.1",
             "--port",
@@ -505,7 +510,7 @@ pub fn install(
         ];
         // Gemma 4 is multimodal — load the projector so the same server reads
         // images (F8 vision). Guarded so a projector-less install still starts.
-        if mmproj.exists() {
+        if complete_file(&mmproj, MMPROJ_SIZE) {
             args.push("--mmproj");
             args.push(&mmproj_s);
         }
@@ -589,6 +594,8 @@ pub fn install(
                 let mut cpu_args: Vec<&str> = vec![
                     "-m",
                     &gguf2_s,
+                    "--alias",
+                    GEMMA_FILE,
                     "--host",
                     "127.0.0.1",
                     "--port",
@@ -599,7 +606,7 @@ pub fn install(
                     "8192",
                     "--jinja",
                 ];
-                if mmproj2.exists() {
+                if complete_file(&mmproj2, MMPROJ_SIZE) {
                     cpu_args.push("--mmproj");
                     cpu_args.push(&mmproj2_s);
                 }
@@ -659,6 +666,127 @@ fn is_reachable(url: &str) -> bool {
     run_capture("curl.exe", &["-s", "-o", "NUL", "--max-time", "2", url])
         .map(|o| o.status.success())
         .unwrap_or(false)
+}
+
+/// True only when a successful OpenAI-shaped `/models` response advertises the
+/// exact alias passed to llama-server. Keeping this pure makes the switch
+/// contract testable without a Windows process or a real model file.
+fn models_list_expected_model(http_success: bool, body: &str, expected: &str) -> bool {
+    http_success
+        && serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .and_then(|json| json.get("data")?.as_array().cloned())
+            .is_some_and(|models| {
+                models.iter().any(|model| {
+                    model.get("id").and_then(serde_json::Value::as_str) == Some(expected)
+                })
+            })
+}
+
+/// A successful model listing alone does not prove that weights are usable.
+/// llama.cpp's successful completion response contains a `choices` item with a
+/// message object; error JSON, including HTTP 200-shaped proxies or malformed
+/// choice arrays, fails.
+fn completion_has_choice(http_success: bool, body: &str) -> bool {
+    http_success
+        && serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .and_then(|json| json.get("choices")?.as_array().cloned())
+            .is_some_and(|choices| {
+                choices.iter().any(|choice| {
+                    choice
+                        .get("message")
+                        .is_some_and(serde_json::Value::is_object)
+                })
+            })
+}
+
+/// The switch readiness transaction is complete only when the requested model
+/// is listed *and* accepts a completion. Kept as a separate pure predicate so
+/// regressions such as accepting a 404/503 response cannot hide in shell code.
+fn expected_model_is_ready(
+    models_http_success: bool,
+    models_body: &str,
+    expected: &str,
+    completion_http_success: bool,
+    completion_body: &str,
+) -> bool {
+    models_list_expected_model(models_http_success, models_body, expected)
+        && completion_has_choice(completion_http_success, completion_body)
+}
+
+/// Run curl with `--fail` so 4xx/5xx responses (notably llama.cpp's loading
+/// 503) never look ready merely because a TCP listener returned a body.
+fn curl_success_body(args: &[&str]) -> Option<String> {
+    run_capture("curl.exe", args).ok().and_then(|out| {
+        out.status
+            .success()
+            .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+    })
+}
+
+fn launched_children_alive(children: &mut [Child]) -> bool {
+    !children.is_empty()
+        && children
+            .iter_mut()
+            .all(|child| matches!(child.try_wait(), Ok(None)))
+}
+
+/// Poll a just-launched llama-server until it advertises the model we started
+/// and serves a minimal completion. The server receives an explicit `--alias`,
+/// making `/models` an authoritative expected-model check rather than a loose
+/// "some server answered" probe.
+fn wait_for_expected_llama(expected: &str, budget: Duration, children: &mut [Child]) -> bool {
+    let models_url = format!("{LLAMA_BASE_URL}/models");
+    let completion_url = format!("{LLAMA_BASE_URL}/chat/completions");
+    let completion_body = serde_json::json!({
+        "model": expected,
+        "messages": [{"role": "user", "content": "hi"}],
+        "max_tokens": 1,
+    })
+    .to_string();
+    let deadline = Instant::now() + budget;
+
+    while Instant::now() < deadline {
+        // Never accept a response after the process we just launched has exited:
+        // another listener or a stale reply could otherwise make a failed switch
+        // look successful.
+        if !launched_children_alive(children) {
+            return false;
+        }
+        let models = curl_success_body(&["-f", "-sS", "--max-time", "3", &models_url]);
+        let completion = if models
+            .as_deref()
+            .is_some_and(|body| models_list_expected_model(true, body, expected))
+        {
+            curl_success_body(&[
+                "-f",
+                "-sS",
+                "--max-time",
+                "8",
+                "-X",
+                "POST",
+                &completion_url,
+                "-H",
+                "Content-Type: application/json",
+                "-d",
+                &completion_body,
+            ])
+        } else {
+            None
+        };
+        if expected_model_is_ready(
+            models.is_some(),
+            models.as_deref().unwrap_or_default(),
+            expected,
+            completion.is_some(),
+            completion.as_deref().unwrap_or_default(),
+        ) {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(400));
+    }
+    false
 }
 
 /// Stop local-AI servers that this app owns.
@@ -839,41 +967,129 @@ pub fn free_llama_port(root: &Path) -> bool {
 pub enum ModelSwitch {
     /// :8080 now answers with the requested GGUF loaded.
     Switched,
+    /// The requested model did not become ready, but the previously selected
+    /// model was relaunched successfully. The caller must retain the returned
+    /// child handles while keeping its persisted selection unchanged.
+    RolledBack,
     /// A FOREIGN process holds :8080 (started outside our `root`) we won't
     /// force-kill — the OLD model keeps serving, so the switch did NOT happen.
     PortBusy,
+    /// The requested optional 12B file is missing or incomplete, so the switch
+    /// is rejected before the currently running model is stopped.
+    TargetUnavailable,
     /// Freed + relaunched but the server never became reachable in time
-    /// (missing binary/GGUF, failed bind, or still cold-loading past the wait).
+    /// (missing binary/GGUF, failed bind, or both requested and rollback models
+    /// missed their readiness budgets).
     FailedToStart,
 }
 
-/// Restart llama-server with the GGUF `prefer_quality` selects: free :8080
-/// owner-aware, relaunch via [`ensure_servers`], then POLL `/models` until the
-/// fresh server answers (model load is a few seconds; 12B cold ≈ 5 s). Returns
-/// the honest [`ModelSwitch`] + any launched child handles. Whisper (:8081) is
-/// left alone. Call from a worker thread (it blocks up to ~20 s).
+/// The complete launch profile of the previously working bundled model. A
+/// rollback restores its model choice and whether its matching vision projector
+/// was attached.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LocalModelProfile {
+    prefer_quality: bool,
+    use_vision: bool,
+}
+
+impl LocalModelProfile {
+    /// Use when applying a newly downloaded projector to an already-running
+    /// 12B. A failed relaunch must restore the prior text-only profile rather
+    /// than retrying that same new projector.
+    #[must_use]
+    pub const fn text_only(prefer_quality: bool) -> Self {
+        Self {
+            prefer_quality,
+            use_vision: false,
+        }
+    }
+}
+
+/// Capture the exact bundled-model profile that the current launch rules would
+/// use. Call before stopping :8080 and pass it to [`switch_local_model`] so a
+/// rollback does not silently degrade a working F8 setup to text-only.
+#[must_use]
+pub fn local_model_profile(root: &Path, prefer_quality: bool) -> LocalModelProfile {
+    let prefer_quality = prefer_quality && quality_model_present(root);
+    let llama_dir = root.join("llama.cpp");
+    let gguf = selected_llama_gguf(&llama_dir, prefer_quality);
+    LocalModelProfile {
+        prefer_quality,
+        use_vision: mmproj_for_model(&llama_dir, &gguf).is_some(),
+    }
+}
+
+const fn switch_attempt_outcome(target_ready: bool, rollback_ready: bool) -> ModelSwitch {
+    if target_ready {
+        ModelSwitch::Switched
+    } else if rollback_ready {
+        ModelSwitch::RolledBack
+    } else {
+        ModelSwitch::FailedToStart
+    }
+}
+
+/// Only this outcome permits the caller to persist the requested model. In
+/// particular, a successful rollback means the old config remains truthful.
+#[must_use]
+pub const fn switch_commits_choice(outcome: ModelSwitch) -> bool {
+    matches!(outcome, ModelSwitch::Switched)
+}
+
+/// Transactionally restart llama-server with the requested GGUF. The newly
+/// launched server must return a successful `/models` response naming that
+/// exact model and complete a one-token request before this reports
+/// [`ModelSwitch::Switched`]. A 404/503, a different model, or a server that
+/// only binds but cannot generate never counts as success.
+///
+/// If the requested model fails after :8080 was freed, the supplied prior
+/// profile is relaunched with its former projector state. [`ModelSwitch::RolledBack`]
+/// returns its child handles for normal lifecycle tracking; config must stay on
+/// the old selection. Whisper (:8081) is otherwise left alone. Call from a
+/// worker thread (it blocks up to ~20 s per readiness attempt).
 #[must_use]
 pub fn switch_local_model(
     root: &Path,
+    previous: LocalModelProfile,
     prefer_quality: bool,
     want_whisper: bool,
 ) -> (ModelSwitch, Vec<Child>) {
+    if prefer_quality && !quality_model_present(root) {
+        return (ModelSwitch::TargetUnavailable, Vec::new());
+    }
     // A foreign owner we can't kill means the old model stays up — don't lie.
     if !free_llama_port(root) {
         return (ModelSwitch::PortBusy, Vec::new());
     }
     // Let the OS release the port before the relaunch binds it.
     std::thread::sleep(Duration::from_millis(800));
-    let started = ensure_servers(root, true, want_whisper, prefer_quality);
-    let url = format!("{LLAMA_BASE_URL}/models");
-    let deadline = Instant::now() + Duration::from_secs(20);
-    while Instant::now() < deadline {
-        if is_reachable(&url) {
-            return (ModelSwitch::Switched, started);
-        }
-        std::thread::sleep(Duration::from_millis(400));
+    let expected = active_local_model_name(root, prefer_quality);
+    let mut started = ensure_servers_inner(root, true, want_whisper, prefer_quality, true);
+    if wait_for_expected_llama(&expected, Duration::from_secs(20), &mut started) {
+        return (switch_attempt_outcome(true, false), started);
     }
-    (ModelSwitch::FailedToStart, started)
+
+    // Do not leave a wedged target process behind, then restore the exact model
+    // and projector profile that was serving before the switch.
+    terminate_servers(started);
+    if !free_llama_port(root) {
+        return (ModelSwitch::FailedToStart, Vec::new());
+    }
+    std::thread::sleep(Duration::from_millis(800));
+    let rollback_expected = active_local_model_name(root, previous.prefer_quality);
+    let mut rollback = ensure_servers_inner(
+        root,
+        true,
+        want_whisper,
+        previous.prefer_quality,
+        previous.use_vision,
+    );
+    if wait_for_expected_llama(&rollback_expected, Duration::from_secs(20), &mut rollback) {
+        (switch_attempt_outcome(false, true), rollback)
+    } else {
+        terminate_servers(rollback);
+        (switch_attempt_outcome(false, false), Vec::new())
+    }
 }
 
 /// True if llama-server is answering on :8080 (even a 503 "loading" counts —
@@ -900,9 +1116,17 @@ pub fn ensure_llama_serving(root: &Path, prefer_quality: bool) -> (ModelSwitch, 
         // Alive (serving or cold-loading) — do not disturb.
         return (ModelSwitch::Switched, Vec::new());
     }
-    // Dead port: free any stale under-root listener and relaunch the selected
-    // GGUF, confirming readiness before reporting success.
-    switch_local_model(root, prefer_quality, false)
+    // There is no live previous server to roll back to here: this is a boot or
+    // watchdog recovery, so launch the selected model directly and report only
+    // a fully ready expected model as success.
+    let expected = active_local_model_name(root, prefer_quality);
+    let mut started = ensure_servers_inner(root, true, false, prefer_quality, true);
+    if wait_for_expected_llama(&expected, Duration::from_secs(20), &mut started) {
+        (ModelSwitch::Switched, started)
+    } else {
+        terminate_servers(started);
+        (ModelSwitch::FailedToStart, Vec::new())
+    }
 }
 
 /// Friendly, compact label for a LOCAL model GGUF basename — so the bar's
@@ -959,7 +1183,7 @@ pub fn quality_gguf_path(root: &Path) -> PathBuf {
 /// again (the launch path also falls back to E4B on a bad file).
 #[must_use]
 pub fn quality_model_present(root: &Path) -> bool {
-    file_len(&quality_gguf_path(root)) >= GEMMA12_SIZE
+    complete_file(&quality_gguf_path(root), GEMMA12_SIZE)
 }
 
 /// True when the base E4B model is downloaded + complete (size matches the pin).
@@ -969,7 +1193,7 @@ pub fn quality_model_present(root: &Path) -> bool {
 /// the download).
 #[must_use]
 pub fn base_model_present(root: &Path) -> bool {
-    file_len(&root.join("llama.cpp").join(GEMMA_FILE)) >= GEMMA_SIZE
+    complete_file(&root.join("llama.cpp").join(GEMMA_FILE), GEMMA_SIZE)
 }
 
 /// The conventional GigaAM model directory under the local-AI root
@@ -994,7 +1218,10 @@ pub fn gigaam_model_present(dir: &Path) -> bool {
 /// reads as absent (the launch only attaches a present projector).
 #[must_use]
 pub fn quality_vision_present(root: &Path) -> bool {
-    file_len(&root.join("llama.cpp").join(GEMMA12_MMPROJ_FILE)) >= GEMMA12_MMPROJ_SIZE
+    complete_file(
+        &root.join("llama.cpp").join(GEMMA12_MMPROJ_FILE),
+        GEMMA12_MMPROJ_SIZE,
+    )
 }
 
 /// True when the installed llama.cpp is new enough to LOAD the 12B projector
@@ -1005,13 +1232,119 @@ pub fn quality_vision_supported(root: &Path) -> bool {
     llama_build_supports_gemma4uv(&root.join("llama.cpp"))
 }
 
+/// The resource estimate the Settings panel may safely show for a selected
+/// local model. Only the exact GGUFs that Suflyor downloads and verifies have
+/// known figures; an id obtained from Ollama or another local server remains
+/// [`Unknown`](Self::Unknown) instead of inheriting Gemma's requirements.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalModelResourceState {
+    /// A custom/server-managed model. Its quantization and auxiliary files are
+    /// unknown, so an estimate would be fabricated.
+    Unknown,
+    /// The built-in Gemma 4B without a complete projector.
+    Gemma4Text,
+    /// The built-in Gemma 4B with its complete projector.
+    Gemma4Vision,
+    /// Gemma 12B is selected in a stale configuration but its GGUF is absent or
+    /// incomplete, so launch falls back to 4B.
+    Gemma12Unavailable,
+    /// The built-in Gemma 12B without a usable, complete projector.
+    Gemma12Text,
+    /// The built-in Gemma 12B with a complete projector and a capable engine.
+    Gemma12Vision,
+}
+
+/// Exact byte counts behind a known built-in model's user-facing estimate.
+/// Custom server models intentionally return no value because their
+/// quantization and sidecar assets are not under Suflyor's control.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LocalModelResources {
+    pub model_bytes: u64,
+    pub vision_projector_bytes: Option<u64>,
+    pub measured_vram_bytes: Option<u64>,
+}
+
+impl LocalModelResourceState {
+    /// Stable compact value for the Slint property that renders the localized
+    /// warning. Keep this mapping next to the actual model/projector
+    /// completeness rules, rather than inferring it from an unrelated quality
+    /// preference in the UI.
+    #[must_use]
+    pub const fn ui_code(self) -> i32 {
+        match self {
+            Self::Unknown => 0,
+            Self::Gemma4Text => 1,
+            Self::Gemma4Vision => 2,
+            Self::Gemma12Unavailable => 3,
+            Self::Gemma12Text => 4,
+            Self::Gemma12Vision => 5,
+        }
+    }
+}
+
+/// Return source-of-truth resource values for a known state. The Settings UI
+/// uses the state's compact code for translated prose; tests bind those states
+/// to the same pinned byte constants that the launcher validates.
+#[must_use]
+pub const fn local_model_resources(state: LocalModelResourceState) -> Option<LocalModelResources> {
+    match state {
+        LocalModelResourceState::Unknown | LocalModelResourceState::Gemma12Unavailable => None,
+        LocalModelResourceState::Gemma4Text => Some(LocalModelResources {
+            model_bytes: GEMMA_SIZE,
+            vision_projector_bytes: None,
+            measured_vram_bytes: None,
+        }),
+        LocalModelResourceState::Gemma4Vision => Some(LocalModelResources {
+            model_bytes: GEMMA_SIZE,
+            vision_projector_bytes: Some(MMPROJ_SIZE),
+            measured_vram_bytes: None,
+        }),
+        LocalModelResourceState::Gemma12Text => Some(LocalModelResources {
+            model_bytes: GEMMA12_SIZE,
+            vision_projector_bytes: None,
+            measured_vram_bytes: Some(GEMMA12_MEASURED_VRAM_BYTES),
+        }),
+        LocalModelResourceState::Gemma12Vision => Some(LocalModelResources {
+            model_bytes: GEMMA12_SIZE,
+            vision_projector_bytes: Some(GEMMA12_MMPROJ_SIZE),
+            measured_vram_bytes: Some(GEMMA12_MEASURED_VRAM_BYTES),
+        }),
+    }
+}
+
+/// Return the resource-warning state for the model id currently selected in
+/// Settings. This intentionally recognises only Suflyor's exact pinned GGUF
+/// names: a Qwen/Ollama/custom id may use a different quantization, context
+/// size, or vision sidecar, so showing a Gemma estimate would be misleading.
+#[must_use]
+pub fn local_model_resource_state(root: &Path, model_id: &str) -> LocalModelResourceState {
+    let model = model_id.trim();
+    if model.eq_ignore_ascii_case(GEMMA_FILE) {
+        if complete_file(&root.join("llama.cpp").join(MMPROJ_FILE), MMPROJ_SIZE) {
+            LocalModelResourceState::Gemma4Vision
+        } else {
+            LocalModelResourceState::Gemma4Text
+        }
+    } else if model.eq_ignore_ascii_case(GEMMA12_FILE) {
+        if !quality_model_present(root) {
+            LocalModelResourceState::Gemma12Unavailable
+        } else if quality_vision_present(root) && quality_vision_supported(root) {
+            LocalModelResourceState::Gemma12Vision
+        } else {
+            LocalModelResourceState::Gemma12Text
+        }
+    } else {
+        LocalModelResourceState::Unknown
+    }
+}
+
 /// Pick which llama GGUF to load: the 12B ONLY when the user asked for it AND
 /// the file is actually present+complete; otherwise the always-installed E4B.
 /// Centralised so `ensure_servers` and `install`'s launch agree. Does the disk
 /// check then defers the choice to the pure [`pick_llama_gguf`] (unit-tested
 /// without materialising a 6 GB file).
 fn selected_llama_gguf(llama_dir: &Path, prefer_quality: bool) -> PathBuf {
-    let present = file_len(&llama_dir.join(GEMMA12_FILE)) >= GEMMA12_SIZE;
+    let present = complete_file(&llama_dir.join(GEMMA12_FILE), GEMMA12_SIZE);
     pick_llama_gguf(llama_dir, prefer_quality, present)
 }
 
@@ -1021,6 +1354,17 @@ fn pick_llama_gguf(llama_dir: &Path, prefer_quality: bool, quality_present: bool
         llama_dir.join(GEMMA12_FILE)
     } else {
         llama_dir.join(GEMMA_FILE)
+    }
+}
+
+/// The launcher only knows about Suflyor's pinned Gemma files. Do not launch a
+/// merely existing partial GGUF: llama-server may bind first and fail later,
+/// which previously made a switch look successful.
+fn selected_model_is_complete(gguf: &Path) -> bool {
+    match gguf.file_name().and_then(|name| name.to_str()) {
+        Some(GEMMA_FILE) => complete_file(gguf, GEMMA_SIZE),
+        Some(GEMMA12_FILE) => complete_file(gguf, GEMMA12_SIZE),
+        _ => false,
     }
 }
 
@@ -1139,10 +1483,10 @@ fn mmproj_for_model(llama_dir: &Path, gguf: &Path) -> Option<PathBuf> {
     let name = gguf.file_name().and_then(|n| n.to_str())?;
     if name == GEMMA_FILE {
         let proj = llama_dir.join(MMPROJ_FILE);
-        proj.exists().then_some(proj)
+        complete_file(&proj, MMPROJ_SIZE).then_some(proj)
     } else if name == GEMMA12_FILE && llama_build_supports_gemma4uv(llama_dir) {
         let proj = llama_dir.join(GEMMA12_MMPROJ_FILE);
-        proj.exists().then_some(proj)
+        complete_file(&proj, GEMMA12_MMPROJ_SIZE).then_some(proj)
     } else {
         None
     }
@@ -1568,6 +1912,19 @@ pub fn ensure_servers(
     want_whisper: bool,
     prefer_quality: bool,
 ) -> Vec<Child> {
+    ensure_servers_inner(root, want_llama, want_whisper, prefer_quality, true)
+}
+
+/// Launch the requested local servers when their ports are dead. Rollback uses
+/// `attach_projector = false` when the previous profile was text-only, so a new
+/// or incompatible projector cannot prevent restoration of that profile.
+fn ensure_servers_inner(
+    root: &Path,
+    want_llama: bool,
+    want_whisper: bool,
+    prefer_quality: bool,
+    attach_projector: bool,
+) -> Vec<Child> {
     let mut started = Vec::new();
     // Any GPU (NVIDIA CUDA or AMD/Intel Vulkan build) → offload; else CPU (Баг2).
     let use_gpu = detect_gpu() != GpuKind::None;
@@ -1585,15 +1942,23 @@ pub fn ensure_servers(
         // (E4B ↔ mmproj-F32, 12B ↔ mmproj-12b-F16). A mismatched projector
         // crashes llama-server on model load; a missing one → the model runs
         // text-only (F8 vision then prompts to download the right projector).
-        let mmproj_s =
-            mmproj_for_model(&llama_dir, &gguf).map(|p| p.to_string_lossy().into_owned());
+        let mmproj_s = attach_projector
+            .then(|| mmproj_for_model(&llama_dir, &gguf))
+            .flatten()
+            .map(|p| p.to_string_lossy().into_owned());
         if let Some(exe) = find_exe(&llama_dir, "llama-server.exe") {
-            if gguf.exists() {
+            if selected_model_is_complete(&gguf) {
                 let gguf_s = gguf.to_string_lossy().into_owned();
+                let model_alias = gguf
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_default();
                 let ngl = if use_gpu { "99" } else { "0" };
                 let mut args: Vec<&str> = vec![
                     "-m",
                     &gguf_s,
+                    "--alias",
+                    &model_alias,
                     "--host",
                     "127.0.0.1",
                     "--port",
@@ -2175,6 +2540,13 @@ fn preflight() -> Result<()> {
 
 fn file_len(p: &Path) -> u64 {
     std::fs::metadata(p).map(|m| m.len()).unwrap_or(0)
+}
+
+/// A model/projector is launchable only at its pinned byte length. Download
+/// validation still checks its SHA-256; this inexpensive gate keeps interrupted
+/// files from ever being passed to llama-server between download attempts.
+fn complete_file(path: &Path, expected_len: u64) -> bool {
+    file_len(path) == expected_len
 }
 
 /// Bail with the cancel sentinel if the user requested cancellation.

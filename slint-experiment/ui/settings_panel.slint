@@ -419,6 +419,13 @@ export component SettingsWindow inherits Window {
     // user picks a loaded model instead of typing its id.
     in-out property <[string]> ai-local-models: [];
     in-out property <int> ai-local-model-index: 0;
+    // True only for Suflyor's own llama.cpp endpoint. The managed 4B/12B
+    // controls must never restart or overwrite an Ollama/custom server.
+    in-out property <bool> managed-local-server: false;
+    // Resource state of the model selected in the dropdown. Rust derives this
+    // from the exact known GGUF/projector files; 0 means a custom model whose
+    // requirements are not known and must never receive a Gemma estimate.
+    in-out property <int> local-model-resource-state: 0;
     in-out property <bool> ai-local-vision: false;
     // E10 — local-model "thinking"/reasoning toggle. Off (default) sends
     // enable_thinking=false for faster answers; on lets the model reason.
@@ -2178,22 +2185,22 @@ export component SettingsWindow inherits Window {
                             HorizontalLayout {
                                 spacing: 6px;
                                 Button {
-                                    text: root.ai-local-quality ? @tr("Faster (4B)") : @tr("● Faster (4B)");
-                                    enabled: root.ai-local-quality && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
+                                    text: root.ai-local-quality ? @tr("Faster (4B)") : @tr("[on] Faster (4B)");
+                                    enabled: root.managed-local-server && root.ai-local-quality && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
                                     clicked => {
                                         root.model-quality-changed(false);
                                     }
                                 }
                                 if root.quality-model-present : Button {
-                                    text: root.ai-local-quality ? @tr("● Smarter (12B)") : @tr("Smarter (12B)");
-                                    enabled: !root.ai-local-quality && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
+                                    text: root.ai-local-quality ? @tr("[on] Smarter (12B)") : @tr("Smarter (12B)");
+                                    enabled: root.managed-local-server && !root.ai-local-quality && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
                                     clicked => {
                                         root.model-quality-changed(true);
                                     }
                                 }
                                 if !root.quality-model-present : Button {
-                                    text: root.quality-downloading ? @tr("Downloading…") : @tr("Download smart model (6 GB)");
-                                    enabled: !root.quality-downloading && !root.local-ai-installing;
+                                    text: root.quality-downloading ? @tr("Downloading…") : @tr("Download smarter model (6.3 GiB)");
+                                    enabled: root.managed-local-server && !root.quality-downloading && !root.local-ai-installing;
                                     clicked => {
                                         root.download-quality-clicked();
                                     }
@@ -2205,10 +2212,30 @@ export component SettingsWindow inherits Window {
                                     }
                                 }
                             }
-                            Text {
-                                text: @tr("The 12B model is noticeably smarter but ~2× slower and needs ~10 GB of video memory (VRAM). On a weaker GPU keep 4B.");
-                                font-size: 11px;
+                            if !root.managed-local-server : Text {
+                                text: @tr("Gemma 4B/12B controls manage only Suflyor's built-in llama.cpp server. The selected external model above is used for new answers.");
+                                font-size: 10px;
                                 color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                // This follows the dropdown's selected model,
+                                // not the separate built-in 4B/12B preference.
+                                // The backend assigns every state only after its
+                                // matching model/projector completeness checks.
+                                text: root.local-model-resource-state == 5
+                                    ? @tr("[!] Selected Gemma 12B: about 6.3 GiB on disk plus its installed 167 MiB vision projector. It needs at least 10 GiB of free VRAM for GPU use, or 16 GiB of available RAM for a slow CPU fallback.")
+                                    : root.local-model-resource-state == 4
+                                        ? @tr("[!] Selected Gemma 12B: about 6.3 GiB on disk. Its vision projector is unavailable or cannot run on this engine, so the model runs text-only. It needs at least 10 GiB of free VRAM for GPU use, or 16 GiB of available RAM for a slow CPU fallback.")
+                                        : root.local-model-resource-state == 3
+                                            ? @tr("[!] Gemma 12B is selected, but its complete model file is unavailable, so local AI falls back to Gemma 4B. Gemma 4B needs at least 6 GiB of free VRAM for GPU use, or 12 GiB of available RAM for CPU fallback.")
+                                            : root.local-model-resource-state == 2
+                                                ? @tr("[!] Selected Gemma 4B: about 4.6 GiB on disk plus its installed 1.8 GiB vision projector (about 6.4 GiB total). It needs at least 6 GiB of free VRAM for GPU use, or 12 GiB of available RAM for CPU fallback.")
+                                                : root.local-model-resource-state == 1
+                                                    ? @tr("[!] Selected Gemma 4B: about 4.6 GiB on disk. Its vision projector is unavailable, so the model runs text-only. It needs at least 6 GiB of free VRAM for GPU use, or 12 GiB of available RAM for CPU fallback.")
+                                                    : @tr("[!] Resource requirements are unavailable for the selected local model. Check its provider's model card; Suflyor does not apply Gemma estimates to custom or Ollama models.");
+                                font-size: 11px;
+                                color: Theme.warning;
                                 wrap: word-wrap;
                             }
                             if root.quality-status != "" : Text {
@@ -2231,13 +2258,13 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                             // ----- v0.18.2 — 12B vision (its own gemma4uv projector) -----
-                            if root.quality-model-present && root.quality-vision-supported && root.quality-vision-present : Text {
+                            if root.managed-local-server && root.quality-model-present && root.quality-vision-supported && root.quality-vision-present : Text {
                                 text: @tr("12B vision projector installed — used when the 12B is the active model.");
                                 font-size: 11px;
                                 color: Theme.success;
                                 wrap: word-wrap;
                             }
-                            if root.quality-model-present && root.quality-vision-supported && !root.quality-vision-present : HorizontalLayout {
+                            if root.managed-local-server && root.quality-model-present && root.quality-vision-supported && !root.quality-vision-present : HorizontalLayout {
                                 spacing: 6px;
                                 Button {
                                     text: root.vision12b-downloading ? @tr("Downloading…") : @tr("Enable vision on 12B — download projector (175 MB)");
@@ -2253,7 +2280,7 @@ export component SettingsWindow inherits Window {
                                     }
                                 }
                             }
-                            if root.quality-model-present && !root.quality-vision-supported : Text {
+                            if root.managed-local-server && root.quality-model-present && !root.quality-vision-supported : Text {
                                 text: @tr("12B vision needs a newer engine — use Update engine below.");
                                 font-size: 11px;
                                 color: Theme.warning;
@@ -2287,7 +2314,7 @@ export component SettingsWindow inherits Window {
                             // ----- one-click in-app local-AI installer -----
                             Rectangle { background: Theme.border; height: 1px; }
                             Text {
-                                text: @tr("Installs the local stack on this PC (~6 GB total): llama.cpp + Gemma-4-E4B (~5 GB; needs ~6 GB VRAM on GPU), whisper.cpp + Whisper-turbo (~0.9 GB), GigaAM-v3 (~0.2 GB). With NVIDIA it picks the CUDA build, otherwise CPU. Models you already have are reused, not re-downloaded.");
+                                text: @tr("Installs the local stack on this PC: about 7.4 GiB of model files plus engine binaries (Gemma 4B + vision: 6.4 GiB; Whisper: 0.8 GiB; GigaAM: 0.2 GiB). Runtime RAM/VRAM is additional. With NVIDIA it picks CUDA, otherwise CPU. Existing models are reused.");
                                 font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
