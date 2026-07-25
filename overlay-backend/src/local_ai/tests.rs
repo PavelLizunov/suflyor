@@ -807,6 +807,7 @@ fn apply_result_sets_local_and_keeps_secrets() {
     let mut cfg = crate::config::Config {
         groq_api_key: "gsk_secret".to_string(),
         ai_bearer: "bridge_secret".to_string(),
+        ai_local_prep_model: "stale-external-prep-model".to_string(),
         // a prior cloud setting — apply_result switches F8 to local on a
         // local install (vision rides the same local server).
         vision_provider: "cloud".to_string(),
@@ -823,6 +824,10 @@ fn apply_result_sets_local_and_keeps_secrets() {
     assert_eq!(cfg.ai_provider, "local");
     assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);
     assert_eq!(cfg.ai_local_model, GEMMA_FILE);
+    assert!(
+        cfg.ai_local_prep_model.is_empty(),
+        "the bundled server serves one selected model, so it must not inherit an external prep id"
+    );
     assert_eq!(cfg.stt_provider, "whisper");
     assert_eq!(cfg.stt_whisper_url, WHISPER_BASE_URL);
     assert_eq!(cfg.stt_gigaam_dir, "C:\\root\\gigaam-v3");

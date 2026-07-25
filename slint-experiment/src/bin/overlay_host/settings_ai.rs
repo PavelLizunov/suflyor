@@ -261,19 +261,37 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
         let weak = win.as_weak();
         win.on_ai_local_base_url_save(move |v| {
             let base_url = v.trim().to_string();
+            let root = overlay_backend::local_ai::default_root();
+            let managed_local_server =
+                overlay_backend::local_ai::is_managed_llama_endpoint(&base_url);
             let mut c = cfg_c.write();
             c.ai_local_base_url = base_url.clone();
-            let selected_model = c.ai_local_model.clone();
+            // The bundled llama.cpp server loads exactly one of Suflyor's
+            // managed GGUFs. Do not carry an Ollama/custom model id (or its
+            // prep override) across to that endpoint: it would make requests
+            // and the resource warning describe different models.
+            let effective_quality = if managed_local_server {
+                overlay_backend::local_ai::effective_local_quality(&root, c.ai_local_quality)
+            } else {
+                c.ai_local_quality
+            };
+            let selected_model = if managed_local_server {
+                let model =
+                    overlay_backend::local_ai::active_local_model_name(&root, effective_quality);
+                c.ai_local_model = model.clone();
+                c.ai_local_prep_model.clear();
+                model
+            } else {
+                c.ai_local_model.clone()
+            };
             if let Err(e) = overlay_backend::config::save(&c) {
                 eprintln!("[overlay-host] ai_local_base_url save failed: {e:#}");
                 return;
             }
             drop(c);
             if let Some(w) = weak.upgrade() {
-                let root = overlay_backend::local_ai::default_root();
-                w.set_managed_local_server(overlay_backend::local_ai::is_managed_llama_endpoint(
-                    &base_url,
-                ));
+                w.set_managed_local_server(managed_local_server);
+                w.set_ai_local_quality(effective_quality);
                 w.set_local_model_resource_state(
                     overlay_backend::local_ai::local_model_resource_state(
                         &root,

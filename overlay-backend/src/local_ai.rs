@@ -277,12 +277,14 @@ fn detect_non_nvidia_gpu() -> bool {
 }
 
 /// Write the installer's resulting endpoints/models into a `Config`, switching
-/// it to the local stack. Secrets (groq key / ai bearer) are untouched because
-/// only these fields are mutated and the caller saves the whole struct.
+/// it to the local stack. Secrets (Groq key / AI bearer) are untouched; any
+/// stale local prep-model override is cleared so every local request targets
+/// the model that the bundled single-model server actually serves.
 pub fn apply_result(cfg: &mut crate::config::Config, res: &LocalAiResult) {
     cfg.ai_provider = "local".to_string();
     cfg.ai_local_base_url = LLAMA_BASE_URL.to_string();
     cfg.ai_local_model = res.ai_local_model.clone();
+    cfg.ai_local_prep_model.clear();
     // Default STT to Whisper (mixed RU+EN); the GigaAM dir is also filled so the
     // user can switch to GigaAM (best Russian) in Settings without re-installing.
     cfg.stt_provider = "whisper".to_string();
