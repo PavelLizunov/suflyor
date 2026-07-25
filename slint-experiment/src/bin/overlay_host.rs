@@ -1272,12 +1272,43 @@ fn main() -> Result<(), slint::PlatformError> {
                                                 }
                                             });
                                         }
+                                        overlay_backend::local_ai::ModelSwitch::RolledBack => {
+                                            // `ensure_llama_serving` currently has no
+                                            // rollback path, but keep this exhaustive
+                                            // branch lifecycle-safe if that changes: a
+                                            // rollback is still a serving local model,
+                                            // and its child handles must survive until
+                                            // normal shutdown.
+                                            watchdog.note_attempt(attempt_now, true);
+                                            {
+                                                let mut s = state_w
+                                                    .lock()
+                                                    .unwrap_or_else(|p| p.into_inner());
+                                                s.local_ai_servers.retain_mut(|c| {
+                                                    !matches!(c.try_wait(), Ok(Some(_)))
+                                                });
+                                                s.local_ai_servers.extend(started);
+                                            }
+                                            diag!(
+                                                "local AI restart target failed — previous model restored"
+                                            );
+                                        }
                                         overlay_backend::local_ai::ModelSwitch::PortBusy => {
                                             watchdog.note_attempt(attempt_now, false);
                                             // started is empty on PortBusy; harmless.
                                             overlay_backend::local_ai::terminate_servers(started);
                                             diag!(
                                                 "local AI :8080 held by a foreign process — not restarting"
+                                            );
+                                        }
+                                        overlay_backend::local_ai::ModelSwitch::TargetUnavailable => {
+                                            watchdog.note_attempt(attempt_now, false);
+                                            // Defensive: this outcome currently
+                                            // carries no children, but do not leak
+                                            // them if the backend contract expands.
+                                            overlay_backend::local_ai::terminate_servers(started);
+                                            diag!(
+                                                "local AI selected model is unavailable — not restarting"
                                             );
                                         }
                                         overlay_backend::local_ai::ModelSwitch::FailedToStart => {
