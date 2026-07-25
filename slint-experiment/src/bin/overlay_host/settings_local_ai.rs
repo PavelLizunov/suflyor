@@ -358,6 +358,17 @@ pub(crate) fn wire_local_ai(
                         eprintln!("[overlay-host] quality switch save failed: {e:#}");
                     }
                 }
+                // The model dropdown is a separate view of `ai_local_model`.
+                // Refresh it after the confirmed switch so it cannot keep
+                // displaying the old model while the resource warning and
+                // active stack already describe the new one.
+                if switched {
+                    super::settings_ai::fetch_models(
+                        weak_t.clone(),
+                        cfg_t.clone(),
+                        super::settings_ai::ModelTarget::Local,
+                    );
+                }
                 let weak_done = weak_t.clone();
                 let overlay_done = overlay_t.clone();
                 let cfg_done = cfg_t.clone();
