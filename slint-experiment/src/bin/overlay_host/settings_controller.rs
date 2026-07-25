@@ -1389,9 +1389,9 @@ pub(crate) fn populate_token_status(
     win.set_ai_prompt_cache(c.ai_prompt_cache);
     win.set_ai_provider_index(i32::from(c.ai_provider == "local"));
     win.set_ai_local_base_url_input(SharedString::from(c.ai_local_base_url.clone()));
-    win.set_managed_local_server(
-        c.ai_local_base_url.trim_end_matches('/') == overlay_backend::local_ai::LLAMA_BASE_URL,
-    );
+    let managed_local_server =
+        c.ai_local_base_url.trim_end_matches('/') == overlay_backend::local_ai::LLAMA_BASE_URL;
+    win.set_managed_local_server(managed_local_server);
     // #E10.1 — seed both model dropdowns (cloud bridge + local) with the saved
     // model so each shows immediately; the full lists are fetched from
     // {base_url}/models AFTER the read guard is released (see end of fn).
@@ -1403,13 +1403,23 @@ pub(crate) fn populate_token_status(
         };
         ModelRc::new(VecModel::from(v))
     };
+    let local_root = overlay_backend::local_ai::default_root();
+    let effective_quality = if managed_local_server {
+        overlay_backend::local_ai::effective_local_quality(&local_root, c.ai_local_quality)
+    } else {
+        c.ai_local_quality
+    };
+    let effective_local_model = if managed_local_server {
+        overlay_backend::local_ai::active_local_model_name(&local_root, effective_quality)
+    } else {
+        c.ai_local_model.clone()
+    };
     win.set_ai_models(seed_one(&c.ai_model));
     win.set_ai_model_index(0);
-    win.set_ai_local_models(seed_one(&c.ai_local_model));
+    win.set_ai_local_models(seed_one(&effective_local_model));
     win.set_ai_local_model_index(0);
-    let local_root = overlay_backend::local_ai::default_root();
     win.set_local_model_resource_state(
-        overlay_backend::local_ai::local_model_resource_state(&local_root, &c.ai_local_model)
+        overlay_backend::local_ai::local_model_resource_state(&local_root, &effective_local_model)
             .ui_code(),
     );
     win.set_ai_local_vision(c.ai_local_vision);
@@ -1444,7 +1454,7 @@ pub(crate) fn populate_token_status(
     }
     win.set_ai_local_thinking(c.ai_local_thinking);
     // v0.18.0 — local model size choice + whether the 12B is downloaded yet.
-    win.set_ai_local_quality(c.ai_local_quality);
+    win.set_ai_local_quality(effective_quality);
     {
         let root = local_root;
         win.set_quality_model_present(overlay_backend::local_ai::quality_model_present(&root));

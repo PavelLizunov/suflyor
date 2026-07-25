@@ -1106,7 +1106,7 @@ fn main() -> Result<(), slint::PlatformError> {
             // BEFORE the engine-update block claims the lifecycle lock for a
             // potentially long download.
             {
-                let (want_llama, prefer_quality) = {
+                let (want_llama, requested_quality) = {
                     let c = cfg_w.read();
                     (
                         c.ai_provider == "local" && c.ai_local_base_url.contains(":8080"),
@@ -1114,6 +1114,26 @@ fn main() -> Result<(), slint::PlatformError> {
                     )
                 };
                 if want_llama {
+                    let prefer_quality = overlay_backend::local_ai::effective_local_quality(
+                        &root,
+                        requested_quality,
+                    );
+                    // A vanished/partial optional model falls back to 4B. Persist
+                    // that effective choice before the download can finish, so a
+                    // later 12B download cannot make Settings claim that the
+                    // still-serving 4B is the active 12B model.
+                    if requested_quality && !prefer_quality {
+                        let model = overlay_backend::local_ai::active_local_model_name(
+                            &root,
+                            prefer_quality,
+                        );
+                        let mut c = cfg_w.write();
+                        c.ai_local_quality = false;
+                        c.ai_local_model = model;
+                        if let Err(e) = overlay_backend::config::save(&c) {
+                            eprintln!("[overlay-host] local AI fallback save failed: {e:#}");
+                        }
+                    }
                     // Cold boot: any server already on :8080 is necessarily from
                     // a PREVIOUS process — typically a stale orphan an in-place
                     // upgrade or force-kill left squatting the port. Bare
@@ -1135,15 +1155,37 @@ fn main() -> Result<(), slint::PlatformError> {
                         s.local_ai_lock.clone()
                     };
                     let guard = lifecycle_lock.lock().unwrap_or_else(|p| p.into_inner());
-                    let (_outcome, started) =
-                        overlay_backend::local_ai::ensure_llama_serving(&root, prefer_quality);
+                    let (outcome, started) =
+                        overlay_backend::local_ai::restart_llama_server(&root, prefer_quality);
                     drop(guard);
-                    if !started.is_empty() {
-                        state_w
-                            .lock()
-                            .unwrap_or_else(|p| p.into_inner())
-                            .local_ai_servers
-                            .extend(started);
+                    match outcome {
+                        overlay_backend::local_ai::ModelSwitch::Switched => {
+                            let model = overlay_backend::local_ai::active_local_model_name(
+                                &root,
+                                prefer_quality,
+                            );
+                            let label = {
+                                let mut c = cfg_w.write();
+                                c.ai_local_quality = prefer_quality;
+                                c.ai_local_model = model;
+                                if let Err(e) = overlay_backend::config::save(&c) {
+                                    eprintln!("[overlay-host] local AI boot save failed: {e:#}");
+                                }
+                                active_stack_label(&c)
+                            };
+                            state_w
+                                .lock()
+                                .unwrap_or_else(|p| p.into_inner())
+                                .local_ai_servers
+                                .extend(started);
+                            let ow = overlay_w.clone();
+                            let _ = slint::invoke_from_event_loop(move || {
+                                if let Some(o) = ow.upgrade() {
+                                    o.set_active_stack(SharedString::from(label));
+                                }
+                            });
+                        }
+                        _ => overlay_backend::local_ai::terminate_servers(started),
                     }
                 }
             }

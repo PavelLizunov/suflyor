@@ -84,7 +84,7 @@ fn active_local_model_name_reports_e4b_when_not_quality() {
 /// injected: release the managed listener, choose the launch model, then wait
 /// for that exact model to become ready.
 #[test]
-fn persisted_12b_boot_recovers_with_4b_when_the_file_is_missing_or_incomplete() {
+fn cold_boot_forced_restart_uses_4b_when_12b_is_missing_or_incomplete() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     let llama_dir = root.join("llama.cpp");
@@ -97,7 +97,7 @@ fn persisted_12b_boot_recovers_with_4b_when_the_file_is_missing_or_incomplete() 
         }
         let mut released_port = false;
         let mut launched_model = None;
-        let (outcome, started) = recover_dead_llama(
+        let (outcome, started) = restart_llama_server_inner(
             root,
             true,
             |_| {
@@ -124,6 +124,26 @@ fn persisted_12b_boot_recovers_with_4b_when_the_file_is_missing_or_incomplete() 
         assert_eq!(launched_model.as_deref(), Some(GEMMA_FILE));
         let _ = std::fs::remove_file(llama_dir.join(GEMMA12_FILE));
     }
+}
+
+#[test]
+fn missing_12b_resolves_the_effective_selection_to_4b() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let llama = root.join("llama.cpp");
+    std::fs::create_dir_all(&llama).unwrap();
+
+    assert!(!effective_local_quality(root, true));
+    assert_eq!(active_local_model_name(root, true), GEMMA_FILE);
+
+    make_complete(&llama.join(GEMMA12_FILE), GEMMA12_SIZE);
+    assert!(effective_local_quality(root, true));
+    assert_eq!(active_local_model_name(root, true), GEMMA12_FILE);
+}
+
+#[test]
+fn strict_llama_readiness_budget_matches_install_warmup() {
+    assert_eq!(STRICT_LLAMA_READY_BUDGET, Duration::from_secs(120));
 }
 
 /// The bar must show the fast vs smart model distinctly. Pin the friendly

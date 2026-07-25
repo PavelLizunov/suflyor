@@ -418,7 +418,6 @@ pub(crate) fn wire_local_ai(
     // the user taps it to switch (no auto-switch, so a background download can't
     // swap the model mid-call).
     {
-        let cfg_c = cfg.clone();
         let state_c = state.clone();
         let weak = win.as_weak();
         win.on_download_quality_clicked(move || {
@@ -429,6 +428,10 @@ pub(crate) fn wire_local_ai(
             if w.get_quality_downloading() {
                 return; // re-entry guard (same window)
             }
+            // Downloading 12B is intentionally not an auto-switch. Keep the
+            // resource warning tied to the model serving when this began, so a
+            // completed download cannot make an active 4B look like active 12B.
+            let selected_quality = w.get_ai_local_quality();
             // B3 — process-global dedup (survives Settings reopen) + RAII release.
             let Some(busy_guard) = slint_replay::app_state::LocalAiBusyGuard::try_acquire({
                 let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
@@ -444,7 +447,6 @@ pub(crate) fn wire_local_ai(
                 s.local_ai_cancel.clone()
             };
             cancel.store(false, std::sync::atomic::Ordering::Relaxed);
-            let cfg_t = cfg_c.clone();
             let weak_t = w.as_weak();
             std::thread::spawn(move || {
                 let _busy_guard = busy_guard; // frees local_ai_busy on exit incl. panic
@@ -484,7 +486,8 @@ pub(crate) fn wire_local_ai(
                 let root = overlay_backend::local_ai::default_root();
                 let res = overlay_backend::local_ai::download_quality_model(&root, &cancel, &on);
                 let resource_state = res.as_ref().ok().map(|_| {
-                    let model = cfg_t.read().ai_local_model.clone();
+                    let model =
+                        overlay_backend::local_ai::active_local_model_name(&root, selected_quality);
                     overlay_backend::local_ai::local_model_resource_state(&root, &model).ui_code()
                 });
                 let weak_done = weak_t.clone();

@@ -102,6 +102,10 @@ pub const LLAMA_BASE_URL: &str = "http://127.0.0.1:8080/v1";
 pub const WHISPER_BASE_URL: &str = "http://127.0.0.1:8081/v1";
 const LLAMA_PORT: &str = "8080";
 const WHISPER_PORT: &str = "8081";
+/// A 12B cold load on the CPU fallback can legitimately take much longer than
+/// a small HTTP probe. Keep strict model+completion readiness in line with
+/// install warm-up, including rollback after a failed switch.
+const STRICT_LLAMA_READY_BUDGET: Duration = Duration::from_secs(120);
 
 /// CREATE_NO_WINDOW — keep the spawned console servers windowless.
 #[cfg(windows)]
@@ -1028,13 +1032,22 @@ impl LocalModelProfile {
 /// rollback does not silently degrade a working F8 setup to text-only.
 #[must_use]
 pub fn local_model_profile(root: &Path, prefer_quality: bool) -> LocalModelProfile {
-    let prefer_quality = prefer_quality && quality_model_present(root);
+    let prefer_quality = effective_local_quality(root, prefer_quality);
     let llama_dir = root.join("llama.cpp");
     let gguf = selected_llama_gguf(&llama_dir, prefer_quality);
     LocalModelProfile {
         prefer_quality,
         use_vision: mmproj_for_model(&llama_dir, &gguf).is_some(),
     }
+}
+
+/// Resolve a persisted 12B preference to the model that can actually be
+/// launched now. A missing or partial 12B always means the effective selection
+/// is 4B; callers that show or persist the active selection must use this value
+/// rather than the stale requested preference.
+#[must_use]
+pub fn effective_local_quality(root: &Path, requested_quality: bool) -> bool {
+    requested_quality && quality_model_present(root)
 }
 
 const fn switch_attempt_outcome(target_ready: bool, rollback_ready: bool) -> ModelSwitch {
@@ -1064,7 +1077,7 @@ pub const fn switch_commits_choice(outcome: ModelSwitch) -> bool {
 /// profile is relaunched with its former projector state. [`ModelSwitch::RolledBack`]
 /// returns its child handles for normal lifecycle tracking; config must stay on
 /// the old selection. Whisper (:8081) is otherwise left alone. Call from a
-/// worker thread (it blocks up to ~20 s per readiness attempt).
+/// worker thread (it allows up to 120 s per readiness attempt).
 #[must_use]
 pub fn switch_local_model(
     root: &Path,
@@ -1083,7 +1096,7 @@ pub fn switch_local_model(
     std::thread::sleep(Duration::from_millis(800));
     let expected = active_local_model_name(root, prefer_quality);
     let mut started = ensure_servers_inner(root, true, want_whisper, prefer_quality, true);
-    if wait_for_expected_llama(&expected, Duration::from_secs(20), &mut started) {
+    if wait_for_expected_llama(&expected, STRICT_LLAMA_READY_BUDGET, &mut started) {
         return (switch_attempt_outcome(true, false), started);
     }
 
@@ -1102,7 +1115,7 @@ pub fn switch_local_model(
         previous.prefer_quality,
         previous.use_vision,
     );
-    if wait_for_expected_llama(&rollback_expected, Duration::from_secs(20), &mut rollback) {
+    if wait_for_expected_llama(&rollback_expected, STRICT_LLAMA_READY_BUDGET, &mut rollback) {
         (switch_attempt_outcome(false, true), rollback)
     } else {
         terminate_servers(rollback);
@@ -1120,34 +1133,49 @@ pub fn llama_reachable() -> bool {
     is_reachable(&format!("{LLAMA_BASE_URL}/models"))
 }
 
-/// Make :8080 actually serve — the robust primitive shared by boot and the
-/// runtime watchdog. If llama already answers (even a mid-load 503) we leave
+/// Make :8080 actually serve — the non-disruptive primitive used by the runtime
+/// watchdog. If llama already answers (even a mid-load 503) we leave
 /// it ALONE: killing a healthy/warming server would defeat warm-up and drop
 /// in-flight requests. Only a truly-dead port triggers a clean owner-aware
 /// free + relaunch, which POLLS until the fresh server answers and returns the
-/// honest [`ModelSwitch`]. Whisper (:8081) is never touched here (boot launches
-/// STT separately). Call from a worker thread (blocks up to ~21 s on the
-/// relaunch+poll path).
+/// honest [`ModelSwitch`]. Whisper (:8081) is never touched here. Call from a
+/// worker thread (it allows up to 120 s on the relaunch+poll path).
 #[must_use]
 pub fn ensure_llama_serving(root: &Path, prefer_quality: bool) -> (ModelSwitch, Vec<Child>) {
     if llama_reachable() {
         // Alive (serving or cold-loading) — do not disturb.
         return (ModelSwitch::Switched, Vec::new());
     }
-    recover_dead_llama(
+    restart_llama_server_inner(
         root,
         prefer_quality,
         free_llama_port,
         |root, prefer_quality| ensure_servers_inner(root, true, false, prefer_quality, true),
-        |expected, started| wait_for_expected_llama(expected, Duration::from_secs(20), started),
+        |expected, started| wait_for_expected_llama(expected, STRICT_LLAMA_READY_BUDGET, started),
     )
 }
 
-/// Owner-aware recovery for a dead llama endpoint. A process can still own
-/// :8080 while failing health checks, so freeing managed listeners has to happen
-/// before attempting the replacement. `start` receives the persisted quality
-/// preference; the shared launcher resolves a missing/incomplete 12B to 4B.
-fn recover_dead_llama<F, S, W>(
+/// Force an owner-aware llama restart and validate that the fresh process
+/// advertises and serves the exact effective model. Cold boot uses this instead
+/// of [`ensure_llama_serving`]: any listener on :8080 then belongs to a prior
+/// process and must not be trusted merely because it returns an HTTP response.
+/// Foreign listeners are left alone and report [`ModelSwitch::PortBusy`].
+#[must_use]
+pub fn restart_llama_server(root: &Path, prefer_quality: bool) -> (ModelSwitch, Vec<Child>) {
+    restart_llama_server_inner(
+        root,
+        prefer_quality,
+        free_llama_port,
+        |root, prefer_quality| ensure_servers_inner(root, true, false, prefer_quality, true),
+        |expected, started| wait_for_expected_llama(expected, STRICT_LLAMA_READY_BUDGET, started),
+    )
+}
+
+/// Owner-aware forced restart. A process can still own :8080 while failing
+/// health checks, so freeing managed listeners has to happen before attempting
+/// the replacement. `start` receives the persisted quality preference; the
+/// shared launcher resolves a missing/incomplete 12B to 4B.
+fn restart_llama_server_inner<F, S, W>(
     root: &Path,
     prefer_quality: bool,
     mut free_port: F,
