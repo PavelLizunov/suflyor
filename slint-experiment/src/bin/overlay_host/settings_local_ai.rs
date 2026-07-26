@@ -743,6 +743,7 @@ pub(crate) fn wire_local_ai(
             let cfg_t = cfg_c.clone();
             let state_t = state_c.clone();
             let weak_t = w.as_weak();
+            let overlay_t = overlay.clone();
             std::thread::spawn(move || {
                 let _busy_guard = busy_guard; // frees local_ai_busy on exit incl. panic
                 let on = {
@@ -828,7 +829,7 @@ pub(crate) fn wire_local_ai(
                 let supported = overlay_backend::local_ai::quality_vision_supported(&root);
                 let weak_done = weak_t.clone();
                 let cfg_done = cfg_t.clone();
-                let overlay_done = overlay.clone();
+                let overlay_done = overlay_t.clone();
                 let _ = slint::invoke_from_event_loop(move || {
                     let Some(w) = weak_done.upgrade() else { return };
                     w.set_engine_updating(false);
