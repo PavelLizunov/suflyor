@@ -45,6 +45,11 @@
 use super::{
     populate_token_status, ComponentHandle, ModelRc, SettingsWindow, SharedString, VecModel,
 };
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// Monotonically invalidates older worker results for the reused Settings
+/// window. Hardware discovery for a 26B note can outlast a later model choice.
+static LOCAL_MODEL_RESOURCE_WARNING_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 /// Which model dropdown a fetch populates — the cloud bridge or the local server.
 #[derive(Clone, Copy)]
@@ -127,6 +132,7 @@ pub(crate) fn refresh_local_model_resource_warning(
     base_url: String,
     model: String,
 ) {
+    let generation = LOCAL_MODEL_RESOURCE_WARNING_GENERATION.fetch_add(1, Ordering::Relaxed) + 1;
     win.set_local_model_resource_warning(SharedString::from("Проверяю ресурсы модели..."));
     let weak = win.as_weak();
     std::thread::spawn(move || {
@@ -136,7 +142,7 @@ pub(crate) fn refresh_local_model_resource_warning(
             let Some(w) = weak.upgrade() else {
                 return;
             };
-            if w.get_ai_local_base_url_input().as_str() == base_url.as_str() {
+            if LOCAL_MODEL_RESOURCE_WARNING_GENERATION.load(Ordering::Relaxed) == generation {
                 w.set_local_model_resource_warning(SharedString::from(warning));
             }
         });
@@ -408,10 +414,30 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
     }
     {
         let cfg_c = cfg.clone();
+        let weak = win.as_weak();
         win.on_ai_local_vision_changed(move |on| {
-            let mut c = cfg_c.write();
-            c.ai_local_vision = on;
-            let _ = overlay_backend::config::save(&c);
+            let root = overlay_backend::local_ai::default_root();
+            let (local_vision, vision_provider) = {
+                let mut c = cfg_c.write();
+                c.ai_local_vision = on;
+                // A managed 26B-A4B server has no projector. Re-apply the
+                // model invariant here because a reused Settings window can
+                // otherwise re-enable and persist an old vision checkbox.
+                overlay_backend::local_ai::repair_managed_model_state(&mut c, &root);
+                if let Err(e) = overlay_backend::config::save(&c) {
+                    eprintln!("[overlay-host] ai_local_vision save failed: {e:#}");
+                }
+                (c.ai_local_vision, c.vision_provider.clone())
+            };
+            if let Some(w) = weak.upgrade() {
+                w.set_ai_local_vision(local_vision);
+                w.set_vision_provider_index(match vision_provider.as_str() {
+                    "off" => 0,
+                    "same" => 1,
+                    "local" => 3,
+                    _ => 2,
+                });
+            }
         });
     }
     {

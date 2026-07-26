@@ -133,6 +133,30 @@ fn persisted_primary_falls_back_to_12b_when_missing() {
 }
 
 #[test]
+fn managed_primary_never_uses_a_stale_vision_flag() {
+    let tmp = tempfile::tempdir().unwrap();
+    let llama_dir = tmp.path().join("llama.cpp");
+    std::fs::create_dir_all(&llama_dir).unwrap();
+    make_complete(&llama_dir.join(GEMMA26_FILE), GEMMA26_SIZE);
+    let mut cfg = crate::config::Config {
+        ai_local_base_url: LLAMA_BASE_URL.to_string(),
+        ai_local_model: GEMMA26_FILE.to_string(),
+        ai_local_quality: true,
+        ai_local_vision: true,
+        vision_provider: "same".to_string(),
+        ..Default::default()
+    };
+
+    assert!(
+        !local_vision_enabled(&cfg, tmp.path()),
+        "the 26B primary has no projector in this candidate"
+    );
+    assert!(repair_managed_model_state(&mut cfg, tmp.path()));
+    assert!(!cfg.ai_local_vision);
+    assert_eq!(cfg.vision_provider, "off");
+}
+
+#[test]
 fn legacy_4b_install_survives_upgrade_until_12b_is_installed() {
     let tmp = tempfile::tempdir().unwrap();
     let llama_dir = tmp.path().join("llama.cpp");

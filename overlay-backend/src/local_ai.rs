@@ -1453,6 +1453,20 @@ pub fn repair_managed_model_state_after_verification(
     repair_managed_model_state_for_quality(cfg, root, quality)
 }
 
+/// Whether the configured local text endpoint may safely receive an image
+/// attachment. Managed profiles are checked from their actual selected model
+/// and projector state instead of trusting the persisted UI flag: the 26B-A4B
+/// primary is deliberately text-only in this candidate.
+#[must_use]
+pub fn local_vision_enabled(cfg: &crate::config::Config, root: &Path) -> bool {
+    cfg.ai_local_vision
+        && (!is_managed_llama_endpoint(&cfg.ai_local_base_url)
+            || managed_model_vision_capable(
+                root,
+                effective_local_quality(root, cfg.ai_local_quality),
+            ))
+}
+
 fn repair_managed_model_state_for_quality(
     cfg: &mut crate::config::Config,
     root: &Path,

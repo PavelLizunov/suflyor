@@ -541,6 +541,10 @@ pub(crate) fn wire_local_ai(
                             )
                         };
                         w.set_ai_local_quality(quality);
+                        w.set_ai_local_models(ModelRc::new(VecModel::from(vec![
+                            SharedString::from(model.clone()),
+                        ])));
+                        w.set_ai_local_model_index(0);
                         w.set_ai_local_vision(local_vision);
                         w.set_vision_provider_index(match vision_provider.as_str() {
                             "off" => 0,
