@@ -27,7 +27,10 @@
 //! NOTE: `diag!` is reached by textual macro scope (the parent defines it before
 //! the `mod settings_local_ai;` declaration); only the crate-root items are
 //! imported explicitly below (`active_stack_label` stays in `overlay_host.rs`).
-use super::{active_stack_label, ComponentHandle, OverlayBarWindow, SettingsWindow, SharedString};
+use super::{
+    active_stack_label, refresh_local_model_resource_warning, ComponentHandle, ModelRc,
+    OverlayBarWindow, SettingsWindow, SharedString, VecModel,
+};
 
 /// Wire the local-AI installer Settings callbacks onto the Settings window.
 /// Moved VERBATIM out of `open_settings` (P1 domain split) — same captures, same
@@ -202,13 +205,12 @@ pub(crate) fn wire_local_ai(
                                         _ => 2,
                                     });
                                 }
-                                w.set_local_model_resource_warning(SharedString::from(
-                                    overlay_backend::local_ai::local_model_resource_warning(
-                                        &overlay_backend::local_ai::default_root(),
-                                        overlay_backend::local_ai::LLAMA_BASE_URL,
-                                        &model,
-                                    ),
-                                ));
+                                refresh_local_model_resource_warning(
+                                    &w,
+                                    overlay_backend::local_ai::default_root(),
+                                    overlay_backend::local_ai::LLAMA_BASE_URL.to_string(),
+                                    model,
+                                );
                                 w.set_stt_provider_index(2);
                                 w.set_stt_whisper_url_input(SharedString::from(
                                     overlay_backend::local_ai::WHISPER_BASE_URL,
@@ -448,22 +450,25 @@ pub(crate) fn wire_local_ai(
                                 "Не удалось запустить модель — проверьте установку локального AI."
                             }
                         }));
-                        let c = cfg_done.read();
-                        w.set_ai_local_quality(c.ai_local_quality);
-                        w.set_ai_local_vision(c.ai_local_vision);
-                        w.set_vision_provider_index(match c.vision_provider.as_str() {
+                        let (quality, local_vision, vision_provider, base_url, model) = {
+                            let c = cfg_done.read();
+                            (
+                                c.ai_local_quality,
+                                c.ai_local_vision,
+                                c.vision_provider.clone(),
+                                c.ai_local_base_url.clone(),
+                                c.ai_local_model.clone(),
+                            )
+                        };
+                        w.set_ai_local_quality(quality);
+                        w.set_ai_local_vision(local_vision);
+                        w.set_vision_provider_index(match vision_provider.as_str() {
                             "off" => 0,
                             "same" => 1,
                             "local" => 3,
                             _ => 2,
                         });
-                        w.set_local_model_resource_warning(SharedString::from(
-                            overlay_backend::local_ai::local_model_resource_warning(
-                                &root,
-                                &c.ai_local_base_url,
-                                &c.ai_local_model,
-                            ),
-                        ));
+                        refresh_local_model_resource_warning(&w, root.clone(), base_url, model);
                     }
                     if let Some(o) = overlay_done.upgrade() {
                         o.set_active_stack(SharedString::from(active_stack_label(
@@ -708,6 +713,7 @@ pub(crate) fn wire_local_ai(
         let cfg_c = cfg.clone();
         let state_c = state.clone();
         let weak = win.as_weak();
+        let overlay = overlay_weak.clone();
         win.on_update_engine_clicked(move || {
             let Some(w) = weak.upgrade() else { return };
             if w.get_engine_updating() {
@@ -771,8 +777,8 @@ pub(crate) fn wire_local_ai(
                 overlay_backend::local_ai::mark_engine_update_checked(&root);
                 // A real swap stopped :8080 — relaunch with the preferred model so
                 // local AI stays up on the new engine.
-                if matches!(
-                    res,
+                let restarted_model = if matches!(
+                    res.as_ref(),
                     Ok(overlay_backend::local_ai::EngineUpdate::Updated { .. })
                 ) {
                     let prefer_quality = cfg_t.read().ai_local_quality;
@@ -786,10 +792,36 @@ pub(crate) fn wire_local_ai(
                     } else {
                         overlay_backend::local_ai::terminate_servers(started);
                     }
-                }
+                    drop(s);
+                    if outcome == overlay_backend::local_ai::ModelSwitch::Switched {
+                        let mut c = cfg_t.write();
+                        if overlay_backend::local_ai::repair_managed_model_state_after_verification(
+                            &mut c, &root,
+                        ) {
+                            if let Err(e) = overlay_backend::config::save(&c) {
+                                eprintln!(
+                                    "[overlay-host] engine-update local-AI state save failed: {e:#}"
+                                );
+                            }
+                        }
+                        Some((
+                            c.ai_local_quality,
+                            c.ai_local_base_url.clone(),
+                            c.ai_local_model.clone(),
+                            c.ai_local_vision,
+                            c.vision_provider.clone(),
+                        ))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
                 let build = overlay_backend::local_ai::installed_engine_build(&root);
                 let supported = overlay_backend::local_ai::quality_vision_supported(&root);
                 let weak_done = weak_t.clone();
+                let cfg_done = cfg_t.clone();
+                let overlay_done = overlay.clone();
                 let _ = slint::invoke_from_event_loop(move || {
                     let Some(w) = weak_done.upgrade() else { return };
                     w.set_engine_updating(false);
@@ -798,6 +830,23 @@ pub(crate) fn wire_local_ai(
                     }
                     // The engine may now (or no longer) support 12B vision.
                     w.set_quality_vision_supported(supported);
+                    if let Some((quality, base_url, model, local_vision, vision_provider)) =
+                        restarted_model
+                    {
+                        w.set_ai_local_quality(quality);
+                        w.set_ai_local_models(ModelRc::new(VecModel::from(vec![
+                            SharedString::from(model.clone()),
+                        ])));
+                        w.set_ai_local_model_index(0);
+                        w.set_ai_local_vision(local_vision);
+                        w.set_vision_provider_index(match vision_provider.as_str() {
+                            "off" => 0,
+                            "same" => 1,
+                            "local" => 3,
+                            _ => 2,
+                        });
+                        refresh_local_model_resource_warning(&w, root.clone(), base_url, model);
+                    }
                     let msg = match res {
                         Ok(overlay_backend::local_ai::EngineUpdate::UpToDate { .. }) => {
                             "Движок уже последней версии.".to_string()
@@ -818,6 +867,11 @@ pub(crate) fn wire_local_ai(
                         }
                     };
                     w.set_engine_update_status(SharedString::from(msg));
+                    if let Some(o) = overlay_done.upgrade() {
+                        o.set_active_stack(SharedString::from(active_stack_label(
+                            &cfg_done.read(),
+                        )));
+                    }
                 });
             });
         });

@@ -36,8 +36,8 @@ const GEMMA_SIZE: u64 = 6_716_355_328;
 const GEMMA_SHA256: &str = "cc9ff072e0a8203429ed854e6662c17a6c2bc1e5dca5b475dd4736caaacbc165";
 
 // Owner-approved primary model. The byte size and SHA-256 are independently
-// pinned from the Hugging Face pointer updated by commit c099eb4.
-const GEMMA26_URL: &str = "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf";
+// pinned from the immutable Hugging Face revision c099eb4.
+const GEMMA26_URL: &str = "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/c099eb4/gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf";
 const GEMMA26_FILE: &str = "gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf";
 const GEMMA26_SIZE: u64 = 10_546_934_240;
 const GEMMA26_SHA256: &str = "2a1d26dfe6ea00a467940a5728316af6edb366bbdba950d65b85d232392fb658";
@@ -107,6 +107,16 @@ pub fn is_managed_llama_endpoint(base_url: &str) -> bool {
                 "127.0.0.1" | "localhost" | "::1"
             )
     })
+}
+
+/// Select the local provider and repair a bundled managed endpoint before any
+/// request can use its persisted model fields. Custom local servers retain
+/// their configured model and prep-model values.
+pub fn select_local_provider(cfg: &mut crate::config::Config, root: &Path) -> bool {
+    let provider_changed = cfg.ai_provider != "local";
+    cfg.ai_provider = "local".to_string();
+    let model_state_changed = repair_managed_model_state(cfg, root);
+    provider_changed || model_state_changed
 }
 
 const STRICT_LLAMA_READY_BUDGET: Duration = Duration::from_secs(120);

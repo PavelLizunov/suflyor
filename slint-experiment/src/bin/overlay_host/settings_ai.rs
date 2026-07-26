@@ -118,6 +118,31 @@ pub(crate) fn fetch_models(
     });
 }
 
+/// Resolve the managed-model resource note outside Slint's event loop. Hardware
+/// discovery can call WMI, which must never make opening Settings or changing a
+/// model appear frozen.
+pub(crate) fn refresh_local_model_resource_warning(
+    win: &SettingsWindow,
+    root: std::path::PathBuf,
+    base_url: String,
+    model: String,
+) {
+    win.set_local_model_resource_warning(SharedString::from("Проверяю ресурсы модели..."));
+    let weak = win.as_weak();
+    std::thread::spawn(move || {
+        let warning =
+            overlay_backend::local_ai::local_model_resource_warning(&root, &base_url, &model);
+        let _ = slint::invoke_from_event_loop(move || {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            if w.get_ai_local_base_url_input().as_str() == base_url.as_str() {
+                w.set_local_model_resource_warning(SharedString::from(warning));
+            }
+        });
+    });
+}
+
 /// Wire the AI-tab Settings callbacks onto the Settings window — both the cloud
 /// bridge and the local server. Moved VERBATIM out of `open_settings` (P1 domain
 /// split) — same captures, same behavior. Needs only `win` (for the closures +
@@ -242,7 +267,23 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
         win.on_ai_provider_changed(move |idx| {
             let provider = if idx == 1 { "local" } else { "cloud" };
             let mut c = cfg_c.write();
-            c.ai_provider = provider.to_string();
+            if provider == "local" {
+                overlay_backend::local_ai::select_local_provider(
+                    &mut c,
+                    &overlay_backend::local_ai::default_root(),
+                );
+            } else {
+                c.ai_provider = provider.to_string();
+            }
+            let local_state = (provider == "local").then(|| {
+                (
+                    c.ai_local_base_url.clone(),
+                    c.ai_local_quality,
+                    c.ai_local_model.clone(),
+                    c.ai_local_vision,
+                    c.vision_provider.clone(),
+                )
+            });
             if let Err(e) = overlay_backend::config::save(&c) {
                 eprintln!("[overlay-host] ai_provider save failed: {e:#}");
                 return;
@@ -251,7 +292,28 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
             drop(c);
             diag!("ai_provider -> {provider}");
             // #E10.1 — switching to Local auto-populates the model dropdown.
-            if provider == "local" {
+            if let Some((base_url, quality, model, local_vision, vision_provider)) = local_state {
+                if let Some(w) = weak.upgrade() {
+                    w.set_ai_local_base_url_input(SharedString::from(base_url.clone()));
+                    w.set_ai_local_quality(quality);
+                    w.set_ai_local_models(ModelRc::new(VecModel::from(vec![SharedString::from(
+                        model.clone(),
+                    )])));
+                    w.set_ai_local_model_index(0);
+                    w.set_ai_local_vision(local_vision);
+                    w.set_vision_provider_index(match vision_provider.as_str() {
+                        "off" => 0,
+                        "same" => 1,
+                        "local" => 3,
+                        _ => 2,
+                    });
+                    refresh_local_model_resource_warning(
+                        &w,
+                        overlay_backend::local_ai::default_root(),
+                        base_url,
+                        model,
+                    );
+                }
                 fetch_models(weak.clone(), cfg_c.clone(), ModelTarget::Local);
             }
         });
@@ -293,13 +355,7 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
                     "local" => 3,
                     _ => 2,
                 });
-                w.set_local_model_resource_warning(SharedString::from(
-                    overlay_backend::local_ai::local_model_resource_warning(
-                        &root,
-                        &saved_base_url,
-                        &model,
-                    ),
-                ));
+                refresh_local_model_resource_warning(&w, root, saved_base_url, model);
             }
             // #E10.1 — re-query models against the new URL.
             fetch_models(weak.clone(), cfg_c.clone(), ModelTarget::Local);
@@ -333,13 +389,12 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
                 c.ai_local_base_url.clone()
             };
             if let Some(w) = weak.upgrade() {
-                w.set_local_model_resource_warning(SharedString::from(
-                    overlay_backend::local_ai::local_model_resource_warning(
-                        &overlay_backend::local_ai::default_root(),
-                        &base_url,
-                        &m,
-                    ),
-                ));
+                refresh_local_model_resource_warning(
+                    &w,
+                    overlay_backend::local_ai::default_root(),
+                    base_url,
+                    m.clone(),
+                );
             }
             diag!("ai_local_model selected: {m}");
         });

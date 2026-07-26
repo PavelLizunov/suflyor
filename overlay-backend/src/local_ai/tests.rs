@@ -40,7 +40,7 @@ fn local_result(quality: bool, vision: bool) -> LocalAiResult {
 fn owner_primary_coordinates_and_sha_are_exact() {
     assert_eq!(
         GEMMA26_URL,
-        "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf"
+        "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/c099eb4/gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf"
     );
     assert_eq!(GEMMA26_FILE, "gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf");
     assert_eq!(
@@ -114,7 +114,7 @@ fn persisted_primary_falls_back_to_12b_when_missing() {
     assert!(!effective_local_quality(tmp.path(), true));
 
     let mut cfg = crate::config::Config {
-        ai_local_base_url: "http://[::1]:8080/v1".to_string(),
+        ai_local_base_url: "http://[::1]:8080/v1/".to_string(),
         ai_local_model: GEMMA26_FILE.to_string(),
         ai_local_prep_model: "stale-prep".to_string(),
         ai_local_quality: true,
@@ -130,6 +130,26 @@ fn persisted_primary_falls_back_to_12b_when_missing() {
     assert!(!cfg.ai_local_vision);
     assert_eq!(cfg.vision_provider, "off");
     assert!(!repair_managed_model_state(&mut cfg, tmp.path()));
+}
+
+#[test]
+fn selecting_local_provider_repairs_managed_state_before_prep_requests() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut cfg = crate::config::Config {
+        ai_provider: "cloud".to_string(),
+        ai_local_base_url: "http://[::1]:8080/v1".to_string(),
+        ai_local_model: GEMMA26_FILE.to_string(),
+        ai_local_prep_model: "stale-prep".to_string(),
+        ai_local_quality: true,
+        ..Default::default()
+    };
+
+    assert!(select_local_provider(&mut cfg, tmp.path()));
+    assert_eq!(cfg.ai_provider, "local");
+    assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);
+    assert_eq!(cfg.ai_local_model, GEMMA_FILE);
+    assert!(cfg.ai_local_prep_model.is_empty());
+    assert_eq!(cfg.ai_endpoint(true).model, GEMMA_FILE);
 }
 
 /// The bar must show the fast vs smart model distinctly. Pin the friendly
