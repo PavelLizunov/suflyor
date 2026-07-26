@@ -18,7 +18,7 @@ use crate::config::Config;
 pub enum ComponentKind {
     /// llama.cpp runtime — the engine that serves the local model.
     Engine,
-    /// Local LLM weights — Gemma 4B base (+ optional 12B "smarter").
+    /// Local LLM weights — Gemma 12B QAT fallback (+ optional 26B-A4B primary).
     LocalModel,
     /// Local speech-to-text — GigaAM.
     Stt,
@@ -35,7 +35,7 @@ pub struct ComponentStatus {
     /// True when the component is installed + usable right now.
     pub installed: bool,
     /// Short, locale-neutral detail when installed (version / tier / engine),
-    /// e.g. `"b9637"`, `"Gemma 4B + 12B"`, `"Tesseract"`. Empty when not
+    /// e.g. `"b9637"`, `"Gemma 12B + 26B-A4B"`, `"Tesseract"`. Empty when not
     /// installed (the UI shows its own «⬇ установить» from `installed`).
     pub detail: String,
 }
@@ -54,7 +54,7 @@ pub fn status(cfg: &Config) -> Vec<ComponentStatus> {
         detail: engine_detail(engine_build),
     };
 
-    // Local model: 4B base is the minimum; 12B is optional on top.
+    // Local model: 12B QAT is the minimum; 26B-A4B is optional on top.
     let base = crate::local_ai::base_model_present(&root);
     let quality = crate::local_ai::quality_model_present(&root);
     let local_model = ComponentStatus {
@@ -114,12 +114,12 @@ fn engine_detail(build: Option<u32>) -> String {
     build.map(|b| format!("b{b}")).unwrap_or_default()
 }
 
-/// Pure: local-model detail from the 4B / 12B presence flags.
+/// Pure: local-model detail from the 12B / 26B-A4B presence flags.
 fn local_model_detail(base: bool, quality: bool) -> String {
     match (base, quality) {
         (false, _) => String::new(),
-        (true, true) => "Gemma 4B + 12B".to_string(),
-        (true, false) => "Gemma 4B".to_string(),
+        (true, true) => "Gemma 12B + 26B-A4B".to_string(),
+        (true, false) => "Gemma 12B".to_string(),
     }
 }
 
@@ -136,9 +136,9 @@ mod tests {
     #[test]
     fn local_model_detail_covers_tiers() {
         assert_eq!(local_model_detail(false, false), "");
-        assert_eq!(local_model_detail(false, true), ""); // 12B without 4B → still not usable
-        assert_eq!(local_model_detail(true, false), "Gemma 4B");
-        assert_eq!(local_model_detail(true, true), "Gemma 4B + 12B");
+        assert_eq!(local_model_detail(false, true), ""); // 26B without fallback → incomplete
+        assert_eq!(local_model_detail(true, false), "Gemma 12B");
+        assert_eq!(local_model_detail(true, true), "Gemma 12B + 26B-A4B");
     }
 
     #[test]

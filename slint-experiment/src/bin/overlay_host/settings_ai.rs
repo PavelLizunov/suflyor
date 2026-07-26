@@ -260,13 +260,30 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_ai_local_base_url_save(move |v| {
-            let mut c = cfg_c.write();
-            c.ai_local_base_url = v.trim().to_string();
-            if let Err(e) = overlay_backend::config::save(&c) {
-                eprintln!("[overlay-host] ai_local_base_url save failed: {e:#}");
-                return;
+            let base_url = v.trim().to_string();
+            let root = overlay_backend::local_ai::default_root();
+            let (managed, quality, model) = {
+                let mut c = cfg_c.write();
+                c.ai_local_base_url = base_url.clone();
+                let managed = overlay_backend::local_ai::is_managed_llama_endpoint(&base_url);
+                if managed {
+                    overlay_backend::local_ai::repair_managed_model_state(&mut c, &root);
+                }
+                if let Err(e) = overlay_backend::config::save(&c) {
+                    eprintln!("[overlay-host] ai_local_base_url save failed: {e:#}");
+                    return;
+                }
+                (managed, c.ai_local_quality, c.ai_local_model.clone())
+            };
+            if let Some(w) = weak.upgrade() {
+                w.set_managed_local_server(managed);
+                w.set_ai_local_quality(quality);
+                w.set_local_model_resource_warning(SharedString::from(
+                    overlay_backend::local_ai::local_model_resource_warning(
+                        &root, &base_url, &model,
+                    ),
+                ));
             }
-            drop(c);
             // #E10.1 — re-query models against the new URL.
             fetch_models(weak.clone(), cfg_c.clone(), ModelTarget::Local);
         });
@@ -283,16 +300,29 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
     }
     {
         let cfg_c = cfg.clone();
+        let weak = win.as_weak();
         win.on_ai_local_model_selected(move |model| {
             let m = model.trim().to_string();
             if m.is_empty() {
                 return;
             }
-            let mut c = cfg_c.write();
-            c.ai_local_model = m.clone();
-            if let Err(e) = overlay_backend::config::save(&c) {
-                eprintln!("[overlay-host] ai_local_model save failed: {e:#}");
-                return;
+            let base_url = {
+                let mut c = cfg_c.write();
+                c.ai_local_model = m.clone();
+                if let Err(e) = overlay_backend::config::save(&c) {
+                    eprintln!("[overlay-host] ai_local_model save failed: {e:#}");
+                    return;
+                }
+                c.ai_local_base_url.clone()
+            };
+            if let Some(w) = weak.upgrade() {
+                w.set_local_model_resource_warning(SharedString::from(
+                    overlay_backend::local_ai::local_model_resource_warning(
+                        &overlay_backend::local_ai::default_root(),
+                        &base_url,
+                        &m,
+                    ),
+                ));
             }
             diag!("ai_local_model selected: {m}");
         });

@@ -419,22 +419,23 @@ export component SettingsWindow inherits Window {
     // user picks a loaded model instead of typing its id.
     in-out property <[string]> ai-local-models: [];
     in-out property <int> ai-local-model-index: 0;
+    in-out property <bool> managed-local-server: false;
+    in-out property <string> local-model-resource-warning: "";
     in-out property <bool> ai-local-vision: false;
     // E10 — local-model "thinking"/reasoning toggle. Off (default) sends
     // enable_thinking=false for faster answers; on lets the model reason.
     in-out property <bool> ai-local-thinking: false;
-    // v0.18.0 — local LLM size choice: false = fast 4B (default), true = smart
-    // but ~2× slower 12B. The 12B is downloaded on demand (not bundled); these
-    // mirror config + the download worker state.
+    // Bundled local LLM profile: false = 12B QAT fallback; true = 26B-A4B
+    // primary. The 26B is downloaded on demand or by the confirmed hardware
+    // matrix during installation.
     in-out property <bool> ai-local-quality: false;
     in-out property <bool> quality-model-present: false;
     in-out property <bool> quality-downloading: false;
     in-out property <bool> model-switching: false; // server relaunch in flight
     in-out property <float> quality-progress: 0.0; // 0.0..1.0
     in-out property <string> quality-status: "";
-    // v0.18.2 — 12B vision: its own projector (gemma4uv, ~175 MB) downloaded on
-    // demand, attachable ONLY on a new-enough engine (>= b9626). present = file
-    // on disk; supported = engine can load it; downloading = pull in flight.
+    // Legacy projector state remains for callback compatibility. The current UI
+    // does not offer a 26B projector because its vision memory is unconfirmed.
     in-out property <bool> quality-vision-present: false;
     in-out property <bool> quality-vision-supported: false;
     in-out property <bool> vision12b-downloading: false;
@@ -493,12 +494,12 @@ export component SettingsWindow inherits Window {
     callback ai-local-models-refresh();
     callback ai-local-vision-changed(bool);
     callback ai-local-thinking-changed(bool);
-    // v0.18.0 — local model size: faster 4B vs smarter 12B. `model-quality-changed`
-    // writes config + restarts the local server with the other GGUF;
-    // `download-quality-clicked` pulls the 12B on demand (it isn't bundled).
+    // Local profile: 12B QAT fallback vs 26B-A4B primary.
+    // `model-quality-changed` transactionally restarts the managed server;
+    // `download-quality-clicked` pulls the exact pinned 26B file on demand.
     callback model-quality-changed(bool);
     callback download-quality-clicked();
-    // v0.18.2 — pull the 12B vision projector; update the llama.cpp engine.
+    // Legacy projector callback plus llama.cpp engine update.
     callback download-vision12b-clicked();
     callback update-engine-clicked();
     callback ai-local-test-clicked();
@@ -2167,10 +2168,10 @@ export component SettingsWindow inherits Window {
                                     root.ai-local-thinking-changed(v);
                                 }
                             }
-                            // ----- v0.18.0 — local model: faster (4B) vs smarter (12B) -----
+                            // ----- bundled local model: 12B fallback vs 26B primary -----
                             Rectangle { background: Theme.border; height: 1px; }
                             Text {
-                                text: @tr("Local model: speed vs quality. Switching restarts the local server (~5s).");
+                                text: @tr("Bundled model profile. The 26B primary is selected only for the confirmed VRAM/RAM matrix; 12B QAT remains the RAM-safe fallback.");
                                 font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
@@ -2178,22 +2179,22 @@ export component SettingsWindow inherits Window {
                             HorizontalLayout {
                                 spacing: 6px;
                                 Button {
-                                    text: root.ai-local-quality ? @tr("Faster (4B)") : @tr("● Faster (4B)");
-                                    enabled: root.ai-local-quality && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
+                                    text: root.ai-local-quality ? @tr("Fallback (12B QAT)") : @tr("[on] Fallback (12B QAT)");
+                                    enabled: root.managed-local-server && root.ai-local-quality && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
                                     clicked => {
                                         root.model-quality-changed(false);
                                     }
                                 }
                                 if root.quality-model-present : Button {
-                                    text: root.ai-local-quality ? @tr("● Smarter (12B)") : @tr("Smarter (12B)");
-                                    enabled: !root.ai-local-quality && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
+                                    text: root.ai-local-quality ? @tr("[on] Primary (26B-A4B)") : @tr("Primary (26B-A4B)");
+                                    enabled: root.managed-local-server && !root.ai-local-quality && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
                                     clicked => {
                                         root.model-quality-changed(true);
                                     }
                                 }
                                 if !root.quality-model-present : Button {
-                                    text: root.quality-downloading ? @tr("Downloading…") : @tr("Download smart model (6 GB)");
-                                    enabled: !root.quality-downloading && !root.local-ai-installing;
+                                    text: root.quality-downloading ? @tr("Downloading…") : @tr("Download primary model (9.8 GiB)");
+                                    enabled: root.managed-local-server && !root.quality-downloading && !root.local-ai-installing;
                                     clicked => {
                                         root.download-quality-clicked();
                                     }
@@ -2205,10 +2206,16 @@ export component SettingsWindow inherits Window {
                                     }
                                 }
                             }
-                            Text {
-                                text: @tr("The 12B model is noticeably smarter but ~2× slower and needs ~10 GB of video memory (VRAM). On a weaker GPU keep 4B.");
-                                font-size: 11px;
+                            if !root.managed-local-server : Text {
+                                text: @tr("Bundled 12B/26B controls manage only Suflyor's own llama.cpp endpoint.");
+                                font-size: 10px;
                                 color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: root.local-model-resource-warning;
+                                font-size: 11px;
+                                color: Theme.warning;
                                 wrap: word-wrap;
                             }
                             if root.quality-status != "" : Text {
@@ -2229,35 +2236,6 @@ export component SettingsWindow inherits Window {
                                     border-radius: 3px;
                                     background: Theme.accent;
                                 }
-                            }
-                            // ----- v0.18.2 — 12B vision (its own gemma4uv projector) -----
-                            if root.quality-model-present && root.quality-vision-supported && root.quality-vision-present : Text {
-                                text: @tr("12B vision projector installed — used when the 12B is the active model.");
-                                font-size: 11px;
-                                color: Theme.success;
-                                wrap: word-wrap;
-                            }
-                            if root.quality-model-present && root.quality-vision-supported && !root.quality-vision-present : HorizontalLayout {
-                                spacing: 6px;
-                                Button {
-                                    text: root.vision12b-downloading ? @tr("Downloading…") : @tr("Enable vision on 12B — download projector (175 MB)");
-                                    enabled: !root.vision12b-downloading && !root.quality-downloading && !root.model-switching && !root.local-ai-installing && !root.engine-updating;
-                                    clicked => {
-                                        root.download-vision12b-clicked();
-                                    }
-                                }
-                                if root.vision12b-downloading : Button {
-                                    text: @tr("Cancel");
-                                    clicked => {
-                                        root.cancel-local-ai-clicked();
-                                    }
-                                }
-                            }
-                            if root.quality-model-present && !root.quality-vision-supported : Text {
-                                text: @tr("12B vision needs a newer engine — use Update engine below.");
-                                font-size: 11px;
-                                color: Theme.warning;
-                                wrap: word-wrap;
                             }
                             if root.vision12b-status != "" : Text {
                                 text: root.vision12b-status;
@@ -2287,7 +2265,7 @@ export component SettingsWindow inherits Window {
                             // ----- one-click in-app local-AI installer -----
                             Rectangle { background: Theme.border; height: 1px; }
                             Text {
-                                text: @tr("Installs the local stack on this PC (~6 GB total): llama.cpp + Gemma-4-E4B (~5 GB; needs ~6 GB VRAM on GPU), whisper.cpp + Whisper-turbo (~0.9 GB), GigaAM-v3 (~0.2 GB). With NVIDIA it picks the CUDA build, otherwise CPU. Models you already have are reused, not re-downloaded.");
+                                text: @tr("Installs the local stack with Gemma 4 12B QAT as the fallback. On confirmed 8/32, 12/24-32 or 16/32 GB VRAM/RAM profiles it also installs the pinned Gemma 4 26B-A4B primary. Existing verified models are reused.");
                                 font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
@@ -2338,7 +2316,7 @@ export component SettingsWindow inherits Window {
                             // ----- v0.18.2 — llama.cpp engine auto-update -----
                             Rectangle { background: Theme.border; height: 1px; }
                             Text {
-                                text: @tr("Engine (llama.cpp). The app keeps it up to date automatically (checked weekly) so the local model stays fast and 12B vision works. A new build is verified to run before it replaces the current one.");
+                                text: @tr("Engine (llama.cpp). The app checks it weekly and verifies a new build before replacing the current one.");
                                 font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;

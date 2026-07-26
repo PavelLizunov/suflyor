@@ -137,6 +137,18 @@ pub(crate) fn wire_local_ai(
                 // silently fails to start (wait_ready still sees the old one and
                 // reports success). Fresh installs have nothing to drain.
                 let opts = overlay_backend::local_ai::InstallOptions::default();
+                let (restore_previous, restore_whisper, previous_quality) = {
+                    let c = cfg_t.read();
+                    (
+                        overlay_backend::local_ai::is_managed_llama_endpoint(&c.ai_local_base_url)
+                            && overlay_backend::local_ai::base_model_present(&opts.root),
+                        c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081"),
+                        overlay_backend::local_ai::effective_local_quality(
+                            &opts.root,
+                            c.ai_local_quality,
+                        ),
+                    )
+                };
                 let old_servers = {
                     let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
                     s.local_ai_servers.drain(..).collect::<Vec<_>>()
@@ -147,6 +159,7 @@ pub(crate) fn wire_local_ai(
                         let model = res.ai_local_model.clone();
                         let gigaam_dir = res.stt_gigaam_dir.clone();
                         let on_gpu = res.on_gpu;
+                        let quality = res.ai_local_quality;
                         {
                             let mut c = cfg_t.write();
                             overlay_backend::local_ai::apply_result(&mut c, &res);
@@ -174,6 +187,20 @@ pub(crate) fn wire_local_ai(
                                 w.set_ai_local_base_url_input(SharedString::from(
                                     overlay_backend::local_ai::LLAMA_BASE_URL,
                                 ));
+                                w.set_managed_local_server(true);
+                                w.set_ai_local_quality(quality);
+                                w.set_quality_model_present(
+                                    overlay_backend::local_ai::quality_model_present(
+                                        &overlay_backend::local_ai::default_root(),
+                                    ),
+                                );
+                                w.set_local_model_resource_warning(SharedString::from(
+                                    overlay_backend::local_ai::local_model_resource_warning(
+                                        &overlay_backend::local_ai::default_root(),
+                                        overlay_backend::local_ai::LLAMA_BASE_URL,
+                                        &model,
+                                    ),
+                                ));
                                 w.set_stt_provider_index(2);
                                 w.set_stt_whisper_url_input(SharedString::from(
                                     overlay_backend::local_ai::WHISPER_BASE_URL,
@@ -188,6 +215,37 @@ pub(crate) fn wire_local_ai(
                         });
                     }
                     Err(e) => {
+                        // A reinstall deliberately stops the old managed server
+                        // before replacing files. If any later stage fails (or is
+                        // cancelled), restore the last effective persisted model
+                        // and keep its handles tracked instead of leaving local AI
+                        // down until the next app restart.
+                        let mut restored_servers = Vec::new();
+                        if restore_previous {
+                            let (outcome, restored) =
+                                overlay_backend::local_ai::restart_llama_server(
+                                    &opts.root,
+                                    previous_quality,
+                                );
+                            if outcome == overlay_backend::local_ai::ModelSwitch::Switched {
+                                restored_servers.extend(restored);
+                            } else {
+                                overlay_backend::local_ai::terminate_servers(restored);
+                            }
+                        }
+                        if restore_whisper {
+                            restored_servers.extend(overlay_backend::local_ai::ensure_servers(
+                                &opts.root,
+                                false,
+                                true,
+                                previous_quality,
+                            ));
+                        }
+                        state_t
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .local_ai_servers
+                            .extend(restored_servers);
                         let cancelled = e
                             .to_string()
                             .contains(overlay_backend::local_ai::CANCEL_SENTINEL);
@@ -230,11 +288,11 @@ pub(crate) fn wire_local_ai(
         });
     }
 
-    // v0.18.0 — "faster (4B) ↔ smarter (12B)" switch. Persists the choice, then
+    // Owner-approved fallback (12B QAT) ↔ primary (26B-A4B) switch. Persists the choice, then
     // (off the UI thread) frees :8080 owner-aware and relaunches llama-server
     // with the OTHER GGUF. STT (:8081) is left alone. The 12B button is only
     // enabled when the file is present, so the relaunch can always find a model
-    // (selected_llama_gguf falls back to 4B otherwise).
+    // (selected_llama_gguf falls back to 12B otherwise).
     {
         let cfg_c = cfg.clone();
         let state_c = state.clone();
@@ -253,6 +311,9 @@ pub(crate) fn wire_local_ai(
             if w.get_ai_local_quality() == want_quality {
                 return;
             }
+            if !w.get_managed_local_server() {
+                return;
+            }
             // UI-audit 2026-06-13 (IMPORTANT): do NOT flip ai_local_quality /
             // config optimistically. If the relaunch returns PortBusy/
             // FailedToStart, an optimistic flip would leave the "●" active
@@ -269,10 +330,11 @@ pub(crate) fn wire_local_ai(
             };
             w.set_model_switching(true);
             w.set_quality_status(SharedString::from(if want_quality {
-                "Переключаю на умную модель (12B)…"
+                "Переключаю на основную модель (26B-A4B)…"
             } else {
-                "Переключаю на быструю модель (4B)…"
+                "Переключаю на безопасный fallback (12B QAT)…"
             }));
+            let previous_quality = w.get_ai_local_quality();
             let cfg_t = cfg_c.clone();
             let state_t = state_c.clone();
             let overlay_t = overlay_c.clone();
@@ -298,10 +360,16 @@ pub(crate) fn wire_local_ai(
                 // outcome (review #1/#2) instead of a blind "done".
                 let (outcome, started) = overlay_backend::local_ai::switch_local_model(
                     &root,
+                    previous_quality,
                     want_quality,
                     want_whisper,
                 );
-                let switched = outcome == overlay_backend::local_ai::ModelSwitch::Switched;
+                let switched = overlay_backend::local_ai::switch_commits_choice(outcome);
+                let serving = matches!(
+                    outcome,
+                    overlay_backend::local_ai::ModelSwitch::Switched
+                        | overlay_backend::local_ai::ModelSwitch::RolledBack
+                );
                 let to_terminate = {
                     let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
                     // Reap only DEFINITIVELY-exited handles (Ok(Some)); keep
@@ -309,7 +377,7 @@ pub(crate) fn wire_local_ai(
                     // never lost from kill-on-quit tracking (review #3).
                     s.local_ai_servers
                         .retain_mut(|c| !matches!(c.try_wait(), Ok(Some(_))));
-                    if switched {
+                    if serving {
                         s.local_ai_servers.extend(started);
                         Vec::new()
                     } else {
@@ -331,6 +399,7 @@ pub(crate) fn wire_local_ai(
                     c.ai_local_quality = want_quality;
                     c.ai_local_model =
                         overlay_backend::local_ai::active_local_model_name(&root, want_quality);
+                    c.ai_local_prep_model.clear();
                     if let Err(e) = overlay_backend::config::save(&c) {
                         eprintln!("[overlay-host] quality switch save failed: {e:#}");
                     }
@@ -344,18 +413,33 @@ pub(crate) fn wire_local_ai(
                         w.set_quality_status(SharedString::from(match outcome {
                             overlay_backend::local_ai::ModelSwitch::Switched => {
                                 if want_quality {
-                                    "Готово: умная модель (12B). Первый ответ может грузиться ~5 с."
+                                    "Готово: основная модель (26B-A4B)."
                                 } else {
-                                    "Готово: быстрая модель (4B)."
+                                    "Готово: RAM-safe fallback (12B QAT)."
                                 }
+                            }
+                            overlay_backend::local_ai::ModelSwitch::RolledBack => {
+                                "Новая модель не прошла проверку; предыдущая модель восстановлена."
                             }
                             overlay_backend::local_ai::ModelSwitch::PortBusy => {
                                 "Порт :8080 занят другим процессом — переключение не выполнено."
+                            }
+                            overlay_backend::local_ai::ModelSwitch::TargetUnavailable => {
+                                "Файл основной модели отсутствует или загружен не полностью."
                             }
                             overlay_backend::local_ai::ModelSwitch::FailedToStart => {
                                 "Не удалось запустить модель — проверьте установку локального AI."
                             }
                         }));
+                        let c = cfg_done.read();
+                        w.set_ai_local_quality(c.ai_local_quality);
+                        w.set_local_model_resource_warning(SharedString::from(
+                            overlay_backend::local_ai::local_model_resource_warning(
+                                &root,
+                                &c.ai_local_base_url,
+                                &c.ai_local_model,
+                            ),
+                        ));
                     }
                     if let Some(o) = overlay_done.upgrade() {
                         o.set_active_stack(SharedString::from(active_stack_label(
@@ -368,9 +452,9 @@ pub(crate) fn wire_local_ai(
         });
     }
 
-    // v0.18.0 — download the optional 12B on demand (it isn't bundled). Same
+    // Download the optional 26B-A4B primary on demand. Same
     // worker/progress pattern as the installer; the backend verifies the pinned
-    // SHA-256 before the file is ever loaded. On success the 12B button appears;
+    // SHA-256 before the file is ever loaded. On success the 26B button appears;
     // the user taps it to switch (no auto-switch, so a background download can't
     // swap the model mid-call).
     {
@@ -443,7 +527,7 @@ pub(crate) fn wire_local_ai(
                             w.set_quality_progress(1.0);
                             w.set_quality_model_present(true);
                             w.set_quality_status(SharedString::from(
-                                "Умная модель загружена. Нажмите «Умнее (12B)», чтобы включить.",
+                                "Основная модель 26B-A4B загружена. Нажмите её профиль, чтобы включить.",
                             ));
                         }
                         Err(e) => {
@@ -453,7 +537,7 @@ pub(crate) fn wire_local_ai(
                             if cancelled {
                                 w.set_quality_status(SharedString::from("Отменено."));
                             } else {
-                                eprintln!("[overlay-host] 12B download failed: {e:#}");
+                                eprintln!("[overlay-host] 26B-A4B download failed: {e:#}");
                                 w.set_quality_status(SharedString::from(format!(
                                     "Ошибка загрузки: {e}"
                                 )));
@@ -539,7 +623,12 @@ pub(crate) fn wire_local_ai(
                         c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081")
                     };
                     let (outcome, started) =
-                        overlay_backend::local_ai::switch_local_model(&root, true, want_whisper);
+                        overlay_backend::local_ai::switch_local_model(
+                            &root,
+                            true,
+                            true,
+                            want_whisper,
+                        );
                     let ok = outcome == overlay_backend::local_ai::ModelSwitch::Switched;
                     {
                         let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
