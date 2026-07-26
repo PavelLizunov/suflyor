@@ -1,6 +1,7 @@
 //! Unit tests for `local_ai.rs`, split out to keep the module file lean.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use super::*;
+use std::process::{Child, Command};
 
 fn asset(name: &str) -> GhAsset {
     GhAsset {
@@ -95,6 +96,21 @@ fn pinned_presence_rejects_same_size_corruption() {
     std::fs::write(&path, b"corrupt").unwrap();
     assert_eq!(file_len(&path), 7, "fixture must keep the same byte length");
     assert!(!pinned_file_matches(&path, 7, PRIMARY_SHA));
+}
+
+#[test]
+fn rejected_same_size_primary_is_removed_for_redownload() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("primary.gguf");
+    std::fs::write(&path, b"corrupt").unwrap();
+    assert_eq!(file_len(&path), 7, "fixture must be exact-size");
+
+    discard_rejected_pinned_file(&path, 7);
+
+    assert!(
+        !path.exists(),
+        "a SHA-rejected exact-size primary must not hide re-download"
+    );
 }
 
 #[test]
@@ -406,6 +422,52 @@ fn strict_readiness_rejects_http_errors_wrong_model_and_malformed_choices() {
         true,
         r#"{"choices":[{}]}"#
     ));
+}
+
+fn spawn_long_lived_child() -> Child {
+    #[cfg(windows)]
+    let mut command = {
+        let mut command = Command::new("cmd");
+        command.args(["/C", "ping -n 4 127.0.0.1 > NUL"]);
+        command
+    };
+    #[cfg(not(windows))]
+    let mut command = {
+        let mut command = Command::new("sh");
+        command.args(["-c", "sleep 3"]);
+        command
+    };
+    command.spawn().unwrap()
+}
+
+fn spawn_exiting_child() -> Child {
+    #[cfg(windows)]
+    let mut command = {
+        let mut command = Command::new("cmd");
+        command.args(["/C", "exit 0"]);
+        command
+    };
+    #[cfg(not(windows))]
+    let mut command = {
+        let mut command = Command::new("sh");
+        command.args(["-c", "exit 0"]);
+        command
+    };
+    command.spawn().unwrap()
+}
+
+#[test]
+fn llama_readiness_ignores_an_exited_whisper_child() {
+    let llama = spawn_long_lived_child();
+    let mut whisper = spawn_exiting_child();
+    let _ = whisper.wait().unwrap();
+    let mut children = vec![llama, whisper];
+
+    assert!(
+        launched_llama_alive(&mut children),
+        "an exited optional Whisper child must not fail llama readiness"
+    );
+    terminate_servers(children);
 }
 
 #[test]

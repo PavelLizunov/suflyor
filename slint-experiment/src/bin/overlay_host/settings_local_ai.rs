@@ -459,6 +459,7 @@ pub(crate) fn wire_local_ai(
                     want_quality,
                     want_whisper,
                 );
+                let quality_present = overlay_backend::local_ai::quality_model_present(&root);
                 let switched = overlay_backend::local_ai::switch_commits_choice(outcome);
                 let serving = matches!(
                     outcome,
@@ -503,6 +504,14 @@ pub(crate) fn wire_local_ai(
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak_done.upgrade() {
                         w.set_model_switching(false);
+                        // A failed worker-side SHA review removes the rejected
+                        // exact-size primary. Refresh this reused Settings window
+                        // from disk so its normal download control is available.
+                        if outcome
+                            == overlay_backend::local_ai::ModelSwitch::TargetUnavailable
+                        {
+                            w.set_quality_model_present(quality_present);
+                        }
                         w.set_quality_status(SharedString::from(match outcome {
                             overlay_backend::local_ai::ModelSwitch::Switched => {
                                 if want_quality {
@@ -518,7 +527,7 @@ pub(crate) fn wire_local_ai(
                                 "Порт :8080 занят другим процессом — переключение не выполнено."
                             }
                             overlay_backend::local_ai::ModelSwitch::TargetUnavailable => {
-                                "Файл основной модели отсутствует или загружен не полностью."
+                                "Файл основной модели недоступен или не прошёл проверку целостности. Загрузите его заново."
                             }
                             overlay_backend::local_ai::ModelSwitch::HardwareUnsupported => {
                                 "26B-A4B доступна только для подтверждённой матрицы VRAM/RAM."

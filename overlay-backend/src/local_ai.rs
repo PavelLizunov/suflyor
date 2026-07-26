@@ -983,11 +983,14 @@ fn curl_success_body(args: &[&str]) -> Option<String> {
     })
 }
 
-fn launched_children_alive(children: &mut [Child]) -> bool {
-    !children.is_empty()
-        && children
-            .iter_mut()
-            .all(|child| matches!(child.try_wait(), Ok(None)))
+/// `switch_local_model` frees :8080 before calling [`ensure_servers`], whose
+/// launch order is llama first and Whisper second. Readiness is therefore about
+/// that first llama child alone: an unrelated Whisper failure must not reject a
+/// healthy model switch or poison its rollback.
+fn launched_llama_alive(children: &mut [Child]) -> bool {
+    children
+        .first_mut()
+        .is_some_and(|child| matches!(child.try_wait(), Ok(None)))
 }
 
 fn wait_for_expected_llama(expected: &str, budget: Duration, children: &mut [Child]) -> bool {
@@ -1001,7 +1004,7 @@ fn wait_for_expected_llama(expected: &str, budget: Duration, children: &mut [Chi
     .to_string();
     let deadline = Instant::now() + budget;
     while Instant::now() < deadline {
-        if !launched_children_alive(children) {
+        if !launched_llama_alive(children) {
             return false;
         }
         let models = curl_success_body(&["-f", "-sS", "--max-time", "3", &models_url]);
@@ -2887,8 +2890,39 @@ fn cache_quality_model_verification(path: &Path, matches: bool) {
         );
 }
 
+/// Remove an exact-size file that has already failed a worker-side SHA review.
+///
+/// This deliberately does no hashing itself: callers must first establish that
+/// the bytes are invalid. Keeping a same-size rejected primary makes the
+/// Settings presence check hide the download action and strands the user with
+/// no recovery path. Forget the cache too, so a fresh download is always
+/// reviewed as new bytes even on a coarse-mtime filesystem.
+fn discard_rejected_pinned_file(path: &Path, expected_size: u64) {
+    if !file_has_expected_size(path, expected_size) {
+        return;
+    }
+    if std::fs::remove_file(path).is_ok() {
+        if let Some(cache) = PINNED_FILE_VERIFICATIONS.get() {
+            cache
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .remove(path);
+        }
+        log::warn!("local AI: removed primary model after failed pinned SHA-256 review");
+    }
+}
+
 fn quality_model_verified(root: &Path) -> bool {
-    cached_pinned_file_matches(&quality_gguf_path(root), GEMMA26_SIZE, GEMMA26_SHA256)
+    let path = quality_gguf_path(root);
+    let verified = cached_pinned_file_matches(&path, GEMMA26_SIZE, GEMMA26_SHA256);
+    if !verified {
+        // Settings deliberately uses a cheap size-only presence check. Once a
+        // worker-side SHA review rejects a same-size file, remove it so that
+        // presence check exposes the normal re-download control. Keeping this
+        // here covers both an explicit profile switch and cold-start fallback.
+        discard_rejected_pinned_file(&path, GEMMA26_SIZE);
+    }
+    verified
 }
 
 /// Bail with the cancel sentinel if the user requested cancellation.
