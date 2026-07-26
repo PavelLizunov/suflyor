@@ -62,8 +62,8 @@ fn pick_llama_gguf_prefers_26b_only_when_present_and_wanted() {
     assert_eq!(pick_llama_gguf(dir, false, false), fallback);
 }
 
-/// Missing/truncated/oversized 26B files are absent without entering the hash
-/// path. Exact-size integrity is covered separately with a small fixture.
+/// UI presence is an O(1) size check: Settings must never hash the 10.5-GB
+/// model. Exact SHA-256 validation is covered separately at the launch boundary.
 #[test]
 fn quality_model_present_rejects_wrong_sizes() {
     let tmp = tempfile::tempdir().unwrap();
@@ -74,6 +74,15 @@ fn quality_model_present_rejects_wrong_sizes() {
     assert!(!quality_model_present(root), "truncated file → not present");
     make_complete(&quality_gguf_path(root), GEMMA26_SIZE + 1);
     assert!(!quality_model_present(root), "oversized file → not present");
+}
+
+#[test]
+fn stat_only_presence_accepts_an_exact_size_fixture_without_hashing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    std::fs::create_dir_all(root.join("llama.cpp")).unwrap();
+    make_complete(&quality_gguf_path(root), GEMMA26_SIZE);
+    assert!(quality_model_present(root));
 }
 
 #[test]
@@ -197,6 +206,46 @@ fn owner_hardware_matrix_is_exact() {
     assert_eq!(
         select_hardware_model_profile(None, Some(32)),
         HardwareModelProfile::Unknown
+    );
+}
+
+#[test]
+fn vulkan_adapter_vram_uses_the_same_confirmed_matrix() {
+    assert_eq!(
+        select_non_nvidia_dedicated_vram_gib(&[(0x1002, 0, 8 * GIB)]),
+        Some(8),
+        "8 GiB AMD adapter reported by DXGI"
+    );
+    assert_eq!(
+        select_non_nvidia_dedicated_vram_gib(&[(0x8086, 0, 8 * GIB), (0x1002, 0, 16 * GIB),]),
+        Some(16),
+        "multiple adapters are not summed"
+    );
+    assert_eq!(
+        select_non_nvidia_dedicated_vram_gib(&[
+            (0x10DE, 0, 16 * GIB),
+            (0x1002, DXGI_ADAPTER_FLAG_SOFTWARE_BIT, 16 * GIB),
+            (0x8086, DXGI_ADAPTER_FLAG_REMOTE_BIT, 16 * GIB),
+        ]),
+        None,
+        "NVIDIA, remote, and software adapters are not Vulkan candidates"
+    );
+    assert_eq!(
+        hardware_profile_from_discovery(false, None, Some(8), Some(32)),
+        HardwareModelProfile::Primary26Vram8
+    );
+    assert_eq!(
+        hardware_profile_from_discovery(false, None, Some(12), Some(24)),
+        HardwareModelProfile::Primary26Vram12
+    );
+    assert_eq!(
+        hardware_profile_from_discovery(false, None, Some(16), Some(32)),
+        HardwareModelProfile::Primary26Vram16
+    );
+    assert_eq!(
+        hardware_profile_from_discovery(false, None, None, Some(32)),
+        HardwareModelProfile::Unknown,
+        "unreported Vulkan VRAM must not be guessed"
     );
 }
 

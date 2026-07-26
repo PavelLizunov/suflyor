@@ -94,8 +94,9 @@ pub struct Config {
     pub ai_local_thinking: bool,
     /// Bundled local LLM profile: `false` = RAM-safe Gemma 4 12B QAT fallback,
     /// `true` = owner-approved Gemma 4 26B-A4B primary. The local server loads
-    /// one GGUF; `true` is honoured only when the exact pinned 26B file is
-    /// present, otherwise boot persists the 12B fallback.
+    /// one GGUF; `true` is honoured only when the pinned 26B candidate is
+    /// present, and worker-side launch rechecks its exact SHA-256 before load.
+    /// A missing or invalid primary falls back to 12B.
     #[serde(default)]
     pub ai_local_quality: bool,
 

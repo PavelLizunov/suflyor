@@ -14,10 +14,14 @@
 //! Progress is reported through a `&dyn Fn(Progress)` callback the UI turns into
 //! `slint::invoke_from_event_loop` property updates.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Mutex, OnceLock,
+};
+use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::{anyhow, bail, Context, Result};
 use serde::Deserialize;
@@ -324,6 +328,60 @@ fn detect_nvidia_vram_gib() -> Option<u64> {
         .map(|mib| (mib + 512) / 1024)
 }
 
+#[cfg(any(windows, test))]
+const AMD_VENDOR_ID: u32 = 0x1002;
+#[cfg(any(windows, test))]
+const INTEL_VENDOR_ID: u32 = 0x8086;
+#[cfg(any(windows, test))]
+const DXGI_ADAPTER_FLAG_REMOTE_BIT: u32 = 0x1;
+#[cfg(any(windows, test))]
+const DXGI_ADAPTER_FLAG_SOFTWARE_BIT: u32 = 0x2;
+
+/// Best-effort VRAM discovery for Vulkan-capable AMD/Intel adapters. `nvidia-smi`
+/// is NVIDIA-only, while the launcher also offers a Vulkan build on these GPUs.
+/// DXGI reports the full 64-bit dedicated VRAM value; legacy WMI `AdapterRAM` is
+/// only 32-bit and would truncate modern 8-16 GiB adapters.
+#[cfg(windows)]
+fn detect_non_nvidia_vram_gib() -> Option<u64> {
+    use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1};
+
+    // DXGI factory/adapter calls are the direct Windows API for enumerating
+    // display adapters. Failure is an unknown profile, never an invented value.
+    let factory = unsafe { CreateDXGIFactory1::<IDXGIFactory1>().ok()? };
+    let mut adapters = Vec::new();
+    for index in 0.. {
+        let Ok(adapter) = (unsafe { factory.EnumAdapters1(index) }) else {
+            break;
+        };
+        let Ok(desc) = (unsafe { adapter.GetDesc1() }) else {
+            continue;
+        };
+        adapters.push((desc.VendorId, desc.Flags, desc.DedicatedVideoMemory as u64));
+    }
+    select_non_nvidia_dedicated_vram_gib(&adapters)
+}
+
+#[cfg(not(windows))]
+fn detect_non_nvidia_vram_gib() -> Option<u64> {
+    None
+}
+
+/// Select a single usable AMD/Intel DXGI adapter. The tuples are
+/// `(vendor_id, flags, dedicated_vram_bytes)` so the hardware rule remains
+/// unit-testable on non-Windows CI.
+#[cfg(any(windows, test))]
+fn select_non_nvidia_dedicated_vram_gib(adapters: &[(u32, u32, u64)]) -> Option<u64> {
+    adapters
+        .iter()
+        .filter(|(vendor, flags, bytes)| {
+            (*vendor == AMD_VENDOR_ID || *vendor == INTEL_VENDOR_ID)
+                && (*flags & (DXGI_ADAPTER_FLAG_REMOTE_BIT | DXGI_ADAPTER_FLAG_SOFTWARE_BIT)) == 0
+                && *bytes > 0
+        })
+        .map(|(_, _, bytes)| bytes.div_ceil(GIB))
+        .max()
+}
+
 fn detect_system_ram_gib() -> Option<u64> {
     let out = run_capture(
         "powershell",
@@ -349,7 +407,33 @@ fn detected_hardware_model_profile(force_cpu: bool) -> HardwareModelProfile {
     if force_cpu {
         return HardwareModelProfile::Unknown;
     }
-    select_hardware_model_profile(detect_nvidia_vram_gib(), detect_system_ram_gib())
+    let nvidia_vram = detect_nvidia_vram_gib();
+    let non_nvidia_vram = if nvidia_vram.is_none() {
+        detect_non_nvidia_vram_gib()
+    } else {
+        None
+    };
+    hardware_profile_from_discovery(
+        force_cpu,
+        nvidia_vram,
+        non_nvidia_vram,
+        detect_system_ram_gib(),
+    )
+}
+
+/// Keep the source of VRAM explicit so AMD/Intel Vulkan hardware follows the
+/// same owner-approved matrix as NVIDIA, while tests need no Windows commands.
+fn hardware_profile_from_discovery(
+    force_cpu: bool,
+    nvidia_vram_gib: Option<u64>,
+    non_nvidia_vram_gib: Option<u64>,
+    ram_gib: Option<u64>,
+) -> HardwareModelProfile {
+    if force_cpu {
+        HardwareModelProfile::Unknown
+    } else {
+        select_hardware_model_profile(nvidia_vram_gib.or(non_nvidia_vram_gib), ram_gib)
+    }
 }
 
 /// Write the installer's resulting endpoints/models into a `Config`, switching
@@ -530,6 +614,7 @@ pub fn install(
                 )?;
             }
             verify_sha256(&primary_dest, GEMMA26_SHA256, "Gemma 26B-A4B model")?;
+            cache_quality_model_verification(&primary_dest, true);
         }
     }
 
@@ -1108,8 +1193,8 @@ pub enum ModelSwitch {
     /// A FOREIGN process holds :8080 (started outside our `root`) we won't
     /// force-kill — the OLD model keeps serving, so the switch did NOT happen.
     PortBusy,
-    /// The requested 26B file is absent or partial; the serving model is not
-    /// stopped.
+    /// The requested 26B file is absent, has the wrong size, or fails its
+    /// pinned SHA-256 review; the serving model is not stopped.
     TargetUnavailable,
     /// Freed + relaunched but the server never became reachable in time
     /// (missing binary/GGUF, failed bind, or still cold-loading past the wait).
@@ -1131,7 +1216,10 @@ pub fn switch_local_model(
     prefer_quality: bool,
     want_whisper: bool,
 ) -> (ModelSwitch, Vec<Child>) {
-    if prefer_quality && !quality_model_present(root) {
+    // This is a worker-only launch boundary. A UI presence query is deliberately
+    // stat-only, but loading the primary always performs (or reuses) an exact
+    // SHA-256 review before we stop the currently serving fallback.
+    if prefer_quality && !quality_model_verified(root) {
         return (ModelSwitch::TargetUnavailable, Vec::new());
     }
     // A foreign owner we can't kill means the old model stays up — don't lie.
@@ -1140,7 +1228,7 @@ pub fn switch_local_model(
     }
     // Let the OS release the port before the relaunch binds it.
     std::thread::sleep(Duration::from_millis(800));
-    let expected = active_local_model_name(root, prefer_quality);
+    let expected = model_name_for_quality(prefer_quality);
     let mut started = ensure_servers(root, true, want_whisper, prefer_quality);
     if wait_for_expected_llama(&expected, STRICT_LLAMA_READY_BUDGET, &mut started) {
         return (ModelSwitch::Switched, started);
@@ -1150,8 +1238,8 @@ pub fn switch_local_model(
         return (ModelSwitch::FailedToStart, Vec::new());
     }
     std::thread::sleep(Duration::from_millis(800));
-    let rollback_quality = effective_local_quality(root, previous_quality);
-    let rollback_expected = active_local_model_name(root, rollback_quality);
+    let rollback_quality = effective_verified_local_quality(root, previous_quality);
+    let rollback_expected = model_name_for_quality(rollback_quality);
     let mut rollback = ensure_servers(root, true, want_whisper, rollback_quality);
     if wait_for_expected_llama(&rollback_expected, STRICT_LLAMA_READY_BUDGET, &mut rollback) {
         (ModelSwitch::RolledBack, rollback)
@@ -1196,8 +1284,8 @@ pub fn restart_llama_server(root: &Path, prefer_quality: bool) -> (ModelSwitch, 
         return (ModelSwitch::PortBusy, Vec::new());
     }
     std::thread::sleep(Duration::from_millis(800));
-    let effective_quality = effective_local_quality(root, prefer_quality);
-    let expected = active_local_model_name(root, effective_quality);
+    let effective_quality = effective_verified_local_quality(root, prefer_quality);
+    let expected = model_name_for_quality(effective_quality);
     let mut started = ensure_servers(root, true, false, effective_quality);
     if wait_for_expected_llama(&expected, STRICT_LLAMA_READY_BUDGET, &mut started) {
         (ModelSwitch::Switched, started)
@@ -1230,19 +1318,20 @@ pub fn local_model_label(basename: &str) -> String {
     }
 }
 
-/// Basename of the GGUF [`selected_llama_gguf`] would load — so callers keep
-/// `config.ai_local_model` (the bar's active-stack readout) in sync with the
-/// model actually serving. Pure string pick mirroring [`pick_llama_gguf`].
+/// Basename of the candidate profile Settings should display. This is stat-only
+/// and safe on the UI thread; the worker-side launcher independently resolves
+/// the exact verified GGUF through [`selected_llama_gguf`].
 #[must_use]
 pub fn active_local_model_name(root: &Path, prefer_quality: bool) -> String {
-    pick_llama_gguf(
-        &root.join("llama.cpp"),
-        prefer_quality,
-        quality_model_present(root),
-    )
-    .file_name()
-    .map(|s| s.to_string_lossy().into_owned())
-    .unwrap_or_default()
+    model_name_for_quality(effective_local_quality(root, prefer_quality))
+}
+
+fn model_name_for_quality(quality: bool) -> String {
+    if quality {
+        GEMMA26_FILE.to_string()
+    } else {
+        GEMMA_FILE.to_string()
+    }
 }
 
 /// Absolute path the optional 26B primary GGUF lives at (whether or not it
@@ -1252,31 +1341,61 @@ pub fn quality_gguf_path(root: &Path) -> PathBuf {
     root.join("llama.cpp").join(GEMMA26_FILE)
 }
 
-/// True when the 26B model matches both the pinned byte length and SHA-256.
-/// Used by persistence/UI as well as launch selection, so a same-size replaced
-/// file is never advertised as the primary.
+/// Fast, stat-only 26B presence check for Settings and component rows. Exact
+/// SHA-256 validation is intentionally deferred to [`quality_model_verified`],
+/// which is called only from worker-side launch/switch paths. Opening Settings
+/// must never stream the 10.5-GB model from disk.
 #[must_use]
 pub fn quality_model_present(root: &Path) -> bool {
-    pinned_file_matches(&quality_gguf_path(root), GEMMA26_SIZE, GEMMA26_SHA256)
+    file_has_expected_size(&quality_gguf_path(root), GEMMA26_SIZE)
 }
 
-/// Resolve a persisted primary preference to the model that can actually be
-/// launched. Callers must persist `false` when the 26B file vanished or is
-/// partial so the UI and request model do not remain stale.
+/// Resolve a persisted primary preference to the candidate profile displayed by
+/// Settings. This is intentionally stat-only; worker launch paths use
+/// [`effective_verified_local_quality`] before loading the primary.
 #[must_use]
 pub fn effective_local_quality(root: &Path, requested_quality: bool) -> bool {
     requested_quality && quality_model_present(root)
 }
 
+/// Worker-side counterpart to [`effective_local_quality`]. The 26B becomes a
+/// launch target only after the exact pinned SHA-256 check succeeds.
+fn effective_verified_local_quality(root: &Path, requested_quality: bool) -> bool {
+    requested_quality && quality_model_verified(root)
+}
+
 /// Repair persisted bundled-model state without touching custom local servers.
 /// Returns `true` when the caller must save the config. This is used at boot and
-/// when switching back to Suflyor's endpoint so a vanished/partial 26B file
-/// cannot leave a stale primary or prep-model id in requests.
+/// when switching back to Suflyor's endpoint so a vanished/partial primary
+/// cannot leave a stale model or prep-model id in requests. Same-size integrity
+/// failures are repaired by [`repair_managed_model_state_after_verification`].
 pub fn repair_managed_model_state(cfg: &mut crate::config::Config, root: &Path) -> bool {
     if !is_managed_llama_endpoint(&cfg.ai_local_base_url) {
         return false;
     }
     let quality = effective_local_quality(root, cfg.ai_local_quality);
+    repair_managed_model_state_for_quality(cfg, root, quality)
+}
+
+/// Worker-only version of [`repair_managed_model_state`]. It is called after a
+/// launch attempt, so persistence records the 12B fallback if the exact 26B
+/// SHA-256 review rejected a same-size replacement.
+pub fn repair_managed_model_state_after_verification(
+    cfg: &mut crate::config::Config,
+    root: &Path,
+) -> bool {
+    if !is_managed_llama_endpoint(&cfg.ai_local_base_url) {
+        return false;
+    }
+    let quality = effective_verified_local_quality(root, cfg.ai_local_quality);
+    repair_managed_model_state_for_quality(cfg, root, quality)
+}
+
+fn repair_managed_model_state_for_quality(
+    cfg: &mut crate::config::Config,
+    root: &Path,
+    quality: bool,
+) -> bool {
     let model = if quality {
         GEMMA26_FILE.to_string()
     } else {
@@ -1387,9 +1506,16 @@ pub fn local_model_resource_warning(root: &Path, base_url: &str, model_id: &str)
 /// check then defers the choice to the pure [`pick_llama_gguf`] (unit-tested
 /// without materialising a 6 GB file).
 fn selected_llama_gguf(llama_dir: &Path, prefer_quality: bool) -> PathBuf {
-    // Selection is a launch boundary, so the pinned hash is rechecked even
-    // when a prior download already verified the file.
-    let present = pinned_file_matches(&llama_dir.join(GEMMA26_FILE), GEMMA26_SIZE, GEMMA26_SHA256);
+    if !prefer_quality {
+        // The RAM-safe fallback never needs the optional primary, so do not
+        // stream 10.5 GB merely to start the 12B server.
+        return llama_dir.join(GEMMA_FILE);
+    }
+    // Selection is a worker-only launch boundary. The exact pinned hash is
+    // rechecked here (or served from the matching metadata cache), never from
+    // the Settings/UI path.
+    let present =
+        cached_pinned_file_matches(&llama_dir.join(GEMMA26_FILE), GEMMA26_SIZE, GEMMA26_SHA256);
     pick_llama_gguf(llama_dir, prefer_quality, present)
 }
 
@@ -1438,6 +1564,7 @@ pub fn download_quality_model(
         )?;
     }
     verify_sha256(&dest, GEMMA26_SHA256, "Gemma 26B-A4B model")?;
+    cache_quality_model_verification(&dest, true);
     Ok(())
 }
 
@@ -2569,11 +2696,95 @@ fn file_len(p: &Path) -> u64 {
     std::fs::metadata(p).map(|m| m.len()).unwrap_or(0)
 }
 
-/// Exact pinned-file presence check. Size is only a fast rejection; a
-/// same-sized corrupted or replaced model must never be advertised or launched.
-fn pinned_file_matches(path: &Path, expected_size: u64, expected_sha256: &str) -> bool {
+fn file_has_expected_size(path: &Path, expected_size: u64) -> bool {
     file_len(path) == expected_size
+}
+
+/// Exact pinned-file verification. Size is only a fast rejection; a same-sized
+/// corrupted or replaced model must never be launched.
+fn pinned_file_matches(path: &Path, expected_size: u64, expected_sha256: &str) -> bool {
+    file_has_expected_size(path, expected_size)
         && sha256_hex_of(path).is_some_and(|hash| hash.eq_ignore_ascii_case(expected_sha256))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FileStamp {
+    len: u64,
+    modified: Option<SystemTime>,
+}
+
+#[derive(Debug, Clone)]
+struct PinnedFileVerification {
+    stamp: FileStamp,
+    matches: bool,
+}
+
+/// Hashing a 10.5-GB primary is valid only outside the UI path. Cache its
+/// exact result by file metadata so a switch's preflight and its subsequent
+/// launch select do not stream the model twice. A changed size or mtime forces
+/// a new SHA-256 review before the file can be loaded.
+static PINNED_FILE_VERIFICATIONS: OnceLock<Mutex<HashMap<PathBuf, PinnedFileVerification>>> =
+    OnceLock::new();
+
+fn file_stamp(path: &Path) -> Option<FileStamp> {
+    let metadata = std::fs::metadata(path).ok()?;
+    Some(FileStamp {
+        len: metadata.len(),
+        modified: metadata.modified().ok(),
+    })
+}
+
+fn cached_pinned_file_matches(path: &Path, expected_size: u64, expected_sha256: &str) -> bool {
+    let Some(stamp) = file_stamp(path) else {
+        return false;
+    };
+    if stamp.len != expected_size {
+        return false;
+    }
+    let cache = PINNED_FILE_VERIFICATIONS.get_or_init(|| Mutex::new(HashMap::new()));
+    {
+        let cached = cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(result) = cached.get(path) {
+            if result.stamp == stamp {
+                return result.matches;
+            }
+        }
+    }
+    let matches = pinned_file_matches(path, expected_size, expected_sha256);
+    // Do not cache a result for bytes that changed while they were being read.
+    if file_stamp(path).as_ref() != Some(&stamp) {
+        return false;
+    }
+    let mut cached = cache
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    cached.insert(
+        path.to_path_buf(),
+        PinnedFileVerification { stamp, matches },
+    );
+    matches
+}
+
+/// Record a completed download/install SHA check for later worker-side launch
+/// selection. This is never consulted by the UI presence query.
+fn cache_quality_model_verification(path: &Path, matches: bool) {
+    let Some(stamp) = file_stamp(path) else {
+        return;
+    };
+    let cache = PINNED_FILE_VERIFICATIONS.get_or_init(|| Mutex::new(HashMap::new()));
+    cache
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .insert(
+            path.to_path_buf(),
+            PinnedFileVerification { stamp, matches },
+        );
+}
+
+fn quality_model_verified(root: &Path) -> bool {
+    cached_pinned_file_matches(&quality_gguf_path(root), GEMMA26_SIZE, GEMMA26_SHA256)
 }
 
 /// Bail with the cancel sentinel if the user requested cancellation.

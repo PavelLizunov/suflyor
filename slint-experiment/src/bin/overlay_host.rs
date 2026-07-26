@@ -1146,9 +1146,21 @@ fn main() -> Result<(), slint::PlatformError> {
                         s.local_ai_lock.clone()
                     };
                     let guard = lifecycle_lock.lock().unwrap_or_else(|p| p.into_inner());
-                    let (_outcome, started) =
+                    let (outcome, started) =
                         overlay_backend::local_ai::restart_llama_server(&root, prefer_quality);
                     drop(guard);
+                    if outcome == overlay_backend::local_ai::ModelSwitch::Switched {
+                        let mut c = cfg_w.write();
+                        if overlay_backend::local_ai::repair_managed_model_state_after_verification(
+                            &mut c, &root,
+                        ) {
+                            if let Err(e) = overlay_backend::config::save(&c) {
+                                eprintln!(
+                                    "[overlay-host] verified local AI state repair save failed: {e:#}"
+                                );
+                            }
+                        }
+                    }
                     if !started.is_empty() {
                         state_w
                             .lock()
@@ -1267,7 +1279,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                             // so the readout shows the real model.
                                             let label = {
                                                 let mut c = cfg_w.write();
-                                                overlay_backend::local_ai::repair_managed_model_state(
+                                                overlay_backend::local_ai::repair_managed_model_state_after_verification(
                                                     &mut c,
                                                     &root,
                                                 );

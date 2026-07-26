@@ -7,10 +7,10 @@
 //! the install buttons already use, so the hub can never disagree with what the
 //! app actually sees as installed.
 //!
-//! No model loads; the pinned 26B primary does receive an integrity hash check
-//! so a same-size replacement is not advertised as installed. The labelling
-//! logic is split into small pure helpers so it is unit-testable without
-//! materialising multi-GB model files.
+//! No model loads: Settings/component rows use a stat-only candidate check, and
+//! worker-side model launch independently verifies the pinned 26B SHA-256. The
+//! labelling logic is split into small pure helpers so it is unit-testable
+//! without materialising multi-GB model files.
 
 use crate::config::Config;
 

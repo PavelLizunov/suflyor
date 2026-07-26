@@ -237,6 +237,17 @@ pub(crate) fn wire_local_ai(
                                 );
                             if outcome == overlay_backend::local_ai::ModelSwitch::Switched {
                                 restored_servers.extend(restored);
+                                let mut c = cfg_t.write();
+                                if overlay_backend::local_ai::repair_managed_model_state_after_verification(
+                                    &mut c,
+                                    &opts.root,
+                                ) {
+                                    if let Err(save_error) = overlay_backend::config::save(&c) {
+                                        eprintln!(
+                                            "[overlay-host] restored local-AI state save failed: {save_error:#}"
+                                        );
+                                    }
+                                }
                             } else {
                                 overlay_backend::local_ai::terminate_servers(restored);
                             }
