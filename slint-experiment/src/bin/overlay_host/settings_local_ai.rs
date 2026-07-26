@@ -163,6 +163,8 @@ pub(crate) fn wire_local_ai(
                         let gigaam_dir = res.stt_gigaam_dir.clone();
                         let on_gpu = res.on_gpu;
                         let quality = res.ai_local_quality;
+                        let quality_selection_allowed =
+                            overlay_backend::local_ai::primary_26b_allowed(res.hardware_profile);
                         let quality_present =
                             overlay_backend::local_ai::quality_model_present(&opts.root);
                         {
@@ -194,6 +196,7 @@ pub(crate) fn wire_local_ai(
                                 ));
                                 w.set_managed_local_server(true);
                                 w.set_ai_local_quality(quality);
+                                w.set_quality_selection_allowed(quality_selection_allowed);
                                 // The Settings window is reused. Replace a prior
                                 // custom-server list so its selected model cannot
                                 // disagree with the model this reinstall launched.
@@ -238,15 +241,25 @@ pub(crate) fn wire_local_ai(
                         // and keep its handles tracked instead of leaving local AI
                         // down until the next app restart.
                         let mut restored_servers = Vec::new();
+                        let mut restored_label = None;
                         if restore_previous {
                             let (outcome, restored) =
                                 overlay_backend::local_ai::restart_llama_server(
                                     &opts.root,
                                     previous_quality,
                                 );
-                            if outcome == overlay_backend::local_ai::ModelSwitch::Switched {
+                            if matches!(
+                                outcome,
+                                overlay_backend::local_ai::ModelSwitch::Switched
+                                    | overlay_backend::local_ai::ModelSwitch::FallbackStarted
+                            ) {
                                 restored_servers.extend(restored);
                                 let mut c = cfg_t.write();
+                                if outcome
+                                    == overlay_backend::local_ai::ModelSwitch::FallbackStarted
+                                {
+                                    c.ai_local_quality = false;
+                                }
                                 if overlay_backend::local_ai::repair_managed_model_state_after_verification(
                                     &mut c,
                                     &opts.root,
@@ -257,6 +270,7 @@ pub(crate) fn wire_local_ai(
                                         );
                                     }
                                 }
+                                restored_label = Some(active_stack_label(&c));
                             } else {
                                 overlay_backend::local_ai::terminate_servers(restored);
                             }
@@ -284,10 +298,16 @@ pub(crate) fn wire_local_ai(
                             format!("Ошибка установки: {e}")
                         };
                         let weak_err = weak_t.clone();
+                        let overlay_err = overlay_t.clone();
                         let _ = slint::invoke_from_event_loop(move || {
                             if let Some(w) = weak_err.upgrade() {
                                 w.set_local_ai_installing(false);
                                 w.set_local_ai_status(SharedString::from(msg));
+                            }
+                            if let (Some(label), Some(o)) =
+                                (restored_label, overlay_err.upgrade())
+                            {
+                                o.set_active_stack(SharedString::from(label));
                             }
                         });
                     }
@@ -340,6 +360,12 @@ pub(crate) fn wire_local_ai(
                 return;
             }
             if !w.get_managed_local_server() {
+                return;
+            }
+            if want_quality && !w.get_quality_selection_allowed() {
+                w.set_quality_status(SharedString::from(
+                    "26B-A4B доступна только для подтверждённой матрицы VRAM/RAM.",
+                ));
                 return;
             }
             // UI-audit 2026-06-13 (IMPORTANT): do NOT flip ai_local_quality /
@@ -453,6 +479,12 @@ pub(crate) fn wire_local_ai(
                             overlay_backend::local_ai::ModelSwitch::TargetUnavailable => {
                                 "Файл основной модели отсутствует или загружен не полностью."
                             }
+                            overlay_backend::local_ai::ModelSwitch::HardwareUnsupported => {
+                                "26B-A4B доступна только для подтверждённой матрицы VRAM/RAM."
+                            }
+                            overlay_backend::local_ai::ModelSwitch::FallbackStarted => {
+                                "Основная модель не запустилась; включён RAM-safe fallback (12B QAT)."
+                            }
                             overlay_backend::local_ai::ModelSwitch::FailedToStart => {
                                 "Не удалось запустить модель — проверьте установку локального AI."
                             }
@@ -500,6 +532,12 @@ pub(crate) fn wire_local_ai(
             let Some(w) = weak.upgrade() else { return };
             if w.get_quality_downloading() {
                 return; // re-entry guard (same window)
+            }
+            if !w.get_quality_selection_allowed() {
+                w.set_quality_status(SharedString::from(
+                    "26B-A4B доступна только для подтверждённой матрицы VRAM/RAM.",
+                ));
+                return;
             }
             // B3 — process-global dedup (survives Settings reopen) + RAII release.
             let Some(busy_guard) = slint_replay::app_state::LocalAiBusyGuard::try_acquire({
@@ -795,14 +833,25 @@ pub(crate) fn wire_local_ai(
                     let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
                     s.local_ai_servers
                         .retain_mut(|c| !matches!(c.try_wait(), Ok(Some(_))));
-                    if outcome == overlay_backend::local_ai::ModelSwitch::Switched {
+                    if matches!(
+                        outcome,
+                        overlay_backend::local_ai::ModelSwitch::Switched
+                            | overlay_backend::local_ai::ModelSwitch::FallbackStarted
+                    ) {
                         s.local_ai_servers.extend(started);
                     } else {
                         overlay_backend::local_ai::terminate_servers(started);
                     }
                     drop(s);
-                    if outcome == overlay_backend::local_ai::ModelSwitch::Switched {
+                    if matches!(
+                        outcome,
+                        overlay_backend::local_ai::ModelSwitch::Switched
+                            | overlay_backend::local_ai::ModelSwitch::FallbackStarted
+                    ) {
                         let mut c = cfg_t.write();
+                        if outcome == overlay_backend::local_ai::ModelSwitch::FallbackStarted {
+                            c.ai_local_quality = false;
+                        }
                         if overlay_backend::local_ai::repair_managed_model_state_after_verification(
                             &mut c, &root,
                         ) {

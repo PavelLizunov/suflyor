@@ -55,13 +55,17 @@ pub fn status(cfg: &Config) -> Vec<ComponentStatus> {
         detail: engine_detail(engine_build),
     };
 
-    // Local model: 12B QAT is the minimum; 26B-A4B is optional on top.
+    // Local model: 12B QAT is the current fallback; a complete legacy 4B is
+    // still usable during an in-place upgrade until the user installs 12B.
     let base = crate::local_ai::base_model_present(&root);
     let quality = crate::local_ai::quality_model_present(&root);
+    let fallback = base.then(|| {
+        crate::local_ai::local_model_label(&crate::local_ai::active_local_model_name(&root, false))
+    });
     let local_model = ComponentStatus {
         kind: ComponentKind::LocalModel,
         installed: base,
-        detail: local_model_detail(base, quality),
+        detail: local_model_detail(fallback.as_deref(), quality),
     };
 
     // STT (GigaAM): installed when the model file exists at the pinned size in
@@ -115,12 +119,12 @@ fn engine_detail(build: Option<u32>) -> String {
     build.map(|b| format!("b{b}")).unwrap_or_default()
 }
 
-/// Pure: local-model detail from the 12B / 26B-A4B presence flags.
-fn local_model_detail(base: bool, quality: bool) -> String {
-    match (base, quality) {
-        (false, _) => String::new(),
-        (true, true) => "Gemma 12B + 26B-A4B".to_string(),
-        (true, false) => "Gemma 12B".to_string(),
+/// Pure: local-model detail from the available fallback and optional primary.
+fn local_model_detail(fallback: Option<&str>, quality: bool) -> String {
+    match (fallback, quality) {
+        (None, _) => String::new(),
+        (Some(fallback), true) => format!("{fallback} + 26B-A4B"),
+        (Some(fallback), false) => fallback.to_string(),
     }
 }
 
@@ -136,10 +140,14 @@ mod tests {
 
     #[test]
     fn local_model_detail_covers_tiers() {
-        assert_eq!(local_model_detail(false, false), "");
-        assert_eq!(local_model_detail(false, true), ""); // 26B without fallback → incomplete
-        assert_eq!(local_model_detail(true, false), "Gemma 12B");
-        assert_eq!(local_model_detail(true, true), "Gemma 12B + 26B-A4B");
+        assert_eq!(local_model_detail(None, false), "");
+        assert_eq!(local_model_detail(None, true), ""); // 26B without fallback → incomplete
+        assert_eq!(local_model_detail(Some("Gemma 12B"), false), "Gemma 12B");
+        assert_eq!(
+            local_model_detail(Some("Gemma 12B"), true),
+            "Gemma 12B + 26B-A4B"
+        );
+        assert_eq!(local_model_detail(Some("Gemma 4B"), false), "Gemma 4B");
     }
 
     #[test]

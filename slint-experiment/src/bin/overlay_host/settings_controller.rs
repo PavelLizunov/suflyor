@@ -1393,6 +1393,18 @@ pub(crate) fn populate_token_status(
     let managed_local_server =
         overlay_backend::local_ai::is_managed_llama_endpoint(&c.ai_local_base_url);
     win.set_managed_local_server(managed_local_server);
+    // VRAM/RAM discovery can use WMI/DXGI, so never do it on the UI thread.
+    // Keep 26B controls disabled until the exact owner-approved pair is known.
+    win.set_quality_selection_allowed(false);
+    let quality_selection_weak = win.as_weak();
+    std::thread::spawn(move || {
+        let allowed = overlay_backend::local_ai::primary_26b_allowed_on_current_hardware();
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(w) = quality_selection_weak.upgrade() {
+                w.set_quality_selection_allowed(allowed);
+            }
+        });
+    });
     // #E10.1 — seed both model dropdowns (cloud bridge + local) with the saved
     // model so each shows immediately; the full lists are fetched from
     // {base_url}/models AFTER the read guard is released (see end of fn).

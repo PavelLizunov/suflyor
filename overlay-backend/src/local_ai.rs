@@ -35,6 +35,13 @@ const GEMMA_FILE: &str = "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf";
 const GEMMA_SIZE: u64 = 6_716_355_328;
 const GEMMA_SHA256: &str = "cc9ff072e0a8203429ed854e6662c17a6c2bc1e5dca5b475dd4736caaacbc165";
 
+// The model installed by the previous release. Keep recognising it during an
+// upgrade: replacing its persisted model id with the new 12B filename before
+// the user has downloaded 12B would leave an otherwise working installation
+// with no launchable model.
+const LEGACY_GEMMA_FILE: &str = "gemma-4-E4B-it-Q4_K_M.gguf";
+const LEGACY_GEMMA_SIZE: u64 = 4_977_169_568;
+
 // Owner-approved primary model. The byte size and SHA-256 are independently
 // pinned from the immutable Hugging Face revision c099eb4.
 const GEMMA26_URL: &str = "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/c099eb4/gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf";
@@ -142,8 +149,14 @@ impl HardwareModelProfile {
     }
 }
 
+/// Whether a profile is in the owner's confirmed 26B-A4B matrix.
+#[must_use]
+pub const fn primary_26b_allowed(profile: HardwareModelProfile) -> bool {
+    profile.uses_primary_26b()
+}
+
 /// Select only an owner-confirmed VRAM/RAM pair. Inputs are nominal binary GiB:
-/// 8/16 -> 12B; 8/32, 12/24+, and 16/32+ -> the corresponding 26B profile.
+/// 8/16 -> 12B; 8/32, 12/24-32, and 16/32 -> the corresponding 26B profile.
 #[must_use]
 pub const fn select_hardware_model_profile(
     vram_gib: Option<u64>,
@@ -429,6 +442,13 @@ fn detected_hardware_model_profile(force_cpu: bool) -> HardwareModelProfile {
         non_nvidia_vram,
         detect_system_ram_gib(),
     )
+}
+
+/// Detect whether this machine is currently in the confirmed 26B-A4B matrix.
+/// This is worker-only: discovery may query WMI/DXGI and must not block Slint.
+#[must_use]
+pub fn primary_26b_allowed_on_current_hardware() -> bool {
+    primary_26b_allowed(detected_hardware_model_profile(false))
 }
 
 /// Keep the source of VRAM explicit so AMD/Intel Vulkan hardware follows the
@@ -1200,12 +1220,17 @@ pub enum ModelSwitch {
     /// The requested profile failed strict readiness, but the previous profile
     /// was restored and its child handles are returned.
     RolledBack,
+    /// The requested primary could not be started, but the RAM-safe fallback
+    /// passed readiness and is now serving. Callers must persist that downgrade.
+    FallbackStarted,
     /// A FOREIGN process holds :8080 (started outside our `root`) we won't
     /// force-kill — the OLD model keeps serving, so the switch did NOT happen.
     PortBusy,
     /// The requested 26B file is absent, has the wrong size, or fails its
     /// pinned SHA-256 review; the serving model is not stopped.
     TargetUnavailable,
+    /// The requested primary is outside the owner's confirmed VRAM/RAM matrix.
+    HardwareUnsupported,
     /// Freed + relaunched but the server never became reachable in time
     /// (missing binary/GGUF, failed bind, or still cold-loading past the wait).
     FailedToStart,
@@ -1229,8 +1254,13 @@ pub fn switch_local_model(
     // This is a worker-only launch boundary. A UI presence query is deliberately
     // stat-only, but loading the primary always performs (or reuses) an exact
     // SHA-256 review before we stop the currently serving fallback.
-    if prefer_quality && !quality_model_verified(root) {
-        return (ModelSwitch::TargetUnavailable, Vec::new());
+    if prefer_quality {
+        if !primary_26b_allowed_on_current_hardware() {
+            return (ModelSwitch::HardwareUnsupported, Vec::new());
+        }
+        if !quality_model_verified(root) {
+            return (ModelSwitch::TargetUnavailable, Vec::new());
+        }
     }
     // A foreign owner we can't kill means the old model stays up — don't lie.
     if !free_llama_port(root) {
@@ -1238,7 +1268,7 @@ pub fn switch_local_model(
     }
     // Let the OS release the port before the relaunch binds it.
     std::thread::sleep(Duration::from_millis(800));
-    let expected = model_name_for_quality(prefer_quality);
+    let expected = active_local_model_name(root, prefer_quality);
     let mut started = ensure_servers(root, true, want_whisper, prefer_quality);
     if wait_for_expected_llama(&expected, STRICT_LLAMA_READY_BUDGET, &mut started) {
         return (ModelSwitch::Switched, started);
@@ -1249,7 +1279,7 @@ pub fn switch_local_model(
     }
     std::thread::sleep(Duration::from_millis(800));
     let rollback_quality = effective_verified_local_quality(root, previous_quality);
-    let rollback_expected = model_name_for_quality(rollback_quality);
+    let rollback_expected = active_local_model_name(root, rollback_quality);
     let mut rollback = ensure_servers(root, true, want_whisper, rollback_quality);
     if wait_for_expected_llama(&rollback_expected, STRICT_LLAMA_READY_BUDGET, &mut rollback) {
         (ModelSwitch::RolledBack, rollback)
@@ -1294,13 +1324,32 @@ pub fn restart_llama_server(root: &Path, prefer_quality: bool) -> (ModelSwitch, 
         return (ModelSwitch::PortBusy, Vec::new());
     }
     std::thread::sleep(Duration::from_millis(800));
-    let effective_quality = effective_verified_local_quality(root, prefer_quality);
-    let expected = model_name_for_quality(effective_quality);
+    let effective_quality = prefer_quality
+        && primary_26b_allowed_on_current_hardware()
+        && effective_verified_local_quality(root, true);
+    let expected = active_local_model_name(root, effective_quality);
     let mut started = ensure_servers(root, true, false, effective_quality);
     if wait_for_expected_llama(&expected, STRICT_LLAMA_READY_BUDGET, &mut started) {
-        (ModelSwitch::Switched, started)
+        return (
+            if prefer_quality && !effective_quality {
+                ModelSwitch::FallbackStarted
+            } else {
+                ModelSwitch::Switched
+            },
+            started,
+        );
+    }
+    terminate_servers(started);
+    if !effective_quality || !free_llama_port(root) {
+        return (ModelSwitch::FailedToStart, Vec::new());
+    }
+    std::thread::sleep(Duration::from_millis(800));
+    let fallback_expected = active_local_model_name(root, false);
+    let mut fallback = ensure_servers(root, true, false, false);
+    if wait_for_expected_llama(&fallback_expected, STRICT_LLAMA_READY_BUDGET, &mut fallback) {
+        (ModelSwitch::FallbackStarted, fallback)
     } else {
-        terminate_servers(started);
+        terminate_servers(fallback);
         (ModelSwitch::FailedToStart, Vec::new())
     }
 }
@@ -1333,15 +1382,18 @@ pub fn local_model_label(basename: &str) -> String {
 /// the exact verified GGUF through [`selected_llama_gguf`].
 #[must_use]
 pub fn active_local_model_name(root: &Path, prefer_quality: bool) -> String {
-    model_name_for_quality(effective_local_quality(root, prefer_quality))
-}
-
-fn model_name_for_quality(quality: bool) -> String {
-    if quality {
+    if effective_local_quality(root, prefer_quality) {
         GEMMA26_FILE.to_string()
     } else {
-        GEMMA_FILE.to_string()
+        fallback_model_name(root)
     }
+}
+
+fn fallback_model_name(root: &Path) -> String {
+    fallback_llama_gguf(&root.join("llama.cpp"))
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| GEMMA_FILE.to_string())
 }
 
 /// Absolute path the optional 26B primary GGUF lives at (whether or not it
@@ -1409,7 +1461,7 @@ fn repair_managed_model_state_for_quality(
     let model = if quality {
         GEMMA26_FILE.to_string()
     } else {
-        GEMMA_FILE.to_string()
+        fallback_model_name(root)
     };
     let vision_capable = managed_model_vision_capable(root, quality);
     let local_vision = cfg.ai_local_vision && vision_capable;
@@ -1435,14 +1487,14 @@ fn repair_managed_model_state_for_quality(
     changed
 }
 
-/// True when the base 12B fallback is downloaded + complete (size matches the pin).
-/// This is the MINIMUM for local AI to answer; `quality_model_present` is the
-/// optional 26B-A4B on top. Mirrors `quality_model_present`; used by the components
-/// readiness API (a truncated file reads as absent, so the user is re-offered
-/// the download).
+/// True when either the current 12B fallback or the legacy 4B fallback is
+/// complete. The latter remains launchable only to preserve an existing install
+/// until the user runs the new installer.
 #[must_use]
 pub fn base_model_present(root: &Path) -> bool {
-    file_len(&root.join("llama.cpp").join(GEMMA_FILE)) == GEMMA_SIZE
+    let llama_dir = root.join("llama.cpp");
+    file_has_expected_size(&llama_dir.join(GEMMA_FILE), GEMMA_SIZE)
+        || file_has_expected_size(&llama_dir.join(LEGACY_GEMMA_FILE), LEGACY_GEMMA_SIZE)
 }
 
 /// The conventional GigaAM model directory under the local-AI root
@@ -1503,8 +1555,13 @@ pub fn local_model_resource_warning(root: &Path, base_url: &str, model_id: &str)
             "[!] Gemma 12B QAT fallback: {:.1} GiB на диске. Матрица 8 ГБ VRAM / 16 ГБ RAM подтверждена владельцем. Память для vision: неизвестно.",
             GEMMA_SIZE as f64 / GIB as f64
         )
+    } else if lower.contains("e4b") || lower.contains("4b") {
+        format!(
+            "[!] Legacy Gemma 4B: {:.1} GiB на диске. Память для vision: неизвестно.",
+            LEGACY_GEMMA_SIZE as f64 / GIB as f64
+        )
     } else if model_id.trim().is_empty() && base_model_present(root) {
-        local_model_resource_warning(root, base_url, GEMMA_FILE)
+        local_model_resource_warning(root, base_url, &fallback_model_name(root))
     } else {
         "[!] Требования к памяти выбранной локальной модели неизвестны.".to_string()
     }
@@ -1519,7 +1576,7 @@ fn selected_llama_gguf(llama_dir: &Path, prefer_quality: bool) -> PathBuf {
     if !prefer_quality {
         // The RAM-safe fallback never needs the optional primary, so do not
         // stream 10.5 GB merely to start the 12B server.
-        return llama_dir.join(GEMMA_FILE);
+        return fallback_llama_gguf(llama_dir);
     }
     // Selection is a worker-only launch boundary. The exact pinned hash is
     // rechecked here (or served from the matching metadata cache), never from
@@ -1527,6 +1584,22 @@ fn selected_llama_gguf(llama_dir: &Path, prefer_quality: bool) -> PathBuf {
     let present =
         cached_pinned_file_matches(&llama_dir.join(GEMMA26_FILE), GEMMA26_SIZE, GEMMA26_SHA256);
     pick_llama_gguf(llama_dir, prefer_quality, present)
+}
+
+/// Prefer the current 12B fallback, but keep the previous 4B artifact
+/// launchable during an in-place upgrade that has not downloaded 12B yet.
+fn fallback_llama_gguf(llama_dir: &Path) -> PathBuf {
+    let current = llama_dir.join(GEMMA_FILE);
+    if file_has_expected_size(&current, GEMMA_SIZE) {
+        current
+    } else {
+        let legacy = llama_dir.join(LEGACY_GEMMA_FILE);
+        if file_has_expected_size(&legacy, LEGACY_GEMMA_SIZE) {
+            legacy
+        } else {
+            current
+        }
+    }
 }
 
 /// Pure model-choice rule (no I/O): 26B only when wanted and present.
@@ -1545,12 +1618,16 @@ fn pick_llama_gguf(llama_dir: &Path, prefer_quality: bool, quality_present: bool
 /// the caller flips `ai_local_quality` and restarts so the new GGUF loads.
 ///
 /// # Errors
-/// Network/disk failure, cancellation, or a SHA-256 mismatch after download.
+/// Hardware outside the confirmed matrix, network/disk failure, cancellation,
+/// or a SHA-256 mismatch after download.
 pub fn download_quality_model(
     root: &Path,
     cancel: &AtomicBool,
     on: &dyn Fn(Progress),
 ) -> Result<()> {
+    if !primary_26b_allowed_on_current_hardware() {
+        bail!("Gemma 26B-A4B requires a confirmed VRAM/RAM hardware profile");
+    }
     let llama_dir = root.join("llama.cpp");
     std::fs::create_dir_all(&llama_dir)
         .with_context(|| format!("create llama dir {}", llama_dir.display()))?;
@@ -1639,7 +1716,7 @@ fn managed_model_vision_capable(root: &Path, quality: bool) -> bool {
         return false;
     }
     let llama_dir = root.join("llama.cpp");
-    mmproj_for_model(&llama_dir, &llama_dir.join(GEMMA_FILE)).is_some()
+    mmproj_for_model(&llama_dir, &fallback_llama_gguf(&llama_dir)).is_some()
 }
 
 /// True when F8's configured route resolves back to Suflyor's managed text

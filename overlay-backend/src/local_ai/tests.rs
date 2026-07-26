@@ -133,6 +133,34 @@ fn persisted_primary_falls_back_to_12b_when_missing() {
 }
 
 #[test]
+fn legacy_4b_install_survives_upgrade_until_12b_is_installed() {
+    let tmp = tempfile::tempdir().unwrap();
+    let llama_dir = tmp.path().join("llama.cpp");
+    std::fs::create_dir_all(&llama_dir).unwrap();
+    make_complete(&llama_dir.join(LEGACY_GEMMA_FILE), LEGACY_GEMMA_SIZE);
+
+    assert!(base_model_present(tmp.path()));
+    assert_eq!(
+        active_local_model_name(tmp.path(), false),
+        LEGACY_GEMMA_FILE
+    );
+    assert_eq!(active_local_model_name(tmp.path(), true), LEGACY_GEMMA_FILE);
+
+    let mut cfg = crate::config::Config {
+        ai_local_base_url: "http://localhost:8080/v1".to_string(),
+        ai_local_model: GEMMA26_FILE.to_string(),
+        ai_local_prep_model: "stale-prep".to_string(),
+        ai_local_quality: true,
+        ..Default::default()
+    };
+    assert!(repair_managed_model_state(&mut cfg, tmp.path()));
+    assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);
+    assert!(!cfg.ai_local_quality);
+    assert_eq!(cfg.ai_local_model, LEGACY_GEMMA_FILE);
+    assert!(cfg.ai_local_prep_model.is_empty());
+}
+
+#[test]
 fn selecting_local_provider_repairs_managed_state_before_prep_requests() {
     let tmp = tempfile::tempdir().unwrap();
     let mut cfg = crate::config::Config {
@@ -230,6 +258,15 @@ fn owner_hardware_matrix_is_exact() {
 }
 
 #[test]
+fn only_confirmed_profiles_allow_manual_primary_selection() {
+    assert!(!primary_26b_allowed(HardwareModelProfile::Unknown));
+    assert!(!primary_26b_allowed(HardwareModelProfile::Fallback12B));
+    assert!(primary_26b_allowed(HardwareModelProfile::Primary26Vram8));
+    assert!(primary_26b_allowed(HardwareModelProfile::Primary26Vram12));
+    assert!(primary_26b_allowed(HardwareModelProfile::Primary26Vram16));
+}
+
+#[test]
 fn vulkan_adapter_vram_uses_the_same_confirmed_matrix() {
     assert_eq!(
         select_non_nvidia_dedicated_vram_gib(&[(0x1002, 0, 8 * GIB)]),
@@ -283,8 +320,10 @@ fn vision_memory_warning_is_explicitly_unknown() {
     let root = Path::new("C:/root");
     let primary = local_model_resource_warning(root, LLAMA_BASE_URL, GEMMA26_FILE);
     let fallback = local_model_resource_warning(root, LLAMA_BASE_URL, GEMMA_FILE);
+    let legacy = local_model_resource_warning(root, LLAMA_BASE_URL, LEGACY_GEMMA_FILE);
     assert!(primary.contains("Память для vision: неизвестно"));
     assert!(fallback.contains("Память для vision: неизвестно"));
+    assert!(legacy.contains("Память для vision: неизвестно"));
 }
 
 #[test]

@@ -430,6 +430,9 @@ export component SettingsWindow inherits Window {
     // matrix during installation.
     in-out property <bool> ai-local-quality: false;
     in-out property <bool> quality-model-present: false;
+    // True only after Rust confirms the current VRAM/RAM pair is in the
+    // owner-approved 26B matrix. It defaults to false while discovery runs.
+    in-out property <bool> quality-selection-allowed: false;
     in-out property <bool> quality-downloading: false;
     in-out property <bool> model-switching: false; // server relaunch in flight
     in-out property <float> quality-progress: 0.0; // 0.0..1.0
@@ -2185,14 +2188,14 @@ export component SettingsWindow inherits Window {
                                         root.model-quality-changed(false);
                                     }
                                 }
-                                if root.quality-model-present : Button {
+                                if root.quality-model-present && root.quality-selection-allowed : Button {
                                     text: root.ai-local-quality ? @tr("[on] Primary (26B-A4B)") : @tr("Primary (26B-A4B)");
                                     enabled: root.managed-local-server && !root.ai-local-quality && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
                                     clicked => {
                                         root.model-quality-changed(true);
                                     }
                                 }
-                                if !root.quality-model-present : Button {
+                                if !root.quality-model-present && root.quality-selection-allowed : Button {
                                     text: root.quality-downloading ? @tr("Downloading…") : @tr("Download primary model (9.8 GiB)");
                                     enabled: root.managed-local-server && !root.quality-downloading && !root.local-ai-installing;
                                     clicked => {

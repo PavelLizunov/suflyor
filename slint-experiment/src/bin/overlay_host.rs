@@ -1149,8 +1149,15 @@ fn main() -> Result<(), slint::PlatformError> {
                     let (outcome, started) =
                         overlay_backend::local_ai::restart_llama_server(&root, prefer_quality);
                     drop(guard);
-                    if outcome == overlay_backend::local_ai::ModelSwitch::Switched {
+                    if matches!(
+                        outcome,
+                        overlay_backend::local_ai::ModelSwitch::Switched
+                            | overlay_backend::local_ai::ModelSwitch::FallbackStarted
+                    ) {
                         let mut c = cfg_w.write();
+                        if outcome == overlay_backend::local_ai::ModelSwitch::FallbackStarted {
+                            c.ai_local_quality = false;
+                        }
                         if overlay_backend::local_ai::repair_managed_model_state_after_verification(
                             &mut c, &root,
                         ) {
@@ -1160,6 +1167,13 @@ fn main() -> Result<(), slint::PlatformError> {
                                 );
                             }
                         }
+                        let label = active_stack_label(&c);
+                        let overlay_for_refresh = overlay_w.clone();
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(o) = overlay_for_refresh.upgrade() {
+                                o.set_active_stack(SharedString::from(label));
+                            }
+                        });
                     }
                     if !started.is_empty() {
                         state_w
@@ -1258,7 +1272,8 @@ fn main() -> Result<(), slint::PlatformError> {
                                         );
                                     let attempt_now = std::time::Instant::now();
                                     match outcome {
-                                        overlay_backend::local_ai::ModelSwitch::Switched => {
+                                        overlay_backend::local_ai::ModelSwitch::Switched
+                                        | overlay_backend::local_ai::ModelSwitch::FallbackStarted => {
                                             watchdog.note_attempt(attempt_now, true);
                                             {
                                                 let mut s = state_w
@@ -1279,6 +1294,11 @@ fn main() -> Result<(), slint::PlatformError> {
                                             // so the readout shows the real model.
                                             let label = {
                                                 let mut c = cfg_w.write();
+                                                if outcome
+                                                    == overlay_backend::local_ai::ModelSwitch::FallbackStarted
+                                                {
+                                                    c.ai_local_quality = false;
+                                                }
                                                 overlay_backend::local_ai::repair_managed_model_state_after_verification(
                                                     &mut c,
                                                     &root,
@@ -1324,6 +1344,13 @@ fn main() -> Result<(), slint::PlatformError> {
                                             overlay_backend::local_ai::terminate_servers(started);
                                             diag!(
                                                 "local AI selected primary file unavailable"
+                                            );
+                                        }
+                                        overlay_backend::local_ai::ModelSwitch::HardwareUnsupported => {
+                                            watchdog.note_attempt(attempt_now, false);
+                                            overlay_backend::local_ai::terminate_servers(started);
+                                            diag!(
+                                                "local AI primary is outside the confirmed hardware matrix"
                                             );
                                         }
                                         overlay_backend::local_ai::ModelSwitch::FailedToStart => {
