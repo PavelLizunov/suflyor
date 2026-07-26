@@ -194,6 +194,13 @@ pub(crate) fn wire_local_ai(
                                 ));
                                 w.set_managed_local_server(true);
                                 w.set_ai_local_quality(quality);
+                                // The Settings window is reused. Replace a prior
+                                // custom-server list so its selected model cannot
+                                // disagree with the model this reinstall launched.
+                                w.set_ai_local_models(ModelRc::new(VecModel::from(vec![
+                                    SharedString::from(model.clone()),
+                                ])));
+                                w.set_ai_local_model_index(0);
                                 w.set_quality_model_present(quality_present);
                                 {
                                     let c = cfg_done.read();
