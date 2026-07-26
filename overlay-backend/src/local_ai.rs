@@ -1589,16 +1589,20 @@ fn selected_llama_gguf(llama_dir: &Path, prefer_quality: bool) -> PathBuf {
 /// Prefer the current 12B fallback, but keep the previous 4B artifact
 /// launchable during an in-place upgrade that has not downloaded 12B yet.
 fn fallback_llama_gguf(llama_dir: &Path) -> PathBuf {
+    complete_fallback_llama_gguf(llama_dir).unwrap_or_else(|| llama_dir.join(GEMMA_FILE))
+}
+
+/// Complete fallback GGUF available for a launch-time model-load check. The
+/// current 12B is preferred, while a complete legacy 4B remains supported until
+/// the user installs 12B. `None` means a binary-only verification is the best
+/// safe check available.
+fn complete_fallback_llama_gguf(llama_dir: &Path) -> Option<PathBuf> {
     let current = llama_dir.join(GEMMA_FILE);
     if file_has_expected_size(&current, GEMMA_SIZE) {
-        current
+        Some(current)
     } else {
         let legacy = llama_dir.join(LEGACY_GEMMA_FILE);
-        if file_has_expected_size(&legacy, LEGACY_GEMMA_SIZE) {
-            legacy
-        } else {
-            current
-        }
+        file_has_expected_size(&legacy, LEGACY_GEMMA_SIZE).then_some(legacy)
     }
 }
 
@@ -1931,10 +1935,11 @@ pub fn update_llama_engine(
     })
 }
 
-/// Launch a staged engine on a scratch port with the smallest installed model
+/// Launch a staged engine on a scratch port with the installed fallback model
 /// and wait for `/v1/models`. Proves binary + DLL + CUDA + model-load all work
-/// (the regression class that would brick local AI). Falls back to a `--version`
-/// integrity check when no model is on disk yet. Always reaps the test server.
+/// (the regression class that would brick local AI). A legacy 4B-only install
+/// must exercise that model too; fall back to a `--version` integrity check only
+/// when neither supported fallback is complete. Always reaps the test server.
 fn verify_engine_runs(
     staged_exe: &Path,
     llama_dir: &Path,
@@ -1945,13 +1950,11 @@ fn verify_engine_runs(
         return false;
     }
     let root = llama_dir.parent().unwrap_or(llama_dir);
-    // Always-present 12B fallback, text-only. Skip the
-    // projector: we're verifying the BINARY, not vision, and a text-only load is
-    // lighter on VRAM/time.
-    let model = llama_dir
-        .join(GEMMA_FILE)
-        .exists()
-        .then(|| llama_dir.join(GEMMA_FILE));
+    // Skip the projector: we're verifying the BINARY, not vision, and a
+    // text-only load is lighter on VRAM/time. Prefer the current 12B fallback,
+    // but retain the legacy 4B load check for an in-place upgrade where 12B has
+    // not been installed yet.
+    let model = complete_fallback_llama_gguf(llama_dir);
     let Some(model) = model else {
         // No weights yet — at least prove the image + its DLLs load.
         return run_capture(&staged_exe.to_string_lossy(), &["--version"])

@@ -161,6 +161,23 @@ fn legacy_4b_install_survives_upgrade_until_12b_is_installed() {
 }
 
 #[test]
+fn engine_verification_uses_complete_legacy_4b_until_12b_exists() {
+    let tmp = tempfile::tempdir().unwrap();
+    let llama_dir = tmp.path().join("llama.cpp");
+    std::fs::create_dir_all(&llama_dir).unwrap();
+
+    assert!(complete_fallback_llama_gguf(&llama_dir).is_none());
+
+    let legacy = llama_dir.join(LEGACY_GEMMA_FILE);
+    make_complete(&legacy, LEGACY_GEMMA_SIZE);
+    assert_eq!(complete_fallback_llama_gguf(&llama_dir), Some(legacy));
+
+    let current = llama_dir.join(GEMMA_FILE);
+    make_complete(&current, GEMMA_SIZE);
+    assert_eq!(complete_fallback_llama_gguf(&llama_dir), Some(current));
+}
+
+#[test]
 fn selecting_local_provider_repairs_managed_state_before_prep_requests() {
     let tmp = tempfile::tempdir().unwrap();
     let mut cfg = crate::config::Config {

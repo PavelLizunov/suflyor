@@ -242,6 +242,7 @@ pub(crate) fn wire_local_ai(
                         // down until the next app restart.
                         let mut restored_servers = Vec::new();
                         let mut restored_label = None;
+                        let mut restored_settings = None;
                         if restore_previous {
                             let (outcome, restored) =
                                 overlay_backend::local_ai::restart_llama_server(
@@ -271,6 +272,13 @@ pub(crate) fn wire_local_ai(
                                     }
                                 }
                                 restored_label = Some(active_stack_label(&c));
+                                restored_settings = Some((
+                                    c.ai_local_quality,
+                                    c.ai_local_base_url.clone(),
+                                    c.ai_local_model.clone(),
+                                    c.ai_local_vision,
+                                    c.vision_provider.clone(),
+                                ));
                             } else {
                                 overlay_backend::local_ai::terminate_servers(restored);
                             }
@@ -303,6 +311,39 @@ pub(crate) fn wire_local_ai(
                             if let Some(w) = weak_err.upgrade() {
                                 w.set_local_ai_installing(false);
                                 w.set_local_ai_status(SharedString::from(msg));
+                                if let Some((
+                                    quality,
+                                    base_url,
+                                    model,
+                                    local_vision,
+                                    vision_provider,
+                                )) = restored_settings
+                                {
+                                    // A primary restore can downgrade to 12B.
+                                    // Refresh the reused Settings window from
+                                    // the persisted effective state so its
+                                    // active profile, vision controls, model
+                                    // list, and resource warning agree with
+                                    // the server that is now running.
+                                    w.set_ai_local_quality(quality);
+                                    w.set_ai_local_models(ModelRc::new(VecModel::from(vec![
+                                        SharedString::from(model.clone()),
+                                    ])));
+                                    w.set_ai_local_model_index(0);
+                                    w.set_ai_local_vision(local_vision);
+                                    w.set_vision_provider_index(match vision_provider.as_str() {
+                                        "off" => 0,
+                                        "same" => 1,
+                                        "local" => 3,
+                                        _ => 2,
+                                    });
+                                    refresh_local_model_resource_warning(
+                                        &w,
+                                        opts.root.clone(),
+                                        base_url,
+                                        model,
+                                    );
+                                }
                             }
                             if let (Some(label), Some(o)) =
                                 (restored_label, overlay_err.upgrade())
