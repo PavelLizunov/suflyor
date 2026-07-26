@@ -160,6 +160,8 @@ pub(crate) fn wire_local_ai(
                         let gigaam_dir = res.stt_gigaam_dir.clone();
                         let on_gpu = res.on_gpu;
                         let quality = res.ai_local_quality;
+                        let quality_present =
+                            overlay_backend::local_ai::quality_model_present(&opts.root);
                         {
                             let mut c = cfg_t.write();
                             overlay_backend::local_ai::apply_result(&mut c, &res);
@@ -189,11 +191,17 @@ pub(crate) fn wire_local_ai(
                                 ));
                                 w.set_managed_local_server(true);
                                 w.set_ai_local_quality(quality);
-                                w.set_quality_model_present(
-                                    overlay_backend::local_ai::quality_model_present(
-                                        &overlay_backend::local_ai::default_root(),
-                                    ),
-                                );
+                                w.set_quality_model_present(quality_present);
+                                {
+                                    let c = cfg_done.read();
+                                    w.set_ai_local_vision(c.ai_local_vision);
+                                    w.set_vision_provider_index(match c.vision_provider.as_str() {
+                                        "off" => 0,
+                                        "same" => 1,
+                                        "local" => 3,
+                                        _ => 2,
+                                    });
+                                }
                                 w.set_local_model_resource_warning(SharedString::from(
                                     overlay_backend::local_ai::local_model_resource_warning(
                                         &overlay_backend::local_ai::default_root(),
@@ -397,9 +405,7 @@ pub(crate) fn wire_local_ai(
                 if switched {
                     let mut c = cfg_t.write();
                     c.ai_local_quality = want_quality;
-                    c.ai_local_model =
-                        overlay_backend::local_ai::active_local_model_name(&root, want_quality);
-                    c.ai_local_prep_model.clear();
+                    overlay_backend::local_ai::repair_managed_model_state(&mut c, &root);
                     if let Err(e) = overlay_backend::config::save(&c) {
                         eprintln!("[overlay-host] quality switch save failed: {e:#}");
                     }
@@ -433,6 +439,13 @@ pub(crate) fn wire_local_ai(
                         }));
                         let c = cfg_done.read();
                         w.set_ai_local_quality(c.ai_local_quality);
+                        w.set_ai_local_vision(c.ai_local_vision);
+                        w.set_vision_provider_index(match c.vision_provider.as_str() {
+                            "off" => 0,
+                            "same" => 1,
+                            "local" => 3,
+                            _ => 2,
+                        });
                         w.set_local_model_resource_warning(SharedString::from(
                             overlay_backend::local_ai::local_model_resource_warning(
                                 &root,
@@ -612,7 +625,7 @@ pub(crate) fn wire_local_ai(
                 // On success, if the 12B is active, relaunch :8080 with the
                 // projector. Hold the lifecycle lock ONLY for the restart so the
                 // long download never blocks the watchdog. RAII release.
-                let restarted = if res.is_ok() && cfg_t.read().ai_local_quality {
+                let restarted = if res.is_ok() && !cfg_t.read().ai_local_quality {
                     let lifecycle_lock = {
                         let s = state_t.lock().unwrap_or_else(|p| p.into_inner());
                         s.local_ai_lock.clone()
@@ -625,8 +638,8 @@ pub(crate) fn wire_local_ai(
                     let (outcome, started) =
                         overlay_backend::local_ai::switch_local_model(
                             &root,
-                            true,
-                            true,
+                            false,
+                            false,
                             want_whisper,
                         );
                     let ok = outcome == overlay_backend::local_ai::ModelSwitch::Switched;

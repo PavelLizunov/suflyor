@@ -7,9 +7,10 @@
 //! the install buttons already use, so the hub can never disagree with what the
 //! app actually sees as installed.
 //!
-//! Cheap: stat-only (no model loads), safe to call on Settings open / at
-//! startup. The labelling logic is split into small pure helpers so it is
-//! unit-testable without materialising multi-GB model files.
+//! No model loads; the pinned 26B primary does receive an integrity hash check
+//! so a same-size replacement is not advertised as installed. The labelling
+//! logic is split into small pure helpers so it is unit-testable without
+//! materialising multi-GB model files.
 
 use crate::config::Config;
 

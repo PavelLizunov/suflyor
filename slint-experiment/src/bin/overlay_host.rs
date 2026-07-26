@@ -1267,17 +1267,10 @@ fn main() -> Result<(), slint::PlatformError> {
                                             // so the readout shows the real model.
                                             let label = {
                                                 let mut c = cfg_w.write();
-                                                c.ai_local_quality =
-                                                    overlay_backend::local_ai::effective_local_quality(
-                                                        &root,
-                                                        prefer_quality,
-                                                    );
-                                                c.ai_local_model =
-                                                    overlay_backend::local_ai::active_local_model_name(
-                                                        &root,
-                                                        c.ai_local_quality,
-                                                    );
-                                                c.ai_local_prep_model.clear();
+                                                overlay_backend::local_ai::repair_managed_model_state(
+                                                    &mut c,
+                                                    &root,
+                                                );
                                                 if let Err(e) =
                                                     overlay_backend::config::save(&c)
                                                 {

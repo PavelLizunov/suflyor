@@ -226,6 +226,9 @@ pub struct LocalAiResult {
     /// `true` when the owner-approved 26B primary actually started; `false`
     /// when the installed/serving model is the 12B fallback.
     pub ai_local_quality: bool,
+    /// Whether the model that actually started also has its matching projector
+    /// attached. The 26B primary is text-only in this candidate.
+    pub ai_local_vision: bool,
     pub hardware_profile: HardwareModelProfile,
     pub stt_gigaam_dir: String,
     pub on_gpu: bool,
@@ -365,13 +368,16 @@ pub fn apply_result(cfg: &mut crate::config::Config, res: &LocalAiResult) {
     cfg.stt_whisper_url = WHISPER_BASE_URL.to_string();
     cfg.stt_whisper_model = WHISPER_MODEL_ID.to_string();
     cfg.stt_gigaam_dir = res.stt_gigaam_dir.clone();
-    // Gemma 4 is multimodal; the installer fetches the vision projector and
-    // launches llama-server with --mmproj, so F8 screenshots run fully locally on
-    // the SAME server as text — verified working for the real F8 task
-    // (descriptive prompt, 1024 tokens): the model reads the screen and answers
-    // well. So switch F8 vision to local too — fully local, no cloud egress.
-    cfg.ai_local_vision = true;
-    cfg.vision_provider = "same".to_string();
+    // Only the 12B fallback has a pinned projector. Never route F8 to the
+    // text-only 26B server. Preserve an explicitly configured cloud/separate
+    // vision endpoint; only a route that resolves back to managed :8080 is
+    // disabled.
+    cfg.ai_local_vision = !res.ai_local_quality && res.ai_local_vision;
+    if cfg.ai_local_vision {
+        cfg.vision_provider = "same".to_string();
+    } else if vision_routes_to_managed_llama(cfg) {
+        cfg.vision_provider = "off".to_string();
+    }
 }
 
 /// Run the full install pipeline. BLOCKING — call from a worker thread. Reports
@@ -783,6 +789,9 @@ pub fn install(
             .context("whisper-server did not become ready")?;
     }
 
+    let ai_local_vision = !opts.skip_llama
+        && !prefer_quality
+        && mmproj_for_model(&llama_dir, &llama_dir.join(GEMMA_FILE)).is_some();
     Ok(LocalAiResult {
         ai_local_model: if prefer_quality {
             GEMMA26_FILE.to_string()
@@ -790,6 +799,7 @@ pub fn install(
             GEMMA_FILE.to_string()
         },
         ai_local_quality: prefer_quality,
+        ai_local_vision,
         hardware_profile,
         // Only advertise the GigaAM dir if it actually completed — otherwise STT
         // stays cleanly on Whisper (the default) instead of pointing at a partial
@@ -1242,13 +1252,12 @@ pub fn quality_gguf_path(root: &Path) -> PathBuf {
     root.join("llama.cpp").join(GEMMA26_FILE)
 }
 
-/// True when the 26B model is downloaded AND complete (size matches the pin) —
-/// the cheap presence check the UI uses to show "download" vs "switch". A
-/// truncated/partial file reads as absent so the user is offered the download
-/// again (the launch path also falls back to 12B on a bad file).
+/// True when the 26B model matches both the pinned byte length and SHA-256.
+/// Used by persistence/UI as well as launch selection, so a same-size replaced
+/// file is never advertised as the primary.
 #[must_use]
 pub fn quality_model_present(root: &Path) -> bool {
-    file_len(&quality_gguf_path(root)) == GEMMA26_SIZE
+    pinned_file_matches(&quality_gguf_path(root), GEMMA26_SIZE, GEMMA26_SHA256)
 }
 
 /// Resolve a persisted primary preference to the model that can actually be
@@ -1268,13 +1277,32 @@ pub fn repair_managed_model_state(cfg: &mut crate::config::Config, root: &Path) 
         return false;
     }
     let quality = effective_local_quality(root, cfg.ai_local_quality);
-    let model = active_local_model_name(root, quality);
-    let changed = cfg.ai_local_quality != quality
+    let model = if quality {
+        GEMMA26_FILE.to_string()
+    } else {
+        GEMMA_FILE.to_string()
+    };
+    let vision_capable = managed_model_vision_capable(root, quality);
+    let local_vision = cfg.ai_local_vision && vision_capable;
+    let vision_provider = if !vision_capable && vision_routes_to_managed_llama(cfg) {
+        "off".to_string()
+    } else {
+        cfg.vision_provider.clone()
+    };
+    let changed = cfg.ai_local_base_url != LLAMA_BASE_URL
+        || cfg.ai_local_quality != quality
         || cfg.ai_local_model != model
-        || !cfg.ai_local_prep_model.is_empty();
+        || !cfg.ai_local_prep_model.is_empty()
+        || cfg.ai_local_vision != local_vision
+        || cfg.vision_provider != vision_provider;
+    // The managed server is launched on 127.0.0.1. Canonicalise legacy
+    // localhost/[::1] spellings so persisted requests use the same listener.
+    cfg.ai_local_base_url = LLAMA_BASE_URL.to_string();
     cfg.ai_local_quality = quality;
     cfg.ai_local_model = model;
     cfg.ai_local_prep_model.clear();
+    cfg.ai_local_vision = local_vision;
+    cfg.vision_provider = vision_provider;
     changed
 }
 
@@ -1359,7 +1387,9 @@ pub fn local_model_resource_warning(root: &Path, base_url: &str, model_id: &str)
 /// check then defers the choice to the pure [`pick_llama_gguf`] (unit-tested
 /// without materialising a 6 GB file).
 fn selected_llama_gguf(llama_dir: &Path, prefer_quality: bool) -> PathBuf {
-    let present = file_len(&llama_dir.join(GEMMA26_FILE)) == GEMMA26_SIZE;
+    // Selection is a launch boundary, so the pinned hash is rechecked even
+    // when a prior download already verified the file.
+    let present = pinned_file_matches(&llama_dir.join(GEMMA26_FILE), GEMMA26_SIZE, GEMMA26_SHA256);
     pick_llama_gguf(llama_dir, prefer_quality, present)
 }
 
@@ -1462,6 +1492,35 @@ fn mmproj_for_model(llama_dir: &Path, gguf: &Path) -> Option<PathBuf> {
         (file_len(&proj) == MMPROJ_SIZE).then_some(proj)
     } else {
         None
+    }
+}
+
+/// Whether the effective managed profile can accept screenshots on the server
+/// Suflyor launches. The 26B primary has no pinned projector in this candidate.
+fn managed_model_vision_capable(root: &Path, quality: bool) -> bool {
+    if quality || !base_model_present(root) {
+        return false;
+    }
+    let llama_dir = root.join("llama.cpp");
+    mmproj_for_model(&llama_dir, &llama_dir.join(GEMMA_FILE)).is_some()
+}
+
+/// True when F8's configured route resolves back to Suflyor's managed text
+/// server. Besides `same`, a `local` vision provider with an empty (or explicit
+/// managed) URL inherits `ai_local_base_url` and is the same unsafe route for a
+/// text-only profile.
+fn vision_routes_to_managed_llama(cfg: &crate::config::Config) -> bool {
+    match cfg.vision_provider.as_str() {
+        "same" => true,
+        "local" => {
+            let base_url = if cfg.vision_local_base_url.trim().is_empty() {
+                &cfg.ai_local_base_url
+            } else {
+                &cfg.vision_local_base_url
+            };
+            is_managed_llama_endpoint(base_url)
+        }
+        _ => false,
     }
 }
 
@@ -2508,6 +2567,13 @@ fn preflight() -> Result<()> {
 
 fn file_len(p: &Path) -> u64 {
     std::fs::metadata(p).map(|m| m.len()).unwrap_or(0)
+}
+
+/// Exact pinned-file presence check. Size is only a fast rejection; a
+/// same-sized corrupted or replaced model must never be advertised or launched.
+fn pinned_file_matches(path: &Path, expected_size: u64, expected_sha256: &str) -> bool {
+    file_len(path) == expected_size
+        && sha256_hex_of(path).is_some_and(|hash| hash.eq_ignore_ascii_case(expected_sha256))
 }
 
 /// Bail with the cancel sentinel if the user requested cancellation.

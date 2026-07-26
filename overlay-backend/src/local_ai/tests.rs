@@ -1,5 +1,5 @@
 //! Unit tests for `local_ai.rs`, split out to keep the module file lean.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use super::*;
 
 fn asset(name: &str) -> GhAsset {
@@ -15,6 +15,40 @@ fn make_complete(path: &Path, size: u64) {
     file.set_len(size).unwrap();
 }
 
+fn local_result(quality: bool, vision: bool) -> LocalAiResult {
+    LocalAiResult {
+        ai_local_model: if quality {
+            GEMMA26_FILE.to_string()
+        } else {
+            GEMMA_FILE.to_string()
+        },
+        ai_local_quality: quality,
+        ai_local_vision: vision,
+        hardware_profile: if quality {
+            HardwareModelProfile::Primary26Vram8
+        } else {
+            HardwareModelProfile::Fallback12B
+        },
+        stt_gigaam_dir: "C:\\root\\gigaam-v3".to_string(),
+        on_gpu: true,
+        cuda_version: Some("13.3".to_string()),
+        servers: Vec::new(),
+    }
+}
+
+#[test]
+fn owner_primary_coordinates_and_sha_are_exact() {
+    assert_eq!(
+        GEMMA26_URL,
+        "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf"
+    );
+    assert_eq!(GEMMA26_FILE, "gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf");
+    assert_eq!(
+        GEMMA26_SHA256,
+        "2a1d26dfe6ea00a467940a5728316af6edb366bbdba950d65b85d232392fb658"
+    );
+}
+
 /// The 26B primary is chosen only when requested and complete; every other
 /// combination resolves to the always-installed 12B fallback.
 #[test]
@@ -28,11 +62,10 @@ fn pick_llama_gguf_prefers_26b_only_when_present_and_wanted() {
     assert_eq!(pick_llama_gguf(dir, false, false), fallback);
 }
 
-/// A truncated/partial 26B (smaller than the pinned size) must read as
-/// ABSENT so the user is re-offered the download and the launch path falls
-/// back to 12B instead of handing llama-server a corrupt file.
+/// Missing/truncated/oversized 26B files are absent without entering the hash
+/// path. Exact-size integrity is covered separately with a small fixture.
 #[test]
-fn quality_model_present_requires_exact_pinned_size() {
+fn quality_model_present_rejects_wrong_sizes() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     std::fs::create_dir_all(root.join("llama.cpp")).unwrap();
@@ -41,8 +74,18 @@ fn quality_model_present_requires_exact_pinned_size() {
     assert!(!quality_model_present(root), "truncated file → not present");
     make_complete(&quality_gguf_path(root), GEMMA26_SIZE + 1);
     assert!(!quality_model_present(root), "oversized file → not present");
-    make_complete(&quality_gguf_path(root), GEMMA26_SIZE);
-    assert!(quality_model_present(root), "exact pinned size → present");
+}
+
+#[test]
+fn pinned_presence_rejects_same_size_corruption() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("model.gguf");
+    const PRIMARY_SHA: &str = "986a1b7135f4986150aa5fa0028feeaa66cdaf3ed6a00a355dd86e042f7fb494";
+    std::fs::write(&path, b"primary").unwrap();
+    assert!(pinned_file_matches(&path, 7, PRIMARY_SHA));
+    std::fs::write(&path, b"corrupt").unwrap();
+    assert_eq!(file_len(&path), 7, "fixture must keep the same byte length");
+    assert!(!pinned_file_matches(&path, 7, PRIMARY_SHA));
 }
 
 #[test]
@@ -60,23 +103,23 @@ fn persisted_primary_falls_back_to_12b_when_missing() {
     assert_eq!(active_local_model_name(tmp.path(), false), GEMMA_FILE);
     assert_eq!(active_local_model_name(tmp.path(), true), GEMMA_FILE);
     assert!(!effective_local_quality(tmp.path(), true));
-    std::fs::create_dir_all(tmp.path().join("llama.cpp")).unwrap();
-    make_complete(&quality_gguf_path(tmp.path()), GEMMA26_SIZE);
-    assert!(effective_local_quality(tmp.path(), true));
-    assert_eq!(active_local_model_name(tmp.path(), true), GEMMA26_FILE);
 
-    std::fs::remove_file(quality_gguf_path(tmp.path())).unwrap();
     let mut cfg = crate::config::Config {
         ai_local_base_url: "http://[::1]:8080/v1".to_string(),
         ai_local_model: GEMMA26_FILE.to_string(),
         ai_local_prep_model: "stale-prep".to_string(),
         ai_local_quality: true,
+        ai_local_vision: true,
+        vision_provider: "same".to_string(),
         ..Default::default()
     };
     assert!(repair_managed_model_state(&mut cfg, tmp.path()));
+    assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);
     assert!(!cfg.ai_local_quality);
     assert_eq!(cfg.ai_local_model, GEMMA_FILE);
     assert!(cfg.ai_local_prep_model.is_empty());
+    assert!(!cfg.ai_local_vision);
+    assert_eq!(cfg.vision_provider, "off");
     assert!(!repair_managed_model_state(&mut cfg, tmp.path()));
 }
 
@@ -545,15 +588,7 @@ fn apply_result_sets_local_and_keeps_secrets() {
         vision_provider: "cloud".to_string(),
         ..Default::default()
     };
-    let res = LocalAiResult {
-        ai_local_model: GEMMA_FILE.to_string(),
-        ai_local_quality: false,
-        hardware_profile: HardwareModelProfile::Fallback12B,
-        stt_gigaam_dir: "C:\\root\\gigaam-v3".to_string(),
-        on_gpu: true,
-        cuda_version: Some("13.3".to_string()),
-        servers: Vec::new(),
-    };
+    let res = local_result(false, true);
     apply_result(&mut cfg, &res);
     assert_eq!(cfg.ai_provider, "local");
     assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);
@@ -570,6 +605,57 @@ fn apply_result_sets_local_and_keeps_secrets() {
     // local server).
     assert!(cfg.ai_local_vision);
     assert_eq!(cfg.vision_provider, "same");
+}
+
+#[test]
+fn apply_primary_never_routes_vision_to_text_only_server() {
+    let mut cloud_cfg = crate::config::Config {
+        ai_local_prep_model: "stale-prep-model".to_string(),
+        vision_provider: "cloud".to_string(),
+        ..Default::default()
+    };
+    apply_result(&mut cloud_cfg, &local_result(true, false));
+    assert_eq!(cloud_cfg.ai_local_model, GEMMA26_FILE);
+    assert!(cloud_cfg.ai_local_quality);
+    assert!(cloud_cfg.ai_local_prep_model.is_empty());
+    assert!(!cloud_cfg.ai_local_vision);
+    assert_eq!(
+        cloud_cfg.vision_provider, "cloud",
+        "an explicit separate/cloud vision route is preserved"
+    );
+
+    let mut stale_same_cfg = crate::config::Config {
+        vision_provider: "same".to_string(),
+        ..Default::default()
+    };
+    apply_result(
+        &mut stale_same_cfg,
+        &local_result(true, true), // inconsistent input must still stay text-only
+    );
+    assert!(!stale_same_cfg.ai_local_vision);
+    assert_eq!(
+        stale_same_cfg.vision_provider, "off",
+        "F8 must not send images to the text-only 26B endpoint"
+    );
+
+    let mut inherited_local_cfg = crate::config::Config {
+        vision_provider: "local".to_string(),
+        vision_local_base_url: String::new(),
+        ..Default::default()
+    };
+    apply_result(&mut inherited_local_cfg, &local_result(true, false));
+    assert_eq!(inherited_local_cfg.vision_provider, "off");
+
+    let mut separate_local_cfg = crate::config::Config {
+        vision_provider: "local".to_string(),
+        vision_local_base_url: "http://127.0.0.1:8082/v1".to_string(),
+        ..Default::default()
+    };
+    apply_result(&mut separate_local_cfg, &local_result(true, false));
+    assert_eq!(
+        separate_local_cfg.vision_provider, "local",
+        "an explicit separate local vision server is preserved"
+    );
 }
 
 // P1-2: swap_engine_binaries must install engine files from a NESTED staging
