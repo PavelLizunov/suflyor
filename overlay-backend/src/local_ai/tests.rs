@@ -2,6 +2,13 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use super::*;
 use std::process::{Child, Command};
+#[cfg(windows)]
+use std::{
+    io::{Read, Write},
+    net::TcpListener,
+    sync::mpsc,
+    thread,
+};
 
 fn asset(name: &str) -> GhAsset {
     GhAsset {
@@ -170,6 +177,28 @@ fn managed_primary_never_uses_a_stale_vision_flag() {
     assert!(repair_managed_model_state(&mut cfg, tmp.path()));
     assert!(!cfg.ai_local_vision);
     assert_eq!(cfg.vision_provider, "off");
+}
+
+/// Mirrors selecting "Same as text model above" after a managed text-only 26B
+/// is active. The UI callback persists that selection through this repair, so
+/// F8 remains disabled instead of being routed to a server without a projector.
+#[test]
+fn managed_primary_repairs_same_vision_provider_after_selection() {
+    let tmp = tempfile::tempdir().unwrap();
+    let llama_dir = tmp.path().join("llama.cpp");
+    std::fs::create_dir_all(&llama_dir).unwrap();
+    make_complete(&llama_dir.join(GEMMA26_FILE), GEMMA26_SIZE);
+    let mut cfg = crate::config::Config {
+        ai_local_base_url: LLAMA_BASE_URL.to_string(),
+        ai_local_model: GEMMA26_FILE.to_string(),
+        ai_local_quality: true,
+        vision_provider: "same".to_string(),
+        ..Default::default()
+    };
+
+    assert!(repair_managed_model_state(&mut cfg, tmp.path()));
+    assert_eq!(cfg.vision_provider, "off");
+    assert!(cfg.vision_endpoint().is_none());
 }
 
 #[test]
@@ -424,6 +453,89 @@ fn strict_readiness_rejects_http_errors_wrong_model_and_malformed_choices() {
     ));
 }
 
+#[cfg(windows)]
+fn spawn_stale_llama_server(
+    expected: &'static str,
+) -> (String, mpsc::Sender<()>, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
+    let (stop_tx, stop_rx) = mpsc::channel();
+    let server = thread::spawn(move || loop {
+        match listener.accept() {
+            Ok((mut stream, _)) => {
+                let mut request = [0_u8; 4096];
+                let read = stream.read(&mut request).unwrap_or(0);
+                let body = if request[..read].starts_with(b"GET /v1/models") {
+                    format!(r#"{{"data":[{{"id":"{expected}"}}]}}"#)
+                } else {
+                    r#"{"choices":[{"message":{"role":"assistant","content":"ok"}}]}"#.to_string()
+                };
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(response.as_bytes());
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                if stop_rx.recv_timeout(Duration::from_millis(10)).is_ok() {
+                    return;
+                }
+            }
+            Err(_) => return,
+        }
+    });
+    (base_url, stop_tx, server)
+}
+
+/// A stale listener may still advertise the requested model and answer a
+/// completion after the freshly launched server loses the bind race. Install
+/// readiness must reject that reply because its own child has already exited.
+#[cfg(windows)]
+#[test]
+fn strict_readiness_rejects_stale_server_after_new_child_exits() {
+    const EXPECTED: &str = "newly-launched-model";
+    let (base_url, stop, server) = spawn_stale_llama_server(EXPECTED);
+    let models_url = format!("{base_url}/models");
+    let models = curl_success_body(&["-f", "-sS", "--max-time", "3", &models_url]);
+    let completion_url = format!("{base_url}/chat/completions");
+    let completion = curl_success_body(&[
+        "-f",
+        "-sS",
+        "--max-time",
+        "3",
+        "-X",
+        "POST",
+        &completion_url,
+        "-H",
+        "Content-Type: application/json",
+        "-d",
+        r#"{"model":"newly-launched-model","messages":[{"role":"user","content":"hi"}],"max_tokens":1}"#,
+    ]);
+    assert!(expected_model_is_ready(
+        models.is_some(),
+        models.as_deref().unwrap_or_default(),
+        EXPECTED,
+        completion.is_some(),
+        completion.as_deref().unwrap_or_default(),
+    ));
+
+    let mut child = spawn_exiting_child();
+    let _ = child.wait();
+    let mut children = vec![child];
+    assert!(
+        !wait_for_expected_model_at(
+            &base_url,
+            EXPECTED,
+            Duration::from_secs(1),
+            &mut children[0]
+        ),
+        "a stale exact-model response must not verify an exited new child"
+    );
+    let _ = stop.send(());
+    server.join().unwrap();
+}
+
 fn spawn_long_lived_child() -> Child {
     #[cfg(windows)]
     let mut command = {
@@ -464,7 +576,7 @@ fn llama_readiness_ignores_an_exited_whisper_child() {
     let mut children = vec![llama, whisper];
 
     assert!(
-        launched_llama_alive(&mut children),
+        launched_llama_alive(&mut children[0]),
         "an exited optional Whisper child must not fail llama readiness"
     );
     terminate_servers(children);

@@ -800,11 +800,17 @@ pub fn install(
              включите облачный AI в Настройках → AI.";
         // P0.2: fail (or fall back) if the model never loads or can't generate —
         // don't report success on a wedged server.
-        let ready: Result<()> = (|| {
-            wait_ready(&format!("{LLAMA_BASE_URL}/models"), 120)?;
-            verify_llama_ready(on)?;
-            Ok(())
-        })();
+        // A stale listener can answer generic readiness while the child we just
+        // launched has already failed to bind. Require both that exact child to
+        // remain alive and that `/models` advertises the alias it was launched
+        // with before this install can persist its profile.
+        let ready: Result<()> = servers
+            .first_mut()
+            .is_some_and(|llama| wait_for_expected_llama(&alias, STRICT_LLAMA_READY_BUDGET, llama))
+            .then_some(())
+            .ok_or_else(|| {
+                anyhow!("the newly launched llama-server did not become ready with model {alias}")
+            });
         if let Err(e) = ready {
             // If a GPU launch cannot become ready, restore the always-installed
             // 12B fallback. A failed 26B first retries 12B with llama.cpp's
@@ -822,7 +828,12 @@ pub fn install(
                 // here (this block runs only when !skip_llama, and llama is pushed
                 // before whisper). Do NOT pop() — that would kill the whisper server
                 // (pushed last) and wedge its readiness wait below (CRITICAL fix).
-                let _ = stop_listener_on_port(LLAMA_PORT, &opts.root);
+                if !stop_listener_on_port(LLAMA_PORT, &opts.root) {
+                    return Err(anyhow!(
+                        "could not reclaim :8080 after the failed llama launch"
+                    ))
+                    .context(NOT_READY_RU);
+                }
                 if !servers.is_empty() {
                     // Reap the failed llama's handle (its process was already killed
                     // by the port-free above) so the Child isn't dropped unreaped
@@ -842,11 +853,13 @@ pub fn install(
                     llama_server_args(&gguf2_s, GEMMA_FILE, mmproj2.as_deref(), force_cpu);
                 let arg_refs: Vec<&str> = fallback_args.iter().map(String::as_str).collect();
                 servers.push(launch_hidden(&exe2, &arg_refs)?);
-                let fallback_ready: Result<()> = (|| {
-                    wait_ready(&format!("{LLAMA_BASE_URL}/models"), 120)?;
-                    verify_llama_ready(on)?;
-                    Ok(())
-                })();
+                let fallback_ready: Result<()> = servers
+                    .last_mut()
+                    .is_some_and(|llama| {
+                        wait_for_expected_llama(GEMMA_FILE, STRICT_LLAMA_READY_BUDGET, llama)
+                    })
+                    .then_some(())
+                    .ok_or_else(|| anyhow!("the newly launched 12B fallback did not become ready"));
                 if let Err(fallback_error) = fallback_ready {
                     if force_cpu {
                         return Err(fallback_error).context(NOT_READY_RU);
@@ -857,7 +870,12 @@ pub fn install(
                     on(Progress::Step(
                         "GPU fallback did not start — retrying Gemma 12B on CPU".to_string(),
                     ));
-                    let _ = stop_listener_on_port(LLAMA_PORT, &opts.root);
+                    if !stop_listener_on_port(LLAMA_PORT, &opts.root) {
+                        return Err(anyhow!(
+                            "could not reclaim :8080 after the failed 12B GPU launch"
+                        ))
+                        .context(NOT_READY_RU);
+                    }
                     if let Some(mut dead) = servers.pop() {
                         let _ = dead.wait();
                     }
@@ -867,8 +885,14 @@ pub fn install(
                         llama_server_args(&gguf2_s, GEMMA_FILE, mmproj2.as_deref(), true);
                     let cpu_refs: Vec<&str> = cpu_args.iter().map(String::as_str).collect();
                     servers.push(launch_hidden(&exe2, &cpu_refs)?);
-                    wait_ready(&format!("{LLAMA_BASE_URL}/models"), 120).context(NOT_READY_RU)?;
-                    verify_llama_ready(on).context(NOT_READY_RU)?;
+                    if !servers.last_mut().is_some_and(|llama| {
+                        wait_for_expected_llama(GEMMA_FILE, STRICT_LLAMA_READY_BUDGET, llama)
+                    }) {
+                        return Err(anyhow!(
+                            "the newly launched 12B CPU fallback did not become ready"
+                        ))
+                        .context(NOT_READY_RU);
+                    }
                 }
                 prefer_quality = false;
                 if force_cpu {
@@ -983,19 +1007,51 @@ fn curl_success_body(args: &[&str]) -> Option<String> {
     })
 }
 
-/// `switch_local_model` frees :8080 before calling [`ensure_servers`], whose
-/// launch order is llama first and Whisper second. Readiness is therefore about
-/// that first llama child alone: an unrelated Whisper failure must not reject a
-/// healthy model switch or poison its rollback.
-fn launched_llama_alive(children: &mut [Child]) -> bool {
-    children
-        .first_mut()
-        .is_some_and(|child| matches!(child.try_wait(), Ok(None)))
+/// Readiness belongs to the exact llama child just launched, never to a
+/// different child (such as Whisper) returned alongside it.
+fn launched_llama_alive(child: &mut Child) -> bool {
+    matches!(child.try_wait(), Ok(None))
 }
 
-fn wait_for_expected_llama(expected: &str, budget: Duration, children: &mut [Child]) -> bool {
-    let models_url = format!("{LLAMA_BASE_URL}/models");
-    let completion_url = format!("{LLAMA_BASE_URL}/chat/completions");
+#[cfg(windows)]
+fn launched_llama_owns_listener(child: &mut Child) -> bool {
+    if !launched_llama_alive(child) {
+        return false;
+    }
+    let Ok(out) = run_capture("netstat", &["-ano", "-p", "tcp"]) else {
+        return false;
+    };
+    if !out.status.success() {
+        return false;
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    let child_pid = child.id().to_string();
+    listener_pids_on_port(&text, LLAMA_PORT)
+        .iter()
+        .any(|pid| *pid == child_pid)
+}
+
+#[cfg(not(windows))]
+fn launched_llama_owns_listener(child: &mut Child) -> bool {
+    launched_llama_alive(child)
+}
+
+fn wait_for_expected_llama(expected: &str, budget: Duration, llama: &mut Child) -> bool {
+    wait_for_expected_model_at(LLAMA_BASE_URL, expected, budget, llama)
+}
+
+/// Strict readiness for a newly launched llama child at an OpenAI-compatible
+/// endpoint. Keeping the endpoint explicit makes the stale-listener regression
+/// testable without touching the real managed :8080 port.
+fn wait_for_expected_model_at(
+    base_url: &str,
+    expected: &str,
+    budget: Duration,
+    llama: &mut Child,
+) -> bool {
+    let base_url = base_url.trim_end_matches('/');
+    let models_url = format!("{base_url}/models");
+    let completion_url = format!("{base_url}/chat/completions");
     let completion_body = serde_json::json!({
         "model": expected,
         "messages": [{"role": "user", "content": "hi"}],
@@ -1004,7 +1060,7 @@ fn wait_for_expected_llama(expected: &str, budget: Duration, children: &mut [Chi
     .to_string();
     let deadline = Instant::now() + budget;
     while Instant::now() < deadline {
-        if !launched_llama_alive(children) {
+        if !launched_llama_alive(llama) {
             return false;
         }
         let models = curl_success_body(&["-f", "-sS", "--max-time", "3", &models_url]);
@@ -1028,13 +1084,15 @@ fn wait_for_expected_llama(expected: &str, budget: Duration, children: &mut [Chi
         } else {
             None
         };
-        if expected_model_is_ready(
-            models.is_some(),
-            models.as_deref().unwrap_or_default(),
-            expected,
-            completion.is_some(),
-            completion.as_deref().unwrap_or_default(),
-        ) {
+        if launched_llama_owns_listener(llama)
+            && expected_model_is_ready(
+                models.is_some(),
+                models.as_deref().unwrap_or_default(),
+                expected,
+                completion.is_some(),
+                completion.as_deref().unwrap_or_default(),
+            )
+        {
             return true;
         }
         std::thread::sleep(Duration::from_millis(400));
@@ -1128,7 +1186,7 @@ fn kill_pid_tree(pid: &str) -> bool {
         .unwrap_or(false)
 }
 
-#[cfg(all(windows, test))]
+#[cfg(windows)]
 fn listener_pids_on_port<'a>(netstat: &'a str, port: &str) -> Vec<&'a str> {
     let suffix = format!(":{port}");
     let mut pids = Vec::new();
@@ -1163,7 +1221,14 @@ fn path_is_under_root(path: &str, root_lc: &str) -> bool {
 #[cfg(windows)]
 fn stop_listener_on_port(port: &str, root: &Path) -> bool {
     let Ok(out) = run_capture("netstat", &["-ano", "-p", "tcp"]) else {
-        return true; // can't enumerate — best-effort; let the bind attempt decide
+        log::warn!("port {port}: netstat failed; cannot safely reclaim the listener");
+        return false;
+    };
+    if !out.status.success() {
+        log::warn!(
+            "port {port}: netstat exited unsuccessfully; cannot safely reclaim the listener"
+        );
+        return false;
     };
     let text = String::from_utf8_lossy(&out.stdout);
     let suffix = format!(":{port}");
@@ -1183,8 +1248,12 @@ fn stop_listener_on_port(port: &str, root: &Path) -> bool {
             }
             match exe_path_for_pid(pid) {
                 Some(p) if path_is_under_root(&p, &root_lc) => {
-                    let _ = kill_pid_tree(pid);
-                    killed.push(pid.to_string());
+                    if kill_pid_tree(pid) {
+                        killed.push(pid.to_string());
+                    } else {
+                        log::warn!("port {port}: could not stop managed listener PID {pid}");
+                        free_of_strangers = false;
+                    }
                 }
                 other => {
                     log::warn!(
@@ -1273,7 +1342,10 @@ pub fn switch_local_model(
     std::thread::sleep(Duration::from_millis(800));
     let expected = active_local_model_name(root, prefer_quality);
     let mut started = ensure_servers(root, true, want_whisper, prefer_quality);
-    if wait_for_expected_llama(&expected, STRICT_LLAMA_READY_BUDGET, &mut started) {
+    if started
+        .first_mut()
+        .is_some_and(|llama| wait_for_expected_llama(&expected, STRICT_LLAMA_READY_BUDGET, llama))
+    {
         return (ModelSwitch::Switched, started);
     }
     terminate_servers(started);
@@ -1284,7 +1356,9 @@ pub fn switch_local_model(
     let rollback_quality = effective_verified_local_quality(root, previous_quality);
     let rollback_expected = active_local_model_name(root, rollback_quality);
     let mut rollback = ensure_servers(root, true, want_whisper, rollback_quality);
-    if wait_for_expected_llama(&rollback_expected, STRICT_LLAMA_READY_BUDGET, &mut rollback) {
+    if rollback.first_mut().is_some_and(|llama| {
+        wait_for_expected_llama(&rollback_expected, STRICT_LLAMA_READY_BUDGET, llama)
+    }) {
         (ModelSwitch::RolledBack, rollback)
     } else {
         terminate_servers(rollback);
@@ -1332,7 +1406,10 @@ pub fn restart_llama_server(root: &Path, prefer_quality: bool) -> (ModelSwitch, 
         && effective_verified_local_quality(root, true);
     let expected = active_local_model_name(root, effective_quality);
     let mut started = ensure_servers(root, true, false, effective_quality);
-    if wait_for_expected_llama(&expected, STRICT_LLAMA_READY_BUDGET, &mut started) {
+    if started
+        .first_mut()
+        .is_some_and(|llama| wait_for_expected_llama(&expected, STRICT_LLAMA_READY_BUDGET, llama))
+    {
         return (
             if prefer_quality && !effective_quality {
                 ModelSwitch::FallbackStarted
@@ -1349,7 +1426,9 @@ pub fn restart_llama_server(root: &Path, prefer_quality: bool) -> (ModelSwitch, 
     std::thread::sleep(Duration::from_millis(800));
     let fallback_expected = active_local_model_name(root, false);
     let mut fallback = ensure_servers(root, true, false, false);
-    if wait_for_expected_llama(&fallback_expected, STRICT_LLAMA_READY_BUDGET, &mut fallback) {
+    if fallback.first_mut().is_some_and(|llama| {
+        wait_for_expected_llama(&fallback_expected, STRICT_LLAMA_READY_BUDGET, llama)
+    }) {
         (ModelSwitch::FallbackStarted, fallback)
     } else {
         terminate_servers(fallback);
