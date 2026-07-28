@@ -162,6 +162,26 @@ pub struct LocalAiResult {
     pub servers: Vec<Child>,
 }
 
+/// Owns the server children while installation is in progress. Any error after
+/// a server has launched drops this guard, which reaps every child instead of
+/// leaving a local server running without a handle in `AppState`.
+#[derive(Default)]
+struct InstallServerCleanup {
+    children: Vec<Child>,
+}
+
+impl InstallServerCleanup {
+    fn into_children(mut self) -> Vec<Child> {
+        std::mem::take(&mut self.children)
+    }
+}
+
+impl Drop for InstallServerCleanup {
+    fn drop(&mut self) {
+        terminate_servers(std::mem::take(&mut self.children));
+    }
+}
+
 /// Default install root: `%USERPROFILE%\suflyor-local-ai`.
 #[must_use]
 pub fn default_root() -> PathBuf {
@@ -471,7 +491,7 @@ pub fn install(
     }
 
     // ---- launch servers ----------------------------------------------------
-    let mut servers: Vec<Child> = Vec::new();
+    let mut servers = InstallServerCleanup::default();
     if !opts.skip_llama {
         on(Progress::Step("Starting llama-server :8080".to_string()));
         let exe = find_exe(&llama_dir, "llama-server.exe")
@@ -510,7 +530,7 @@ pub fn install(
             args.push(&mmproj_s);
         }
         let child = launch_hidden(&exe, &args)?;
-        servers.push(child);
+        servers.children.push(child);
     }
     if !opts.skip_whisper {
         on(Progress::Step("Starting whisper-server :8081".to_string()));
@@ -537,7 +557,7 @@ pub fn install(
                 "/v1/audio/transcriptions",
             ],
         )?;
-        servers.push(child);
+        servers.children.push(child);
     }
 
     // ---- wait for llama readiness + verify GPU offload --------------------
@@ -572,11 +592,11 @@ pub fn install(
                 // before whisper). Do NOT pop() — that would kill the whisper server
                 // (pushed last) and wedge its readiness wait below (CRITICAL fix).
                 let _ = stop_listener_on_port(LLAMA_PORT, &opts.root);
-                if !servers.is_empty() {
+                if !servers.children.is_empty() {
                     // Reap the failed llama's handle (its process was already killed
                     // by the port-free above) so the Child isn't dropped unreaped
                     // (clippy::zombie_processes). Do NOT touch whisper (servers[1..]).
-                    let mut dead = servers.remove(0);
+                    let mut dead = servers.children.remove(0);
                     let _ = dead.wait();
                 }
                 std::thread::sleep(Duration::from_millis(800));
@@ -603,7 +623,7 @@ pub fn install(
                     cpu_args.push("--mmproj");
                     cpu_args.push(&mmproj2_s);
                 }
-                servers.push(launch_hidden(&exe2, &cpu_args)?);
+                servers.children.push(launch_hidden(&exe2, &cpu_args)?);
                 wait_ready(&format!("{LLAMA_BASE_URL}/models"), 120).context(NOT_READY_RU)?;
                 verify_llama_ready(on).context(NOT_READY_RU)?;
                 effective_gpu = GpuKind::None;
@@ -649,7 +669,7 @@ pub fn install(
         },
         on_gpu,
         cuda_version,
-        servers,
+        servers: servers.into_children(),
     })
 }
 
@@ -2109,7 +2129,8 @@ fn verify_llama_ready(on: &dyn Fn(Progress)) -> Result<()> {
         };
         // Step 2: only once a model is listed, prove it actually generates (the
         // server accepts /chat/completions without a model field — uses the
-        // loaded one). A 1-token reply containing "choices" = genuinely ready.
+        // loaded one). A nonblank textual `message.content` proves it genuinely
+        // generated a response; merely echoing a `choices` key does not.
         if models_ok {
             if let Ok(s) = run_capture(
                 "curl.exe",
@@ -2127,7 +2148,7 @@ fn verify_llama_ready(on: &dyn Fn(Progress)) -> Result<()> {
                 ],
             ) {
                 last = String::from_utf8_lossy(&s.stdout).trim().to_string();
-                if last.contains("choices") {
+                if llama_reply_has_text_content(&last) {
                     return Ok(());
                 }
             }
@@ -2159,6 +2180,26 @@ fn verify_llama_ready(on: &dyn Fn(Progress)) -> Result<()> {
         last.chars().take(160).collect()
     };
     bail!("llama never became ready within the warm-up budget (last reply: {snippet})");
+}
+
+/// The local model is ready only once its first chat choice contains actual
+/// assistant text. A syntactically valid response with an empty, non-textual,
+/// or missing content field is still a failed generation.
+fn llama_reply_has_text_content(body: &str) -> bool {
+    let Ok(reply) = serde_json::from_str::<serde_json::Value>(body) else {
+        return false;
+    };
+    let Some(content) = reply
+        .get("choices")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|choices| choices.first())
+        .and_then(|choice| choice.get("message"))
+        .and_then(|message| message.get("content"))
+        .and_then(serde_json::Value::as_str)
+    else {
+        return false;
+    };
+    !content.trim().is_empty()
 }
 
 // ---- process + fs helpers --------------------------------------------------
