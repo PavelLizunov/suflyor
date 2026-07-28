@@ -10,6 +10,78 @@ fn asset(name: &str) -> GhAsset {
     }
 }
 
+fn long_running_child() -> Child {
+    #[cfg(windows)]
+    {
+        Command::new("cmd")
+            .args(["/C", "ping -n 30 127.0.0.1 > NUL"])
+            .spawn()
+            .unwrap()
+    }
+    #[cfg(not(windows))]
+    {
+        Command::new("sh").args(["-c", "sleep 30"]).spawn().unwrap()
+    }
+}
+
+fn process_is_running(pid: u32) -> bool {
+    let pid = pid.to_string();
+    #[cfg(windows)]
+    {
+        Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}"), "/NH"])
+            .output()
+            .is_ok_and(|out| {
+                String::from_utf8_lossy(&out.stdout)
+                    .split_whitespace()
+                    .any(|field| field == pid.as_str())
+            })
+    }
+    #[cfg(not(windows))]
+    {
+        Command::new("kill")
+            .args(["-0", &pid])
+            .status()
+            .is_ok_and(|status| status.success())
+    }
+}
+
+#[test]
+fn failed_install_cleanup_terminates_server_children() {
+    let child = long_running_child();
+    let pid = child.id();
+    let mut cleanup = InstallServerCleanup::default();
+    cleanup.children.push(child);
+
+    drop(cleanup);
+
+    assert!(
+        !process_is_running(pid),
+        "server child {pid} survived cleanup"
+    );
+}
+
+#[test]
+fn llama_readiness_requires_nonempty_text_message_content() {
+    assert!(llama_reply_has_text_content(
+        r#"{"choices":[{"message":{"content":"ok"}}]}"#
+    ));
+    for reply in [
+        r#"{"choices":[{"message":{"content":""}}]}"#,
+        r#"{"choices":[{"message":{"content":" \n\t "}}]}"#,
+        r#"{"choices":[{"message":{}}]}"#,
+        r#"{"choices":[{"message":{"content":[]}}]}"#,
+        r#"{"choices":[]}"#,
+        r#"{"choices":"present but not an array"}"#,
+        "not JSON",
+    ] {
+        assert!(
+            !llama_reply_has_text_content(reply),
+            "must reject a non-textual or empty completion: {reply}"
+        );
+    }
+}
+
 /// v0.18.0 — the "smarter/faster" model picker. The 12B is chosen ONLY when
 /// the user asked for quality AND a complete file is present; everything
 /// else (quality-off, file absent, file truncated) falls back to the
