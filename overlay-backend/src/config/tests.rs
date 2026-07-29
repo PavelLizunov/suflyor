@@ -608,7 +608,10 @@ fn secret_redacted_blanks_every_secret_keeps_the_rest() {
         r.stt_whisper_bearer.is_empty(),
         "stt_whisper_bearer redacted"
     );
-    assert!(r.hermes_bridge_token.is_empty(), "hermes_bridge_token redacted");
+    assert!(
+        r.hermes_bridge_token.is_empty(),
+        "hermes_bridge_token redacted"
+    );
     assert!(r.hermes_api_key.is_empty(), "hermes_api_key redacted");
     assert_eq!(r.config_version, 7, "non-secret fields survive for undo");
     // And the serialized .bak bytes contain none of the secret values.
