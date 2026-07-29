@@ -106,8 +106,8 @@ msgstr "Транскрипт не сохранён"
 msgid "Copy all"
 msgstr "Копировать всё"
 
-msgid "Copied ✓"
-msgstr "Скопировано ✓"
+msgid "Copied [ok]"
+msgstr "Скопировано [ok]"
 
 msgid "with timecodes [mm:ss]"
 msgstr "с таймкодами [mm:ss]"
@@ -909,8 +909,15 @@ msgstr "Groq STT (Whisper) — ключ и модель. Используетс�
 msgid "waiting for transcript... (mic/sys → STT)"
 msgstr "ожидаю транскрипт... (mic/sys → STT)"
 
+msgid "AI streaming"
+msgstr "AI стримит"
+
 msgid "✏ Write a question for the assistant"
 msgstr "✏ Напишите вопрос ассистенту"
+
+# V0.8.3 — text-ask window header label (the ✏ chip above opens it).
+msgid "Write a question for the assistant"
+msgstr "Напишите вопрос ассистенту"
 
 msgid "Type your question…"
 msgstr "Введите вопрос…"

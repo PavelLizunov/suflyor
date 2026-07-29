@@ -121,7 +121,7 @@ export component TextAskWindow inherits Window {
                             slot-size: 18px;
                         }
                         Text {
-                            text: "Напишите вопрос ассистенту";
+                            text: @tr("Write a question for the assistant");
                             color: Theme.text-secondary;
                             font-size: Metrics.font-body;   // was 12px
                             font-weight: 600;
@@ -148,12 +148,12 @@ export component TextAskWindow inherits Window {
             HorizontalLayout {
                 spacing: Metrics.space-sm;   // was 8px
                 input := LineEdit {
-                    placeholder-text: "Введите вопрос...";
+                    placeholder-text: @tr("Type your question…");
                     text <=> root.query;
                     accepted => { root.fire(); }
                 }
                 Button {
-                    text: "Отправить";
+                    text: @tr("Send");
                     primary: true;
                     clicked => { root.fire(); }
                 }
