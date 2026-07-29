@@ -44,9 +44,9 @@ use super::{
     gated_events, grab_hwnd, install_streaming_tile, journal, live_route, markdown,
     present_tile_window, refresh_open_tiles, select_recent_labeled, toggle_tile_maximize,
     wire_copy, wire_escalate, wire_speak, wire_tile_drag, wire_voice_followup, Arc, AskRoute,
-    ComponentHandle, MarkdownBlock, ModelRc, Ordering, OverlayBarBridge, OverlayBarWindow,
-    RuntimeEvents, SharedSlintRuntime, SharedString, StreamingTile, TileWindow, TileWindows,
-    VecModel, AI_STREAM_MAX_TOKENS, CONVO_SEQ, TILE_DISPLAY_SEQ,
+    ComponentHandle, MarkdownBlock, ModelRc, MonitorHint, Ordering, OverlayBarBridge,
+    OverlayBarWindow, RuntimeEvents, SharedSlintRuntime, SharedString, StreamingTile, TileKind,
+    TileSpec, TileWindow, TileWindows, VecModel, AI_STREAM_MAX_TOKENS, CONVO_SEQ, TILE_DISPLAY_SEQ,
 };
 
 /// Phase E3 slice 3 — F3 reask handler.
@@ -197,6 +197,50 @@ pub(crate) fn fire_f9_ask(
     // tile-create + stream + cost + journal + follow-up pipeline.
     typed_question: Option<String>,
 ) {
+    let missing_cloud_auth = {
+        let c = cfg.read();
+        (!route.has_required_auth(&c)).then(|| {
+            (
+                c.response_language == "ru",
+                c.tile_monitor_name.clone(),
+                c.stealth_enabled,
+            )
+        })
+    };
+    if let Some((is_ru, preferred_monitor, stealth)) = missing_cloud_auth {
+        let (title, answer) = if is_ru {
+            (
+                "Облачный запрос (Shift+F9)",
+                "Облачный ИИ не настроен. Добавьте токен доступа в Настройки → AI и повторите Shift+F9.",
+            )
+        } else {
+            (
+                "Cloud ask (Shift+F9)",
+                "Cloud AI is not configured. Add its access token in Settings → AI, then press Shift+F9 again.",
+            )
+        };
+        let monitor = match preferred_monitor.as_deref() {
+            Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
+            _ => MonitorHint::Auto,
+        };
+        if let Err(e) = events.spawn_tile_full(
+            TileSpec {
+                question: title.into(),
+                answer: answer.into(),
+                source: "shift_f9".into(),
+                is_translation: false,
+                highlights: vec![],
+                summary_session: None,
+            },
+            monitor,
+            stealth,
+            TileKind::Error,
+        ) {
+            eprintln!("[overlay-host] Shift+F9 notice tile spawn failed: {e}");
+        }
+        return;
+    }
+
     let is_text = typed_question.is_some();
     // ===== 1. Sync placeholder tile creation =====
     let tile = match TileWindow::new() {
