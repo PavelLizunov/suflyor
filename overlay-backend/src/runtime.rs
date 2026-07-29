@@ -1891,8 +1891,8 @@ pub type CostApplyFn = Box<dyn FnOnce(u64) -> f64 + Send>;
 /// answer text, then at end-of-stream estimates token cost,
 /// invokes the shim-provided `cost_apply` callback to mutate
 /// session_cost (under rt lock on the shim side), writes
-/// JournalEvent::AiResponse, and emits `cost:update` with the new
-/// session USD total.
+/// JournalEvent::AiResponse on successful completion, and emits `cost:update`
+/// with the new session USD total.
 ///
 /// `t0` is the `Instant::now()` captured before `ai::stream_chat`
 /// returned the receiver — used for `AiResponse.latency_ms`.
@@ -1900,7 +1900,8 @@ pub type CostApplyFn = Box<dyn FnOnce(u64) -> f64 + Send>;
 /// Wire-parity invariants preserved:
 /// 1. Each `ai:event` emit fires AS the AiEvent arrives (no batching).
 /// 2. `cost:update` fires AFTER the session_cost mutation.
-/// 3. `JournalEvent::AiResponse.text` is the FULL accumulated answer.
+/// 3. A successful `JournalEvent::AiResponse.text` is the FULL accumulated
+///    answer; failed/incomplete streams never become completed Q&A pairs.
 /// 4. Health `last_ai_ok_ms` bumped on each Delta (atomic store, no lock);
 ///    AiEvent::Error bumps `last_ai_err_ms` so the bar flips to "AI down".
 /// 5. AiEvent::Error path writes JournalEvent::Error AND still emits
@@ -1925,7 +1926,7 @@ pub async fn ask_stream_loop(
     cost_apply: CostApplyFn,
 ) {
     let mut accumulated = String::new();
-    let mut finish = "stop".to_string();
+    let mut finish = None;
     while let Some(ev) = ai_rx.recv().await {
         match &ev {
             ai::AiEvent::Delta { text } => {
@@ -1936,7 +1937,7 @@ pub async fn ask_stream_loop(
                 accumulated.push_str(text);
             }
             ai::AiEvent::Done { reason } => {
-                finish = reason.clone();
+                finish = Some(reason.clone());
                 // Bump health on completion too, not only per-Delta: a
                 // successful but EMPTY-answer stream (zero deltas then Done)
                 // otherwise never clears a prior "AI down" state — matching the
@@ -1990,13 +1991,13 @@ pub async fn ask_stream_loop(
     // Shim-provided closure: lock rt, add micro to session_cost,
     // return new total in USD. Single call, FnOnce, no re-entry.
     let total_usd = cost_apply(micro);
-    if let Some(j) = journal.as_ref() {
+    if let (Some(j), Some(finish)) = (journal.as_ref(), finish.as_deref()) {
         j.write(&JournalEvent::AiResponse {
             unix_ms: crate::journal::now_unix_ms(),
             purpose: "live_ask",
             model: &model,
             latency_ms: t0.elapsed().as_millis() as u64,
-            finish_reason: &finish,
+            finish_reason: finish,
             text: &accumulated,
             output_tokens_est: output_tokens,
             cost_microcents: micro,

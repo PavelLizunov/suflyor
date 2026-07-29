@@ -633,30 +633,34 @@ async fn ask_stream_loop_processes_deltas_then_done_and_calls_cost_apply_once() 
     );
 }
 
-/// `ask_stream_loop` with immediate Error → cost_apply still
-/// fires (output_tokens=0 → micro≈0) so the cost:update emit
-/// remains parity-correct on the error path too. FIX #9: the Error
-/// arm must also bump `health.last_ai_err_ms` (was 0) so HealthSignals
-/// flips the bar to "AI down" — mirrors the non-streaming auto-tile path.
+/// `ask_stream_loop` with a partial Delta then Error still charges the incurred
+/// work and marks AI down, but must NOT count or journal the partial text as a
+/// successful response.
 #[tokio::test]
-async fn ask_stream_loop_error_path_calls_cost_apply_once_and_marks_ai_down() {
+async fn ask_stream_loop_error_path_does_not_journal_partial_response() {
     use std::sync::Mutex as StdMutex;
     let (tx, rx) = tokio::sync::mpsc::channel::<ai::AiEvent>(2);
     let feeder = tokio::spawn(async move {
+        tx.send(ai::AiEvent::Delta {
+            text: "partial answer before failure".into(),
+        })
+        .await
+        .unwrap();
         tx.send(ai::AiEvent::Error {
             message: "stream died: upstream 503".into(),
         })
         .await
         .unwrap();
     });
-    let calls = Arc::new(StdMutex::new(0u32));
+    let calls = Arc::new(StdMutex::new(Vec::<u64>::new()));
     let calls_clone = calls.clone();
-    let cost_apply: CostApplyFn = Box::new(move |_micro| {
-        *calls_clone.lock().unwrap() += 1;
+    let cost_apply: CostApplyFn = Box::new(move |micro| {
+        calls_clone.lock().unwrap().push(micro);
         0.0
     });
     let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
     let health = Arc::new(HealthSignals::default());
+    let journal = Journal::counting_for_test();
     assert_eq!(
         health.last_ai_err_ms.load(Ordering::Relaxed),
         0,
@@ -669,17 +673,25 @@ async fn ask_stream_loop_error_path_calls_cost_apply_once_and_marks_ai_down() {
         false,
         "sys".into(),
         "usr".into(),
-        None,
+        Some(journal.clone()),
         health.clone(),
         std::time::Instant::now(),
         cost_apply,
     )
     .await;
     feeder.await.unwrap();
-    assert_eq!(*calls.lock().unwrap(), 1);
+    let calls = calls.lock().unwrap();
+    assert_eq!(calls.len(), 1);
+    assert!(calls[0] > 0, "partial cloud work still incurs cost");
     assert!(
         health.last_ai_err_ms.load(Ordering::Relaxed) > 0,
-        "FIX #9: streaming Error arm must bump last_ai_err_ms so the bar flips to AI down"
+        "streaming Error must bump last_ai_err_ms so the bar flips to AI down"
+    );
+    let counters = journal.snapshot_counters().unwrap();
+    assert_eq!(counters.ai_errors, 1);
+    assert_eq!(
+        counters.ai_responses_ok, 0,
+        "partial text from a failed stream must not become a completed Q&A"
     );
 }
 
