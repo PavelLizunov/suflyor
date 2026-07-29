@@ -1,6 +1,14 @@
 //! Unit tests for `local_ai.rs`, split out to keep the module file lean.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use super::*;
+use std::process::{Child, Command};
+#[cfg(windows)]
+use std::{
+    io::{Read, Write},
+    net::TcpListener,
+    sync::mpsc,
+    thread,
+};
 
 fn asset(name: &str) -> GhAsset {
     GhAsset {
@@ -82,63 +90,268 @@ fn llama_readiness_requires_nonempty_text_message_content() {
     }
 }
 
-/// v0.18.0 — the "smarter/faster" model picker. The 12B is chosen ONLY when
-/// the user asked for quality AND a complete file is present; everything
-/// else (quality-off, file absent, file truncated) falls back to the
-/// always-installed E4B so the server can never fail to find a model.
-#[test]
-fn pick_llama_gguf_prefers_12b_only_when_present_and_wanted() {
-    let dir = Path::new("C:/root/llama.cpp");
-    let e4b = dir.join(GEMMA_FILE);
-    let q = dir.join(GEMMA12_FILE);
-    // 12B only when BOTH wanted AND present; every other combo → E4B.
-    assert_eq!(pick_llama_gguf(dir, true, true), q);
-    assert_eq!(pick_llama_gguf(dir, true, false), e4b); // wanted, absent
-    assert_eq!(pick_llama_gguf(dir, false, true), e4b); // present, not wanted
-    assert_eq!(pick_llama_gguf(dir, false, false), e4b);
+fn make_complete(path: &Path, size: u64) {
+    let file = std::fs::File::create(path).unwrap();
+    file.set_len(size).unwrap();
 }
 
-/// A truncated/partial 12B (smaller than the pinned size) must read as
-/// ABSENT so the user is re-offered the download and the launch path falls
-/// back to E4B instead of handing llama-server a corrupt file.
+fn local_result(quality: bool, vision: bool) -> LocalAiResult {
+    LocalAiResult {
+        ai_local_model: if quality {
+            GEMMA26_FILE.to_string()
+        } else {
+            GEMMA_FILE.to_string()
+        },
+        ai_local_quality: quality,
+        ai_local_vision: vision,
+        hardware_profile: if quality {
+            HardwareModelProfile::Primary26Vram8
+        } else {
+            HardwareModelProfile::Fallback12B
+        },
+        stt_gigaam_dir: "C:\\root\\gigaam-v3".to_string(),
+        on_gpu: true,
+        cuda_version: Some("13.3".to_string()),
+        servers: Vec::new(),
+    }
+}
+
 #[test]
-fn quality_model_present_rejects_truncated_file() {
+fn owner_primary_coordinates_and_sha_are_exact() {
+    assert_eq!(
+        GEMMA_URL,
+        "https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/980b060c40a8539ac159e0501a3e0f66a6365af3/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf"
+    );
+    assert_eq!(
+        GEMMA_SHA256,
+        "90fd44e29e0d7cffeb0fd00dc73cfdab9ed0b0e95306ecf7821ea634c940c370"
+    );
+    assert_eq!(
+        GEMMA26_URL,
+        "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/c099eb4/gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf"
+    );
+    assert_eq!(GEMMA26_FILE, "gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf");
+    assert_eq!(
+        GEMMA26_SHA256,
+        "2a1d26dfe6ea00a467940a5728316af6edb366bbdba950d65b85d232392fb658"
+    );
+}
+
+/// The 26B primary is chosen only when requested and complete; every other
+/// combination resolves to the always-installed 12B fallback.
+#[test]
+fn pick_llama_gguf_prefers_26b_only_when_present_and_wanted() {
+    let dir = Path::new("C:/root/llama.cpp");
+    let fallback = dir.join(GEMMA_FILE);
+    let primary = dir.join(GEMMA26_FILE);
+    assert_eq!(pick_llama_gguf(dir, true, true), primary);
+    assert_eq!(pick_llama_gguf(dir, true, false), fallback);
+    assert_eq!(pick_llama_gguf(dir, false, true), fallback);
+    assert_eq!(pick_llama_gguf(dir, false, false), fallback);
+}
+
+/// UI presence is an O(1) size check: Settings must never hash the 10.5-GB
+/// model. Exact SHA-256 validation is covered separately at the launch boundary.
+#[test]
+fn quality_model_present_rejects_wrong_sizes() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     std::fs::create_dir_all(root.join("llama.cpp")).unwrap();
     assert!(!quality_model_present(root), "absent file → not present");
     std::fs::write(quality_gguf_path(root), b"partial").unwrap();
     assert!(!quality_model_present(root), "truncated file → not present");
+    make_complete(&quality_gguf_path(root), GEMMA26_SIZE + 1);
+    assert!(!quality_model_present(root), "oversized file → not present");
+}
+
+#[test]
+fn stat_only_presence_accepts_an_exact_size_fixture_without_hashing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    std::fs::create_dir_all(root.join("llama.cpp")).unwrap();
+    make_complete(&quality_gguf_path(root), GEMMA26_SIZE);
+    assert!(quality_model_present(root));
+}
+
+#[test]
+fn pinned_presence_rejects_same_size_corruption() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("model.gguf");
+    const PRIMARY_SHA: &str = "986a1b7135f4986150aa5fa0028feeaa66cdaf3ed6a00a355dd86e042f7fb494";
+    std::fs::write(&path, b"primary").unwrap();
+    assert!(pinned_file_matches(&path, 7, PRIMARY_SHA));
+    std::fs::write(&path, b"corrupt").unwrap();
+    assert_eq!(file_len(&path), 7, "fixture must keep the same byte length");
+    assert!(!pinned_file_matches(&path, 7, PRIMARY_SHA));
+}
+
+#[test]
+fn rejected_same_size_primary_is_removed_for_redownload() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("primary.gguf");
+    std::fs::write(&path, b"corrupt").unwrap();
+    assert_eq!(file_len(&path), 7, "fixture must be exact-size");
+
+    discard_rejected_pinned_file(&path, 7);
+
+    assert!(
+        !path.exists(),
+        "a SHA-rejected exact-size primary must not hide re-download"
+    );
 }
 
 #[test]
 fn quality_gguf_path_is_under_llama_dir() {
     let p = quality_gguf_path(Path::new("C:/root"));
-    assert!(p.ends_with(GEMMA12_FILE));
+    assert!(p.ends_with(GEMMA26_FILE));
     assert!(p.to_string_lossy().contains("llama.cpp"));
 }
 
-/// The bar's active-model label must follow the pick: quality-off (or 12B
-/// absent) → the E4B basename. (Quality-on+present needs a 6 GB file, so the
-/// 12B branch is covered by `pick_llama_gguf` above, not here.)
+/// A persisted 26B choice whose file vanished resolves to and persists 12B,
+/// while a stale prep-model id is removed from the managed single-model server.
 #[test]
-fn active_local_model_name_reports_e4b_when_not_quality() {
+fn persisted_primary_falls_back_to_12b_when_missing() {
     let tmp = tempfile::tempdir().unwrap();
     assert_eq!(active_local_model_name(tmp.path(), false), GEMMA_FILE);
-    // quality wanted but 12B absent → still E4B (safe fallback).
     assert_eq!(active_local_model_name(tmp.path(), true), GEMMA_FILE);
+    assert!(!effective_local_quality(tmp.path(), true));
+
+    let mut cfg = crate::config::Config {
+        ai_local_base_url: "http://[::1]:8080/v1/".to_string(),
+        ai_local_model: GEMMA26_FILE.to_string(),
+        ai_local_prep_model: "stale-prep".to_string(),
+        ai_local_quality: true,
+        ai_local_vision: true,
+        vision_provider: "same".to_string(),
+        ..Default::default()
+    };
+    assert!(repair_managed_model_state(&mut cfg, tmp.path()));
+    assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);
+    assert!(!cfg.ai_local_quality);
+    assert_eq!(cfg.ai_local_model, GEMMA_FILE);
+    assert!(cfg.ai_local_prep_model.is_empty());
+    assert!(!cfg.ai_local_vision);
+    assert_eq!(cfg.vision_provider, "off");
+    assert!(!repair_managed_model_state(&mut cfg, tmp.path()));
+}
+
+#[test]
+fn managed_primary_never_uses_a_stale_vision_flag() {
+    let tmp = tempfile::tempdir().unwrap();
+    let llama_dir = tmp.path().join("llama.cpp");
+    std::fs::create_dir_all(&llama_dir).unwrap();
+    make_complete(&llama_dir.join(GEMMA26_FILE), GEMMA26_SIZE);
+    let mut cfg = crate::config::Config {
+        ai_local_base_url: LLAMA_BASE_URL.to_string(),
+        ai_local_model: GEMMA26_FILE.to_string(),
+        ai_local_quality: true,
+        ai_local_vision: true,
+        vision_provider: "same".to_string(),
+        ..Default::default()
+    };
+
+    assert!(
+        !local_vision_enabled(&cfg, tmp.path()),
+        "the 26B primary has no projector in this candidate"
+    );
+    assert!(repair_managed_model_state(&mut cfg, tmp.path()));
+    assert!(!cfg.ai_local_vision);
+    assert_eq!(cfg.vision_provider, "off");
+}
+
+/// Mirrors selecting "Same as text model above" after a managed text-only 26B
+/// is active. The UI callback persists that selection through this repair, so
+/// F8 remains disabled instead of being routed to a server without a projector.
+#[test]
+fn managed_primary_repairs_same_vision_provider_after_selection() {
+    let tmp = tempfile::tempdir().unwrap();
+    let llama_dir = tmp.path().join("llama.cpp");
+    std::fs::create_dir_all(&llama_dir).unwrap();
+    make_complete(&llama_dir.join(GEMMA26_FILE), GEMMA26_SIZE);
+    let mut cfg = crate::config::Config {
+        ai_local_base_url: LLAMA_BASE_URL.to_string(),
+        ai_local_model: GEMMA26_FILE.to_string(),
+        ai_local_quality: true,
+        vision_provider: "same".to_string(),
+        ..Default::default()
+    };
+
+    assert!(repair_managed_model_state(&mut cfg, tmp.path()));
+    assert_eq!(cfg.vision_provider, "off");
+    assert!(cfg.vision_endpoint().is_none());
+}
+
+#[test]
+fn legacy_4b_install_survives_upgrade_until_12b_is_installed() {
+    let tmp = tempfile::tempdir().unwrap();
+    let llama_dir = tmp.path().join("llama.cpp");
+    std::fs::create_dir_all(&llama_dir).unwrap();
+    make_complete(&llama_dir.join(LEGACY_GEMMA_FILE), LEGACY_GEMMA_SIZE);
+
+    assert!(base_model_present(tmp.path()));
+    assert_eq!(
+        active_local_model_name(tmp.path(), false),
+        LEGACY_GEMMA_FILE
+    );
+    assert_eq!(active_local_model_name(tmp.path(), true), LEGACY_GEMMA_FILE);
+
+    let mut cfg = crate::config::Config {
+        ai_local_base_url: "http://localhost:8080/v1".to_string(),
+        ai_local_model: GEMMA26_FILE.to_string(),
+        ai_local_prep_model: "stale-prep".to_string(),
+        ai_local_quality: true,
+        ..Default::default()
+    };
+    assert!(repair_managed_model_state(&mut cfg, tmp.path()));
+    assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);
+    assert!(!cfg.ai_local_quality);
+    assert_eq!(cfg.ai_local_model, LEGACY_GEMMA_FILE);
+    assert!(cfg.ai_local_prep_model.is_empty());
+}
+
+#[test]
+fn engine_verification_uses_complete_legacy_4b_until_12b_exists() {
+    let tmp = tempfile::tempdir().unwrap();
+    let llama_dir = tmp.path().join("llama.cpp");
+    std::fs::create_dir_all(&llama_dir).unwrap();
+
+    assert!(complete_fallback_llama_gguf(&llama_dir).is_none());
+
+    let legacy = llama_dir.join(LEGACY_GEMMA_FILE);
+    make_complete(&legacy, LEGACY_GEMMA_SIZE);
+    assert_eq!(complete_fallback_llama_gguf(&llama_dir), Some(legacy));
+
+    let current = llama_dir.join(GEMMA_FILE);
+    make_complete(&current, GEMMA_SIZE);
+    assert_eq!(complete_fallback_llama_gguf(&llama_dir), Some(current));
+}
+
+#[test]
+fn selecting_local_provider_repairs_managed_state_before_prep_requests() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut cfg = crate::config::Config {
+        ai_provider: "cloud".to_string(),
+        ai_local_base_url: "http://[::1]:8080/v1".to_string(),
+        ai_local_model: GEMMA26_FILE.to_string(),
+        ai_local_prep_model: "stale-prep".to_string(),
+        ai_local_quality: true,
+        ..Default::default()
+    };
+
+    assert!(select_local_provider(&mut cfg, tmp.path()));
+    assert_eq!(cfg.ai_provider, "local");
+    assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);
+    assert_eq!(cfg.ai_local_model, GEMMA_FILE);
+    assert!(cfg.ai_local_prep_model.is_empty());
+    assert_eq!(cfg.ai_endpoint(true).model, GEMMA_FILE);
 }
 
 /// The bar must show the fast vs smart model distinctly. Pin the friendly
-/// label against the ACTUAL shipped GGUF constants (so a future filename
-/// rename that breaks the mapping fails here) plus the 12B-before-4B order
-/// and the non-Gemma fallback.
+/// label against the actual pinned GGUF constants.
 #[test]
-fn local_model_label_distinguishes_fast_and_smart() {
-    // Real shipped basenames map to the at-a-glance labels.
-    assert_eq!(local_model_label(GEMMA_FILE), "Gemma 4B");
-    assert_eq!(local_model_label(GEMMA12_FILE), "Gemma 12B");
-    // Case-insensitive + 12B wins over the generic 4b branch.
+fn local_model_label_distinguishes_fallback_and_primary() {
+    assert_eq!(local_model_label(GEMMA_FILE), "Gemma 12B");
+    assert_eq!(local_model_label(GEMMA26_FILE), "Gemma 26B-A4B");
     assert_eq!(local_model_label("GEMMA-4-12B-IT.gguf"), "Gemma 12B");
     // A Gemma file with no size token → bare "Gemma" (never empty).
     assert_eq!(local_model_label("gemma-it.gguf"), "Gemma");
@@ -147,36 +360,406 @@ fn local_model_label_distinguishes_fast_and_smart() {
     assert_eq!(local_model_label(""), "—");
 }
 
-/// The projector-attach rules: E4B always gets its F32 (once present); the
-/// 12B gets its own projector ONLY when present AND the engine build is
-/// gemma4uv-capable (`.llama-build` >= GEMMA4UV_MIN_BUILD) — else text-only,
-/// because an old engine would crash-loop on the gemma4uv type (the user's
-/// "сломалась"). Other models never get a Gemma projector.
+/// Only the 12B fallback gets the pinned projector, and only when complete and
+/// the engine is gemma4uv-capable. The 26B stays text-only.
 #[test]
-fn mmproj_attach_rules_e4b_and_gated_12b() {
+fn mmproj_attach_rules_gated_12b_and_text_only_26b() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();
-    // E4B projector absent → text-only; present → attached.
     assert!(mmproj_for_model(dir, &dir.join(GEMMA_FILE)).is_none());
-    std::fs::write(dir.join(MMPROJ_FILE), b"x").unwrap();
+    make_complete(&dir.join(MMPROJ_FILE), MMPROJ_SIZE);
+    assert!(mmproj_for_model(dir, &dir.join(GEMMA_FILE)).is_none());
+    std::fs::write(dir.join(".llama-build"), format!("b{GEMMA4UV_MIN_BUILD}")).unwrap();
     assert_eq!(
         mmproj_for_model(dir, &dir.join(GEMMA_FILE)),
         Some(dir.join(MMPROJ_FILE))
     );
-    // 12B projector present but NO build stamp → engine assumed too old → none.
-    std::fs::write(dir.join(GEMMA12_MMPROJ_FILE), b"x").unwrap();
-    assert!(mmproj_for_model(dir, &dir.join(GEMMA12_FILE)).is_none());
-    // An OLD build stamp (< floor) → still none (would crash-loop).
-    std::fs::write(dir.join(".llama-build"), b"b9410").unwrap();
-    assert!(mmproj_for_model(dir, &dir.join(GEMMA12_FILE)).is_none());
-    // A gemma4uv-capable build → 12B finally gets its projector.
-    std::fs::write(dir.join(".llama-build"), format!("b{GEMMA4UV_MIN_BUILD}")).unwrap();
-    assert_eq!(
-        mmproj_for_model(dir, &dir.join(GEMMA12_FILE)),
-        Some(dir.join(GEMMA12_MMPROJ_FILE))
-    );
+    assert!(mmproj_for_model(dir, &dir.join(GEMMA26_FILE)).is_none());
     // Non-Gemma model never gets a Gemma projector.
     assert!(mmproj_for_model(dir, &dir.join("qwen2.5-7b.gguf")).is_none());
+}
+
+#[test]
+fn primary_model_requires_the_tested_llama_build() {
+    let tmp = tempfile::tempdir().unwrap();
+    assert!(!llama_build_supports_26b(tmp.path()));
+    std::fs::write(
+        tmp.path().join(".llama-build"),
+        format!("b{}", GEMMA26_MIN_BUILD - 1),
+    )
+    .unwrap();
+    assert!(!llama_build_supports_26b(tmp.path()));
+    std::fs::write(
+        tmp.path().join(".llama-build"),
+        format!("b{GEMMA26_MIN_BUILD}"),
+    )
+    .unwrap();
+    assert!(llama_build_supports_26b(tmp.path()));
+}
+
+#[test]
+fn owner_hardware_matrix_is_exact() {
+    assert_eq!(
+        select_hardware_model_profile(Some(8), Some(16)),
+        HardwareModelProfile::Fallback12B
+    );
+    assert_eq!(
+        select_hardware_model_profile(Some(8), Some(32)),
+        HardwareModelProfile::Primary26Vram8
+    );
+    assert_eq!(
+        select_hardware_model_profile(Some(12), Some(24)),
+        HardwareModelProfile::Primary26Vram12
+    );
+    assert_eq!(
+        select_hardware_model_profile(Some(12), Some(32)),
+        HardwareModelProfile::Primary26Vram12
+    );
+    assert_eq!(
+        select_hardware_model_profile(Some(16), Some(32)),
+        HardwareModelProfile::Primary26Vram16
+    );
+    assert_eq!(
+        select_hardware_model_profile(Some(16), Some(24)),
+        HardwareModelProfile::Unknown
+    );
+    assert_eq!(
+        select_hardware_model_profile(Some(8), Some(24)),
+        HardwareModelProfile::Unknown
+    );
+    assert_eq!(
+        select_hardware_model_profile(Some(12), Some(64)),
+        HardwareModelProfile::Unknown
+    );
+    assert_eq!(
+        select_hardware_model_profile(Some(16), Some(64)),
+        HardwareModelProfile::Unknown
+    );
+    assert_eq!(
+        select_hardware_model_profile(None, Some(32)),
+        HardwareModelProfile::Unknown
+    );
+}
+
+#[test]
+fn vram_release_uses_the_largest_dedicated_adapter_and_requires_a_drop() {
+    assert_eq!(
+        parse_nvidia_memory_mib("512, 8192\n1537, 16384\n"),
+        Some((1537, 16384))
+    );
+    assert_eq!(parse_nvidia_memory_mib("not available\n"), None);
+    assert!(vram_has_released(8192, Some(2048)));
+    assert!(vram_has_released(8192, Some(8128)));
+    assert!(!vram_has_released(8192, Some(8129)));
+    assert!(!vram_has_released(8192, Some(8192)));
+    assert!(!vram_has_released(8192, None));
+    assert!(vram_is_at_baseline(2048, Some(2112)));
+    assert!(!vram_is_at_baseline(2048, Some(2113)));
+    assert!(!vram_is_at_baseline(2048, None));
+}
+
+#[test]
+fn only_confirmed_profiles_allow_manual_primary_selection() {
+    assert!(!primary_26b_allowed(HardwareModelProfile::Unknown));
+    assert!(!primary_26b_allowed(HardwareModelProfile::Fallback12B));
+    assert!(primary_26b_allowed(HardwareModelProfile::Primary26Vram8));
+    assert!(primary_26b_allowed(HardwareModelProfile::Primary26Vram12));
+    assert!(primary_26b_allowed(HardwareModelProfile::Primary26Vram16));
+}
+
+#[test]
+fn only_nvidia_discovery_enters_the_confirmed_matrix() {
+    assert_eq!(
+        hardware_profile_from_discovery(false, Some(8), Some(32)),
+        HardwareModelProfile::Primary26Vram8
+    );
+    assert_eq!(
+        hardware_profile_from_discovery(false, Some(12), Some(24)),
+        HardwareModelProfile::Primary26Vram12
+    );
+    assert_eq!(
+        hardware_profile_from_discovery(false, Some(16), Some(32)),
+        HardwareModelProfile::Primary26Vram16
+    );
+    assert_eq!(
+        hardware_profile_from_discovery(false, None, Some(32)),
+        HardwareModelProfile::Unknown,
+        "AMD/Intel or unreported VRAM must not reuse the NVIDIA matrix"
+    );
+}
+
+#[test]
+fn launcher_uses_the_exact_confirmed_profile_matrix() {
+    let cases = [
+        (
+            HardwareModelProfile::Fallback12B,
+            false,
+            "32768",
+            "34",
+            None,
+            false,
+        ),
+        (
+            HardwareModelProfile::Primary26Vram8,
+            false,
+            "32768",
+            "99",
+            Some("20"),
+            false,
+        ),
+        (
+            HardwareModelProfile::Primary26Vram8,
+            true,
+            "65536",
+            "99",
+            Some("20"),
+            true,
+        ),
+        (
+            HardwareModelProfile::Primary26Vram12,
+            false,
+            "65536",
+            "99",
+            Some("8"),
+            false,
+        ),
+        (
+            HardwareModelProfile::Primary26Vram12,
+            true,
+            "98304",
+            "99",
+            Some("8"),
+            true,
+        ),
+        (
+            HardwareModelProfile::Primary26Vram16,
+            true,
+            "98304",
+            "99",
+            None,
+            false,
+        ),
+    ];
+    for (profile, prep, context, ngl, ncmoe, q8) in cases {
+        let args = llama_server_args("model.gguf", "alias", None, false, profile, prep);
+        assert!(args.windows(2).any(|pair| pair == ["-c", context]));
+        assert!(args.windows(2).any(|pair| pair == ["-ngl", ngl]));
+        assert!(args.windows(2).any(|pair| pair == ["-np", "1"]));
+        assert!(args.iter().any(|arg| arg == "--no-mmap"));
+        assert_eq!(
+            args.windows(2)
+                .find(|pair| pair.first().is_some_and(|arg| arg == "-ncmoe"))
+                .and_then(|pair| pair.get(1))
+                .map(String::as_str),
+            ncmoe
+        );
+        assert_eq!(args.iter().any(|arg| arg == "-ctk"), q8);
+        assert_eq!(args.iter().any(|arg| arg == "-ctv"), q8);
+    }
+
+    let unknown = llama_server_args(
+        "model.gguf",
+        "alias",
+        Some("vision.gguf"),
+        false,
+        HardwareModelProfile::Unknown,
+        false,
+    );
+    assert!(!unknown.iter().any(|arg| arg == "-ngl"));
+    assert!(unknown.windows(2).any(|pair| pair == ["--alias", "alias"]));
+    let cpu = llama_server_args(
+        "model.gguf",
+        "alias",
+        None,
+        true,
+        HardwareModelProfile::Unknown,
+        false,
+    );
+    assert!(cpu.windows(2).any(|pair| pair == ["-ngl", "0"]));
+}
+
+#[test]
+fn vision_memory_warning_is_explicitly_unknown() {
+    let root = Path::new("C:/root");
+    let primary = local_model_resource_warning(root, LLAMA_BASE_URL, GEMMA26_FILE);
+    let fallback = local_model_resource_warning(root, LLAMA_BASE_URL, GEMMA_FILE);
+    let legacy = local_model_resource_warning(root, LLAMA_BASE_URL, LEGACY_GEMMA_FILE);
+    assert!(primary.contains("Память для vision: неизвестно"));
+    assert!(fallback.contains("Память для vision: неизвестно"));
+    assert!(legacy.contains("Память для vision: неизвестно"));
+}
+
+#[test]
+fn managed_endpoint_accepts_ipv4_hostname_and_ipv6_loopback_only() {
+    for endpoint in [
+        "http://127.0.0.1:8080/v1",
+        "http://localhost:8080/v1/",
+        "http://[::1]:8080/v1",
+    ] {
+        assert!(is_managed_llama_endpoint(endpoint), "{endpoint}");
+    }
+    for endpoint in [
+        "https://localhost:8080/v1",
+        "http://127.0.0.1:11434/v1",
+        "http://10.0.0.8:8080/v1",
+        "http://[::2]:8080/v1",
+    ] {
+        assert!(!is_managed_llama_endpoint(endpoint), "{endpoint}");
+    }
+}
+
+#[test]
+fn strict_readiness_rejects_http_errors_wrong_model_and_malformed_choices() {
+    let models = r#"{"data":[{"id":"gemma-26"}]}"#;
+    let completion = r#"{"choices":[{"message":{"role":"assistant","content":"ok"}}]}"#;
+    assert!(expected_model_is_ready(
+        true, models, "gemma-26", true, completion
+    ));
+    assert!(!expected_model_is_ready(
+        false, models, "gemma-26", true, completion
+    ));
+    assert!(!expected_model_is_ready(
+        true, models, "gemma-12", true, completion
+    ));
+    assert!(!expected_model_is_ready(
+        true,
+        models,
+        "gemma-26",
+        true,
+        r#"{"choices":[{}]}"#
+    ));
+}
+
+#[cfg(windows)]
+fn spawn_stale_llama_server(
+    expected: &'static str,
+) -> (String, mpsc::Sender<()>, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
+    let (stop_tx, stop_rx) = mpsc::channel();
+    let server = thread::spawn(move || loop {
+        match listener.accept() {
+            Ok((mut stream, _)) => {
+                let mut request = [0_u8; 4096];
+                let read = stream.read(&mut request).unwrap_or(0);
+                let body = if request[..read].starts_with(b"GET /v1/models") {
+                    format!(r#"{{"data":[{{"id":"{expected}"}}]}}"#)
+                } else {
+                    r#"{"choices":[{"message":{"role":"assistant","content":"ok"}}]}"#.to_string()
+                };
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(response.as_bytes());
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                if stop_rx.recv_timeout(Duration::from_millis(10)).is_ok() {
+                    return;
+                }
+            }
+            Err(_) => return,
+        }
+    });
+    (base_url, stop_tx, server)
+}
+
+/// A stale listener may still advertise the requested model and answer a
+/// completion after the freshly launched server loses the bind race. Install
+/// readiness must reject that reply because its own child has already exited.
+#[cfg(windows)]
+#[test]
+fn strict_readiness_rejects_stale_server_after_new_child_exits() {
+    const EXPECTED: &str = "newly-launched-model";
+    let (base_url, stop, server) = spawn_stale_llama_server(EXPECTED);
+    let models_url = format!("{base_url}/models");
+    let models = curl_success_body(&["-f", "-sS", "--max-time", "3", &models_url]);
+    let completion_url = format!("{base_url}/chat/completions");
+    let completion = curl_success_body(&[
+        "-f",
+        "-sS",
+        "--max-time",
+        "3",
+        "-X",
+        "POST",
+        &completion_url,
+        "-H",
+        "Content-Type: application/json",
+        "-d",
+        r#"{"model":"newly-launched-model","messages":[{"role":"user","content":"hi"}],"max_tokens":1}"#,
+    ]);
+    assert!(
+        expected_model_is_ready(
+            models.is_some(),
+            models.as_deref().unwrap_or_default(),
+            EXPECTED,
+            completion.is_some(),
+            completion.as_deref().unwrap_or_default(),
+        ),
+        "models={models:?} completion={completion:?}"
+    );
+
+    let mut child = spawn_exiting_child();
+    let _ = child.wait();
+    let mut children = [child];
+    assert!(
+        !wait_for_expected_model_at(
+            &base_url,
+            EXPECTED,
+            Duration::from_secs(1),
+            &mut children[0]
+        ),
+        "a stale exact-model response must not verify an exited new child"
+    );
+    let _ = stop.send(());
+    server.join().unwrap();
+}
+
+fn spawn_long_lived_child() -> Child {
+    #[cfg(windows)]
+    let mut command = {
+        let mut command = Command::new("cmd");
+        command.args(["/C", "ping -n 4 127.0.0.1 > NUL"]);
+        command
+    };
+    #[cfg(not(windows))]
+    let mut command = {
+        let mut command = Command::new("sh");
+        command.args(["-c", "sleep 3"]);
+        command
+    };
+    command.spawn().unwrap()
+}
+
+fn spawn_exiting_child() -> Child {
+    #[cfg(windows)]
+    let mut command = {
+        let mut command = Command::new("cmd");
+        command.args(["/C", "exit 0"]);
+        command
+    };
+    #[cfg(not(windows))]
+    let mut command = {
+        let mut command = Command::new("sh");
+        command.args(["-c", "exit 0"]);
+        command
+    };
+    command.spawn().unwrap()
+}
+
+#[test]
+fn llama_readiness_ignores_an_exited_whisper_child() {
+    let llama = spawn_long_lived_child();
+    let mut whisper = spawn_exiting_child();
+    let _ = whisper.wait().unwrap();
+    let mut children = vec![llama, whisper];
+
+    assert!(
+        launched_llama_alive(&mut children[0]),
+        "an exited optional Whisper child must not fail llama readiness"
+    );
+    terminate_servers(children);
 }
 
 #[test]
@@ -501,22 +1084,20 @@ fn apply_result_sets_local_and_keeps_secrets() {
     let mut cfg = crate::config::Config {
         groq_api_key: "gsk_secret".to_string(),
         ai_bearer: "bridge_secret".to_string(),
+        ai_local_prep_model: "stale-prep-model".to_string(),
+        ai_local_quality: true,
         // a prior cloud setting — apply_result switches F8 to local on a
         // local install (vision rides the same local server).
         vision_provider: "cloud".to_string(),
         ..Default::default()
     };
-    let res = LocalAiResult {
-        ai_local_model: GEMMA_FILE.to_string(),
-        stt_gigaam_dir: "C:\\root\\gigaam-v3".to_string(),
-        on_gpu: true,
-        cuda_version: Some("13.3".to_string()),
-        servers: Vec::new(),
-    };
+    let res = local_result(false, true);
     apply_result(&mut cfg, &res);
     assert_eq!(cfg.ai_provider, "local");
     assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);
     assert_eq!(cfg.ai_local_model, GEMMA_FILE);
+    assert!(!cfg.ai_local_quality);
+    assert!(cfg.ai_local_prep_model.is_empty());
     assert_eq!(cfg.stt_provider, "whisper");
     assert_eq!(cfg.stt_whisper_url, WHISPER_BASE_URL);
     assert_eq!(cfg.stt_gigaam_dir, "C:\\root\\gigaam-v3");
@@ -527,6 +1108,57 @@ fn apply_result_sets_local_and_keeps_secrets() {
     // local server).
     assert!(cfg.ai_local_vision);
     assert_eq!(cfg.vision_provider, "same");
+}
+
+#[test]
+fn apply_primary_never_routes_vision_to_text_only_server() {
+    let mut cloud_cfg = crate::config::Config {
+        ai_local_prep_model: "stale-prep-model".to_string(),
+        vision_provider: "cloud".to_string(),
+        ..Default::default()
+    };
+    apply_result(&mut cloud_cfg, &local_result(true, false));
+    assert_eq!(cloud_cfg.ai_local_model, GEMMA26_FILE);
+    assert!(cloud_cfg.ai_local_quality);
+    assert!(cloud_cfg.ai_local_prep_model.is_empty());
+    assert!(!cloud_cfg.ai_local_vision);
+    assert_eq!(
+        cloud_cfg.vision_provider, "cloud",
+        "an explicit separate/cloud vision route is preserved"
+    );
+
+    let mut stale_same_cfg = crate::config::Config {
+        vision_provider: "same".to_string(),
+        ..Default::default()
+    };
+    apply_result(
+        &mut stale_same_cfg,
+        &local_result(true, true), // inconsistent input must still stay text-only
+    );
+    assert!(!stale_same_cfg.ai_local_vision);
+    assert_eq!(
+        stale_same_cfg.vision_provider, "off",
+        "F8 must not send images to the text-only 26B endpoint"
+    );
+
+    let mut inherited_local_cfg = crate::config::Config {
+        vision_provider: "local".to_string(),
+        vision_local_base_url: String::new(),
+        ..Default::default()
+    };
+    apply_result(&mut inherited_local_cfg, &local_result(true, false));
+    assert_eq!(inherited_local_cfg.vision_provider, "off");
+
+    let mut separate_local_cfg = crate::config::Config {
+        vision_provider: "local".to_string(),
+        vision_local_base_url: "http://127.0.0.1:8082/v1".to_string(),
+        ..Default::default()
+    };
+    apply_result(&mut separate_local_cfg, &local_result(true, false));
+    assert_eq!(
+        separate_local_cfg.vision_provider, "local",
+        "an explicit separate local vision server is preserved"
+    );
 }
 
 // P1-2: swap_engine_binaries must install engine files from a NESTED staging

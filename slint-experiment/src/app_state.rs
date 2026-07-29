@@ -12,7 +12,7 @@
 
 use std::sync::{Arc, Mutex};
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct AppState {
     /// Monotonic count of tile spawns over the session. Used by the
     /// overlay bar to display "spawned N tiles" footer.
@@ -61,13 +61,12 @@ pub struct AppState {
     /// Serializes EVERY local-AI lifecycle op that frees/relaunches :8080 —
     /// the manual install + the fast/smart switch + the boot/watchdog
     /// auto-recovery. A holder owns the port exclusively for the op's whole
-    /// duration; the watchdog `try_lock`s and skips its tick if a manual op
+    /// duration; the watchdog tries once and skips its tick if another op
     /// holds it, so two `free_llama_port`+relaunch sequences can never overlap.
-    /// A real mutex (not a checked-then-acted flag) is required: the watchdog's
+    /// A real permit (not a checked-then-acted flag) is required: the watchdog's
     /// reachability probe + relaunch span seconds, far too wide for a bare bool
-    /// to serialize. RAII release also means a panic in any holder can't wedge
-    /// the lock (a poisoned mutex is recovered via `into_inner`).
-    pub local_ai_lock: std::sync::Arc<std::sync::Mutex<()>>,
+    /// to serialize. The owned permit can also span async summary calls safely.
+    pub local_ai_lock: std::sync::Arc<tokio::sync::Semaphore>,
     /// Process-global "a local-AI op is running" dedup flag (audit B3). The 5
     /// Settings local-AI ops — install / 12B download / vision-projector download
     /// / model switch / engine update — each guard re-entry with their PER-WINDOW
@@ -80,6 +79,28 @@ pub struct AppState {
     /// permanently block new ops. (Mutual exclusion also means the single
     /// `local_ai_cancel` only ever applies to the one running op.)
     pub local_ai_busy: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            tiles_spawned: 0,
+            always_on_top: false,
+            stealth: false,
+            mic_active: false,
+            sys_active: false,
+            timer_active: false,
+            paused: false,
+            session_secs: 0,
+            cost_usd: 0.0,
+            mic_probe_in_flight: false,
+            sys_probe_in_flight: false,
+            local_ai_servers: Vec::new(),
+            local_ai_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            local_ai_lock: overlay_backend::local_ai::lifecycle_lock(),
+            local_ai_busy: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }
+    }
 }
 
 /// RAII guard for [`AppState::local_ai_busy`]. Dropping it — on every worker exit
