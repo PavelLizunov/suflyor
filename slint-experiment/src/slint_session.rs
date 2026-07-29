@@ -30,6 +30,7 @@ use overlay_backend::audio::{self, AudioChunk, AudioSource, TranscriptLine};
 use overlay_backend::config::SharedConfig;
 use overlay_backend::events::{MonitorHint, RuntimeEvents, TileKind, TileSpec};
 use overlay_backend::journal::{now_unix_ms, Journal, JournalEvent};
+use overlay_backend::recorder::SessionRecorder;
 use overlay_backend::stt;
 use overlay_backend::{ai, runtime as backend_runtime};
 use std::sync::atomic::Ordering;
@@ -248,14 +249,11 @@ fn start_session_inner(
         .context("audio::start_capture failed (check mic / system audio devices in Settings)")?;
     let health = lock(&rt).health.clone();
 
-    // ===== 4b. Optional raw-audio recorder (v0.13.0) =====
-    // When recording is enabled, tee the AudioChunk stream to per-channel WAVs
-    // via a forwarding task that ALSO feeds the recorder. The recorder.feed is
-    // non-blocking (drops on overflow), and forwarding to STT keeps the SAME
-    // bounded(128) back-pressure as the direct path — so recording never slows
-    // transcription. The recorder is MOVED into the task and dropped (WAVs
-    // finalised) when the stream ends on session stop. When disabled, audio_rx
-    // flows straight into STT with zero overhead.
+    // ===== 4b. Pause gate + optional raw-audio recorder (v0.13.0) =====
+    // Every chunk now crosses the same pause-aware forwarder before STT,
+    // regardless of whether recording is enabled. The recorder feed is
+    // non-blocking (drops on overflow), and forwarding to STT keeps the same
+    // bounded(128) back-pressure.
     // One atomic snapshot — the enabled flag + both retention bounds are read
     // under a SINGLE lock so a concurrent Settings save can't split the
     // decision across two config states (review v0.15.0).
@@ -268,7 +266,7 @@ fn start_session_inner(
             c.record_max_total_mb,
         )
     };
-    let stt_audio_rx = if record_enabled {
+    let recorder = if record_enabled {
         // Reuse the session id derived above (the conspect + the recordings dir
         // share one key, so a re-Summary from the archive lines up with both).
         match overlay_backend::recorder::SessionRecorder::start(
@@ -279,64 +277,20 @@ fn start_session_inner(
         ) {
             Ok(recorder) => {
                 log_info(&format!("audio recording → {}", recorder.dir().display()));
-                let (stt_tx, stt_rx2) = tokio::sync::mpsc::channel::<AudioChunk>(128);
-                let mut src_rx = audio_rx;
-                let rt_for_rec = rt.clone();
-                // Intentionally NOT stored as an abort-tracked task: it
-                // self-terminates when src_rx closes (stop_session drops the
-                // CaptureHandle → WASAPI threads exit → senders dropped), and the
-                // recorder MUST finalise its WAVs via Drop rather than be aborted
-                // mid-write. The retention prune's grace window keeps a rapid
-                // restart from racing a still-finalising prior dir.
-                tokio::spawn(async move {
-                    // `recorder` is owned here → it is finalised when this task
-                    // ends, i.e. when capture stops and src_rx closes.
-                    let recorder = recorder;
-                    while let Some(chunk) = src_rx.recv().await {
-                        // Pause (v0.22.0) — drop the chunk whole: the recorder is
-                        // NOT fed (its WAVs stop growing but are NOT finalised, so
-                        // Resume appends to the SAME files) and nothing reaches
-                        // STT (no transcript, no auto-tiles). The session stays
-                        // live; only Стоп finalises.
-                        if lock(&rt_for_rec).paused {
-                            continue;
-                        }
-                        // v0.13.1 — when the mic chip is muted, do NOT write mic
-                        // audio to the recording (system audio still records). The
-                        // transcript forwarder drops mic transcript lines on the
-                        // same rt.mic_muted flag, so one toggle stops both.
-                        let mic_muted =
-                            matches!(chunk.source, AudioSource::Mic) && lock(&rt_for_rec).mic_muted;
-                        if !mic_muted {
-                            recorder.feed(&chunk);
-                        }
-                        if stt_tx.send(chunk).await.is_err() {
-                            break; // STT pipeline gone — stop teeing
-                        }
-                    }
-                    // Finalise the WAVs on the BLOCKING pool: the recorder's Drop
-                    // join()s its writer std-thread (real disk I/O), and the
-                    // runtime has only 2 worker threads — dropping it inline would
-                    // park a scarce async worker for the flush, and a stacked
-                    // teardown on rapid restart could park both. spawn_blocking
-                    // moves the join off the async workers (review v0.13.0). The
-                    // handle is detached (dropped) — the blocking finalise still
-                    // runs to completion.
-                    std::mem::drop(tokio::task::spawn_blocking(move || drop(recorder)));
-                });
-                stt_rx2
+                Some(recorder)
             }
             Err(e) => {
                 // Recording is best-effort: a failure must NOT abort the session.
                 log_info(&format!(
                     "audio recording unavailable (continuing without it): {e:#}"
                 ));
-                audio_rx
+                None
             }
         }
     } else {
-        audio_rx
+        None
     };
+    let stt_audio_rx = forward_audio_chunks(audio_rx, rt.clone(), recorder);
 
     // ===== 5. Spawn STT pipeline =====
     let stt_rx = stt::spawn(
@@ -390,6 +344,49 @@ fn start_session_inner(
     Ok(())
 }
 
+fn forward_audio_chunks(
+    mut src_rx: tokio::sync::mpsc::Receiver<AudioChunk>,
+    rt: SharedSlintRuntime,
+    recorder: Option<SessionRecorder>,
+) -> tokio::sync::mpsc::Receiver<AudioChunk> {
+    let (stt_tx, stt_rx) = tokio::sync::mpsc::channel::<AudioChunk>(128);
+    tokio::spawn(async move {
+        while let Some(chunk) = src_rx.recv().await {
+            let (paused, mic_muted) = {
+                let state = lock(&rt);
+                (
+                    state.paused,
+                    matches!(chunk.source, AudioSource::Mic) && state.mic_muted,
+                )
+            };
+            if paused {
+                continue;
+            }
+            if !mic_muted {
+                if let Some(recorder) = recorder.as_ref() {
+                    recorder.feed(&chunk);
+                }
+            }
+            let permit = match stt_tx.reserve().await {
+                Ok(permit) => permit,
+                Err(_) => break,
+            };
+            // Pause may have been toggled while bounded STT back-pressure held
+            // this chunk. Recheck before it can reach any provider.
+            if lock(&rt).paused {
+                continue;
+            }
+            permit.send(chunk);
+        }
+        if let Some(recorder) = recorder {
+            // Finalise the WAVs on the blocking pool: Drop joins the writer
+            // thread and must not park a scarce async runtime worker.
+            std::mem::drop(tokio::task::spawn_blocking(move || drop(recorder)));
+        }
+    });
+    stt_rx
+}
+
 /// Transcript forwarder task body. Reads STT events, pushes to
 /// rt.transcript (with 80-line cap), writes journal, emits
 /// transcript:line to UI, runs meeting-ending detection, and
@@ -402,12 +399,11 @@ async fn transcript_forwarder(
     journal: Journal,
 ) {
     while let Some(ev) = stt_rx.recv().await {
-        // Pause (v0.22.0) — drop any STT event that lands while paused. This is
-        // the gate for the recording-OFF path (no forwarder tees its chunks);
-        // with recording ON the chunk was already dropped upstream, so here it
-        // is cheap belt-and-braces. No transcript line, journal write, or
-        // auto-tile fires while paused. Manual F9 still reads the accumulated
-        // transcript, so it keeps working — by design.
+        // Pause (v0.22.0) — the chunk gate in `forward_audio_chunks` is primary
+        // for both recording modes. This remains belt-and-braces for an STT
+        // request already in flight when pause was pressed. No transcript line,
+        // journal write, or auto-tile fires while paused. Manual F9 still reads
+        // the accumulated transcript, so it keeps working — by design.
         if lock(&rt).paused {
             continue;
         }
@@ -1334,6 +1330,41 @@ fn log_info(msg: &str) {
 )]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn audio_forwarder_gates_stt_while_paused_without_recording() {
+        use crate::runtime_state::{lock, shared_runtime};
+
+        let rt = shared_runtime();
+        lock(&rt).paused = true;
+        let (source_tx, source_rx) = tokio::sync::mpsc::channel(1);
+        let mut stt_rx = forward_audio_chunks(source_rx, rt.clone(), None);
+        source_tx
+            .send(AudioChunk {
+                source: AudioSource::System,
+                pcm_i16: vec![1],
+                timestamp_ms: 1,
+            })
+            .await
+            .unwrap();
+        drop(source_tx);
+        assert!(stt_rx.recv().await.is_none());
+
+        lock(&rt).paused = false;
+        let (source_tx, source_rx) = tokio::sync::mpsc::channel(1);
+        let mut stt_rx = forward_audio_chunks(source_rx, rt, None);
+        source_tx
+            .send(AudioChunk {
+                source: AudioSource::System,
+                pcm_i16: vec![2],
+                timestamp_ms: 2,
+            })
+            .await
+            .unwrap();
+        drop(source_tx);
+        assert_eq!(stt_rx.recv().await.unwrap().timestamp_ms, 2);
+        assert!(stt_rx.recv().await.is_none());
+    }
 
     #[test]
     fn meeting_ending_detects_canonical_patterns() {
