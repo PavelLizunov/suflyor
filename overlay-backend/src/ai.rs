@@ -164,7 +164,13 @@ pub fn stream_chat(
         // Wait for a concurrency permit before touching the model so a spam burst
         // can't flood the GPU. Held for the whole stream; dropped (freeing the
         // slot) when the producer ends or is torn down by a closed receiver.
-        let _permit = AI_SEMAPHORE.acquire().await.ok();
+        let _permit = tokio::select! {
+            permit = AI_SEMAPHORE.acquire() => permit.ok(),
+            () = tx.closed() => return,
+        };
+        if tx.is_closed() {
+            return;
+        }
         if let Err(e) =
             stream_inner(base_url, bearer, model, messages, max_tokens, tx.clone()).await
         {
@@ -924,6 +930,29 @@ pub fn build_request(
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
+
+    #[tokio::test]
+    async fn queued_stream_stops_when_receiver_is_dropped() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        let permits = AI_SEMAPHORE.acquire_many(2).await.unwrap();
+
+        let rx = stream_chat(base_url, String::new(), String::new(), Vec::new(), 1);
+        tokio::task::yield_now().await;
+        drop(rx);
+        tokio::task::yield_now().await;
+        drop(permits);
+
+        let reacquired = tokio::time::timeout(
+            std::time::Duration::from_millis(500),
+            AI_SEMAPHORE.acquire_many(2),
+        )
+        .await;
+        assert!(
+            reacquired.is_ok(),
+            "a queued stream kept a permit after its receiver was dropped"
+        );
+    }
 
     /// Structuring (`force = true`) must disable local thinking REGARDLESS of the
     /// global `ai_local_thinking` toggle — this is the v0.18.6 fix for the tester
