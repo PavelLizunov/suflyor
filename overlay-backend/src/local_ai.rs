@@ -189,6 +189,108 @@ impl HardwareModelProfile {
     }
 }
 
+/// User-selected context for Suflyor's managed llama.cpp server.
+///
+/// Manual presets never exceed the confirmed profile's safe live ceiling.
+/// `Auto` stays compact: 16K on known profiles, 8K on unknown hardware.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalContextPreset {
+    Auto,
+    K8,
+    K16,
+    K32,
+    K64,
+    K96,
+}
+
+impl LocalContextPreset {
+    #[must_use]
+    pub fn from_config(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "8k" => Self::K8,
+            "16k" => Self::K16,
+            "32k" => Self::K32,
+            "64k" => Self::K64,
+            "96k" => Self::K96,
+            _ => Self::Auto,
+        }
+    }
+
+    #[must_use]
+    pub const fn as_config(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::K8 => "8k",
+            Self::K16 => "16k",
+            Self::K32 => "32k",
+            Self::K64 => "64k",
+            Self::K96 => "96k",
+        }
+    }
+
+    #[must_use]
+    pub const fn from_index(index: i32) -> Self {
+        match index {
+            1 => Self::K8,
+            2 => Self::K16,
+            3 => Self::K32,
+            4 => Self::K64,
+            5 => Self::K96,
+            _ => Self::Auto,
+        }
+    }
+
+    #[must_use]
+    pub const fn index(self) -> i32 {
+        match self {
+            Self::Auto => 0,
+            Self::K8 => 1,
+            Self::K16 => 2,
+            Self::K32 => 3,
+            Self::K64 => 4,
+            Self::K96 => 5,
+        }
+    }
+
+    #[must_use]
+    pub fn context_tokens(self, profile: HardwareModelProfile, _prep: bool) -> u32 {
+        let safe_live = profile.context_tokens(false);
+        match self {
+            Self::Auto => 16_384.min(safe_live),
+            Self::K8 => 8_192.min(safe_live),
+            Self::K16 => 16_384.min(safe_live),
+            Self::K32 => 32_768.min(safe_live),
+            Self::K64 => 65_536.min(safe_live),
+            Self::K96 => 98_304.min(safe_live),
+        }
+    }
+
+    /// Approximate VRAM change against Auto. A real 26B/F16-KV measurement on
+    /// RTX 5060 Ti showed ~675 MiB per 32K context step.
+    #[must_use]
+    pub fn estimated_vram_delta_mib(self, profile: HardwareModelProfile) -> i32 {
+        let auto = Self::Auto.context_tokens(profile, false) as i64;
+        let selected = self.context_tokens(profile, false) as i64;
+        ((selected - auto) * 675 / 32_768) as i32
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ManagedLlamaChoice {
+    pub prefer_quality: bool,
+    pub context: LocalContextPreset,
+}
+
+impl ManagedLlamaChoice {
+    #[must_use]
+    pub const fn new(prefer_quality: bool, context: LocalContextPreset) -> Self {
+        Self {
+            prefer_quality,
+            context,
+        }
+    }
+}
+
 /// Whether a profile is in the owner's confirmed 26B-A4B matrix.
 #[must_use]
 pub const fn primary_26b_allowed(profile: HardwareModelProfile) -> bool {
@@ -254,6 +356,7 @@ pub struct InstallOptions {
     pub skip_llama: bool,
     pub skip_whisper: bool,
     pub skip_gigaam: bool,
+    pub context: LocalContextPreset,
 }
 
 impl Default for InstallOptions {
@@ -264,6 +367,7 @@ impl Default for InstallOptions {
             skip_llama: false,
             skip_whisper: false,
             skip_gigaam: false,
+            context: LocalContextPreset::Auto,
         }
     }
 }
@@ -898,6 +1002,7 @@ pub fn install(
             mmproj.as_deref(),
             gpu == GpuKind::None,
             launch_profile,
+            opts.context,
             false,
         );
         let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -1010,6 +1115,7 @@ pub fn install(
                     mmproj2.as_deref(),
                     force_cpu,
                     HardwareModelProfile::Fallback12B,
+                    opts.context,
                     false,
                 );
                 let arg_refs: Vec<&str> = fallback_args.iter().map(String::as_str).collect();
@@ -1049,6 +1155,7 @@ pub fn install(
                         mmproj2.as_deref(),
                         true,
                         HardwareModelProfile::Fallback12B,
+                        opts.context,
                         false,
                     );
                     let cpu_refs: Vec<&str> = cpu_args.iter().map(String::as_str).collect();
@@ -1508,14 +1615,14 @@ pub const fn switch_commits_choice(outcome: ModelSwitch) -> bool {
 #[must_use]
 pub fn switch_local_model(
     root: &Path,
-    previous_quality: bool,
-    prefer_quality: bool,
+    previous: ManagedLlamaChoice,
+    target: ManagedLlamaChoice,
     want_whisper: bool,
 ) -> (ModelSwitch, Vec<Child>) {
     // This is a worker-only launch boundary. A UI presence query is deliberately
     // stat-only, but loading the primary always performs (or reuses) an exact
     // SHA-256 review before we stop the currently serving fallback.
-    if prefer_quality {
+    if target.prefer_quality {
         if !primary_26b_allowed_on_current_hardware() {
             return (ModelSwitch::HardwareUnsupported, Vec::new());
         }
@@ -1539,8 +1646,8 @@ pub fn switch_local_model(
     let baseline_vram = detect_nvidia_memory_mib().map(|(used, _)| used);
     // Let the OS release the port before the relaunch binds it.
     std::thread::sleep(Duration::from_millis(800));
-    let expected = active_local_model_name(root, prefer_quality);
-    let mut started = ensure_servers(root, true, want_whisper, prefer_quality);
+    let expected = active_local_model_name(root, target.prefer_quality);
+    let mut started = ensure_servers(root, true, want_whisper, target);
     if started
         .first_mut()
         .is_some_and(|llama| wait_for_expected_llama(&expected, STRICT_LLAMA_READY_BUDGET, llama))
@@ -1556,9 +1663,10 @@ pub fn switch_local_model(
         return (ModelSwitch::FailedToStart, Vec::new());
     }
     std::thread::sleep(Duration::from_millis(800));
-    let rollback_quality = effective_verified_local_quality(root, previous_quality);
+    let rollback_quality = effective_verified_local_quality(root, previous.prefer_quality);
     let rollback_expected = active_local_model_name(root, rollback_quality);
-    let mut rollback = ensure_servers(root, true, want_whisper, rollback_quality);
+    let rollback_choice = ManagedLlamaChoice::new(rollback_quality, previous.context);
+    let mut rollback = ensure_servers(root, true, want_whisper, rollback_choice);
     if rollback.first_mut().is_some_and(|llama| {
         wait_for_expected_llama(&rollback_expected, STRICT_LLAMA_READY_BUDGET, llama)
     }) {
@@ -1588,19 +1696,19 @@ pub fn llama_reachable() -> bool {
 /// never touched here (boot launches STT separately). Call from a worker
 /// thread (blocks up to ~21 s on the relaunch+poll path).
 #[must_use]
-pub fn ensure_llama_serving(root: &Path, prefer_quality: bool) -> (ModelSwitch, Vec<Child>) {
+pub fn ensure_llama_serving(root: &Path, choice: ManagedLlamaChoice) -> (ModelSwitch, Vec<Child>) {
     if llama_reachable() {
         // Alive (serving or cold-loading) — do not disturb.
         return (ModelSwitch::Switched, Vec::new());
     }
-    restart_llama_server(root, prefer_quality)
+    restart_llama_server(root, choice)
 }
 
 /// Cold-start or reinstall recovery: reclaim only a managed listener, launch
 /// the effective persisted choice, and require exact-model readiness.
 #[must_use]
-pub fn restart_llama_server(root: &Path, prefer_quality: bool) -> (ModelSwitch, Vec<Child>) {
-    restart_llama_server_for_route(root, prefer_quality, false)
+pub fn restart_llama_server(root: &Path, choice: ManagedLlamaChoice) -> (ModelSwitch, Vec<Child>) {
+    restart_llama_server_for_route(root, choice, false)
 }
 
 /// Restart the managed server with the measured live/prep context profile.
@@ -1608,7 +1716,7 @@ pub fn restart_llama_server(root: &Path, prefer_quality: bool) -> (ModelSwitch, 
 #[must_use]
 pub fn restart_llama_server_for_route(
     root: &Path,
-    prefer_quality: bool,
+    choice: ManagedLlamaChoice,
     prep: bool,
 ) -> (ModelSwitch, Vec<Child>) {
     let had_llama = llama_reachable();
@@ -1625,17 +1733,18 @@ pub fn restart_llama_server_for_route(
     }
     let baseline_vram = detect_nvidia_memory_mib().map(|(used, _)| used);
     std::thread::sleep(Duration::from_millis(800));
-    let effective_quality = prefer_quality
+    let effective_quality = choice.prefer_quality
         && primary_26b_allowed_on_current_hardware()
         && effective_verified_local_quality(root, true);
     let expected = active_local_model_name(root, effective_quality);
-    let mut started = ensure_servers_for_route(root, true, false, effective_quality, prep);
+    let effective_choice = ManagedLlamaChoice::new(effective_quality, choice.context);
+    let mut started = ensure_servers_for_route(root, true, false, effective_choice, prep);
     if started
         .first_mut()
         .is_some_and(|llama| wait_for_expected_llama(&expected, STRICT_LLAMA_READY_BUDGET, llama))
     {
         return (
-            if prefer_quality && !effective_quality {
+            if choice.prefer_quality && !effective_quality {
                 ModelSwitch::FallbackStarted
             } else {
                 ModelSwitch::Switched
@@ -1653,7 +1762,8 @@ pub fn restart_llama_server_for_route(
     }
     std::thread::sleep(Duration::from_millis(800));
     let fallback_expected = active_local_model_name(root, false);
-    let mut fallback = ensure_servers_for_route(root, true, false, false, prep);
+    let fallback_choice = ManagedLlamaChoice::new(false, choice.context);
+    let mut fallback = ensure_servers_for_route(root, true, false, fallback_choice, prep);
     if fallback.first_mut().is_some_and(|llama| {
         wait_for_expected_llama(&fallback_expected, STRICT_LLAMA_READY_BUDGET, llama)
     }) {
@@ -2480,16 +2590,16 @@ pub fn ensure_servers(
     root: &Path,
     want_llama: bool,
     want_whisper: bool,
-    prefer_quality: bool,
+    choice: ManagedLlamaChoice,
 ) -> Vec<Child> {
-    ensure_servers_for_route(root, want_llama, want_whisper, prefer_quality, false)
+    ensure_servers_for_route(root, want_llama, want_whisper, choice, false)
 }
 
 fn ensure_servers_for_route(
     root: &Path,
     want_llama: bool,
     want_whisper: bool,
-    prefer_quality: bool,
+    choice: ManagedLlamaChoice,
     prep: bool,
 ) -> Vec<Child> {
     let mut started = Vec::new();
@@ -2506,7 +2616,7 @@ fn ensure_servers_for_route(
     if want_llama && !is_reachable(&format!("{LLAMA_BASE_URL}/models")) {
         warn_if_nvidia_vram_busy(None);
         let llama_dir = root.join("llama.cpp");
-        let gguf = selected_llama_gguf(&llama_dir, prefer_quality);
+        let gguf = selected_llama_gguf(&llama_dir, choice.prefer_quality);
         // The MATCHING vision projector for the selected model, if downloaded
         // (12B QAT ↔ mmproj-12b-F16). A mismatched projector
         // crashes llama-server on model load; a missing one → the model runs
@@ -2521,13 +2631,14 @@ fn ensure_servers_for_route(
                     .map(|name| name.to_string_lossy().into_owned())
                     .unwrap_or_default();
                 let detected = detected_hardware_model_profile(!use_gpu);
-                let profile = profile_for_model(detected, prefer_quality);
+                let profile = profile_for_model(detected, choice.prefer_quality);
                 let args = llama_server_args(
                     &gguf_s,
                     &alias,
                     mmproj_s.as_deref(),
                     !use_gpu,
                     profile,
+                    choice.context,
                     prep,
                 );
                 let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -2574,6 +2685,7 @@ fn llama_server_args(
     mmproj: Option<&str>,
     force_cpu: bool,
     profile: HardwareModelProfile,
+    context: LocalContextPreset,
     prep: bool,
 ) -> Vec<String> {
     let mut args = vec![
@@ -2586,7 +2698,7 @@ fn llama_server_args(
         "--port".to_string(),
         LLAMA_PORT.to_string(),
         "-c".to_string(),
-        profile.context_tokens(prep).to_string(),
+        context.context_tokens(profile, prep).to_string(),
         "--jinja".to_string(),
     ];
     if force_cpu {
@@ -2639,7 +2751,7 @@ fn llama_server_args(
     log::info!(
         "local-ai launch: profile={profile:?}, route={}, context_tokens={}, model={alias}",
         if prep { "prep" } else { "live" },
-        profile.context_tokens(prep)
+        context.context_tokens(profile, prep)
     );
     args
 }

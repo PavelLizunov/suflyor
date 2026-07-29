@@ -757,6 +757,48 @@ msgstr "Загрузка…"
 msgid "Bundled model profile. The 26B primary is selected only for the confirmed VRAM/RAM matrix; 12B QAT remains the RAM-safe fallback."
 msgstr "Профиль встроенной модели. Основная 26B выбирается только по подтверждённой матрице VRAM/RAM; 12B QAT остаётся безопасным для RAM резервом."
 
+msgid "Context window"
+msgstr "Окно контекста"
+
+msgid "[on] Auto"
+msgstr "[выбрано] Авто"
+
+msgid "8K"
+msgstr "8K"
+
+msgid "[on] 8K"
+msgstr "[выбрано] 8K"
+
+msgid "16K"
+msgstr "16K"
+
+msgid "[on] 16K"
+msgstr "[выбрано] 16K"
+
+msgid "32K"
+msgstr "32K"
+
+msgid "[on] 32K"
+msgstr "[выбрано] 32K"
+
+msgid "64K"
+msgstr "64K"
+
+msgid "[on] 64K"
+msgstr "[выбрано] 64K"
+
+msgid "96K"
+msgstr "96K"
+
+msgid "[on] 96K"
+msgstr "[выбрано] 96K"
+
+msgid "Auto uses a compact {}K context."
+msgstr "Авто использует компактный контекст {}K."
+
+msgid "The selected context is fixed for live answers and long summaries."
+msgstr "Выбранный контекст фиксирован для живых ответов и длинных итогов."
+
 msgid "Fallback (12B QAT)"
 msgstr "Резерв (12B QAT)"
 

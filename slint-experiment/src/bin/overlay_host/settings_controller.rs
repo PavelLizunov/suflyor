@@ -48,13 +48,13 @@ use super::{
     active_stack_label, ai, apply_scheme_bar, apply_scheme_settings, audio, clamp_scheme, config,
     drag_begin, drag_update, fetch_models, grab_hwnd, make_transparent_tile, open_wizard,
     parse_tile_monitor_pin, populate_diagnostics, present_window_stealth_aware,
-    preset_for_tts_rate, refresh_local_model_resource_warning, set_always_on_top,
-    set_global_scheme, set_global_stealth, set_global_tile_monitor, set_global_tile_opacity,
-    set_stealth, spawn_ptt_watchdog, stt, try_acquire_mic, wire_ai_settings, wire_diagnostics,
-    wire_import_export, wire_local_ai, wire_memory, wire_stt_settings, wire_updates,
-    wire_vision_settings, wire_voice_settings, Arc, AtomicBool, ComponentHandle, ComponentRow,
-    ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell, SettingsWindow, SharedString,
-    TileWindows, VecModel, WindowRegistry,
+    preset_for_tts_rate, refresh_local_context_controls, refresh_local_model_resource_warning,
+    set_always_on_top, set_global_scheme, set_global_stealth, set_global_tile_monitor,
+    set_global_tile_opacity, set_stealth, spawn_ptt_watchdog, stt, try_acquire_mic,
+    wire_ai_settings, wire_diagnostics, wire_import_export, wire_local_ai, wire_memory,
+    wire_stt_settings, wire_updates, wire_vision_settings, wire_voice_settings, Arc, AtomicBool,
+    ComponentHandle, ComponentRow, ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell,
+    SettingsWindow, SharedString, TileWindows, VecModel, WindowRegistry,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -1474,6 +1474,7 @@ pub(crate) fn populate_token_status(
     win.set_ai_local_thinking(c.ai_local_thinking);
     // Local model choice + whether the optional 26B-A4B is downloaded.
     win.set_ai_local_quality(effective_quality);
+    refresh_local_context_controls(win, &c);
     {
         let root = local_root;
         win.set_quality_model_present(overlay_backend::local_ai::quality_model_present(&root));

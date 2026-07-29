@@ -99,6 +99,11 @@ pub struct Config {
     /// A missing or invalid primary falls back to 12B.
     #[serde(default)]
     pub ai_local_quality: bool,
+    /// Managed llama.cpp context preset: "auto", "8k", "16k", "32k",
+    /// "64k", or "96k". Auto uses a compact 16K context (8K on unknown
+    /// hardware); manual values are clamped to the safe hardware ceiling.
+    #[serde(default = "default_ai_local_context")]
+    pub ai_local_context: String,
 
     /// Screenshot/vision channel — resolved INDEPENDENTLY of the text AI (via
     /// [`Config::vision_endpoint`]) so a local text model can keep answering
@@ -568,6 +573,7 @@ impl Config {
             ai_local_vision: false,
             ai_local_thinking: false,
             ai_local_quality: false,
+            ai_local_context: default_ai_local_context(),
             vision_provider: default_vision_provider(),
             vision_base_url: String::new(),
             vision_bearer: String::new(),
@@ -918,6 +924,10 @@ fn default_ai_local_base_url() -> String {
     // llama.cpp (the shipped setup-local-ai.ps1 pipeline) serves on :8080.
     // Ollama users can change this to :11434 in Settings.
     "http://127.0.0.1:8080/v1".into()
+}
+
+fn default_ai_local_context() -> String {
+    "auto".into()
 }
 
 fn default_stt_provider() -> String {

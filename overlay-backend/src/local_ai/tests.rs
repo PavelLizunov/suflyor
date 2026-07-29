@@ -489,11 +489,12 @@ fn only_nvidia_discovery_enters_the_confirmed_matrix() {
 }
 
 #[test]
-fn launcher_uses_the_exact_confirmed_profile_matrix() {
+fn launcher_uses_fixed_context_with_the_confirmed_hardware_matrix() {
     let cases = [
         (
             HardwareModelProfile::Fallback12B,
             false,
+            LocalContextPreset::K32,
             "32768",
             "34",
             None,
@@ -502,6 +503,7 @@ fn launcher_uses_the_exact_confirmed_profile_matrix() {
         (
             HardwareModelProfile::Primary26Vram8,
             false,
+            LocalContextPreset::K32,
             "32768",
             "99",
             Some("20"),
@@ -510,7 +512,8 @@ fn launcher_uses_the_exact_confirmed_profile_matrix() {
         (
             HardwareModelProfile::Primary26Vram8,
             true,
-            "65536",
+            LocalContextPreset::K64,
+            "32768",
             "99",
             Some("20"),
             true,
@@ -518,6 +521,7 @@ fn launcher_uses_the_exact_confirmed_profile_matrix() {
         (
             HardwareModelProfile::Primary26Vram12,
             false,
+            LocalContextPreset::K64,
             "65536",
             "99",
             Some("8"),
@@ -526,7 +530,8 @@ fn launcher_uses_the_exact_confirmed_profile_matrix() {
         (
             HardwareModelProfile::Primary26Vram12,
             true,
-            "98304",
+            LocalContextPreset::K96,
+            "65536",
             "99",
             Some("8"),
             true,
@@ -534,14 +539,15 @@ fn launcher_uses_the_exact_confirmed_profile_matrix() {
         (
             HardwareModelProfile::Primary26Vram16,
             true,
+            LocalContextPreset::K96,
             "98304",
             "99",
             None,
             false,
         ),
     ];
-    for (profile, prep, context, ngl, ncmoe, q8) in cases {
-        let args = llama_server_args("model.gguf", "alias", None, false, profile, prep);
+    for (profile, prep, preset, context, ngl, ncmoe, q8) in cases {
+        let args = llama_server_args("model.gguf", "alias", None, false, profile, preset, prep);
         assert!(args.windows(2).any(|pair| pair == ["-c", context]));
         assert!(args.windows(2).any(|pair| pair == ["-ngl", ngl]));
         assert!(args.windows(2).any(|pair| pair == ["-np", "1"]));
@@ -563,6 +569,7 @@ fn launcher_uses_the_exact_confirmed_profile_matrix() {
         Some("vision.gguf"),
         false,
         HardwareModelProfile::Unknown,
+        LocalContextPreset::Auto,
         false,
     );
     assert!(!unknown.iter().any(|arg| arg == "-ngl"));
@@ -573,9 +580,42 @@ fn launcher_uses_the_exact_confirmed_profile_matrix() {
         None,
         true,
         HardwareModelProfile::Unknown,
+        LocalContextPreset::Auto,
         false,
     );
     assert!(cpu.windows(2).any(|pair| pair == ["-ngl", "0"]));
+}
+
+#[test]
+fn context_presets_are_compact_clamped_and_stable() {
+    let known = HardwareModelProfile::Primary26Vram16;
+    let weak = HardwareModelProfile::Unknown;
+    assert_eq!(
+        LocalContextPreset::Auto.context_tokens(known, false),
+        16_384
+    );
+    assert_eq!(LocalContextPreset::Auto.context_tokens(weak, false), 8_192);
+    assert_eq!(LocalContextPreset::K96.context_tokens(known, true), 98_304);
+    assert_eq!(LocalContextPreset::K96.context_tokens(weak, true), 8_192);
+
+    for (index, value) in ["auto", "8k", "16k", "32k", "64k", "96k"]
+        .into_iter()
+        .enumerate()
+    {
+        let preset = LocalContextPreset::from_config(value);
+        assert_eq!(preset.index(), index as i32);
+        assert_eq!(LocalContextPreset::from_index(index as i32), preset);
+        assert_eq!(preset.as_config(), value);
+    }
+    assert_eq!(
+        LocalContextPreset::from_config("invalid"),
+        LocalContextPreset::Auto
+    );
+    assert_eq!(LocalContextPreset::K8.estimated_vram_delta_mib(known), -168);
+    assert_eq!(
+        LocalContextPreset::K96.estimated_vram_delta_mib(known),
+        1_687
+    );
 }
 
 #[test]

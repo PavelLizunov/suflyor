@@ -219,13 +219,17 @@ const SUMMARY_MIN_LINES: usize = 2;
 const SUMMARY_PARTIAL_MAX_TOKENS: u32 = 700;
 const SUMMARY_CONTEXT_RESERVE_TOKENS: u64 = 256;
 
-fn managed_summary_profile(
+fn managed_summary_context(
     is_local: bool,
     base_url: &str,
     prefer_quality: bool,
-) -> Option<crate::local_ai::HardwareModelProfile> {
-    (is_local && crate::local_ai::is_managed_llama_endpoint(base_url))
-        .then(|| crate::local_ai::current_server_profile(prefer_quality))
+    context_config: &str,
+) -> Option<u32> {
+    (is_local && crate::local_ai::is_managed_llama_endpoint(base_url)).then(|| {
+        let profile = crate::local_ai::current_server_profile(prefer_quality);
+        crate::local_ai::LocalContextPreset::from_config(context_config)
+            .context_tokens(profile, true)
+    })
 }
 
 fn prompt_fits_context(prompt_tokens: u64, max_tokens: u32, context_tokens: u32) -> bool {
@@ -257,18 +261,17 @@ async fn summary_request_fits(
     model: &str,
     messages: &[ai::ChatMessage],
     max_tokens: u32,
-    profile: Option<crate::local_ai::HardwareModelProfile>,
+    context_tokens: Option<u32>,
 ) -> bool {
-    let Some(profile) = profile else {
+    let Some(context_tokens) = context_tokens else {
         return message_text_chars(messages) <= SUMMARY_INPUT_BUDGET_CLOUD_CHARS;
     };
     match ai::count_chat_tokens(base_url, bearer, model, messages).await {
         Ok(prompt_tokens) => {
-            let context_tokens = profile.context_tokens(true);
             let fits = prompt_fits_context(prompt_tokens, max_tokens, context_tokens);
             log::info!(
-                "meeting summary budget: profile={profile:?}, prompt_tokens={prompt_tokens}, \
-                 max_tokens={max_tokens}, context_tokens={context_tokens}, fits={fits}"
+                "meeting summary budget: prompt_tokens={prompt_tokens}, max_tokens={max_tokens}, \
+                 context_tokens={context_tokens}, fits={fits}"
             );
             fits
         }
@@ -686,6 +689,7 @@ pub async fn run_meeting_summary(
         model,
         is_local,
         prefer_quality,
+        local_context,
     ) = {
         let c = cfg.read();
         // Same endpoint policy as the debrief: prep=true picks the
@@ -700,6 +704,7 @@ pub async fn run_meeting_summary(
             ep.model,
             ep.is_local,
             c.ai_local_quality,
+            c.ai_local_context.clone(),
         )
     };
     let is_ru = response_language == "ru";
@@ -755,7 +760,8 @@ pub async fn run_meeting_summary(
     };
     // Build a fresh conspect. The part SOURCES are recorded up front and
     // persisted BEFORE any AI call, so a crash / error mid-map keeps them.
-    let profile = managed_summary_profile(is_local, &base_url, prefer_quality);
+    let context_tokens =
+        managed_summary_context(is_local, &base_url, prefer_quality, &local_context);
     let direct_memory_ref = crate::memory::summary_reference_for_transcript(&formatted);
     let direct_messages = build_summary_seed_from_formatted(
         &formatted,
@@ -769,7 +775,7 @@ pub async fn run_meeting_summary(
         &model,
         &direct_messages,
         SUMMARY_MAX_TOKENS,
-        profile,
+        context_tokens,
     )
     .await;
     let cs = if direct {
@@ -851,6 +857,7 @@ struct ManagedPrepSession {
     _lifecycle: tokio::sync::OwnedSemaphorePermit,
     root: std::path::PathBuf,
     prefer_quality: bool,
+    context: crate::local_ai::LocalContextPreset,
     switched: bool,
     children: Vec<std::process::Child>,
     restored: bool,
@@ -858,12 +865,13 @@ struct ManagedPrepSession {
 
 impl ManagedPrepSession {
     async fn start(cfg: &SharedConfig) -> anyhow::Result<Option<Self>> {
-        let (managed, prefer_quality) = {
+        let (managed, prefer_quality, context) = {
             let c = cfg.read();
             let ep = c.ai_endpoint(true);
             (
                 ep.is_local && crate::local_ai::is_managed_llama_endpoint(&ep.base_url),
                 c.ai_local_quality,
+                crate::local_ai::LocalContextPreset::from_config(&c.ai_local_context),
             )
         };
         if !managed {
@@ -881,11 +889,13 @@ impl ManagedPrepSession {
             .await
             .map_err(|_| anyhow::anyhow!("local AI lifecycle queue closed"))?;
         let root = crate::local_ai::default_root();
-        let switched = prefer_quality && profile.requires_prep_switch();
+        let choice = crate::local_ai::ManagedLlamaChoice::new(prefer_quality, context);
+        let switched = prefer_quality
+            && context.context_tokens(profile, true) != context.context_tokens(profile, false);
         let children = if switched {
             let launch_root = root.clone();
             let (outcome, children) = tokio::task::spawn_blocking(move || {
-                crate::local_ai::restart_llama_server_for_route(&launch_root, prefer_quality, true)
+                crate::local_ai::restart_llama_server_for_route(&launch_root, choice, true)
             })
             .await
             .map_err(|_| anyhow::anyhow!("prep server worker failed"))?;
@@ -894,7 +904,7 @@ impl ManagedPrepSession {
                 let _ = tokio::task::spawn_blocking(move || {
                     let result = crate::local_ai::restart_llama_server_for_route(
                         &restore_root,
-                        prefer_quality,
+                        choice,
                         false,
                     );
                     crate::local_ai::terminate_servers(children);
@@ -913,6 +923,7 @@ impl ManagedPrepSession {
             _lifecycle: lifecycle,
             root,
             prefer_quality,
+            context,
             switched,
             children,
             restored: false,
@@ -923,10 +934,11 @@ impl ManagedPrepSession {
         if self.switched {
             let root = self.root.clone();
             let prefer_quality = self.prefer_quality;
+            let context = self.context;
             let children = std::mem::take(&mut self.children);
             match tokio::task::spawn_blocking(move || {
-                let result =
-                    crate::local_ai::restart_llama_server_for_route(&root, prefer_quality, false);
+                let choice = crate::local_ai::ManagedLlamaChoice::new(prefer_quality, context);
+                let result = crate::local_ai::restart_llama_server_for_route(&root, choice, false);
                 crate::local_ai::terminate_servers(children);
                 result
             })
@@ -960,8 +972,9 @@ impl Drop for ManagedPrepSession {
         // Cancellation safety: never leave the prep route serving after an
         // aborted summary. This rare path may block while the live model loads.
         let prep_children = std::mem::take(&mut self.children);
+        let choice = crate::local_ai::ManagedLlamaChoice::new(self.prefer_quality, self.context);
         let (outcome, children) =
-            crate::local_ai::restart_llama_server_for_route(&self.root, self.prefer_quality, false);
+            crate::local_ai::restart_llama_server_for_route(&self.root, choice, false);
         crate::local_ai::terminate_servers(prep_children);
         if matches!(
             outcome,
@@ -1012,7 +1025,7 @@ async fn ensure_map_parts_fit(
     base_url: &str,
     bearer: &str,
     model: &str,
-    profile: Option<crate::local_ai::HardwareModelProfile>,
+    context_tokens: Option<u32>,
 ) -> bool {
     let mut index = 0;
     while index < cs.parts.len() {
@@ -1037,7 +1050,7 @@ async fn ensure_map_parts_fit(
             model,
             &messages,
             SUMMARY_PARTIAL_MAX_TOKENS,
-            profile,
+            context_tokens,
         )
         .await
         {
@@ -1073,7 +1086,7 @@ async fn pack_reduce_batches(
     base_url: &str,
     bearer: &str,
     model: &str,
-    profile: Option<crate::local_ai::HardwareModelProfile>,
+    context_tokens: Option<u32>,
 ) -> anyhow::Result<Vec<Vec<String>>> {
     let mut batches = Vec::new();
     let mut current = Vec::new();
@@ -1087,7 +1100,7 @@ async fn pack_reduce_batches(
             model,
             &messages,
             SUMMARY_PARTIAL_MAX_TOKENS,
-            profile,
+            context_tokens,
         )
         .await
         {
@@ -1106,7 +1119,7 @@ async fn pack_reduce_batches(
             model,
             &messages,
             SUMMARY_PARTIAL_MAX_TOKENS,
-            profile,
+            context_tokens,
         )
         .await
         {
@@ -1129,7 +1142,7 @@ async fn reduce_summary_full(
     base_url: &str,
     bearer: &str,
     model: &str,
-    profile: Option<crate::local_ai::HardwareModelProfile>,
+    context_tokens: Option<u32>,
     exclusive: bool,
 ) -> anyhow::Result<String> {
     loop {
@@ -1140,7 +1153,7 @@ async fn reduce_summary_full(
             model,
             &final_messages,
             SUMMARY_MAX_TOKENS,
-            profile,
+            context_tokens,
         )
         .await
         {
@@ -1160,9 +1173,16 @@ async fn reduce_summary_full(
 
         let old_len = partials.len();
         let old_chars: usize = partials.iter().map(String::len).sum();
-        let batches =
-            pack_reduce_batches(partials, is_ru, is_local, base_url, bearer, model, profile)
-                .await?;
+        let batches = pack_reduce_batches(
+            partials,
+            is_ru,
+            is_local,
+            base_url,
+            bearer,
+            model,
+            context_tokens,
+        )
+        .await?;
         let mut next = Vec::with_capacity(batches.len());
         for batch in batches {
             let messages = build_summary_reduce_seed(&batch, is_ru, is_local, None);
@@ -1237,7 +1257,7 @@ async fn finish_summary_from_conspect_inner(
     stealth: bool,
     exclusive: bool,
 ) {
-    let (base_url, bearer, model, is_local, prefer_quality) = {
+    let (base_url, bearer, model, is_local, prefer_quality, local_context) = {
         let c = cfg.read();
         let ep = c.ai_endpoint(true);
         (
@@ -1246,16 +1266,18 @@ async fn finish_summary_from_conspect_inner(
             ep.model,
             ep.is_local,
             c.ai_local_quality,
+            c.ai_local_context.clone(),
         )
     };
     let is_ru = cs.is_ru;
-    let profile = managed_summary_profile(is_local, &base_url, prefer_quality);
+    let context_tokens =
+        managed_summary_context(is_local, &base_url, prefer_quality, &local_context);
 
     // MAP — fill every part still missing its conspectus (no-op for a single
     // pass or an already-mapped conspect). Never reduce an incomplete map:
     // completed parts stay persisted and Retry resumes from the first gap.
     if !cs.single_pass {
-        if !ensure_map_parts_fit(&mut cs, &base_url, &bearer, &model, profile).await {
+        if !ensure_map_parts_fit(&mut cs, &base_url, &bearer, &model, context_tokens).await {
             log::warn!("meeting summary: a map part cannot fit the active context");
             spawn_summary_error_tile(
                 events,
@@ -1344,7 +1366,7 @@ async fn finish_summary_from_conspect_inner(
             &model,
             &messages,
             SUMMARY_MAX_TOKENS,
-            profile,
+            context_tokens,
         )
         .await
         {
@@ -1386,7 +1408,7 @@ async fn finish_summary_from_conspect_inner(
             &base_url,
             &bearer,
             &model,
-            profile,
+            context_tokens,
             exclusive,
         )
         .await

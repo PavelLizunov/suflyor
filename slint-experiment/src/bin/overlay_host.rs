@@ -1096,7 +1096,15 @@ fn main() -> Result<(), slint::PlatformError> {
                 c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081")
             };
             if want_whisper {
-                let started = overlay_backend::local_ai::ensure_servers(&root, false, true, false);
+                let started = overlay_backend::local_ai::ensure_servers(
+                    &root,
+                    false,
+                    true,
+                    overlay_backend::local_ai::ManagedLlamaChoice::new(
+                        false,
+                        overlay_backend::local_ai::LocalContextPreset::Auto,
+                    ),
+                );
                 if !started.is_empty() {
                     state_w
                         .lock()
@@ -1118,7 +1126,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         )
                 };
                 if want_llama {
-                    let prefer_quality = {
+                    let choice = {
                         let mut c = cfg_w.write();
                         if overlay_backend::local_ai::repair_managed_model_state(&mut c, &root) {
                             if let Err(e) = overlay_backend::config::save(&c) {
@@ -1127,7 +1135,12 @@ fn main() -> Result<(), slint::PlatformError> {
                                 );
                             }
                         }
-                        c.ai_local_quality
+                        overlay_backend::local_ai::ManagedLlamaChoice::new(
+                            c.ai_local_quality,
+                            overlay_backend::local_ai::LocalContextPreset::from_config(
+                                &c.ai_local_context,
+                            ),
+                        )
                     };
                     // Cold boot: any server already on :8080 is necessarily from
                     // a PREVIOUS process — typically a stale orphan an in-place
@@ -1155,7 +1168,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         return;
                     };
                     let (outcome, started) =
-                        overlay_backend::local_ai::restart_llama_server(&root, prefer_quality);
+                        overlay_backend::local_ai::restart_llama_server(&root, choice);
                     drop(guard);
                     if matches!(
                         outcome,
@@ -1232,14 +1245,19 @@ fn main() -> Result<(), slint::PlatformError> {
             }
             let mut watchdog = WatchdogState::default();
             loop {
-                let (want_llama, prefer_quality) = {
+                let (want_llama, choice) = {
                     let c = cfg_w.read();
                     (
                         c.ai_provider == "local"
                             && overlay_backend::local_ai::is_managed_llama_endpoint(
                                 &c.ai_local_base_url,
                             ),
-                        c.ai_local_quality,
+                        overlay_backend::local_ai::ManagedLlamaChoice::new(
+                            c.ai_local_quality,
+                            overlay_backend::local_ai::LocalContextPreset::from_config(
+                                &c.ai_local_context,
+                            ),
+                        ),
                     )
                 };
                 if want_llama {
@@ -1275,8 +1293,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                     );
                                     let (outcome, started) =
                                         overlay_backend::local_ai::ensure_llama_serving(
-                                            &root,
-                                            prefer_quality,
+                                            &root, choice,
                                         );
                                     let attempt_now = std::time::Instant::now();
                                     match outcome {

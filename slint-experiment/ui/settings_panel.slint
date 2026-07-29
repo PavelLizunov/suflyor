@@ -437,6 +437,11 @@ export component SettingsWindow inherits Window {
     in-out property <bool> model-switching: false; // server relaunch in flight
     in-out property <float> quality-progress: 0.0; // 0.0..1.0
     in-out property <string> quality-status: "";
+    // Managed 26B context: 0=Auto, 1=8K, 2=16K, 3=32K, 4=64K, 5=96K.
+    in-out property <int> ai-local-context-index: 0;
+    in-out property <int> ai-local-context-max-k: 32;
+    in-out property <int> ai-local-context-auto-k: 16;
+    in-out property <string> ai-local-context-vram-hint: "";
     // Legacy projector state remains for callback compatibility. The current UI
     // does not offer a 26B projector because its vision memory is unconfirmed.
     in-out property <bool> quality-vision-present: false;
@@ -501,6 +506,7 @@ export component SettingsWindow inherits Window {
     // `model-quality-changed` transactionally restarts the managed server;
     // `download-quality-clicked` pulls the exact pinned 26B file on demand.
     callback model-quality-changed(bool);
+    callback ai-local-context-changed(int);
     callback download-quality-clicked();
     // Legacy projector callback plus llama.cpp engine update.
     callback download-vision12b-clicked();
@@ -2214,6 +2220,69 @@ export component SettingsWindow inherits Window {
                                 font-size: 10px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
+                            }
+                            if root.managed-local-server && root.ai-local-quality : VerticalLayout {
+                                spacing: 6px;
+                                Text {
+                                    text: @tr("Context window");
+                                    font-size: 11px;
+                                    font-weight: 700;
+                                    color: Theme.text-primary;
+                                }
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    Button {
+                                        text: root.ai-local-context-index == 0 ? @tr("[on] Auto") : @tr("Auto");
+                                        enabled: root.ai-local-context-index != 0 && !root.model-switching && !root.local-ai-installing;
+                                        clicked => { root.ai-local-context-changed(0); }
+                                    }
+                                    Button {
+                                        text: root.ai-local-context-index == 1 ? @tr("[on] 8K") : @tr("8K");
+                                        enabled: root.ai-local-context-index != 1 && !root.model-switching && !root.local-ai-installing;
+                                        clicked => { root.ai-local-context-changed(1); }
+                                    }
+                                    Button {
+                                        text: root.ai-local-context-index == 2 ? @tr("[on] 16K") : @tr("16K");
+                                        enabled: root.ai-local-context-max-k >= 16 && root.ai-local-context-index != 2 && !root.model-switching && !root.local-ai-installing;
+                                        clicked => { root.ai-local-context-changed(2); }
+                                    }
+                                    Button {
+                                        text: root.ai-local-context-index == 3 ? @tr("[on] 32K") : @tr("32K");
+                                        enabled: root.ai-local-context-max-k >= 32 && root.ai-local-context-index != 3 && !root.model-switching && !root.local-ai-installing;
+                                        clicked => { root.ai-local-context-changed(3); }
+                                    }
+                                }
+                                if root.ai-local-context-max-k >= 64 : HorizontalLayout {
+                                    spacing: 6px;
+                                    if root.ai-local-context-max-k >= 64 : Button {
+                                        text: root.ai-local-context-index == 4 ? @tr("[on] 64K") : @tr("64K");
+                                        enabled: root.ai-local-context-index != 4 && !root.model-switching && !root.local-ai-installing;
+                                        clicked => { root.ai-local-context-changed(4); }
+                                    }
+                                    if root.ai-local-context-max-k >= 96 : Button {
+                                        text: root.ai-local-context-index == 5 ? @tr("[on] 96K") : @tr("96K");
+                                        enabled: root.ai-local-context-index != 5 && !root.model-switching && !root.local-ai-installing;
+                                        clicked => { root.ai-local-context-changed(5); }
+                                    }
+                                }
+                                if root.ai-local-context-index == 0 : Text {
+                                    text: @tr("Auto uses a compact {}K context.", root.ai-local-context-auto-k);
+                                    font-size: 10px;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
+                                }
+                                if root.ai-local-context-index != 0 : Text {
+                                    text: @tr("The selected context is fixed for live answers and long summaries.");
+                                    font-size: 10px;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
+                                }
+                                Text {
+                                    text: root.ai-local-context-vram-hint;
+                                    font-size: 10px;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
+                                }
                             }
                             Text {
                                 text: root.local-model-resource-warning;
