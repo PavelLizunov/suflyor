@@ -66,6 +66,11 @@ windows = { version = "0.62", features = [
     "Win32_System_JobObjects",
     "Win32_System_Threading",
     "Win32_Security",
+    # Exact dedicated VRAM for the AMD/Intel Vulkan launcher path. WMI's
+    # Win32_VideoController.AdapterRAM is a 32-bit legacy value and truncates
+    # modern 8-16 GiB adapters, so use DXGI instead.
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
 ] }
 
 # Neural TTS (read-aloud) runs in the `suflyor-tts` SIDECAR process — sherpa-onnx

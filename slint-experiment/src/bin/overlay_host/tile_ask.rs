@@ -434,7 +434,10 @@ pub(crate) fn fire_f9_ask(
             c.response_language.clone(),
             c.max_session_cost_usd,
             ep.is_local,
-            c.ai_local_vision,
+            overlay_backend::local_ai::local_vision_enabled(
+                &c,
+                &overlay_backend::local_ai::default_root(),
+            ),
         )
     };
     // Audit (prompt-context): the F9 / typed-ask LLM prompt must carry the user's

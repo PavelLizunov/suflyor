@@ -1059,7 +1059,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // cooldown + a fail cap keep a broken install from spawning forever; a
     // reachable server re-arms the cap. On a confirmed (re)start we sync the
     // persisted model name and refresh the bar so the user always sees the
-    // model that is actually serving (Gemma 4B / 12B).
+    // model that is actually serving (Gemma 12B QAT / 26B-A4B).
     {
         let cfg_w = cfg.clone();
         let state_w = state.clone();
@@ -1106,14 +1106,25 @@ fn main() -> Result<(), slint::PlatformError> {
             // BEFORE the engine-update block claims the lifecycle lock for a
             // potentially long download.
             {
-                let (want_llama, prefer_quality) = {
+                let want_llama = {
                     let c = cfg_w.read();
-                    (
-                        c.ai_provider == "local" && c.ai_local_base_url.contains(":8080"),
-                        c.ai_local_quality,
-                    )
+                    c.ai_provider == "local"
+                        && overlay_backend::local_ai::is_managed_llama_endpoint(
+                            &c.ai_local_base_url,
+                        )
                 };
                 if want_llama {
+                    let prefer_quality = {
+                        let mut c = cfg_w.write();
+                        if overlay_backend::local_ai::repair_managed_model_state(&mut c, &root) {
+                            if let Err(e) = overlay_backend::config::save(&c) {
+                                eprintln!(
+                                    "[overlay-host] local AI state repair save failed: {e:#}"
+                                );
+                            }
+                        }
+                        c.ai_local_quality
+                    };
                     // Cold boot: any server already on :8080 is necessarily from
                     // a PREVIOUS process — typically a stale orphan an in-place
                     // upgrade or force-kill left squatting the port. Bare
@@ -1135,9 +1146,35 @@ fn main() -> Result<(), slint::PlatformError> {
                         s.local_ai_lock.clone()
                     };
                     let guard = lifecycle_lock.lock().unwrap_or_else(|p| p.into_inner());
-                    let (_outcome, started) =
-                        overlay_backend::local_ai::switch_local_model(&root, prefer_quality, false);
+                    let (outcome, started) =
+                        overlay_backend::local_ai::restart_llama_server(&root, prefer_quality);
                     drop(guard);
+                    if matches!(
+                        outcome,
+                        overlay_backend::local_ai::ModelSwitch::Switched
+                            | overlay_backend::local_ai::ModelSwitch::FallbackStarted
+                    ) {
+                        let mut c = cfg_w.write();
+                        if outcome == overlay_backend::local_ai::ModelSwitch::FallbackStarted {
+                            c.ai_local_quality = false;
+                        }
+                        if overlay_backend::local_ai::repair_managed_model_state_after_verification(
+                            &mut c, &root,
+                        ) {
+                            if let Err(e) = overlay_backend::config::save(&c) {
+                                eprintln!(
+                                    "[overlay-host] verified local AI state repair save failed: {e:#}"
+                                );
+                            }
+                        }
+                        let label = active_stack_label(&c);
+                        let overlay_for_refresh = overlay_w.clone();
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(o) = overlay_for_refresh.upgrade() {
+                                o.set_active_stack(SharedString::from(label));
+                            }
+                        });
+                    }
                     if !started.is_empty() {
                         state_w
                             .lock()
@@ -1186,7 +1223,10 @@ fn main() -> Result<(), slint::PlatformError> {
                 let (want_llama, prefer_quality) = {
                     let c = cfg_w.read();
                     (
-                        c.ai_provider == "local" && c.ai_local_base_url.contains(":8080"),
+                        c.ai_provider == "local"
+                            && overlay_backend::local_ai::is_managed_llama_endpoint(
+                                &c.ai_local_base_url,
+                            ),
                         c.ai_local_quality,
                     )
                 };
@@ -1232,7 +1272,8 @@ fn main() -> Result<(), slint::PlatformError> {
                                         );
                                     let attempt_now = std::time::Instant::now();
                                     match outcome {
-                                        overlay_backend::local_ai::ModelSwitch::Switched => {
+                                        overlay_backend::local_ai::ModelSwitch::Switched
+                                        | overlay_backend::local_ai::ModelSwitch::FallbackStarted => {
                                             watchdog.note_attempt(attempt_now, true);
                                             {
                                                 let mut s = state_w
@@ -1253,11 +1294,22 @@ fn main() -> Result<(), slint::PlatformError> {
                                             // so the readout shows the real model.
                                             let label = {
                                                 let mut c = cfg_w.write();
-                                                c.ai_local_model =
-                                                    overlay_backend::local_ai::active_local_model_name(
-                                                        &root,
-                                                        prefer_quality,
+                                                if outcome
+                                                    == overlay_backend::local_ai::ModelSwitch::FallbackStarted
+                                                {
+                                                    c.ai_local_quality = false;
+                                                }
+                                                overlay_backend::local_ai::repair_managed_model_state_after_verification(
+                                                    &mut c,
+                                                    &root,
+                                                );
+                                                if let Err(e) =
+                                                    overlay_backend::config::save(&c)
+                                                {
+                                                    eprintln!(
+                                                        "[overlay-host] local AI watchdog save failed: {e:#}"
                                                     );
+                                                }
                                                 active_stack_label(&c)
                                             };
                                             diag!("local AI server ready ({label})");
@@ -1274,6 +1326,31 @@ fn main() -> Result<(), slint::PlatformError> {
                                             overlay_backend::local_ai::terminate_servers(started);
                                             diag!(
                                                 "local AI :8080 held by a foreign process — not restarting"
+                                            );
+                                        }
+                                        overlay_backend::local_ai::ModelSwitch::RolledBack => {
+                                            watchdog.note_attempt(attempt_now, true);
+                                            state_w
+                                                .lock()
+                                                .unwrap_or_else(|p| p.into_inner())
+                                                .local_ai_servers
+                                                .extend(started);
+                                            diag!(
+                                                "local AI restart target failed — previous model restored"
+                                            );
+                                        }
+                                        overlay_backend::local_ai::ModelSwitch::TargetUnavailable => {
+                                            watchdog.note_attempt(attempt_now, false);
+                                            overlay_backend::local_ai::terminate_servers(started);
+                                            diag!(
+                                                "local AI selected primary file unavailable"
+                                            );
+                                        }
+                                        overlay_backend::local_ai::ModelSwitch::HardwareUnsupported => {
+                                            watchdog.note_attempt(attempt_now, false);
+                                            overlay_backend::local_ai::terminate_servers(started);
+                                            diag!(
+                                                "local AI primary is outside the confirmed hardware matrix"
                                             );
                                         }
                                         overlay_backend::local_ai::ModelSwitch::FailedToStart => {
@@ -3852,8 +3929,8 @@ pub(crate) fn active_stack_label(c: &overlay_backend::config::Config) -> String 
     } else {
         c.ai_model.as_str()
     };
-    // For a LOCAL model show the friendly "Gemma 4B" / "Gemma 12B" so the user
-    // can tell the fast vs smart model apart at a glance (the user asked to see
+    // For a LOCAL model show the friendly "Gemma 12B" / "Gemma 26B-A4B" so the user
+    // can tell the fallback vs primary model apart at a glance (the user asked to see
     // the selected model more explicitly); cloud models keep the short id.
     let model = if ai_local {
         overlay_backend::local_ai::local_model_label(model_full)

@@ -92,12 +92,11 @@ pub struct Config {
     /// model to think. Only affects the LOCAL provider.
     #[serde(default)]
     pub ai_local_thinking: bool,
-    /// Local LLM size preference: `false` (default) = the fast ~4B model
-    /// (Gemma 4 E4B), `true` = the smarter but ~2× slower 12B (Gemma 4 12B
-    /// QAT). The local server loads ONE GGUF; flipping this restarts
-    /// llama-server with the other file. `true` is honoured only when the 12B
-    /// GGUF is actually present on disk (downloaded on demand from Settings),
-    /// else we transparently fall back to the 4B so the server always starts.
+    /// Bundled local LLM profile: `false` = RAM-safe Gemma 4 12B QAT fallback,
+    /// `true` = owner-approved Gemma 4 26B-A4B primary. The local server loads
+    /// one GGUF; `true` is honoured only when the pinned 26B candidate is
+    /// present, and worker-side launch rechecks its exact SHA-256 before load.
+    /// A missing or invalid primary falls back to 12B.
     #[serde(default)]
     pub ai_local_quality: bool,
 
