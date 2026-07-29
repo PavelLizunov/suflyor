@@ -543,14 +543,14 @@ impl Store {
     }
 
     /// Approve a candidate: mark it `approved` AND mint a [`MemoryItem`] from it,
-    /// in ONE transaction. Returns the new item id. Errors if the candidate id
-    /// doesn't exist (the row read fails → the tx rolls back).
+    /// in ONE transaction. Returns the new item id. Errors if the candidate
+    /// doesn't exist or is no longer pending (the tx rolls back).
     pub fn approve_candidate(&mut self, candidate_id: i64, approved_at_ms: i64) -> Result<i64> {
         let tx = self.conn.transaction().context("begin approve tx")?;
         let (profile_id, kind, text, source): (String, String, String, Option<String>) = tx
             .query_row(
                 "SELECT profile_id, kind, text, source_session_id \
-                 FROM memory_candidates WHERE id = ?1",
+                 FROM memory_candidates WHERE id = ?1 AND status = 'pending'",
                 params![candidate_id],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
             )
@@ -1162,6 +1162,20 @@ mod tests {
         assert_eq!(items[0].source_session_id.as_deref(), Some("sess-1"));
         assert_eq!(items[0].approved_at_ms, 50);
         assert!(items[0].archived_at_ms.is_none());
+    }
+
+    #[test]
+    fn approve_candidate_twice_mints_only_one_item() {
+        let mut store = Store::open_in_memory().unwrap();
+        let cid = store
+            .insert_candidate(&new_cand("use a hash map"), 5)
+            .unwrap();
+        store.approve_candidate(cid, 50).unwrap();
+
+        assert!(store.approve_candidate(cid, 51).is_err());
+        let items = store.list_memory_items("default", true, -1).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].approved_at_ms, 50);
     }
 
     #[test]
