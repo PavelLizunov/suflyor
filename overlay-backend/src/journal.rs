@@ -150,6 +150,17 @@ pub struct Journal {
 }
 
 impl Journal {
+    #[cfg(test)]
+    pub(crate) fn counting_for_test() -> Self {
+        let (tx, rx) = mpsc::unbounded_channel::<String>();
+        drop(rx);
+        Self {
+            tx: Some(Arc::new(tx)),
+            path: None,
+            counters: Some(Arc::new(Mutex::new(SessionCounters::default()))),
+        }
+    }
+
     /// Open with the pre-v0.15 hard-coded retention (keep 100 / 500 MB).
     /// Production callers should prefer [`Journal::open_new_session_with_limits`]
     /// with the user's configured values.
