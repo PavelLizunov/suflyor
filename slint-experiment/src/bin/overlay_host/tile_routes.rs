@@ -28,6 +28,11 @@ pub(crate) enum AskRoute {
 }
 
 impl AskRoute {
+    /// Explicit cloud escalation needs the cloud bearer; other routes do not.
+    pub(crate) fn has_required_auth(self, c: &overlay_backend::config::Config) -> bool {
+        self != AskRoute::Cloud || !c.ai_bearer.trim().is_empty()
+    }
+
     /// Resolve the endpoint for this route from config.
     pub(crate) fn endpoint(
         self,
@@ -61,4 +66,25 @@ pub(crate) type LiveRoute = Rc<std::cell::Cell<AskRoute>>;
 
 pub(crate) fn live_route(initial: AskRoute) -> LiveRoute {
     Rc::new(std::cell::Cell::new(initial))
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use super::AskRoute;
+
+    #[test]
+    fn cloud_route_requires_bearer() {
+        let mut config = overlay_backend::config::Config {
+            ai_bearer: " \t".into(),
+            ..Default::default()
+        };
+
+        assert!(!AskRoute::Cloud.has_required_auth(&config));
+        assert!(AskRoute::Text.has_required_auth(&config));
+
+        config.ai_bearer = "token".into();
+        assert!(AskRoute::Cloud.has_required_auth(&config));
+    }
 }
