@@ -1077,7 +1077,11 @@ fn main() -> Result<(), slint::PlatformError> {
                     let s = state_w.lock().unwrap_or_else(|p| p.into_inner());
                     s.local_ai_lock.clone()
                 };
-                let _g = lifecycle_lock.lock().unwrap_or_else(|p| p.into_inner());
+                let Some(_g) =
+                    overlay_backend::local_ai::blocking_acquire_lifecycle(&lifecycle_lock)
+                else {
+                    return;
+                };
                 overlay_backend::local_ai::sweep_orphaned_engine_artifacts(&root);
             }
             // Bring the local servers UP FIRST (on the CURRENT engine) so AI + STT
@@ -1145,7 +1149,11 @@ fn main() -> Result<(), slint::PlatformError> {
                         let s = state_w.lock().unwrap_or_else(|p| p.into_inner());
                         s.local_ai_lock.clone()
                     };
-                    let guard = lifecycle_lock.lock().unwrap_or_else(|p| p.into_inner());
+                    let Some(guard) =
+                        overlay_backend::local_ai::blocking_acquire_lifecycle(&lifecycle_lock)
+                    else {
+                        return;
+                    };
                     let (outcome, started) =
                         overlay_backend::local_ai::restart_llama_server(&root, prefer_quality);
                     drop(guard);
@@ -1197,7 +1205,11 @@ fn main() -> Result<(), slint::PlatformError> {
                     let s = state_w.lock().unwrap_or_else(|p| p.into_inner());
                     s.local_ai_lock.clone()
                 };
-                let guard = lifecycle_lock.lock().unwrap_or_else(|p| p.into_inner());
+                let Some(guard) =
+                    overlay_backend::local_ai::blocking_acquire_lifecycle(&lifecycle_lock)
+                else {
+                    return;
+                };
                 let no_cancel = std::sync::atomic::AtomicBool::new(false);
                 match overlay_backend::local_ai::update_llama_engine(&root, &no_cancel, &|p| {
                     if let overlay_backend::local_ai::Progress::Step(s) = p {
@@ -1251,13 +1263,9 @@ fn main() -> Result<(), slint::PlatformError> {
                                 let s = state_w.lock().unwrap_or_else(|p| p.into_inner());
                                 s.local_ai_lock.clone()
                             };
-                            let guard = match lifecycle_lock.try_lock() {
-                                Ok(g) => Some(g),
-                                Err(std::sync::TryLockError::Poisoned(p)) => Some(p.into_inner()),
-                                // A manual install/switch owns the lifecycle — let
-                                // it bring :8080 up; we re-check next tick.
-                                Err(std::sync::TryLockError::WouldBlock) => None,
-                            };
+                            // A manual install/switch/summary owns the lifecycle:
+                            // let it bring :8080 up; re-check next tick.
+                            let guard = lifecycle_lock.try_acquire_owned().ok();
                             if let Some(_ai_guard) = guard {
                                 // Re-check UNDER the lock — a manual op may have
                                 // brought :8080 up between our probe and the lock.

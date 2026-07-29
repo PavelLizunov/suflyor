@@ -119,6 +119,14 @@ fn local_result(quality: bool, vision: bool) -> LocalAiResult {
 #[test]
 fn owner_primary_coordinates_and_sha_are_exact() {
     assert_eq!(
+        GEMMA_URL,
+        "https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/980b060c40a8539ac159e0501a3e0f66a6365af3/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf"
+    );
+    assert_eq!(
+        GEMMA_SHA256,
+        "90fd44e29e0d7cffeb0fd00dc73cfdab9ed0b0e95306ecf7821ea634c940c370"
+    );
+    assert_eq!(
         GEMMA26_URL,
         "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/c099eb4/gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf"
     );
@@ -372,6 +380,24 @@ fn mmproj_attach_rules_gated_12b_and_text_only_26b() {
 }
 
 #[test]
+fn primary_model_requires_the_tested_llama_build() {
+    let tmp = tempfile::tempdir().unwrap();
+    assert!(!llama_build_supports_26b(tmp.path()));
+    std::fs::write(
+        tmp.path().join(".llama-build"),
+        format!("b{}", GEMMA26_MIN_BUILD - 1),
+    )
+    .unwrap();
+    assert!(!llama_build_supports_26b(tmp.path()));
+    std::fs::write(
+        tmp.path().join(".llama-build"),
+        format!("b{GEMMA26_MIN_BUILD}"),
+    )
+    .unwrap();
+    assert!(llama_build_supports_26b(tmp.path()));
+}
+
+#[test]
 fn owner_hardware_matrix_is_exact() {
     assert_eq!(
         select_hardware_model_profile(Some(8), Some(16)),
@@ -416,6 +442,23 @@ fn owner_hardware_matrix_is_exact() {
 }
 
 #[test]
+fn vram_release_uses_the_largest_dedicated_adapter_and_requires_a_drop() {
+    assert_eq!(
+        parse_nvidia_memory_mib("512, 8192\n1537, 16384\n"),
+        Some((1537, 16384))
+    );
+    assert_eq!(parse_nvidia_memory_mib("not available\n"), None);
+    assert!(vram_has_released(8192, Some(2048)));
+    assert!(vram_has_released(8192, Some(8128)));
+    assert!(!vram_has_released(8192, Some(8129)));
+    assert!(!vram_has_released(8192, Some(8192)));
+    assert!(!vram_has_released(8192, None));
+    assert!(vram_is_at_baseline(2048, Some(2112)));
+    assert!(!vram_is_at_baseline(2048, Some(2113)));
+    assert!(!vram_is_at_baseline(2048, None));
+}
+
+#[test]
 fn only_confirmed_profiles_allow_manual_primary_selection() {
     assert!(!primary_26b_allowed(HardwareModelProfile::Unknown));
     assert!(!primary_26b_allowed(HardwareModelProfile::Fallback12B));
@@ -425,51 +468,113 @@ fn only_confirmed_profiles_allow_manual_primary_selection() {
 }
 
 #[test]
-fn vulkan_adapter_vram_uses_the_same_confirmed_matrix() {
+fn only_nvidia_discovery_enters_the_confirmed_matrix() {
     assert_eq!(
-        select_non_nvidia_dedicated_vram_gib(&[(0x1002, 0, 8 * GIB)]),
-        Some(8),
-        "8 GiB AMD adapter reported by DXGI"
-    );
-    assert_eq!(
-        select_non_nvidia_dedicated_vram_gib(&[(0x8086, 0, 8 * GIB), (0x1002, 0, 16 * GIB),]),
-        Some(16),
-        "multiple adapters are not summed"
-    );
-    assert_eq!(
-        select_non_nvidia_dedicated_vram_gib(&[
-            (0x10DE, 0, 16 * GIB),
-            (0x1002, DXGI_ADAPTER_FLAG_SOFTWARE_BIT, 16 * GIB),
-            (0x8086, DXGI_ADAPTER_FLAG_REMOTE_BIT, 16 * GIB),
-        ]),
-        None,
-        "NVIDIA, remote, and software adapters are not Vulkan candidates"
-    );
-    assert_eq!(
-        hardware_profile_from_discovery(false, None, Some(8), Some(32)),
+        hardware_profile_from_discovery(false, Some(8), Some(32)),
         HardwareModelProfile::Primary26Vram8
     );
     assert_eq!(
-        hardware_profile_from_discovery(false, None, Some(12), Some(24)),
+        hardware_profile_from_discovery(false, Some(12), Some(24)),
         HardwareModelProfile::Primary26Vram12
     );
     assert_eq!(
-        hardware_profile_from_discovery(false, None, Some(16), Some(32)),
+        hardware_profile_from_discovery(false, Some(16), Some(32)),
         HardwareModelProfile::Primary26Vram16
     );
     assert_eq!(
-        hardware_profile_from_discovery(false, None, None, Some(32)),
+        hardware_profile_from_discovery(false, None, Some(32)),
         HardwareModelProfile::Unknown,
-        "unreported Vulkan VRAM must not be guessed"
+        "AMD/Intel or unreported VRAM must not reuse the NVIDIA matrix"
     );
 }
 
 #[test]
-fn launcher_leaves_gpu_layer_fitting_to_llama_cpp() {
-    let gpu = llama_server_args("model.gguf", "alias", Some("vision.gguf"), false);
-    assert!(!gpu.iter().any(|arg| arg == "-ngl"));
-    assert!(gpu.windows(2).any(|pair| pair == ["--alias", "alias"]));
-    let cpu = llama_server_args("model.gguf", "alias", None, true);
+fn launcher_uses_the_exact_confirmed_profile_matrix() {
+    let cases = [
+        (
+            HardwareModelProfile::Fallback12B,
+            false,
+            "32768",
+            "34",
+            None,
+            false,
+        ),
+        (
+            HardwareModelProfile::Primary26Vram8,
+            false,
+            "32768",
+            "99",
+            Some("20"),
+            false,
+        ),
+        (
+            HardwareModelProfile::Primary26Vram8,
+            true,
+            "65536",
+            "99",
+            Some("20"),
+            true,
+        ),
+        (
+            HardwareModelProfile::Primary26Vram12,
+            false,
+            "65536",
+            "99",
+            Some("8"),
+            false,
+        ),
+        (
+            HardwareModelProfile::Primary26Vram12,
+            true,
+            "98304",
+            "99",
+            Some("8"),
+            true,
+        ),
+        (
+            HardwareModelProfile::Primary26Vram16,
+            true,
+            "98304",
+            "99",
+            None,
+            false,
+        ),
+    ];
+    for (profile, prep, context, ngl, ncmoe, q8) in cases {
+        let args = llama_server_args("model.gguf", "alias", None, false, profile, prep);
+        assert!(args.windows(2).any(|pair| pair == ["-c", context]));
+        assert!(args.windows(2).any(|pair| pair == ["-ngl", ngl]));
+        assert!(args.windows(2).any(|pair| pair == ["-np", "1"]));
+        assert!(args.iter().any(|arg| arg == "--no-mmap"));
+        assert_eq!(
+            args.windows(2)
+                .find(|pair| pair.first().is_some_and(|arg| arg == "-ncmoe"))
+                .and_then(|pair| pair.get(1))
+                .map(String::as_str),
+            ncmoe
+        );
+        assert_eq!(args.iter().any(|arg| arg == "-ctk"), q8);
+        assert_eq!(args.iter().any(|arg| arg == "-ctv"), q8);
+    }
+
+    let unknown = llama_server_args(
+        "model.gguf",
+        "alias",
+        Some("vision.gguf"),
+        false,
+        HardwareModelProfile::Unknown,
+        false,
+    );
+    assert!(!unknown.iter().any(|arg| arg == "-ngl"));
+    assert!(unknown.windows(2).any(|pair| pair == ["--alias", "alias"]));
+    let cpu = llama_server_args(
+        "model.gguf",
+        "alias",
+        None,
+        true,
+        HardwareModelProfile::Unknown,
+        false,
+    );
     assert!(cpu.windows(2).any(|pair| pair == ["-ngl", "0"]));
 }
 
@@ -584,17 +689,20 @@ fn strict_readiness_rejects_stale_server_after_new_child_exits() {
         "-d",
         r#"{"model":"newly-launched-model","messages":[{"role":"user","content":"hi"}],"max_tokens":1}"#,
     ]);
-    assert!(expected_model_is_ready(
-        models.is_some(),
-        models.as_deref().unwrap_or_default(),
-        EXPECTED,
-        completion.is_some(),
-        completion.as_deref().unwrap_or_default(),
-    ));
+    assert!(
+        expected_model_is_ready(
+            models.is_some(),
+            models.as_deref().unwrap_or_default(),
+            EXPECTED,
+            completion.is_some(),
+            completion.as_deref().unwrap_or_default(),
+        ),
+        "models={models:?} completion={completion:?}"
+    );
 
     let mut child = spawn_exiting_child();
     let _ = child.wait();
-    let mut children = vec![child];
+    let mut children = [child];
     assert!(
         !wait_for_expected_model_at(
             &base_url,

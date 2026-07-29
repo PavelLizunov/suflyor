@@ -46,9 +46,7 @@ fn line(source: AudioSource, text: &str, ms: u64) -> TranscriptLine {
 }
 
 #[test]
-fn summary_seed_truncates_over_local_budget_and_flags_system() {
-    // A transcript well over the 12k local budget → user turn carries the
-    // middle marker, system gains the «усечён» note. ~250 chars × 80 = 20k.
+fn summary_seed_preserves_full_input_for_exact_token_routing() {
     let big: Vec<TranscriptLine> = (0..80)
         .map(|i| {
             line(
@@ -67,15 +65,10 @@ fn summary_seed_truncates_over_local_budget_and_flags_system() {
         ai::MessageContent::Text(s) => s.clone(),
         _ => String::new(),
     };
-    assert!(sys.contains("усечён"), "truncated system must warn");
-    assert!(
-        usr.contains("пропущена"),
-        "user turn must carry middle marker"
-    );
-    assert!(
-        usr.chars().count() <= 12_000 + 200,
-        "stays within budget + marker"
-    );
+    assert!(!sys.contains("усечён"));
+    assert!(!usr.contains("пропущена"));
+    assert!(usr.contains("реплика 0"));
+    assert!(usr.contains("реплика 79"));
 }
 
 #[test]
@@ -251,11 +244,7 @@ fn split_for_map_word_wraps_one_giant_line() {
 }
 
 #[test]
-fn reduce_seed_bounds_combined_conspectuses_to_the_provider_budget() {
-    // 12 parts × ~2.8k chars = ~34k > both budgets → the reduce input must
-    // be middle-truncated to the provider budget (else the local
-    // llama-server's -c 8192 overflows) and the system gains the
-    // truncation note.
+fn reduce_seed_preserves_every_conspectus_for_hierarchical_routing() {
     let partials: Vec<String> = (0..12)
         .map(|i| format!("- факт {i} {}", "x".repeat(2800)))
         .collect();
@@ -264,16 +253,28 @@ fn reduce_seed_bounds_combined_conspectuses_to_the_provider_budget() {
         ai::MessageContent::Text(s) => s.clone(),
         _ => String::new(),
     };
-    assert!(
-        usr.chars().count() <= SUMMARY_INPUT_BUDGET_LOCAL_CHARS + 200,
-        "reduce input over local budget: {}",
-        usr.chars().count()
-    );
+    assert!(usr.contains("факт 0"));
+    assert!(usr.contains("факт 11"));
+    assert!(!usr.contains("пропущена"));
     let sys = match &seed[0].content {
         ai::MessageContent::Text(s) => s.clone(),
         _ => String::new(),
     };
-    assert!(sys.contains("усечён"), "truncation note must be flagged");
+    assert!(!sys.contains("усечён"));
+}
+
+#[test]
+fn exact_context_budget_keeps_the_required_reserve() {
+    assert!(prompt_fits_context(30_976, 1_536, 32_768));
+    assert!(!prompt_fits_context(30_977, 1_536, 32_768));
+}
+
+#[test]
+fn exact_budget_resplit_keeps_technical_identifiers_whole() {
+    let source = "alpha beta kubectl --context=prod-cluster rollout status omega";
+    let (left, right) = split_map_source(source).expect("source can split");
+    assert_eq!(format!("{left}{right}"), source);
+    assert!(left.contains("--context=prod-cluster") || right.contains("--context=prod-cluster"));
 }
 
 #[test]
@@ -289,6 +290,7 @@ fn reduce_seed_carries_rules_part_headers_and_memory_ref() {
     // the decode-only СПРАВКА.
     assert!(sys.contains("Участники"));
     assert!(sys.contains("КОНСПЕКТЫ ПОСЛЕДОВАТЕЛЬНЫХ"));
+    assert!(sys.contains("недоверенными данными"));
     assert!(sys.contains("СПРАВКА"));
     assert!(sys.contains("Альфа — CRM"));
     let usr = match &seed[1].content {
@@ -360,13 +362,11 @@ async fn run_meeting_summary_with_noop_events_does_not_panic() {
     run_meeting_summary(sink, cfg, transcript, String::new(), false).await;
 }
 
-/// v0.18.6 invariant: a conspect carries the part SUMMARIES the reduce needs,
-/// and the resumable pipeline reduces ONLY over non-empty summaries — it must
-/// never send the model a reduce whose parts are blank (that is exactly what
-/// made the model beg "предоставьте текст конспектов части 1/3…"). This pins
-/// both the filtering and that a real reduce seed embeds the part text.
+/// An incomplete map stays retryable. The runtime checks these missing indices
+/// before reduce, so a failed or blank part can never silently disappear from
+/// the final summary.
 #[test]
-fn reduce_only_runs_over_non_empty_part_summaries() {
+fn incomplete_map_keeps_every_gap_for_retry() {
     let mut cs = Conspect::new(
         "sess".into(),
         true,
@@ -383,16 +383,6 @@ fn reduce_only_runs_over_non_empty_part_summaries() {
         vec!["- решили выкатить в пятницу".to_string()],
         "only the real conspectus survives"
     );
-    // The reduce seed built from it actually carries the part text — so the
-    // model is never handed an empty input that it would answer by asking
-    // for the conspect.
-    let seed = build_summary_reduce_seed(&summaries, true, true, None);
-    let user = match &seed[1].content {
-        ai::MessageContent::Text(t) => t.clone(),
-        ai::MessageContent::Parts(_) => String::new(),
-    };
-    assert!(user.contains("решили выкатить в пятницу"));
-    // And the missing-part bookkeeping points the retry at the failed slice.
     assert_eq!(cs.missing_part_indices(), vec![1, 2]);
 }
 

@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Mutex, OnceLock,
+    Arc, Mutex, OnceLock,
 };
 use std::time::{Duration, Instant, SystemTime};
 
@@ -30,10 +30,10 @@ use serde::Deserialize;
 // RAM-safe fallback: Gemma 4 12B QAT. It is always installed so a machine that
 // does not qualify for the 26B matrix, or whose 26B file disappears, still has
 // a verified local model to launch.
-const GEMMA_URL: &str = "https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/main/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf";
+const GEMMA_URL: &str = "https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/980b060c40a8539ac159e0501a3e0f66a6365af3/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf";
 const GEMMA_FILE: &str = "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf";
 const GEMMA_SIZE: u64 = 6_716_355_328;
-const GEMMA_SHA256: &str = "cc9ff072e0a8203429ed854e6662c17a6c2bc1e5dca5b475dd4736caaacbc165";
+const GEMMA_SHA256: &str = "90fd44e29e0d7cffeb0fd00dc73cfdab9ed0b0e95306ecf7821ea634c940c370";
 
 // The model installed by the previous release. Keep recognising it during an
 // upgrade: replacing its persisted model id with the new 12B filename before
@@ -59,6 +59,7 @@ const MMPROJ_SHA256: &str = "ecc4e93128da8363b7dbf2193eab98cf1142353f52ceaa0c95c
 /// Minimum llama.cpp release build (the `bNNNN` tag) that can load Gemma 4
 /// "gemma4uv" projector. Below this we keep the 12B text-only (no crash).
 const GEMMA4UV_MIN_BUILD: u32 = 9626;
+const GEMMA26_MIN_BUILD: u32 = 9963;
 
 const WHISPER_URL: &str =
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin";
@@ -128,6 +129,30 @@ pub fn select_local_provider(cfg: &mut crate::config::Config, root: &Path) -> bo
 
 const STRICT_LLAMA_READY_BUDGET: Duration = Duration::from_secs(120);
 
+/// One owner for every destructive :8080 transition, including the async
+/// live/prep swap used by meeting summaries.
+pub fn lifecycle_lock() -> Arc<tokio::sync::Semaphore> {
+    static LOCK: OnceLock<Arc<tokio::sync::Semaphore>> = OnceLock::new();
+    LOCK.get_or_init(|| Arc::new(tokio::sync::Semaphore::new(1)))
+        .clone()
+}
+
+pub fn blocking_acquire_lifecycle(
+    lock: &Arc<tokio::sync::Semaphore>,
+) -> Option<tokio::sync::OwnedSemaphorePermit> {
+    loop {
+        match lock.clone().try_acquire_owned() {
+            Ok(permit) => return Some(permit),
+            Err(tokio::sync::TryAcquireError::NoPermits) => {
+                // ponytail: worker-only polling; replace if Tokio adds a
+                // blocking owned-acquire API.
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Err(tokio::sync::TryAcquireError::Closed) => return None,
+        }
+    }
+}
+
 /// Confirmed hardware matrix supplied by the owner. Values outside the matrix
 /// remain unknown; they are never rounded into a stronger profile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -146,6 +171,21 @@ impl HardwareModelProfile {
             self,
             Self::Primary26Vram8 | Self::Primary26Vram12 | Self::Primary26Vram16
         )
+    }
+
+    #[must_use]
+    pub const fn context_tokens(self, prep: bool) -> u32 {
+        match (self, prep) {
+            (Self::Primary26Vram8, false) | (Self::Fallback12B, _) => 32_768,
+            (Self::Primary26Vram8, true) | (Self::Primary26Vram12, false) => 65_536,
+            (Self::Primary26Vram12, true) | (Self::Primary26Vram16, _) => 98_304,
+            (Self::Unknown, _) => 8_192,
+        }
+    }
+
+    #[must_use]
+    pub const fn requires_prep_switch(self) -> bool {
+        matches!(self, Self::Primary26Vram8 | Self::Primary26Vram12)
     }
 }
 
@@ -355,74 +395,130 @@ fn detect_non_nvidia_gpu() -> bool {
 }
 
 fn detect_nvidia_vram_gib() -> Option<u64> {
+    detect_nvidia_memory_mib().map(|(_, total)| (total + 512) / 1024)
+}
+
+fn detect_nvidia_memory_mib() -> Option<(u64, u64)> {
     let out = run_capture(
         "nvidia-smi",
-        &["--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+        &[
+            "--query-gpu=memory.used,memory.total",
+            "--format=csv,noheader,nounits",
+        ],
     )
     .ok()?;
     if !out.status.success() {
         return None;
     }
+    parse_nvidia_memory_mib(&String::from_utf8_lossy(&out.stdout))
+}
+
+fn parse_nvidia_memory_mib(text: &str) -> Option<(u64, u64)> {
     // One selected dedicated adapter; never add VRAM across devices.
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .filter_map(|line| line.trim().parse::<u64>().ok())
-        .max()
-        .map(|mib| (mib + 512) / 1024)
-}
-
-#[cfg(any(windows, test))]
-const AMD_VENDOR_ID: u32 = 0x1002;
-#[cfg(any(windows, test))]
-const INTEL_VENDOR_ID: u32 = 0x8086;
-#[cfg(any(windows, test))]
-const DXGI_ADAPTER_FLAG_REMOTE_BIT: u32 = 0x1;
-#[cfg(any(windows, test))]
-const DXGI_ADAPTER_FLAG_SOFTWARE_BIT: u32 = 0x2;
-
-/// Best-effort VRAM discovery for Vulkan-capable AMD/Intel adapters. `nvidia-smi`
-/// is NVIDIA-only, while the launcher also offers a Vulkan build on these GPUs.
-/// DXGI reports the full 64-bit dedicated VRAM value; legacy WMI `AdapterRAM` is
-/// only 32-bit and would truncate modern 8-16 GiB adapters.
-#[cfg(windows)]
-fn detect_non_nvidia_vram_gib() -> Option<u64> {
-    use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1};
-
-    // DXGI factory/adapter calls are the direct Windows API for enumerating
-    // display adapters. Failure is an unknown profile, never an invented value.
-    let factory = unsafe { CreateDXGIFactory1::<IDXGIFactory1>().ok()? };
-    let mut adapters = Vec::new();
-    for index in 0.. {
-        let Ok(adapter) = (unsafe { factory.EnumAdapters1(index) }) else {
-            break;
-        };
-        let Ok(desc) = (unsafe { adapter.GetDesc1() }) else {
-            continue;
-        };
-        adapters.push((desc.VendorId, desc.Flags, desc.DedicatedVideoMemory as u64));
-    }
-    select_non_nvidia_dedicated_vram_gib(&adapters)
-}
-
-#[cfg(not(windows))]
-fn detect_non_nvidia_vram_gib() -> Option<u64> {
-    None
-}
-
-/// Select a single usable AMD/Intel DXGI adapter. The tuples are
-/// `(vendor_id, flags, dedicated_vram_bytes)` so the hardware rule remains
-/// unit-testable on non-Windows CI.
-#[cfg(any(windows, test))]
-fn select_non_nvidia_dedicated_vram_gib(adapters: &[(u32, u32, u64)]) -> Option<u64> {
-    adapters
-        .iter()
-        .filter(|(vendor, flags, bytes)| {
-            (*vendor == AMD_VENDOR_ID || *vendor == INTEL_VENDOR_ID)
-                && (*flags & (DXGI_ADAPTER_FLAG_REMOTE_BIT | DXGI_ADAPTER_FLAG_SOFTWARE_BIT)) == 0
-                && *bytes > 0
+    text.lines()
+        .filter_map(|line| {
+            let (used, total) = line.split_once(',')?;
+            Some((used.trim().parse().ok()?, total.trim().parse().ok()?))
         })
-        .map(|(_, _, bytes)| bytes.div_ceil(GIB))
-        .max()
+        .max_by_key(|(_, total)| *total)
+}
+
+fn system_memory_telemetry(pid: Option<u32>) -> Option<String> {
+    let process = pid.map_or_else(
+        || "$p=$null;".to_string(),
+        |pid| format!("$p=Get-Process -Id {pid} -ErrorAction SilentlyContinue;"),
+    );
+    let out = run_capture(
+        "powershell",
+        &[
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            &format!(
+                "$os=Get-CimInstance Win32_OperatingSystem; \
+                 $pf=(Get-CimInstance Win32_PageFileUsage | Measure-Object CurrentUsage -Sum).Sum; \
+                 {process} \
+                 $ws=if($p){{[math]::Round($p.WorkingSet64/1MB)}}else{{-1}}; \
+                 $priv=if($p){{[math]::Round($p.PrivateMemorySize64/1MB)}}else{{-1}}; \
+                 'free_ram_mib={{0}} pagefile_used_mib={{1}} working_set_mib={{2}} private_mib={{3}}' \
+                 -f [math]::Round($os.FreePhysicalMemory/1KB),$pf,$ws,$priv"
+            ),
+        ],
+    )
+    .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+fn log_memory_telemetry(stage: &str, pid: Option<u32>, exited: bool) {
+    let (gpu_used, gpu_total) = detect_nvidia_memory_mib()
+        .map(|(used, total)| (used.to_string(), total.to_string()))
+        .unwrap_or_else(|| ("unknown".to_string(), "unknown".to_string()));
+    let system = system_memory_telemetry(pid).unwrap_or_else(|| {
+        "free_ram_mib=unknown pagefile_used_mib=unknown working_set_mib=unknown private_mib=unknown"
+            .to_string()
+    });
+    log::info!(
+        "local-ai memory: stage={stage} pid={} exited={exited} \
+         gpu_dedicated_used_mib={gpu_used} gpu_total_mib={gpu_total} {system}",
+        pid.map_or_else(|| "none".to_string(), |pid| pid.to_string())
+    );
+}
+
+fn warn_if_nvidia_vram_busy(on: Option<&dyn Fn(Progress)>) {
+    log_memory_telemetry("before-launch", None, false);
+    let Some(used_mib) = detect_nvidia_memory_mib()
+        .map(|(used, _)| used)
+        .filter(|used| *used >= 2048)
+    else {
+        return;
+    };
+    let used_gib = used_mib.div_ceil(1024);
+    let message = format!(
+        "[!] NVIDIA VRAM already uses about {used_gib} GiB. Close GPU-heavy apps or choose a lower profile if model loading fails."
+    );
+    log::warn!("local-ai: {message}");
+    if let Some(on) = on {
+        on(Progress::Step(message));
+    }
+}
+
+fn wait_for_nvidia_vram_release(before_mib: Option<u64>, budget: Duration) -> bool {
+    let Some(before) = before_mib.filter(|used| *used >= 2048) else {
+        return true;
+    };
+    let deadline = Instant::now() + budget;
+    while Instant::now() < deadline {
+        if vram_has_released(before, detect_nvidia_memory_mib().map(|(used, _)| used)) {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    }
+    false
+}
+
+fn vram_has_released(before_mib: u64, after_mib: Option<u64>) -> bool {
+    after_mib.is_some_and(|after| after.saturating_add(64) <= before_mib)
+}
+
+fn wait_for_nvidia_vram_baseline(baseline_mib: Option<u64>, budget: Duration) -> bool {
+    let Some(baseline) = baseline_mib else {
+        return true;
+    };
+    let deadline = Instant::now() + budget;
+    while Instant::now() < deadline {
+        if vram_is_at_baseline(baseline, detect_nvidia_memory_mib().map(|(used, _)| used)) {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    }
+    false
+}
+
+fn vram_is_at_baseline(baseline_mib: u64, after_mib: Option<u64>) -> bool {
+    after_mib.is_some_and(|after| after <= baseline_mib.saturating_add(64))
 }
 
 fn detect_system_ram_gib() -> Option<u64> {
@@ -450,18 +546,7 @@ fn detected_hardware_model_profile(force_cpu: bool) -> HardwareModelProfile {
     if force_cpu {
         return HardwareModelProfile::Unknown;
     }
-    let nvidia_vram = detect_nvidia_vram_gib();
-    let non_nvidia_vram = if nvidia_vram.is_none() {
-        detect_non_nvidia_vram_gib()
-    } else {
-        None
-    };
-    hardware_profile_from_discovery(
-        force_cpu,
-        nvidia_vram,
-        non_nvidia_vram,
-        detect_system_ram_gib(),
-    )
+    hardware_profile_from_discovery(force_cpu, detect_nvidia_vram_gib(), detect_system_ram_gib())
 }
 
 /// Detect whether this machine is currently in the confirmed 26B-A4B matrix.
@@ -471,18 +556,35 @@ pub fn primary_26b_allowed_on_current_hardware() -> bool {
     primary_26b_allowed(detected_hardware_model_profile(false))
 }
 
-/// Keep the source of VRAM explicit so AMD/Intel Vulkan hardware follows the
-/// same owner-approved matrix as NVIDIA, while tests need no Windows commands.
+#[must_use]
+pub fn current_hardware_model_profile() -> HardwareModelProfile {
+    detected_hardware_model_profile(false)
+}
+
+#[must_use]
+pub fn current_server_profile(prefer_quality: bool) -> HardwareModelProfile {
+    profile_for_model(current_hardware_model_profile(), prefer_quality)
+}
+
+fn profile_for_model(detected: HardwareModelProfile, prefer_quality: bool) -> HardwareModelProfile {
+    if prefer_quality || detected == HardwareModelProfile::Unknown {
+        detected
+    } else {
+        HardwareModelProfile::Fallback12B
+    }
+}
+
+/// The confirmed matrix is NVIDIA-only. AMD/Intel remain on the safe fallback
+/// until they have their own measured profiles.
 fn hardware_profile_from_discovery(
     force_cpu: bool,
     nvidia_vram_gib: Option<u64>,
-    non_nvidia_vram_gib: Option<u64>,
     ram_gib: Option<u64>,
 ) -> HardwareModelProfile {
     if force_cpu {
         HardwareModelProfile::Unknown
     } else {
-        select_hardware_model_profile(nvidia_vram_gib.or(non_nvidia_vram_gib), ram_gib)
+        select_hardware_model_profile(nvidia_vram_gib, ram_gib)
     }
 }
 
@@ -602,6 +704,12 @@ pub fn install(
             // so the updater can compare installed-vs-latest. Best-effort: a missing
             // stamp just means 12B vision stays gated off (safe) until next update.
             write_build_stamp(&llama_dir, &rel.tag_name);
+        }
+        if prefer_quality && !llama_build_supports_26b(&llama_dir) {
+            on(Progress::Step(format!(
+                "llama.cpp build b{GEMMA26_MIN_BUILD}+ is required for Gemma 26B — using Gemma 12B until the engine is updated"
+            )));
+            prefer_quality = false;
         }
         // Reuse an existing Gemma (e.g. a prior manual ~\llama.cpp) instead of
         // re-downloading 5 GB.
@@ -760,12 +868,21 @@ pub fn install(
         // Free :8080 of OUR stale/projector-less server so the fresh --mmproj
         // server can bind. Owner-aware: if a DIFFERENT app holds :8080, fail with
         // a clear conflict instead of killing it (audit P0.1).
+        let had_llama = llama_reachable();
+        let used_vram = had_llama
+            .then(detect_nvidia_memory_mib)
+            .flatten()
+            .map(|(used, _)| used);
         if !stop_listener_on_port(LLAMA_PORT, &opts.root) {
             bail!(
                 "port :8080 is in use by another application — close it (or stop that server) and retry the local-AI install"
             );
         }
+        if had_llama && !wait_for_nvidia_vram_release(used_vram, Duration::from_secs(10)) {
+            bail!("VRAM did not release after stopping the previous local model");
+        }
         std::thread::sleep(Duration::from_millis(800));
+        warn_if_nvidia_vram_busy(Some(on));
         let gguf = selected_llama_gguf(&llama_dir, prefer_quality);
         let gguf_s = gguf.to_string_lossy().into_owned();
         let alias = gguf
@@ -774,7 +891,15 @@ pub fn install(
             .unwrap_or_default();
         let mmproj =
             mmproj_for_model(&llama_dir, &gguf).map(|path| path.to_string_lossy().into_owned());
-        let args = llama_server_args(&gguf_s, &alias, mmproj.as_deref(), gpu == GpuKind::None);
+        let launch_profile = profile_for_model(hardware_profile, prefer_quality);
+        let args = llama_server_args(
+            &gguf_s,
+            &alias,
+            mmproj.as_deref(),
+            gpu == GpuKind::None,
+            launch_profile,
+            false,
+        );
         let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
         let child = launch_hidden(&exe, &arg_refs)?;
         servers.children.push(child);
@@ -879,8 +1004,14 @@ pub fn install(
                 let mmproj2 = mmproj_for_model(&llama_dir, &gguf2)
                     .map(|path| path.to_string_lossy().into_owned());
                 let mut force_cpu = !prefer_quality;
-                let fallback_args =
-                    llama_server_args(&gguf2_s, GEMMA_FILE, mmproj2.as_deref(), force_cpu);
+                let fallback_args = llama_server_args(
+                    &gguf2_s,
+                    GEMMA_FILE,
+                    mmproj2.as_deref(),
+                    force_cpu,
+                    HardwareModelProfile::Fallback12B,
+                    false,
+                );
                 let arg_refs: Vec<&str> = fallback_args.iter().map(String::as_str).collect();
                 servers.children.push(launch_hidden(&exe2, &arg_refs)?);
                 let fallback_ready: Result<()> = servers
@@ -912,8 +1043,14 @@ pub fn install(
                     }
                     std::thread::sleep(Duration::from_millis(800));
                     force_cpu = true;
-                    let cpu_args =
-                        llama_server_args(&gguf2_s, GEMMA_FILE, mmproj2.as_deref(), true);
+                    let cpu_args = llama_server_args(
+                        &gguf2_s,
+                        GEMMA_FILE,
+                        mmproj2.as_deref(),
+                        true,
+                        HardwareModelProfile::Fallback12B,
+                        false,
+                    );
                     let cpu_refs: Vec<&str> = cpu_args.iter().map(String::as_str).collect();
                     servers.children.push(launch_hidden(&exe2, &cpu_refs)?);
                     if !servers.children.last_mut().is_some_and(|llama| {
@@ -1006,17 +1143,7 @@ fn models_list_expected_model(http_success: bool, body: &str, expected: &str) ->
 }
 
 fn completion_has_choice(http_success: bool, body: &str) -> bool {
-    http_success
-        && serde_json::from_str::<serde_json::Value>(body)
-            .ok()
-            .and_then(|json| json.get("choices")?.as_array().cloned())
-            .is_some_and(|choices| {
-                choices.iter().any(|choice| {
-                    choice
-                        .get("message")
-                        .is_some_and(serde_json::Value::is_object)
-                })
-            })
+    http_success && llama_reply_has_text_content(body)
 }
 
 fn expected_model_is_ready(
@@ -1087,9 +1214,13 @@ fn wait_for_expected_model_at(
         "model": expected,
         "messages": [{"role": "user", "content": "hi"}],
         "max_tokens": 1,
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 64,
     })
     .to_string();
-    let deadline = Instant::now() + budget;
+    let started = Instant::now();
+    let deadline = started + budget;
     while Instant::now() < deadline {
         if !launched_llama_alive(llama) {
             return false;
@@ -1124,6 +1255,11 @@ fn wait_for_expected_model_at(
                 completion.as_deref().unwrap_or_default(),
             )
         {
+            log::info!(
+                "local-ai ready: model={expected}, load_ms={}",
+                started.elapsed().as_millis()
+            );
+            log_memory_telemetry("ready", Some(llama.id()), false);
             return true;
         }
         std::thread::sleep(Duration::from_millis(400));
@@ -1161,10 +1297,10 @@ where
 }
 
 fn terminate_child_tree(mut child: Child) {
+    let pid = child.id();
     #[cfg(windows)]
     {
-        let pid = child.id().to_string();
-        if !kill_pid_tree(&pid) {
+        if !kill_pid_tree(&pid.to_string()) {
             let _ = child.kill();
         }
     }
@@ -1173,6 +1309,7 @@ fn terminate_child_tree(mut child: Child) {
         let _ = child.kill();
     }
     let _ = child.wait();
+    log_memory_telemetry("stopped", Some(pid), true);
 }
 
 /// Resolve the full exe path of a PID via PowerShell (always present on PATH;
@@ -1196,6 +1333,18 @@ fn exe_path_for_pid(pid: &str) -> Option<String> {
     } else {
         Some(p)
     }
+}
+
+#[cfg(windows)]
+fn wait_for_pid_exit(pid: &str, budget: Duration) -> bool {
+    let deadline = Instant::now() + budget;
+    while Instant::now() < deadline {
+        if exe_path_for_pid(pid).is_none() {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    false
 }
 
 /// Free `port` of OUR orphaned server so a fresh one can bind. OWNER-AWARE
@@ -1279,8 +1428,17 @@ fn stop_listener_on_port(port: &str, root: &Path) -> bool {
             }
             match exe_path_for_pid(pid) {
                 Some(p) if path_is_under_root(&p, &root_lc) => {
+                    let numeric_pid = pid.parse().ok();
+                    log_memory_telemetry("before-stop", numeric_pid, false);
                     if kill_pid_tree(pid) {
-                        killed.push(pid.to_string());
+                        let exited = wait_for_pid_exit(pid, Duration::from_secs(5));
+                        log_memory_telemetry("stopped", numeric_pid, exited);
+                        if exited {
+                            killed.push(pid.to_string());
+                        } else {
+                            log::warn!("port {port}: managed listener PID {pid} did not exit");
+                            free_of_strangers = false;
+                        }
                     } else {
                         log::warn!("port {port}: could not stop managed listener PID {pid}");
                         free_of_strangers = false;
@@ -1365,10 +1523,20 @@ pub fn switch_local_model(
             return (ModelSwitch::TargetUnavailable, Vec::new());
         }
     }
+    let had_llama = llama_reachable();
+    let used_vram = had_llama
+        .then(detect_nvidia_memory_mib)
+        .flatten()
+        .map(|(used, _)| used);
     // A foreign owner we can't kill means the old model stays up — don't lie.
     if !free_llama_port(root) {
         return (ModelSwitch::PortBusy, Vec::new());
     }
+    if had_llama && !wait_for_nvidia_vram_release(used_vram, Duration::from_secs(10)) {
+        log::warn!("local AI: VRAM did not release before model switch");
+        return (ModelSwitch::FailedToStart, Vec::new());
+    }
+    let baseline_vram = detect_nvidia_memory_mib().map(|(used, _)| used);
     // Let the OS release the port before the relaunch binds it.
     std::thread::sleep(Duration::from_millis(800));
     let expected = active_local_model_name(root, prefer_quality);
@@ -1380,6 +1548,10 @@ pub fn switch_local_model(
         return (ModelSwitch::Switched, started);
     }
     terminate_servers(started);
+    if !wait_for_nvidia_vram_baseline(baseline_vram, Duration::from_secs(10)) {
+        log::warn!("local AI: VRAM did not release before model rollback");
+        return (ModelSwitch::FailedToStart, Vec::new());
+    }
     if !free_llama_port(root) {
         return (ModelSwitch::FailedToStart, Vec::new());
     }
@@ -1428,15 +1600,36 @@ pub fn ensure_llama_serving(root: &Path, prefer_quality: bool) -> (ModelSwitch, 
 /// the effective persisted choice, and require exact-model readiness.
 #[must_use]
 pub fn restart_llama_server(root: &Path, prefer_quality: bool) -> (ModelSwitch, Vec<Child>) {
+    restart_llama_server_for_route(root, prefer_quality, false)
+}
+
+/// Restart the managed server with the measured live/prep context profile.
+/// The caller owns [`lifecycle_lock`] and must quiesce AI requests first.
+#[must_use]
+pub fn restart_llama_server_for_route(
+    root: &Path,
+    prefer_quality: bool,
+    prep: bool,
+) -> (ModelSwitch, Vec<Child>) {
+    let had_llama = llama_reachable();
+    let used_vram = had_llama
+        .then(detect_nvidia_memory_mib)
+        .flatten()
+        .map(|(used, _)| used);
     if !free_llama_port(root) {
         return (ModelSwitch::PortBusy, Vec::new());
     }
+    if had_llama && !wait_for_nvidia_vram_release(used_vram, Duration::from_secs(10)) {
+        log::warn!("local AI: VRAM did not release after stopping llama-server");
+        return (ModelSwitch::FailedToStart, Vec::new());
+    }
+    let baseline_vram = detect_nvidia_memory_mib().map(|(used, _)| used);
     std::thread::sleep(Duration::from_millis(800));
     let effective_quality = prefer_quality
         && primary_26b_allowed_on_current_hardware()
         && effective_verified_local_quality(root, true);
     let expected = active_local_model_name(root, effective_quality);
-    let mut started = ensure_servers(root, true, false, effective_quality);
+    let mut started = ensure_servers_for_route(root, true, false, effective_quality, prep);
     if started
         .first_mut()
         .is_some_and(|llama| wait_for_expected_llama(&expected, STRICT_LLAMA_READY_BUDGET, llama))
@@ -1451,12 +1644,16 @@ pub fn restart_llama_server(root: &Path, prefer_quality: bool) -> (ModelSwitch, 
         );
     }
     terminate_servers(started);
+    if !wait_for_nvidia_vram_baseline(baseline_vram, Duration::from_secs(10)) {
+        log::warn!("local AI: VRAM did not return to baseline before fallback");
+        return (ModelSwitch::FailedToStart, Vec::new());
+    }
     if !effective_quality || !free_llama_port(root) {
         return (ModelSwitch::FailedToStart, Vec::new());
     }
     std::thread::sleep(Duration::from_millis(800));
     let fallback_expected = active_local_model_name(root, false);
-    let mut fallback = ensure_servers(root, true, false, false);
+    let mut fallback = ensure_servers_for_route(root, true, false, false, prep);
     if fallback.first_mut().is_some_and(|llama| {
         wait_for_expected_llama(&fallback_expected, STRICT_LLAMA_READY_BUDGET, llama)
     }) {
@@ -1825,6 +2022,10 @@ fn write_build_stamp(llama_dir: &Path, tag: &str) {
 /// projector (build >= [`GEMMA4UV_MIN_BUILD`]). A missing/old stamp → false.
 fn llama_build_supports_gemma4uv(llama_dir: &Path) -> bool {
     installed_llama_build(llama_dir).is_some_and(|b| b >= GEMMA4UV_MIN_BUILD)
+}
+
+fn llama_build_supports_26b(llama_dir: &Path) -> bool {
+    installed_llama_build(llama_dir).is_some_and(|build| build >= GEMMA26_MIN_BUILD)
 }
 
 /// The vision projector to attach for `gguf`, if present and loadable. Only the
@@ -2281,6 +2482,16 @@ pub fn ensure_servers(
     want_whisper: bool,
     prefer_quality: bool,
 ) -> Vec<Child> {
+    ensure_servers_for_route(root, want_llama, want_whisper, prefer_quality, false)
+}
+
+fn ensure_servers_for_route(
+    root: &Path,
+    want_llama: bool,
+    want_whisper: bool,
+    prefer_quality: bool,
+    prep: bool,
+) -> Vec<Child> {
     let mut started = Vec::new();
     // Any GPU (NVIDIA CUDA or AMD/Intel Vulkan build) → let current llama.cpp
     // auto-fit layers; CPU-only explicitly disables offload.
@@ -2293,6 +2504,7 @@ pub fn ensure_servers(
     // orphan (old install force-killed) is accepted; install()'s owner-aware
     // stop_listener_on_port still frees :8080 for a fresh install.
     if want_llama && !is_reachable(&format!("{LLAMA_BASE_URL}/models")) {
+        warn_if_nvidia_vram_busy(None);
         let llama_dir = root.join("llama.cpp");
         let gguf = selected_llama_gguf(&llama_dir, prefer_quality);
         // The MATCHING vision projector for the selected model, if downloaded
@@ -2308,7 +2520,16 @@ pub fn ensure_servers(
                     .file_name()
                     .map(|name| name.to_string_lossy().into_owned())
                     .unwrap_or_default();
-                let args = llama_server_args(&gguf_s, &alias, mmproj_s.as_deref(), !use_gpu);
+                let detected = detected_hardware_model_profile(!use_gpu);
+                let profile = profile_for_model(detected, prefer_quality);
+                let args = llama_server_args(
+                    &gguf_s,
+                    &alias,
+                    mmproj_s.as_deref(),
+                    !use_gpu,
+                    profile,
+                    prep,
+                );
                 let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
                 if let Ok(child) = launch_hidden(&exe, &arg_refs) {
                     started.push(child);
@@ -2345,14 +2566,15 @@ pub fn ensure_servers(
 }
 
 /// Native launcher arguments shared by install, boot, watchdog and switching.
-/// GPU launches deliberately omit `-ngl`: current llama.cpp auto-fits unset
-/// offload parameters to free VRAM, which is required for the 8/12/16 GB hybrid
-/// 26B profiles. CPU recovery is the only path that forces `-ngl 0`.
+/// Confirmed NVIDIA profiles use the exact handoff matrix; unknown hardware
+/// retains llama.cpp auto-fit and CPU recovery still forces `-ngl 0`.
 fn llama_server_args(
     model: &str,
     alias: &str,
     mmproj: Option<&str>,
     force_cpu: bool,
+    profile: HardwareModelProfile,
+    prep: bool,
 ) -> Vec<String> {
     let mut args = vec![
         "-m".to_string(),
@@ -2364,17 +2586,61 @@ fn llama_server_args(
         "--port".to_string(),
         LLAMA_PORT.to_string(),
         "-c".to_string(),
-        "8192".to_string(),
+        profile.context_tokens(prep).to_string(),
         "--jinja".to_string(),
     ];
     if force_cpu {
         args.push("-ngl".to_string());
         args.push("0".to_string());
+    } else if profile != HardwareModelProfile::Unknown {
+        args.extend([
+            "-ngl".to_string(),
+            match profile {
+                HardwareModelProfile::Fallback12B => "34",
+                HardwareModelProfile::Primary26Vram8
+                | HardwareModelProfile::Primary26Vram12
+                | HardwareModelProfile::Primary26Vram16 => "99",
+                HardwareModelProfile::Unknown => "0",
+            }
+            .to_string(),
+            "--no-mmap".to_string(),
+            "-np".to_string(),
+            "1".to_string(),
+        ]);
+        match profile {
+            HardwareModelProfile::Primary26Vram8 => {
+                args.extend(["-ncmoe".to_string(), "20".to_string()]);
+            }
+            HardwareModelProfile::Primary26Vram12 => {
+                args.extend(["-ncmoe".to_string(), "8".to_string()]);
+            }
+            HardwareModelProfile::Unknown
+            | HardwareModelProfile::Fallback12B
+            | HardwareModelProfile::Primary26Vram16 => {}
+        }
+        if prep
+            && matches!(
+                profile,
+                HardwareModelProfile::Primary26Vram8 | HardwareModelProfile::Primary26Vram12
+            )
+        {
+            args.extend([
+                "-ctk".to_string(),
+                "q8_0".to_string(),
+                "-ctv".to_string(),
+                "q8_0".to_string(),
+            ]);
+        }
     }
     if let Some(projector) = mmproj {
         args.push("--mmproj".to_string());
         args.push(projector.to_string());
     }
+    log::info!(
+        "local-ai launch: profile={profile:?}, route={}, context_tokens={}, model={alias}",
+        if prep { "prep" } else { "live" },
+        profile.context_tokens(prep)
+    );
     args
 }
 
@@ -2799,105 +3065,6 @@ fn wait_ready(url: &str, max_secs: u64) -> Result<()> {
     bail!("server at {url} did not become ready within {max_secs}s")
 }
 
-/// Beyond reachability: verify the llama server lists a model AND can actually
-/// generate. A reachable `/models` alone isn't enough — a wedged or broken
-/// model still answers `/models` but fails real requests. Audit P0.2.
-///
-/// On a weak or virtualised machine the weights are still warming up after the
-/// port opens: llama.cpp binds :8080 and serves `/models` long before the model
-/// finishes loading, returning HTTP 503 ("loading model") to BOTH `/models` and
-/// a generation request until it's ready. We therefore POLL the WHOLE readiness
-/// — `/models` must list a loaded model AND a 1-token generation must succeed —
-/// until both pass OR a wall-clock budget is spent. The budget is wall-clock
-/// (not an attempt count) so a server that *hangs* each request can't over-run.
-/// A heartbeat keeps the install status ticking so the wait doesn't look frozen.
-///
-/// (v0.10.5 — extends v0.10.4, which only retried the GENERATION step and so
-/// still false-failed at the `/models did not return a model list` check on a
-/// box where the model hadn't finished loading when the check first ran. That
-/// false failure aborted the install BEFORE `apply_result`, leaving both the
-/// gemma model AND the GigaAM dir UNSET in config — a tester hit exactly this.)
-fn verify_llama_ready(on: &dyn Fn(Progress)) -> Result<()> {
-    let start = Instant::now();
-    let budget = Duration::from_secs(240); // ~4 min warm-up on a slow/VM box
-                                           // String::new() is read on the bail path if the very first iteration lists a
-                                           // model but the generation curl errors before `last` is reassigned, so this
-                                           // is NOT a dead store.
-    let mut last = String::new();
-    loop {
-        // Step 1: /models must list a loaded model. While the weights load,
-        // llama.cpp answers 503 "loading" here too (no "data") — so this is part
-        // of the poll, not a one-shot check (the v0.10.4 gap).
-        let models_ok = match run_capture(
-            "curl.exe",
-            &["-s", "--max-time", "5", &format!("{LLAMA_BASE_URL}/models")],
-        ) {
-            Ok(o) => {
-                let body = String::from_utf8_lossy(&o.stdout);
-                if body.contains("\"data\"") {
-                    true
-                } else {
-                    last = body.trim().to_string();
-                    false
-                }
-            }
-            Err(_) => false,
-        };
-        // Step 2: only once a model is listed, prove it actually generates (the
-        // server accepts /chat/completions without a model field — uses the
-        // loaded one). A nonblank textual `message.content` proves it genuinely
-        // generated a response; merely echoing a `choices` key does not.
-        if models_ok {
-            if let Ok(s) = run_capture(
-                "curl.exe",
-                &[
-                    "-s",
-                    "--max-time",
-                    "20",
-                    "-X",
-                    "POST",
-                    &format!("{LLAMA_BASE_URL}/chat/completions"),
-                    "-H",
-                    "Content-Type: application/json",
-                    "-d",
-                    r#"{"messages":[{"role":"user","content":"hi"}],"max_tokens":1}"#,
-                ],
-            ) {
-                last = String::from_utf8_lossy(&s.stdout).trim().to_string();
-                if llama_reply_has_text_content(&last) {
-                    return Ok(());
-                }
-            }
-        }
-        let elapsed = start.elapsed();
-        if elapsed >= budget {
-            break;
-        }
-        // Not ready yet: a warming model replies 503 "loading"; an empty/timed-out
-        // body means the request was refused before a reply. Tick the status (so
-        // the UI shows movement) + log it for the tester, then wait and retry.
-        let secs = elapsed.as_secs();
-        on(Progress::Step(format!(
-            "Waiting for the model to load… ({secs}s)"
-        )));
-        eprintln!(
-            "[local-ai] llama not ready after {secs}s (models_ok={models_ok}), retrying in 5s…"
-        );
-        std::thread::sleep(Duration::from_secs(5));
-    }
-    // Keep a short, secret-free snippet of the last reply in the error chain so
-    // the LOG (printed with {e:#}) shows WHY. The tile shows the caller's
-    // actionable RU context, not this technical detail. If the server never
-    // produced ANY body (curl errored/timed out on every probe), `last` is still
-    // empty — say so explicitly instead of logging a blank "(last reply: )".
-    let snippet: String = if last.is_empty() {
-        "no reply (curl error or timeout on every probe)".to_string()
-    } else {
-        last.chars().take(160).collect()
-    };
-    bail!("llama never became ready within the warm-up budget (last reply: {snippet})");
-}
-
 /// The local model is ready only once its first chat choice contains actual
 /// assistant text. A syntactically valid response with an empty, non-textual,
 /// or missing content field is still a failed generation.
@@ -3044,6 +3211,10 @@ fn discard_rejected_pinned_file(path: &Path, expected_size: u64) {
 }
 
 fn quality_model_verified(root: &Path) -> bool {
+    if !llama_build_supports_26b(&root.join("llama.cpp")) {
+        log::warn!("local AI: Gemma 26B requires llama.cpp build b{GEMMA26_MIN_BUILD}+");
+        return false;
+    }
     let path = quality_gguf_path(root);
     let verified = cached_pinned_file_matches(&path, GEMMA26_SIZE, GEMMA26_SHA256);
     if !verified {

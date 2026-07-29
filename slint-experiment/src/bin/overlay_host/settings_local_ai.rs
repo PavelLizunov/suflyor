@@ -133,7 +133,11 @@ pub(crate) fn wire_local_ai(
                     let s = state_t.lock().unwrap_or_else(|p| p.into_inner());
                     s.local_ai_lock.clone()
                 };
-                let _ai_guard = lifecycle_lock.lock().unwrap_or_else(|p| p.into_inner());
+                let Some(_ai_guard) =
+                    overlay_backend::local_ai::blocking_acquire_lifecycle(&lifecycle_lock)
+                else {
+                    return;
+                };
                 // Re-install hardening: stop any servers we previously launched
                 // so a fresh `--mmproj` llama-server can bind :8080. Without this
                 // a stale vision-less server keeps the port and the new one
@@ -445,7 +449,11 @@ pub(crate) fn wire_local_ai(
                     let s = state_t.lock().unwrap_or_else(|p| p.into_inner());
                     s.local_ai_lock.clone()
                 };
-                let _ai_guard = lifecycle_lock.lock().unwrap_or_else(|p| p.into_inner());
+                let Some(_ai_guard) =
+                    overlay_backend::local_ai::blocking_acquire_lifecycle(&lifecycle_lock)
+                else {
+                    return;
+                };
                 let want_whisper = {
                     let c = cfg_t.read();
                     c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081")
@@ -745,7 +753,11 @@ pub(crate) fn wire_local_ai(
                         let s = state_t.lock().unwrap_or_else(|p| p.into_inner());
                         s.local_ai_lock.clone()
                     };
-                    let _ai_guard = lifecycle_lock.lock().unwrap_or_else(|p| p.into_inner());
+                    let Some(_ai_guard) =
+                        overlay_backend::local_ai::blocking_acquire_lifecycle(&lifecycle_lock)
+                    else {
+                        return;
+                    };
                     let want_whisper = {
                         let c = cfg_t.read();
                         c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081")
@@ -872,7 +884,11 @@ pub(crate) fn wire_local_ai(
                     let s = state_t.lock().unwrap_or_else(|p| p.into_inner());
                     s.local_ai_lock.clone()
                 };
-                let _ai_guard = lifecycle_lock.lock().unwrap_or_else(|p| p.into_inner());
+                let Some(_ai_guard) =
+                    overlay_backend::local_ai::blocking_acquire_lifecycle(&lifecycle_lock)
+                else {
+                    return;
+                };
                 let res = overlay_backend::local_ai::update_llama_engine(&root, &cancel, &on);
                 overlay_backend::local_ai::mark_engine_update_checked(&root);
                 // A real swap stopped :8080 — relaunch with the preferred model so
