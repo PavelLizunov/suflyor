@@ -1581,3 +1581,22 @@ msgstr "2) Прямо здесь ниже: впиши вводную в «Под
 
 msgid "Auto"
 msgstr "Авто"
+
+# Replay window — enforced by tests/i18n_guard.rs.
+msgid "Replay"
+msgstr "Повтор"
+
+msgid "Filter:"
+msgstr "Фильтр:"
+
+msgid "reset"
+msgstr "сброс"
+
+msgid "(no events - choose a session above)"
+msgstr "(нет событий — выберите сессию выше)"
+
+msgid "{} events - {} AI responses"
+msgstr "Событий: {} · ответов AI: {}"
+
+msgid "Total cost: ${}"
+msgstr "Общая стоимость: ${}"
