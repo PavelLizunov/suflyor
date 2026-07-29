@@ -154,9 +154,11 @@ impl Store {
     }
 
     /// Hard-delete a session from the catalog: its row (ON DELETE CASCADE drops
-    /// the utterances / ai_turns) plus its FTS rows (cleared explicitly — the
-    /// FTS5 index isn't FK-cascaded, same as `replace_session`). Idempotent:
-    /// deleting an absent session affects 0 rows and still commits.
+    /// the utterances / ai_turns), its FTS rows (cleared explicitly — the FTS5
+    /// index isn't FK-cascaded, same as `replace_session`), and its diarization
+    /// row (also cleared explicitly — the side-table isn't FK'd to the
+    /// projection so it survives re-indexing, but not a hard delete).
+    /// Idempotent: deleting an absent session affects 0 rows and still commits.
     pub fn delete_session(&mut self, session_id: &str) -> Result<()> {
         let tx = self.conn.transaction().context("begin delete tx")?;
         tx.execute(
@@ -164,6 +166,11 @@ impl Store {
             params![session_id],
         )
         .context("clear search rows")?;
+        tx.execute(
+            "DELETE FROM diarization WHERE session_id = ?1",
+            params![session_id],
+        )
+        .context("clear diarization row")?;
         tx.execute("DELETE FROM sessions WHERE id = ?1", params![session_id])
             .context("delete session row")?;
         tx.commit().context("commit delete tx")?;
@@ -796,12 +803,24 @@ mod tests {
         store
             .replace_session(&s, &[utt(&s.id, 1, "mic", "hash map lookup")], &[])
             .unwrap();
+        store
+            .put_diarization(&Diarization {
+                session_id: s.id.clone(),
+                created_at_ms: 111,
+                num_speakers: 0,
+                model_id: "test".into(),
+                segments: vec![],
+                speaker_names: Default::default(),
+            })
+            .unwrap();
         assert_eq!(store.count_utterances(&s.id).unwrap(), 1);
         assert!(!store.search("hash", 10).unwrap().is_empty());
+        assert!(store.get_diarization(&s.id).unwrap().is_some());
 
         store.delete_session(&s.id).unwrap();
         assert_eq!(store.count_utterances(&s.id).unwrap(), 0); // FK cascade
         assert!(store.search("hash", 10).unwrap().is_empty()); // FTS cleared
+        assert!(store.get_diarization(&s.id).unwrap().is_none());
         assert!(store.session_utterances(&s.id).unwrap().is_empty());
         // Idempotent: deleting an absent session is a no-op.
         store.delete_session(&s.id).unwrap();
