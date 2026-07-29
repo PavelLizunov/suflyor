@@ -3602,31 +3602,12 @@ fn main() -> Result<(), slint::PlatformError> {
     // var SLINT_OVERLAY_NO_AUTO_SYS=1 if a future caller needs the
     // old behaviour (e.g. CI smoke runs).
     //
-    // Phase E6 v14 — also auto-start session (timer) ~1.5s after
-    // sys probe completes. User: "то что еще старт нужно прокликивать
-    // это ко?". Sequence: sys-toggle (400 ms delay) → 3 s probe →
-    // settle → timer-toggle (1900 ms total delay so the probe
-    // finishes first). Opt-out: SLINT_OVERLAY_NO_AUTO_START=1.
     if std::env::var("SLINT_OVERLAY_NO_AUTO_SYS").is_err() {
         let weak = overlay.as_weak();
         Timer::single_shot(Duration::from_millis(400), move || {
             if let Some(o) = weak.upgrade() {
                 eprintln!("[overlay-host] auto-enabling sys capture on startup");
                 o.invoke_sys_toggle_clicked();
-            }
-        });
-    }
-    if std::env::var("SLINT_OVERLAY_NO_AUTO_START").is_err() {
-        let weak = overlay.as_weak();
-        Timer::single_shot(Duration::from_millis(1900), move || {
-            if let Some(o) = weak.upgrade() {
-                // Guard against the user manually starting the session inside the
-                // 1.9s window — without this the auto-start would toggle it OFF.
-                if o.get_timer_active() {
-                    return;
-                }
-                eprintln!("[overlay-host] auto-starting session on startup");
-                o.invoke_timer_toggle_clicked();
             }
         });
     }
@@ -3659,14 +3640,11 @@ fn main() -> Result<(), slint::PlatformError> {
     // shown when it returns None.
     //
     // GATED OFF by default (opt-in: SLINT_OVERLAY_RECOVERY) pending the
-    // auto-start-sequencing fix. Regression sweep 2026-06-03 found 3 HIGH defects:
-    // the 2200ms scan races the 1900ms auto-start and latches onto the just-
-    // started LIVE session (false "recover previous session" on every launch), it
-    // shadows any genuinely-crashed prior journal (newest-by-mtime), and a clean
-    // Quit/restart/updater exit never writes SessionStop so it also looks like a
-    // crash. Re-enable once (a) the scan runs BEFORE auto-start / excludes the
-    // current session, (b) clean exits write SessionStop, and (c) accepting
-    // recovery does not double-start. The detection (journal.rs) is sound + tested.
+    // recovery-sequencing fix. Regression sweep 2026-06-03 found that the scan
+    // could latch onto a newly-started session, shadow a genuinely crashed prior
+    // journal, and treat Quit/restart/updater exits without SessionStop as crashes.
+    // Startup no longer creates a session automatically, but the remaining clean-
+    // exit and newest-journal rules still need fixing before recovery is re-enabled.
     if !first_run && std::env::var("SLINT_OVERLAY_RECOVERY").is_ok() {
         let ro = recover_offer.clone();
         let cfg_r = cfg.clone();

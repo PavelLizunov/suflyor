@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>suflyor — проверка локальной сборки 30.07.2026</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { max-width: 900px; margin: 32px auto; padding: 0 20px 60px; background: #111827; color: #e5e7eb; }
+    h1 { font-size: 28px; margin-bottom: 6px; }
+    h2 { margin-top: 30px; }
+    .meta, .hint { color: #9ca3af; }
+    .card { display: block; padding: 14px 16px; margin: 10px 0; border: 1px solid #374151; border-radius: 10px; background: #1f2937; }
+    .card input { width: 20px; height: 20px; margin-right: 10px; vertical-align: middle; }
+    .card strong { color: #fff; }
+    code { color: #93c5fd; }
+    textarea { box-sizing: border-box; width: 100%; min-height: 100px; padding: 10px; color: inherit; background: #111827; border: 1px solid #4b5563; border-radius: 8px; }
+    button { margin: 12px 8px 0 0; padding: 9px 14px; border: 0; border-radius: 7px; cursor: pointer; }
+    #progress { color: #86efac; font-weight: 700; }
+    .blocker { border-color: #b45309; }
+    .build-state { padding: 14px 16px; border: 1px solid #166534; border-radius: 10px; background: #052e16; }
+    .build-state li { margin: 5px 0; }
+  </style>
+</head>
+<body>
+  <h1>suflyor v0.35.0 preview</h1>
+  <p class="meta">Ветка <code>codex/local-context-control</code>. Это тестовая сборка, не опубликованный релиз.</p>
+  <div class="build-state">
+    <strong>Что уже проверено автоматически</strong>
+    <ul>
+      <li>Полный gate всех трёх компонентов прошёл.</li>
+      <li>Обычный запуск без тестовых переменных: новых сессий и папок записи не создано.</li>
+      <li>Stealth: стрелка сохранилась в 96 из 96 точек основной панели, включая кнопки и область перетаскивания.</li>
+      <li>Длинное резюме остаётся живой проверкой на реальной сессии — пункт 8 не считать закрытым по unit-тестам.</li>
+    </ul>
+  </div>
+  <p id="progress">Проверено: 0 / 10</p>
+
+  <h2>Быстрый запуск</h2>
+  <label class="card"><input type="checkbox"><strong>1. Приложение запускается</strong><br>
+    Видна панель, настройки открываются, нет падения или бесконечной загрузки.</label>
+  <label class="card"><input type="checkbox"><strong>2. Основная локальная модель работает</strong><br>
+    В настройках выбран локальный режим и профиль 26B. Короткий вопрос даёт нормальный ответ в плитке.</label>
+
+  <h2>Контекст локальной модели</h2>
+  <label class="card"><input type="checkbox"><strong>3. Auto по умолчанию</strong><br>
+    Настройки → локальная модель → «Окно контекста»: выбрано Auto, показано 16K и подсказка по видеопамяти.</label>
+  <label class="card"><input type="checkbox"><strong>4. Все варианты доступны</strong><br>
+    Видны Auto, 8K, 16K, 32K, 64K и 96K; кнопки и русский текст не обрезаны.</label>
+  <label class="card"><input type="checkbox"><strong>5. Переключение 8K → 32K → 96K</strong><br>
+    После каждого выбора модель перезапускается или применяет режим, интерфейс не зависает. После запуска задайте короткий вопрос.</label>
+  <label class="card"><input type="checkbox"><strong>6. Подсказка о VRAM меняется</strong><br>
+    Ориентиры относительно Auto: 8K ≈ −0,2 ГиБ; 16K без изменения; 32K ≈ +0,3; 64K ≈ +1,0; 96K ≈ +1,6 ГиБ.</label>
+  <label class="card"><input type="checkbox"><strong>7. Настройка сохраняется</strong><br>
+    Выберите 32K, полностью закройте и снова запустите приложение: остаётся 32K, модель отвечает. После проверки верните Auto.</label>
+  <label class="card"><input type="checkbox"><strong>8. Длинное резюме не ломает модель</strong><br>
+    Если есть длинная сессия, создайте резюме: нет ошибки контекста и цикла перезапусков локальной модели.</label>
+
+  <h2>Отдельные блокеры релиза</h2>
+  <label class="card blocker"><input type="checkbox"><strong>9. Запись не стартует сама</strong><br>
+    Запустите приложение обычным способом, без специальных переменных: новая запись и сессия не должны начинаться автоматически. Старт — только отдельной кнопкой.</label>
+  <label class="card blocker"><input type="checkbox"><strong>10. Курсор не выдаёт скрытый оверлей</strong><br>
+    В stealth-режиме наведите курсор на скрытую область: форма курсора не должна меняться. Проверьте и в тестовой трансляции.</label>
+
+  <h2>Результат</h2>
+  <textarea id="notes" placeholder="Что не сработало, на каком шаге, текст ошибки или наблюдение…"></textarea>
+  <div>
+    <button id="copy">Скопировать результат</button>
+    <button id="reset">Сбросить отметки</button>
+  </div>
+  <p class="hint">Отметки и заметки сохраняются в этом браузере автоматически.</p>
+
+  <script>
+    const key = "suflyor-retest-context-v035-2026-07-30";
+    const checks = [...document.querySelectorAll('input[type="checkbox"]')];
+    const notes = document.querySelector("#notes");
+    const progress = document.querySelector("#progress");
+
+    function save() {
+      localStorage.setItem(key, JSON.stringify({ checks: checks.map(x => x.checked), notes: notes.value }));
+      progress.textContent = `Проверено: ${checks.filter(x => x.checked).length} / ${checks.length}`;
+    }
+
+    try {
+      const saved = JSON.parse(localStorage.getItem(key) || "{}");
+      (saved.checks || []).forEach((value, index) => { if (checks[index]) checks[index].checked = value; });
+      notes.value = saved.notes || "";
+    } catch {}
+    checks.forEach(x => x.addEventListener("change", save));
+    notes.addEventListener("input", save);
+    save();
+
+    document.querySelector("#copy").addEventListener("click", async () => {
+      const lines = checks.map((x, i) => `${x.checked ? "[OK]" : "[ ]"} ${i + 1}. ${x.parentElement.querySelector("strong").textContent.replace(/^\d+\.\s*/, "")}`);
+      await navigator.clipboard.writeText([...lines, "", `Заметки: ${notes.value || "нет"}`].join("\n"));
+    });
+    document.querySelector("#reset").addEventListener("click", () => {
+      checks.forEach(x => { x.checked = false; });
+      notes.value = "";
+      save();
+    });
+  </script>
+</body>
+</html>
