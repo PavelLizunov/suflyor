@@ -1293,6 +1293,8 @@ fn secret_redacted(cfg: &Config) -> Config {
     c.vision_local_bearer.clear();
     c.groq_api_key.clear();
     c.stt_whisper_bearer.clear();
+    c.hermes_bridge_token.clear();
+    c.hermes_api_key.clear();
     c
 }
 
