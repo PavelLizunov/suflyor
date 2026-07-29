@@ -590,6 +590,8 @@ fn secret_redacted_blanks_every_secret_keeps_the_rest() {
         vision_local_bearer: "vision-local".into(),
         groq_api_key: "gsk_secret".into(),
         stt_whisper_bearer: "whisper-bearer".into(),
+        hermes_bridge_token: "hermes-bridge-token".into(),
+        hermes_api_key: "hermes-api-key".into(),
         ..Default::default()
     };
 
@@ -606,6 +608,11 @@ fn secret_redacted_blanks_every_secret_keeps_the_rest() {
         r.stt_whisper_bearer.is_empty(),
         "stt_whisper_bearer redacted"
     );
+    assert!(
+        r.hermes_bridge_token.is_empty(),
+        "hermes_bridge_token redacted"
+    );
+    assert!(r.hermes_api_key.is_empty(), "hermes_api_key redacted");
     assert_eq!(r.config_version, 7, "non-secret fields survive for undo");
     // And the serialized .bak bytes contain none of the secret values.
     let bytes = serde_json::to_vec(&r).expect("serialize redacted");
@@ -615,6 +622,8 @@ fn secret_redacted_blanks_every_secret_keeps_the_rest() {
         "gsk_secret",
         "whisper-bearer",
         "vision-bearer",
+        "hermes-bridge-token",
+        "hermes-api-key",
     ] {
         assert!(
             !s.contains(secret),
