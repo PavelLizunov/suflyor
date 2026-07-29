@@ -75,7 +75,7 @@ export component MainWindow inherits Window {
             spacing: 12px;
             alignment: start;
             Text {
-                text: "Replay";
+                text: @tr("Replay");
                 font-size: 18px;
                 font-weight: 700;
                 color: #e8e8ec;
@@ -89,7 +89,7 @@ export component MainWindow inherits Window {
             }
             Rectangle { } // spring spacer
             Button {
-                text: "Back";
+                text: @tr("Back");
                 clicked => { root.back-clicked(); }
             }
         }
@@ -101,7 +101,7 @@ export component MainWindow inherits Window {
             spacing: 6px;
             alignment: start;
             Text {
-                text: "Filter:";
+                text: @tr("Filter:");
                 font-size: 11px;
                 color: #999;
                 vertical-alignment: center;
@@ -140,7 +140,7 @@ export component MainWindow inherits Window {
                     padding-left: 8px;
                     padding-right: 8px;
                     Text {
-                        text: "reset";
+                        text: @tr("reset");
                         font-size: 11px;
                         color: #6366f1;
                         vertical-alignment: center;
@@ -196,7 +196,7 @@ export component MainWindow inherits Window {
                     }
                 }
                 if root.events.length == 0 : Text {
-                    text: "(no events — choose a session above)";
+                    text: @tr("(no events - choose a session above)");
                     font-size: 12px;
                     color: #666;
                     horizontal-alignment: center;
@@ -208,14 +208,14 @@ export component MainWindow inherits Window {
         HorizontalLayout {
             spacing: 16px;
             Text {
-                text: root.total-events + " events · " + root.ai-response-count + " AI responses";
+                text: @tr("{} events - {} AI responses", root.total-events, root.ai-response-count);
                 font-size: 11px;
                 color: #999;
                 vertical-alignment: center;
             }
             Rectangle { } // spring spacer
             Text {
-                text: "Total cost: $" + root.total-cost-display;
+                text: @tr("Total cost: ${}", root.total-cost-display);
                 font-size: 11px;
                 color: #999;
                 vertical-alignment: center;
