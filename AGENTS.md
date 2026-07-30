@@ -36,6 +36,19 @@ Claude-Code twin of this file — same rules, different tooling notes.
 - Release build + installer (rarely needed by agents):
   `powershell -File scripts/build-slint-release.ps1 -Installer`.
 
+## Mandatory Slint MCP visual gate
+
+- After any `.slint` edit or Rust change that affects visible UI, use the
+  project skill `.agents/skills/slint-mcp-ui-audit/SKILL.md` before calling the
+  task done, committing it, or handing a build to the user.
+- A green compile/test gate is not visual verification. Launch the exact binary
+  with `SLINT_EMIT_DEBUG_INFO=1` and `SLINT_MCP_PORT=9123`, inspect live
+  screenshots through the embedded Slint MCP server, and report the surfaces
+  checked.
+- A change to a shared Settings primitive or layout requires screenshots of all
+  16 Settings tabs at 720x600. Never rely on computer-use screenshots for
+  transparent-window colours.
+
 Git hooks: run `git config core.hooksPath .githooks` once after clone —
 pre-commit runs fmt --check, pre-push runs clippy + tests (all crates).
 Do NOT bypass with --no-verify.
