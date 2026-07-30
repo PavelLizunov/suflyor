@@ -78,6 +78,10 @@ pub struct Config {
     /// until the user sets it.
     #[serde(default)]
     pub ai_local_model: String,
+    /// User-selected GGUF file for Suflyor's managed llama.cpp server.
+    /// Empty keeps the pinned 4B/12B/26B profiles. This path is machine-local.
+    #[serde(default)]
+    pub ai_local_custom_gguf: String,
     /// Local model for prep/structuring; empty → falls back to ai_local_model.
     #[serde(default)]
     pub ai_local_prep_model: String,
@@ -568,6 +572,7 @@ impl Config {
             ai_local_base_url: default_ai_local_base_url(),
             ai_local_bearer: String::new(),
             ai_local_model: String::new(),
+            ai_local_custom_gguf: String::new(),
             ai_local_prep_model: String::new(),
             ai_local_vision: false,
             ai_local_thinking: false,

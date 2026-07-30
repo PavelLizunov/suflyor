@@ -1138,6 +1138,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         overlay_backend::local_ai::ManagedLlamaChoice::from_config(
                             &c.ai_local_model,
                             c.ai_local_quality,
+                            &c.ai_local_custom_gguf,
                             overlay_backend::local_ai::LocalContextPreset::from_config(
                                 &c.ai_local_context,
                             ),
@@ -1256,6 +1257,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         overlay_backend::local_ai::ManagedLlamaChoice::from_config(
                             &c.ai_local_model,
                             c.ai_local_quality,
+                            &c.ai_local_custom_gguf,
                             overlay_backend::local_ai::LocalContextPreset::from_config(
                                 &c.ai_local_context,
                             ),
@@ -2526,35 +2528,40 @@ fn main() -> Result<(), slint::PlatformError> {
                     // selection, then read the clipboard aloud (zero OCR artifacts).
                     diag!("[overlay-host] Shift+Alt+1 — read selection (clipboard)");
                     let saved = slint_replay::win32::clipboard_read_text();
-                    slint_replay::win32::clipboard_clear();
-                    slint_replay::win32::send_ctrl_c();
                     let bridge_sa1 = hp_bridge.clone();
                     let tiles_sa1 = hp_tiles.clone();
                     let overlay_sa1 = hp_weak_overlay.clone();
-                    // Ctrl+C is async — the foreground app writes the clipboard on
-                    // its own message loop; read after a short delay, off the press.
-                    Timer::single_shot(std::time::Duration::from_millis(140), move || {
-                        let copied = slint_replay::win32::clipboard_read_text();
-                        diag!(
-                            "[overlay-host] sa1: copied {} chars from selection",
-                            copied.as_ref().map(|s| s.chars().count()).unwrap_or(0)
-                        );
-                        match &saved {
-                            Some(s) => slint_replay::win32::clipboard_write_text(s),
-                            None => slint_replay::win32::clipboard_clear(),
-                        }
-                        if let Some(text) = copied {
-                            // Spawn a visible tile showing the text + 🔊/⏯/📋/✕,
-                            // which auto-starts the read-aloud.
-                            spawn_text_tile(
-                                &text,
-                                "🔊 Выделенный текст",
-                                "Shift+Alt+1",
-                                &bridge_sa1,
-                                &tiles_sa1,
-                                &overlay_sa1,
+                    // The callback fires on key-down. Let Shift+Alt come up before
+                    // synthesising Ctrl+C, otherwise Windows receives
+                    // Ctrl+Shift+Alt+C and the foreground selection is not copied.
+                    Timer::single_shot(std::time::Duration::from_millis(80), move || {
+                        slint_replay::win32::clipboard_clear();
+                        slint_replay::win32::send_ctrl_c();
+                        // Ctrl+C is async — the foreground app writes the clipboard
+                        // on its own message loop; read after a short second delay.
+                        Timer::single_shot(std::time::Duration::from_millis(140), move || {
+                            let copied = slint_replay::win32::clipboard_read_text();
+                            diag!(
+                                "[overlay-host] sa1: copied {} chars from selection",
+                                copied.as_ref().map(|s| s.chars().count()).unwrap_or(0)
                             );
-                        }
+                            match &saved {
+                                Some(s) => slint_replay::win32::clipboard_write_text(s),
+                                None => slint_replay::win32::clipboard_clear(),
+                            }
+                            if let Some(text) = copied {
+                                // Spawn a visible tile showing the text + 🔊/⏯/📋/✕,
+                                // which auto-starts the read-aloud.
+                                spawn_text_tile(
+                                    &text,
+                                    "🔊 Выделенный текст",
+                                    "Shift+Alt+1",
+                                    &bridge_sa1,
+                                    &tiles_sa1,
+                                    &overlay_sa1,
+                                );
+                            }
+                        });
                     });
                 } else if event.id == sa2_id {
                     // Shift+Alt+2 — OCR a screen region and read it. Reuses the

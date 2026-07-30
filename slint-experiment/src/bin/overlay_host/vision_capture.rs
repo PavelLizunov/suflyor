@@ -39,9 +39,9 @@ use super::{
     live_route, markdown, present_tile_window, ptt_tile_error, refresh_open_tiles,
     set_always_on_top, toggle_tile_maximize, vision, wire_copy, wire_speak, wire_tile_drag,
     wire_voice_followup, Arc, AskRoute, CaptureOverlay, ComponentHandle, MarkdownBlock, ModelRc,
-    Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink, Rc, RefCell, RuntimeEvents,
-    SharedSlintRuntime, SharedString, TileWindow, TileWindows, VecModel, CONVO_SEQ,
-    TILE_DISPLAY_SEQ,
+    MonitorHint, Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink, Rc, RefCell,
+    RuntimeEvents, SharedSlintRuntime, SharedString, TileKind, TileSpec, TileWindow, TileWindows,
+    VecModel, CONVO_SEQ, TILE_DISPLAY_SEQ,
 };
 
 /// Build a Slint RGBA image from a top-down BGRA capture. Alpha is forced
@@ -101,7 +101,39 @@ pub(crate) fn fire_f8_vision_capture(
     let ocr_ready = matches!(mode, vision::VisionMode::Ocr) && overlay_backend::ocr::is_available();
     let ep = cfg.read().vision_endpoint();
     if ep.is_none() && !ocr_ready {
-        diag!("[overlay-host] F8: vision off and no local OCR — skipping");
+        let (is_ru, preferred_monitor, stealth) = {
+            let c = cfg.read();
+            (
+                c.response_language == "ru",
+                c.tile_monitor_name.clone(),
+                c.stealth_enabled,
+            )
+        };
+        let answer = if is_ru {
+            "Vision выключен. Выберите маршрут в Настройки → AI мост → Vision."
+        } else {
+            "Vision is off. Choose a route in Settings → AI bridge → Vision."
+        };
+        let monitor = match preferred_monitor.as_deref() {
+            Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
+            _ => MonitorHint::Auto,
+        };
+        if let Err(e) = events.spawn_tile_full(
+            TileSpec {
+                question: "Vision (F8)".into(),
+                answer: answer.into(),
+                source: "vision_off".into(),
+                is_translation: false,
+                highlights: vec![],
+                summary_session: None,
+            },
+            monitor,
+            stealth,
+            TileKind::Error,
+        ) {
+            eprintln!("[overlay-host] F8 vision-off notice tile spawn failed: {e}");
+        }
+        diag!("[overlay-host] F8: vision off and no local OCR — notice shown");
         return;
     }
 

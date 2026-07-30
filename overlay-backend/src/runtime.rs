@@ -894,8 +894,9 @@ impl ManagedPrepSession {
             && context.context_tokens(profile, true) != context.context_tokens(profile, false);
         let children = if switched {
             let launch_root = root.clone();
+            let prep_choice = choice.clone();
             let (outcome, children) = tokio::task::spawn_blocking(move || {
-                crate::local_ai::restart_llama_server_for_route(&launch_root, choice, true)
+                crate::local_ai::restart_llama_server_for_route(&launch_root, prep_choice, true)
             })
             .await
             .map_err(|_| anyhow::anyhow!("prep server worker failed"))?;

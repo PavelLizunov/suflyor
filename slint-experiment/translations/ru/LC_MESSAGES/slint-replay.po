@@ -850,6 +850,33 @@ msgstr "установлена"
 msgid "Not installed"
 msgstr "не установлена"
 
+msgid "Requires supported hardware"
+msgstr "нужно совместимое железо"
+
+msgid "Download"
+msgstr "скачать"
+
+msgid "Your GGUF model"
+msgstr "Ваша GGUF-модель"
+
+msgid "Active: {}"
+msgstr "Активна: {}"
+
+msgid "No user model selected"
+msgstr "Пользовательская модель не выбрана"
+
+msgid "Choose GGUF…"
+msgstr "Выбрать GGUF…"
+
+msgid "Use recommended 12B"
+msgstr "Использовать рекомендуемую 12B"
+
+msgid "Choose a trusted local GGUF file. User models run text-only; memory requirements are unknown."
+msgstr "Выберите доверенный локальный GGUF-файл. Пользовательские модели работают только с текстом; требования к памяти неизвестны."
+
+msgid "Local Vision requires the installed 12B model and its projector. Use the separate Vision section below for cloud or another server."
+msgstr "Для локального Vision нужны установленная модель 12B и её проектор. Для облака или другого сервера используйте отдельный раздел Vision ниже."
+
 msgid "Bundled 4B/12B/26B controls manage only Suflyor's own llama.cpp endpoint."
 msgstr "Управление встроенными 4B/12B/26B работает только с собственным endpoint llama.cpp Suflyor."
 
@@ -871,8 +898,11 @@ msgstr "Устанавливает локальный стек с Gemma 4 12B QA
 msgid "Installs or completes the local stack: llama.cpp, the 12B fallback, speech components, and 26B on supported hardware. Complete verified files are reused; partial downloads resume. The optional 4B profile is kept when already present."
 msgstr "Устанавливает или дополняет локальный стек: llama.cpp, резервную 12B, речевые компоненты и 26B на поддерживаемом оборудовании. Готовые проверенные файлы используются повторно, а частичные загрузки продолжаются. Необязательная 4B сохраняется, если уже установлена."
 
-msgid "Engine (llama.cpp). The app checks it weekly and verifies a new build before replacing the current one."
-msgstr "Движок (llama.cpp). Приложение проверяет его раз в неделю и проверяет новую сборку перед заменой текущей."
+msgid "Engine (llama.cpp)"
+msgstr "Движок (llama.cpp)"
+
+msgid "The app checks it weekly and verifies a new build before replacing the current one."
+msgstr "Приложение проверяет его раз в неделю и проверяет новую сборку перед заменой текущей."
 
 msgid "The 12B model is noticeably smarter but ~2× slower and needs ~10 GB of video memory (VRAM). On a weaker GPU keep 4B."
 msgstr "Модель 12B заметно умнее, но примерно вдвое медленнее и требует ~10 ГБ видеопамяти (VRAM). На слабой видеокарте оставьте 4B."
@@ -1669,6 +1699,9 @@ msgstr "Проверить"
 msgid "Prepare a call profile — describe the call, the agent researches it into an active profile:"
 msgstr "Подготовить профиль созвона — опиши созвон, агент соберёт из этого активный профиль:"
 
+msgid "Prepare a call profile"
+msgstr "Подготовить профиль созвона"
+
 msgid "e.g. Interview at Acme, Senior SRE role"
 msgstr "напр. Собес в Acme, роль Senior SRE"
 
@@ -1723,3 +1756,15 @@ msgstr "Событий: {} · ответов AI: {}"
 
 msgid "Total cost: ${}"
 msgstr "Общая стоимость: ${}"
+
+msgid "Vision for 26B requires its matching ~1.1 GiB projector."
+msgstr "Для зрения 26B нужен совместимый проектор размером около 1,1 ГиБ."
+
+msgid "Update the local engine before installing Vision for 26B."
+msgstr "Обновите локальный движок перед установкой зрения для 26B."
+
+msgid "Installing Vision…"
+msgstr "Установка зрения…"
+
+msgid "Install Vision for 26B (~1.1 GiB)"
+msgstr "Установить зрение для 26B (~1,1 ГиБ)"

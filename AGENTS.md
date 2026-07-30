@@ -48,6 +48,9 @@ Claude-Code twin of this file — same rules, different tooling notes.
 - A change to a shared Settings primitive or layout requires screenshots of all
   16 Settings tabs at 720x600. Never rely on computer-use screenshots for
   transparent-window colours.
+- After the page pass, run the project skill's complete 13-shortcut global
+  hotkey smoke once against the same binary. Registration logs alone do not
+  prove dispatch; check the distinct result/log for every shortcut.
 
 Git hooks: run `git config core.hooksPath .githooks` once after clone —
 pre-commit runs fmt --check, pre-push runs clippy + tests (all crates).

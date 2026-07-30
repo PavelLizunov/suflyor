@@ -101,6 +101,7 @@ export struct ComponentRow {
 export component DarkCheck inherits Rectangle {
     in property <string> text;
     in-out property <bool> checked: false;
+    in property <bool> enabled: true;
     callback toggled(bool);
     // min-height (not a fixed height) so the row can GROW when a long label wraps
     // to a 2nd line instead of being clipped vertically. horizontal-stretch:1 fills
@@ -120,8 +121,8 @@ export component DarkCheck inherits Rectangle {
             y: (parent.height - self.height) / 2;
             border-radius: 11px;
             border-width: 1px;
-            border-color: root.checked ? Theme.accent : Theme.border;
-            background: root.checked ? Theme.accent.with-alpha(0.2) : #ffffff0f;
+            border-color: !root.enabled ? Theme.border.with-alpha(0.5) : root.checked ? Theme.accent : Theme.border;
+            background: !root.enabled ? #ffffff08 : root.checked ? Theme.accent.with-alpha(0.2) : #ffffff0f;
             animate background, border-color { duration: 140ms; }
             Rectangle {
                 width: 16px;
@@ -129,20 +130,21 @@ export component DarkCheck inherits Rectangle {
                 border-radius: 8px;
                 y: (parent.height - self.height) / 2;
                 x: root.checked ? parent.width - self.width - 3px : 3px;
-                background: root.checked ? Theme.accent : Theme.text-muted;
+                background: !root.enabled ? Theme.text-muted.with-alpha(0.45) : root.checked ? Theme.accent : Theme.text-muted;
                 animate x, background { duration: 140ms; }
             }
         }
         Text {
             text: root.text;
             font-size: Metrics.font-body;
-            color: Theme.text-primary;
+            color: root.enabled ? Theme.text-primary : Theme.text-muted;
             vertical-alignment: center;
             wrap: word-wrap;
             horizontal-stretch: 1;
         }
     }
     TouchArea {
+        enabled: root.enabled;
         clicked => {
             root.checked = !root.checked;
             root.toggled(root.checked);
@@ -169,7 +171,9 @@ component SettingsCard inherits Rectangle {
     border-width: Metrics.border-thin;
     border-color: Theme.border;
     clip: true;
-    VerticalLayout {
+    min-height: card-content.preferred-height;
+    preferred-height: card-content.preferred-height;
+    card-content := VerticalLayout {
         padding: Metrics.space-md;
         spacing: Metrics.space-sm;
         if root.title != "" : Text {
@@ -437,6 +441,7 @@ export component SettingsWindow inherits Window {
     in-out property <bool> managed-local-server: false;
     in-out property <string> local-model-resource-warning: "";
     in-out property <bool> ai-local-vision: false;
+    in-out property <bool> ai-local-vision-available: true;
     // E10 — local-model "thinking"/reasoning toggle. Off (default) sends
     // enable_thinking=false for faster answers; on lets the model reason.
     in-out property <bool> ai-local-thinking: false;
@@ -454,14 +459,17 @@ export component SettingsWindow inherits Window {
     in-out property <bool> model-switching: false; // server relaunch in flight
     in-out property <float> quality-progress: 0.0; // 0.0..1.0
     in-out property <string> quality-status: "";
+    in-out property <bool> ai-local-custom-active: false;
+    in-out property <string> ai-local-custom-model-name: "";
     // Managed context: 0=Auto, 1=8K, 2=16K, 3=32K, 4=64K, 5=96K.
     in-out property <int> ai-local-context-index: 0;
     in-out property <int> ai-local-context-preview-index: 0;
+    in-out property <int> ai-local-hardware-profile-index: 0;
     in-out property <int> ai-local-context-max-k: 32;
     in-out property <int> ai-local-context-auto-k: 16;
     in-out property <string> ai-local-context-vram-hint: "";
-    // Legacy projector state remains for callback compatibility. The current UI
-    // does not offer a 26B projector because its vision memory is unconfirmed.
+    // The property/callback names are retained for ABI compatibility; they now
+    // drive the matching 26B projector.
     in-out property <bool> quality-vision-present: false;
     in-out property <bool> quality-vision-supported: false;
     in-out property <bool> vision12b-downloading: false;
@@ -527,6 +535,7 @@ export component SettingsWindow inherits Window {
     callback ai-local-context-preview-changed(float);
     callback ai-local-context-changed(int);
     callback download-quality-clicked();
+    callback choose-custom-gguf-clicked();
     // Legacy projector callback plus llama.cpp engine update.
     callback download-vision12b-clicked();
     callback update-engine-clicked();
@@ -2197,9 +2206,51 @@ export component SettingsWindow inherits Window {
                             DarkCheck {
                                 text: @tr("Local model supports images (vision)");
                                 checked <=> root.ai-local-vision;
+                                enabled: root.ai-local-vision-available;
                                 toggled(v) => {
                                     root.ai-local-vision-changed(v);
                                 }
+                            }
+                            if root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index != 2 : Text {
+                                text: @tr("Local Vision requires the installed 12B model and its projector. Use the separate Vision section below for cloud or another server.");
+                                font-size: 10px;
+                                color: Theme.warning;
+                                wrap: word-wrap;
+                            }
+                            if root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index == 2 : Text {
+                                text: root.quality-vision-supported
+                                    ? @tr("Vision for 26B requires its matching ~1.1 GiB projector.")
+                                    : @tr("Update the local engine before installing Vision for 26B.");
+                                font-size: 10px;
+                                color: Theme.warning;
+                                wrap: word-wrap;
+                            }
+                            if root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index == 2 && root.quality-vision-supported : HorizontalLayout {
+                                spacing: 6px;
+                                vertical-stretch: 0;
+                                Button {
+                                    height: 32px;
+                                    text: root.vision12b-downloading
+                                        ? @tr("Installing Vision…")
+                                        : @tr("Install Vision for 26B (~1.1 GiB)");
+                                    enabled: !root.vision12b-downloading && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
+                                    clicked => {
+                                        root.download-vision12b-clicked();
+                                    }
+                                }
+                                if root.vision12b-downloading : Button {
+                                    height: 32px;
+                                    text: @tr("Cancel");
+                                    clicked => {
+                                        root.cancel-local-ai-clicked();
+                                    }
+                                }
+                            }
+                            if root.vision12b-status != "" : Text {
+                                text: root.vision12b-status;
+                                font-size: 11px;
+                                color: Theme.accent;
+                                wrap: word-wrap;
                             }
                             DarkCheck {
                                 text: @tr("Local model reasoning/thinking (slower, off = faster)");
@@ -2224,9 +2275,9 @@ export component SettingsWindow inherits Window {
                                 Button {
                                     height: 32px;
                                     text: @tr("Fast (4B)") + " - " +
-                                        (root.ai-local-model-profile-index == 0 ? @tr("Active") :
+                                        (!root.ai-local-custom-active && root.ai-local-model-profile-index == 0 ? @tr("Active") :
                                          root.legacy-model-present ? @tr("Installed") : @tr("Not installed"));
-                                    enabled: root.managed-local-server && root.legacy-model-present && root.ai-local-model-profile-index != 0 && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
+                                    enabled: root.managed-local-server && root.legacy-model-present && (root.ai-local-custom-active || root.ai-local-model-profile-index != 0) && !root.quality-downloading && !root.model-switching && !root.local-ai-installing && !root.vision12b-downloading;
                                     clicked => {
                                         root.model-profile-changed(0);
                                     }
@@ -2234,41 +2285,83 @@ export component SettingsWindow inherits Window {
                                 Button {
                                     height: 32px;
                                     text: @tr("Balanced (12B QAT)") + " - " +
-                                        (root.ai-local-model-profile-index == 1 ? @tr("Active") :
-                                         root.fallback-model-present ? @tr("Installed") : @tr("Not installed"));
-                                    enabled: root.managed-local-server && root.fallback-model-present && root.ai-local-model-profile-index != 1 && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
+                                        (!root.ai-local-custom-active && root.ai-local-model-profile-index == 1 ? @tr("Active") :
+                                         root.fallback-model-present ? @tr("Installed") : @tr("Install"));
+                                    enabled: root.managed-local-server && (root.ai-local-custom-active || root.ai-local-model-profile-index != 1 || !root.fallback-model-present) && !root.quality-downloading && !root.model-switching && !root.local-ai-installing && !root.vision12b-downloading;
                                     clicked => {
-                                        root.model-profile-changed(1);
+                                        if root.fallback-model-present {
+                                            root.model-profile-changed(1);
+                                        } else {
+                                            root.install-local-ai-clicked();
+                                        }
                                     }
                                 }
-                                if root.quality-selection-allowed : Button {
+                                Button {
                                     height: 32px;
                                     text: @tr("Maximum (26B-A4B)") + " - " +
-                                        (root.ai-local-model-profile-index == 2 ? @tr("Active") :
-                                         root.quality-model-present ? @tr("Installed") : @tr("Not installed"));
-                                    enabled: root.managed-local-server && root.quality-model-present && root.ai-local-model-profile-index != 2 && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
+                                        (!root.ai-local-custom-active && root.ai-local-model-profile-index == 2 ? @tr("Active") :
+                                         !root.quality-selection-allowed ? @tr("Requires supported hardware") :
+                                         root.quality-model-present ? @tr("Installed") : @tr("Download"));
+                                    enabled: root.quality-selection-allowed && root.managed-local-server && (root.ai-local-custom-active || root.ai-local-model-profile-index != 2 || !root.quality-model-present) && !root.quality-downloading && !root.model-switching && !root.local-ai-installing && !root.vision12b-downloading;
                                     clicked => {
-                                        root.model-profile-changed(2);
+                                        if root.quality-model-present {
+                                            root.model-profile-changed(2);
+                                        } else {
+                                            root.download-quality-clicked();
+                                        }
                                     }
                                 }
                             }
-                            HorizontalLayout {
+                            if root.quality-downloading : HorizontalLayout {
                                 spacing: 6px;
                                 vertical-stretch: 0;
-                                if !root.quality-model-present && root.quality-selection-allowed : Button {
-                                    height: 32px;
-                                    text: root.quality-downloading ? @tr("Downloading…") : @tr("Download only 26B (9.8 GiB)");
-                                    enabled: root.managed-local-server && !root.quality-downloading && !root.local-ai-installing;
-                                    clicked => {
-                                        root.download-quality-clicked();
-                                    }
-                                }
-                                if root.quality-downloading : Button {
+                                Button {
                                     text: @tr("Cancel");
                                     clicked => {
                                         root.cancel-local-ai-clicked();
                                     }
                                 }
+                            }
+                            Rectangle { background: Theme.border; height: 1px; }
+                            Text {
+                                text: @tr("Your GGUF model");
+                                font-size: 11px;
+                                font-weight: 700;
+                                color: Theme.text-primary;
+                            }
+                            Text {
+                                text: root.ai-local-custom-active
+                                    ? @tr("Active: {}", root.ai-local-custom-model-name)
+                                    : @tr("No user model selected");
+                                font-size: 10px;
+                                color: root.ai-local-custom-active ? Theme.accent : Theme.text-muted;
+                                overflow: elide;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                vertical-stretch: 0;
+                                Button {
+                                    height: 32px;
+                                    text: @tr("Choose GGUF…");
+                                    enabled: root.managed-local-server && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
+                                    clicked => {
+                                        root.choose-custom-gguf-clicked();
+                                    }
+                                }
+                                if root.ai-local-custom-active : Button {
+                                    height: 32px;
+                                    text: @tr("Use recommended 12B");
+                                    enabled: root.fallback-model-present && !root.model-switching;
+                                    clicked => {
+                                        root.model-profile-changed(1);
+                                    }
+                                }
+                            }
+                            Text {
+                                text: @tr("Choose a trusted local GGUF file. User models run text-only; memory requirements are unknown.");
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
                             }
                             if !root.managed-local-server : Text {
                                 text: @tr("Bundled 4B/12B/26B controls manage only Suflyor's own llama.cpp endpoint.");
@@ -2287,20 +2380,18 @@ export component SettingsWindow inherits Window {
                                 }
                                 SettingsSlider {
                                     height: 20px;
-                                    // Fluent's active track is a zero-width rounded
-                                    // rectangle at the exact endpoints. Keep the
-                                    // logical 0..N values one invisible epsilon
-                                    // inside the visual range to avoid a renderer
-                                    // state bug that softens neighbouring text.
-                                    minimum: -0.01;
-                                    maximum: root.ai-local-context-max-k >= 96 ? 5.01 :
-                                        root.ai-local-context-max-k >= 64 ? 4.01 :
-                                        root.ai-local-context-max-k >= 32 ? 3.01 :
-                                        root.ai-local-context-max-k >= 16 ? 2.01 : 1.01;
-                                    value: root.ai-local-context-preview-index;
+                                    // The visual range is 1..6; backend/config
+                                    // remain 0..5. The thumb can never reach zero,
+                                    // which avoids Fluent's blurry endpoint state.
+                                    minimum: 0.99;
+                                    maximum: root.ai-local-context-max-k >= 96 ? 6.01 :
+                                        root.ai-local-context-max-k >= 64 ? 5.01 :
+                                        root.ai-local-context-max-k >= 32 ? 4.01 :
+                                        root.ai-local-context-max-k >= 16 ? 3.01 : 2.01;
+                                    value: root.ai-local-context-preview-index + 1;
                                     enabled: !root.model-switching && !root.local-ai-installing;
                                     changed(v) => {
-                                        root.ai-local-context-preview-changed(v);
+                                        root.ai-local-context-preview-changed(v - 1);
                                     }
                                 }
                                 HorizontalLayout {
@@ -2397,12 +2488,6 @@ export component SettingsWindow inherits Window {
                                     background: Theme.accent;
                                 }
                             }
-                            if root.vision12b-status != "" : Text {
-                                text: root.vision12b-status;
-                                font-size: 11px;
-                                color: Theme.accent;
-                                wrap: word-wrap;
-                            }
                             HorizontalLayout {
                                 spacing: 6px;
                                 height: 32px;
@@ -2475,10 +2560,15 @@ export component SettingsWindow inherits Window {
                                     background: Theme.accent;
                                 }
                             }
-                            // ----- v0.18.2 — llama.cpp engine auto-update -----
-                            Rectangle { background: Theme.border; height: 1px; }
+                        }
+
+                        // Keep engine maintenance in its own card. The local-AI
+                        // card is intentionally long and Slint can under-report
+                        // the final conditional rows when sizing its ScrollView.
+                        if root.ai-provider-index == 1 : SettingsCard {
+                            title: @tr("Engine (llama.cpp)");
                             Text {
-                                text: @tr("Engine (llama.cpp). The app checks it weekly and verifies a new build before replacing the current one.");
+                                text: @tr("The app checks it weekly and verifies a new build before replacing the current one.");
                                 font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
@@ -2904,7 +2994,9 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
-                            Rectangle { background: Theme.border; height: 1px; }
+                        }
+                        SettingsCard {
+                            title: @tr("Prepare a call profile");
                             Text {
                                 text: @tr("Prepare a call profile — describe the call, the agent researches it into an active profile:");
                                 font-size: 11px;
