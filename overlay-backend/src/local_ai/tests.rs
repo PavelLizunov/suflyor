@@ -611,6 +611,128 @@ fn only_nvidia_discovery_enters_the_confirmed_matrix() {
 }
 
 #[test]
+fn normalization_snaps_near_nominal_readings_to_approved_tiers() {
+    // VRAM: ±1 GiB around each approved tier (8, 12, 16).
+    assert_eq!(normalize_vram_gib(7), 8);
+    assert_eq!(normalize_vram_gib(8), 8);
+    assert_eq!(normalize_vram_gib(9), 8);
+    assert_eq!(normalize_vram_gib(11), 12);
+    assert_eq!(normalize_vram_gib(12), 12);
+    assert_eq!(normalize_vram_gib(13), 12);
+    assert_eq!(normalize_vram_gib(15), 16);
+    assert_eq!(normalize_vram_gib(16), 16);
+    assert_eq!(normalize_vram_gib(17), 16);
+
+    // RAM: ±1 GiB around each approved tier (16, 24, 32).
+    assert_eq!(normalize_ram_gib(15), 16);
+    assert_eq!(normalize_ram_gib(16), 16);
+    assert_eq!(normalize_ram_gib(17), 16);
+    assert_eq!(normalize_ram_gib(23), 24);
+    assert_eq!(normalize_ram_gib(24), 24);
+    assert_eq!(normalize_ram_gib(25), 24);
+    assert_eq!(normalize_ram_gib(31), 32);
+    assert_eq!(normalize_ram_gib(32), 32);
+    assert_eq!(normalize_ram_gib(33), 32);
+}
+
+#[test]
+fn normalization_never_promotes_clearly_smaller_hardware() {
+    // 6 GiB VRAM is 2 away from the 8 GiB tier — must stay 6.
+    assert_eq!(normalize_vram_gib(6), 6);
+    assert_eq!(normalize_vram_gib(4), 4);
+    assert_eq!(normalize_vram_gib(10), 10);
+    assert_eq!(normalize_vram_gib(14), 14);
+    assert_eq!(normalize_vram_gib(18), 18);
+
+    // RAM clearly below a tier stays put.
+    assert_eq!(normalize_ram_gib(14), 14);
+    assert_eq!(normalize_ram_gib(22), 22);
+    assert_eq!(normalize_ram_gib(26), 26);
+    assert_eq!(normalize_ram_gib(30), 30);
+    assert_eq!(normalize_ram_gib(34), 34);
+
+    // End-to-end: 6 GiB VRAM + 32 GiB RAM must remain Unknown.
+    assert_eq!(
+        hardware_profile_from_discovery(false, Some(6), Some(32)),
+        HardwareModelProfile::Unknown,
+        "6 GiB VRAM must never enter the confirmed 26B matrix"
+    );
+}
+
+#[test]
+fn igpu_ram_reservation_snaps_to_existing_profile() {
+    // Owner's machine: 16 GiB NVIDIA + 32 GiB installed, iGPU reserves ~1 GiB
+    // → TotalPhysicalMemory reports 31 GiB usable.
+    assert_eq!(
+        hardware_profile_from_discovery(false, Some(16), Some(31)),
+        HardwareModelProfile::Primary26Vram16,
+        "16/31 must snap to the 16/32 profile (iGPU reservation)"
+    );
+    // Same for the 8 GiB VRAM tier.
+    assert_eq!(
+        hardware_profile_from_discovery(false, Some(8), Some(31)),
+        HardwareModelProfile::Primary26Vram8,
+        "8/31 must snap to the 8/32 profile"
+    );
+    // 12 GiB VRAM tier already accepts 24..=32, so 31 matches without
+    // normalization — verify it still works through the pipeline.
+    assert_eq!(
+        hardware_profile_from_discovery(false, Some(12), Some(31)),
+        HardwareModelProfile::Primary26Vram12
+    );
+    // Fallback tier: 8/15 → 8/16.
+    assert_eq!(
+        hardware_profile_from_discovery(false, Some(8), Some(15)),
+        HardwareModelProfile::Fallback12B,
+        "8/15 must snap to the 8/16 fallback profile"
+    );
+}
+
+#[test]
+fn near_nominal_vram_snaps_to_existing_profile() {
+    // 15 GiB reported for a 16 GiB card (firmware underreport).
+    assert_eq!(
+        hardware_profile_from_discovery(false, Some(15), Some(32)),
+        HardwareModelProfile::Primary26Vram16,
+        "15/32 must snap to the 16/32 profile"
+    );
+    // 11 GiB reported for a 12 GiB card.
+    assert_eq!(
+        hardware_profile_from_discovery(false, Some(11), Some(32)),
+        HardwareModelProfile::Primary26Vram12,
+        "11/32 must snap to the 12/32 profile"
+    );
+    // 7 GiB reported for an 8 GiB card.
+    assert_eq!(
+        hardware_profile_from_discovery(false, Some(7), Some(16)),
+        HardwareModelProfile::Fallback12B,
+        "7/16 must snap to the 8/16 fallback profile"
+    );
+}
+
+#[test]
+fn strongest_adapter_vram_normalizes_correctly() {
+    // Multi-GPU nvidia-smi output: iGPU (512 MiB) + dGPU (16384 MiB).
+    // parse_nvidia_memory_mib picks the strongest (max total).
+    let (used, total) = parse_nvidia_memory_mib("128, 512\n1024, 16384\n").unwrap();
+    assert_eq!((used, total), (1024, 16384));
+    // Same GiB conversion as detect_nvidia_vram_gib: round-to-nearest.
+    let vram_gib = (total + 512) / 1024;
+    assert_eq!(vram_gib, 16);
+    assert_eq!(normalize_vram_gib(vram_gib), 16);
+
+    // Strongest adapter reports 15360 MiB (some 16 GiB cards underreport).
+    let (_, total_under) = parse_nvidia_memory_mib("256, 512\n900, 15360\n").unwrap();
+    let vram_under = (total_under + 512) / 1024;
+    assert_eq!(vram_under, 15, "15360 MiB rounds to 15 GiB");
+    assert_eq!(
+        normalize_vram_gib(vram_under),
+        16,
+        "15 GiB snaps back to the 16 GiB tier"
+    );
+}
+
+#[test]
 fn launcher_uses_fixed_context_with_the_confirmed_hardware_matrix() {
     let cases = [
         (
@@ -1425,4 +1547,275 @@ fn archive_entry_safety_rejects_zip_slip() {
     // A bare "." current-dir component is harmless and must stay allowed
     // (tar may emit "./"-prefixed entries).
     assert!(archive_entry_is_safe("./build/x.dll"));
+}
+
+// ---- v0.35.2: all built-in profiles remain selectable on ANY hardware -------
+
+#[test]
+fn all_managed_models_accessible_regardless_of_hardware() {
+    // Every built-in profile index resolves to a distinct model with a valid
+    // file name, independent of the detected hardware profile.
+    let models = [
+        ManagedModel::from_index(0),
+        ManagedModel::from_index(1),
+        ManagedModel::from_index(2),
+    ];
+    assert_eq!(models[0], ManagedModel::Legacy4B);
+    assert_eq!(models[1], ManagedModel::Fallback12B);
+    assert_eq!(models[2], ManagedModel::Primary26B);
+    for m in &models {
+        assert!(!m.file_name().is_empty());
+    }
+    // Round-trip through index.
+    for m in models {
+        assert_eq!(ManagedModel::from_index(m.index()), m);
+    }
+}
+
+#[test]
+fn low_hardware_profile_is_recommendation_only() {
+    // 6 GiB NVIDIA + 16 GiB RAM → Unknown (not in the confirmed matrix).
+    let profile = hardware_profile_from_discovery(false, Some(6), Some(16));
+    assert_eq!(profile, HardwareModelProfile::Unknown);
+    // The recommendation flag is false…
+    assert!(!primary_26b_allowed(profile));
+    // …but every ManagedModel variant is still constructible and the hardware
+    // profile does NOT gate model access.
+    assert_eq!(ManagedModel::from_index(2), ManagedModel::Primary26B);
+    assert_eq!(
+        ManagedModel::Primary26B.file_name(),
+        "gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf"
+    );
+}
+
+#[test]
+fn sixteen_vram_31_ram_normalizes_and_exposes_all_profiles() {
+    // Owner's machine with iGPU: 16 GiB VRAM, 31 GiB usable RAM.
+    let profile = hardware_profile_from_discovery(false, Some(16), Some(31));
+    assert_eq!(profile, HardwareModelProfile::Primary26Vram16);
+    assert!(primary_26b_allowed(profile));
+    // All three models remain accessible.
+    for idx in 0..3 {
+        let m = ManagedModel::from_index(idx);
+        assert!(!m.file_name().is_empty());
+    }
+}
+
+#[test]
+fn unknown_hardware_does_not_block_26b_download_path() {
+    // download_quality_model no longer bails on hardware. Verify the function
+    // proceeds past the hardware check by calling it with a temp root and an
+    // immediate cancel — it must NOT return the old hardware-rejection error.
+    let root = tempfile::tempdir().unwrap();
+    let cancel = std::sync::atomic::AtomicBool::new(true);
+    let result = download_quality_model(root.path(), &cancel, &|_| {});
+    // The cancel flag is set, so the download aborts with a cancellation error
+    // (or a mkdir/network error), but NEVER with the old hardware bail message.
+    if let Err(e) = result {
+        let msg = format!("{e:#}");
+        assert!(
+            !msg.contains("confirmed VRAM/RAM hardware profile"),
+            "hardware must not reject the download: {msg}"
+        );
+    }
+}
+
+/// Every bundled model button must pull EXACTLY the clicked model from an
+/// immutable Hugging Face revision — never /main, never hardware-redirected —
+/// and verify it against a full LFS SHA-256. Pure metadata assertions (no
+/// download), so they run anywhere.
+#[test]
+fn model_specs_pin_immutable_revisions_with_full_sha() {
+    for model in [
+        ManagedModel::Legacy4B,
+        ManagedModel::Fallback12B,
+        ManagedModel::Primary26B,
+    ] {
+        let spec = model.spec();
+        assert_eq!(spec.file, model.file_name(), "spec file matches the model");
+        assert!(spec.size > 0, "{}: size pinned", spec.label);
+        // Immutable revision, never the moving /main branch.
+        assert!(
+            spec.url.starts_with("https://huggingface.co/"),
+            "{}: HF origin",
+            spec.label
+        );
+        assert!(
+            spec.url.contains("/resolve/"),
+            "{}: pinned resolve",
+            spec.label
+        );
+        assert!(
+            !spec.url.contains("/resolve/main/"),
+            "{}: must never resolve /main",
+            spec.label
+        );
+        let resolve_ref = spec
+            .url
+            .split("/resolve/")
+            .nth(1)
+            .and_then(|rest| rest.split('/').next())
+            .unwrap_or_default();
+        assert!(
+            resolve_ref.len() >= 7 && resolve_ref.chars().all(|c| c.is_ascii_hexdigit()),
+            "{}: resolve ref {resolve_ref:?} is a commit hash, not a branch",
+            spec.label
+        );
+        assert!(
+            spec.url.ends_with(&format!("/{}", spec.file)),
+            "{}: url downloads the exact model file",
+            spec.label
+        );
+        // Full 64-char LFS object hash.
+        assert_eq!(spec.sha256.len(), 64, "{}: sha256 length", spec.label);
+        assert!(
+            spec.sha256.chars().all(|c| c.is_ascii_hexdigit()),
+            "{}: sha256 is hex",
+            spec.label
+        );
+    }
+}
+
+/// The 4B profile is pinned to the exact LFS size + SHA read from the immutable
+/// Hugging Face revision bfc15c3. Lock the values so an accidental edit (or a
+/// silent /main re-upload) is caught here, not on a user's machine.
+#[test]
+fn legacy_4b_spec_matches_the_pinned_hf_revision() {
+    let spec = ManagedModel::Legacy4B.spec();
+    assert_eq!(spec.file, "gemma-4-E4B-it-Q4_K_M.gguf");
+    assert_eq!(spec.size, 4_977_171_584);
+    assert_eq!(
+        spec.sha256,
+        "85a896a047553e842f25297ee5b031d64ff30147d9c4af17b1e4b394cd1fab87"
+    );
+    assert!(spec
+        .url
+        .contains("/resolve/bfc15c382204943c3a8fff0c750b94ae2364d7a3/"));
+    // The presence check must agree with the download spec's exact size + hash.
+    assert_eq!(spec.size, LEGACY_GEMMA_SIZE);
+    assert_eq!(spec.sha256, LEGACY_GEMMA_SHA256);
+}
+
+/// UI presence for the 4B model is an O(1) size check against the pinned size.
+/// Both the current pinned size and the previous release's size are accepted.
+#[test]
+fn legacy_presence_uses_the_pinned_4b_size() {
+    let tmp = tempfile::tempdir().unwrap();
+    let llama_dir = tmp.path().join("llama.cpp");
+    std::fs::create_dir_all(&llama_dir).unwrap();
+    let path = llama_dir.join(LEGACY_GEMMA_FILE);
+    assert!(
+        !legacy_model_present(tmp.path()),
+        "absent file → not present"
+    );
+    make_complete(&path, LEGACY_GEMMA_SIZE - 1);
+    assert!(
+        !legacy_model_present(tmp.path()),
+        "short file → not present"
+    );
+    make_complete(&path, LEGACY_GEMMA_SIZE);
+    assert!(legacy_model_present(tmp.path()), "exact size → present");
+    make_complete(&path, LEGACY_GEMMA_SIZE_PREV);
+    assert!(
+        legacy_model_present(tmp.path()),
+        "previous-release size → present"
+    );
+}
+
+/// Hardware must never block or redirect ANY model download (4B/12B/26B). Each
+/// call proceeds straight to the (here cancelled) download path — no hardware
+/// rejection. Cancel is set up-front so no network I/O happens.
+#[test]
+fn hardware_never_blocks_any_managed_model_download() {
+    for model in [
+        ManagedModel::Legacy4B,
+        ManagedModel::Fallback12B,
+        ManagedModel::Primary26B,
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let cancel = std::sync::atomic::AtomicBool::new(true);
+        let result = download_managed_model(root.path(), model, &cancel, &|_| {});
+        if let Err(e) = result {
+            let msg = format!("{e:#}");
+            assert!(
+                !msg.contains("confirmed VRAM/RAM hardware profile"),
+                "hardware must not reject the {} download: {msg}",
+                model.spec().label
+            );
+        }
+    }
+}
+
+/// Regression: a previous-release 4B file (4 977 169 568 bytes) must remain
+/// Installed + launchable after upgrade, and the explicit downloader must not
+/// corrupt-resume it. A fresh/missing download still targets the new pinned
+/// spec (exact size + SHA-256 from the immutable HF revision).
+#[test]
+fn old_size_4b_upgrade_compatibility_and_new_spec_integrity() {
+    // -- new-spec integrity pins ------------------------------------------------
+    let spec = ManagedModel::Legacy4B.spec();
+    assert_eq!(spec.size, LEGACY_GEMMA_SIZE);
+    assert_eq!(spec.size, 4_977_171_584);
+    assert_eq!(spec.sha256, LEGACY_GEMMA_SHA256);
+    assert_ne!(
+        LEGACY_GEMMA_SIZE, LEGACY_GEMMA_SIZE_PREV,
+        "old and new sizes must differ"
+    );
+    assert_eq!(LEGACY_GEMMA_SIZE_PREV, 4_977_169_568);
+
+    // -- old-size file: presence + selection ------------------------------------
+    let tmp = tempfile::tempdir().unwrap();
+    let llama_dir = tmp.path().join("llama.cpp");
+    std::fs::create_dir_all(&llama_dir).unwrap();
+    let path = llama_dir.join(LEGACY_GEMMA_FILE);
+    make_complete(&path, LEGACY_GEMMA_SIZE_PREV);
+
+    assert!(
+        legacy_model_present(tmp.path()),
+        "old-size file must be recognised as Installed"
+    );
+    assert!(
+        base_model_present(tmp.path()),
+        "old-size file must satisfy base_model_present"
+    );
+    assert_eq!(
+        effective_managed_model(tmp.path(), ManagedModel::Legacy4B),
+        ManagedModel::Legacy4B,
+        "old-size file must keep the Legacy4B selection"
+    );
+    assert_eq!(
+        selected_llama_gguf(&llama_dir, ManagedModel::Legacy4B),
+        path,
+        "old-size file must be launchable"
+    );
+    assert_eq!(
+        complete_fallback_llama_gguf(&llama_dir),
+        Some(path.clone()),
+        "old-size file must be the fallback when 12B is absent"
+    );
+
+    // -- explicit downloader must not corrupt-resume ----------------------------
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let result = download_managed_model(tmp.path(), ManagedModel::Legacy4B, &cancel, &|_| {});
+    assert!(
+        result.is_ok(),
+        "downloader must accept the old-size file: {result:?}"
+    );
+    assert_eq!(
+        file_len(&path),
+        LEGACY_GEMMA_SIZE_PREV,
+        "old-size file must not be modified by the downloader"
+    );
+
+    // -- repair keeps the old-size selection ------------------------------------
+    let mut cfg = crate::config::Config {
+        ai_local_base_url: "http://127.0.0.1:8080/v1".to_string(),
+        ai_local_model: LEGACY_GEMMA_FILE.to_string(),
+        ..Default::default()
+    };
+    assert!(
+        !repair_managed_model_state(&mut cfg, tmp.path()),
+        "old-size 4B selection must survive repair"
+    );
+    assert_eq!(cfg.ai_local_model, LEGACY_GEMMA_FILE);
 }

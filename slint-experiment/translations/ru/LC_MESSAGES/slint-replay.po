@@ -856,6 +856,9 @@ msgstr "нужно совместимое железо"
 msgid "Download"
 msgstr "скачать"
 
+msgid "Hardware not in the confirmed matrix. The model may exceed VRAM, spill into system RAM, run very slowly, or fail. You accept this risk."
+msgstr "Железо не входит в подтверждённую матрицу. Модель может превысить VRAM, использовать системную RAM, работать очень медленно или не запуститься. Вы принимаете этот риск."
+
 msgid "Your GGUF model"
 msgstr "Ваша GGUF-модель"
 
