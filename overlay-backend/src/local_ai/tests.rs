@@ -137,17 +137,26 @@ fn owner_primary_coordinates_and_sha_are_exact() {
     );
 }
 
-/// The 26B primary is chosen only when requested and complete; every other
-/// combination resolves to the always-installed 12B fallback.
+/// Any explicit managed model is selected only when complete.
 #[test]
-fn pick_llama_gguf_prefers_26b_only_when_present_and_wanted() {
+fn pick_llama_gguf_uses_explicit_model_only_when_present() {
     let dir = Path::new("C:/root/llama.cpp");
     let fallback = dir.join(GEMMA_FILE);
+    let legacy = dir.join(LEGACY_GEMMA_FILE);
     let primary = dir.join(GEMMA26_FILE);
-    assert_eq!(pick_llama_gguf(dir, true, true), primary);
-    assert_eq!(pick_llama_gguf(dir, true, false), fallback);
-    assert_eq!(pick_llama_gguf(dir, false, true), fallback);
-    assert_eq!(pick_llama_gguf(dir, false, false), fallback);
+    assert_eq!(
+        pick_llama_gguf(dir, ManagedModel::Primary26B, true),
+        primary
+    );
+    assert_eq!(
+        pick_llama_gguf(dir, ManagedModel::Primary26B, false),
+        fallback
+    );
+    assert_eq!(pick_llama_gguf(dir, ManagedModel::Legacy4B, true), legacy);
+    assert_eq!(
+        pick_llama_gguf(dir, ManagedModel::Fallback12B, true),
+        fallback
+    );
 }
 
 /// UI presence is an O(1) size check: Settings must never hash the 10.5-GB
@@ -212,8 +221,14 @@ fn quality_gguf_path_is_under_llama_dir() {
 #[test]
 fn persisted_primary_falls_back_to_12b_when_missing() {
     let tmp = tempfile::tempdir().unwrap();
-    assert_eq!(active_local_model_name(tmp.path(), false), GEMMA_FILE);
-    assert_eq!(active_local_model_name(tmp.path(), true), GEMMA_FILE);
+    assert_eq!(
+        active_local_model_name(tmp.path(), ManagedModel::Fallback12B),
+        GEMMA_FILE
+    );
+    assert_eq!(
+        active_local_model_name(tmp.path(), ManagedModel::Primary26B),
+        GEMMA_FILE
+    );
     assert!(!effective_local_quality(tmp.path(), true));
 
     let mut cfg = crate::config::Config {
@@ -290,10 +305,13 @@ fn legacy_4b_install_survives_upgrade_until_12b_is_installed() {
 
     assert!(base_model_present(tmp.path()));
     assert_eq!(
-        active_local_model_name(tmp.path(), false),
+        active_local_model_name(tmp.path(), ManagedModel::Fallback12B),
         LEGACY_GEMMA_FILE
     );
-    assert_eq!(active_local_model_name(tmp.path(), true), LEGACY_GEMMA_FILE);
+    assert_eq!(
+        active_local_model_name(tmp.path(), ManagedModel::Primary26B),
+        LEGACY_GEMMA_FILE
+    );
 
     let mut cfg = crate::config::Config {
         ai_local_base_url: "http://localhost:8080/v1".to_string(),
@@ -307,6 +325,13 @@ fn legacy_4b_install_survives_upgrade_until_12b_is_installed() {
     assert!(!cfg.ai_local_quality);
     assert_eq!(cfg.ai_local_model, LEGACY_GEMMA_FILE);
     assert!(cfg.ai_local_prep_model.is_empty());
+
+    make_complete(&llama_dir.join(GEMMA_FILE), GEMMA_SIZE);
+    assert!(
+        !repair_managed_model_state(&mut cfg, tmp.path()),
+        "an explicit 4B selection must survive after 12B is installed"
+    );
+    assert_eq!(cfg.ai_local_model, LEGACY_GEMMA_FILE);
 }
 
 #[test]
@@ -615,6 +640,25 @@ fn context_presets_are_compact_clamped_and_stable() {
     assert_eq!(
         LocalContextPreset::K96.estimated_vram_delta_mib(known),
         1_687
+    );
+    assert_eq!(
+        ManagedModel::from_config(LEGACY_GEMMA_FILE, false),
+        ManagedModel::Legacy4B
+    );
+    assert_eq!(
+        ManagedModel::from_config(GEMMA_FILE, true),
+        ManagedModel::Primary26B
+    );
+    assert_eq!(ManagedModel::from_index(0).index(), 0);
+    assert_eq!(ManagedModel::from_index(1).index(), 1);
+    assert_eq!(ManagedModel::from_index(2).index(), 2);
+    assert!(
+        estimated_total_vram_mib(ManagedModel::Legacy4B, LocalContextPreset::Auto, known)
+            < estimated_total_vram_mib(ManagedModel::Fallback12B, LocalContextPreset::Auto, known)
+    );
+    assert!(
+        estimated_total_vram_mib(ManagedModel::Primary26B, LocalContextPreset::K8, known)
+            < estimated_total_vram_mib(ManagedModel::Primary26B, LocalContextPreset::K96, known)
     );
 }
 

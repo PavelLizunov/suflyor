@@ -37,39 +37,45 @@ pub(crate) fn refresh_local_context_controls(
     cfg: &overlay_backend::config::Config,
 ) {
     let root = overlay_backend::local_ai::default_root();
-    let quality = overlay_backend::local_ai::effective_local_quality(&root, cfg.ai_local_quality);
-    let profile = overlay_backend::local_ai::current_server_profile(quality);
+    let requested = overlay_backend::local_ai::ManagedModel::from_config(
+        &cfg.ai_local_model,
+        cfg.ai_local_quality,
+    );
+    let model = overlay_backend::local_ai::effective_managed_model(&root, requested);
+    let profile = overlay_backend::local_ai::current_server_profile(model.is_quality());
     let preset = overlay_backend::local_ai::LocalContextPreset::from_config(&cfg.ai_local_context);
+    win.set_ai_local_quality(model.is_quality());
+    win.set_ai_local_model_profile_index(model.index());
+    win.set_legacy_model_present(overlay_backend::local_ai::legacy_model_present(&root));
+    win.set_fallback_model_present(overlay_backend::local_ai::fallback_model_present(&root));
     win.set_ai_local_context_index(preset.index());
+    refresh_local_context_preview(win, cfg, model, profile, preset);
+}
+
+fn refresh_local_context_preview(
+    win: &SettingsWindow,
+    cfg: &overlay_backend::config::Config,
+    model: overlay_backend::local_ai::ManagedModel,
+    profile: overlay_backend::local_ai::HardwareModelProfile,
+    preset: overlay_backend::local_ai::LocalContextPreset,
+) {
+    win.set_ai_local_context_preview_index(preset.index());
     win.set_ai_local_context_max_k((profile.context_tokens(false) / 1024) as i32);
     win.set_ai_local_context_auto_k(
         (overlay_backend::local_ai::LocalContextPreset::Auto.context_tokens(profile, false) / 1024)
             as i32,
     );
-    let delta = preset.estimated_vram_delta_mib(profile);
-    let gib = f64::from(delta.unsigned_abs()) / 1024.0;
+    let gib = f64::from(overlay_backend::local_ai::estimated_total_vram_mib(
+        model, preset, profile,
+    )) / 1024.0;
     let hint = if cfg.ui_language == "ru" {
-        match delta.cmp(&0) {
-            std::cmp::Ordering::Less => {
-                format!("Ожидаемо примерно на {gib:.1} ГБ VRAM меньше, чем Auto.")
-            }
-            std::cmp::Ordering::Greater => {
-                format!("Ожидаемо примерно на {gib:.1} ГБ VRAM больше, чем Auto.")
-            }
-            std::cmp::Ordering::Equal => {
-                "Ожидаемое потребление VRAM примерно как в Auto.".to_string()
-            }
-        }
+        format!(
+            "Оценка до запуска: ~{gib:.1} ГиБ VRAM. Фактическое значение зависит от драйвера и GPU offload."
+        )
     } else {
-        match delta.cmp(&0) {
-            std::cmp::Ordering::Less => {
-                format!("Expected VRAM: about {gib:.1} GiB less than Auto.")
-            }
-            std::cmp::Ordering::Greater => {
-                format!("Expected VRAM: about {gib:.1} GiB more than Auto.")
-            }
-            std::cmp::Ordering::Equal => "Expected VRAM use is about the same as Auto.".to_string(),
-        }
+        format!(
+            "Pre-launch estimate: ~{gib:.1} GiB VRAM. Actual use depends on the driver and GPU offload."
+        )
     };
     win.set_ai_local_context_vram_hint(SharedString::from(hint));
 }
@@ -196,11 +202,9 @@ pub(crate) fn wire_local_ai(
                         overlay_backend::local_ai::is_managed_llama_endpoint(&c.ai_local_base_url)
                             && overlay_backend::local_ai::base_model_present(&opts.root),
                         c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081"),
-                        overlay_backend::local_ai::ManagedLlamaChoice::new(
-                            overlay_backend::local_ai::effective_local_quality(
-                                &opts.root,
-                                c.ai_local_quality,
-                            ),
+                        overlay_backend::local_ai::ManagedLlamaChoice::from_config(
+                            &c.ai_local_model,
+                            c.ai_local_quality,
                             opts.context,
                         ),
                     )
@@ -380,6 +384,12 @@ pub(crate) fn wire_local_ai(
                                     // list, and resource warning agree with
                                     // the server that is now running.
                                     w.set_ai_local_quality(quality);
+                                    w.set_ai_local_model_profile_index(
+                                        overlay_backend::local_ai::ManagedModel::from_config(
+                                            &model, quality,
+                                        )
+                                        .index(),
+                                    );
                                     w.set_ai_local_models(ModelRc::new(VecModel::from(vec![
                                         SharedString::from(model.clone()),
                                     ])));
@@ -431,7 +441,7 @@ pub(crate) fn wire_local_ai(
         });
     }
 
-    // Owner-approved fallback (12B QAT) ↔ primary (26B-A4B) switch. Persists the choice, then
+    // Explicit 4B ↔ 12B ↔ 26B switch. Persists the choice, then
     // (off the UI thread) frees :8080 owner-aware and relaunches llama-server
     // with the OTHER GGUF. STT (:8081) is left alone. The 12B button is only
     // enabled when the file is present, so the relaunch can always find a model
@@ -441,8 +451,9 @@ pub(crate) fn wire_local_ai(
         let state_c = state.clone();
         let overlay_c = overlay_weak.clone();
         let weak = win.as_weak();
-        win.on_model_quality_changed(move |want_quality| {
+        win.on_model_profile_changed(move |index| {
             let Some(w) = weak.upgrade() else { return };
+            let want_model = overlay_backend::local_ai::ManagedModel::from_index(index);
             // Re-entry guard (review #3): the Slint `enabled:` bindings only
             // block the SAME button, so a fast opposite-button click during the
             // relaunch could double-launch :8080. `model-switching` gates both.
@@ -451,15 +462,22 @@ pub(crate) fn wire_local_ai(
             }
             // No-op if already on the requested model (the active button is
             // disabled, but guard anyway).
-            if w.get_ai_local_quality() == want_quality {
+            if w.get_ai_local_model_profile_index() == want_model.index() {
                 return;
             }
             if !w.get_managed_local_server() {
                 return;
             }
-            if want_quality && !w.get_quality_selection_allowed() {
+            if want_model.is_quality() && !w.get_quality_selection_allowed() {
                 w.set_quality_status(SharedString::from(
                     "26B-A4B доступна только для подтверждённой матрицы VRAM/RAM.",
+                ));
+                return;
+            }
+            let root = overlay_backend::local_ai::default_root();
+            if !overlay_backend::local_ai::managed_model_present(&root, want_model) {
+                w.set_quality_status(SharedString::from(
+                    "Файл выбранной модели не установлен.",
                 ));
                 return;
             }
@@ -478,12 +496,20 @@ pub(crate) fn wire_local_ai(
                 return; // another local-AI op is already running
             };
             w.set_model_switching(true);
-            w.set_quality_status(SharedString::from(if want_quality {
-                "Переключаю на основную модель (26B-A4B)…"
-            } else {
-                "Переключаю на безопасный fallback (12B QAT)…"
+            w.set_quality_status(SharedString::from(match want_model {
+                overlay_backend::local_ai::ManagedModel::Legacy4B => {
+                    "Переключаю на быструю модель (4B)…"
+                }
+                overlay_backend::local_ai::ManagedModel::Fallback12B => {
+                    "Переключаю на сбалансированную модель (12B QAT)…"
+                }
+                overlay_backend::local_ai::ManagedModel::Primary26B => {
+                    "Переключаю на максимальную модель (26B-A4B)…"
+                }
             }));
-            let previous_quality = w.get_ai_local_quality();
+            let previous_model = overlay_backend::local_ai::ManagedModel::from_index(
+                w.get_ai_local_model_profile_index(),
+            );
             let cfg_t = cfg_c.clone();
             let state_t = state_c.clone();
             let overlay_t = overlay_c.clone();
@@ -519,11 +545,11 @@ pub(crate) fn wire_local_ai(
                 // outcome (review #1/#2) instead of a blind "done".
                 let (outcome, started) = overlay_backend::local_ai::switch_local_model(
                     &root,
-                    overlay_backend::local_ai::ManagedLlamaChoice::new(
-                        previous_quality,
+                    overlay_backend::local_ai::ManagedLlamaChoice::for_model(
+                        previous_model,
                         context,
                     ),
-                    overlay_backend::local_ai::ManagedLlamaChoice::new(want_quality, context),
+                    overlay_backend::local_ai::ManagedLlamaChoice::for_model(want_model, context),
                     want_whisper,
                 );
                 let quality_present = overlay_backend::local_ai::quality_model_present(&root);
@@ -559,7 +585,8 @@ pub(crate) fn wire_local_ai(
                 // the next launch still starts the model that's actually running.
                 if switched {
                     let mut c = cfg_t.write();
-                    c.ai_local_quality = want_quality;
+                    c.ai_local_quality = want_model.is_quality();
+                    c.ai_local_model = want_model.file_name().to_string();
                     overlay_backend::local_ai::repair_managed_model_state(&mut c, &root);
                     if let Err(e) = overlay_backend::config::save(&c) {
                         eprintln!("[overlay-host] quality switch save failed: {e:#}");
@@ -581,10 +608,16 @@ pub(crate) fn wire_local_ai(
                         }
                         w.set_quality_status(SharedString::from(match outcome {
                             overlay_backend::local_ai::ModelSwitch::Switched => {
-                                if want_quality {
-                                    "Готово: основная модель (26B-A4B)."
-                                } else {
-                                    "Готово: RAM-safe fallback (12B QAT)."
+                                match want_model {
+                                    overlay_backend::local_ai::ManagedModel::Legacy4B => {
+                                        "Готово: быстрая модель (4B)."
+                                    }
+                                    overlay_backend::local_ai::ManagedModel::Fallback12B => {
+                                        "Готово: сбалансированная модель (12B QAT)."
+                                    }
+                                    overlay_backend::local_ai::ManagedModel::Primary26B => {
+                                        "Готово: максимальная модель (26B-A4B)."
+                                    }
                                 }
                             }
                             overlay_backend::local_ai::ModelSwitch::RolledBack => {
@@ -606,11 +639,16 @@ pub(crate) fn wire_local_ai(
                                 "Не удалось запустить модель — проверьте установку локального AI."
                             }
                         }));
-                        let (quality, local_vision, vision_provider, base_url, model) = {
+                        let (quality, profile, local_vision, vision_provider, base_url, model) = {
                             let c = cfg_done.read();
                             refresh_local_context_controls(&w, &c);
                             (
                                 c.ai_local_quality,
+                                overlay_backend::local_ai::ManagedModel::from_config(
+                                    &c.ai_local_model,
+                                    c.ai_local_quality,
+                                )
+                                .index(),
                                 c.ai_local_vision,
                                 c.vision_provider.clone(),
                                 c.ai_local_base_url.clone(),
@@ -618,6 +656,7 @@ pub(crate) fn wire_local_ai(
                             )
                         };
                         w.set_ai_local_quality(quality);
+                        w.set_ai_local_model_profile_index(profile);
                         w.set_ai_local_models(ModelRc::new(VecModel::from(vec![
                             SharedString::from(model.clone()),
                         ])));
@@ -642,6 +681,38 @@ pub(crate) fn wire_local_ai(
         });
     }
 
+    // Slider movement is preview-only: update the estimate without persisting or
+    // restarting. The Apply button calls `ai_local_context_changed` once.
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_ai_local_context_preview_changed(move |value| {
+            let Some(w) = weak.upgrade() else { return };
+            if w.get_model_switching() || !w.get_managed_local_server() {
+                return;
+            }
+            let index = value.round().clamp(0.0, 5.0) as i32;
+            if w.get_ai_local_context_preview_index() == index {
+                return;
+            }
+            let c = cfg_c.read();
+            let root = overlay_backend::local_ai::default_root();
+            let requested = overlay_backend::local_ai::ManagedModel::from_config(
+                &c.ai_local_model,
+                c.ai_local_quality,
+            );
+            let model = overlay_backend::local_ai::effective_managed_model(&root, requested);
+            let profile = overlay_backend::local_ai::current_server_profile(model.is_quality());
+            refresh_local_context_preview(
+                &w,
+                &c,
+                model,
+                profile,
+                overlay_backend::local_ai::LocalContextPreset::from_index(index),
+            );
+        });
+    }
+
     // Managed llama.cpp context preset. Auto stays compact; manual presets use
     // one fixed context for live + prep. A restart is transactional through the
     // same backend primitive as a model switch.
@@ -652,12 +723,22 @@ pub(crate) fn wire_local_ai(
         let weak = win.as_weak();
         win.on_ai_local_context_changed(move |index| {
             let Some(w) = weak.upgrade() else { return };
-            if w.get_model_switching() || !w.get_managed_local_server() || !w.get_ai_local_quality()
-            {
+            if w.get_model_switching() || !w.get_managed_local_server() {
                 return;
             }
             let target_context = overlay_backend::local_ai::LocalContextPreset::from_index(index);
-            let profile = overlay_backend::local_ai::current_server_profile(true);
+            let model = {
+                let c = cfg_c.read();
+                let root = overlay_backend::local_ai::default_root();
+                overlay_backend::local_ai::effective_managed_model(
+                    &root,
+                    overlay_backend::local_ai::ManagedModel::from_config(
+                        &c.ai_local_model,
+                        c.ai_local_quality,
+                    ),
+                )
+            };
+            let profile = overlay_backend::local_ai::current_server_profile(model.is_quality());
             let max_k = profile.context_tokens(false) / 1024;
             let allowed = match target_context {
                 overlay_backend::local_ai::LocalContextPreset::Auto => true,
@@ -733,20 +814,27 @@ pub(crate) fn wire_local_ai(
                     return;
                 };
                 let root = overlay_backend::local_ai::default_root();
-                let (quality, previous_context, want_whisper) = {
+                let (previous_model, previous_context, want_whisper) = {
                     let c = cfg_t.read();
                     (
-                        c.ai_local_quality,
+                        overlay_backend::local_ai::ManagedModel::from_config(
+                            &c.ai_local_model,
+                            c.ai_local_quality,
+                        ),
                         overlay_backend::local_ai::LocalContextPreset::from_config(
                             &c.ai_local_context,
                         ),
                         c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081"),
                     )
                 };
-                let previous =
-                    overlay_backend::local_ai::ManagedLlamaChoice::new(quality, previous_context);
-                let target =
-                    overlay_backend::local_ai::ManagedLlamaChoice::new(quality, target_context);
+                let previous = overlay_backend::local_ai::ManagedLlamaChoice::for_model(
+                    previous_model,
+                    previous_context,
+                );
+                let target = overlay_backend::local_ai::ManagedLlamaChoice::for_model(
+                    previous_model,
+                    target_context,
+                );
                 let (outcome, started) = overlay_backend::local_ai::switch_local_model(
                     &root,
                     previous,
@@ -1161,7 +1249,8 @@ pub(crate) fn wire_local_ai(
                 ) {
                     let choice = {
                         let c = cfg_t.read();
-                        overlay_backend::local_ai::ManagedLlamaChoice::new(
+                        overlay_backend::local_ai::ManagedLlamaChoice::from_config(
+                            &c.ai_local_model,
                             c.ai_local_quality,
                             overlay_backend::local_ai::LocalContextPreset::from_config(
                                 &c.ai_local_context,
@@ -1231,6 +1320,10 @@ pub(crate) fn wire_local_ai(
                         restarted_model
                     {
                         w.set_ai_local_quality(quality);
+                        w.set_ai_local_model_profile_index(
+                            overlay_backend::local_ai::ManagedModel::from_config(&model, quality)
+                                .index(),
+                        );
                         w.set_ai_local_models(ModelRc::new(VecModel::from(vec![
                             SharedString::from(model.clone()),
                         ])));

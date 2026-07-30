@@ -856,7 +856,7 @@ struct ManagedPrepSession {
     _ai: tokio::sync::SemaphorePermit<'static>,
     _lifecycle: tokio::sync::OwnedSemaphorePermit,
     root: std::path::PathBuf,
-    prefer_quality: bool,
+    model: crate::local_ai::ManagedModel,
     context: crate::local_ai::LocalContextPreset,
     switched: bool,
     children: Vec<std::process::Child>,
@@ -865,19 +865,19 @@ struct ManagedPrepSession {
 
 impl ManagedPrepSession {
     async fn start(cfg: &SharedConfig) -> anyhow::Result<Option<Self>> {
-        let (managed, prefer_quality, context) = {
+        let (managed, model, context) = {
             let c = cfg.read();
             let ep = c.ai_endpoint(true);
             (
                 ep.is_local && crate::local_ai::is_managed_llama_endpoint(&ep.base_url),
-                c.ai_local_quality,
+                crate::local_ai::ManagedModel::from_config(&c.ai_local_model, c.ai_local_quality),
                 crate::local_ai::LocalContextPreset::from_config(&c.ai_local_context),
             )
         };
         if !managed {
             return Ok(None);
         }
-        let profile = crate::local_ai::current_server_profile(prefer_quality);
+        let profile = crate::local_ai::current_server_profile(model.is_quality());
         if profile == crate::local_ai::HardwareModelProfile::Unknown {
             return Ok(None);
         }
@@ -889,8 +889,8 @@ impl ManagedPrepSession {
             .await
             .map_err(|_| anyhow::anyhow!("local AI lifecycle queue closed"))?;
         let root = crate::local_ai::default_root();
-        let choice = crate::local_ai::ManagedLlamaChoice::new(prefer_quality, context);
-        let switched = prefer_quality
+        let choice = crate::local_ai::ManagedLlamaChoice::for_model(model, context);
+        let switched = model.is_quality()
             && context.context_tokens(profile, true) != context.context_tokens(profile, false);
         let children = if switched {
             let launch_root = root.clone();
@@ -922,7 +922,7 @@ impl ManagedPrepSession {
             _ai: ai,
             _lifecycle: lifecycle,
             root,
-            prefer_quality,
+            model,
             context,
             switched,
             children,
@@ -933,11 +933,11 @@ impl ManagedPrepSession {
     async fn restore(mut self) {
         if self.switched {
             let root = self.root.clone();
-            let prefer_quality = self.prefer_quality;
+            let model = self.model;
             let context = self.context;
             let children = std::mem::take(&mut self.children);
             match tokio::task::spawn_blocking(move || {
-                let choice = crate::local_ai::ManagedLlamaChoice::new(prefer_quality, context);
+                let choice = crate::local_ai::ManagedLlamaChoice::for_model(model, context);
                 let result = crate::local_ai::restart_llama_server_for_route(&root, choice, false);
                 crate::local_ai::terminate_servers(children);
                 result
@@ -972,7 +972,7 @@ impl Drop for ManagedPrepSession {
         // Cancellation safety: never leave the prep route serving after an
         // aborted summary. This rare path may block while the live model loads.
         let prep_children = std::mem::take(&mut self.children);
-        let choice = crate::local_ai::ManagedLlamaChoice::new(self.prefer_quality, self.context);
+        let choice = crate::local_ai::ManagedLlamaChoice::for_model(self.model, self.context);
         let (outcome, children) =
             crate::local_ai::restart_llama_server_for_route(&self.root, choice, false);
         crate::local_ai::terminate_servers(prep_children);

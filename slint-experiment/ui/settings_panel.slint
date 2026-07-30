@@ -425,10 +425,12 @@ export component SettingsWindow inherits Window {
     // E10 — local-model "thinking"/reasoning toggle. Off (default) sends
     // enable_thinking=false for faster answers; on lets the model reason.
     in-out property <bool> ai-local-thinking: false;
-    // Bundled local LLM profile: false = 12B QAT fallback; true = 26B-A4B
-    // primary. The 26B is downloaded on demand or by the confirmed hardware
-    // matrix during installation.
+    // Bundled local LLM profile: 0=legacy 4B, 1=12B QAT, 2=26B-A4B.
+    // ai-local-quality remains the backwards-compatible 26B flag.
     in-out property <bool> ai-local-quality: false;
+    in-out property <int> ai-local-model-profile-index: 1;
+    in-out property <bool> legacy-model-present: false;
+    in-out property <bool> fallback-model-present: false;
     in-out property <bool> quality-model-present: false;
     // True only after Rust confirms the current VRAM/RAM pair is in the
     // owner-approved 26B matrix. It defaults to false while discovery runs.
@@ -437,8 +439,9 @@ export component SettingsWindow inherits Window {
     in-out property <bool> model-switching: false; // server relaunch in flight
     in-out property <float> quality-progress: 0.0; // 0.0..1.0
     in-out property <string> quality-status: "";
-    // Managed 26B context: 0=Auto, 1=8K, 2=16K, 3=32K, 4=64K, 5=96K.
+    // Managed context: 0=Auto, 1=8K, 2=16K, 3=32K, 4=64K, 5=96K.
     in-out property <int> ai-local-context-index: 0;
+    in-out property <int> ai-local-context-preview-index: 0;
     in-out property <int> ai-local-context-max-k: 32;
     in-out property <int> ai-local-context-auto-k: 16;
     in-out property <string> ai-local-context-vram-hint: "";
@@ -502,10 +505,11 @@ export component SettingsWindow inherits Window {
     callback ai-local-models-refresh();
     callback ai-local-vision-changed(bool);
     callback ai-local-thinking-changed(bool);
-    // Local profile: 12B QAT fallback vs 26B-A4B primary.
-    // `model-quality-changed` transactionally restarts the managed server;
+    // Local profile: legacy 4B, 12B QAT, or 26B-A4B primary.
+    // `model-profile-changed` transactionally restarts the managed server;
     // `download-quality-clicked` pulls the exact pinned 26B file on demand.
-    callback model-quality-changed(bool);
+    callback model-profile-changed(int);
+    callback ai-local-context-preview-changed(float);
     callback ai-local-context-changed(int);
     callback download-quality-clicked();
     // Legacy projector callback plus llama.cpp engine update.
@@ -2177,10 +2181,10 @@ export component SettingsWindow inherits Window {
                                     root.ai-local-thinking-changed(v);
                                 }
                             }
-                            // ----- bundled local model: 12B fallback vs 26B primary -----
+                            // ----- bundled local model: 4B / 12B / 26B -----
                             Rectangle { background: Theme.border; height: 1px; }
                             Text {
-                                text: @tr("Bundled model profile. The 26B primary is selected only for the confirmed VRAM/RAM matrix; 12B QAT remains the RAM-safe fallback.");
+                                text: @tr("Choose the local model explicitly. Approximate VRAM at Auto: 4B ~6 GiB, 12B ~9.5 GiB, 26B ~12 GiB.");
                                 font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
@@ -2188,19 +2192,29 @@ export component SettingsWindow inherits Window {
                             HorizontalLayout {
                                 spacing: 6px;
                                 Button {
-                                    text: root.ai-local-quality ? @tr("Fallback (12B QAT)") : @tr("[on] Fallback (12B QAT)");
-                                    enabled: root.managed-local-server && root.ai-local-quality && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
+                                    text: root.ai-local-model-profile-index == 0 ? @tr("[on] Fast (4B)") : @tr("Fast (4B)");
+                                    enabled: root.managed-local-server && root.legacy-model-present && root.ai-local-model-profile-index != 0 && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
                                     clicked => {
-                                        root.model-quality-changed(false);
+                                        root.model-profile-changed(0);
+                                    }
+                                }
+                                Button {
+                                    text: root.ai-local-model-profile-index == 1 ? @tr("[on] Balanced (12B QAT)") : @tr("Balanced (12B QAT)");
+                                    enabled: root.managed-local-server && root.fallback-model-present && root.ai-local-model-profile-index != 1 && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
+                                    clicked => {
+                                        root.model-profile-changed(1);
                                     }
                                 }
                                 if root.quality-model-present && root.quality-selection-allowed : Button {
-                                    text: root.ai-local-quality ? @tr("[on] Primary (26B-A4B)") : @tr("Primary (26B-A4B)");
-                                    enabled: root.managed-local-server && !root.ai-local-quality && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
+                                    text: root.ai-local-model-profile-index == 2 ? @tr("[on] Maximum (26B-A4B)") : @tr("Maximum (26B-A4B)");
+                                    enabled: root.managed-local-server && root.ai-local-model-profile-index != 2 && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
                                     clicked => {
-                                        root.model-quality-changed(true);
+                                        root.model-profile-changed(2);
                                     }
                                 }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
                                 if !root.quality-model-present && root.quality-selection-allowed : Button {
                                     text: root.quality-downloading ? @tr("Downloading…") : @tr("Download primary model (9.8 GiB)");
                                     enabled: root.managed-local-server && !root.quality-downloading && !root.local-ai-installing;
@@ -2216,12 +2230,12 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                             if !root.managed-local-server : Text {
-                                text: @tr("Bundled 12B/26B controls manage only Suflyor's own llama.cpp endpoint.");
+                                text: @tr("Bundled 4B/12B/26B controls manage only Suflyor's own llama.cpp endpoint.");
                                 font-size: 10px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
-                            if root.managed-local-server && root.ai-local-quality : VerticalLayout {
+                            if root.managed-local-server : VerticalLayout {
                                 spacing: 6px;
                                 Text {
                                     text: @tr("Context window");
@@ -2229,50 +2243,68 @@ export component SettingsWindow inherits Window {
                                     font-weight: 700;
                                     color: Theme.text-primary;
                                 }
+                                Slider {
+                                    minimum: 0;
+                                    maximum: root.ai-local-context-max-k >= 96 ? 5 :
+                                        root.ai-local-context-max-k >= 64 ? 4 :
+                                        root.ai-local-context-max-k >= 32 ? 3 :
+                                        root.ai-local-context-max-k >= 16 ? 2 : 1;
+                                    value: root.ai-local-context-preview-index;
+                                    enabled: !root.model-switching && !root.local-ai-installing;
+                                    changed(v) => {
+                                        root.ai-local-context-preview-changed(v);
+                                    }
+                                }
                                 HorizontalLayout {
-                                    spacing: 6px;
-                                    Button {
-                                        text: root.ai-local-context-index == 0 ? @tr("[on] Auto") : @tr("Auto");
-                                        enabled: root.ai-local-context-index != 0 && !root.model-switching && !root.local-ai-installing;
-                                        clicked => { root.ai-local-context-changed(0); }
+                                    Text {
+                                        text: @tr("Auto");
+                                        font-size: 9px;
+                                        color: Theme.text-muted;
+                                        horizontal-stretch: 1;
                                     }
-                                    Button {
-                                        text: root.ai-local-context-index == 1 ? @tr("[on] 8K") : @tr("8K");
-                                        enabled: root.ai-local-context-index != 1 && !root.model-switching && !root.local-ai-installing;
-                                        clicked => { root.ai-local-context-changed(1); }
+                                    Text {
+                                        text: @tr("8K");
+                                        font-size: 9px;
+                                        color: Theme.text-muted;
+                                        horizontal-stretch: 1;
+                                        horizontal-alignment: center;
                                     }
-                                    Button {
-                                        text: root.ai-local-context-index == 2 ? @tr("[on] 16K") : @tr("16K");
-                                        enabled: root.ai-local-context-max-k >= 16 && root.ai-local-context-index != 2 && !root.model-switching && !root.local-ai-installing;
-                                        clicked => { root.ai-local-context-changed(2); }
+                                    if root.ai-local-context-max-k >= 16 : Text {
+                                        text: @tr("16K");
+                                        font-size: 9px;
+                                        color: Theme.text-muted;
+                                        horizontal-stretch: 1;
+                                        horizontal-alignment: center;
                                     }
-                                    Button {
-                                        text: root.ai-local-context-index == 3 ? @tr("[on] 32K") : @tr("32K");
-                                        enabled: root.ai-local-context-max-k >= 32 && root.ai-local-context-index != 3 && !root.model-switching && !root.local-ai-installing;
-                                        clicked => { root.ai-local-context-changed(3); }
+                                    if root.ai-local-context-max-k >= 32 : Text {
+                                        text: @tr("32K");
+                                        font-size: 9px;
+                                        color: Theme.text-muted;
+                                        horizontal-stretch: 1;
+                                        horizontal-alignment: center;
+                                    }
+                                    if root.ai-local-context-max-k >= 64 : Text {
+                                        text: @tr("64K");
+                                        font-size: 9px;
+                                        color: Theme.text-muted;
+                                        horizontal-stretch: 1;
+                                        horizontal-alignment: center;
+                                    }
+                                    if root.ai-local-context-max-k >= 96 : Text {
+                                        text: @tr("96K");
+                                        font-size: 9px;
+                                        color: Theme.text-muted;
+                                        horizontal-stretch: 1;
+                                        horizontal-alignment: right;
                                     }
                                 }
-                                if root.ai-local-context-max-k >= 64 : HorizontalLayout {
-                                    spacing: 6px;
-                                    if root.ai-local-context-max-k >= 64 : Button {
-                                        text: root.ai-local-context-index == 4 ? @tr("[on] 64K") : @tr("64K");
-                                        enabled: root.ai-local-context-index != 4 && !root.model-switching && !root.local-ai-installing;
-                                        clicked => { root.ai-local-context-changed(4); }
-                                    }
-                                    if root.ai-local-context-max-k >= 96 : Button {
-                                        text: root.ai-local-context-index == 5 ? @tr("[on] 96K") : @tr("96K");
-                                        enabled: root.ai-local-context-index != 5 && !root.model-switching && !root.local-ai-installing;
-                                        clicked => { root.ai-local-context-changed(5); }
-                                    }
-                                }
-                                if root.ai-local-context-index == 0 : Text {
-                                    text: @tr("Auto uses a compact {}K context.", root.ai-local-context-auto-k);
-                                    font-size: 10px;
-                                    color: Theme.text-muted;
-                                    wrap: word-wrap;
-                                }
-                                if root.ai-local-context-index != 0 : Text {
-                                    text: @tr("The selected context is fixed for live answers and long summaries.");
+                                Text {
+                                    text: root.ai-local-context-preview-index == 0
+                                        ? @tr("Selected: Auto ({}K)", root.ai-local-context-auto-k)
+                                        : @tr("Selected: {}K", root.ai-local-context-preview-index == 1 ? 8 :
+                                            root.ai-local-context-preview-index == 2 ? 16 :
+                                            root.ai-local-context-preview-index == 3 ? 32 :
+                                            root.ai-local-context-preview-index == 4 ? 64 : 96);
                                     font-size: 10px;
                                     color: Theme.text-muted;
                                     wrap: word-wrap;
@@ -2282,6 +2314,13 @@ export component SettingsWindow inherits Window {
                                     font-size: 10px;
                                     color: Theme.text-muted;
                                     wrap: word-wrap;
+                                }
+                                Button {
+                                    text: root.model-switching ? @tr("Applying…") : @tr("Apply context");
+                                    enabled: root.ai-local-context-preview-index != root.ai-local-context-index && !root.model-switching && !root.local-ai-installing;
+                                    clicked => {
+                                        root.ai-local-context-changed(root.ai-local-context-preview-index);
+                                    }
                                 }
                             }
                             Text {

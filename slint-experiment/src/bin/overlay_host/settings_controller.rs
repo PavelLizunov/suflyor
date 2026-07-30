@@ -1421,13 +1421,20 @@ pub(crate) fn populate_token_status(
         ModelRc::new(VecModel::from(v))
     };
     let local_root = overlay_backend::local_ai::default_root();
-    let effective_quality = if managed_local_server {
-        overlay_backend::local_ai::effective_local_quality(&local_root, c.ai_local_quality)
+    let effective_managed_model = if managed_local_server {
+        overlay_backend::local_ai::effective_managed_model(
+            &local_root,
+            overlay_backend::local_ai::ManagedModel::from_config(
+                &c.ai_local_model,
+                c.ai_local_quality,
+            ),
+        )
     } else {
-        c.ai_local_quality
+        overlay_backend::local_ai::ManagedModel::from_config(&c.ai_local_model, c.ai_local_quality)
     };
+    let effective_quality = effective_managed_model.is_quality();
     let effective_local_model = if managed_local_server {
-        overlay_backend::local_ai::active_local_model_name(&local_root, effective_quality)
+        overlay_backend::local_ai::active_local_model_name(&local_root, effective_managed_model)
     } else {
         c.ai_local_model.clone()
     };

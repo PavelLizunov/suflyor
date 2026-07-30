@@ -1135,7 +1135,8 @@ fn main() -> Result<(), slint::PlatformError> {
                                 );
                             }
                         }
-                        overlay_backend::local_ai::ManagedLlamaChoice::new(
+                        overlay_backend::local_ai::ManagedLlamaChoice::from_config(
+                            &c.ai_local_model,
                             c.ai_local_quality,
                             overlay_backend::local_ai::LocalContextPreset::from_config(
                                 &c.ai_local_context,
@@ -1252,7 +1253,8 @@ fn main() -> Result<(), slint::PlatformError> {
                             && overlay_backend::local_ai::is_managed_llama_endpoint(
                                 &c.ai_local_base_url,
                             ),
-                        overlay_backend::local_ai::ManagedLlamaChoice::new(
+                        overlay_backend::local_ai::ManagedLlamaChoice::from_config(
+                            &c.ai_local_model,
                             c.ai_local_quality,
                             overlay_backend::local_ai::LocalContextPreset::from_config(
                                 &c.ai_local_context,

@@ -302,6 +302,10 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
                 if let Some(w) = weak.upgrade() {
                     w.set_ai_local_base_url_input(SharedString::from(base_url.clone()));
                     w.set_ai_local_quality(quality);
+                    w.set_ai_local_model_profile_index(
+                        overlay_backend::local_ai::ManagedModel::from_config(&model, quality)
+                            .index(),
+                    );
                     w.set_ai_local_models(ModelRc::new(VecModel::from(vec![SharedString::from(
                         model.clone(),
                     )])));
@@ -353,6 +357,9 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
             if let Some(w) = weak.upgrade() {
                 w.set_managed_local_server(managed);
                 w.set_ai_local_quality(quality);
+                w.set_ai_local_model_profile_index(
+                    overlay_backend::local_ai::ManagedModel::from_config(&model, quality).index(),
+                );
                 w.set_ai_local_base_url_input(SharedString::from(saved_base_url.clone()));
                 w.set_ai_local_vision(local_vision);
                 w.set_vision_provider_index(match vision_provider.as_str() {

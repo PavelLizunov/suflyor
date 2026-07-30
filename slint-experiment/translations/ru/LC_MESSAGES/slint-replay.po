@@ -817,6 +817,42 @@ msgstr "Скачать основную модель (9,8 ГиБ)"
 msgid "Bundled 12B/26B controls manage only Suflyor's own llama.cpp endpoint."
 msgstr "Управление встроенными 12B/26B работает только с собственным endpoint llama.cpp Suflyor."
 
+msgid "Choose the local model explicitly. Approximate VRAM at Auto: 4B ~6 GiB, 12B ~9.5 GiB, 26B ~12 GiB."
+msgstr "Выберите локальную модель явно. Примерная VRAM в Auto: 4B ~6 ГиБ, 12B ~9,5 ГиБ, 26B ~12 ГиБ."
+
+msgid "Fast (4B)"
+msgstr "Быстрая (4B)"
+
+msgid "[on] Fast (4B)"
+msgstr "[выбрано] Быстрая (4B)"
+
+msgid "Balanced (12B QAT)"
+msgstr "Сбалансированная (12B QAT)"
+
+msgid "[on] Balanced (12B QAT)"
+msgstr "[выбрано] Сбалансированная (12B QAT)"
+
+msgid "Maximum (26B-A4B)"
+msgstr "Максимальная (26B-A4B)"
+
+msgid "[on] Maximum (26B-A4B)"
+msgstr "[выбрано] Максимальная (26B-A4B)"
+
+msgid "Bundled 4B/12B/26B controls manage only Suflyor's own llama.cpp endpoint."
+msgstr "Управление встроенными 4B/12B/26B работает только с собственным endpoint llama.cpp Suflyor."
+
+msgid "Selected: Auto ({}K)"
+msgstr "Выбрано: Auto ({}K)"
+
+msgid "Selected: {}K"
+msgstr "Выбрано: {}K"
+
+msgid "Applying…"
+msgstr "Применение…"
+
+msgid "Apply context"
+msgstr "Применить контекст"
+
 msgid "Installs the local stack with Gemma 4 12B QAT as the fallback. On confirmed 8/32, 12/24-32 or 16/32 GB VRAM/RAM profiles it also installs the pinned Gemma 4 26B-A4B primary. Existing verified models are reused."
 msgstr "Устанавливает локальный стек с Gemma 4 12B QAT как резервом. Для подтверждённых профилей VRAM/RAM 8/32, 12/24–32 или 16/32 ГБ также устанавливается закреплённая основная Gemma 4 26B-A4B. Существующие проверенные модели используются повторно."
 
