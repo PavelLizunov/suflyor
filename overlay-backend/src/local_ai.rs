@@ -35,12 +35,23 @@ const GEMMA_FILE: &str = "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf";
 const GEMMA_SIZE: u64 = 6_716_356_800;
 const GEMMA_SHA256: &str = "90fd44e29e0d7cffeb0fd00dc73cfdab9ed0b0e95306ecf7821ea634c940c370";
 
-// The model installed by the previous release. Keep recognising it during an
-// upgrade: replacing its persisted model id with the new 12B filename before
-// the user has downloaded 12B would leave an otherwise working installation
-// with no launchable model.
+// The optional fast 4B profile (also the model the previous release installed).
+// Pinned to an immutable Hugging Face revision with the exact LFS size + SHA-256
+// (read from the revision's LFS pointer) so the on-demand 4B download verifies
+// byte-for-byte and an upgraded install keeps recognising the file. Never
+// resolved from /main. Keep recognising it during an upgrade: replacing its
+// persisted model id with the new 12B filename before the user has downloaded
+// 12B would leave an otherwise working installation with no launchable model.
+const LEGACY_GEMMA_URL: &str = "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/bfc15c382204943c3a8fff0c750b94ae2364d7a3/gemma-4-E4B-it-Q4_K_M.gguf";
 const LEGACY_GEMMA_FILE: &str = "gemma-4-E4B-it-Q4_K_M.gguf";
-const LEGACY_GEMMA_SIZE: u64 = 4_977_169_568;
+const LEGACY_GEMMA_SIZE: u64 = 4_977_171_584;
+const LEGACY_GEMMA_SHA256: &str =
+    "85a896a047553e842f25297ee5b031d64ff30147d9c4af17b1e4b394cd1fab87";
+/// The 4B file size installed by releases before the immutable-revision pin.
+/// Same filename, same model weights, 2 016 bytes shorter (different GGUF
+/// metadata padding). Recognised as a complete, launchable artifact so an
+/// upgraded install never corrupt-resumes or re-downloads a working file.
+const LEGACY_GEMMA_SIZE_PREV: u64 = 4_977_169_568;
 
 // Owner-approved primary model. The byte size and SHA-256 are independently
 // pinned from the immutable Hugging Face revision c099eb4.
@@ -357,6 +368,48 @@ impl ManagedModel {
     pub const fn is_quality(self) -> bool {
         matches!(self, Self::Primary26B)
     }
+
+    /// The immutable download coordinates + integrity pins for this model. A
+    /// model button downloads EXACTLY this spec on any hardware (never /main,
+    /// never hardware-redirected) and verifies it byte-for-byte before load.
+    #[must_use]
+    pub const fn spec(self) -> ModelSpec {
+        match self {
+            Self::Legacy4B => ModelSpec {
+                url: LEGACY_GEMMA_URL,
+                file: LEGACY_GEMMA_FILE,
+                size: LEGACY_GEMMA_SIZE,
+                sha256: LEGACY_GEMMA_SHA256,
+                label: "Gemma 4B",
+            },
+            Self::Fallback12B => ModelSpec {
+                url: GEMMA_URL,
+                file: GEMMA_FILE,
+                size: GEMMA_SIZE,
+                sha256: GEMMA_SHA256,
+                label: "Gemma 12B QAT",
+            },
+            Self::Primary26B => ModelSpec {
+                url: GEMMA26_URL,
+                file: GEMMA26_FILE,
+                size: GEMMA26_SIZE,
+                sha256: GEMMA26_SHA256,
+                label: "Gemma 26B-A4B",
+            },
+        }
+    }
+}
+
+/// Immutable download coordinates + integrity pins for one bundled model. Every
+/// field is a compile-time constant pinned from a fixed Hugging Face revision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ModelSpec {
+    pub url: &'static str,
+    pub file: &'static str,
+    pub size: u64,
+    pub sha256: &'static str,
+    /// Short progress label, e.g. "Gemma 4B".
+    pub label: &'static str,
 }
 
 /// Approximate total VRAM requirement before launch. The 26B baseline and
@@ -2138,10 +2191,7 @@ pub fn quality_model_present(root: &Path) -> bool {
 
 #[must_use]
 pub fn legacy_model_present(root: &Path) -> bool {
-    file_has_expected_size(
-        &root.join("llama.cpp").join(LEGACY_GEMMA_FILE),
-        LEGACY_GEMMA_SIZE,
-    )
+    legacy_gguf_complete(&root.join("llama.cpp").join(LEGACY_GEMMA_FILE))
 }
 
 #[must_use]
@@ -2326,7 +2376,7 @@ fn repair_managed_model_state_for_model(
 pub fn base_model_present(root: &Path) -> bool {
     let llama_dir = root.join("llama.cpp");
     file_has_expected_size(&llama_dir.join(GEMMA_FILE), GEMMA_SIZE)
-        || file_has_expected_size(&llama_dir.join(LEGACY_GEMMA_FILE), LEGACY_GEMMA_SIZE)
+        || legacy_gguf_complete(&llama_dir.join(LEGACY_GEMMA_FILE))
 }
 
 /// The conventional GigaAM model directory under the local-AI root
@@ -2416,7 +2466,7 @@ fn selected_llama_gguf(llama_dir: &Path, model: ManagedModel) -> PathBuf {
         ManagedModel::Legacy4B => pick_llama_gguf(
             llama_dir,
             model,
-            file_has_expected_size(&llama_dir.join(LEGACY_GEMMA_FILE), LEGACY_GEMMA_SIZE),
+            legacy_gguf_complete(&llama_dir.join(LEGACY_GEMMA_FILE)),
         ),
         ManagedModel::Fallback12B => pick_llama_gguf(
             llama_dir,
@@ -2442,7 +2492,7 @@ fn complete_fallback_llama_gguf(llama_dir: &Path) -> Option<PathBuf> {
         Some(current)
     } else {
         let legacy = llama_dir.join(LEGACY_GEMMA_FILE);
-        file_has_expected_size(&legacy, LEGACY_GEMMA_SIZE).then_some(legacy)
+        legacy_gguf_complete(&legacy).then_some(legacy)
     }
 }
 
@@ -2455,20 +2505,25 @@ fn pick_llama_gguf(llama_dir: &Path, model: ManagedModel, target_present: bool) 
     }
 }
 
-/// Download (resumable) + SHA-verify the optional 26B model into `root`, on
-/// demand from Settings. Mirrors the installer's download→verify discipline
-/// (P1.5: a tampered byte-stream fails the pinned hash and the partial file is
-/// left for a clean re-pull, never launched). Does NOT restart the server —
-/// the caller flips `ai_local_quality` and restarts so the new GGUF loads.
+/// Download (resumable) + SHA-verify EXACTLY the requested bundled model into
+/// `root`, on demand from a Settings model button. Mirrors the installer's
+/// download→verify discipline (P1.5: a tampered byte-stream fails the pinned
+/// hash and the partial file is left for a clean re-pull, never launched).
+/// Hardware is never consulted to block or redirect the choice — any machine
+/// may pull any model; the 26B keeps only its advisory VRAM warning. Does NOT
+/// restart the server — the caller switches models afterwards so a background
+/// download can't swap the model mid-call.
 ///
 /// # Errors
 /// Network/disk failure, cancellation, or a SHA-256 mismatch after download.
-pub fn download_quality_model(
+pub fn download_managed_model(
     root: &Path,
+    model: ManagedModel,
     cancel: &AtomicBool,
     on: &dyn Fn(Progress),
 ) -> Result<()> {
-    if !primary_26b_allowed_on_current_hardware() {
+    let spec = model.spec();
+    if model == ManagedModel::Primary26B && !primary_26b_allowed_on_current_hardware() {
         log::warn!(
             "local-ai: hardware outside the confirmed matrix — 26B may exceed VRAM, \
              spill into system RAM, run slowly, or fail; user accepted the risk"
@@ -2477,28 +2532,44 @@ pub fn download_quality_model(
     let llama_dir = root.join("llama.cpp");
     std::fs::create_dir_all(&llama_dir)
         .with_context(|| format!("create llama dir {}", llama_dir.display()))?;
-    let dest = llama_dir.join(GEMMA26_FILE);
+    let dest = llama_dir.join(spec.file);
+    // A previous-release 4B file is complete and launchable at its own size.
+    // Never resume into it (curl -C - would append new-spec bytes and corrupt
+    // it) and never re-download it — treat it as already installed.
+    if model == ManagedModel::Legacy4B && file_len(&dest) == LEGACY_GEMMA_SIZE_PREV {
+        on(Progress::Step(format!("{}: файл уже загружен", spec.label)));
+        return Ok(());
+    }
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
     if reuse_if_available(
         &dest,
-        GEMMA26_SIZE,
-        GEMMA26_SHA256,
-        &[home.join("llama.cpp").join(GEMMA26_FILE)],
+        spec.size,
+        spec.sha256,
+        &[home.join("llama.cpp").join(spec.file)],
     ) {
-        on(Progress::Step("Основная модель уже загружена".to_string()));
+        on(Progress::Step(format!("{}: файл уже загружен", spec.label)));
     } else {
-        curl_resumable(
-            GEMMA26_URL,
-            &dest,
-            GEMMA26_SIZE,
-            "Gemma 26B-A4B",
-            cancel,
-            on,
-        )?;
+        curl_resumable(spec.url, &dest, spec.size, spec.label, cancel, on)?;
     }
-    verify_sha256(&dest, GEMMA26_SHA256, "Gemma 26B-A4B model")?;
-    cache_quality_model_verification(&dest, true);
+    verify_sha256(&dest, spec.sha256, spec.label)?;
+    if model == ManagedModel::Primary26B {
+        cache_quality_model_verification(&dest, true);
+    }
     Ok(())
+}
+
+/// Download (resumable) + SHA-verify the optional 26B model into `root`, on
+/// demand from Settings. Thin wrapper over [`download_managed_model`] kept for
+/// the 26B-specific callers/tests.
+///
+/// # Errors
+/// Network/disk failure, cancellation, or a SHA-256 mismatch after download.
+pub fn download_quality_model(
+    root: &Path,
+    cancel: &AtomicBool,
+    on: &dyn Fn(Progress),
+) -> Result<()> {
+    download_managed_model(root, ManagedModel::Primary26B, cancel, on)
 }
 
 /// Download and verify the projector that belongs to the pinned 26B model.
@@ -3663,6 +3734,14 @@ fn file_len(p: &Path) -> u64 {
 
 fn file_has_expected_size(path: &Path, expected_size: u64) -> bool {
     file_len(path) == expected_size
+}
+
+/// True when `path` holds a complete legacy 4B model — either the current
+/// pinned size or the previous release's size. Both are launchable; the old
+/// size is never re-downloaded or resumed into.
+fn legacy_gguf_complete(path: &Path) -> bool {
+    let len = file_len(path);
+    len == LEGACY_GEMMA_SIZE || len == LEGACY_GEMMA_SIZE_PREV
 }
 
 /// Exact pinned-file verification. Size is only a fast rejection; a same-sized

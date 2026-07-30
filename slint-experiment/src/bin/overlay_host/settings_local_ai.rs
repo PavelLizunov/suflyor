@@ -383,7 +383,7 @@ pub(crate) fn wire_local_ai(
                             "Отменено.".to_string()
                         } else {
                             eprintln!("[overlay-host] local-ai install failed: {e:#}");
-                            format!("Ошибка установки: {e}")
+                            "Ошибка установки локального AI. Подробности в журнале.".to_string()
                         };
                         let weak_err = weak_t.clone();
                         let overlay_err = overlay_t.clone();
@@ -994,15 +994,16 @@ pub(crate) fn wire_local_ai(
         });
     }
 
-    // Download the optional 26B-A4B primary on demand. Same
-    // worker/progress pattern as the installer; the backend verifies the pinned
-    // SHA-256 before the file is ever loaded. On success the 26B button appears;
-    // the user taps it to switch (no auto-switch, so a background download can't
-    // swap the model mid-call).
+    // Download EXACTLY the clicked bundled model (4B/12B/26B) on demand, on any
+    // hardware. Same worker/progress pattern as the installer; the backend
+    // verifies the pinned SHA-256 before the file is ever loaded. On success the
+    // matching "Installed" button appears; the user taps it to switch (no
+    // auto-switch, so a background download can't swap the model mid-call). The
+    // generic full-stack installer (`install-local-ai-clicked`) stays separate.
     {
         let state_c = state.clone();
         let weak = win.as_weak();
-        win.on_download_quality_clicked(move || {
+        win.on_download_model_clicked(move |index| {
             let Some(w) = weak.upgrade() else { return };
             if w.get_quality_downloading() {
                 return; // re-entry guard (same window)
@@ -1014,6 +1015,8 @@ pub(crate) fn wire_local_ai(
             }) else {
                 return; // another local-AI op is already running
             };
+            let model = overlay_backend::local_ai::ManagedModel::from_index(index);
+            let model_label = model.spec().label;
             w.set_quality_downloading(true);
             w.set_quality_progress(0.0);
             w.set_quality_status(SharedString::from("Подготовка…"));
@@ -1059,7 +1062,8 @@ pub(crate) fn wire_local_ai(
                     }
                 };
                 let root = overlay_backend::local_ai::default_root();
-                let res = overlay_backend::local_ai::download_quality_model(&root, &cancel, &on);
+                let res =
+                    overlay_backend::local_ai::download_managed_model(&root, model, &cancel, &on);
                 let weak_done = weak_t.clone();
                 let _ = slint::invoke_from_event_loop(move || {
                     let Some(w) = weak_done.upgrade() else { return };
@@ -1067,10 +1071,29 @@ pub(crate) fn wire_local_ai(
                     match res {
                         Ok(()) => {
                             w.set_quality_progress(1.0);
-                            w.set_quality_model_present(true);
-                            w.set_quality_status(SharedString::from(
-                                "Основная модель 26B-A4B загружена. Нажмите её профиль, чтобы включить.",
-                            ));
+                            match model {
+                                overlay_backend::local_ai::ManagedModel::Legacy4B => {
+                                    w.set_legacy_model_present(true);
+                                }
+                                overlay_backend::local_ai::ManagedModel::Fallback12B => {
+                                    w.set_fallback_model_present(true);
+                                }
+                                overlay_backend::local_ai::ManagedModel::Primary26B => {
+                                    w.set_quality_model_present(true);
+                                }
+                            }
+                            let done = match model {
+                                overlay_backend::local_ai::ManagedModel::Legacy4B => {
+                                    "Быстрая модель (4B) загружена. Нажмите её профиль, чтобы включить."
+                                }
+                                overlay_backend::local_ai::ManagedModel::Fallback12B => {
+                                    "Сбалансированная модель (12B QAT) загружена. Нажмите её профиль, чтобы включить."
+                                }
+                                overlay_backend::local_ai::ManagedModel::Primary26B => {
+                                    "Основная модель 26B-A4B загружена. Нажмите её профиль, чтобы включить."
+                                }
+                            };
+                            w.set_quality_status(SharedString::from(done));
                         }
                         Err(e) => {
                             let cancelled = e
@@ -1079,10 +1102,10 @@ pub(crate) fn wire_local_ai(
                             if cancelled {
                                 w.set_quality_status(SharedString::from("Отменено."));
                             } else {
-                                eprintln!("[overlay-host] 26B-A4B download failed: {e:#}");
-                                w.set_quality_status(SharedString::from(format!(
-                                    "Ошибка загрузки: {e}"
-                                )));
+                                eprintln!("[overlay-host] {model_label} download failed: {e:#}");
+                                w.set_quality_status(SharedString::from(
+                                    "Ошибка загрузки модели. Подробности в журнале.",
+                                ));
                             }
                         }
                     }
@@ -1422,12 +1445,10 @@ pub(crate) fn wire_local_ai(
                             "Обновление пропущено — оставлен текущий движок.".to_string()
                         }
                         Err(e) => {
-                            // Surface the REAL stage/cause — not the misleading
-                            // "failed to CHECK" (the failure is usually the swap).
-                            // Full chain (incl. os errors) → log; the top context
-                            // names the stage. No base_url/bearer in engine errors.
+                            // Full chain (incl. os errors) → stderr only; the UI
+                            // shows a generic message (no path/URL leak).
                             eprintln!("[overlay-host] engine update failed: {e:#}");
-                            format!("Не удалось обновить движок: {e}")
+                            "Не удалось обновить движок. Подробности в журнале.".to_string()
                         }
                     };
                     w.set_engine_update_status(SharedString::from(msg));

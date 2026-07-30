@@ -1619,3 +1619,203 @@ fn unknown_hardware_does_not_block_26b_download_path() {
         );
     }
 }
+
+/// Every bundled model button must pull EXACTLY the clicked model from an
+/// immutable Hugging Face revision — never /main, never hardware-redirected —
+/// and verify it against a full LFS SHA-256. Pure metadata assertions (no
+/// download), so they run anywhere.
+#[test]
+fn model_specs_pin_immutable_revisions_with_full_sha() {
+    for model in [
+        ManagedModel::Legacy4B,
+        ManagedModel::Fallback12B,
+        ManagedModel::Primary26B,
+    ] {
+        let spec = model.spec();
+        assert_eq!(spec.file, model.file_name(), "spec file matches the model");
+        assert!(spec.size > 0, "{}: size pinned", spec.label);
+        // Immutable revision, never the moving /main branch.
+        assert!(
+            spec.url.starts_with("https://huggingface.co/"),
+            "{}: HF origin",
+            spec.label
+        );
+        assert!(
+            spec.url.contains("/resolve/"),
+            "{}: pinned resolve",
+            spec.label
+        );
+        assert!(
+            !spec.url.contains("/resolve/main/"),
+            "{}: must never resolve /main",
+            spec.label
+        );
+        let resolve_ref = spec
+            .url
+            .split("/resolve/")
+            .nth(1)
+            .and_then(|rest| rest.split('/').next())
+            .unwrap_or_default();
+        assert!(
+            resolve_ref.len() >= 7 && resolve_ref.chars().all(|c| c.is_ascii_hexdigit()),
+            "{}: resolve ref {resolve_ref:?} is a commit hash, not a branch",
+            spec.label
+        );
+        assert!(
+            spec.url.ends_with(&format!("/{}", spec.file)),
+            "{}: url downloads the exact model file",
+            spec.label
+        );
+        // Full 64-char LFS object hash.
+        assert_eq!(spec.sha256.len(), 64, "{}: sha256 length", spec.label);
+        assert!(
+            spec.sha256.chars().all(|c| c.is_ascii_hexdigit()),
+            "{}: sha256 is hex",
+            spec.label
+        );
+    }
+}
+
+/// The 4B profile is pinned to the exact LFS size + SHA read from the immutable
+/// Hugging Face revision bfc15c3. Lock the values so an accidental edit (or a
+/// silent /main re-upload) is caught here, not on a user's machine.
+#[test]
+fn legacy_4b_spec_matches_the_pinned_hf_revision() {
+    let spec = ManagedModel::Legacy4B.spec();
+    assert_eq!(spec.file, "gemma-4-E4B-it-Q4_K_M.gguf");
+    assert_eq!(spec.size, 4_977_171_584);
+    assert_eq!(
+        spec.sha256,
+        "85a896a047553e842f25297ee5b031d64ff30147d9c4af17b1e4b394cd1fab87"
+    );
+    assert!(spec
+        .url
+        .contains("/resolve/bfc15c382204943c3a8fff0c750b94ae2364d7a3/"));
+    // The presence check must agree with the download spec's exact size + hash.
+    assert_eq!(spec.size, LEGACY_GEMMA_SIZE);
+    assert_eq!(spec.sha256, LEGACY_GEMMA_SHA256);
+}
+
+/// UI presence for the 4B model is an O(1) size check against the pinned size.
+/// Both the current pinned size and the previous release's size are accepted.
+#[test]
+fn legacy_presence_uses_the_pinned_4b_size() {
+    let tmp = tempfile::tempdir().unwrap();
+    let llama_dir = tmp.path().join("llama.cpp");
+    std::fs::create_dir_all(&llama_dir).unwrap();
+    let path = llama_dir.join(LEGACY_GEMMA_FILE);
+    assert!(
+        !legacy_model_present(tmp.path()),
+        "absent file → not present"
+    );
+    make_complete(&path, LEGACY_GEMMA_SIZE - 1);
+    assert!(
+        !legacy_model_present(tmp.path()),
+        "short file → not present"
+    );
+    make_complete(&path, LEGACY_GEMMA_SIZE);
+    assert!(legacy_model_present(tmp.path()), "exact size → present");
+    make_complete(&path, LEGACY_GEMMA_SIZE_PREV);
+    assert!(
+        legacy_model_present(tmp.path()),
+        "previous-release size → present"
+    );
+}
+
+/// Hardware must never block or redirect ANY model download (4B/12B/26B). Each
+/// call proceeds straight to the (here cancelled) download path — no hardware
+/// rejection. Cancel is set up-front so no network I/O happens.
+#[test]
+fn hardware_never_blocks_any_managed_model_download() {
+    for model in [
+        ManagedModel::Legacy4B,
+        ManagedModel::Fallback12B,
+        ManagedModel::Primary26B,
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let cancel = std::sync::atomic::AtomicBool::new(true);
+        let result = download_managed_model(root.path(), model, &cancel, &|_| {});
+        if let Err(e) = result {
+            let msg = format!("{e:#}");
+            assert!(
+                !msg.contains("confirmed VRAM/RAM hardware profile"),
+                "hardware must not reject the {} download: {msg}",
+                model.spec().label
+            );
+        }
+    }
+}
+
+/// Regression: a previous-release 4B file (4 977 169 568 bytes) must remain
+/// Installed + launchable after upgrade, and the explicit downloader must not
+/// corrupt-resume it. A fresh/missing download still targets the new pinned
+/// spec (exact size + SHA-256 from the immutable HF revision).
+#[test]
+fn old_size_4b_upgrade_compatibility_and_new_spec_integrity() {
+    // -- new-spec integrity pins ------------------------------------------------
+    let spec = ManagedModel::Legacy4B.spec();
+    assert_eq!(spec.size, LEGACY_GEMMA_SIZE);
+    assert_eq!(spec.size, 4_977_171_584);
+    assert_eq!(spec.sha256, LEGACY_GEMMA_SHA256);
+    assert_ne!(
+        LEGACY_GEMMA_SIZE, LEGACY_GEMMA_SIZE_PREV,
+        "old and new sizes must differ"
+    );
+    assert_eq!(LEGACY_GEMMA_SIZE_PREV, 4_977_169_568);
+
+    // -- old-size file: presence + selection ------------------------------------
+    let tmp = tempfile::tempdir().unwrap();
+    let llama_dir = tmp.path().join("llama.cpp");
+    std::fs::create_dir_all(&llama_dir).unwrap();
+    let path = llama_dir.join(LEGACY_GEMMA_FILE);
+    make_complete(&path, LEGACY_GEMMA_SIZE_PREV);
+
+    assert!(
+        legacy_model_present(tmp.path()),
+        "old-size file must be recognised as Installed"
+    );
+    assert!(
+        base_model_present(tmp.path()),
+        "old-size file must satisfy base_model_present"
+    );
+    assert_eq!(
+        effective_managed_model(tmp.path(), ManagedModel::Legacy4B),
+        ManagedModel::Legacy4B,
+        "old-size file must keep the Legacy4B selection"
+    );
+    assert_eq!(
+        selected_llama_gguf(&llama_dir, ManagedModel::Legacy4B),
+        path,
+        "old-size file must be launchable"
+    );
+    assert_eq!(
+        complete_fallback_llama_gguf(&llama_dir),
+        Some(path.clone()),
+        "old-size file must be the fallback when 12B is absent"
+    );
+
+    // -- explicit downloader must not corrupt-resume ----------------------------
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let result = download_managed_model(tmp.path(), ManagedModel::Legacy4B, &cancel, &|_| {});
+    assert!(
+        result.is_ok(),
+        "downloader must accept the old-size file: {result:?}"
+    );
+    assert_eq!(
+        file_len(&path),
+        LEGACY_GEMMA_SIZE_PREV,
+        "old-size file must not be modified by the downloader"
+    );
+
+    // -- repair keeps the old-size selection ------------------------------------
+    let mut cfg = crate::config::Config {
+        ai_local_base_url: "http://127.0.0.1:8080/v1".to_string(),
+        ai_local_model: LEGACY_GEMMA_FILE.to_string(),
+        ..Default::default()
+    };
+    assert!(
+        !repair_managed_model_state(&mut cfg, tmp.path()),
+        "old-size 4B selection must survive repair"
+    );
+    assert_eq!(cfg.ai_local_model, LEGACY_GEMMA_FILE);
+}

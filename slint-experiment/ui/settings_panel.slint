@@ -531,11 +531,12 @@ export component SettingsWindow inherits Window {
     callback ai-local-thinking-changed(bool);
     // Local profile: legacy 4B, 12B QAT, or 26B-A4B primary.
     // `model-profile-changed` transactionally restarts the managed server;
-    // `download-quality-clicked` pulls the exact pinned 26B file on demand.
+    // `download-model-clicked(index)` pulls EXACTLY that bundled model on demand
+    // (4B/12B/26B) on any hardware, then the user switches to it once installed.
     callback model-profile-changed(int);
     callback ai-local-context-preview-changed(float);
     callback ai-local-context-changed(int);
-    callback download-quality-clicked();
+    callback download-model-clicked(int);
     callback choose-custom-gguf-clicked();
     // Legacy projector callback plus llama.cpp engine update.
     callback download-vision12b-clicked();
@@ -2277,23 +2278,27 @@ export component SettingsWindow inherits Window {
                                     height: 32px;
                                     text: @tr("Fast (4B)") + " - " +
                                         (!root.ai-local-custom-active && root.ai-local-model-profile-index == 0 ? @tr("Active") :
-                                         root.legacy-model-present ? @tr("Installed") : @tr("Not installed"));
-                                    enabled: root.managed-local-server && root.legacy-model-present && (root.ai-local-custom-active || root.ai-local-model-profile-index != 0) && !root.quality-downloading && !root.model-switching && !root.local-ai-installing && !root.vision12b-downloading;
+                                         root.legacy-model-present ? @tr("Installed") : @tr("Download"));
+                                    enabled: root.managed-local-server && (root.ai-local-custom-active || root.ai-local-model-profile-index != 0 || !root.legacy-model-present) && !root.quality-downloading && !root.model-switching && !root.local-ai-installing && !root.vision12b-downloading;
                                     clicked => {
-                                        root.model-profile-changed(0);
+                                        if root.legacy-model-present {
+                                            root.model-profile-changed(0);
+                                        } else {
+                                            root.download-model-clicked(0);
+                                        }
                                     }
                                 }
                                 Button {
                                     height: 32px;
                                     text: @tr("Balanced (12B QAT)") + " - " +
                                         (!root.ai-local-custom-active && root.ai-local-model-profile-index == 1 ? @tr("Active") :
-                                         root.fallback-model-present ? @tr("Installed") : @tr("Install"));
+                                         root.fallback-model-present ? @tr("Installed") : @tr("Download"));
                                     enabled: root.managed-local-server && (root.ai-local-custom-active || root.ai-local-model-profile-index != 1 || !root.fallback-model-present) && !root.quality-downloading && !root.model-switching && !root.local-ai-installing && !root.vision12b-downloading;
                                     clicked => {
                                         if root.fallback-model-present {
                                             root.model-profile-changed(1);
                                         } else {
-                                            root.install-local-ai-clicked();
+                                            root.download-model-clicked(1);
                                         }
                                     }
                                 }
@@ -2307,7 +2312,7 @@ export component SettingsWindow inherits Window {
                                         if root.quality-model-present {
                                             root.model-profile-changed(2);
                                         } else {
-                                            root.download-quality-clicked();
+                                            root.download-model-clicked(2);
                                         }
                                     }
                                 }
