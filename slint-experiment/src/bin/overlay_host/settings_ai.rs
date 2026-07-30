@@ -282,12 +282,14 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
                 c.ai_provider = provider.to_string();
             }
             let local_state = (provider == "local").then(|| {
+                let root = overlay_backend::local_ai::default_root();
                 (
                     c.ai_local_base_url.clone(),
                     c.ai_local_quality,
                     c.ai_local_model.clone(),
                     c.ai_local_vision,
                     c.vision_provider.clone(),
+                    overlay_backend::local_ai::local_vision_available(&c, &root),
                 )
             });
             if let Err(e) = overlay_backend::config::save(&c) {
@@ -298,7 +300,15 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
             drop(c);
             diag!("ai_provider -> {provider}");
             // #E10.1 — switching to Local auto-populates the model dropdown.
-            if let Some((base_url, quality, model, local_vision, vision_provider)) = local_state {
+            if let Some((
+                base_url,
+                quality,
+                model,
+                local_vision,
+                vision_provider,
+                vision_available,
+            )) = local_state
+            {
                 if let Some(w) = weak.upgrade() {
                     w.set_ai_local_base_url_input(SharedString::from(base_url.clone()));
                     w.set_ai_local_quality(quality);
@@ -311,6 +321,7 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
                     )])));
                     w.set_ai_local_model_index(0);
                     w.set_ai_local_vision(local_vision);
+                    w.set_ai_local_vision_available(vision_available);
                     w.set_vision_provider_index(match vision_provider.as_str() {
                         "off" => 0,
                         "same" => 1,
@@ -334,7 +345,15 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
         win.on_ai_local_base_url_save(move |v| {
             let base_url = v.trim().to_string();
             let root = overlay_backend::local_ai::default_root();
-            let (managed, quality, model, saved_base_url, local_vision, vision_provider) = {
+            let (
+                managed,
+                quality,
+                model,
+                saved_base_url,
+                local_vision,
+                vision_provider,
+                vision_available,
+            ) = {
                 let mut c = cfg_c.write();
                 c.ai_local_base_url = base_url.clone();
                 let managed = overlay_backend::local_ai::is_managed_llama_endpoint(&base_url);
@@ -352,6 +371,7 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
                     c.ai_local_base_url.clone(),
                     c.ai_local_vision,
                     c.vision_provider.clone(),
+                    overlay_backend::local_ai::local_vision_available(&c, &root),
                 )
             };
             if let Some(w) = weak.upgrade() {
@@ -362,6 +382,7 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
                 );
                 w.set_ai_local_base_url_input(SharedString::from(saved_base_url.clone()));
                 w.set_ai_local_vision(local_vision);
+                w.set_ai_local_vision_available(vision_available);
                 w.set_vision_provider_index(match vision_provider.as_str() {
                     "off" => 0,
                     "same" => 1,
@@ -426,11 +447,7 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
             let root = overlay_backend::local_ai::default_root();
             let (local_vision, vision_provider) = {
                 let mut c = cfg_c.write();
-                c.ai_local_vision = on;
-                // A managed 26B-A4B server has no projector. Re-apply the
-                // model invariant here because a reused Settings window can
-                // otherwise re-enable and persist an old vision checkbox.
-                overlay_backend::local_ai::repair_managed_model_state(&mut c, &root);
+                overlay_backend::local_ai::set_local_vision(&mut c, &root, on);
                 if let Err(e) = overlay_backend::config::save(&c) {
                     eprintln!("[overlay-host] ai_local_vision save failed: {e:#}");
                 }

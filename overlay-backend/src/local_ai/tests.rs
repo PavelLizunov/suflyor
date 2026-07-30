@@ -126,6 +126,7 @@ fn owner_primary_coordinates_and_sha_are_exact() {
         GEMMA_SHA256,
         "90fd44e29e0d7cffeb0fd00dc73cfdab9ed0b0e95306ecf7821ea634c940c370"
     );
+    assert_eq!(GEMMA_SIZE, 6_716_356_800);
     assert_eq!(
         GEMMA26_URL,
         "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/c099eb4/gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf"
@@ -134,6 +135,15 @@ fn owner_primary_coordinates_and_sha_are_exact() {
     assert_eq!(
         GEMMA26_SHA256,
         "2a1d26dfe6ea00a467940a5728316af6edb366bbdba950d65b85d232392fb658"
+    );
+    assert_eq!(
+        MMPROJ26_URL,
+        "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/c099eb4/mmproj-F16.gguf"
+    );
+    assert_eq!(MMPROJ26_SIZE, 1_193_058_784);
+    assert_eq!(
+        MMPROJ26_SHA256,
+        "418a6d8723067cd712235facbbc5cba6c8fbbd413fc1292d2aace5a027d5a42f"
     );
 }
 
@@ -180,6 +190,18 @@ fn stat_only_presence_accepts_an_exact_size_fixture_without_hashing() {
     std::fs::create_dir_all(root.join("llama.cpp")).unwrap();
     make_complete(&quality_gguf_path(root), GEMMA26_SIZE);
     assert!(quality_model_present(root));
+}
+
+#[test]
+fn fallback_presence_rejects_the_old_1472_byte_short_size() {
+    let tmp = tempfile::tempdir().unwrap();
+    let llama_dir = tmp.path().join("llama.cpp");
+    std::fs::create_dir_all(&llama_dir).unwrap();
+    let path = llama_dir.join(GEMMA_FILE);
+    make_complete(&path, GEMMA_SIZE - 1_472);
+    assert!(!fallback_model_present(tmp.path()));
+    make_complete(&path, GEMMA_SIZE);
+    assert!(fallback_model_present(tmp.path()));
 }
 
 #[test]
@@ -251,11 +273,17 @@ fn persisted_primary_falls_back_to_12b_when_missing() {
 }
 
 #[test]
-fn managed_primary_never_uses_a_stale_vision_flag() {
+fn managed_primary_uses_only_its_matching_projector() {
     let tmp = tempfile::tempdir().unwrap();
     let llama_dir = tmp.path().join("llama.cpp");
     std::fs::create_dir_all(&llama_dir).unwrap();
     make_complete(&llama_dir.join(GEMMA26_FILE), GEMMA26_SIZE);
+    make_complete(&llama_dir.join(MMPROJ26_FILE), MMPROJ26_SIZE);
+    std::fs::write(
+        llama_dir.join(".llama-build"),
+        format!("b{GEMMA26_MIN_BUILD}"),
+    )
+    .unwrap();
     let mut cfg = crate::config::Config {
         ai_local_base_url: LLAMA_BASE_URL.to_string(),
         ai_local_model: GEMMA26_FILE.to_string(),
@@ -265,18 +293,14 @@ fn managed_primary_never_uses_a_stale_vision_flag() {
         ..Default::default()
     };
 
-    assert!(
-        !local_vision_enabled(&cfg, tmp.path()),
-        "the 26B primary has no projector in this candidate"
-    );
-    assert!(repair_managed_model_state(&mut cfg, tmp.path()));
-    assert!(!cfg.ai_local_vision);
-    assert_eq!(cfg.vision_provider, "off");
+    assert!(local_vision_enabled(&cfg, tmp.path()));
+    assert!(!repair_managed_model_state(&mut cfg, tmp.path()));
+    assert!(cfg.ai_local_vision);
+    assert_eq!(cfg.vision_provider, "same");
 }
 
-/// Mirrors selecting "Same as text model above" after a managed text-only 26B
-/// is active. The UI callback persists that selection through this repair, so
-/// F8 remains disabled instead of being routed to a server without a projector.
+/// Without the matching projector, selecting "Same as text model above" must
+/// still be repaired so F8 is not routed to a text-only server.
 #[test]
 fn managed_primary_repairs_same_vision_provider_after_selection() {
     let tmp = tempfile::tempdir().unwrap();
@@ -294,6 +318,74 @@ fn managed_primary_repairs_same_vision_provider_after_selection() {
     assert!(repair_managed_model_state(&mut cfg, tmp.path()));
     assert_eq!(cfg.vision_provider, "off");
     assert!(cfg.vision_endpoint().is_none());
+}
+
+#[test]
+fn local_vision_toggle_enables_f8_route_for_ready_12b() {
+    let tmp = tempfile::tempdir().unwrap();
+    let llama_dir = tmp.path().join("llama.cpp");
+    std::fs::create_dir_all(&llama_dir).unwrap();
+    make_complete(&llama_dir.join(GEMMA_FILE), GEMMA_SIZE);
+    make_complete(&llama_dir.join(MMPROJ_FILE), MMPROJ_SIZE);
+    std::fs::write(
+        llama_dir.join(".llama-build"),
+        format!("b{GEMMA4UV_MIN_BUILD}"),
+    )
+    .unwrap();
+    let mut cfg = crate::config::Config {
+        ai_local_base_url: LLAMA_BASE_URL.to_string(),
+        ai_local_model: GEMMA_FILE.to_string(),
+        vision_provider: "off".to_string(),
+        ..Default::default()
+    };
+
+    assert!(local_vision_available(&cfg, tmp.path()));
+    set_local_vision(&mut cfg, tmp.path(), true);
+    assert!(cfg.ai_local_vision);
+    assert_eq!(cfg.vision_provider, "same");
+    assert!(cfg.vision_endpoint().is_some());
+
+    set_local_vision(&mut cfg, tmp.path(), false);
+    assert!(!cfg.ai_local_vision);
+    assert_eq!(cfg.vision_provider, "off");
+}
+
+#[test]
+fn custom_gguf_validation_and_repair_are_machine_local() {
+    let tmp = tempfile::tempdir().unwrap();
+    let good = tmp.path().join("my-model.GGUF");
+    let bad = tmp.path().join("bad.gguf");
+    std::fs::write(&good, b"GGUFfixture").unwrap();
+    std::fs::write(&bad, b"nope").unwrap();
+
+    assert_eq!(
+        valid_custom_gguf_path(&good.to_string_lossy()),
+        Some(good.clone())
+    );
+    assert!(valid_custom_gguf_path(&bad.to_string_lossy()).is_none());
+    assert!(valid_custom_gguf_path("relative.gguf").is_none());
+
+    let mut cfg = crate::config::Config {
+        ai_local_base_url: LLAMA_BASE_URL.to_string(),
+        ai_local_model: "stale".to_string(),
+        ai_local_custom_gguf: good.to_string_lossy().into_owned(),
+        ai_local_quality: true,
+        ai_local_vision: true,
+        vision_provider: "same".to_string(),
+        ..Default::default()
+    };
+    assert!(repair_managed_model_state(&mut cfg, tmp.path()));
+    assert_eq!(cfg.ai_local_custom_gguf, good.to_string_lossy());
+    assert_eq!(cfg.ai_local_model, "my-model.GGUF");
+    assert!(!cfg.ai_local_quality);
+    assert!(!cfg.ai_local_vision);
+    assert_eq!(cfg.vision_provider, "off");
+    assert!(!local_vision_available(&cfg, tmp.path()));
+
+    std::fs::remove_file(good).unwrap();
+    assert!(repair_managed_model_state(&mut cfg, tmp.path()));
+    assert!(cfg.ai_local_custom_gguf.is_empty());
+    assert_eq!(cfg.ai_local_model, GEMMA_FILE);
 }
 
 #[test]
@@ -385,10 +477,10 @@ fn local_model_label_distinguishes_fallback_and_primary() {
     assert_eq!(local_model_label(""), "—");
 }
 
-/// Only the 12B fallback gets the pinned projector, and only when complete and
-/// the engine is gemma4uv-capable. The 26B stays text-only.
+/// Each managed model gets only its matching complete projector on a compatible
+/// engine build.
 #[test]
-fn mmproj_attach_rules_gated_12b_and_text_only_26b() {
+fn mmproj_attach_rules_are_model_specific() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();
     assert!(mmproj_for_model(dir, &dir.join(GEMMA_FILE)).is_none());
@@ -399,7 +491,12 @@ fn mmproj_attach_rules_gated_12b_and_text_only_26b() {
         mmproj_for_model(dir, &dir.join(GEMMA_FILE)),
         Some(dir.join(MMPROJ_FILE))
     );
-    assert!(mmproj_for_model(dir, &dir.join(GEMMA26_FILE)).is_none());
+    make_complete(&dir.join(MMPROJ26_FILE), MMPROJ26_SIZE);
+    std::fs::write(dir.join(".llama-build"), format!("b{GEMMA26_MIN_BUILD}")).unwrap();
+    assert_eq!(
+        mmproj_for_model(dir, &dir.join(GEMMA26_FILE)),
+        Some(dir.join(MMPROJ26_FILE))
+    );
     // Non-Gemma model never gets a Gemma projector.
     assert!(mmproj_for_model(dir, &dir.join("qwen2.5-7b.gguf")).is_none());
 }
@@ -1195,7 +1292,7 @@ fn apply_result_sets_local_and_keeps_secrets() {
 }
 
 #[test]
-fn apply_primary_never_routes_vision_to_text_only_server() {
+fn apply_primary_routes_vision_only_when_the_installer_verified_it() {
     let mut cloud_cfg = crate::config::Config {
         ai_local_prep_model: "stale-prep-model".to_string(),
         vision_provider: "cloud".to_string(),
@@ -1215,15 +1312,9 @@ fn apply_primary_never_routes_vision_to_text_only_server() {
         vision_provider: "same".to_string(),
         ..Default::default()
     };
-    apply_result(
-        &mut stale_same_cfg,
-        &local_result(true, true), // inconsistent input must still stay text-only
-    );
-    assert!(!stale_same_cfg.ai_local_vision);
-    assert_eq!(
-        stale_same_cfg.vision_provider, "off",
-        "F8 must not send images to the text-only 26B endpoint"
-    );
+    apply_result(&mut stale_same_cfg, &local_result(true, true));
+    assert!(stale_same_cfg.ai_local_vision);
+    assert_eq!(stale_same_cfg.vision_provider, "same");
 
     let mut inherited_local_cfg = crate::config::Config {
         vision_provider: "local".to_string(),

@@ -1485,8 +1485,7 @@ pub(crate) fn populate_token_status(
     {
         let root = local_root;
         win.set_quality_model_present(overlay_backend::local_ai::quality_model_present(&root));
-        // Legacy projector state stays false for the 26B profile; engine build
-        // remains visible for diagnostics.
+        // Matching 26B projector and engine support remain visible separately.
         win.set_quality_vision_present(overlay_backend::local_ai::quality_vision_present(&root));
         win.set_quality_vision_supported(overlay_backend::local_ai::quality_vision_supported(
             &root,

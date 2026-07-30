@@ -45,9 +45,8 @@ pub(crate) fn wire_vision_settings(
             let saved_provider = {
                 let mut c = cfg_c.write();
                 c.vision_provider = provider.to_string();
-                // The managed 26B-A4B profile deliberately has no projector.
-                // Re-apply its invariant after a Vision-provider selection so
-                // choosing "same" cannot route F8 back to text-only :8080.
+                // Re-apply the selected model's projector invariant so choosing
+                // "same" cannot route F8 to a managed text-only server.
                 overlay_backend::local_ai::repair_managed_model_state(
                     &mut c,
                     &overlay_backend::local_ai::default_root(),

@@ -41,15 +41,27 @@ pub(crate) fn refresh_local_context_controls(
         &cfg.ai_local_model,
         cfg.ai_local_quality,
     );
+    let custom_name =
+        overlay_backend::local_ai::custom_gguf_display_name(&cfg.ai_local_custom_gguf);
+    let custom_active = !custom_name.is_empty();
     let model = overlay_backend::local_ai::effective_managed_model(&root, requested);
-    let profile = overlay_backend::local_ai::current_server_profile(model.is_quality());
+    let profile = if custom_active {
+        overlay_backend::local_ai::HardwareModelProfile::Unknown
+    } else {
+        overlay_backend::local_ai::current_server_profile(model.is_quality())
+    };
     let preset = overlay_backend::local_ai::LocalContextPreset::from_config(&cfg.ai_local_context);
-    win.set_ai_local_quality(model.is_quality());
-    win.set_ai_local_model_profile_index(model.index());
+    win.set_ai_local_quality(!custom_active && model.is_quality());
+    win.set_ai_local_model_profile_index(if custom_active { -1 } else { model.index() });
+    win.set_ai_local_custom_active(custom_active);
+    win.set_ai_local_custom_model_name(SharedString::from(custom_name));
+    win.set_ai_local_vision_available(overlay_backend::local_ai::local_vision_available(
+        cfg, &root,
+    ));
     win.set_legacy_model_present(overlay_backend::local_ai::legacy_model_present(&root));
     win.set_fallback_model_present(overlay_backend::local_ai::fallback_model_present(&root));
     win.set_ai_local_context_index(preset.index());
-    refresh_local_context_preview(win, cfg, model, profile, preset);
+    refresh_local_context_preview(win, cfg, model, profile, preset, custom_active);
 }
 
 fn refresh_local_context_preview(
@@ -58,8 +70,10 @@ fn refresh_local_context_preview(
     model: overlay_backend::local_ai::ManagedModel,
     profile: overlay_backend::local_ai::HardwareModelProfile,
     preset: overlay_backend::local_ai::LocalContextPreset,
+    custom_active: bool,
 ) {
     win.set_ai_local_context_preview_index(preset.index());
+    win.set_ai_local_hardware_profile_index(profile.index());
     win.set_ai_local_context_max_k((profile.context_tokens(false) / 1024) as i32);
     win.set_ai_local_context_auto_k(
         (overlay_backend::local_ai::LocalContextPreset::Auto.context_tokens(profile, false) / 1024)
@@ -68,7 +82,11 @@ fn refresh_local_context_preview(
     let gib = f64::from(overlay_backend::local_ai::estimated_total_vram_mib(
         model, preset, profile,
     )) / 1024.0;
-    let hint = if cfg.ui_language == "ru" {
+    let hint = if custom_active && cfg.ui_language == "ru" {
+        "Для пользовательской GGUF-модели объём VRAM неизвестен; Auto использует безопасный контекст 8K.".to_string()
+    } else if custom_active {
+        "VRAM use is unknown for a user GGUF model; Auto uses a safe 8K context.".to_string()
+    } else if cfg.ui_language == "ru" {
         format!(
             "Оценка до запуска: ~{gib:.1} ГиБ VRAM. Фактическое значение зависит от драйвера и GPU offload."
         )
@@ -94,6 +112,9 @@ pub(crate) fn wire_local_ai(
     state: &slint_replay::app_state::SharedState,
     overlay_weak: &slint::Weak<OverlayBarWindow>,
 ) {
+    let pending_custom_gguf =
+        std::sync::Arc::new(std::sync::Mutex::new(None::<std::path::PathBuf>));
+
     // E10.4 — one-click in-app local-AI installer. Runs the whole
     // download + launch pipeline on a worker thread, streams progress to
     // the panel, and on success stores the server handles (for kill-on-
@@ -205,6 +226,7 @@ pub(crate) fn wire_local_ai(
                         overlay_backend::local_ai::ManagedLlamaChoice::from_config(
                             &c.ai_local_model,
                             c.ai_local_quality,
+                            &c.ai_local_custom_gguf,
                             opts.context,
                         ),
                     )
@@ -305,7 +327,7 @@ pub(crate) fn wire_local_ai(
                             let (outcome, restored) =
                                 overlay_backend::local_ai::restart_llama_server(
                                     &opts.root,
-                                    previous_choice,
+                                    previous_choice.clone(),
                                 );
                             if matches!(
                                 outcome,
@@ -441,18 +463,53 @@ pub(crate) fn wire_local_ai(
         });
     }
 
-    // Explicit 4B ↔ 12B ↔ 26B switch. Persists the choice, then
+    {
+        let pending = pending_custom_gguf.clone();
+        let weak = win.as_weak();
+        win.on_choose_custom_gguf_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            let Some(path) = rfd::FileDialog::new()
+                .add_filter("GGUF model", &["gguf"])
+                .pick_file()
+            else {
+                return;
+            };
+            if overlay_backend::local_ai::valid_custom_gguf_path(&path.to_string_lossy()).is_none()
+            {
+                w.set_quality_status(SharedString::from(
+                    "Выбранный файл не является корректной GGUF-моделью.",
+                ));
+                return;
+            }
+            *pending.lock().unwrap_or_else(|p| p.into_inner()) = Some(path);
+            let weak_invoke = w.as_weak();
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(w) = weak_invoke.upgrade() {
+                    w.invoke_model_profile_changed(-1);
+                }
+            });
+        });
+    }
+
+    // Explicit bundled/user model switch. Persists the choice, then
     // (off the UI thread) frees :8080 owner-aware and relaunches llama-server
-    // with the OTHER GGUF. STT (:8081) is left alone. The 12B button is only
-    // enabled when the file is present, so the relaunch can always find a model
-    // (selected_llama_gguf falls back to 12B otherwise).
+    // with the selected GGUF. STT (:8081) is left alone.
     {
         let cfg_c = cfg.clone();
         let state_c = state.clone();
         let overlay_c = overlay_weak.clone();
+        let pending_custom = pending_custom_gguf.clone();
         let weak = win.as_weak();
         win.on_model_profile_changed(move |index| {
             let Some(w) = weak.upgrade() else { return };
+            let custom_path = if index < 0 {
+                pending_custom
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .take()
+            } else {
+                None
+            };
             let want_model = overlay_backend::local_ai::ManagedModel::from_index(index);
             // Re-entry guard (review #3): the Slint `enabled:` bindings only
             // block the SAME button, so a fast opposite-button click during the
@@ -462,20 +519,28 @@ pub(crate) fn wire_local_ai(
             }
             // No-op if already on the requested model (the active button is
             // disabled, but guard anyway).
-            if w.get_ai_local_model_profile_index() == want_model.index() {
+            if custom_path.is_none()
+                && w.get_ai_local_model_profile_index() == want_model.index()
+                && !w.get_ai_local_custom_active()
+            {
                 return;
             }
             if !w.get_managed_local_server() {
                 return;
             }
-            if want_model.is_quality() && !w.get_quality_selection_allowed() {
+            if custom_path.is_none()
+                && want_model.is_quality()
+                && !w.get_quality_selection_allowed()
+            {
                 w.set_quality_status(SharedString::from(
                     "26B-A4B доступна только для подтверждённой матрицы VRAM/RAM.",
                 ));
                 return;
             }
             let root = overlay_backend::local_ai::default_root();
-            if !overlay_backend::local_ai::managed_model_present(&root, want_model) {
+            if custom_path.is_none()
+                && !overlay_backend::local_ai::managed_model_present(&root, want_model)
+            {
                 w.set_quality_status(SharedString::from(
                     "Файл выбранной модели не установлен.",
                 ));
@@ -496,20 +561,27 @@ pub(crate) fn wire_local_ai(
                 return; // another local-AI op is already running
             };
             w.set_model_switching(true);
-            w.set_quality_status(SharedString::from(match want_model {
-                overlay_backend::local_ai::ManagedModel::Legacy4B => {
-                    "Переключаю на быструю модель (4B)…"
-                }
-                overlay_backend::local_ai::ManagedModel::Fallback12B => {
-                    "Переключаю на сбалансированную модель (12B QAT)…"
-                }
-                overlay_backend::local_ai::ManagedModel::Primary26B => {
-                    "Переключаю на максимальную модель (26B-A4B)…"
-                }
-            }));
-            let previous_model = overlay_backend::local_ai::ManagedModel::from_index(
-                w.get_ai_local_model_profile_index(),
-            );
+            let custom_name = custom_path.as_ref().and_then(|path| {
+                path.file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+            });
+            w.set_quality_status(SharedString::from(
+                if let Some(name) = custom_name.as_deref() {
+                    format!("Переключаю на пользовательскую модель {name}…")
+                } else {
+                    match want_model {
+                        overlay_backend::local_ai::ManagedModel::Legacy4B => {
+                            "Переключаю на быструю модель (4B)…".to_string()
+                        }
+                        overlay_backend::local_ai::ManagedModel::Fallback12B => {
+                            "Переключаю на сбалансированную модель (12B QAT)…".to_string()
+                        }
+                        overlay_backend::local_ai::ManagedModel::Primary26B => {
+                            "Переключаю на максимальную модель (26B-A4B)…".to_string()
+                        }
+                    }
+                },
+            ));
             let cfg_t = cfg_c.clone();
             let state_t = state_c.clone();
             let overlay_t = overlay_c.clone();
@@ -530,14 +602,31 @@ pub(crate) fn wire_local_ai(
                 else {
                     return;
                 };
-                let want_whisper = {
+                let (previous, target, want_whisper) = {
                     let c = cfg_t.read();
-                    c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081")
-                };
-                let context = {
-                    let c = cfg_t.read();
-                    overlay_backend::local_ai::LocalContextPreset::from_config(
+                    let context = overlay_backend::local_ai::LocalContextPreset::from_config(
                         &c.ai_local_context,
+                    );
+                    (
+                        overlay_backend::local_ai::ManagedLlamaChoice::from_config(
+                            &c.ai_local_model,
+                            c.ai_local_quality,
+                            &c.ai_local_custom_gguf,
+                            context,
+                        ),
+                        custom_path.map_or_else(
+                            || {
+                                overlay_backend::local_ai::ManagedLlamaChoice::for_model(
+                                    want_model, context,
+                                )
+                            },
+                            |path| {
+                                overlay_backend::local_ai::ManagedLlamaChoice::for_custom(
+                                    path, context,
+                                )
+                            },
+                        ),
+                        c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081"),
                     )
                 };
                 // Backend frees :8080 owner-aware, relaunches with the chosen
@@ -545,11 +634,8 @@ pub(crate) fn wire_local_ai(
                 // outcome (review #1/#2) instead of a blind "done".
                 let (outcome, started) = overlay_backend::local_ai::switch_local_model(
                     &root,
-                    overlay_backend::local_ai::ManagedLlamaChoice::for_model(
-                        previous_model,
-                        context,
-                    ),
-                    overlay_backend::local_ai::ManagedLlamaChoice::for_model(want_model, context),
+                    previous,
+                    target.clone(),
                     want_whisper,
                 );
                 let quality_present = overlay_backend::local_ai::quality_model_present(&root);
@@ -585,9 +671,7 @@ pub(crate) fn wire_local_ai(
                 // the next launch still starts the model that's actually running.
                 if switched {
                     let mut c = cfg_t.write();
-                    c.ai_local_quality = want_model.is_quality();
-                    c.ai_local_model = want_model.file_name().to_string();
-                    overlay_backend::local_ai::repair_managed_model_state(&mut c, &root);
+                    overlay_backend::local_ai::apply_llama_choice(&mut c, &root, &target);
                     if let Err(e) = overlay_backend::config::save(&c) {
                         eprintln!("[overlay-host] quality switch save failed: {e:#}");
                     }
@@ -606,9 +690,18 @@ pub(crate) fn wire_local_ai(
                         {
                             w.set_quality_model_present(quality_present);
                         }
-                        w.set_quality_status(SharedString::from(match outcome {
-                            overlay_backend::local_ai::ModelSwitch::Switched => {
-                                match want_model {
+                        let status = if outcome
+                            == overlay_backend::local_ai::ModelSwitch::Switched
+                            && custom_name.is_some()
+                        {
+                            format!(
+                                "Готово: пользовательская модель {}.",
+                                custom_name.as_deref().unwrap_or_default()
+                            )
+                        } else {
+                            match outcome {
+                                overlay_backend::local_ai::ModelSwitch::Switched => {
+                                    match want_model {
                                     overlay_backend::local_ai::ManagedModel::Legacy4B => {
                                         "Готово: быстрая модель (4B)."
                                     }
@@ -618,45 +711,40 @@ pub(crate) fn wire_local_ai(
                                     overlay_backend::local_ai::ManagedModel::Primary26B => {
                                         "Готово: максимальная модель (26B-A4B)."
                                     }
+                                    }
+                                }
+                                overlay_backend::local_ai::ModelSwitch::RolledBack => {
+                                    "Новая модель не прошла проверку; предыдущая модель восстановлена."
+                                }
+                                overlay_backend::local_ai::ModelSwitch::PortBusy => {
+                                    "Порт :8080 занят другим процессом — переключение не выполнено."
+                                }
+                                overlay_backend::local_ai::ModelSwitch::TargetUnavailable => {
+                                    "Файл основной модели недоступен или не прошёл проверку целостности. Загрузите его заново."
+                                }
+                                overlay_backend::local_ai::ModelSwitch::HardwareUnsupported => {
+                                    "26B-A4B доступна только для подтверждённой матрицы VRAM/RAM."
+                                }
+                                overlay_backend::local_ai::ModelSwitch::FallbackStarted => {
+                                    "Основная модель не запустилась; включён RAM-safe fallback (12B QAT)."
+                                }
+                                overlay_backend::local_ai::ModelSwitch::FailedToStart => {
+                                    "Не удалось запустить модель — проверьте установку локального AI."
                                 }
                             }
-                            overlay_backend::local_ai::ModelSwitch::RolledBack => {
-                                "Новая модель не прошла проверку; предыдущая модель восстановлена."
-                            }
-                            overlay_backend::local_ai::ModelSwitch::PortBusy => {
-                                "Порт :8080 занят другим процессом — переключение не выполнено."
-                            }
-                            overlay_backend::local_ai::ModelSwitch::TargetUnavailable => {
-                                "Файл основной модели недоступен или не прошёл проверку целостности. Загрузите его заново."
-                            }
-                            overlay_backend::local_ai::ModelSwitch::HardwareUnsupported => {
-                                "26B-A4B доступна только для подтверждённой матрицы VRAM/RAM."
-                            }
-                            overlay_backend::local_ai::ModelSwitch::FallbackStarted => {
-                                "Основная модель не запустилась; включён RAM-safe fallback (12B QAT)."
-                            }
-                            overlay_backend::local_ai::ModelSwitch::FailedToStart => {
-                                "Не удалось запустить модель — проверьте установку локального AI."
-                            }
-                        }));
-                        let (quality, profile, local_vision, vision_provider, base_url, model) = {
+                            .to_string()
+                        };
+                        w.set_quality_status(SharedString::from(status));
+                        let (local_vision, vision_provider, base_url, model) = {
                             let c = cfg_done.read();
                             refresh_local_context_controls(&w, &c);
                             (
-                                c.ai_local_quality,
-                                overlay_backend::local_ai::ManagedModel::from_config(
-                                    &c.ai_local_model,
-                                    c.ai_local_quality,
-                                )
-                                .index(),
                                 c.ai_local_vision,
                                 c.vision_provider.clone(),
                                 c.ai_local_base_url.clone(),
                                 c.ai_local_model.clone(),
                             )
                         };
-                        w.set_ai_local_quality(quality);
-                        w.set_ai_local_model_profile_index(profile);
                         w.set_ai_local_models(ModelRc::new(VecModel::from(vec![
                             SharedString::from(model.clone()),
                         ])));
@@ -702,13 +790,16 @@ pub(crate) fn wire_local_ai(
                 c.ai_local_quality,
             );
             let model = overlay_backend::local_ai::effective_managed_model(&root, requested);
-            let profile = overlay_backend::local_ai::current_server_profile(model.is_quality());
+            let profile = overlay_backend::local_ai::HardwareModelProfile::from_index(
+                w.get_ai_local_hardware_profile_index(),
+            );
             refresh_local_context_preview(
                 &w,
                 &c,
                 model,
                 profile,
                 overlay_backend::local_ai::LocalContextPreset::from_index(index),
+                w.get_ai_local_custom_active(),
             );
         });
     }
@@ -727,18 +818,9 @@ pub(crate) fn wire_local_ai(
                 return;
             }
             let target_context = overlay_backend::local_ai::LocalContextPreset::from_index(index);
-            let model = {
-                let c = cfg_c.read();
-                let root = overlay_backend::local_ai::default_root();
-                overlay_backend::local_ai::effective_managed_model(
-                    &root,
-                    overlay_backend::local_ai::ManagedModel::from_config(
-                        &c.ai_local_model,
-                        c.ai_local_quality,
-                    ),
-                )
-            };
-            let profile = overlay_backend::local_ai::current_server_profile(model.is_quality());
+            let profile = overlay_backend::local_ai::HardwareModelProfile::from_index(
+                w.get_ai_local_hardware_profile_index(),
+            );
             let max_k = profile.context_tokens(false) / 1024;
             let allowed = match target_context {
                 overlay_backend::local_ai::LocalContextPreset::Auto => true,
@@ -814,27 +896,23 @@ pub(crate) fn wire_local_ai(
                     return;
                 };
                 let root = overlay_backend::local_ai::default_root();
-                let (previous_model, previous_context, want_whisper) = {
+                let (previous, want_whisper) = {
                     let c = cfg_t.read();
-                    (
-                        overlay_backend::local_ai::ManagedModel::from_config(
-                            &c.ai_local_model,
-                            c.ai_local_quality,
-                        ),
+                    let previous_context =
                         overlay_backend::local_ai::LocalContextPreset::from_config(
                             &c.ai_local_context,
+                        );
+                    (
+                        overlay_backend::local_ai::ManagedLlamaChoice::from_config(
+                            &c.ai_local_model,
+                            c.ai_local_quality,
+                            &c.ai_local_custom_gguf,
+                            previous_context,
                         ),
                         c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081"),
                     )
                 };
-                let previous = overlay_backend::local_ai::ManagedLlamaChoice::for_model(
-                    previous_model,
-                    previous_context,
-                );
-                let target = overlay_backend::local_ai::ManagedLlamaChoice::for_model(
-                    previous_model,
-                    target_context,
-                );
+                let target = previous.with_context(target_context);
                 let (outcome, started) = overlay_backend::local_ai::switch_local_model(
                     &root,
                     previous,
@@ -1028,9 +1106,8 @@ pub(crate) fn wire_local_ai(
         });
     }
 
-    // v0.18.2 — download the 12B vision projector (gemma4uv, ~175 MB). On success,
-    // if the 12B is the ACTIVE model, relaunch :8080 so the projector attaches and
-    // F8 vision works on the 12B. Same worker/progress pattern as the 12B download.
+    // Download the matching 26B vision projector. On success, relaunch :8080
+    // transactionally so the projector is attached before F8 is enabled.
     {
         let cfg_c = cfg.clone();
         let state_c = state.clone();
@@ -1088,10 +1165,9 @@ pub(crate) fn wire_local_ai(
                 };
                 let root = overlay_backend::local_ai::default_root();
                 let res = overlay_backend::local_ai::download_quality_vision(&root, &cancel, &on);
-                // On success, if the 12B is active, relaunch :8080 with the
-                // projector. Hold the lifecycle lock ONLY for the restart so the
-                // long download never blocks the watchdog. RAII release.
-                let restarted = if res.is_ok() && !cfg_t.read().ai_local_quality {
+                // Hold the lifecycle lock ONLY for the restart so the long
+                // download never blocks the watchdog. RAII release.
+                let restarted = if res.is_ok() && cfg_t.read().ai_local_quality {
                     let lifecycle_lock = {
                         let s = state_t.lock().unwrap_or_else(|p| p.into_inner());
                         s.local_ai_lock.clone()
@@ -1111,11 +1187,11 @@ pub(crate) fn wire_local_ai(
                         )
                     };
                     let choice =
-                        overlay_backend::local_ai::ManagedLlamaChoice::new(false, context);
+                        overlay_backend::local_ai::ManagedLlamaChoice::new(true, context);
                     let (outcome, started) =
                         overlay_backend::local_ai::switch_local_model(
                             &root,
-                            choice,
+                            choice.clone(),
                             choice,
                             want_whisper,
                         );
@@ -1130,6 +1206,13 @@ pub(crate) fn wire_local_ai(
                             overlay_backend::local_ai::terminate_servers(started);
                         }
                     }
+                    if ok {
+                        let mut c = cfg_t.write();
+                        overlay_backend::local_ai::set_local_vision(&mut c, &root, true);
+                        if let Err(e) = overlay_backend::config::save(&c) {
+                            eprintln!("[overlay-host] 26B vision state save failed: {e:#}");
+                        }
+                    }
                     ok
                 } else {
                     false
@@ -1141,10 +1224,15 @@ pub(crate) fn wire_local_ai(
                     match res {
                         Ok(()) => {
                             w.set_quality_vision_present(true);
+                            w.set_ai_local_vision_available(restarted);
+                            w.set_ai_local_vision(restarted);
+                            if restarted {
+                                w.set_vision_provider_index(1);
+                            }
                             w.set_vision12b_status(SharedString::from(if restarted {
-                                "Зрение 12B включено — F8 теперь работает на 12B."
+                                "Зрение 26B включено — F8 теперь работает на 26B."
                             } else {
-                                "Проектор загружен. Включите «Умнее (12B)», чтобы заработало зрение."
+                                "Проектор 26B загружен. Перезапустите приложение, чтобы включить зрение."
                             }));
                         }
                         Err(e) => {
@@ -1154,7 +1242,7 @@ pub(crate) fn wire_local_ai(
                             if cancelled {
                                 w.set_vision12b_status(SharedString::from("Отменено."));
                             } else {
-                                eprintln!("[overlay-host] 12B vision projector download failed: {e:#}");
+                                eprintln!("[overlay-host] 26B vision projector download failed: {e:#}");
                                 w.set_vision12b_status(SharedString::from(
                                     "Не удалось загрузить проектор зрения. Попробуйте ещё раз.",
                                 ));
@@ -1252,6 +1340,7 @@ pub(crate) fn wire_local_ai(
                         overlay_backend::local_ai::ManagedLlamaChoice::from_config(
                             &c.ai_local_model,
                             c.ai_local_quality,
+                            &c.ai_local_custom_gguf,
                             overlay_backend::local_ai::LocalContextPreset::from_config(
                                 &c.ai_local_context,
                             ),
@@ -1314,7 +1403,7 @@ pub(crate) fn wire_local_ai(
                     if let Some(b) = build {
                         w.set_engine_build(SharedString::from(format!("b{b}")));
                     }
-                    // The engine may now (or no longer) support 12B vision.
+                    // The engine may now (or no longer) support managed vision.
                     w.set_quality_vision_supported(supported);
                     if let Some((quality, base_url, model, local_vision, vision_provider)) =
                         restarted_model
