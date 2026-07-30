@@ -508,25 +508,12 @@ fn sidecar_stderr() -> Stdio {
     Stdio::null()
 }
 
-#[cfg(windows)]
 fn spawn_sidecar(exe: &Path) -> std::io::Result<Proc> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    Command::new(exe)
-        .stdin(Stdio::piped())
+    let mut cmd = Command::new(exe);
+    cmd.stdin(Stdio::piped())
         .stdout(Stdio::null())
-        .stderr(sidecar_stderr())
-        .creation_flags(CREATE_NO_WINDOW)
-        .spawn()
-}
-
-#[cfg(not(windows))]
-fn spawn_sidecar(exe: &Path) -> std::io::Result<Proc> {
-    Command::new(exe)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(sidecar_stderr())
-        .spawn()
+        .stderr(sidecar_stderr());
+    crate::download::no_window(&mut cmd).spawn()
 }
 
 /// `%APPDATA%\suflyor\tts`.

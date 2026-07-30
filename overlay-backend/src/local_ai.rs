@@ -620,10 +620,6 @@ fn hardware_profile_status(profile: HardwareModelProfile) -> String {
     }
 }
 
-/// CREATE_NO_WINDOW — keep the spawned console servers windowless.
-#[cfg(windows)]
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-
 /// `install` returns this exact error message when the user cancels mid-run, so
 /// the UI can show "Отменено" instead of treating it as a failure.
 pub const CANCEL_SENTINEL: &str = "__cancelled__";
@@ -3973,11 +3969,7 @@ fn find_exe(dir: &Path, name: &str) -> Option<PathBuf> {
 fn hidden_command(exe: &str, args: &[&str]) -> Command {
     let mut cmd = Command::new(exe);
     cmd.args(args);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
+    crate::download::no_window(&mut cmd);
     cmd
 }
 

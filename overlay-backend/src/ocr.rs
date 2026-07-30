@@ -139,29 +139,14 @@ pub fn run_ocr(bgra: &[u8], width: u32, height: u32, lang: &str) -> Result<Strin
 /// Spawn tesseract reading the image from stdin and writing text to stdout.
 /// `--oem 1` = LSTM engine (matches the `tessdata_fast` models), `--psm 6` =
 /// assume a single uniform block of text (a selected region).
-#[cfg(windows)]
 fn spawn_tesseract(exe: &Path, tessdata: &Path, lang: &str) -> std::io::Result<Child> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    Command::new(exe)
-        .args(["stdin", "stdout", "-l", lang, "--oem", "1", "--psm", "6"])
+    let mut cmd = Command::new(exe);
+    cmd.args(["stdin", "stdout", "-l", lang, "--oem", "1", "--psm", "6"])
         .env("TESSDATA_PREFIX", tessdata)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .creation_flags(CREATE_NO_WINDOW)
-        .spawn()
-}
-
-#[cfg(not(windows))]
-fn spawn_tesseract(exe: &Path, tessdata: &Path, lang: &str) -> std::io::Result<Child> {
-    Command::new(exe)
-        .args(["stdin", "stdout", "-l", lang, "--oem", "1", "--psm", "6"])
-        .env("TESSDATA_PREFIX", tessdata)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
+        .stderr(Stdio::null());
+    crate::download::no_window(&mut cmd).spawn()
 }
 
 /// Tidy tesseract output for text-to-speech: drop the per-page form-feed it
