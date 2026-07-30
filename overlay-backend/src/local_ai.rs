@@ -189,6 +189,198 @@ impl HardwareModelProfile {
     }
 }
 
+/// User-selected context for Suflyor's managed llama.cpp server.
+///
+/// Manual presets never exceed the confirmed profile's safe live ceiling.
+/// `Auto` stays compact: 16K on known profiles, 8K on unknown hardware.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalContextPreset {
+    Auto,
+    K8,
+    K16,
+    K32,
+    K64,
+    K96,
+}
+
+impl LocalContextPreset {
+    #[must_use]
+    pub fn from_config(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "8k" => Self::K8,
+            "16k" => Self::K16,
+            "32k" => Self::K32,
+            "64k" => Self::K64,
+            "96k" => Self::K96,
+            _ => Self::Auto,
+        }
+    }
+
+    #[must_use]
+    pub const fn as_config(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::K8 => "8k",
+            Self::K16 => "16k",
+            Self::K32 => "32k",
+            Self::K64 => "64k",
+            Self::K96 => "96k",
+        }
+    }
+
+    #[must_use]
+    pub const fn from_index(index: i32) -> Self {
+        match index {
+            1 => Self::K8,
+            2 => Self::K16,
+            3 => Self::K32,
+            4 => Self::K64,
+            5 => Self::K96,
+            _ => Self::Auto,
+        }
+    }
+
+    #[must_use]
+    pub const fn index(self) -> i32 {
+        match self {
+            Self::Auto => 0,
+            Self::K8 => 1,
+            Self::K16 => 2,
+            Self::K32 => 3,
+            Self::K64 => 4,
+            Self::K96 => 5,
+        }
+    }
+
+    #[must_use]
+    pub fn context_tokens(self, profile: HardwareModelProfile, _prep: bool) -> u32 {
+        let safe_live = profile.context_tokens(false);
+        match self {
+            Self::Auto => 16_384.min(safe_live),
+            Self::K8 => 8_192.min(safe_live),
+            Self::K16 => 16_384.min(safe_live),
+            Self::K32 => 32_768.min(safe_live),
+            Self::K64 => 65_536.min(safe_live),
+            Self::K96 => 98_304.min(safe_live),
+        }
+    }
+
+    /// Approximate VRAM change against Auto. A real 26B/F16-KV measurement on
+    /// RTX 5060 Ti showed ~675 MiB per 32K context step.
+    #[must_use]
+    pub fn estimated_vram_delta_mib(self, profile: HardwareModelProfile) -> i32 {
+        let auto = Self::Auto.context_tokens(profile, false) as i64;
+        let selected = self.context_tokens(profile, false) as i64;
+        ((selected - auto) * 675 / 32_768) as i32
+    }
+}
+
+/// Explicit model selected for Suflyor's managed llama.cpp server.
+///
+/// `ai_local_model` already stores the active GGUF name, so keeping the third
+/// state here avoids a config migration. `ai_local_quality` remains the
+/// backwards-compatible 26B flag.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ManagedModel {
+    Legacy4B,
+    Fallback12B,
+    Primary26B,
+}
+
+impl ManagedModel {
+    #[must_use]
+    pub fn from_config(model_id: &str, quality: bool) -> Self {
+        if quality {
+            Self::Primary26B
+        } else if model_id.eq_ignore_ascii_case(LEGACY_GEMMA_FILE) {
+            Self::Legacy4B
+        } else {
+            Self::Fallback12B
+        }
+    }
+
+    #[must_use]
+    pub const fn from_index(index: i32) -> Self {
+        match index {
+            0 => Self::Legacy4B,
+            2 => Self::Primary26B,
+            _ => Self::Fallback12B,
+        }
+    }
+
+    #[must_use]
+    pub const fn index(self) -> i32 {
+        match self {
+            Self::Legacy4B => 0,
+            Self::Fallback12B => 1,
+            Self::Primary26B => 2,
+        }
+    }
+
+    #[must_use]
+    pub const fn file_name(self) -> &'static str {
+        match self {
+            Self::Legacy4B => LEGACY_GEMMA_FILE,
+            Self::Fallback12B => GEMMA_FILE,
+            Self::Primary26B => GEMMA26_FILE,
+        }
+    }
+
+    #[must_use]
+    pub const fn is_quality(self) -> bool {
+        matches!(self, Self::Primary26B)
+    }
+}
+
+/// Approximate total VRAM requirement before launch. The 26B baseline and
+/// context slope come from the owner's RTX 5060 Ti measurements; 4B/12B are
+/// conservative rounded profiles and the UI labels the result as an estimate.
+#[must_use]
+pub fn estimated_total_vram_mib(
+    model: ManagedModel,
+    context: LocalContextPreset,
+    profile: HardwareModelProfile,
+) -> u32 {
+    let auto_mib: u32 = match model {
+        ManagedModel::Legacy4B => 6_144,
+        ManagedModel::Fallback12B => 9_728,
+        ManagedModel::Primary26B => 12_238,
+    };
+    auto_mib
+        .saturating_add_signed(context.estimated_vram_delta_mib(profile))
+        .max(1)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ManagedLlamaChoice {
+    pub model: ManagedModel,
+    pub context: LocalContextPreset,
+}
+
+impl ManagedLlamaChoice {
+    #[must_use]
+    pub const fn new(prefer_quality: bool, context: LocalContextPreset) -> Self {
+        Self {
+            model: if prefer_quality {
+                ManagedModel::Primary26B
+            } else {
+                ManagedModel::Fallback12B
+            },
+            context,
+        }
+    }
+
+    #[must_use]
+    pub const fn for_model(model: ManagedModel, context: LocalContextPreset) -> Self {
+        Self { model, context }
+    }
+
+    #[must_use]
+    pub fn from_config(model_id: &str, quality: bool, context: LocalContextPreset) -> Self {
+        Self::for_model(ManagedModel::from_config(model_id, quality), context)
+    }
+}
+
 /// Whether a profile is in the owner's confirmed 26B-A4B matrix.
 #[must_use]
 pub const fn primary_26b_allowed(profile: HardwareModelProfile) -> bool {
@@ -254,6 +446,7 @@ pub struct InstallOptions {
     pub skip_llama: bool,
     pub skip_whisper: bool,
     pub skip_gigaam: bool,
+    pub context: LocalContextPreset,
 }
 
 impl Default for InstallOptions {
@@ -264,6 +457,7 @@ impl Default for InstallOptions {
             skip_llama: false,
             skip_whisper: false,
             skip_gigaam: false,
+            context: LocalContextPreset::Auto,
         }
     }
 }
@@ -883,7 +1077,14 @@ pub fn install(
         }
         std::thread::sleep(Duration::from_millis(800));
         warn_if_nvidia_vram_busy(Some(on));
-        let gguf = selected_llama_gguf(&llama_dir, prefer_quality);
+        let gguf = selected_llama_gguf(
+            &llama_dir,
+            if prefer_quality {
+                ManagedModel::Primary26B
+            } else {
+                ManagedModel::Fallback12B
+            },
+        );
         let gguf_s = gguf.to_string_lossy().into_owned();
         let alias = gguf
             .file_name()
@@ -898,6 +1099,7 @@ pub fn install(
             mmproj.as_deref(),
             gpu == GpuKind::None,
             launch_profile,
+            opts.context,
             false,
         );
         let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -1010,6 +1212,7 @@ pub fn install(
                     mmproj2.as_deref(),
                     force_cpu,
                     HardwareModelProfile::Fallback12B,
+                    opts.context,
                     false,
                 );
                 let arg_refs: Vec<&str> = fallback_args.iter().map(String::as_str).collect();
@@ -1049,6 +1252,7 @@ pub fn install(
                         mmproj2.as_deref(),
                         true,
                         HardwareModelProfile::Fallback12B,
+                        opts.context,
                         false,
                     );
                     let cpu_refs: Vec<&str> = cpu_args.iter().map(String::as_str).collect();
@@ -1502,26 +1706,28 @@ pub const fn switch_commits_choice(outcome: ModelSwitch) -> bool {
     matches!(outcome, ModelSwitch::Switched)
 }
 
-/// Transactionally switch between the 12B fallback and 26B primary. A target is
+/// Transactionally switch between the managed 4B, 12B, and 26B models. A target is
 /// accepted only after `/models` advertises its exact alias and a minimal chat
 /// completion succeeds. On failure the previous model is relaunched.
 #[must_use]
 pub fn switch_local_model(
     root: &Path,
-    previous_quality: bool,
-    prefer_quality: bool,
+    previous: ManagedLlamaChoice,
+    target: ManagedLlamaChoice,
     want_whisper: bool,
 ) -> (ModelSwitch, Vec<Child>) {
     // This is a worker-only launch boundary. A UI presence query is deliberately
     // stat-only, but loading the primary always performs (or reuses) an exact
     // SHA-256 review before we stop the currently serving fallback.
-    if prefer_quality {
+    if target.model == ManagedModel::Primary26B {
         if !primary_26b_allowed_on_current_hardware() {
             return (ModelSwitch::HardwareUnsupported, Vec::new());
         }
         if !quality_model_verified(root) {
             return (ModelSwitch::TargetUnavailable, Vec::new());
         }
+    } else if !managed_model_present(root, target.model) {
+        return (ModelSwitch::TargetUnavailable, Vec::new());
     }
     let had_llama = llama_reachable();
     let used_vram = had_llama
@@ -1539,8 +1745,8 @@ pub fn switch_local_model(
     let baseline_vram = detect_nvidia_memory_mib().map(|(used, _)| used);
     // Let the OS release the port before the relaunch binds it.
     std::thread::sleep(Duration::from_millis(800));
-    let expected = active_local_model_name(root, prefer_quality);
-    let mut started = ensure_servers(root, true, want_whisper, prefer_quality);
+    let expected = active_local_model_name(root, target.model);
+    let mut started = ensure_servers(root, true, want_whisper, target);
     if started
         .first_mut()
         .is_some_and(|llama| wait_for_expected_llama(&expected, STRICT_LLAMA_READY_BUDGET, llama))
@@ -1556,9 +1762,10 @@ pub fn switch_local_model(
         return (ModelSwitch::FailedToStart, Vec::new());
     }
     std::thread::sleep(Duration::from_millis(800));
-    let rollback_quality = effective_verified_local_quality(root, previous_quality);
-    let rollback_expected = active_local_model_name(root, rollback_quality);
-    let mut rollback = ensure_servers(root, true, want_whisper, rollback_quality);
+    let rollback_model = effective_verified_managed_model(root, previous.model);
+    let rollback_expected = active_local_model_name(root, rollback_model);
+    let rollback_choice = ManagedLlamaChoice::for_model(rollback_model, previous.context);
+    let mut rollback = ensure_servers(root, true, want_whisper, rollback_choice);
     if rollback.first_mut().is_some_and(|llama| {
         wait_for_expected_llama(&rollback_expected, STRICT_LLAMA_READY_BUDGET, llama)
     }) {
@@ -1588,19 +1795,19 @@ pub fn llama_reachable() -> bool {
 /// never touched here (boot launches STT separately). Call from a worker
 /// thread (blocks up to ~21 s on the relaunch+poll path).
 #[must_use]
-pub fn ensure_llama_serving(root: &Path, prefer_quality: bool) -> (ModelSwitch, Vec<Child>) {
+pub fn ensure_llama_serving(root: &Path, choice: ManagedLlamaChoice) -> (ModelSwitch, Vec<Child>) {
     if llama_reachable() {
         // Alive (serving or cold-loading) — do not disturb.
         return (ModelSwitch::Switched, Vec::new());
     }
-    restart_llama_server(root, prefer_quality)
+    restart_llama_server(root, choice)
 }
 
 /// Cold-start or reinstall recovery: reclaim only a managed listener, launch
 /// the effective persisted choice, and require exact-model readiness.
 #[must_use]
-pub fn restart_llama_server(root: &Path, prefer_quality: bool) -> (ModelSwitch, Vec<Child>) {
-    restart_llama_server_for_route(root, prefer_quality, false)
+pub fn restart_llama_server(root: &Path, choice: ManagedLlamaChoice) -> (ModelSwitch, Vec<Child>) {
+    restart_llama_server_for_route(root, choice, false)
 }
 
 /// Restart the managed server with the measured live/prep context profile.
@@ -1608,7 +1815,7 @@ pub fn restart_llama_server(root: &Path, prefer_quality: bool) -> (ModelSwitch, 
 #[must_use]
 pub fn restart_llama_server_for_route(
     root: &Path,
-    prefer_quality: bool,
+    choice: ManagedLlamaChoice,
     prep: bool,
 ) -> (ModelSwitch, Vec<Child>) {
     let had_llama = llama_reachable();
@@ -1625,17 +1832,21 @@ pub fn restart_llama_server_for_route(
     }
     let baseline_vram = detect_nvidia_memory_mib().map(|(used, _)| used);
     std::thread::sleep(Duration::from_millis(800));
-    let effective_quality = prefer_quality
-        && primary_26b_allowed_on_current_hardware()
-        && effective_verified_local_quality(root, true);
-    let expected = active_local_model_name(root, effective_quality);
-    let mut started = ensure_servers_for_route(root, true, false, effective_quality, prep);
+    let effective_model =
+        if choice.model == ManagedModel::Primary26B && !primary_26b_allowed_on_current_hardware() {
+            effective_verified_managed_model(root, ManagedModel::Fallback12B)
+        } else {
+            effective_verified_managed_model(root, choice.model)
+        };
+    let expected = active_local_model_name(root, effective_model);
+    let effective_choice = ManagedLlamaChoice::for_model(effective_model, choice.context);
+    let mut started = ensure_servers_for_route(root, true, false, effective_choice, prep);
     if started
         .first_mut()
         .is_some_and(|llama| wait_for_expected_llama(&expected, STRICT_LLAMA_READY_BUDGET, llama))
     {
         return (
-            if prefer_quality && !effective_quality {
+            if choice.model != effective_model {
                 ModelSwitch::FallbackStarted
             } else {
                 ModelSwitch::Switched
@@ -1648,12 +1859,14 @@ pub fn restart_llama_server_for_route(
         log::warn!("local AI: VRAM did not return to baseline before fallback");
         return (ModelSwitch::FailedToStart, Vec::new());
     }
-    if !effective_quality || !free_llama_port(root) {
+    if effective_model != ManagedModel::Primary26B || !free_llama_port(root) {
         return (ModelSwitch::FailedToStart, Vec::new());
     }
     std::thread::sleep(Duration::from_millis(800));
-    let fallback_expected = active_local_model_name(root, false);
-    let mut fallback = ensure_servers_for_route(root, true, false, false, prep);
+    let fallback_model = effective_verified_managed_model(root, ManagedModel::Fallback12B);
+    let fallback_expected = active_local_model_name(root, fallback_model);
+    let fallback_choice = ManagedLlamaChoice::for_model(fallback_model, choice.context);
+    let mut fallback = ensure_servers_for_route(root, true, false, fallback_choice, prep);
     if fallback.first_mut().is_some_and(|llama| {
         wait_for_expected_llama(&fallback_expected, STRICT_LLAMA_READY_BUDGET, llama)
     }) {
@@ -1691,12 +1904,10 @@ pub fn local_model_label(basename: &str) -> String {
 /// and safe on the UI thread; the worker-side launcher independently resolves
 /// the exact verified GGUF through [`selected_llama_gguf`].
 #[must_use]
-pub fn active_local_model_name(root: &Path, prefer_quality: bool) -> String {
-    if effective_local_quality(root, prefer_quality) {
-        GEMMA26_FILE.to_string()
-    } else {
-        fallback_model_name(root)
-    }
+pub fn active_local_model_name(root: &Path, requested: ManagedModel) -> String {
+    effective_managed_model(root, requested)
+        .file_name()
+        .to_string()
 }
 
 fn fallback_model_name(root: &Path) -> String {
@@ -1722,18 +1933,64 @@ pub fn quality_model_present(root: &Path) -> bool {
     file_has_expected_size(&quality_gguf_path(root), GEMMA26_SIZE)
 }
 
+#[must_use]
+pub fn legacy_model_present(root: &Path) -> bool {
+    file_has_expected_size(
+        &root.join("llama.cpp").join(LEGACY_GEMMA_FILE),
+        LEGACY_GEMMA_SIZE,
+    )
+}
+
+#[must_use]
+pub fn fallback_model_present(root: &Path) -> bool {
+    file_has_expected_size(&root.join("llama.cpp").join(GEMMA_FILE), GEMMA_SIZE)
+}
+
+#[must_use]
+pub fn managed_model_present(root: &Path, model: ManagedModel) -> bool {
+    match model {
+        ManagedModel::Legacy4B => legacy_model_present(root),
+        ManagedModel::Fallback12B => fallback_model_present(root),
+        ManagedModel::Primary26B => quality_model_present(root),
+    }
+}
+
+/// Resolve a requested model using only file metadata, safe for Settings.
+#[must_use]
+pub fn effective_managed_model(root: &Path, requested: ManagedModel) -> ManagedModel {
+    if managed_model_present(root, requested) {
+        requested
+    } else if fallback_model_present(root) {
+        ManagedModel::Fallback12B
+    } else if legacy_model_present(root) {
+        ManagedModel::Legacy4B
+    } else {
+        ManagedModel::Fallback12B
+    }
+}
+
+fn effective_verified_managed_model(root: &Path, requested: ManagedModel) -> ManagedModel {
+    if requested == ManagedModel::Primary26B && quality_model_verified(root) {
+        return requested;
+    }
+    if requested != ManagedModel::Primary26B && managed_model_present(root, requested) {
+        return requested;
+    }
+    if fallback_model_present(root) {
+        ManagedModel::Fallback12B
+    } else if legacy_model_present(root) {
+        ManagedModel::Legacy4B
+    } else {
+        ManagedModel::Fallback12B
+    }
+}
+
 /// Resolve a persisted primary preference to the candidate profile displayed by
 /// Settings. This is intentionally stat-only; worker launch paths use
 /// [`effective_verified_local_quality`] before loading the primary.
 #[must_use]
 pub fn effective_local_quality(root: &Path, requested_quality: bool) -> bool {
     requested_quality && quality_model_present(root)
-}
-
-/// Worker-side counterpart to [`effective_local_quality`]. The 26B becomes a
-/// launch target only after the exact pinned SHA-256 check succeeds.
-fn effective_verified_local_quality(root: &Path, requested_quality: bool) -> bool {
-    requested_quality && quality_model_verified(root)
 }
 
 /// Repair persisted bundled-model state without touching custom local servers.
@@ -1745,8 +2002,8 @@ pub fn repair_managed_model_state(cfg: &mut crate::config::Config, root: &Path) 
     if !is_managed_llama_endpoint(&cfg.ai_local_base_url) {
         return false;
     }
-    let quality = effective_local_quality(root, cfg.ai_local_quality);
-    repair_managed_model_state_for_quality(cfg, root, quality)
+    let requested = ManagedModel::from_config(&cfg.ai_local_model, cfg.ai_local_quality);
+    repair_managed_model_state_for_model(cfg, root, effective_managed_model(root, requested))
 }
 
 /// Worker-only version of [`repair_managed_model_state`]. It is called after a
@@ -1759,8 +2016,12 @@ pub fn repair_managed_model_state_after_verification(
     if !is_managed_llama_endpoint(&cfg.ai_local_base_url) {
         return false;
     }
-    let quality = effective_verified_local_quality(root, cfg.ai_local_quality);
-    repair_managed_model_state_for_quality(cfg, root, quality)
+    let requested = ManagedModel::from_config(&cfg.ai_local_model, cfg.ai_local_quality);
+    repair_managed_model_state_for_model(
+        cfg,
+        root,
+        effective_verified_managed_model(root, requested),
+    )
 }
 
 /// Whether the configured local text endpoint may safely receive an image
@@ -1773,21 +2034,21 @@ pub fn local_vision_enabled(cfg: &crate::config::Config, root: &Path) -> bool {
         && (!is_managed_llama_endpoint(&cfg.ai_local_base_url)
             || managed_model_vision_capable(
                 root,
-                effective_local_quality(root, cfg.ai_local_quality),
+                effective_managed_model(
+                    root,
+                    ManagedModel::from_config(&cfg.ai_local_model, cfg.ai_local_quality),
+                ),
             ))
 }
 
-fn repair_managed_model_state_for_quality(
+fn repair_managed_model_state_for_model(
     cfg: &mut crate::config::Config,
     root: &Path,
-    quality: bool,
+    model: ManagedModel,
 ) -> bool {
-    let model = if quality {
-        GEMMA26_FILE.to_string()
-    } else {
-        fallback_model_name(root)
-    };
-    let vision_capable = managed_model_vision_capable(root, quality);
+    let model_name = model.file_name().to_string();
+    let quality = model.is_quality();
+    let vision_capable = managed_model_vision_capable(root, model);
     let local_vision = cfg.ai_local_vision && vision_capable;
     let vision_provider = if !vision_capable && vision_routes_to_managed_llama(cfg) {
         "off".to_string()
@@ -1796,7 +2057,7 @@ fn repair_managed_model_state_for_quality(
     };
     let changed = cfg.ai_local_base_url != LLAMA_BASE_URL
         || cfg.ai_local_quality != quality
-        || cfg.ai_local_model != model
+        || cfg.ai_local_model != model_name
         || !cfg.ai_local_prep_model.is_empty()
         || cfg.ai_local_vision != local_vision
         || cfg.vision_provider != vision_provider;
@@ -1804,7 +2065,7 @@ fn repair_managed_model_state_for_quality(
     // localhost/[::1] spellings so persisted requests use the same listener.
     cfg.ai_local_base_url = LLAMA_BASE_URL.to_string();
     cfg.ai_local_quality = quality;
-    cfg.ai_local_model = model;
+    cfg.ai_local_model = model_name;
     cfg.ai_local_prep_model.clear();
     cfg.ai_local_vision = local_vision;
     cfg.vision_provider = vision_provider;
@@ -1896,18 +2157,29 @@ pub fn local_model_resource_warning(root: &Path, base_url: &str, model_id: &str)
 /// Centralised so `ensure_servers` and `install`'s launch agree. Does the disk
 /// check then defers the choice to the pure [`pick_llama_gguf`] (unit-tested
 /// without materialising a 6 GB file).
-fn selected_llama_gguf(llama_dir: &Path, prefer_quality: bool) -> PathBuf {
-    if !prefer_quality {
-        // The RAM-safe fallback never needs the optional primary, so do not
-        // stream 10.5 GB merely to start the 12B server.
-        return fallback_llama_gguf(llama_dir);
+fn selected_llama_gguf(llama_dir: &Path, model: ManagedModel) -> PathBuf {
+    match model {
+        ManagedModel::Primary26B => {
+            // Selection is a worker-only launch boundary. The exact pinned hash
+            // is rechecked here (or served from the matching metadata cache).
+            let present = cached_pinned_file_matches(
+                &llama_dir.join(GEMMA26_FILE),
+                GEMMA26_SIZE,
+                GEMMA26_SHA256,
+            );
+            pick_llama_gguf(llama_dir, model, present)
+        }
+        ManagedModel::Legacy4B => pick_llama_gguf(
+            llama_dir,
+            model,
+            file_has_expected_size(&llama_dir.join(LEGACY_GEMMA_FILE), LEGACY_GEMMA_SIZE),
+        ),
+        ManagedModel::Fallback12B => pick_llama_gguf(
+            llama_dir,
+            model,
+            file_has_expected_size(&llama_dir.join(GEMMA_FILE), GEMMA_SIZE),
+        ),
     }
-    // Selection is a worker-only launch boundary. The exact pinned hash is
-    // rechecked here (or served from the matching metadata cache), never from
-    // the Settings/UI path.
-    let present =
-        cached_pinned_file_matches(&llama_dir.join(GEMMA26_FILE), GEMMA26_SIZE, GEMMA26_SHA256);
-    pick_llama_gguf(llama_dir, prefer_quality, present)
 }
 
 /// Prefer the current 12B fallback, but keep the previous 4B artifact
@@ -1930,12 +2202,12 @@ fn complete_fallback_llama_gguf(llama_dir: &Path) -> Option<PathBuf> {
     }
 }
 
-/// Pure model-choice rule (no I/O): 26B only when wanted and present.
-fn pick_llama_gguf(llama_dir: &Path, prefer_quality: bool, quality_present: bool) -> PathBuf {
-    if prefer_quality && quality_present {
-        llama_dir.join(GEMMA26_FILE)
+/// Pure model-choice rule (no I/O): an explicit model only when complete.
+fn pick_llama_gguf(llama_dir: &Path, model: ManagedModel, target_present: bool) -> PathBuf {
+    if target_present {
+        llama_dir.join(model.file_name())
     } else {
-        llama_dir.join(GEMMA_FILE)
+        fallback_llama_gguf(llama_dir)
     }
 }
 
@@ -2043,12 +2315,12 @@ fn mmproj_for_model(llama_dir: &Path, gguf: &Path) -> Option<PathBuf> {
 
 /// Whether the effective managed profile can accept screenshots on the server
 /// Suflyor launches. The 26B primary has no pinned projector in this candidate.
-fn managed_model_vision_capable(root: &Path, quality: bool) -> bool {
-    if quality || !base_model_present(root) {
+fn managed_model_vision_capable(root: &Path, model: ManagedModel) -> bool {
+    if model != ManagedModel::Fallback12B || !base_model_present(root) {
         return false;
     }
     let llama_dir = root.join("llama.cpp");
-    mmproj_for_model(&llama_dir, &fallback_llama_gguf(&llama_dir)).is_some()
+    mmproj_for_model(&llama_dir, &llama_dir.join(GEMMA_FILE)).is_some()
 }
 
 /// True when F8's configured route resolves back to Suflyor's managed text
@@ -2472,24 +2744,23 @@ pub fn sweep_orphaned_engine_artifacts(root: &Path) {
 /// already running (the app kills its servers on quit, so after a restart
 /// following an in-app install they'd be down). Uses the binaries + models
 /// under `root` (the installer/script layout); skips a server whose port
-/// already answers. `prefer_quality` picks the 12B GGUF when present (see
-/// [`selected_llama_gguf`]). Best-effort — a missing binary just means that
+/// already answers. Best-effort — a missing binary just means that
 /// server is not started. Returns the launched child handles for kill-on-quit.
 #[must_use]
 pub fn ensure_servers(
     root: &Path,
     want_llama: bool,
     want_whisper: bool,
-    prefer_quality: bool,
+    choice: ManagedLlamaChoice,
 ) -> Vec<Child> {
-    ensure_servers_for_route(root, want_llama, want_whisper, prefer_quality, false)
+    ensure_servers_for_route(root, want_llama, want_whisper, choice, false)
 }
 
 fn ensure_servers_for_route(
     root: &Path,
     want_llama: bool,
     want_whisper: bool,
-    prefer_quality: bool,
+    choice: ManagedLlamaChoice,
     prep: bool,
 ) -> Vec<Child> {
     let mut started = Vec::new();
@@ -2506,7 +2777,7 @@ fn ensure_servers_for_route(
     if want_llama && !is_reachable(&format!("{LLAMA_BASE_URL}/models")) {
         warn_if_nvidia_vram_busy(None);
         let llama_dir = root.join("llama.cpp");
-        let gguf = selected_llama_gguf(&llama_dir, prefer_quality);
+        let gguf = selected_llama_gguf(&llama_dir, choice.model);
         // The MATCHING vision projector for the selected model, if downloaded
         // (12B QAT ↔ mmproj-12b-F16). A mismatched projector
         // crashes llama-server on model load; a missing one → the model runs
@@ -2521,13 +2792,14 @@ fn ensure_servers_for_route(
                     .map(|name| name.to_string_lossy().into_owned())
                     .unwrap_or_default();
                 let detected = detected_hardware_model_profile(!use_gpu);
-                let profile = profile_for_model(detected, prefer_quality);
+                let profile = profile_for_model(detected, choice.model.is_quality());
                 let args = llama_server_args(
                     &gguf_s,
                     &alias,
                     mmproj_s.as_deref(),
                     !use_gpu,
                     profile,
+                    choice.context,
                     prep,
                 );
                 let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -2574,6 +2846,7 @@ fn llama_server_args(
     mmproj: Option<&str>,
     force_cpu: bool,
     profile: HardwareModelProfile,
+    context: LocalContextPreset,
     prep: bool,
 ) -> Vec<String> {
     let mut args = vec![
@@ -2586,7 +2859,7 @@ fn llama_server_args(
         "--port".to_string(),
         LLAMA_PORT.to_string(),
         "-c".to_string(),
-        profile.context_tokens(prep).to_string(),
+        context.context_tokens(profile, prep).to_string(),
         "--jinja".to_string(),
     ];
     if force_cpu {
@@ -2639,7 +2912,7 @@ fn llama_server_args(
     log::info!(
         "local-ai launch: profile={profile:?}, route={}, context_tokens={}, model={alias}",
         if prep { "prep" } else { "live" },
-        profile.context_tokens(prep)
+        context.context_tokens(profile, prep)
     );
     args
 }

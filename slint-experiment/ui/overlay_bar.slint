@@ -13,6 +13,10 @@ import { Button, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Metrics } from "metrics.slint";
 
+global OverlayCursorPolicy {
+    in-out property <bool> force-arrow: false;
+}
+
 // ===== Reusable chip primitives =====
 
 component IconSlot inherits Rectangle {
@@ -116,7 +120,7 @@ component Chip inherits Rectangle {
         }
     }
     ta := TouchArea {
-        mouse-cursor: pointer;
+        mouse-cursor: OverlayCursorPolicy.force-arrow ? default : pointer;
         clicked => { root.clicked(); }
     }
 }
@@ -171,7 +175,7 @@ component LockChip inherits Rectangle {
         }
     }
     ta := TouchArea {
-        mouse-cursor: pointer;
+        mouse-cursor: OverlayCursorPolicy.force-arrow ? default : pointer;
         clicked => {
             root.clicked();
         }
@@ -320,7 +324,7 @@ component RecordBtn inherits Rectangle {
         }
     }
     TouchArea {
-        mouse-cursor: pointer;
+        mouse-cursor: OverlayCursorPolicy.force-arrow ? default : pointer;
         pointer-event(ev) => {
             if (ev.button == PointerEventButton.left) {
                 if (ev.kind == PointerEventKind.down) {
@@ -463,6 +467,9 @@ export component OverlayBarWindow inherits Window {
     in-out property <bool> aggressive-active: false;
     // E10.2 — stealth on/off, so the 🎯 chip lights up + reflects restored state.
     in-out property <bool> stealth-active: false;
+    changed stealth-active => {
+        OverlayCursorPolicy.force-arrow = root.stealth-active;
+    }
 
     // Phase E6 v11 — live status indicators. `last-transcript-line`
     // shows the most recent STT output (truncated by Rust to ~120
@@ -594,7 +601,7 @@ export component OverlayBarWindow inherits Window {
                 horizontal-stretch: 0;
                 // Drag handle — press-and-drag to move the whole bar.
                 TouchArea {
-                    mouse-cursor: grab;
+                    mouse-cursor: OverlayCursorPolicy.force-arrow ? default : grab;
                     pointer-event(ev) => {
                         if (ev.button == PointerEventButton.left
                             && ev.kind == PointerEventKind.down) {
@@ -1025,7 +1032,7 @@ export component OverlayBarWindow inherits Window {
                     // so it never needs the cap).
                     max-width: 150px;
                     TouchArea {
-                        mouse-cursor: grab;
+                        mouse-cursor: OverlayCursorPolicy.force-arrow ? default : grab;
                         pointer-event(ev) => {
                             if (ev.button == PointerEventButton.left
                                 && ev.kind == PointerEventKind.down) {

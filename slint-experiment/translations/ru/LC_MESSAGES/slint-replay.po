@@ -757,6 +757,48 @@ msgstr "Загрузка…"
 msgid "Bundled model profile. The 26B primary is selected only for the confirmed VRAM/RAM matrix; 12B QAT remains the RAM-safe fallback."
 msgstr "Профиль встроенной модели. Основная 26B выбирается только по подтверждённой матрице VRAM/RAM; 12B QAT остаётся безопасным для RAM резервом."
 
+msgid "Context window"
+msgstr "Окно контекста"
+
+msgid "[on] Auto"
+msgstr "[выбрано] Авто"
+
+msgid "8K"
+msgstr "8K"
+
+msgid "[on] 8K"
+msgstr "[выбрано] 8K"
+
+msgid "16K"
+msgstr "16K"
+
+msgid "[on] 16K"
+msgstr "[выбрано] 16K"
+
+msgid "32K"
+msgstr "32K"
+
+msgid "[on] 32K"
+msgstr "[выбрано] 32K"
+
+msgid "64K"
+msgstr "64K"
+
+msgid "[on] 64K"
+msgstr "[выбрано] 64K"
+
+msgid "96K"
+msgstr "96K"
+
+msgid "[on] 96K"
+msgstr "[выбрано] 96K"
+
+msgid "Auto uses a compact {}K context."
+msgstr "Авто использует компактный контекст {}K."
+
+msgid "The selected context is fixed for live answers and long summaries."
+msgstr "Выбранный контекст фиксирован для живых ответов и длинных итогов."
+
 msgid "Fallback (12B QAT)"
 msgstr "Резерв (12B QAT)"
 
@@ -772,11 +814,62 @@ msgstr "[выбрано] Основная (26B-A4B)"
 msgid "Download primary model (9.8 GiB)"
 msgstr "Скачать основную модель (9,8 ГиБ)"
 
+msgid "Download only 26B (9.8 GiB)"
+msgstr "Скачать только 26B (9,8 ГиБ)"
+
 msgid "Bundled 12B/26B controls manage only Suflyor's own llama.cpp endpoint."
 msgstr "Управление встроенными 12B/26B работает только с собственным endpoint llama.cpp Suflyor."
 
+msgid "Choose the local model explicitly. Estimated total VRAM at Auto (model + context + runtime): 4B ~6 GiB, 12B ~9.5 GiB, 26B ~12 GiB."
+msgstr "Выберите локальную модель явно. Оценка общей VRAM в Auto (модель + контекст + служебная память): 4B ~6 ГиБ, 12B ~9,5 ГиБ, 26B ~12 ГиБ."
+
+msgid "Fast (4B)"
+msgstr "Быстрая (4B)"
+
+msgid "[on] Fast (4B)"
+msgstr "[x] Быстрая (4B)"
+
+msgid "Balanced (12B QAT)"
+msgstr "Сбалансированная (12B QAT)"
+
+msgid "[on] Balanced (12B QAT)"
+msgstr "[x] Сбалансированная (12B QAT)"
+
+msgid "Maximum (26B-A4B)"
+msgstr "Максимальная (26B-A4B)"
+
+msgid "[on] Maximum (26B-A4B)"
+msgstr "[x] Максимальная (26B-A4B)"
+
+msgid "Active"
+msgstr "активна"
+
+msgid "Installed"
+msgstr "установлена"
+
+msgid "Not installed"
+msgstr "не установлена"
+
+msgid "Bundled 4B/12B/26B controls manage only Suflyor's own llama.cpp endpoint."
+msgstr "Управление встроенными 4B/12B/26B работает только с собственным endpoint llama.cpp Suflyor."
+
+msgid "Selected: Auto ({}K)"
+msgstr "Выбрано: Auto ({}K)"
+
+msgid "Selected: {}K"
+msgstr "Выбрано: {}K"
+
+msgid "Applying…"
+msgstr "Применение…"
+
+msgid "Apply context"
+msgstr "Применить контекст"
+
 msgid "Installs the local stack with Gemma 4 12B QAT as the fallback. On confirmed 8/32, 12/24-32 or 16/32 GB VRAM/RAM profiles it also installs the pinned Gemma 4 26B-A4B primary. Existing verified models are reused."
 msgstr "Устанавливает локальный стек с Gemma 4 12B QAT как резервом. Для подтверждённых профилей VRAM/RAM 8/32, 12/24–32 или 16/32 ГБ также устанавливается закреплённая основная Gemma 4 26B-A4B. Существующие проверенные модели используются повторно."
+
+msgid "Installs or completes the local stack: llama.cpp, the 12B fallback, speech components, and 26B on supported hardware. Complete verified files are reused; partial downloads resume. The optional 4B profile is kept when already present."
+msgstr "Устанавливает или дополняет локальный стек: llama.cpp, резервную 12B, речевые компоненты и 26B на поддерживаемом оборудовании. Готовые проверенные файлы используются повторно, а частичные загрузки продолжаются. Необязательная 4B сохраняется, если уже установлена."
 
 msgid "Engine (llama.cpp). The app checks it weekly and verifies a new build before replacing the current one."
 msgstr "Движок (llama.cpp). Приложение проверяет его раз в неделю и проверяет новую сборку перед заменой текущей."
@@ -807,6 +900,9 @@ msgstr "Установлено: {}"
 
 msgid "Install local AI"
 msgstr "Установить локальный AI"
+
+msgid "Install / complete local AI"
+msgstr "Установить / докачать локальный AI"
 
 msgid "Installing…"
 msgstr "Установка…"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Slint MCP UI Audit"
+  short_description: "Validate Suflyor UI with live Slint screenshots"
+  default_prompt: "Use $slint-mcp-ui-audit to validate the changed Suflyor UI with live Slint MCP screenshots."

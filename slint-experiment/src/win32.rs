@@ -22,20 +22,91 @@
 #![allow(clippy::missing_errors_doc)]
 
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use windows::Win32::Foundation::{HWND, RECT};
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Dwm::{
     DwmEnableBlurBehindWindow, DwmExtendFrameIntoClientArea, DwmIsCompositionEnabled,
     DWM_BB_BLURREGION, DWM_BB_ENABLE, DWM_BLURBEHIND,
 };
 use windows::Win32::Graphics::Gdi::{CreateRectRgn, DeleteObject};
 use windows::Win32::UI::Controls::MARGINS;
+use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetWindowLongPtrW, SetWindowDisplayAffinity, SetWindowLongPtrW, SetWindowPos, ShowWindow,
-    GWL_EXSTYLE, GWL_STYLE, HWND_NOTOPMOST, HWND_TOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE,
-    SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE, SW_SHOWNOACTIVATE, WDA_EXCLUDEFROMCAPTURE,
-    WDA_NONE, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_MAXIMIZEBOX, WS_MINIMIZEBOX,
-    WS_SYSMENU,
+    GetWindowDisplayAffinity, GetWindowLongPtrW, KillTimer, LoadCursorW, SetCursor, SetTimer,
+    SetWindowDisplayAffinity, SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, GWL_STYLE,
+    HWND_NOTOPMOST, HWND_TOPMOST, IDC_ARROW, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
+    SWP_NOSIZE, SWP_NOZORDER, SW_HIDE, SW_SHOWNOACTIVATE, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
+    WM_MOUSEMOVE, WM_SETCURSOR, WM_TIMER, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
+    WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SYSMENU,
 };
+
+const STEALTH_CURSOR_SUBCLASS_ID: usize = 0x55F1_0001;
+const STEALTH_CURSOR_TIMER_ID: usize = 0x55F1_0002;
+
+fn restore_arrow_after_message(message: u32) -> bool {
+    message == WM_MOUSEMOVE
+}
+
+unsafe fn force_arrow_if_stealthed(hwnd: HWND) -> bool {
+    let mut affinity = 0;
+    if unsafe { GetWindowDisplayAffinity(hwnd, &mut affinity) }.is_err()
+        || affinity != WDA_EXCLUDEFROMCAPTURE.0
+    {
+        return false;
+    }
+    let Ok(cursor) = (unsafe { LoadCursorW(None, IDC_ARROW) }) else {
+        return false;
+    };
+    unsafe {
+        SetCursor(Some(cursor));
+    }
+    true
+}
+
+/// WDA hides window pixels from capture, but the OS cursor remains visible.
+/// Keep the normal arrow over stealthed windows without swallowing mouse input.
+unsafe extern "system" fn stealth_cursor_subclass_proc(
+    hwnd: HWND,
+    message: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+    _subclass_id: usize,
+    _ref_data: usize,
+) -> LRESULT {
+    if message == WM_SETCURSOR && unsafe { force_arrow_if_stealthed(hwnd) } {
+        return LRESULT(1);
+    }
+    if message == WM_TIMER && wparam.0 == STEALTH_CURSOR_TIMER_ID {
+        let _ = unsafe { KillTimer(Some(hwnd), STEALTH_CURSOR_TIMER_ID) };
+        let _ = unsafe { force_arrow_if_stealthed(hwnd) };
+        return LRESULT(0);
+    }
+
+    let result = unsafe { DefSubclassProc(hwnd, message, wparam, lparam) };
+    // Slint handles the pointer event after this native callback returns and
+    // calls SetCursor directly. Restore once after its deferred work runs.
+    if restore_arrow_after_message(message) && unsafe { force_arrow_if_stealthed(hwnd) } {
+        unsafe {
+            SetTimer(Some(hwnd), STEALTH_CURSOR_TIMER_ID, 1, None);
+        }
+    }
+    result
+}
+
+fn install_stealth_cursor_guard(hwnd: HWND) -> Result<(), Box<dyn std::error::Error>> {
+    let installed = unsafe {
+        SetWindowSubclass(
+            hwnd,
+            Some(stealth_cursor_subclass_proc),
+            STEALTH_CURSOR_SUBCLASS_ID,
+            0,
+        )
+    };
+    if installed.as_bool() {
+        Ok(())
+    } else {
+        Err(windows::core::Error::from_thread().into())
+    }
+}
 
 /// Extract a raw Win32 HWND from any Slint window. Requires the
 /// `raw-window-handle-06` feature on `slint`.
@@ -245,6 +316,7 @@ pub fn set_stealth(hwnd: HWND, on: bool) -> Result<(), Box<dyn std::error::Error
     unsafe {
         SetWindowDisplayAffinity(hwnd, affinity)?;
     }
+    install_stealth_cursor_guard(hwnd)?;
     Ok(())
 }
 
@@ -914,5 +986,18 @@ pub fn send_ctrl_c() {
     ];
     unsafe {
         SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use super::*;
+
+    #[test]
+    fn stealth_cursor_guard_defers_mouse_move_restore() {
+        assert!(restore_arrow_after_message(WM_MOUSEMOVE));
+        assert!(!restore_arrow_after_message(WM_SETCURSOR));
     }
 }

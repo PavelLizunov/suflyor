@@ -60,7 +60,10 @@ pub fn status(cfg: &Config) -> Vec<ComponentStatus> {
     let base = crate::local_ai::base_model_present(&root);
     let quality = crate::local_ai::quality_model_present(&root);
     let fallback = base.then(|| {
-        crate::local_ai::local_model_label(&crate::local_ai::active_local_model_name(&root, false))
+        crate::local_ai::local_model_label(&crate::local_ai::active_local_model_name(
+            &root,
+            crate::local_ai::ManagedModel::Fallback12B,
+        ))
     });
     let local_model = ComponentStatus {
         kind: ComponentKind::LocalModel,
