@@ -528,15 +528,6 @@ pub(crate) fn wire_local_ai(
             if !w.get_managed_local_server() {
                 return;
             }
-            if custom_path.is_none()
-                && want_model.is_quality()
-                && !w.get_quality_selection_allowed()
-            {
-                w.set_quality_status(SharedString::from(
-                    "26B-A4B доступна только для подтверждённой матрицы VRAM/RAM.",
-                ));
-                return;
-            }
             let root = overlay_backend::local_ai::default_root();
             if custom_path.is_none()
                 && !overlay_backend::local_ai::managed_model_present(&root, want_model)
@@ -1015,12 +1006,6 @@ pub(crate) fn wire_local_ai(
             let Some(w) = weak.upgrade() else { return };
             if w.get_quality_downloading() {
                 return; // re-entry guard (same window)
-            }
-            if !w.get_quality_selection_allowed() {
-                w.set_quality_status(SharedString::from(
-                    "26B-A4B доступна только для подтверждённой матрицы VRAM/RAM.",
-                ));
-                return;
             }
             // B3 — process-global dedup (survives Settings reopen) + RAII release.
             let Some(busy_guard) = slint_replay::app_state::LocalAiBusyGuard::try_acquire({

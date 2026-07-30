@@ -1548,3 +1548,74 @@ fn archive_entry_safety_rejects_zip_slip() {
     // (tar may emit "./"-prefixed entries).
     assert!(archive_entry_is_safe("./build/x.dll"));
 }
+
+// ---- v0.35.2: all built-in profiles remain selectable on ANY hardware -------
+
+#[test]
+fn all_managed_models_accessible_regardless_of_hardware() {
+    // Every built-in profile index resolves to a distinct model with a valid
+    // file name, independent of the detected hardware profile.
+    let models = [
+        ManagedModel::from_index(0),
+        ManagedModel::from_index(1),
+        ManagedModel::from_index(2),
+    ];
+    assert_eq!(models[0], ManagedModel::Legacy4B);
+    assert_eq!(models[1], ManagedModel::Fallback12B);
+    assert_eq!(models[2], ManagedModel::Primary26B);
+    for m in &models {
+        assert!(!m.file_name().is_empty());
+    }
+    // Round-trip through index.
+    for m in models {
+        assert_eq!(ManagedModel::from_index(m.index()), m);
+    }
+}
+
+#[test]
+fn low_hardware_profile_is_recommendation_only() {
+    // 6 GiB NVIDIA + 16 GiB RAM → Unknown (not in the confirmed matrix).
+    let profile = hardware_profile_from_discovery(false, Some(6), Some(16));
+    assert_eq!(profile, HardwareModelProfile::Unknown);
+    // The recommendation flag is false…
+    assert!(!primary_26b_allowed(profile));
+    // …but every ManagedModel variant is still constructible and the hardware
+    // profile does NOT gate model access.
+    assert_eq!(ManagedModel::from_index(2), ManagedModel::Primary26B);
+    assert_eq!(
+        ManagedModel::Primary26B.file_name(),
+        "gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf"
+    );
+}
+
+#[test]
+fn sixteen_vram_31_ram_normalizes_and_exposes_all_profiles() {
+    // Owner's machine with iGPU: 16 GiB VRAM, 31 GiB usable RAM.
+    let profile = hardware_profile_from_discovery(false, Some(16), Some(31));
+    assert_eq!(profile, HardwareModelProfile::Primary26Vram16);
+    assert!(primary_26b_allowed(profile));
+    // All three models remain accessible.
+    for idx in 0..3 {
+        let m = ManagedModel::from_index(idx);
+        assert!(!m.file_name().is_empty());
+    }
+}
+
+#[test]
+fn unknown_hardware_does_not_block_26b_download_path() {
+    // download_quality_model no longer bails on hardware. Verify the function
+    // proceeds past the hardware check by calling it with a temp root and an
+    // immediate cancel — it must NOT return the old hardware-rejection error.
+    let root = tempfile::tempdir().unwrap();
+    let cancel = std::sync::atomic::AtomicBool::new(true);
+    let result = download_quality_model(root.path(), &cancel, &|_| {});
+    // The cancel flag is set, so the download aborts with a cancellation error
+    // (or a mkdir/network error), but NEVER with the old hardware bail message.
+    if let Err(e) = result {
+        let msg = format!("{e:#}");
+        assert!(
+            !msg.contains("confirmed VRAM/RAM hardware profile"),
+            "hardware must not reject the download: {msg}"
+        );
+    }
+}

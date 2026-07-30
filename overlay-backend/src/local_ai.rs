@@ -499,12 +499,7 @@ fn effective_llama_choice(root: &Path, choice: &ManagedLlamaChoice) -> ManagedLl
     if let Some(path) = valid_custom_choice_path(choice) {
         return ManagedLlamaChoice::for_custom(path, choice.context);
     }
-    let model =
-        if choice.model == ManagedModel::Primary26B && !primary_26b_allowed_on_current_hardware() {
-            effective_verified_managed_model(root, ManagedModel::Fallback12B)
-        } else {
-            effective_verified_managed_model(root, choice.model)
-        };
+    let model = effective_verified_managed_model(root, choice.model);
     ManagedLlamaChoice::for_model(model, choice.context)
 }
 
@@ -1936,9 +1931,6 @@ pub fn switch_local_model(
             return (ModelSwitch::TargetUnavailable, Vec::new());
         }
     } else if target.model == ManagedModel::Primary26B {
-        if !primary_26b_allowed_on_current_hardware() {
-            return (ModelSwitch::HardwareUnsupported, Vec::new());
-        }
         if !quality_model_verified(root) {
             return (ModelSwitch::TargetUnavailable, Vec::new());
         }
@@ -2470,15 +2462,17 @@ fn pick_llama_gguf(llama_dir: &Path, model: ManagedModel, target_present: bool) 
 /// the caller flips `ai_local_quality` and restarts so the new GGUF loads.
 ///
 /// # Errors
-/// Hardware outside the confirmed matrix, network/disk failure, cancellation,
-/// or a SHA-256 mismatch after download.
+/// Network/disk failure, cancellation, or a SHA-256 mismatch after download.
 pub fn download_quality_model(
     root: &Path,
     cancel: &AtomicBool,
     on: &dyn Fn(Progress),
 ) -> Result<()> {
     if !primary_26b_allowed_on_current_hardware() {
-        bail!("Gemma 26B-A4B requires a confirmed VRAM/RAM hardware profile");
+        log::warn!(
+            "local-ai: hardware outside the confirmed matrix — 26B may exceed VRAM, \
+             spill into system RAM, run slowly, or fail; user accepted the risk"
+        );
     }
     let llama_dir = root.join("llama.cpp");
     std::fs::create_dir_all(&llama_dir)

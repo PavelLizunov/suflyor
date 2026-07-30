@@ -452,8 +452,9 @@ export component SettingsWindow inherits Window {
     in-out property <bool> legacy-model-present: false;
     in-out property <bool> fallback-model-present: false;
     in-out property <bool> quality-model-present: false;
-    // True only after Rust confirms the current VRAM/RAM pair is in the
-    // owner-approved 26B matrix. It defaults to false while discovery runs.
+    // True when Rust confirms the current VRAM/RAM pair is in the
+    // owner-approved 26B matrix. Used only for a non-blocking warning;
+    // all model profiles remain selectable regardless of this flag.
     in-out property <bool> quality-selection-allowed: false;
     in-out property <bool> quality-downloading: false;
     in-out property <bool> model-switching: false; // server relaunch in flight
@@ -2300,9 +2301,8 @@ export component SettingsWindow inherits Window {
                                     height: 32px;
                                     text: @tr("Maximum (26B-A4B)") + " - " +
                                         (!root.ai-local-custom-active && root.ai-local-model-profile-index == 2 ? @tr("Active") :
-                                         !root.quality-selection-allowed ? @tr("Requires supported hardware") :
                                          root.quality-model-present ? @tr("Installed") : @tr("Download"));
-                                    enabled: root.quality-selection-allowed && root.managed-local-server && (root.ai-local-custom-active || root.ai-local-model-profile-index != 2 || !root.quality-model-present) && !root.quality-downloading && !root.model-switching && !root.local-ai-installing && !root.vision12b-downloading;
+                                    enabled: root.managed-local-server && (root.ai-local-custom-active || root.ai-local-model-profile-index != 2 || !root.quality-model-present) && !root.quality-downloading && !root.model-switching && !root.local-ai-installing && !root.vision12b-downloading;
                                     clicked => {
                                         if root.quality-model-present {
                                             root.model-profile-changed(2);
@@ -2311,6 +2311,12 @@ export component SettingsWindow inherits Window {
                                         }
                                     }
                                 }
+                            }
+                            if !root.quality-selection-allowed && root.managed-local-server : Text {
+                                text: @tr("Hardware not in the confirmed matrix. The model may exceed VRAM, spill into system RAM, run very slowly, or fail. You accept this risk.");
+                                font-size: 10px;
+                                color: Theme.warning;
+                                wrap: word-wrap;
                             }
                             if root.quality-downloading : HorizontalLayout {
                                 spacing: 6px;
