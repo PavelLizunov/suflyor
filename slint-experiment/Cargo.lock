@@ -6298,9 +6298,9 @@ dependencies = [
 
 [[package]]
 name = "timestretch"
-version = "0.5.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29bc0137b834925d73c1e81db0460ca58a33e37d84951d8f582732d4d0af302e"
+checksum = "8ac2653c1c01fa2f5ce5fe215829628693d519444d822fe1fdcd4a8d85171f5b"
 dependencies = [
  "arc-swap",
  "rustfft",
