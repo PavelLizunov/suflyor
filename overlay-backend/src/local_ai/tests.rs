@@ -611,6 +611,128 @@ fn only_nvidia_discovery_enters_the_confirmed_matrix() {
 }
 
 #[test]
+fn normalization_snaps_near_nominal_readings_to_approved_tiers() {
+    // VRAM: ±1 GiB around each approved tier (8, 12, 16).
+    assert_eq!(normalize_vram_gib(7), 8);
+    assert_eq!(normalize_vram_gib(8), 8);
+    assert_eq!(normalize_vram_gib(9), 8);
+    assert_eq!(normalize_vram_gib(11), 12);
+    assert_eq!(normalize_vram_gib(12), 12);
+    assert_eq!(normalize_vram_gib(13), 12);
+    assert_eq!(normalize_vram_gib(15), 16);
+    assert_eq!(normalize_vram_gib(16), 16);
+    assert_eq!(normalize_vram_gib(17), 16);
+
+    // RAM: ±1 GiB around each approved tier (16, 24, 32).
+    assert_eq!(normalize_ram_gib(15), 16);
+    assert_eq!(normalize_ram_gib(16), 16);
+    assert_eq!(normalize_ram_gib(17), 16);
+    assert_eq!(normalize_ram_gib(23), 24);
+    assert_eq!(normalize_ram_gib(24), 24);
+    assert_eq!(normalize_ram_gib(25), 24);
+    assert_eq!(normalize_ram_gib(31), 32);
+    assert_eq!(normalize_ram_gib(32), 32);
+    assert_eq!(normalize_ram_gib(33), 32);
+}
+
+#[test]
+fn normalization_never_promotes_clearly_smaller_hardware() {
+    // 6 GiB VRAM is 2 away from the 8 GiB tier — must stay 6.
+    assert_eq!(normalize_vram_gib(6), 6);
+    assert_eq!(normalize_vram_gib(4), 4);
+    assert_eq!(normalize_vram_gib(10), 10);
+    assert_eq!(normalize_vram_gib(14), 14);
+    assert_eq!(normalize_vram_gib(18), 18);
+
+    // RAM clearly below a tier stays put.
+    assert_eq!(normalize_ram_gib(14), 14);
+    assert_eq!(normalize_ram_gib(22), 22);
+    assert_eq!(normalize_ram_gib(26), 26);
+    assert_eq!(normalize_ram_gib(30), 30);
+    assert_eq!(normalize_ram_gib(34), 34);
+
+    // End-to-end: 6 GiB VRAM + 32 GiB RAM must remain Unknown.
+    assert_eq!(
+        hardware_profile_from_discovery(false, Some(6), Some(32)),
+        HardwareModelProfile::Unknown,
+        "6 GiB VRAM must never enter the confirmed 26B matrix"
+    );
+}
+
+#[test]
+fn igpu_ram_reservation_snaps_to_existing_profile() {
+    // Owner's machine: 16 GiB NVIDIA + 32 GiB installed, iGPU reserves ~1 GiB
+    // → TotalPhysicalMemory reports 31 GiB usable.
+    assert_eq!(
+        hardware_profile_from_discovery(false, Some(16), Some(31)),
+        HardwareModelProfile::Primary26Vram16,
+        "16/31 must snap to the 16/32 profile (iGPU reservation)"
+    );
+    // Same for the 8 GiB VRAM tier.
+    assert_eq!(
+        hardware_profile_from_discovery(false, Some(8), Some(31)),
+        HardwareModelProfile::Primary26Vram8,
+        "8/31 must snap to the 8/32 profile"
+    );
+    // 12 GiB VRAM tier already accepts 24..=32, so 31 matches without
+    // normalization — verify it still works through the pipeline.
+    assert_eq!(
+        hardware_profile_from_discovery(false, Some(12), Some(31)),
+        HardwareModelProfile::Primary26Vram12
+    );
+    // Fallback tier: 8/15 → 8/16.
+    assert_eq!(
+        hardware_profile_from_discovery(false, Some(8), Some(15)),
+        HardwareModelProfile::Fallback12B,
+        "8/15 must snap to the 8/16 fallback profile"
+    );
+}
+
+#[test]
+fn near_nominal_vram_snaps_to_existing_profile() {
+    // 15 GiB reported for a 16 GiB card (firmware underreport).
+    assert_eq!(
+        hardware_profile_from_discovery(false, Some(15), Some(32)),
+        HardwareModelProfile::Primary26Vram16,
+        "15/32 must snap to the 16/32 profile"
+    );
+    // 11 GiB reported for a 12 GiB card.
+    assert_eq!(
+        hardware_profile_from_discovery(false, Some(11), Some(32)),
+        HardwareModelProfile::Primary26Vram12,
+        "11/32 must snap to the 12/32 profile"
+    );
+    // 7 GiB reported for an 8 GiB card.
+    assert_eq!(
+        hardware_profile_from_discovery(false, Some(7), Some(16)),
+        HardwareModelProfile::Fallback12B,
+        "7/16 must snap to the 8/16 fallback profile"
+    );
+}
+
+#[test]
+fn strongest_adapter_vram_normalizes_correctly() {
+    // Multi-GPU nvidia-smi output: iGPU (512 MiB) + dGPU (16384 MiB).
+    // parse_nvidia_memory_mib picks the strongest (max total).
+    let (used, total) = parse_nvidia_memory_mib("128, 512\n1024, 16384\n").unwrap();
+    assert_eq!((used, total), (1024, 16384));
+    // Same GiB conversion as detect_nvidia_vram_gib: round-to-nearest.
+    let vram_gib = (total + 512) / 1024;
+    assert_eq!(vram_gib, 16);
+    assert_eq!(normalize_vram_gib(vram_gib), 16);
+
+    // Strongest adapter reports 15360 MiB (some 16 GiB cards underreport).
+    let (_, total_under) = parse_nvidia_memory_mib("256, 512\n900, 15360\n").unwrap();
+    let vram_under = (total_under + 512) / 1024;
+    assert_eq!(vram_under, 15, "15360 MiB rounds to 15 GiB");
+    assert_eq!(
+        normalize_vram_gib(vram_under),
+        16,
+        "15 GiB snaps back to the 16 GiB tier"
+    );
+}
+
+#[test]
 fn launcher_uses_fixed_context_with_the_confirmed_hardware_matrix() {
     let cases = [
         (

@@ -568,6 +568,38 @@ pub const fn select_hardware_model_profile(
     }
 }
 
+/// Snap a near-nominal VRAM reading to the closest approved matrix tier.
+///
+/// Tolerance is ±1 GiB — enough to absorb firmware/driver underreport
+/// (e.g. a 16 GiB card reporting 15 GiB). Readings 2+ GiB away from any
+/// tier pass through unchanged, so clearly smaller hardware (6 GiB) never
+/// enters the confirmed matrix.
+#[must_use]
+fn normalize_vram_gib(raw: u64) -> u64 {
+    match raw {
+        7..=9 => 8,
+        11..=13 => 12,
+        15..=17 => 16,
+        _ => raw,
+    }
+}
+
+/// Snap a near-nominal system-RAM reading to the closest approved tier.
+///
+/// With an iGPU enabled in firmware, `TotalPhysicalMemory` reports usable
+/// RAM minus the iGPU reservation, so a 32 GiB machine can show 31 GiB.
+/// ±1 GiB tolerance covers this without promoting clearly smaller hardware
+/// (e.g. 22 GiB stays 22 → `Unknown`).
+#[must_use]
+fn normalize_ram_gib(raw: u64) -> u64 {
+    match raw {
+        15..=17 => 16,
+        23..=25 => 24,
+        31..=33 => 32,
+        _ => raw,
+    }
+}
+
 fn hardware_profile_status(profile: HardwareModelProfile) -> String {
     match profile {
         HardwareModelProfile::Unknown => {
@@ -902,7 +934,10 @@ fn detected_hardware_model_profile(force_cpu: bool) -> HardwareModelProfile {
     if force_cpu {
         return HardwareModelProfile::Unknown;
     }
-    hardware_profile_from_discovery(force_cpu, detect_nvidia_vram_gib(), detect_system_ram_gib())
+    let raw_vram = detect_nvidia_vram_gib();
+    let raw_ram = detect_system_ram_gib();
+    log::info!("local-ai hardware discovery: raw_vram_gib={raw_vram:?} raw_ram_gib={raw_ram:?}");
+    hardware_profile_from_discovery(force_cpu, raw_vram, raw_ram)
 }
 
 /// Detect whether this machine is currently in the confirmed 26B-A4B matrix.
@@ -932,16 +967,27 @@ fn profile_for_model(detected: HardwareModelProfile, prefer_quality: bool) -> Ha
 
 /// The confirmed matrix is NVIDIA-only. AMD/Intel remain on the safe fallback
 /// until they have their own measured profiles.
+///
+/// Raw readings pass through ±1 GiB normalization before the exact matrix
+/// lookup, absorbing iGPU memory reservations and firmware underreport.
 fn hardware_profile_from_discovery(
     force_cpu: bool,
     nvidia_vram_gib: Option<u64>,
     ram_gib: Option<u64>,
 ) -> HardwareModelProfile {
     if force_cpu {
-        HardwareModelProfile::Unknown
-    } else {
-        select_hardware_model_profile(nvidia_vram_gib, ram_gib)
+        return HardwareModelProfile::Unknown;
     }
+    let vram = nvidia_vram_gib.map(normalize_vram_gib);
+    let ram = ram_gib.map(normalize_ram_gib);
+    if vram != nvidia_vram_gib || ram != ram_gib {
+        log::info!(
+            "local-ai hardware normalization: vram {nvidia_vram_gib:?} -> {vram:?}, ram {ram_gib:?} -> {ram:?}"
+        );
+    }
+    let profile = select_hardware_model_profile(vram, ram);
+    log::info!("local-ai hardware profile: {profile:?}");
+    profile
 }
 
 /// Write the installer's resulting endpoints/models into a `Config`, switching
