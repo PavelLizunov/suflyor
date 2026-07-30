@@ -1,4 +1,4 @@
-﻿// Settings window — custom dark tab bar + content area (the std TabWidget
+// Settings window — custom dark tab bar + content area (the std TabWidget
 // clashes with our theme, and we want per-tab control of content rendering).
 // The sidebar groups tabs into SESSION / AI / APP; `active-tab` indexes the
 // content pane. Indices have gaps (5 + 8) where the Stats + Snippets panes
@@ -180,6 +180,21 @@ component SettingsCard inherits Rectangle {
         }
         @children
     }
+}
+
+// Settings fields use one fixed control height on every tab. Without it,
+// parent layouts stretch the same Fluent controls to different fractional
+// heights depending on how much content a page contains.
+component SettingsComboBox inherits ComboBox {
+    height: 32px;
+}
+
+component SettingsLineEdit inherits LineEdit {
+    height: 32px;
+}
+
+component SettingsSlider inherits Slider {
+    height: 20px;
 }
 
 // Phase E6 v39 — grouped sidebar, cherry-picked from the Claude Design
@@ -960,7 +975,7 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
-                            Slider {
+                            SettingsSlider {
                                 minimum: 0.5;
                                 maximum: 1.0;
                                 value <=> root.tile-body-opacity;
@@ -1221,7 +1236,7 @@ export component SettingsWindow inherits Window {
                                     color: Theme.text-secondary;
                                     vertical-alignment: center;
                                 }
-                                ComboBox {
+                                SettingsComboBox {
                                     // Language names are themselves untranslated identifiers
                                     // (each appears in its own language as a self-label).
                                     model: ["Русский", "English"];
@@ -1249,7 +1264,7 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
-                            ComboBox {
+                            SettingsComboBox {
                                 height: 32px;
                                 model: root.tile-monitors;
                                 current-index <=> root.tile-monitor-index;
@@ -1276,7 +1291,7 @@ export component SettingsWindow inherits Window {
                                     color: Theme.text-secondary;
                                     vertical-alignment: center;
                                 }
-                                ComboBox {
+                                SettingsComboBox {
                                     // Self-labelled scheme names (proper nouns —
                                     // left untranslated so they read the same in
                                     // both languages).
@@ -1326,7 +1341,7 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
-                            ComboBox {
+                            SettingsComboBox {
                                 model: root.tts-voice-names;
                                 current-index: root.tts-voice-index;
                                 selected => { root.tts-voice-changed(self.current-index); }
@@ -1378,7 +1393,7 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
-                            ComboBox {
+                            SettingsComboBox {
                                 model: ["0.75×", "1.0×", "1.3×", "1.5×", "2.0×"];
                                 current-index: root.tts-rate-index;
                                 selected => { root.tts-rate-changed(self.current-index); }
@@ -1567,7 +1582,7 @@ export component SettingsWindow inherits Window {
                         }
                         // Phase E6 v23 — real device list from
                         // audio::list_devices().inputs, wired by Rust.
-                        ComboBox {
+                        SettingsComboBox {
                             model: root.mic-devices;
                             current-index <=> root.mic-device-index;
                             selected(val) => { root.mic-device-selected(val); }
@@ -1609,14 +1624,14 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
-                            ComboBox {
+                            SettingsComboBox {
                                 model: [@tr("all (no limit)"), @tr("last N sessions"), @tr("last N days")];
                                 current-index <=> root.retention-mode;
                                 selected(v) => {
                                     root.retention-changed(root.retention-mode, root.retention-value);
                                 }
                             }
-                            if root.retention-mode != 0 : LineEdit {
+                            if root.retention-mode != 0 : SettingsLineEdit {
                                 width: 64px;
                                 text <=> root.retention-value;
                                 edited(t) => { root.retention-changed(root.retention-mode, t); }
@@ -1654,7 +1669,7 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
-                            LineEdit {
+                            SettingsLineEdit {
                                 width: 64px;
                                 text <=> root.journal-keep-value;
                                 edited(t) => { root.journal-retention-changed(t, root.journal-mb-value); }
@@ -1669,7 +1684,7 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
-                            LineEdit {
+                            SettingsLineEdit {
                                 width: 64px;
                                 text <=> root.journal-mb-value;
                                 edited(t) => { root.journal-retention-changed(root.journal-keep-value, t); }
@@ -1846,6 +1861,7 @@ export component SettingsWindow inherits Window {
                                 height: 150px;
                             }
                             Button {
+                                height: 32px;
                                 text: @tr("Save keywords");
                                 clicked => {
                                     root.trigger-keywords-save(root.trigger-keywords-input);
@@ -1890,13 +1906,14 @@ export component SettingsWindow inherits Window {
                         HorizontalLayout {
                             spacing: 6px;
                             alignment: start;
+                            vertical-stretch: 0;
                             Text {
                                 text: @tr("Profile:");
                                 font-size: 12px;
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
-                            if root.profile-names.length > 0 : ComboBox {
+                            if root.profile-names.length > 0 : SettingsComboBox {
                                 model: root.profile-names;
                                 current-index: root.active-profile-index;
                                 min-width: 170px;
@@ -1911,7 +1928,7 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-muted;
                                 vertical-alignment: center;
                             }
-                            LineEdit {
+                            SettingsLineEdit {
                                 placeholder-text: @tr("profile name");
                                 text <=> root.profile-name-input;
                                 horizontal-stretch: 1;
@@ -1920,6 +1937,8 @@ export component SettingsWindow inherits Window {
                         HorizontalLayout {
                             spacing: 6px;
                             alignment: start;
+                            vertical-stretch: 0;
+                            height: 32px;
                             Button {
                                 text: @tr("Add profile");
                                 clicked => {
@@ -1954,6 +1973,8 @@ export component SettingsWindow inherits Window {
                         HorizontalLayout {
                             spacing: 8px;
                             alignment: start;
+                            vertical-stretch: 0;
+                            height: 32px;
                             // Phase E6 v43 — voice dictation toggle.
                             Button {
                                 text: root.context-dictating
@@ -1973,14 +1994,12 @@ export component SettingsWindow inherits Window {
                                 enabled: !root.context-processing;
                                 clicked => { root.context-process-clicked(); }
                             }
-                            if root.meeting-context-result != "" : Text {
-                                text: root.meeting-context-result;
-                                font-size: 11px;
-                                color: Theme.accent;
-                                vertical-alignment: center;
-                                wrap: word-wrap;
-                                horizontal-stretch: 1;
-                            }
+                        }
+                        if root.meeting-context-result != "" : Text {
+                            text: root.meeting-context-result;
+                            font-size: 11px;
+                            color: Theme.accent;
+                            wrap: word-wrap;
                         }
                         }
                     }
@@ -1995,7 +2014,7 @@ export component SettingsWindow inherits Window {
                             wrap: word-wrap;
                         }
                         // ===== TYPE selector — gates everything below =====
-                        ComboBox {
+                        SettingsComboBox {
                             model: [@tr("Cloud (Claude bridge)"), @tr("Local (llama.cpp / Ollama)")];
                             current-index: root.ai-provider-index;
                             selected => {
@@ -2008,6 +2027,7 @@ export component SettingsWindow inherits Window {
                         // ============================ CLOUD ============================
                         if root.ai-provider-index == 0 : VerticalLayout {
                             spacing: 8px;
+                            vertical-stretch: 0;
                             Text {
                                 text: @tr("Cloud bridge");
                                 font-size: 12px;
@@ -2022,7 +2042,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("paste new bearer token then Save");
                                     text <=> root.ai-bearer-input;
                                     input-type: password;
@@ -2044,7 +2064,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("http://your.bridge.host:PORT/v1");
                                     text <=> root.ai-base-url-input;
                                     horizontal-stretch: 1;
@@ -2064,7 +2084,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                ComboBox {
+                                SettingsComboBox {
                                     model: root.ai-models;
                                     current-index: root.ai-model-index;
                                     horizontal-stretch: 1;
@@ -2114,6 +2134,7 @@ export component SettingsWindow inherits Window {
                         // ============================ LOCAL ============================
                         if root.ai-provider-index == 1 : VerticalLayout {
                             spacing: 8px;
+                            vertical-stretch: 0;
                             Text {
                                 text: @tr("Local model");
                                 font-size: 12px;
@@ -2122,7 +2143,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("local URL — http://127.0.0.1:8080/v1 (llama.cpp) or :11434 (Ollama)");
                                     text <=> root.ai-local-base-url-input;
                                     horizontal-stretch: 1;
@@ -2136,7 +2157,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                ComboBox {
+                                SettingsComboBox {
                                     model: root.ai-local-models;
                                     current-index: root.ai-local-model-index;
                                     horizontal-stretch: 1;
@@ -2159,7 +2180,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("local server bearer token (optional)");
                                     text <=> root.ai-local-bearer-input;
                                     input-type: password;
@@ -2201,22 +2222,31 @@ export component SettingsWindow inherits Window {
                                 spacing: 6px;
                                 vertical-stretch: 0;
                                 Button {
-                                    text: root.ai-local-model-profile-index == 0 ? @tr("[on] Fast (4B)") : @tr("Fast (4B)");
+                                    height: 32px;
+                                    text: @tr("Fast (4B)") + " - " +
+                                        (root.ai-local-model-profile-index == 0 ? @tr("Active") :
+                                         root.legacy-model-present ? @tr("Installed") : @tr("Not installed"));
                                     enabled: root.managed-local-server && root.legacy-model-present && root.ai-local-model-profile-index != 0 && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
                                     clicked => {
                                         root.model-profile-changed(0);
                                     }
                                 }
                                 Button {
-                                    text: root.ai-local-model-profile-index == 1 ? @tr("[on] Balanced (12B QAT)") : @tr("Balanced (12B QAT)");
+                                    height: 32px;
+                                    text: @tr("Balanced (12B QAT)") + " - " +
+                                        (root.ai-local-model-profile-index == 1 ? @tr("Active") :
+                                         root.fallback-model-present ? @tr("Installed") : @tr("Not installed"));
                                     enabled: root.managed-local-server && root.fallback-model-present && root.ai-local-model-profile-index != 1 && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
                                     clicked => {
                                         root.model-profile-changed(1);
                                     }
                                 }
-                                if root.quality-model-present && root.quality-selection-allowed : Button {
-                                    text: root.ai-local-model-profile-index == 2 ? @tr("[on] Maximum (26B-A4B)") : @tr("Maximum (26B-A4B)");
-                                    enabled: root.managed-local-server && root.ai-local-model-profile-index != 2 && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
+                                if root.quality-selection-allowed : Button {
+                                    height: 32px;
+                                    text: @tr("Maximum (26B-A4B)") + " - " +
+                                        (root.ai-local-model-profile-index == 2 ? @tr("Active") :
+                                         root.quality-model-present ? @tr("Installed") : @tr("Not installed"));
+                                    enabled: root.managed-local-server && root.quality-model-present && root.ai-local-model-profile-index != 2 && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
                                     clicked => {
                                         root.model-profile-changed(2);
                                     }
@@ -2226,7 +2256,8 @@ export component SettingsWindow inherits Window {
                                 spacing: 6px;
                                 vertical-stretch: 0;
                                 if !root.quality-model-present && root.quality-selection-allowed : Button {
-                                    text: root.quality-downloading ? @tr("Downloading…") : @tr("Download primary model (9.8 GiB)");
+                                    height: 32px;
+                                    text: root.quality-downloading ? @tr("Downloading…") : @tr("Download only 26B (9.8 GiB)");
                                     enabled: root.managed-local-server && !root.quality-downloading && !root.local-ai-installing;
                                     clicked => {
                                         root.download-quality-clicked();
@@ -2254,12 +2285,18 @@ export component SettingsWindow inherits Window {
                                     font-weight: 700;
                                     color: Theme.text-primary;
                                 }
-                                Slider {
-                                    minimum: 0;
-                                    maximum: root.ai-local-context-max-k >= 96 ? 5 :
-                                        root.ai-local-context-max-k >= 64 ? 4 :
-                                        root.ai-local-context-max-k >= 32 ? 3 :
-                                        root.ai-local-context-max-k >= 16 ? 2 : 1;
+                                SettingsSlider {
+                                    height: 20px;
+                                    // Fluent's active track is a zero-width rounded
+                                    // rectangle at the exact endpoints. Keep the
+                                    // logical 0..N values one invisible epsilon
+                                    // inside the visual range to avoid a renderer
+                                    // state bug that softens neighbouring text.
+                                    minimum: -0.01;
+                                    maximum: root.ai-local-context-max-k >= 96 ? 5.01 :
+                                        root.ai-local-context-max-k >= 64 ? 4.01 :
+                                        root.ai-local-context-max-k >= 32 ? 3.01 :
+                                        root.ai-local-context-max-k >= 16 ? 2.01 : 1.01;
                                     value: root.ai-local-context-preview-index;
                                     enabled: !root.model-switching && !root.local-ai-installing;
                                     changed(v) => {
@@ -2327,6 +2364,7 @@ export component SettingsWindow inherits Window {
                                     wrap: word-wrap;
                                 }
                                 Button {
+                                    height: 32px;
                                     text: root.model-switching ? @tr("Applying…") : @tr("Apply context");
                                     enabled: root.ai-local-context-preview-index != root.ai-local-context-index && !root.model-switching && !root.local-ai-installing;
                                     clicked => {
@@ -2367,6 +2405,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
+                                height: 32px;
                                 Button {
                                     text: @tr("Test local connection");
                                     clicked => {
@@ -2387,15 +2426,16 @@ export component SettingsWindow inherits Window {
                             // ----- one-click in-app local-AI installer -----
                             Rectangle { background: Theme.border; height: 1px; }
                             Text {
-                                text: @tr("Installs the local stack with Gemma 4 12B QAT as the fallback. On confirmed 8/32, 12/24-32 or 16/32 GB VRAM/RAM profiles it also installs the pinned Gemma 4 26B-A4B primary. Existing verified models are reused.");
+                                text: @tr("Installs or completes the local stack: llama.cpp, the 12B fallback, speech components, and 26B on supported hardware. Complete verified files are reused; partial downloads resume. The optional 4B profile is kept when already present.");
                                 font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
                             HorizontalLayout {
                                 spacing: 6px;
+                                height: 32px;
                                 Button {
-                                    text: root.local-ai-installing ? @tr("Installing…") : @tr("Install local AI");
+                                    text: root.local-ai-installing ? @tr("Installing…") : @tr("Install / complete local AI");
                                     enabled: !root.local-ai-installing && !root.quality-downloading && !root.model-switching && !root.engine-updating && !root.vision12b-downloading;
                                     clicked => {
                                         root.install-local-ai-clicked();
@@ -2561,7 +2601,7 @@ export component SettingsWindow inherits Window {
                             wrap: word-wrap;
                         }
                         Rectangle { background: Theme.border; height: 1px; }
-                        ComboBox {
+                        SettingsComboBox {
                             model: [@tr("Off"), @tr("Same as text model above"), @tr("Cloud (Sonnet via bridge)"), @tr("Local (2nd vision server)")];
                             current-index: root.vision-provider-index;
                             selected => {
@@ -2579,7 +2619,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("vision base URL (blank = text bridge)");
                                     text <=> root.vision-base-url-input;
                                     horizontal-stretch: 1;
@@ -2588,7 +2628,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("vision bearer (blank = text bridge)");
                                     text <=> root.vision-bearer-input;
                                     input-type: password;
@@ -2598,7 +2638,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("vision model (blank = claude-sonnet-4-6)");
                                     text <=> root.vision-model-input;
                                     horizontal-stretch: 1;
@@ -2616,7 +2656,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("vision local URL — http://127.0.0.1:8082/v1");
                                     text <=> root.vision-local-base-url-input;
                                     horizontal-stretch: 1;
@@ -2625,7 +2665,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("vision local model id");
                                     text <=> root.vision-local-model-input;
                                     horizontal-stretch: 1;
@@ -2634,7 +2674,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("vision local bearer (optional)");
                                     text <=> root.vision-local-bearer-input;
                                     input-type: password;
@@ -2718,7 +2758,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: "127.0.0.1";
                                     text <=> root.hermes-bridge-host;
                                     horizontal-stretch: 1;
@@ -2741,7 +2781,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: "8654";
                                     text <=> root.hermes-bridge-port;
                                     horizontal-stretch: 1;
@@ -2759,7 +2799,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     text <=> root.hermes-bridge-token;
                                     read-only: true;
                                     horizontal-stretch: 1;
@@ -2806,7 +2846,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: "http://127.0.0.1:8642/v1";
                                     text <=> root.hermes-api-url;
                                     horizontal-stretch: 1;
@@ -2823,7 +2863,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("paste API_SERVER_KEY then Save");
                                     text <=> root.hermes-api-key;
                                     input-type: password;
@@ -2873,7 +2913,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("e.g. Interview at Acme, Senior SRE role");
                                     text <=> root.hermes-profile-seed;
                                     horizontal-stretch: 1;
@@ -2903,7 +2943,7 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
-                        ComboBox {
+                        SettingsComboBox {
                             model: [@tr("Cloud (Groq Whisper)"), @tr("Local GigaAM-v3 (Russian)"), @tr("Local Whisper (whisper.cpp)")];
                             current-index: root.stt-provider-index;
                             selected => {
@@ -2923,7 +2963,7 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
-                        ComboBox {
+                        SettingsComboBox {
                             model: [@tr("Auto-detect"), @tr("Russian"), @tr("English")];
                             current-index: root.stt-language-index;
                             selected => {
@@ -2933,7 +2973,7 @@ export component SettingsWindow inherits Window {
                         }
                         if root.stt-provider-index == 1 : HorizontalLayout {
                             spacing: 6px;
-                            LineEdit {
+                            SettingsLineEdit {
                                 placeholder-text: @tr("GigaAM model dir — folder with model.int8.onnx + vocab.txt");
                                 text <=> root.stt-gigaam-dir-input;
                                 horizontal-stretch: 1;
@@ -2954,7 +2994,7 @@ export component SettingsWindow inherits Window {
                         }
                         if root.stt-provider-index == 2 : HorizontalLayout {
                             spacing: 6px;
-                            LineEdit {
+                            SettingsLineEdit {
                                 placeholder-text: @tr("whisper-server URL — http://127.0.0.1:8081/v1");
                                 text <=> root.stt-whisper-url-input;
                                 horizontal-stretch: 1;
@@ -2968,7 +3008,7 @@ export component SettingsWindow inherits Window {
                         }
                         if root.stt-provider-index == 2 : HorizontalLayout {
                             spacing: 6px;
-                            LineEdit {
+                            SettingsLineEdit {
                                 placeholder-text: @tr("whisper-server bearer token (optional)");
                                 input-type: password;
                                 text <=> root.stt-whisper-bearer-input;
@@ -2986,7 +3026,7 @@ export component SettingsWindow inherits Window {
                         }
                         if root.stt-provider-index == 2 : HorizontalLayout {
                             spacing: 6px;
-                            LineEdit {
+                            SettingsLineEdit {
                                 placeholder-text: @tr("whisper model — e.g. whisper-large-v3-turbo");
                                 text <=> root.stt-whisper-model-input;
                                 horizontal-stretch: 1;
@@ -3017,7 +3057,7 @@ export component SettingsWindow inherits Window {
                         }
                         HorizontalLayout {
                             spacing: 6px;
-                            LineEdit {
+                            SettingsLineEdit {
                                 placeholder-text: @tr("paste new Groq key then Save");
                                 text <=> root.groq-api-key-input;
                                 input-type: password;
@@ -3037,16 +3077,18 @@ export component SettingsWindow inherits Window {
                         // ----- Connection test (Phase E6 v27) -----
                         HorizontalLayout {
                             spacing: 6px;
+                            vertical-stretch: 0;
+                            height: 32px;
                             Button {
                                 text: @tr("Test STT connection");
                                 clicked => { root.stt-test-clicked(); }
                             }
-                            if root.stt-test-result != "" : Text {
-                                text: root.stt-test-result;
-                                font-size: 11px;
-                                color: Theme.accent;
-                                vertical-alignment: center;
-                            }
+                        }
+                        if root.stt-test-result != "" : Text {
+                            text: root.stt-test-result;
+                            font-size: 11px;
+                            color: Theme.accent;
+                            wrap: word-wrap;
                         }
 
                         // Text OUTER + TouchArea INNER: a TouchArea is NOT a layout
@@ -3084,7 +3126,7 @@ export component SettingsWindow inherits Window {
                         // approved list below.
                         HorizontalLayout {
                             spacing: 8px;
-                            LineEdit {
+                            SettingsLineEdit {
                                 placeholder-text: @tr("Your fact: project, term, names…");
                                 text <=> root.memory-add-text;
                                 horizontal-stretch: 1;
@@ -3253,7 +3295,7 @@ export component SettingsWindow inherits Window {
                             if root.memory-editing-id == m.id : HorizontalLayout {
                                 padding: 8px;
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     text <=> root.memory-edit-text;
                                     horizontal-stretch: 1;
                                     accepted(t) => { root.memory-edit-save(m.id, t); }

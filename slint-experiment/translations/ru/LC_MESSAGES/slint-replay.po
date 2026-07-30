@@ -814,6 +814,9 @@ msgstr "[выбрано] Основная (26B-A4B)"
 msgid "Download primary model (9.8 GiB)"
 msgstr "Скачать основную модель (9,8 ГиБ)"
 
+msgid "Download only 26B (9.8 GiB)"
+msgstr "Скачать только 26B (9,8 ГиБ)"
+
 msgid "Bundled 12B/26B controls manage only Suflyor's own llama.cpp endpoint."
 msgstr "Управление встроенными 12B/26B работает только с собственным endpoint llama.cpp Suflyor."
 
@@ -838,6 +841,15 @@ msgstr "Максимальная (26B-A4B)"
 msgid "[on] Maximum (26B-A4B)"
 msgstr "[x] Максимальная (26B-A4B)"
 
+msgid "Active"
+msgstr "активна"
+
+msgid "Installed"
+msgstr "установлена"
+
+msgid "Not installed"
+msgstr "не установлена"
+
 msgid "Bundled 4B/12B/26B controls manage only Suflyor's own llama.cpp endpoint."
 msgstr "Управление встроенными 4B/12B/26B работает только с собственным endpoint llama.cpp Suflyor."
 
@@ -855,6 +867,9 @@ msgstr "Применить контекст"
 
 msgid "Installs the local stack with Gemma 4 12B QAT as the fallback. On confirmed 8/32, 12/24-32 or 16/32 GB VRAM/RAM profiles it also installs the pinned Gemma 4 26B-A4B primary. Existing verified models are reused."
 msgstr "Устанавливает локальный стек с Gemma 4 12B QAT как резервом. Для подтверждённых профилей VRAM/RAM 8/32, 12/24–32 или 16/32 ГБ также устанавливается закреплённая основная Gemma 4 26B-A4B. Существующие проверенные модели используются повторно."
+
+msgid "Installs or completes the local stack: llama.cpp, the 12B fallback, speech components, and 26B on supported hardware. Complete verified files are reused; partial downloads resume. The optional 4B profile is kept when already present."
+msgstr "Устанавливает или дополняет локальный стек: llama.cpp, резервную 12B, речевые компоненты и 26B на поддерживаемом оборудовании. Готовые проверенные файлы используются повторно, а частичные загрузки продолжаются. Необязательная 4B сохраняется, если уже установлена."
 
 msgid "Engine (llama.cpp). The app checks it weekly and verifies a new build before replacing the current one."
 msgstr "Движок (llama.cpp). Приложение проверяет его раз в неделю и проверяет новую сборку перед заменой текущей."
@@ -885,6 +900,9 @@ msgstr "Установлено: {}"
 
 msgid "Install local AI"
 msgstr "Установить локальный AI"
+
+msgid "Install / complete local AI"
+msgstr "Установить / докачать локальный AI"
 
 msgid "Installing…"
 msgstr "Установка…"
