@@ -817,26 +817,26 @@ msgstr "Скачать основную модель (9,8 ГиБ)"
 msgid "Bundled 12B/26B controls manage only Suflyor's own llama.cpp endpoint."
 msgstr "Управление встроенными 12B/26B работает только с собственным endpoint llama.cpp Suflyor."
 
-msgid "Choose the local model explicitly. Approximate VRAM at Auto: 4B ~6 GiB, 12B ~9.5 GiB, 26B ~12 GiB."
-msgstr "Выберите локальную модель явно. Примерная VRAM в Auto: 4B ~6 ГиБ, 12B ~9,5 ГиБ, 26B ~12 ГиБ."
+msgid "Choose the local model explicitly. Estimated total VRAM at Auto (model + context + runtime): 4B ~6 GiB, 12B ~9.5 GiB, 26B ~12 GiB."
+msgstr "Выберите локальную модель явно. Оценка общей VRAM в Auto (модель + контекст + служебная память): 4B ~6 ГиБ, 12B ~9,5 ГиБ, 26B ~12 ГиБ."
 
 msgid "Fast (4B)"
 msgstr "Быстрая (4B)"
 
 msgid "[on] Fast (4B)"
-msgstr "[выбрано] Быстрая (4B)"
+msgstr "[x] Быстрая (4B)"
 
 msgid "Balanced (12B QAT)"
 msgstr "Сбалансированная (12B QAT)"
 
 msgid "[on] Balanced (12B QAT)"
-msgstr "[выбрано] Сбалансированная (12B QAT)"
+msgstr "[x] Сбалансированная (12B QAT)"
 
 msgid "Maximum (26B-A4B)"
 msgstr "Максимальная (26B-A4B)"
 
 msgid "[on] Maximum (26B-A4B)"
-msgstr "[выбрано] Максимальная (26B-A4B)"
+msgstr "[x] Максимальная (26B-A4B)"
 
 msgid "Bundled 4B/12B/26B controls manage only Suflyor's own llama.cpp endpoint."
 msgstr "Управление встроенными 4B/12B/26B работает только с собственным endpoint llama.cpp Suflyor."

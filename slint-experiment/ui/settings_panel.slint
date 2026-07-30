@@ -1250,6 +1250,7 @@ export component SettingsWindow inherits Window {
                                 wrap: word-wrap;
                             }
                             ComboBox {
+                                height: 32px;
                                 model: root.tile-monitors;
                                 current-index <=> root.tile-monitor-index;
                                 selected(v) => { root.tile-monitor-changed(self.current-index); }
@@ -1318,6 +1319,7 @@ export component SettingsWindow inherits Window {
                         // Voice chooser — only when at least one voice is installed.
                         if root.tts-available : HorizontalLayout {
                             spacing: 8px;
+                            height: 32px;
                             Text {
                                 text: @tr("Voice:");
                                 font-size: 11px;
@@ -1335,6 +1337,7 @@ export component SettingsWindow inherits Window {
                         // bundled in the app installer).
                         if !root.tts-available : VerticalLayout {
                             spacing: 6px;
+                            vertical-stretch: 0;
                             Text {
                                 text: @tr("Neural voices aren't installed yet — download them (Irina + Ruslan, ~130 MB).");
                                 font-size: 11px;
@@ -1343,6 +1346,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 alignment: start;
+                                height: 32px;
                                 Button {
                                     text: root.tts-installing ? @tr("Installing…") : @tr("Install voices");
                                     enabled: !root.tts-installing;
@@ -1367,6 +1371,7 @@ export component SettingsWindow inherits Window {
                         // Speed preset (multipliers are language-neutral, untranslated).
                         HorizontalLayout {
                             spacing: 8px;
+                            height: 32px;
                             Text {
                                 text: @tr("Speed:");
                                 font-size: 11px;
@@ -1382,6 +1387,7 @@ export component SettingsWindow inherits Window {
                         // Quick test of the current voice + speed.
                         HorizontalLayout {
                             alignment: start;
+                            height: 32px;
                             Button {
                                 text: @tr("Test voice");
                                 enabled: root.tts-available;
@@ -2184,13 +2190,16 @@ export component SettingsWindow inherits Window {
                             // ----- bundled local model: 4B / 12B / 26B -----
                             Rectangle { background: Theme.border; height: 1px; }
                             Text {
-                                text: @tr("Choose the local model explicitly. Approximate VRAM at Auto: 4B ~6 GiB, 12B ~9.5 GiB, 26B ~12 GiB.");
+                                text: @tr("Choose the local model explicitly. Estimated total VRAM at Auto (model + context + runtime): 4B ~6 GiB, 12B ~9.5 GiB, 26B ~12 GiB.");
                                 font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
-                            HorizontalLayout {
+                            // Model names plus the translated selected marker do
+                            // not fit one row at the window's supported widths.
+                            VerticalLayout {
                                 spacing: 6px;
+                                vertical-stretch: 0;
                                 Button {
                                     text: root.ai-local-model-profile-index == 0 ? @tr("[on] Fast (4B)") : @tr("Fast (4B)");
                                     enabled: root.managed-local-server && root.legacy-model-present && root.ai-local-model-profile-index != 0 && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
@@ -2215,6 +2224,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
+                                vertical-stretch: 0;
                                 if !root.quality-model-present && root.quality-selection-allowed : Button {
                                     text: root.quality-downloading ? @tr("Downloading…") : @tr("Download primary model (9.8 GiB)");
                                     enabled: root.managed-local-server && !root.quality-downloading && !root.local-ai-installing;
@@ -2237,6 +2247,7 @@ export component SettingsWindow inherits Window {
                             }
                             if root.managed-local-server : VerticalLayout {
                                 spacing: 6px;
+                                vertical-stretch: 0;
                                 Text {
                                     text: @tr("Context window");
                                     font-size: 11px;
