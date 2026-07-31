@@ -3684,6 +3684,8 @@ fn main() -> Result<(), slint::PlatformError> {
     }
 
     let result = overlay.run();
+    // All event-loop exits share the normal session stop path.
+    let _ = slint_session::stop_session(slint_rt.clone(), &cfg);
     // E10.4 — kill any local-AI servers the in-app installer launched so they
     // do not outlive the app (best-effort; clean-exit path only).
     let local_ai_servers = {
