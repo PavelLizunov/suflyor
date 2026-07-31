@@ -279,7 +279,8 @@ fn quote_ident(name: &str) -> String {
 /// path, or `None` if even the raw copy failed (repair still proceeds — the live
 /// DB is untouched by a failed backup).
 fn backup_before_repair(path: &Path, backups: &Path) -> Option<String> {
-    let millis = unix_millis();
+    // Only used to make a unique backup filename.
+    let millis = crate::journal::now_unix_ms();
     let backup = backups.join(format!("catalog-{millis}.sqlite"));
 
     // Preferred: VACUUM INTO writes a clean, consistent copy (folds in WAL). Runs
@@ -372,15 +373,6 @@ fn is_backup_file(p: &Path) -> bool {
 /// `VACUUM INTO '<path>'` file path.
 fn quote_string(s: &str) -> String {
     format!("'{}'", s.replace('\'', "''"))
-}
-
-/// Milliseconds since the Unix epoch (0 if the clock is before the epoch — only
-/// used to make a unique backup filename).
-fn unix_millis() -> u128 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0)
 }
 
 // ── USER-INITIATED targeted clears of the memory tables ────────────────────────

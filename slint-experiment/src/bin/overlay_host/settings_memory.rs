@@ -53,7 +53,8 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
         win.on_memory_approve(move |id| {
             if let Some(w) = weak.upgrade() {
                 if let Ok(mut store) = open_default_store() {
-                    if let Err(e) = store.approve_candidate(i64::from(id), now_ms()) {
+                    let now = i64::try_from(overlay_backend::journal::now_unix_ms()).unwrap_or(0);
+                    if let Err(e) = store.approve_candidate(i64::from(id), now) {
                         eprintln!("[overlay-host] memory approve failed: {e:#}");
                     }
                 }
@@ -137,7 +138,7 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
                             entity: None,
                             norm_status: "none".into(),
                         },
-                        now_ms(),
+                        i64::try_from(overlay_backend::journal::now_unix_ms()).unwrap_or(0),
                     )
                     .map(|_| ())
                     .map_err(|e| format!("{e:#}")),
@@ -226,11 +227,12 @@ fn run_extract() -> usize {
         .collect();
     let sessions = store.list_sessions().unwrap_or_default();
     let mut inserted = 0usize;
+    let now = i64::try_from(overlay_backend::journal::now_unix_ms()).unwrap_or(0);
     for s in sessions.into_iter().take(EXTRACT_RECENT_SESSIONS) {
         let turns = store.session_ai_turns(&s.id).unwrap_or_default();
         for cand in extract_heuristic(&s.id, &turns) {
             // Skip a text we've already suggested; otherwise insert + count.
-            if seen.insert(cand.text.clone()) && store.insert_candidate(&cand, now_ms()).is_ok() {
+            if seen.insert(cand.text.clone()) && store.insert_candidate(&cand, now).is_ok() {
                 inserted += 1;
             }
         }
@@ -274,12 +276,4 @@ fn kind_glyph(kind: &str) -> &'static str {
         "note" => "📌",
         _ => "•",
     }
-}
-
-fn now_ms() -> i64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
 }

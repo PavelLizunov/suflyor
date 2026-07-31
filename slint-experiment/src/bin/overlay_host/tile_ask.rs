@@ -99,7 +99,7 @@ pub(crate) fn fire_f3_reask(
                     .saturating_add(out.cost_microcents_delta);
                 s.last_question = Some(out.display_question);
                 s.last_answer = Some(out.answer_trimmed);
-                (s.session_cost_microcents as f64) / 100_000_000.0
+                overlay_backend::ai::microcents_to_usd(s.session_cost_microcents)
             };
             events_c.emit("cost:update", serde_json::json!({ "session_usd": total }));
         }
@@ -145,7 +145,7 @@ pub(crate) fn fire_f6_manual_spawn(
                     .saturating_add(out.cost_microcents_delta);
                 s.last_question = Some(out.display_question);
                 s.last_answer = Some(out.answer_trimmed);
-                (s.session_cost_microcents as f64) / 100_000_000.0
+                overlay_backend::ai::microcents_to_usd(s.session_cost_microcents)
             };
             events_c.emit("cost:update", serde_json::json!({ "session_usd": total }));
         }
@@ -450,7 +450,7 @@ pub(crate) fn fire_f9_ask(
         overlay_backend::memory::context_for_meeting(&meeting_context, typed_question.as_deref());
     let current_micro = slint_replay::runtime_state::lock(slint_rt).session_cost_microcents;
     if current_micro > 0 && cap_usd > 0.0 {
-        let usd = (current_micro as f64) / 100_000_000.0;
+        let usd = overlay_backend::ai::microcents_to_usd(current_micro);
         if usd >= cap_usd {
             events.emit(
                 "cost:cap-hit",
@@ -560,7 +560,7 @@ pub(crate) fn fire_f9_ask(
         let micro = if is_local { 0 } else { micro };
         let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
         s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
-        (s.session_cost_microcents as f64) / 100_000_000.0
+        overlay_backend::ai::microcents_to_usd(s.session_cost_microcents)
     });
 
     let t0 = std::time::Instant::now();

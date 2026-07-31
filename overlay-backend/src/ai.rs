@@ -514,20 +514,25 @@ pub fn pricing_per_million(model: &str) -> (f64, f64) {
     }
 }
 
-/// USD float view of cost — convenience wrapper. Internal accounting
-/// uses microcents (cost_microcents) to avoid f64 drift over long
-/// sessions. UI displays the float.
-#[allow(dead_code)]
-pub fn cost_usd(model: &str, input_tokens: u64, output_tokens: u64) -> f64 {
-    // 1 USD = 100_000_000 microcents (1 microcent = 10⁻⁸ USD).
-    (cost_microcents(model, input_tokens, output_tokens) as f64) / 100_000_000.0
+/// The single canonical money-conversion rule: 1 USD = 100_000_000
+/// microcents (1 microcent = 10⁻⁸ USD). Internal accounting uses
+/// microcents (u64) to avoid f64 drift over long sessions; display
+/// paths convert with [`microcents_to_usd`].
+pub const MICROCENTS_PER_USD: f64 = 100_000_000.0;
+
+/// USD float view of a microcents amount — the display conversion shared
+/// by every UI path. Internal accounting stays in microcents
+/// ([`cost_microcents`]) to avoid f64 precision loss over long sessions.
+#[must_use]
+pub fn microcents_to_usd(microcents: u64) -> f64 {
+    (microcents as f64) / MICROCENTS_PER_USD
 }
 
-/// Cost in microcents (1 USD = 100_000_000 microcents). Use this for
+/// Cost in microcents (see [`MICROCENTS_PER_USD`]). Use this for
 /// internal accumulation to avoid f64 precision loss over long sessions.
 pub fn cost_microcents(model: &str, input_tokens: u64, output_tokens: u64) -> u64 {
     let (p_in_per_m, p_out_per_m) = pricing_per_million(model);
-    // microcents per token = price_per_million_usd × 100_000_000 / 1_000_000 = price × 100
+    // microcents per token = price_per_million_usd × MICROCENTS_PER_USD / 1_000_000 = price × 100
     let micro_in = (p_in_per_m * 100.0) as u64; // microcents per input token
     let micro_out = (p_out_per_m * 100.0) as u64;
     input_tokens
@@ -1228,7 +1233,7 @@ mod tests {
         // microcents per token: input=300, output=1500
         let m = cost_microcents("claude-sonnet-4-6", 100_000, 50_000);
         assert_eq!(m, 100_000 * 300 + 50_000 * 1500);
-        assert!((cost_usd("claude-sonnet-4-6", 100_000, 50_000) - 1.05).abs() < 0.001);
+        assert!((microcents_to_usd(m) - 1.05).abs() < 0.001);
     }
 
     #[test]
@@ -1245,7 +1250,19 @@ mod tests {
     #[test]
     fn cost_zero_tokens_is_zero() {
         assert_eq!(cost_microcents("claude-haiku-4-5", 0, 0), 0);
-        assert_eq!(cost_usd("claude-haiku-4-5", 0, 0), 0.0);
+        assert_eq!(
+            microcents_to_usd(cost_microcents("claude-haiku-4-5", 0, 0)),
+            0.0
+        );
+    }
+
+    #[test]
+    fn microcents_to_usd_boundaries() {
+        assert_eq!(microcents_to_usd(0), 0.0);
+        assert!((microcents_to_usd(50_000_000) - 0.5).abs() < 1e-12);
+        assert!((microcents_to_usd(MICROCENTS_PER_USD as u64) - 1.0).abs() < 1e-12);
+        // u64::MAX must not panic; the float view stays finite.
+        assert!(microcents_to_usd(u64::MAX).is_finite());
     }
 
     #[test]

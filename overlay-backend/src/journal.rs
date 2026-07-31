@@ -280,9 +280,7 @@ impl Journal {
         self.counters.as_ref().map(|c| c.lock().clone())
     }
 
-    /// Path of the open journal file, if any. Used by tests and reserved
-    /// for future "show current journal" debug UI.
-    #[allow(dead_code)]
+    /// Path of the open journal file, if any.
     pub fn current_path(&self) -> Option<PathBuf> {
         self.path.as_ref().map(|p| (**p).clone())
     }
