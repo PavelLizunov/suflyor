@@ -557,14 +557,14 @@ pub(crate) fn launch_vision_for_bgra(
     // Profile/persona applies ONLY to Describe (v0.10.5). Translate is a pure
     // translation task; TestPractice is a factual answer — a persona would
     // distort both, so they stay profile-free.
-    let vision_context = if matches!(mode, vision::VisionMode::Describe) {
-        // Audit (prompt-context): F8 Describe carries approved memory + profile too
-        // (Translate/TestPractice stay profile-free above). ТЗ 2026-07-06 (A) —
-        // no user question on a screenshot Describe → recency block (None).
-        let raw = cfg.read().meeting_context.clone();
-        overlay_backend::memory::context_for_meeting(&raw, None)
+    // F8 Describe also folds in approved memory; only the cheap base-context clone
+    // happens here — the blocking catalog read is deferred into the stream task
+    // below so it never freezes the UI. ТЗ 2026-07-06 (A) — no user question on a
+    // screenshot Describe → recency block (None).
+    let describe_base = if matches!(mode, vision::VisionMode::Describe) {
+        Some(cfg.read().meeting_context.clone())
     } else {
-        String::new()
+        None
     };
     let (journal_for_loop, health_for_stream) = {
         let s = slint_replay::runtime_state::lock(slint_rt);
@@ -607,6 +607,12 @@ pub(crate) fn launch_vision_for_bgra(
                 ptt_tile_error(weak_for_title.clone(), "Сбой кодирования кадра.");
                 return;
             }
+        };
+        // Blocking catalog read runs here (off the event loop) — see the
+        // describe_base snapshot above (audit C2/G2).
+        let vision_context = match describe_base {
+            Some(raw) => overlay_backend::memory::context_for_meeting(&raw, None),
+            None => String::new(),
         };
         let (messages, usr_full, sys_full) = match mode {
             vision::VisionMode::TestPractice => (

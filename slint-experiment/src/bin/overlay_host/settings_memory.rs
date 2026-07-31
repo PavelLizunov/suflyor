@@ -43,21 +43,38 @@ const _: () = assert!(MEMORY_TAB_CAP * 2 * 140 + 800 < 32_767);
 /// a double-click can't launch two scans (P1-3).
 static EXTRACT_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// Monotonic generation shared by every memory-tab refresh (reload / mutation /
+/// add / edit). Each schedules its catalog read on a worker thread and bumps the
+/// generation first; the apply back on the event loop runs ONLY if its generation
+/// is still the latest, so a slow refresh can't land on top of a newer one.
+static REFRESH_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn bump_refresh_gen() -> u64 {
+    REFRESH_GEN.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1
+}
+
+fn is_latest_refresh(gen: u64) -> bool {
+    REFRESH_GEN.load(std::sync::atomic::Ordering::SeqCst) == gen
+}
+
 /// Wire the 💭 Memory tab: load the candidate + item lists and bind the
 /// approve / reject / delete / extract callbacks.
 pub(crate) fn wire_memory(win: &SettingsWindow) {
     reload_memory(win);
 
+    // Mutations open the catalog (blocking SQLite open + write) and reload both
+    // lists on a worker thread, so a slow catalog never freezes the window.
     {
         let weak = win.as_weak();
         win.on_memory_approve(move |id| {
             if let Some(w) = weak.upgrade() {
-                if let Ok(mut store) = open_default_store() {
-                    if let Err(e) = store.approve_candidate(i64::from(id), now_ms()) {
-                        eprintln!("[overlay-host] memory approve failed: {e:#}");
+                mutate_and_reload(&w, move || {
+                    if let Ok(mut store) = open_default_store() {
+                        if let Err(e) = store.approve_candidate(i64::from(id), now_ms()) {
+                            eprintln!("[overlay-host] memory approve failed: {e:#}");
+                        }
                     }
-                }
-                reload_memory(&w);
+                });
             }
         });
     }
@@ -65,12 +82,13 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
         let weak = win.as_weak();
         win.on_memory_reject(move |id| {
             if let Some(w) = weak.upgrade() {
-                if let Ok(mut store) = open_default_store() {
-                    if let Err(e) = store.set_candidate_status(i64::from(id), "rejected") {
-                        eprintln!("[overlay-host] memory reject failed: {e:#}");
+                mutate_and_reload(&w, move || {
+                    if let Ok(mut store) = open_default_store() {
+                        if let Err(e) = store.set_candidate_status(i64::from(id), "rejected") {
+                            eprintln!("[overlay-host] memory reject failed: {e:#}");
+                        }
                     }
-                }
-                reload_memory(&w);
+                });
             }
         });
     }
@@ -78,12 +96,13 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
         let weak = win.as_weak();
         win.on_memory_delete_item(move |id| {
             if let Some(w) = weak.upgrade() {
-                if let Ok(mut store) = open_default_store() {
-                    if let Err(e) = store.delete_memory_item(i64::from(id)) {
-                        eprintln!("[overlay-host] memory delete failed: {e:#}");
+                mutate_and_reload(&w, move || {
+                    if let Ok(mut store) = open_default_store() {
+                        if let Err(e) = store.delete_memory_item(i64::from(id)) {
+                            eprintln!("[overlay-host] memory delete failed: {e:#}");
+                        }
                     }
-                }
-                reload_memory(&w);
+                });
             }
         });
     }
@@ -125,39 +144,62 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
             if trimmed.is_empty() {
                 return;
             }
-            let outcome = match open_default_store() {
-                Ok(mut store) => store
-                    .insert_memory_item(
-                        &NewMemoryItem {
-                            profile_id: PROFILE.into(),
-                            kind: "note".into(),
-                            text: trimmed.to_string(),
-                            source_session_id: None,
-                            source_text: None,
-                            entity: None,
-                            norm_status: "none".into(),
-                        },
-                        now_ms(),
-                    )
-                    .map(|_| ())
-                    .map_err(|e| format!("{e:#}")),
-                Err(e) => Err(format!("{e:#}")),
-            };
-            match outcome {
-                Ok(()) => {
-                    // Clear the input ONLY on a confirmed write — otherwise a DB
-                    // failure silently discarded the user's typed fact (audit Q5).
-                    w.set_memory_add_text(SharedString::default());
-                    w.set_memory_status(SharedString::from("➕ факт добавлен"));
-                    reload_memory(&w);
-                }
-                Err(e) => {
-                    eprintln!("[overlay-host] memory add-fact failed: {e}");
-                    w.set_memory_status(SharedString::from(
-                        "[err] не удалось сохранить факт — попробуйте ещё раз",
-                    ));
-                }
-            }
+            let fact = trimmed.to_string();
+            let submitted = fact.clone();
+            let done = w.as_weak();
+            let gen = bump_refresh_gen();
+            std::thread::spawn(move || {
+                let outcome = match open_default_store() {
+                    Ok(mut store) => store
+                        .insert_memory_item(
+                            &NewMemoryItem {
+                                profile_id: PROFILE.into(),
+                                kind: "note".into(),
+                                text: fact,
+                                source_session_id: None,
+                                source_text: None,
+                                entity: None,
+                                norm_status: "none".into(),
+                            },
+                            now_ms(),
+                        )
+                        .map(|_| ())
+                        .map_err(|e| format!("{e:#}")),
+                    Err(e) => Err(format!("{e:#}")),
+                };
+                let (cands, items) = read_memory_lists();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = done.upgrade() {
+                        if !is_latest_refresh(gen) {
+                            if outcome.is_ok()
+                                && w.get_memory_add_text().trim() == submitted.as_str()
+                            {
+                                w.set_memory_add_text(SharedString::default());
+                            }
+                            reload_memory(&w);
+                            return;
+                        }
+                        match outcome {
+                            Ok(()) => {
+                                // Clear only what we actually saved: if the user kept
+                                // typing, leave the newer text alone (a DB failure also
+                                // keeps it — audit Q5).
+                                if w.get_memory_add_text().trim() == submitted.as_str() {
+                                    w.set_memory_add_text(SharedString::default());
+                                }
+                                w.set_memory_status(SharedString::from("➕ факт добавлен"));
+                            }
+                            Err(e) => {
+                                eprintln!("[overlay-host] memory add-fact failed: {e}");
+                                w.set_memory_status(SharedString::from(
+                                    "[err] не удалось сохранить факт — попробуйте ещё раз",
+                                ));
+                            }
+                        }
+                        apply_memory_rows(&w, &cands, &items);
+                    }
+                });
+            });
         });
     }
     // A1 (ТЗ 2026-07-02) — save an inline edit of an approved fact. Empty/whitespace
@@ -167,33 +209,51 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
         let weak = win.as_weak();
         win.on_memory_edit_save(move |id, text| {
             let Some(w) = weak.upgrade() else { return };
-            let trimmed = text.trim();
-            if !trimmed.is_empty() {
-                match open_default_store() {
-                    Ok(mut store) => {
-                        if let Err(e) = store.update_memory_item_text(i64::from(id), trimmed) {
-                            eprintln!("[overlay-host] memory edit failed: {e:#}");
+            let edit = text.trim().to_string();
+            let done = w.as_weak();
+            let gen = bump_refresh_gen();
+            std::thread::spawn(move || {
+                if !edit.is_empty() {
+                    match open_default_store() {
+                        Ok(mut store) => {
+                            if let Err(e) = store.update_memory_item_text(i64::from(id), &edit) {
+                                eprintln!("[overlay-host] memory edit failed: {e:#}");
+                            }
                         }
+                        Err(e) => eprintln!("[overlay-host] memory edit: store open failed: {e:#}"),
                     }
-                    Err(e) => eprintln!("[overlay-host] memory edit: store open failed: {e:#}"),
                 }
-            }
-            w.set_memory_editing_id(-1);
-            reload_memory(&w);
+                let (cands, items) = read_memory_lists();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(w) = done.upgrade() {
+                        if !is_latest_refresh(gen) {
+                            reload_memory(&w);
+                            return;
+                        }
+                        // Leave edit mode only if this row is still the one being
+                        // edited — a newer edit may have moved on.
+                        if w.get_memory_editing_id() == id {
+                            w.set_memory_editing_id(-1);
+                        }
+                        apply_memory_rows(&w, &cands, &items);
+                    }
+                });
+            });
         });
     }
 }
 
-/// Re-open the catalog, load pending candidates + active items, and push both
-/// into the tab's models. Best-effort: a catalog-open failure leaves the lists
-/// empty rather than crashing.
-pub(crate) fn reload_memory(win: &SettingsWindow) {
-    // P3: opening / refreshing the Память tab retries any row stuck 'pending' (AI was offline at
-    // save). Re-entrancy-guarded + a no-op when nothing's pending, so calling it from every reload
-    // (approve/reject/edit too) is cheap. ponytail: swept rows show 'llm' on the NEXT reload, not
-    // this one — fine, the boot sweep already caught prior-session pendings.
+/// Read pending candidates + active items (a blocking SQLite open + queries).
+/// Best-effort: a catalog-open failure leaves the lists empty. Runs OFF the
+/// event loop — never call it on the Slint UI thread.
+fn read_memory_lists() -> (Vec<MemoryCandidate>, Vec<MemoryItem>) {
+    // P3: refreshing the tab retries any row stuck 'pending' (AI was offline at save).
+    // Re-entrancy-guarded + a no-op when nothing's pending, so calling it from every
+    // reload is cheap. ponytail: swept rows show 'llm' on the NEXT reload, not this
+    // one — fine, the boot sweep already caught prior-session pendings. sweep_pending
+    // spawns its own thread, so it never blocks here.
     super::tile_copy::sweep_pending();
-    let (cands, items) = match open_default_store() {
+    match open_default_store() {
         Ok(store) => (
             store
                 .list_candidates(PROFILE, "pending", MEMORY_TAB_CAP)
@@ -203,11 +263,54 @@ pub(crate) fn reload_memory(win: &SettingsWindow) {
                 .unwrap_or_default(),
         ),
         Err(_) => (Vec::new(), Vec::new()),
-    };
+    }
+}
+
+/// Push the candidate + item rows into the tab's models. MUST run on the Slint
+/// event loop (it touches the window's models).
+fn apply_memory_rows(win: &SettingsWindow, cands: &[MemoryCandidate], items: &[MemoryItem]) {
     let c_rows: Vec<MemoryRow> = cands.iter().map(candidate_row).collect();
     let i_rows: Vec<MemoryRow> = items.iter().map(item_row).collect();
     win.set_memory_candidates(ModelRc::new(VecModel::from(c_rows)));
     win.set_memory_items(ModelRc::new(VecModel::from(i_rows)));
+}
+
+/// Run a catalog mutation off the event loop, then refresh both lists (also
+/// off-thread) and apply the rows back on the loop.
+fn mutate_and_reload(win: &SettingsWindow, mutate: impl FnOnce() + Send + 'static) {
+    let weak = win.as_weak();
+    let gen = bump_refresh_gen();
+    std::thread::spawn(move || {
+        mutate();
+        let (cands, items) = read_memory_lists();
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(w) = weak.upgrade() {
+                if is_latest_refresh(gen) {
+                    apply_memory_rows(&w, &cands, &items);
+                } else {
+                    reload_memory(&w);
+                }
+            }
+        });
+    });
+}
+
+/// Refresh the two lists without blocking the event loop: read the catalog on a
+/// worker thread, then apply the rows back on the loop. Safe to call from the
+/// event loop (it only spawns) — used at tab open and from the Diagnostics tab.
+pub(crate) fn reload_memory(win: &SettingsWindow) {
+    let weak = win.as_weak();
+    let gen = bump_refresh_gen();
+    std::thread::spawn(move || {
+        let (cands, items) = read_memory_lists();
+        let _ = slint::invoke_from_event_loop(move || {
+            if is_latest_refresh(gen) {
+                if let Some(w) = weak.upgrade() {
+                    apply_memory_rows(&w, &cands, &items);
+                }
+            }
+        });
+    });
 }
 
 /// Run the heuristic extractor over the most-recent sessions, inserting any

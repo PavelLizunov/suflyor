@@ -1942,13 +1942,6 @@ fn main() -> Result<(), slint::PlatformError> {
                     let c = cfg_for_poll.read();
                     (c.meeting_context.clone(), c.response_language.clone())
                 };
-                // Audit (prompt-context): seed the completed-tile history with the
-                // SAME effective context (profile + approved memory) the live answer
-                // paths use, so a follow-up/regenerate matches the original request.
-                let meeting_context = overlay_backend::memory::context_for_meeting(
-                    &meeting_context,
-                    Some(req.spec.question.as_str()),
-                );
                 let question = req.spec.question.clone();
                 // v0.12.2 — Summary tiles seed their dialog with the REAL recap
                 // payload ([summary-prompt, transcript]) instead of the bare title,
@@ -1964,7 +1957,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 // leave them OFF for that (rare) tile below. Displayed answer is
                 // unaffected (already computed). Stays true for every non-Summary kind.
                 let mut summary_seed_has_transcript = true;
-                let mut messages = if matches!(req.kind, TileKind::Summary) {
+                if matches!(req.kind, TileKind::Summary) {
                     let (is_local, transcript) = {
                         let is_local = cfg_for_poll.read().ai_endpoint(true).is_local;
                         let tx = slint_replay::runtime_state::lock(&slint_rt_for_poll)
@@ -2018,33 +2011,65 @@ fn main() -> Result<(), slint::PlatformError> {
                     summary_seed_has_transcript = !formatted.trim().is_empty();
                     let memory_ref =
                         overlay_backend::memory::summary_reference_for_transcript(&formatted);
-                    overlay_backend::runtime::build_summary_seed_from_formatted(
+                    let mut messages = overlay_backend::runtime::build_summary_seed_from_formatted(
                         &formatted,
                         is_ru,
                         is_local,
                         memory_ref.as_deref(),
-                    )
+                    );
+                    messages.push(ai::ChatMessage {
+                        role: "assistant".into(),
+                        content: ai::MessageContent::Text(req.spec.answer.clone()),
+                    });
+                    // FIX #8 — bounded insert (caps + half-evicts the map).
+                    bridge_for_poll.store_conversation(
+                        convo_id,
+                        ConvoState {
+                            messages,
+                            rendered: req.spec.answer.clone(),
+                        },
+                    );
                 } else {
-                    ai::build_request(
-                        &meeting_context,
-                        &response_language,
-                        &[],
-                        None,
-                        Some(&question),
-                    )
-                };
-                messages.push(ai::ChatMessage {
-                    role: "assistant".into(),
-                    content: ai::MessageContent::Text(req.spec.answer.clone()),
-                });
-                // FIX #8 — bounded insert (caps + half-evicts the map).
-                bridge_for_poll.store_conversation(
-                    convo_id,
-                    ConvoState {
-                        messages,
-                        rendered: req.spec.answer.clone(),
-                    },
-                );
+                    // Seed the completed-tile history with the SAME effective context
+                    // (profile + approved memory) the live answer paths use, so a
+                    // follow-up/regenerate matches the original request. `context_for_meeting`
+                    // is a blocking SQLite read, so build the seed off the event loop.
+                    // Mark the tile busy until the seed lands — an immediate follow-up would
+                    // otherwise read a not-yet-stored conversation and silently no-op.
+                    tile.set_followup_busy(true);
+                    let bridge_seed = bridge_for_poll.clone();
+                    let weak_seed = tile.as_weak();
+                    let rendered = req.spec.answer.clone();
+                    std::thread::spawn(move || {
+                        let meeting_context = overlay_backend::memory::context_for_meeting(
+                            &meeting_context,
+                            Some(question.as_str()),
+                        );
+                        let mut messages = ai::build_request(
+                            &meeting_context,
+                            &response_language,
+                            &[],
+                            None,
+                            Some(&question),
+                        );
+                        messages.push(ai::ChatMessage {
+                            role: "assistant".into(),
+                            content: ai::MessageContent::Text(rendered.clone()),
+                        });
+                        let _ = slint::invoke_from_event_loop(move || {
+                            // Seed + un-busy ONLY if that exact tile still exists — a tile
+                            // closed mid-build must not get a late, orphaned conversation.
+                            // FIX #8 — bounded insert (caps + half-evicts the map).
+                            if let Some(t) = weak_seed.upgrade() {
+                                bridge_seed.store_conversation(
+                                    convo_id,
+                                    ConvoState { messages, rendered },
+                                );
+                                t.set_followup_busy(false);
+                            }
+                        });
+                    });
+                }
                 // V0.8.1 — per-tile live route (sticky-cloud after 🧠).
                 let live = live_route(AskRoute::Text);
                 {
