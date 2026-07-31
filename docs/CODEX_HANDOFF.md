@@ -1,14 +1,15 @@
-# Codex handoff — v0.35.1
+# Codex handoff — v0.35.2 release
 
-Updated 2026-07-30. Read `AGENTS.md` before acting.
+Updated 2026-07-31. Read `AGENTS.md` before acting.
 
 ## Current state
 
-- Worktree: `C:\Users\x3d_mutant\Natively\suflyor-context-control`
-- Branch: `codex/v0.35.1`
+- Worktree: `C:\Users\x3d_mutant\Natively\suflyor-qwen-0352-integration`
+- Branch: `codex/owner-authorized-release`
 - Base: `origin/master`
-- Version: `0.35.1` in Cargo and NSIS.
-- Do not release, tag, merge, or push `master`. The owner performs releases.
+- Version: `0.35.2` in Cargo and NSIS.
+- Do not merge or push `master`. Release or tag only if the owner explicitly
+  authorizes this specific version after verified build evidence was shown.
 
 ## Included
 
@@ -29,10 +30,10 @@ Updated 2026-07-30. Read `AGENTS.md` before acting.
 
 ## Verified
 
-- Exact command passed on 2026-07-30:
+- Exact command passed on 2026-07-31:
   `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci.ps1`
 - Final line: `All gating layers green.`
-- Backend: 515 passed, 1 ignored. TTS: 9 passed.
+- Backend: 529 passed, 1 ignored. TTS: 9 passed.
 - Slint MCP: Settings 720x600, all 16 tabs inspected; long AI, Audio, and
   Hermes pages reached their bottoms with no large gap or clipping.
 - Live 26B Vision: projector SHA verified, 26B restarted, F8 region request
@@ -42,5 +43,7 @@ Updated 2026-07-30. Read `AGENTS.md` before acting.
 
 ## Remaining action
 
-Commit this coherent tree, push `codex/v0.35.1`, and open a ready PR against
-`master`. Do not publish a release.
+Commit the release-policy and v0.35.2 retest files, push
+`codex/owner-authorized-release`, and open a ready PR against `master`. After
+that PR is merged, publish v0.35.2 with the verified installer: the owner
+explicitly authorized this specific release after the evidence above was shown.
