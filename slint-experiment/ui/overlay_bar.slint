@@ -470,6 +470,13 @@ export component OverlayBarWindow inherits Window {
     changed stealth-active => {
         OverlayCursorPolicy.force-arrow = root.stealth-active;
     }
+    // I1/I4 — verified stealth FAILURE: a WDA apply/readback (or the F8 capture
+    // overlay's HWND grab) failed, so the status pill shows the translated
+    // generic failure text instead of the mic/sys status until the next apply
+    // verifies. Set/cleared by Rust (surface_stealth_unavailable clears in
+    // apply_bar_stealth); the pill TEXT is translated here so RU follows
+    // ui_language (the pill's colour stays Rust-owned — colours don't translate).
+    in-out property <bool> stealth-fault: false;
 
     // Phase E6 v11 — live status indicators. `last-transcript-line`
     // shows the most recent STT output (truncated by Rust to ~120
@@ -593,8 +600,8 @@ export component OverlayBarWindow inherits Window {
             // TouchArea here is safe: its bbox is only the pill, so
             // it can't shadow the sibling chips' TouchAreas.
             Rectangle {
-                background: root.status-color.with-alpha(0.18);
-                border-color: root.status-color;
+                background: (root.stealth-fault ? Theme.warning : root.status-color).with-alpha(0.18);
+                border-color: root.stealth-fault ? Theme.warning : root.status-color;
                 border-width: 1px;
                 border-radius: Metrics.radius-control;
                 height: 22px;
@@ -630,10 +637,14 @@ export component OverlayBarWindow inherits Window {
                         slot-height: 22px;
                     }
                     Text {
-                        text: root.status-text;
+                        // I1/I4 — a verified stealth failure overrides the
+                        // mic/sys status with the translated generic banner.
+                        text: root.stealth-fault
+                            ? @tr("[!] stealth unavailable")
+                            : root.status-text;
                         font-size: 11px;
                         font-weight: 600;
-                        color: root.status-color;
+                        color: root.stealth-fault ? Theme.warning : root.status-color;
                         vertical-alignment: center;
                     }
                 }
@@ -1016,8 +1027,8 @@ export component OverlayBarWindow inherits Window {
                 // bar: only the pill is the drag zone, so it can't shadow the
                 // sibling buttons' TouchAreas). Tinted by the live session state.
                 Rectangle {
-                    background: root.status-color.with-alpha(0.18);
-                    border-color: root.status-color;
+                    background: (root.stealth-fault ? Theme.warning : root.status-color).with-alpha(0.18);
+                    border-color: root.stealth-fault ? Theme.warning : root.status-color;
                     border-width: 1px;
                     border-radius: Metrics.radius-control;
                     height: 22px;
@@ -1068,10 +1079,14 @@ export component OverlayBarWindow inherits Window {
                             slot-height: 22px;
                         }
                         Text {
-                            text: root.status-text;
+                            // I1/I4 — same translated stealth-failure override
+                            // as the full bar's pill.
+                            text: root.stealth-fault
+                                ? @tr("[!] stealth unavailable")
+                                : root.status-text;
                             font-size: 11px;
                             font-weight: 600;
-                            color: root.status-color;
+                            color: root.stealth-fault ? Theme.warning : root.status-color;
                             vertical-alignment: center;
                             // Elide a long status within the capped pill so it can
                             // never overflow the narrow compact window. Short

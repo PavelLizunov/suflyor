@@ -259,6 +259,15 @@ msgstr "Поверх всех окон (HWND_TOPMOST)"
 msgid "Stealth (hide from screen capture)"
 msgstr "Скрытность (прятать от захвата экрана)"
 
+msgid "[ok] active - verify with a screen-share preview"
+msgstr "[ok] активна — проверьте через предпросмотр захвата экрана"
+
+msgid "[!] stealth unavailable"
+msgstr "[!] скрытность недоступна"
+
+msgid "[--] off"
+msgstr "[--] выключена"
+
 msgid "Tile opacity ({}%)"
 msgstr "Прозрачность тайлов ({}%)"
 

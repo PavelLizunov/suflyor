@@ -336,6 +336,13 @@ export component SettingsWindow inherits Window {
     // Persisted cross-window toggles (driven by overlay-host).
     in-out property <bool> always-on-top-toggle: true;
     in-out property <bool> stealth-toggle: false;
+    // I1 — verified (EFFECTIVE) stealth state for the Stealth tab status line.
+    // The toggle above is the config INTENT; this flag reports the verified
+    // WDA apply + readback. The status Text below renders the translated line
+    // from these two bools (@tr, so RU follows ui_language — no Rust-built
+    // string). Both are reseeded in populate_token_status on every open
+    // (reused-window rule).
+    in-out property <bool> stealth-effective: false;
 
     // Phase E6 — token status display + edit. Status strings are
     // populated by overlay-host on open from cfg.read().ai_bearer
@@ -970,6 +977,19 @@ export component SettingsWindow inherits Window {
                                 text: @tr("Stealth (hide from screen capture)");
                                 checked <=> root.stealth-toggle;
                                 toggled(v) => { root.stealth-changed(v); }
+                            }
+                            // I1 — verified (effective) stealth state: translated
+                            // here (@tr) and driven by the verified flag + toggle
+                            // intent; ASCII status markers only (skia-safe glyphs).
+                            Text {
+                                text: root.stealth-effective
+                                    ? @tr("[ok] active - verify with a screen-share preview")
+                                    : root.stealth-toggle
+                                        ? @tr("[!] stealth unavailable")
+                                        : @tr("[--] off");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
                             }
                         }
                         SettingsCard {
