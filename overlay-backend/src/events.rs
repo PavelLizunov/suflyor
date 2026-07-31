@@ -1,28 +1,26 @@
-//! Runtime event sink trait — Phase B2 scaffold.
+//! Runtime event sink trait.
 //!
 //! `RuntimeEvents` decouples runtime.rs / pipeline code from any
-//! specific UI framework. Today it has two implementations expected:
+//! specific UI framework. Current implementations:
 //!
-//! - `TauriEvents` in `src-tauri/src/lib.rs` — wraps an `AppHandle`,
-//!   forwards `emit` to `app.emit(channel, payload)`.
-//! - `SlintEvents` in `slint-experiment/src/bin/overlay_host.rs` —
-//!   wraps a channel + the Slint Weak<MainWindow>, forwards via
-//!   `slint::invoke_from_event_loop` to update UI properties.
-//!
-//! Phase B2 proper (not yet shipped) ports runtime.rs's ~9
-//! AppHandle-taking public fns to take `Arc<dyn RuntimeEvents>`
-//! instead, removing the last Tauri coupling from the backend.
-//!
-//! Today the trait is only consumed by `Noop` (default impl) — real
-//! consumers land with each runtime fn that gets ported.
+//! - `SlintEvents` in `slint-experiment/src/slint_events.rs` — the
+//!   primary production adapter; routes `emit` channel names to Slint
+//!   property setters via `invoke_from_event_loop`, and `spawn_tile_full`
+//!   to the tile-spawn queue drained by the overlay-host UI timer.
+//! - `GenGatedEvents` / `PttStreamSink` in
+//!   `slint-experiment/src/bin/overlay_host/tile_controller.rs` —
+//!   specialised sinks for generation-gated tile spawns and
+//!   push-to-talk streaming.
+//! - `Noop` (this file) — headless default for backend tests and
+//!   one-shot AI calls that don't need a UI sink.
 
 use std::sync::Arc;
 
 /// Sink for events the backend pipeline emits during a session.
-/// Channel names match the existing Tauri event channels so the
-/// Tauri-side implementation is a 1:1 forward; the Slint-side
-/// implementation maps channel names to property setters / Rust
-/// callbacks.
+/// Channel names are stable string identifiers (e.g.
+/// `"transcript:line"`, `"health:update"`). The Slint-side
+/// implementation maps them to property setters / Rust callbacks;
+/// headless implementations log or ignore them.
 pub trait RuntimeEvents: Send + Sync {
     /// Emit an event with a JSON payload to the channel.
     /// Implementations should NOT block. Channel names are stable
@@ -40,14 +38,11 @@ pub trait RuntimeEvents: Send + Sync {
     /// overlay-host callsites that don't yet pass those fields.
     fn spawn_tile(&self, spec: TileSpec) -> String;
 
-    /// Phase B2 trait extension — spawn a tile with the full set of
-    /// fields the Tauri-side `tile::spawn_tile_with_stealth(...)` call
-    /// receives today. Required for all 8 runtime.rs tile-spawn sites
-    /// when they port to take `Arc<dyn RuntimeEvents>` instead of
-    /// `(AppHandle, SharedTiles)`.
+    /// Spawn a tile with the full set of placement and chrome fields.
+    /// All runtime.rs tile-spawn sites use this method.
     ///
-    /// - `monitor`: which display to land on. Default impl ignores
-    ///   and the Tauri side uses pick_monitor's portrait-aware logic.
+    /// - `monitor`: which display to land on. Default impl ignores;
+    ///   `SlintEvents` uses pick_monitor's portrait-aware logic.
     /// - `stealth`: when true, apply WDA_EXCLUDEFROMCAPTURE to the
     ///   spawned tile window (carries the session-wide stealth flag).
     /// - `kind`: discriminates Ai / Kb / Snippet / Translate / Reload
@@ -70,15 +65,14 @@ pub trait RuntimeEvents: Send + Sync {
         kind: TileKind,
     ) -> Result<String, String> {
         // Default — preserves source label + question + answer; drops
-        // the new fields. Real impls (TauriEvents / SlintEvents) will
-        // override to honor monitor + stealth + kind.
+        // the new fields. Real impls (SlintEvents etc.) override to
+        // honor monitor + stealth + kind.
         let _ = (monitor, stealth, kind);
         Ok(self.spawn_tile(spec))
     }
 }
 
-/// Description of a tile to spawn — replaces the React-side
-/// `tile::spawn_tile_with_stealth(question, answer)` Tauri call.
+/// Description of a tile to spawn.
 #[derive(Debug, Clone, Default)]
 pub struct TileSpec {
     pub question: String,
@@ -141,18 +135,11 @@ pub enum TileKind {
     /// adapter gains per-kind branches.
     Manual,
     /// Auto-detector spawn — question/keyword caught in transcript
-    /// without F6/F9 user action. Maps to `tile::TileKind::Auto`
-    /// on the Tauri side (yellow chrome). Added Phase B2 port #5
-    /// alongside System/Mic so port #7 (maybe_spawn_tile +
-    /// start_session) doesn't have to re-litigate the variant set.
+    /// without F6/F9 user action (yellow chrome).
     Auto,
-    /// System-side ask (🔊 chip / PTT on interviewer audio).
-    /// Maps to `tile::TileKind::System` (purple chrome). Added
-    /// Phase B2 port #5 so source-color affordance survives the
-    /// adapter polish.
+    /// System-side ask (🔊 chip / PTT on interviewer audio; purple chrome).
     System,
-    /// Mic-side ask (🎤 chip / PTT on user mic). Maps to
-    /// `tile::TileKind::Mic` (teal chrome). Added Phase B2 port #5.
+    /// Mic-side ask (🎤 chip / PTT on user mic; teal chrome).
     Mic,
     /// V0.8.0 (Поток A) — a failure notice tile (e.g. "AI недоступен"), spawned
     /// when an auto-tile AI call fails so the user isn't left wondering why
@@ -355,8 +342,7 @@ mod tests {
             "Named monitor name must appear in Debug output, got: {dbg}"
         );
         // Empty-name Named is allowed at the type level; consumers
-        // (TauriEvents adapter) translate it to None. Sanity-check the
-        // round-trip:
+        // translate it to None. Sanity-check the round-trip:
         let empty = MonitorHint::Named(String::new());
         assert_ne!(empty, MonitorHint::Auto);
     }

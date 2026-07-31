@@ -8,7 +8,8 @@
 #
 # Windows-only by design — the product is pure Win32 + WASAPI + Slint. Mirrors
 # the local gate's 5 layers (fmt --check, clippy -D warnings, FULL cargo test —
-# NOT --lib, so the tests/ guard tests run) for BOTH standalone crates.
+# NOT --lib, so the tests/ guard tests run) for all three standalone crates
+# (overlay-backend, slint-experiment, suflyor-tts).
 name: CI
 
 on:
