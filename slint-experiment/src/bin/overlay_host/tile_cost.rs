@@ -9,23 +9,8 @@
 //! NOTE (§7): only the crate-root symbols actually used are imported below.
 use super::{Arc, RuntimeEvents, SharedSlintRuntime};
 
-/// Local helper: compute `Some(reason)` if session_cost is over the
-/// configured cap, else `None`. Duplicated from src-tauri's
-/// `over_cost_budget` — small enough to inline rather than promote
-/// to overlay-backend.
-pub(crate) fn cost_cap_reason(cap_usd: f64, current_microcents: u64) -> Option<String> {
-    if cap_usd <= 0.0 {
-        return None;
-    }
-    let current_usd = (current_microcents as f64) / 100_000_000.0;
-    if current_usd >= cap_usd {
-        Some(format!(
-            "over budget: ${current_usd:.4} spent ≥ ${cap_usd:.2} (Settings → Max cost per session)"
-        ))
-    } else {
-        None
-    }
-}
+/// Re-exported so the existing binary ask paths keep their crate-root import.
+pub(crate) use slint_replay::runtime_state::cost_cap_reason;
 
 /// Local helper: last `max` transcript lines labeled with speaker
 /// tags `[ПОЛЬЗОВАТЕЛЬ]` / `[СОБЕСЕДНИК]`. Mirrors src-tauri's
@@ -70,21 +55,12 @@ pub(crate) fn warn_if_over_cost_cap(
         return;
     }
     let cap_usd = cfg.read().max_session_cost_usd;
-    if cap_usd <= 0.0 {
-        return;
-    }
     let current_micro = slint_replay::runtime_state::lock(slint_rt).session_cost_microcents;
-    if current_micro == 0 {
-        return;
-    }
-    let usd = (current_micro as f64) / 100_000_000.0;
-    if usd >= cap_usd {
+    if let Some(reason) = cost_cap_reason(cap_usd, current_micro) {
         events.emit(
             "cost:cap-hit",
             serde_json::json!({
-                "reason": format!(
-                    "over budget: ${usd:.4} spent ≥ ${cap_usd:.2} (Settings → Max cost per session)"
-                ),
+                "reason": reason,
                 "source": source,
                 "blocking": false,
             }),

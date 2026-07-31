@@ -83,6 +83,32 @@ pub(crate) fn conversations_evict_keys(keys: &[i32], max: usize) -> Vec<i32> {
     ids
 }
 
+/// Matches the existing auto-tile error debounce.
+const CAP_NOTICE_DEBOUNCE: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// Pure event-to-tile mapping, testable without a live Slint window.
+pub(crate) fn cost_cap_notice_spec(payload: &serde_json::Value) -> Option<(TileSpec, TileKind)> {
+    let reason = payload.get("reason")?.as_str()?.trim();
+    if reason.is_empty() {
+        return None;
+    }
+    let source = payload
+        .get("source")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("ask");
+    Some((
+        TileSpec {
+            question: "Cost limit".into(),
+            answer: reason.to_string(),
+            source: format!("cost_cap_{source}"),
+            is_translation: false,
+            highlights: vec![],
+            summary_session: None,
+        },
+        TileKind::Error,
+    ))
+}
+
 /// Install `new_tile` as the active streaming tile, FIRST clearing the
 /// slot's previous occupant. The single `current_streaming` slot is shared
 /// across F9/PTT/follow-up; starting a new stream aborts the prior task,
@@ -379,6 +405,8 @@ pub(crate) struct OverlayBarBridge {
     /// bounds that cost independent of token speed. The terminal Done/Error
     /// render is never throttled, so the final answer always shows in full.
     pub(crate) last_tile_render: std::sync::Mutex<std::time::Instant>,
+    /// Last time a cap event spawned a visible notice tile.
+    pub(crate) last_cap_notice: std::sync::Mutex<std::time::Instant>,
 }
 
 /// Per-streaming-tile state: weak handle + accumulated answer text.
@@ -464,6 +492,26 @@ impl OverlayBarBridge {
             Err(p) => p.into_inner(),
         };
         convos.remove(&convo_id);
+    }
+
+    /// Route a cap event into the existing error-tile queue, with spam control.
+    fn handle_cost_cap_hit(&self, payload: serde_json::Value) {
+        let Some((spec, kind)) = cost_cap_notice_spec(&payload) else {
+            return;
+        };
+        {
+            let now = std::time::Instant::now();
+            let mut last = match self.last_cap_notice.lock() {
+                Ok(g) => g,
+                Err(p) => p.into_inner(),
+            };
+            if now.duration_since(*last) < CAP_NOTICE_DEBOUNCE {
+                return;
+            }
+            *last = now;
+        }
+        eprintln!("[overlay-bridge] cost:cap-hit: {payload}");
+        let _ = self.schedule_spawn_tile(spec, MonitorHint::Auto, false, kind);
     }
 
     /// Handle `ai:event` separately because it needs to look up the
@@ -721,6 +769,11 @@ impl SlintUiBridge for OverlayBarBridge {
             }
             *last = now;
         }
+        // Route all cap emitters through one visible, debounced notice.
+        if channel == "cost:cap-hit" {
+            self.handle_cost_cap_hit(payload);
+            return;
+        }
         // A stopped session leaves no live AI stream — clear any leaked
         // in-flight count so the "AI streaming" pulse can't stick ON
         // (an aborted stream emits no Done/Error to decrement it).
@@ -869,9 +922,8 @@ impl SlintUiBridge for OverlayBarBridge {
                     o.set_last_transcript_line(SharedString::from(truncated));
                     o.set_last_transcript_source(SharedString::from(source));
                 }
-                "tile:error" | "tile:rate-limited" | "cost:cap-hit" | "speech:coach" => {
-                    // No toast UI yet — log so developer sees these
-                    // during testing without losing them.
+                // These remaining channels have no toast UI yet.
+                "tile:error" | "tile:rate-limited" | "speech:coach" => {
                     eprintln!("[overlay-bridge] {channel}: {payload}");
                 }
                 other => {
@@ -901,5 +953,34 @@ impl SlintUiBridge for OverlayBarBridge {
             .send(req)
             .map_err(|e| format!("tile-spawn channel send failed: {e}"))?;
         Ok(label)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+    use super::*;
+
+    #[test]
+    fn cap_hit_maps_to_error_notice_tile_with_reason_as_answer() {
+        let reason =
+            slint_replay::runtime_state::cost_cap_reason(0.10, 100_000_000).expect("over cap");
+        let payload =
+            serde_json::json!({ "reason": reason, "source": "auto_tile", "blocking": true });
+        let (spec, kind) = cost_cap_notice_spec(&payload).expect("spec");
+        assert_eq!(kind, TileKind::Error);
+        assert_eq!(spec.answer, reason);
+        assert_eq!(spec.source, "cost_cap_auto_tile");
+        assert_eq!(spec.question, "Cost limit");
+        assert!(spec.highlights.is_empty());
+        assert!(!spec.is_translation);
+        assert!(spec.summary_session.is_none());
+    }
+
+    #[test]
+    fn cap_hit_without_usable_reason_spawns_nothing() {
+        assert!(cost_cap_notice_spec(&serde_json::json!({ "source": "auto_tile" })).is_none());
+        assert!(cost_cap_notice_spec(&serde_json::json!({ "reason": 42 })).is_none());
+        assert!(cost_cap_notice_spec(&serde_json::json!({ "reason": "  " })).is_none());
     }
 }
