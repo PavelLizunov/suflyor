@@ -71,7 +71,7 @@ export component TranscriptWindow inherits Window {
     init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
 
-    title: "Transcript";
+    title: @tr("Transcript");
     icon: @image-url("../assets/icon.svg");
     // Opaque (NOT transparent) — a transparent + WS_EX_LAYERED frameless window
     // alpha-clamps text invisible (archive.slint learned this the hard way).
