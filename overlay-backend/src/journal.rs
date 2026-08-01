@@ -161,16 +161,20 @@ impl Journal {
     }
 
     /// Like [`Journal::counting_for_test`], but KEEPS the writer channel's
-    /// receiver so a test can inspect the exact serialized JSONL lines
+    /// receiver so a test can inspect the exact serialized JSONL commands
     /// (`write()` sends them synchronously, so after the code under test
     /// returns they are all queued — drain with `try_recv`).
     #[cfg(test)]
-    pub(crate) fn capturing_for_test() -> (Self, mpsc::UnboundedReceiver<String>) {
-        let (tx, rx) = mpsc::unbounded_channel::<String>();
+    pub(crate) fn capturing_for_test() -> (Self, mpsc::UnboundedReceiver<WriterCmd>) {
+        let (tx, rx) = mpsc::unbounded_channel::<WriterCmd>();
         let journal = Self {
-            tx: Some(Arc::new(tx)),
             path: None,
             counters: Some(Arc::new(Mutex::new(SessionCounters::default()))),
+            writer: Some(Arc::new(Mutex::new(WriterState {
+                tx: Some(tx),
+                join: None,
+                shutdown: None,
+            }))),
         };
         (journal, rx)
     }
@@ -341,7 +345,7 @@ impl Journal {
     }
 }
 
-enum WriterCmd {
+pub(crate) enum WriterCmd {
     Line(String),
     Shutdown(std::sync::mpsc::Sender<Result<(), String>>),
 }

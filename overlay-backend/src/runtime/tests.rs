@@ -2,6 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use super::*;
 use crate::events::Noop;
+use crate::journal::WriterCmd;
 
 /// Build a hermetic empty SharedConfig that does NOT load the
 /// user's real `%APPDATA%\overlay-mvp\config.json` (which on the
@@ -728,6 +729,10 @@ async fn ask_stream_loop_journals_caller_supplied_purpose() {
     // write() queues lines synchronously, so everything is already in the
     // channel now that the loop has returned — drain and find the response.
     let response_line = std::iter::from_fn(|| lines.try_recv().ok())
+        .filter_map(|command| match command {
+            WriterCmd::Line(line) => Some(line),
+            WriterCmd::Shutdown(_) => None,
+        })
         .find(|line| line.contains(r#""kind":"ai_response""#))
         .expect("a successful stream must journal an AiResponse");
     let ev: serde_json::Value = serde_json::from_str(&response_line).unwrap();
