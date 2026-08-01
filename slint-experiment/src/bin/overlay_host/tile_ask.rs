@@ -476,7 +476,6 @@ pub(crate) fn fire_f9_ask(
         let s = slint_replay::runtime_state::lock(slint_rt);
         (s.journal.clone(), s.health.clone())
     };
-
     // ===== 4. Cancel in-flight (UI thread, immediate — same as before) =====
     {
         let mut s = slint_replay::runtime_state::lock(slint_rt);
@@ -532,6 +531,8 @@ pub(crate) fn fire_f9_ask(
             None => String::new(),
         };
         let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
+        // The request and response must carry the same journal purpose.
+        let purpose = if is_text { "text_ask" } else { "live_ask" };
         let _ = slint::invoke_from_event_loop(move || {
             // A newer ask may have superseded this one while the worker ran; the
             // generation check skips the fill/stream so the latest ask wins (the
@@ -554,7 +555,7 @@ pub(crate) fn fire_f9_ask(
             if let Some(j) = journal_for_loop.as_ref() {
                 j.write(&journal::JournalEvent::AiRequest {
                     unix_ms: journal::now_unix_ms(),
-                    purpose: if is_text { "text_ask" } else { "live_ask" },
+                    purpose,
                     model: &model,
                     system_prompt: &sys_full,
                     user_prompt: &usr_full,
@@ -588,6 +589,7 @@ pub(crate) fn fire_f9_ask(
                     events_for_task,
                     ai_rx,
                     model,
+                    purpose,
                     is_local,
                     sys_full,
                     usr_full,

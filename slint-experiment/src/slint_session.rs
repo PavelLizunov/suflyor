@@ -974,7 +974,9 @@ async fn maybe_spawn_auto_tile(
         purpose: "auto_tile",
         model: &model,
         latency_ms,
-        finish_reason: "stop",
+        // The provider's real reason ("stop", "length" = truncated, …) —
+        // surfaced by `complete_once` (audit D4; previously hardcoded).
+        finish_reason: &usage.finish_reason,
         text: &answer,
         output_tokens_est: usage.output,
         cost_microcents: micro,

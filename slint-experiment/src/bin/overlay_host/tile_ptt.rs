@@ -364,10 +364,13 @@ pub(crate) fn fire_ptt_ask(
                 .unwrap_or_default(),
             None => String::new(),
         };
+        // Audit D1 — the SAME purpose must tag the paired AiResponse that
+        // ask_stream_loop journals (previously hardcoded "live_ask" there).
+        let purpose = "ptt_ask";
         if let Some(j) = journal_for_loop.as_ref() {
             j.write(&journal::JournalEvent::AiRequest {
                 unix_ms: journal::now_unix_ms(),
-                purpose: "ptt_ask",
+                purpose,
                 model: &model,
                 system_prompt: &sys_full,
                 user_prompt: &usr_full,
@@ -396,6 +399,7 @@ pub(crate) fn fire_ptt_ask(
             sink,
             ai_rx,
             model,
+            purpose,
             is_local,
             sys_full,
             usr_full,

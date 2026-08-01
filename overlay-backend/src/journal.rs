@@ -160,6 +160,21 @@ impl Journal {
         }
     }
 
+    /// Like [`Journal::counting_for_test`], but KEEPS the writer channel's
+    /// receiver so a test can inspect the exact serialized JSONL lines
+    /// (`write()` sends them synchronously, so after the code under test
+    /// returns they are all queued — drain with `try_recv`).
+    #[cfg(test)]
+    pub(crate) fn capturing_for_test() -> (Self, mpsc::UnboundedReceiver<String>) {
+        let (tx, rx) = mpsc::unbounded_channel::<String>();
+        let journal = Self {
+            tx: Some(Arc::new(tx)),
+            path: None,
+            counters: Some(Arc::new(Mutex::new(SessionCounters::default()))),
+        };
+        (journal, rx)
+    }
+
     /// Open with the pre-v0.15 hard-coded retention (keep 100 / 500 MB).
     /// Production callers should prefer [`Journal::open_new_session_with_limits`]
     /// with the user's configured values.

@@ -540,7 +540,7 @@ pub fn cost_microcents(model: &str, input_tokens: u64, output_tokens: u64) -> u6
         .saturating_add(output_tokens.saturating_mul(micro_out))
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct TokenUsage {
     pub input: u64,
     pub output: u64,
@@ -548,6 +548,12 @@ pub struct TokenUsage {
     /// `timings.predicted_per_second` when present, else completion_tokens over
     /// the wall-clock request time. 0.0 if unknown. Feeds the per-tile label.
     pub tok_per_sec: f64,
+    /// The provider's own `choices[0].finish_reason` — "stop" (natural end),
+    /// "length" (truncated by max_tokens), etc. Falls back to "stop" when the
+    /// provider omits/empties it, so journaling sites can carry it verbatim
+    /// (audit D4: non-streaming sites previously hardcoded "stop" and lost
+    /// real truncation signals).
+    pub finish_reason: String,
 }
 
 /// Rolling tokens/sec across recent AI requests (streaming + non-streaming both
@@ -797,6 +803,18 @@ async fn complete_once(
         .and_then(|u| u.get("completion_tokens"))
         .and_then(|n| n.as_u64())
         .unwrap_or(0);
+    // The provider's real finish reason ("stop", "length" = truncated by
+    // max_tokens, …). Absent/empty/null → "stop", the safe default the
+    // journaling sites used to hardcode (audit D4).
+    let finish_reason = v
+        .get("choices")
+        .and_then(|c| c.as_array())
+        .and_then(|a| a.first())
+        .and_then(|c| c.get("finish_reason"))
+        .and_then(|r| r.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("stop")
+        .to_string();
     // Prefer llama.cpp's own server-side timing (excludes our network + queue);
     // fall back to completion_tokens over the wall-clock request time.
     let tok_per_sec = v
@@ -817,6 +835,7 @@ async fn complete_once(
         input,
         output,
         tok_per_sec,
+        finish_reason,
     };
     Ok((text, usage))
 }
@@ -1352,5 +1371,61 @@ mod tests {
         } else {
             panic!("user content should be parts when screenshot attached");
         }
+    }
+
+    // ── Audit D4: provider finish_reason must survive the non-streaming path ──
+
+    /// One-shot mock OpenAI-compatible server: answers the FIRST
+    /// /chat/completions POST with `body`, then exits. Mirrors the bridge.rs
+    /// tiny_http pattern (same dependency, no new test infra).
+    fn serve_one_completion(body: &'static str) -> String {
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", server.server_addr());
+        std::thread::spawn(move || {
+            if let Ok(req) = server.recv() {
+                let mut resp = tiny_http::Response::from_string(body);
+                if let Ok(h) =
+                    tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..])
+                {
+                    resp = resp.with_header(h);
+                }
+                let _ = req.respond(resp);
+            }
+        });
+        url
+    }
+
+    /// A provider reporting `finish_reason: "length"` (answer truncated by
+    /// max_tokens) must surface the REAL reason to callers — the non-streaming
+    /// journaling sites (reask_last, manual_spawn_tile, auto_tile) write
+    /// `usage.finish_reason` verbatim into JournalEvent::AiResponse.
+    #[tokio::test]
+    async fn complete_with_usage_surfaces_provider_length_finish_reason() {
+        let url = serve_one_completion(
+            r#"{"choices":[{"message":{"content":"truncated answer"},"finish_reason":"length"}],"usage":{"prompt_tokens":11,"completion_tokens":7}}"#,
+        );
+        let (text, usage) = complete_with_usage(&url, "", "mock-model", Vec::new(), 16)
+            .await
+            .unwrap();
+        assert_eq!(text, "truncated answer");
+        assert_eq!(usage.input, 11);
+        assert_eq!(usage.output, 7);
+        assert_eq!(
+            usage.finish_reason, "length",
+            "the provider's real finish_reason must reach the caller, not a hardcoded stop"
+        );
+    }
+
+    /// When the provider omits finish_reason entirely, fall back to "stop"
+    /// (the value every non-streaming site journaled before) — never empty.
+    #[tokio::test]
+    async fn complete_with_usage_defaults_finish_reason_to_stop_when_absent() {
+        let url = serve_one_completion(
+            r#"{"choices":[{"message":{"content":"plain answer"}}],"usage":{"prompt_tokens":3,"completion_tokens":2}}"#,
+        );
+        let (_text, usage) = complete_with_usage(&url, "", "mock-model", Vec::new(), 16)
+            .await
+            .unwrap();
+        assert_eq!(usage.finish_reason, "stop");
     }
 }

@@ -516,6 +516,7 @@ pub(crate) fn fire_followup_ask(
             .unwrap_or_default();
         let usr_full = question.clone();
         let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
+        let purpose = "followup_ask";
         let _ = slint::invoke_from_event_loop(move || {
             if bridge_for_work.stream_gen.load(Ordering::SeqCst) != generation {
                 return;
@@ -526,7 +527,7 @@ pub(crate) fn fire_followup_ask(
             if let Some(j) = journal_for_loop.as_ref() {
                 j.write(&journal::JournalEvent::AiRequest {
                     unix_ms: journal::now_unix_ms(),
-                    purpose: "followup_ask",
+                    purpose,
                     model: &model,
                     system_prompt: &sys_full,
                     user_prompt: &usr_full,
@@ -552,6 +553,7 @@ pub(crate) fn fire_followup_ask(
                     events_for_task,
                     ai_rx,
                     model,
+                    purpose,
                     is_local,
                     sys_full,
                     usr_full,
@@ -714,6 +716,7 @@ pub(crate) fn fire_regenerate(
             .map(|m| message_text(&m.content))
             .unwrap_or_default();
         let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
+        let purpose = "regenerate";
         let _ = slint::invoke_from_event_loop(move || {
             if bridge_for_work.stream_gen.load(Ordering::SeqCst) != generation {
                 return;
@@ -721,7 +724,7 @@ pub(crate) fn fire_regenerate(
             if let Some(j) = journal_for_loop.as_ref() {
                 j.write(&journal::JournalEvent::AiRequest {
                     unix_ms: journal::now_unix_ms(),
-                    purpose: "regenerate",
+                    purpose,
                     model: &model,
                     system_prompt: &sys_full,
                     user_prompt: &usr_full,
@@ -746,6 +749,7 @@ pub(crate) fn fire_regenerate(
                     events_for_task,
                     ai_rx,
                     model,
+                    purpose,
                     is_local,
                     sys_full,
                     usr_full,
