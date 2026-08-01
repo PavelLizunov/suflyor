@@ -549,6 +549,8 @@ export component SettingsWindow inherits Window {
     in-out property <int> stt-provider-index: 0;
     // Recognition language (stt_language): 0=auto-detect, 1=Russian, 2=English.
     in-out property <int> stt-language-index: 0;
+    // Cloud recognition model (stt_model): 0=turbo (fast), 1=large-v3 (accurate).
+    in-out property <int> stt-cloud-model-index: 0;
     in-out property <string> stt-gigaam-dir-input: "";
     // GigaAM GPU acceleration via the ONNX Runtime DirectML EP (default on).
     in-out property <bool> stt-gigaam-gpu: true;
@@ -558,6 +560,7 @@ export component SettingsWindow inherits Window {
     callback ai-bridge-test-clicked();
     callback stt-test-clicked();
     callback stt-provider-changed(int);
+    callback stt-cloud-model-changed(int);
     callback stt-language-changed(int);
     callback stt-gigaam-dir-save(string);
     callback stt-gigaam-gpu-changed(bool);
@@ -3058,6 +3061,26 @@ export component SettingsWindow inherits Window {
                                 root.stt-provider-changed(self.current-index);
                             }
                         }
+                        // Contextual engine description — helps a novice understand
+                        // privacy / language / setup for the selected engine.
+                        if root.stt-provider-index == 0 : Text {
+                            text: @tr("Cloud: audio is sent to Groq's API for recognition. Requires a Groq API key. Supports many languages.");
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
+                        if root.stt-provider-index == 1 : Text {
+                            text: @tr("Local: runs entirely on this PC, no cloud. Russian only. Requires the GigaAM model folder set below.");
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
+                        if root.stt-provider-index == 2 : Text {
+                            text: @tr("Local: runs on your whisper-server. Multilingual. Configure the server URL and model below.");
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
                         // Recognition language (stt_language) — what the mic is
                         // transcribed as, by default.
                         Text {
@@ -3072,6 +3095,21 @@ export component SettingsWindow inherits Window {
                             selected => {
                                 root.stt-language-index = self.current-index;
                                 root.stt-language-changed(self.current-index);
+                            }
+                        }
+                        // Cloud recognition model — only relevant for the Groq engine.
+                        if root.stt-provider-index == 0 : Text {
+                            text: @tr("Cloud recognition model");
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        if root.stt-provider-index == 0 : SettingsComboBox {
+                            model: [@tr("Fast — recommended (whisper-large-v3-turbo)"), @tr("More accurate — slower (whisper-large-v3)")];
+                            current-index: root.stt-cloud-model-index;
+                            selected => {
+                                root.stt-cloud-model-index = self.current-index;
+                                root.stt-cloud-model-changed(self.current-index);
                             }
                         }
                         if root.stt-provider-index == 1 : HorizontalLayout {
@@ -3130,7 +3168,7 @@ export component SettingsWindow inherits Window {
                         if root.stt-provider-index == 2 : HorizontalLayout {
                             spacing: 6px;
                             SettingsLineEdit {
-                                placeholder-text: @tr("whisper model — e.g. whisper-large-v3-turbo");
+                                placeholder-text: @tr("Server model id (advanced) — e.g. whisper-large-v3-turbo");
                                 text <=> root.stt-whisper-model-input;
                                 horizontal-stretch: 1;
                             }
