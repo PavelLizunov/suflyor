@@ -175,6 +175,12 @@ pub struct SlintRuntime {
     /// error tile per line. We spawn at most one error tile per
     /// `AI_ERROR_TILE_DEBOUNCE_MS`. Zero = none spawned yet.
     pub last_ai_error_tile_ms: u64,
+
+    /// Suflyor E2 — latch for the mic-down notice tile emitted by the health
+    /// ticker (see `slint_session::mic_notice_decision`): ONE generic tile per
+    /// failure episode instead of one per 2s tick. Set when the notice spawns;
+    /// cleared when the mic health reads "ok" again and on session start/stop.
+    pub mic_down_notified: bool,
 }
 
 /// Convenience alias matching src-tauri's `SharedRuntime`.
