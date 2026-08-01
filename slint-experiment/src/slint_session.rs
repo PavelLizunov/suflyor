@@ -1067,10 +1067,12 @@ pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<Transcrip
     // v0.12.0 — deliberately NOT clearing s.full_transcript here: the
     // Summary button must still work after Стоп (it resets on the next
     // Старт in start_session_inner).
+    let journal = s.journal.take();
+    drop(s);
     // Write the SessionSummary roll-up + SessionStop marker before closing, so
     // the journal has the "how did this session go" one-liner on disk (audit:
     // these were defined + counted but never emitted on the shipping stack).
-    if let Some(j) = s.journal.take() {
+    if let Some(j) = journal {
         if let Some(c) = j.snapshot_counters() {
             let now = overlay_backend::journal::now_unix_ms();
             j.write(&overlay_backend::journal::JournalEvent::SessionSummary {
@@ -1090,6 +1092,11 @@ pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<Transcrip
             });
             j.write(&overlay_backend::journal::JournalEvent::SessionStop { unix_ms: now });
         }
+        if let Err(e) = j.shutdown(Duration::from_secs(3)) {
+            log_warn(&format!(
+                "journal shutdown on stop did not confirm durability: {e:#}"
+            ));
+        }
         let journal_path = j.current_path();
         drop(j);
         // v0.17.2 (тестер P0.1) — project the just-closed session into the
@@ -1103,15 +1110,8 @@ pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<Transcrip
         if cfg.read().session_archive_enabled {
             if let Some(path) = journal_path {
                 std::thread::spawn(move || {
-                    // `j.write(SessionStop)` only ENQUEUES into the journal's
-                    // mpsc — the writer thread drains it asynchronously, so a
-                    // single read here can race the stop marker onto disk and
-                    // freeze the row as "crashed" forever (the launch / open
-                    // sweeps skip already-indexed ids). Wholesale replace
-                    // makes re-indexing idempotent: retry until the row reads
-                    // "completed" (a partial row is still kept if we give
-                    // up). The pauses also absorb a transient SQLITE_BUSY
-                    // from a concurrent archive-open sweep.
+                    // Shutdown above normally made SessionStop durable. Retain
+                    // the retries for a shutdown error or transient SQLITE_BUSY.
                     let mut last_err: Option<anyhow::Error> = None;
                     for attempt in 0..4u8 {
                         if attempt > 0 {
