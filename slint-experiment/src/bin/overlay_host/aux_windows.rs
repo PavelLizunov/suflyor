@@ -63,25 +63,27 @@ fn lock_store(slot: &StoreSlot) -> std::sync::MutexGuard<'_, Option<Store>> {
 /// close+reopen still sees the running job. One `try_acquire` pairs with exactly
 /// one `release` in the worker's completion path. (Same pattern as `MIC_BUSY`.)
 static RETRANSCRIBE_BUSY: AtomicBool = AtomicBool::new(false);
+static DIAR_BUSY: AtomicBool = AtomicBool::new(false);
+/// V-1 — same latch for the diarization model download: the install outlives
+/// the transcript window, but the per-window `installing-diar-models` property
+/// dies with it — a close+reopen would otherwise spawn a second `install_models`
+/// racing the first on the same .download/staging/live files. One
+/// `try_acquire_busy` pairs with the worker's completion (RAII guard).
+static DIAR_INSTALL_BUSY: AtomicBool = AtomicBool::new(false);
 
-/// RAII release for the retranscribe latch. Dropping it — on ANY exit of the
-/// spawned task, including a panic unwinding the awaited re-STT/Summary future —
-/// frees the latch, so a panic in the heaviest job in the app can't leave the
-/// "↻ Summary" button dead for the rest of the process (audit Q1). The `()`
-/// field is private so only `try_acquire_retranscribe` can mint one.
-struct RetranscribeGuard(());
+/// Shared RAII guard for process-global background-job latches.
+struct BusyGuard<'a>(&'a AtomicBool);
 
-impl Drop for RetranscribeGuard {
+impl Drop for BusyGuard<'_> {
     fn drop(&mut self) {
-        RETRANSCRIBE_BUSY.store(false, Ordering::Release);
+        self.0.store(false, Ordering::Release);
     }
 }
 
-fn try_acquire_retranscribe() -> Option<RetranscribeGuard> {
-    RETRANSCRIBE_BUSY
-        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+fn try_acquire_busy(busy: &AtomicBool) -> Option<BusyGuard<'_>> {
+    busy.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_ok()
-        .then(|| RetranscribeGuard(()))
+        .then(|| BusyGuard(busy))
 }
 
 /// v0.10.1 — format the active profile/persona for the text-ask header so the
@@ -939,7 +941,7 @@ pub(crate) fn open_archive(
             // window's `retranscribe-busy` starts false). Silently no-op while a
             // job runs, like MIC_BUSY. RAII guard moved into the task below frees
             // it on every exit incl. an awaited-future panic.
-            let Some(rt_guard) = try_acquire_retranscribe() else {
+            let Some(rt_guard) = try_acquire_busy(&RETRANSCRIBE_BUSY) else {
                 return;
             };
             p.set_retranscribe_busy(true);
@@ -1941,7 +1943,61 @@ thread_local! {
     // The «Определить говорящих» result-poll timer — held so it outlives the run
     // closure; the timer clears itself on completion (and on window close).
     static DIAR_TIMER: RefCell<Option<slint::Timer>> = const { RefCell::new(None) };
+    // The model-INSTALL poll timer (V-1). Kept SEPARATE from DIAR_TIMER so a
+    // reopen — which drops DIAR_TIMER to re-attach the result poll — can't abort
+    // an in-flight model download, and the install poll's self-clear can't drop
+    // the result poll. The two flows are mutually exclusive by gating
+    // (install ⇄ needs_diar_models, run ⇄ can_diarize), but distinct timers make
+    // that independence structural rather than incidental.
+    static DIAR_INSTALL_TIMER: RefCell<Option<slint::Timer>> = const { RefCell::new(None) };
+    // suflyor H2 — the live job's shared slots (worker → UI poll) + its session
+    // id, so a window closed + reopened mid-run RE-ATTACHES a poll to the running
+    // job instead of spawning a second sidecar. UI-thread-only (like DIAR_TIMER).
+    static DIAR_JOB: RefCell<Option<DiarJobHandles>> = const { RefCell::new(None) };
+    // V-1 — the live model install's shared result slot (worker → UI poll), so a
+    // close+reopen mid-download RE-ATTACHES a poll to the running install instead
+    // of spawning a second one. UI-thread-only (like DIAR_JOB).
+    static DIAR_INSTALL_JOB: RefCell<Option<DiarInstallSlot>> = const { RefCell::new(None) };
 }
+
+/// suflyor H2 — the running diarization job's cross-thread slots. The worker
+/// (spawn_blocking) writes them; the UI-thread poll ([`start_diar_poll`]) reads
+/// them. Cloned between the run callback, `DIAR_JOB`, and the poll, so a
+/// re-attached poll after a close+reopen consumes the SAME job.
+#[derive(Clone)]
+struct DiarJobHandles {
+    /// The terminal outcome (`None` while the job runs).
+    slot: Arc<Mutex<Option<Result<Diarization, DiarFailure>>>>,
+    /// The latest sidecar step message (taken once by the poll → status line).
+    progress: Arc<Mutex<Option<String>>>,
+    /// The session the job runs for — a re-attached poll paints ONLY when the
+    /// window still shows this session (it may have been repurposed mid-run).
+    session_id: String,
+}
+
+/// V-1 — the running model install's shared result slot. The worker
+/// (spawn_blocking) writes the terminal outcome (`None` while it downloads);
+/// the UI-thread poll ([`start_diar_install_poll`]) takes it. Cloned between
+/// the install callback, `DIAR_INSTALL_JOB`, and the poll, so a re-attached
+/// poll after a close+reopen consumes the SAME install.
+type DiarInstallSlot = Arc<Mutex<Option<Result<(), String>>>>;
+
+/// suflyor H3 — how a finished job failed, so the UI never paints a result that
+/// was NOT persisted. `Run` = the sidecar/parse failed (path-safe reason via
+/// `diarize::friendly_error`); `Save` = the run succeeded but the catalog write
+/// failed (details go to the log ONLY — the store error chain can carry the
+/// catalog path, so the shown line is a fixed generic).
+enum DiarFailure {
+    Run(String),
+    Save,
+}
+
+/// A user-facing line for a rename/save failure (Rust-built RU is allowed; the
+/// `.slint` strings stay English `@tr`). Shared const so the rename callback can
+/// recognize — and clear — its OWN failure text on a later successful keystroke
+/// without touching an in-flight job's progress text.
+const DIAR_SAVE_FAILED_MSG: &str = "Не удалось сохранить результат.";
+const DIAR_RENAME_FAILED_MSG: &str = "Не удалось сохранить имя говорящего.";
 
 /// A distinct colour per speaker id (cycled), vivid enough on light + dark surfaces.
 fn speaker_palette(id: i32) -> slint::Color {
@@ -2044,6 +2100,160 @@ fn speaker_rows(diar: &Diarization, utts: &[Utterance]) -> Vec<SpeakerRow> {
 fn set_speaker_list(win: &TranscriptWindow, diar: &Diarization, utts: &[Utterance]) {
     let rows = speaker_rows(diar, utts);
     win.set_speakers(ModelRc::from(Rc::new(VecModel::from(rows))));
+}
+
+/// suflyor H2 — start (replacing any prior) the UI-thread poll that consumes the
+/// running diarization job for display: progress step → status line, then the
+/// terminal outcome. The WORKER already persisted a successful result, so the Ok
+/// arm only PAINTS (re-reading the authoritative state back from the catalog);
+/// `paint_session_id` is the session the window shows now — a job that finishes
+/// for a DIFFERENT session (the window was repurposed mid-run) just clears the
+/// busy state instead of mislabelling another session's lines. Panic backstop:
+/// a worker that freed the latch without posting an outcome (it unwound) fails
+/// the UI clean instead of a forever-busy button.
+fn start_diar_poll(
+    weak: slint::Weak<TranscriptWindow>,
+    store: StoreSlot,
+    diar: Rc<RefCell<Option<Diarization>>>,
+    model: Rc<VecModel<TranscriptLine>>,
+    utts: Rc<Vec<Utterance>>,
+    handles: DiarJobHandles,
+    paint_session_id: String,
+) {
+    let poll = slint::Timer::default();
+    let slot = handles.slot;
+    let progress = handles.progress;
+    let job_sid = handles.session_id;
+    poll.start(
+        slint::TimerMode::Repeated,
+        std::time::Duration::from_millis(200),
+        move || {
+            if let Some(message) = progress.lock().ok().and_then(|mut value| value.take()) {
+                if let Some(w) = weak.upgrade() {
+                    w.set_diar_status(SharedString::from(message));
+                }
+            }
+            let done = slot.lock().ok().and_then(|mut g| g.take());
+            let Some(result) = done else {
+                // Panic backstop: the latch is free but no outcome was posted —
+                // the worker unwound. Fail clean (the RAII guard already freed
+                // the latch, so a new job is possible once this clears).
+                if !DIAR_BUSY.load(Ordering::Acquire) {
+                    DIAR_TIMER.with(|t| *t.borrow_mut() = None); // stop + drop self
+                    DIAR_JOB.with(|j| *j.borrow_mut() = None);
+                    if let Some(w) = weak.upgrade() {
+                        w.set_diarizing(false);
+                        w.set_diar_status(SharedString::from("Не удалось определить говорящих."));
+                    }
+                }
+                return;
+            };
+            DIAR_TIMER.with(|t| *t.borrow_mut() = None); // stop + drop self
+            DIAR_JOB.with(|j| *j.borrow_mut() = None);
+            let Some(w) = weak.upgrade() else {
+                // Window closed — nothing to paint; the worker already persisted
+                // the result, and the next open reads it from the catalog.
+                return;
+            };
+            w.set_diarizing(false);
+            match result {
+                Ok(d) if job_sid == paint_session_id => {
+                    // Re-read the persisted state so the UI can never diverge
+                    // from the catalog (falls back to the worker's value if the
+                    // read races a maintenance vacuum — same data, no failure).
+                    let d = lock_store(&store)
+                        .as_ref()
+                        .and_then(|st| st.get_diarization(&job_sid).ok().flatten())
+                        .unwrap_or(d);
+                    apply_voice_labels(&model, &utts, &d);
+                    set_speaker_list(&w, &d, &utts);
+                    *diar.borrow_mut() = Some(d);
+                    w.set_has_diarization(true);
+                    w.set_by_voice(true);
+                    // F — a fresh result carries no custom names; clear the guard and the
+                    // confirm that may have triggered this re-run.
+                    w.set_has_speaker_names(false);
+                    w.set_confirm_rediar(false);
+                    w.set_diar_status(SharedString::default());
+                }
+                Ok(_) => {
+                    // The job was for another session (repurposed window): the
+                    // worker persisted it; just drop the busy state here.
+                    w.set_diar_status(SharedString::default());
+                }
+                Err(DiarFailure::Run(e)) => {
+                    // I-5: surface the specific, path-safe reason (>3h / no speech)
+                    // instead of a bare generic line.
+                    w.set_diar_status(SharedString::from(
+                        overlay_backend::diarize::friendly_error(&e),
+                    ));
+                }
+                Err(DiarFailure::Save) => {
+                    // suflyor H3 — the result was NOT saved: a generic line (the
+                    // detail chain is in the log and can carry the catalog path),
+                    // and NO voice labels / has-diarization flip.
+                    w.set_diar_status(SharedString::from(DIAR_SAVE_FAILED_MSG));
+                }
+            }
+        },
+    );
+    DIAR_TIMER.with(|t| *t.borrow_mut() = Some(poll));
+}
+
+/// V-1 — start (replacing any prior) the UI-thread poll that consumes the
+/// running model install for display. The worker only downloads — the models
+/// land on disk window-independently — so the Ok arm re-checks the fs and flips
+/// can_diarize only when BOTH really landed (a partial install keeps the prompt
+/// up). A close+reopen re-attaches this poll to the SAME slot via
+/// `DIAR_INSTALL_JOB`; the worker's latch guard makes a second installer
+/// impossible regardless of the per-window property. Panic backstop: a worker
+/// that freed the latch without posting an outcome (it unwound) fails the UI
+/// clean instead of a forever-busy button.
+fn start_diar_install_poll(weak: slint::Weak<TranscriptWindow>, slot: DiarInstallSlot) {
+    let poll = slint::Timer::default();
+    poll.start(
+        slint::TimerMode::Repeated,
+        std::time::Duration::from_millis(300),
+        move || {
+            let done = slot.lock().ok().and_then(|mut g| g.take());
+            let Some(result) = done else {
+                // Panic backstop (same as the diarization poll): the latch is
+                // free but no outcome was posted — the worker unwound.
+                if !DIAR_INSTALL_BUSY.load(Ordering::Acquire) {
+                    DIAR_INSTALL_TIMER.with(|t| *t.borrow_mut() = None); // stop + drop self
+                    DIAR_INSTALL_JOB.with(|j| *j.borrow_mut() = None);
+                    if let Some(w) = weak.upgrade() {
+                        w.set_installing_diar_models(false);
+                        w.set_diar_status(SharedString::from("Не удалось скачать модели"));
+                    }
+                }
+                return;
+            };
+            DIAR_INSTALL_TIMER.with(|t| *t.borrow_mut() = None); // stop + drop self
+            DIAR_INSTALL_JOB.with(|j| *j.borrow_mut() = None);
+            let Some(w) = weak.upgrade() else {
+                // Window closed — nothing to paint; the models are on disk and
+                // the next open recomputes readiness from the fs.
+                return;
+            };
+            w.set_installing_diar_models(false);
+            match result {
+                Ok(()) => {
+                    // Re-check the fs rather than assume — only enable detect if BOTH
+                    // models really landed (a partial install keeps the prompt up).
+                    let ready = overlay_backend::diarize::models_ready();
+                    w.set_can_diarize(ready);
+                    w.set_needs_diar_models(!ready);
+                    w.set_diar_status(SharedString::default());
+                }
+                Err(e) => {
+                    w.set_diar_status(SharedString::from("Не удалось скачать модели"));
+                    log::warn!("diar model install failed: {e}");
+                }
+            }
+        },
+    );
+    DIAR_INSTALL_TIMER.with(|t| *t.borrow_mut() = Some(poll));
 }
 
 /// I (2026-07-05) — case-insensitive substring match (full Unicode lowercasing, so Cyrillic
@@ -2160,8 +2370,31 @@ fn wire_transcript_diarization(
     utts_display: &[Utterance],
     model: &Rc<VecModel<TranscriptLine>>,
 ) {
-    // A stale poll timer from a prior session's window (the window is reused).
+    // suflyor H2 — a live job (this window's or a closed one's) outlives this
+    // wiring: grab its handles BEFORE dropping the poll timer so the job's poll
+    // is re-attached below (a close+reopen keeps consuming the running job
+    // instead of spawning a second sidecar). No live job → the timer being
+    // dropped is just a stale one from a prior session's reused window.
+    let live_job = DIAR_BUSY
+        .load(Ordering::Acquire)
+        .then(|| DIAR_JOB.with(|j| j.borrow().clone()))
+        .flatten();
+    let job_busy = live_job.is_some();
     DIAR_TIMER.with(|t| *t.borrow_mut() = None);
+    // V-1 — same for the model install: grab the running download's slot BEFORE
+    // dropping its poll timer so the poll re-attaches below. Latch free + a slot
+    // still present = the install finished while the window was closed: readiness
+    // is recomputed from disk below, so just clear the stale handle — the new
+    // window must not show a busy button over an already-landed download.
+    let live_install = DIAR_INSTALL_BUSY
+        .load(Ordering::Acquire)
+        .then(|| DIAR_INSTALL_JOB.with(|j| j.borrow().clone()))
+        .flatten();
+    let install_busy = live_install.is_some();
+    DIAR_INSTALL_TIMER.with(|t| *t.borrow_mut() = None);
+    if !install_busy {
+        DIAR_INSTALL_JOB.with(|j| *j.borrow_mut() = None);
+    }
 
     let has_sys_audio_ms = utts_display
         .iter()
@@ -2193,7 +2426,9 @@ fn wire_transcript_diarization(
 
     win.set_can_diarize(can_diarize);
     win.set_needs_diar_models(needs_diar_models);
-    win.set_installing_diar_models(false);
+    // V-1 — honest busy state: a download that outlived the window shows as
+    // downloading on (re)open; the re-attached poll clears it when it lands.
+    win.set_installing_diar_models(install_busy);
     win.set_timeline_unreliable(timeline_unreliable);
     win.set_has_diarization(diar.borrow().is_some());
     // F — arm the re-detect guard iff the stored result already has custom names; reset the
@@ -2205,8 +2440,16 @@ fn wire_transcript_diarization(
     );
     win.set_confirm_rediar(false);
     win.set_by_voice(false);
-    win.set_diarizing(false);
-    win.set_diar_status(SharedString::default());
+    // suflyor H2 — honest busy state: a job still running (from a closed window
+    // or a rep here) shows as running on (re)open; the re-attached poll below
+    // clears it when the job lands. The run callback's latch gate makes a second
+    // sidecar impossible regardless of what this property says.
+    win.set_diarizing(job_busy);
+    win.set_diar_status(SharedString::from(if job_busy {
+        "Определение говорящих…"
+    } else {
+        ""
+    }));
     let default_count = diar
         .borrow()
         .as_ref()
@@ -2217,6 +2460,26 @@ fn wire_transcript_diarization(
     // but defends against a stale prior-session list if the gating ever changes.
     win.set_speakers(ModelRc::from(Rc::new(VecModel::<SpeakerRow>::default())));
     apply_role_labels(model, &utts_rc);
+
+    // suflyor H2 — re-attach the result poll to a job that outlived the window:
+    // the worker persists the result itself, and this poll consumes it for the
+    // UI (painting only if this session is still the one on screen).
+    if let Some(handles) = live_job {
+        start_diar_poll(
+            win.as_weak(),
+            store.clone(),
+            diar.clone(),
+            model.clone(),
+            utts_rc.clone(),
+            handles,
+            session_id.to_string(),
+        );
+    }
+    // V-1 — re-attach the install poll to a download that outlived the window
+    // (same lifecycle as above; the worker commits on disk window-independently).
+    if let Some(slot) = live_install {
+        start_diar_install_poll(win.as_weak(), slot);
+    }
 
     // Toggle role ↔ voice.
     {
@@ -2252,13 +2515,24 @@ fn wire_transcript_diarization(
             let Some(w) = weak.upgrade() else {
                 return;
             };
-            {
+            // suflyor H3 — the rename Result is authoritative: on failure the
+            // name was NOT saved, so the transcript is NOT relabelled from a
+            // state that never reached the catalog and no success is painted.
+            let renamed = {
                 let slot = lock_store(&store_c);
-                if let Some(st) = slot.as_ref() {
-                    let _ = st.rename_speaker(&sid, id, name.as_str());
-                    *diar_c.borrow_mut() = st.get_diarization(&sid).ok().flatten();
+                match slot.as_ref() {
+                    Some(st) => st.rename_speaker(&sid, id, name.as_str()),
+                    None => return,
                 }
+            };
+            if let Err(e) = renamed {
+                log::warn!("diar: rename speaker {id} NOT persisted: {e:#}");
+                w.set_diar_status(SharedString::from(DIAR_RENAME_FAILED_MSG));
+                return;
             }
+            *diar_c.borrow_mut() = lock_store(&store_c)
+                .as_ref()
+                .and_then(|st| st.get_diarization(&sid).ok().flatten());
             if let Some(d) = diar_c.borrow().as_ref() {
                 // F-fix (fable): the rename now commits per-keystroke (`edited`), so do NOT rebuild
                 // the speaker list here — that recreates the focused LineEdit on every keystroke and
@@ -2267,14 +2541,23 @@ fn wire_transcript_diarization(
                 apply_voice_labels(&model_c, &utts_c, d);
                 let has_names = d.speaker_names.values().any(|n| !n.trim().is_empty());
                 w.set_has_speaker_names(has_names);
+                // Clear OUR failure text once a keystroke saved again — but never
+                // an in-flight job's progress line (it only re-posts on a new step).
+                if w.get_diar_status().as_str() == DIAR_RENAME_FAILED_MSG {
+                    w.set_diar_status(SharedString::default());
+                }
                 log::debug!("diar: rename speaker {id} (has_custom_names={has_names})");
             }
         });
     }
 
-    // Run diarization: spawn the blocking sidecar off-thread; a UI-thread poll timer
-    // picks up the Send result and persists + repaints (the !Sync store + Rc model
-    // stay on the UI thread).
+    // Run diarization: spawn the blocking sidecar off-thread behind the process-
+    // global latch (suflyor H2 — one job process-wide; a close+reopen re-attaches
+    // instead of spawning a second sidecar). The WORKER persists the result
+    // through its own catalog handle (WAL + busy_timeout make that safe) BEFORE
+    // releasing the latch, so a completed result survives the window closing and
+    // a failed save is never painted as a success (suflyor H3). The UI-thread
+    // poll ([`start_diar_poll`]) only consumes the outcome for display.
     {
         let weak = win.as_weak();
         let store_c = store.clone();
@@ -2287,22 +2570,38 @@ fn wire_transcript_diarization(
             let Some(w) = weak.upgrade() else {
                 return;
             };
-            if w.get_diarizing() {
+            let Some(guard) = try_acquire_busy(&DIAR_BUSY) else {
+                // A job from another (possibly closed) window is still running:
+                // honest busy state, NO second sidecar. The running job's poll
+                // (re-attached on reopen) clears this when it lands.
+                w.set_diarizing(true);
+                w.set_diar_status(SharedString::from("Определение говорящих уже выполняется…"));
+                // Dismiss the re-detect confirm (if this run came through it) so
+                // the busy line is visible and the card doesn't linger.
+                w.set_confirm_rediar(false);
                 return;
-            }
+            };
             let count = w.get_speaker_count().clamp(0, 8);
             w.set_diarizing(true);
             w.set_diar_status(SharedString::from("Определение говорящих…"));
 
-            let slot: Arc<Mutex<Option<Result<Diarization, String>>>> = Arc::new(Mutex::new(None));
-            let progress: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-            let utts_owned: Vec<Utterance> = utts_c.as_ref().clone();
+            let handles = DiarJobHandles {
+                slot: Arc::new(Mutex::new(None)),
+                progress: Arc::new(Mutex::new(None)),
+                session_id: sid.clone(),
+            };
+            DIAR_JOB.with(|j| *j.borrow_mut() = Some(handles.clone()));
             {
-                let slot_w = slot.clone();
-                let progress_w = progress.clone();
+                let slot_w = handles.slot.clone();
+                let progress_w = handles.progress.clone();
                 let sid_w = sid.clone();
+                let utts_owned: Vec<Utterance> = utts_c.as_ref().clone();
                 rt.spawn_blocking(move || {
-                    let r = overlay_backend::diarize::run_diarization(
+                    // Held until the outcome is posted — on EVERY exit, including
+                    // a panic unwinding the sidecar run (RAII; the latch can't be
+                    // leaked and wedge the feature until restart).
+                    let guard = guard;
+                    let outcome = match overlay_backend::diarize::run_diarization(
                         &sid_w,
                         count,
                         &utts_owned,
@@ -2311,72 +2610,51 @@ fn wire_transcript_diarization(
                                 *value = Some(message);
                             }
                         },
-                    )
-                    .map_err(|e| format!("{e:#}"));
+                    ) {
+                        Ok(d) => {
+                            // Persist HERE, off the window: a worker-owned catalog
+                            // handle (the archive window does the same). The poll's
+                            // Ok arm only paints what this write committed.
+                            match open_default_store().and_then(|st| st.put_diarization(&d)) {
+                                Ok(()) => Ok(d),
+                                Err(e) => {
+                                    log::warn!("diarization result NOT persisted: {e:#}");
+                                    Err(DiarFailure::Save)
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::warn!("diarization failed: {e:#}");
+                            Err(DiarFailure::Run(format!("{e:#}")))
+                        }
+                    };
                     if let Ok(mut g) = slot_w.lock() {
-                        *g = Some(r);
+                        *g = Some(outcome);
+                        // Publish and release the latch while still holding the
+                        // slot lock: the poll cannot consume a terminal result
+                        // and race a final, still-busy latch state.
+                        drop(guard);
                     }
                 });
             }
-
-            let poll = slint::Timer::default();
-            let weak_p = weak.clone();
-            let store_p = store_c.clone();
-            let diar_p = diar_c.clone();
-            let model_p = model_c.clone();
-            let utts_p = utts_c.clone();
-            poll.start(
-                slint::TimerMode::Repeated,
-                std::time::Duration::from_millis(200),
-                move || {
-                    if let Some(message) = progress.lock().ok().and_then(|mut value| value.take()) {
-                        if let Some(w) = weak_p.upgrade() {
-                            w.set_diar_status(SharedString::from(message));
-                        }
-                    }
-                    let done = slot.lock().ok().and_then(|mut g| g.take());
-                    let Some(result) = done else {
-                        return;
-                    };
-                    DIAR_TIMER.with(|t| *t.borrow_mut() = None); // stop + drop self
-                    let Some(w) = weak_p.upgrade() else {
-                        return;
-                    };
-                    w.set_diarizing(false);
-                    match result {
-                        Ok(d) => {
-                            if let Some(st) = lock_store(&store_p).as_ref() {
-                                let _ = st.put_diarization(&d);
-                            }
-                            apply_voice_labels(&model_p, &utts_p, &d);
-                            set_speaker_list(&w, &d, &utts_p);
-                            *diar_p.borrow_mut() = Some(d);
-                            w.set_has_diarization(true);
-                            w.set_by_voice(true);
-                            // F — a fresh result carries no custom names; clear the guard and the
-                            // confirm that may have triggered this re-run.
-                            w.set_has_speaker_names(false);
-                            w.set_confirm_rediar(false);
-                            w.set_diar_status(SharedString::default());
-                        }
-                        Err(e) => {
-                            // I-5: surface the specific, path-safe reason (>3h / no speech)
-                            // instead of a bare generic line.
-                            w.set_diar_status(SharedString::from(
-                                overlay_backend::diarize::friendly_error(&e),
-                            ));
-                            log::warn!("diarization failed: {e}");
-                        }
-                    }
-                },
+            start_diar_poll(
+                weak.clone(),
+                store_c.clone(),
+                diar_c.clone(),
+                model_c.clone(),
+                utts_c.clone(),
+                handles,
+                sid.clone(),
             );
-            DIAR_TIMER.with(|t| *t.borrow_mut() = Some(poll));
         });
     }
 
-    // V-1 — install the diarization models off-thread; a UI-thread poll flips
-    // can_diarize when they land (mirrors run-diarization — the store + models are
-    // UI-thread-bound, so the worker only downloads and the poll updates the UI).
+    // V-1 — install the diarization models off-thread behind the process-global
+    // latch (the download outlives the window; a close+reopen re-attaches the
+    // poll via DIAR_INSTALL_JOB instead of spawning a second `install_models`
+    // on the same .download/staging/live files). The WORKER only downloads —
+    // the models commit on disk window-independently — and the UI-thread poll
+    // ([`start_diar_install_poll`]) consumes the outcome for display.
     {
         let weak = win.as_weak();
         let rt = rt_handle.clone();
@@ -2384,59 +2662,40 @@ fn wire_transcript_diarization(
             let Some(w) = weak.upgrade() else {
                 return;
             };
-            if w.get_installing_diar_models() {
+            let Some(guard) = try_acquire_busy(&DIAR_INSTALL_BUSY) else {
+                // An install from another (possibly closed) window is still
+                // running: honest busy state, NO second worker. The running
+                // install's poll (re-attached on reopen) clears this when it lands.
+                w.set_installing_diar_models(true);
+                w.set_diar_status(SharedString::default());
                 return;
-            }
+            };
             w.set_installing_diar_models(true);
             w.set_diar_status(SharedString::default());
 
-            let slot: Arc<Mutex<Option<Result<(), String>>>> = Arc::new(Mutex::new(None));
+            let slot: DiarInstallSlot = Arc::new(Mutex::new(None));
+            DIAR_INSTALL_JOB.with(|j| *j.borrow_mut() = Some(slot.clone()));
             {
                 let slot_w = slot.clone();
                 rt.spawn_blocking(move || {
-                    let cancel = std::sync::atomic::AtomicBool::new(false);
+                    // Held until the outcome is posted — on EVERY exit, including
+                    // a panic unwinding the download (RAII; the latch can't be
+                    // leaked and wedge the feature until restart).
+                    let guard = guard;
+                    let cancel = AtomicBool::new(false);
                     // ponytail: no per-file progress marshalling — the button's
                     // "Downloading…" state is enough for a one-time ~30 MB fetch.
                     let r = overlay_backend::diar_install::install_models(&cancel, &|_| {})
                         .map_err(|e| format!("{e:#}"));
                     if let Ok(mut g) = slot_w.lock() {
                         *g = Some(r);
+                        // Keep result publication + latch release ordered for
+                        // the poll (same contract as the diarization worker).
+                        drop(guard);
                     }
                 });
             }
-
-            let poll = slint::Timer::default();
-            let weak_p = weak.clone();
-            poll.start(
-                slint::TimerMode::Repeated,
-                std::time::Duration::from_millis(300),
-                move || {
-                    let done = slot.lock().ok().and_then(|mut g| g.take());
-                    let Some(result) = done else {
-                        return;
-                    };
-                    DIAR_TIMER.with(|t| *t.borrow_mut() = None); // stop + drop self
-                    let Some(w) = weak_p.upgrade() else {
-                        return;
-                    };
-                    w.set_installing_diar_models(false);
-                    match result {
-                        Ok(()) => {
-                            // Re-check the fs rather than assume — only enable detect if BOTH
-                            // models really landed (a partial install keeps the prompt up).
-                            let ready = overlay_backend::diarize::models_ready();
-                            w.set_can_diarize(ready);
-                            w.set_needs_diar_models(!ready);
-                            w.set_diar_status(SharedString::default());
-                        }
-                        Err(e) => {
-                            w.set_diar_status(SharedString::from("Не удалось скачать модели"));
-                            log::warn!("diar model install failed: {e}");
-                        }
-                    }
-                },
-            );
-            DIAR_TIMER.with(|t| *t.borrow_mut() = Some(poll));
+            start_diar_install_poll(weak.clone(), slot);
         });
     }
 }
@@ -2573,7 +2832,15 @@ pub(crate) fn open_transcript(
         let weak = win.as_weak();
         win.on_close_requested(move || {
             transcript_player::reset(); // stop audio + poll timer when the window closes
-            DIAR_TIMER.with(|t| *t.borrow_mut() = None); // stop the diarization poll too
+                                        // suflyor H2 / V-1 — dropping the polls only stops the cosmetic
+                                        // consumption: a running job holds its process-global latch, lands
+                                        // the outcome window-independently (the diar worker persists from
+                                        // its own catalog handle; the install commits on disk), and a
+                                        // reopen re-attaches a poll via DIAR_JOB / DIAR_INSTALL_JOB — so
+                                        // closing neither loses the result nor frees the latch for a
+                                        // second worker.
+            DIAR_TIMER.with(|t| *t.borrow_mut() = None);
+            DIAR_INSTALL_TIMER.with(|t| *t.borrow_mut() = None);
             if let Some(w) = weak.upgrade() {
                 let _ = w.hide();
             }
@@ -2677,6 +2944,44 @@ fn build_session_markdown(
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+
+    /// Pins the one-job contract on a private atomic, so parallel tests never
+    /// touch either process-global latch.
+    #[test]
+    fn diar_latch_is_a_single_job_gate() {
+        let latch = AtomicBool::new(false);
+        assert!(!latch.load(Ordering::Acquire), "a fresh latch is free");
+
+        let g1 = try_acquire_busy(&latch);
+        assert!(g1.is_some(), "first acquire on a free latch must succeed");
+        assert!(latch.load(Ordering::Acquire));
+
+        let g2 = try_acquire_busy(&latch);
+        assert!(g2.is_none(), "a second acquire while held must fail");
+        assert!(
+            latch.load(Ordering::Acquire),
+            "a FAILED acquire must NOT free the held latch (then vs then_some)"
+        );
+
+        drop(g1);
+        assert!(
+            !latch.load(Ordering::Acquire),
+            "dropping the guard releases the latch"
+        );
+
+        let g3 = try_acquire_busy(&latch);
+        assert!(g3.is_some(), "the latch is reusable after release");
+        assert!(latch.load(Ordering::Acquire));
+        drop(g3);
+        assert!(!latch.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn diar_failure_messages_are_distinct_and_non_empty() {
+        assert!(!DIAR_SAVE_FAILED_MSG.trim().is_empty());
+        assert!(!DIAR_RENAME_FAILED_MSG.trim().is_empty());
+        assert_ne!(DIAR_SAVE_FAILED_MSG, DIAR_RENAME_FAILED_MSG);
+    }
 
     #[test]
     fn pretty_label_parses_stem() {

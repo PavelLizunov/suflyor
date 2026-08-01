@@ -569,6 +569,9 @@ export component TranscriptWindow inherits Window {
                                     text: sp.label;
                                     width: 108px;
                                     font-size: Metrics.font-label;
+                                    // A re-detect replaces the whole diarization row. Prevent a
+                                    // late rename write from restoring the previous segments.
+                                    enabled: !root.diarizing;
                                     // F-fix (fable, live-proven): commit AS-TYPED, not just on Enter.
                                     // The old Enter-only `accepted` let a typed-but-uncommitted name sit
                                     // VISIBLE while the store stayed empty → the re-detect guard saw no
