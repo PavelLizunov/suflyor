@@ -1,9 +1,9 @@
-# overlay-mvp local CI runner — fmt + clippy + tests for both crates.
+# suflyor local CI runner — fmt + clippy + tests for all three crates.
 # Run BEFORE every commit (the .claude/hooks/git-gate.ps1 hook runs the
 # same checks automatically on commit/push).
 #
-# Covered: cargo fmt --check, clippy --all-targets -D warnings, test --lib
-#   for slint-experiment AND overlay-backend.
+# Covered: cargo fmt --check, clippy --all-targets -D warnings, test
+#   for slint-experiment, overlay-backend, AND suflyor-tts.
 #
 # Not covered here (do manually): review-agent pass
 # (docs/REVIEW_AGENT_PROMPT.md) + a live smoke run of the overlay.
