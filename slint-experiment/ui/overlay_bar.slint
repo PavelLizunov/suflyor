@@ -379,7 +379,7 @@ export component OverlayBarWindow inherits Window {
     property <bool> widgets-light: Theme.is-light;
     init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
-    title: "suflyor (Slint)";
+    title: @tr("suflyor (Slint)");
     icon: @image-url("../assets/icon.svg");
     background: transparent;
     no-frame: true;

@@ -97,7 +97,7 @@ export component TileWindow inherits Window {
     property <bool> widgets-light: Theme.is-light;
     init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
-    title: "tile";
+    title: @tr("tile");
     icon: @image-url("../assets/icon.svg");
     background: transparent;
     no-frame: true;
@@ -458,7 +458,7 @@ export component TileWindow inherits Window {
                     border-width: 1px;
                     border-color: Theme.border-strong;
                     accessible-role: button;
-                    accessible-label: "Retry";
+                    accessible-label: @tr("Retry");
                     retry-touch := TouchArea {
                         clicked => { root.retry-clicked(); }
                     }

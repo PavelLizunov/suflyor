@@ -1771,3 +1771,31 @@ msgstr "Установка зрения…"
 
 msgid "Install Vision for 26B (~1.1 GiB)"
 msgstr "Установить зрение для 26B (~1,1 ГиБ)"
+
+# === Window titles + accessible labels (J1/J2 — i18n_guard now scans
+# `title:` / `accessible-label:` alongside `text:` / `placeholder-text:`).
+# "Session archive" and "Transcript" window titles reuse the msgids above.
+
+msgid "suflyor (Slint)"
+msgstr "suflyor (Slint)"
+
+msgid "tile"
+msgstr "Тайл"
+
+msgid "suflyor — capture"
+msgstr "suflyor — захват"
+
+msgid "suflyor — Replay"
+msgstr "suflyor — Повтор"
+
+msgid "F4 — KB palette"
+msgstr "F4 — палитра базы знаний"
+
+msgid "suflyor recover session (Slint)"
+msgstr "Восстановление сессии suflyor (Slint)"
+
+msgid "suflyor text ask (Slint)"
+msgstr "Текстовый вопрос suflyor (Slint)"
+
+msgid "Retry"
+msgstr "Повторить"
