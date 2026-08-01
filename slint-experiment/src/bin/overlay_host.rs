@@ -3167,7 +3167,7 @@ fn main() -> Result<(), slint::PlatformError> {
                             } else {
                                 ai::cost_microcents(&model, usage.input, usage.output)
                             };
-                            let cost_usd = cost_micro as f64 / 100_000_000.0;
+                            let cost_usd = ai::microcents_to_usd(cost_micro);
                             let md = format!("# {heading_for_task}\n\n{response}\n");
                             let blocks: Vec<MarkdownBlock> = markdown::parse(&md)
                                 .into_iter()

@@ -215,7 +215,7 @@ mod speech_text {
         let mut out = String::with_capacity(s.len());
         let mut blank_run = 0;
         for line in s.lines() {
-            let collapsed = line.split_whitespace().collect::<Vec<_>>().join(" ");
+            let collapsed = crate::text::collapse_ws(line);
             if collapsed.is_empty() {
                 blank_run += 1;
                 if blank_run <= 1 {

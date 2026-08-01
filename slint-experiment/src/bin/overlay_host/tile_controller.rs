@@ -140,9 +140,6 @@ impl RuntimeEvents for GenGatedEvents {
         }
         // else: stale stream — drop the event.
     }
-    fn spawn_tile(&self, spec: TileSpec) -> String {
-        self.inner.spawn_tile(spec)
-    }
     fn spawn_tile_full(
         &self,
         spec: TileSpec,
@@ -314,9 +311,6 @@ impl RuntimeEvents for PttStreamSink {
                 });
             }
         }
-    }
-    fn spawn_tile(&self, spec: TileSpec) -> String {
-        self.inner.spawn_tile(spec)
     }
     fn spawn_tile_full(
         &self,

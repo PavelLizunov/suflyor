@@ -776,7 +776,7 @@ async fn maybe_spawn_auto_tile(
     // the cap previously warned but proceeded, so it never actually capped.
     let current_micro = lock(&rt).session_cost_microcents;
     if cap_usd > 0.0 {
-        let current_usd = (current_micro as f64) / 100_000_000.0;
+        let current_usd = ai::microcents_to_usd(current_micro);
         if current_usd >= cap_usd {
             events.emit(
                 "cost:cap-hit",
@@ -967,7 +967,7 @@ async fn maybe_spawn_auto_tile(
     let total_usd = {
         let mut s = lock(&rt);
         s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
-        (s.session_cost_microcents as f64) / 100_000_000.0
+        ai::microcents_to_usd(s.session_cost_microcents)
     };
     events.emit(
         "cost:update",

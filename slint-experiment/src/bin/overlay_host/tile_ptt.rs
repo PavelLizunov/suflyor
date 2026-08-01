@@ -268,7 +268,7 @@ pub(crate) fn fire_ptt_ask(
         let micro = if is_local { 0 } else { micro };
         let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
         s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
-        (s.session_cost_microcents as f64) / 100_000_000.0
+        overlay_backend::ai::microcents_to_usd(s.session_cost_microcents)
     });
 
     // ===== 5. Spawn transcribe → ask (detached: never stored in ai_task, so a

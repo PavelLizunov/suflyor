@@ -17,7 +17,7 @@ pub(crate) fn cost_cap_reason(cap_usd: f64, current_microcents: u64) -> Option<S
     if cap_usd <= 0.0 {
         return None;
     }
-    let current_usd = (current_microcents as f64) / 100_000_000.0;
+    let current_usd = overlay_backend::ai::microcents_to_usd(current_microcents);
     if current_usd >= cap_usd {
         Some(format!(
             "over budget: ${current_usd:.4} spent ≥ ${cap_usd:.2} (Settings → Max cost per session)"
@@ -77,7 +77,7 @@ pub(crate) fn warn_if_over_cost_cap(
     if current_micro == 0 {
         return;
     }
-    let usd = (current_micro as f64) / 100_000_000.0;
+    let usd = overlay_backend::ai::microcents_to_usd(current_micro);
     if usd >= cap_usd {
         events.emit(
             "cost:cap-hit",

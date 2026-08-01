@@ -525,7 +525,7 @@ pub(crate) fn fire_followup_ask(
         let micro = if is_local { 0 } else { micro };
         let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
         s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
-        (s.session_cost_microcents as f64) / 100_000_000.0
+        overlay_backend::ai::microcents_to_usd(s.session_cost_microcents)
     });
     let t0 = std::time::Instant::now();
     let events_for_task = gated_events(bridge, events.clone(), generation);
@@ -705,7 +705,7 @@ pub(crate) fn fire_regenerate(
         let micro = if is_local { 0 } else { micro };
         let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
         s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
-        (s.session_cost_microcents as f64) / 100_000_000.0
+        overlay_backend::ai::microcents_to_usd(s.session_cost_microcents)
     });
     let t0 = std::time::Instant::now();
     let events_for_task = gated_events(bridge, events.clone(), generation);

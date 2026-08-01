@@ -33,6 +33,7 @@ pub mod session_audio;
 pub mod session_names;
 pub mod stt;
 pub mod summary_source;
+pub mod text;
 pub mod tts;
 pub mod tts_install;
 pub mod tts_normalize;

@@ -1384,7 +1384,9 @@ fn session_to_row(
         )
     };
     let meta = if s.total_cost_microcents > 0 {
-        format!("${:.3}", (s.total_cost_microcents as f64) / 100_000_000.0)
+        // SessionRow stores i64; the >0 guard makes the checked conversion exact.
+        let micro = u64::try_from(s.total_cost_microcents).unwrap_or(0);
+        format!("${:.3}", overlay_backend::ai::microcents_to_usd(micro))
     } else {
         String::new()
     };
@@ -2446,7 +2448,7 @@ pub(crate) fn open_transcript(
             // Role view uses the theme accent (Slint side); this is only read in the
             // «По голосам» view, where `rebuild_speaker_labels` overwrites it.
             speaker_color: slint::Color::from_rgb_u8(0, 0, 0),
-            text: SharedString::from(u.text.split_whitespace().collect::<Vec<_>>().join(" ")),
+            text: SharedString::from(overlay_backend::text::collapse_ws(&u.text)),
             checked: false,
             marked: false,
             start_ms: off.unwrap_or(0) as i32,
@@ -2576,9 +2578,11 @@ fn build_session_markdown(
             s.transcript_lines, s.ai_turns_count
         ));
         if s.total_cost_microcents > 0 {
+            // SessionRow stores i64; the >0 guard makes the checked conversion exact.
+            let micro = u64::try_from(s.total_cost_microcents).unwrap_or(0);
             out.push_str(&format!(
                 " · ${:.3}",
-                (s.total_cost_microcents as f64) / 100_000_000.0
+                overlay_backend::ai::microcents_to_usd(micro)
             ));
         }
         out.push_str("\n\n");
@@ -2596,7 +2600,7 @@ fn build_session_markdown(
                 "Система"
             };
             // Collapse internal whitespace/newlines so one utterance = one line.
-            let text = u.text.split_whitespace().collect::<Vec<_>>().join(" ");
+            let text = overlay_backend::text::collapse_ws(&u.text);
             // F1: start = previous line's timestamp (first = origin); see session_audio.
             match overlay_backend::session_audio::line_start_offset_ms(utterances, i, session_start)
             {

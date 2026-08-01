@@ -137,7 +137,7 @@ pub fn index_journal_file(store: &mut Store, path: &Path) -> Result<Session> {
         transcript_lines: utterances.len() as i64,
         ai_turns_count: ai_turns.len() as i64,
         total_cost_microcents: cost_sum,
-        indexed_at_ms: now_ms(),
+        indexed_at_ms: i64::try_from(crate::journal::now_unix_ms()).unwrap_or(0),
     };
     store.replace_session(&session, &utterances, &ai_turns)?;
     Ok(session)
@@ -197,14 +197,6 @@ fn text(v: &Value, key: &str) -> String {
 
 fn flag(v: &Value, key: &str) -> bool {
     v.get(key).and_then(Value::as_bool).unwrap_or(false)
-}
-
-fn now_ms() -> i64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
 }
 
 #[cfg(test)]

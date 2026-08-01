@@ -88,7 +88,7 @@ pub(crate) fn format_transcript_for_copy(
         } else {
             "Система"
         };
-        let text = u.text.split_whitespace().collect::<Vec<_>>().join(" ");
+        let text = overlay_backend::text::collapse_ws(&u.text);
         // F1: timecode = the line's START (previous line's timestamp; first = origin),
         // matching the on-screen transcript + the player seek.
         let prefix = if with_timecodes {
@@ -793,7 +793,7 @@ fn build_select_text(vm: &VecModel<MarkdownBlock>) -> String {
             out.push_str("• "); // bullet marker (the • is a separate Text in block view)
         }
         // Collapse ALL internal whitespace (incl. newlines) → one flat line per block.
-        out.push_str(&r.text.split_whitespace().collect::<Vec<_>>().join(" "));
+        out.push_str(&overlay_backend::text::collapse_ws(&r.text));
         if out.len() >= CHAR_CAP {
             break;
         }
