@@ -37,11 +37,11 @@
 use super::{
     ai, apply_tile_hwnd_with_monitor, fire_followup_ask, fire_regenerate, grab_hwnd, journal,
     live_route, markdown, present_tile_window, ptt_tile_error, refresh_open_tiles,
-    set_always_on_top, toggle_tile_maximize, vision, wire_copy, wire_speak, wire_tile_drag,
-    wire_voice_followup, Arc, AskRoute, CaptureOverlay, ComponentHandle, MarkdownBlock, ModelRc,
-    Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink, Rc, RefCell, RuntimeEvents,
-    SharedSlintRuntime, SharedString, TileWindow, TileWindows, VecModel, CONVO_SEQ,
-    TILE_DISPLAY_SEQ,
+    set_always_on_top, set_stealth, surface_stealth_unavailable, toggle_tile_maximize, vision,
+    wire_copy, wire_speak, wire_tile_drag, wire_voice_followup, Arc, AskRoute, CaptureOverlay,
+    ComponentHandle, MarkdownBlock, ModelRc, MonitorHint, Ordering, OverlayBarBridge,
+    OverlayBarWindow, PttStreamSink, Rc, RefCell, RuntimeEvents, SharedSlintRuntime, SharedString,
+    TileKind, TileSpec, TileWindow, TileWindows, VecModel, CONVO_SEQ, TILE_DISPLAY_SEQ,
 };
 
 /// Build a Slint RGBA image from a top-down BGRA capture. Alpha is forced
@@ -101,7 +101,39 @@ pub(crate) fn fire_f8_vision_capture(
     let ocr_ready = matches!(mode, vision::VisionMode::Ocr) && overlay_backend::ocr::is_available();
     let ep = cfg.read().vision_endpoint();
     if ep.is_none() && !ocr_ready {
-        diag!("[overlay-host] F8: vision off and no local OCR — skipping");
+        let (is_ru, preferred_monitor, stealth) = {
+            let c = cfg.read();
+            (
+                c.response_language == "ru",
+                c.tile_monitor_name.clone(),
+                c.stealth_enabled,
+            )
+        };
+        let answer = if is_ru {
+            "Vision выключен. Выберите маршрут в Настройки → AI мост → Vision."
+        } else {
+            "Vision is off. Choose a route in Settings → AI bridge → Vision."
+        };
+        let monitor = match preferred_monitor.as_deref() {
+            Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
+            _ => MonitorHint::Auto,
+        };
+        if let Err(e) = events.spawn_tile_full(
+            TileSpec {
+                question: "Vision (F8)".into(),
+                answer: answer.into(),
+                source: "vision_off".into(),
+                is_translation: false,
+                highlights: vec![],
+                summary_session: None,
+            },
+            monitor,
+            stealth,
+            TileKind::Error,
+        ) {
+            eprintln!("[overlay-host] F8 vision-off notice tile spawn failed: {e}");
+        }
+        diag!("[overlay-host] F8: vision off and no local OCR — notice shown");
         return;
     }
 
@@ -235,16 +267,42 @@ pub(crate) fn fire_f8_vision_capture(
     }
 
     win.set_shown(true);
-    // The persistent HWND exists, so grab_hwnd works synchronously here. WDA
-    // stealth was set at pre-create and PERSISTS across hide/show — but winit
-    // re-applies the window's ex-style on show(), dropping WS_EX_TOOLWINDOW, so
-    // the taskbar button reappears. Re-apply it now: synchronous + lands before
-    // the shell creates the button = flash-free. (The overlay is WDA-hidden from
-    // any screen-share regardless.)
-    if let Ok(hwnd) = grab_hwnd(win.window()) {
-        let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
-        let _ = set_always_on_top(hwnd, true);
-        slint_replay::win32::focus_window(hwnd);
+    // The persistent HWND exists, so grab_hwnd works synchronously here. winit
+    // re-applies the window's ex-style on show() (it drops WS_EX_TOOLWINDOW, so
+    // the taskbar button would reappear) — and the pre-create WDA affinity must
+    // NEVER be assumed to have survived: I4 re-applies + READS BACK stealth on
+    // EVERY show. `set_stealth` verifies via GetWindowDisplayAffinity; on a
+    // failed exclusion we surface "stealth unavailable" instead of claiming it.
+    // Synchronous, so both land before the shell creates a taskbar button / the
+    // first composited frame = flash-free.
+    match grab_hwnd(win.window()) {
+        Ok(hwnd) => {
+            let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
+            let _ = set_always_on_top(hwnd, true);
+            match set_stealth(hwnd, true) {
+                Ok(()) => diag!("[overlay-host] F8 overlay stealth re-applied + verified"),
+                Err(e) => {
+                    diag!(
+                        "[overlay-host] F8 overlay stealth FAILED — capture overlay is \
+                         capturable: {e}"
+                    );
+                    if let Some(o) = weak_overlay.upgrade() {
+                        surface_stealth_unavailable(&o);
+                    }
+                }
+            }
+            slint_replay::win32::focus_window(hwnd);
+        }
+        Err(e) => {
+            diag!("[overlay-host] F8 overlay HWND grab failed — stealth NOT verified: {e}");
+            // I4 — without an HWND the exclusion could be neither applied nor
+            // verified; surface the SAME generic failure as a failed WDA apply
+            // above (a log-only miss would leave the user believing the capture
+            // overlay is hidden).
+            if let Some(o) = weak_overlay.upgrade() {
+                surface_stealth_unavailable(&o);
+            }
+        }
     }
 }
 
@@ -286,30 +344,32 @@ pub(crate) fn launch_vision_for_bgra(
     tile.set_sequence(seq as i32);
     // Per-mode tile chrome. The trigger_label doubles as the "Practice" badge
     // so a test-practice answer is always visibly marked as self-check.
+    // Placeholders are plain text — no hourglass glyph (tofu square on the
+    // skia font fallback; project no-tofu rule).
     let (title_s, source_s, trigger_s, placeholder_s) = match mode {
         vision::VisionMode::Translate => (
             "🌐 Перевод",
             "vision · перевод…",
             "🌐 Shift+F8 перевод",
-            "⏳ Перевожу…",
+            "Перевожу…",
         ),
         vision::VisionMode::TestPractice => (
             "🎓 Тренировка",
             "vision · тренировка…",
             "🎓 Practice",
-            "⏳ Решаю вопрос…",
+            "Решаю вопрос…",
         ),
         vision::VisionMode::Describe => (
             "📷 Скриншот",
             "vision · анализ…",
             "📷 F8 vision",
-            "⏳ Распознаю экран…",
+            "Распознаю экран…",
         ),
         vision::VisionMode::Ocr => (
             "🔊 Текст с экрана",
             "vision · текст…",
             "🔊 Ctrl+F8 текст",
-            "⏳ Распознаю текст…",
+            "Распознаю текст…",
         ),
     };
     tile.set_tile_title(SharedString::from(title_s));
@@ -525,14 +585,14 @@ pub(crate) fn launch_vision_for_bgra(
     // Profile/persona applies ONLY to Describe (v0.10.5). Translate is a pure
     // translation task; TestPractice is a factual answer — a persona would
     // distort both, so they stay profile-free.
-    let vision_context = if matches!(mode, vision::VisionMode::Describe) {
-        // Audit (prompt-context): F8 Describe carries approved memory + profile too
-        // (Translate/TestPractice stay profile-free above). ТЗ 2026-07-06 (A) —
-        // no user question on a screenshot Describe → recency block (None).
-        let raw = cfg.read().meeting_context.clone();
-        overlay_backend::memory::context_for_meeting(&raw, None)
+    // F8 Describe also folds in approved memory; only the cheap base-context clone
+    // happens here — the blocking catalog read is deferred into the stream task
+    // below so it never freezes the UI. ТЗ 2026-07-06 (A) — no user question on a
+    // screenshot Describe → recency block (None).
+    let describe_base = if matches!(mode, vision::VisionMode::Describe) {
+        Some(cfg.read().meeting_context.clone())
     } else {
-        String::new()
+        None
     };
     let (journal_for_loop, health_for_stream) = {
         let s = slint_replay::runtime_state::lock(slint_rt);
@@ -545,7 +605,7 @@ pub(crate) fn launch_vision_for_bgra(
         let micro = if is_local { 0 } else { micro };
         let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
         s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
-        (s.session_cost_microcents as f64) / 100_000_000.0
+        overlay_backend::ai::microcents_to_usd(s.session_cost_microcents)
     });
     let bridge_for_task = bridge.clone();
     let events_inner = events.clone();
@@ -576,6 +636,12 @@ pub(crate) fn launch_vision_for_bgra(
                 return;
             }
         };
+        // Blocking catalog read runs here (off the event loop) — see the
+        // describe_base snapshot above (audit C2/G2).
+        let vision_context = match describe_base {
+            Some(raw) => overlay_backend::memory::context_for_meeting(&raw, None),
+            None => String::new(),
+        };
         let (messages, usr_full, sys_full) = match mode {
             vision::VisionMode::TestPractice => (
                 vision::build_test_practice_request(&data_url, &response_language),
@@ -597,10 +663,13 @@ pub(crate) fn launch_vision_for_bgra(
             convo_id,
             messages.clone(),
         ));
+        // Audit D1 — the SAME purpose must tag the paired AiResponse that
+        // ask_stream_loop journals (previously hardcoded "live_ask" there).
+        let purpose = "vision_ask";
         if let Some(j) = journal_for_loop.as_ref() {
             j.write(&journal::JournalEvent::AiRequest {
                 unix_ms: journal::now_unix_ms(),
-                purpose: "vision_ask",
+                purpose,
                 model: &model,
                 system_prompt: &sys_full,
                 user_prompt: &usr_full,
@@ -620,6 +689,7 @@ pub(crate) fn launch_vision_for_bgra(
             sink,
             ai_rx,
             model,
+            purpose,
             is_local,
             sys_full,
             usr_full,

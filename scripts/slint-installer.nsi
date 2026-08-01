@@ -1,20 +1,16 @@
-; Phase D3 — NSIS installer for the Slint v0.2.0-pre overlay-host binary.
+; NSIS installer for the suflyor overlay-host binary (Slint UI).
 ;
-; Installs into %LOCALAPPDATA%\suflyor-slint\ (separate from existing
-; suflyor v0.1.1 — both can coexist for side-by-side testing). Creates
-; a Start menu shortcut + Add/Remove Programs entry. Uninstaller in
-; the install dir.
+; Installs into %LOCALAPPDATA%\suflyor-slint\ (per-user, no admin).
+; Creates a Start menu shortcut + Add/Remove Programs entry.
+; Uninstaller in the install dir.
 ;
 ; Build:
 ;   makensis scripts/slint-installer.nsi
 ; Output:
 ;   slint-experiment/target/release/bundle/suflyor-slint-setup.exe
-;
-; Phase E (full v0.2.0 cut) will rename product back to "suflyor"
-; and bump the upgrade GUID so it overwrites v0.1.1 cleanly.
 
 !define PRODUCT_NAME "suflyor"
-!define PRODUCT_VERSION "0.34.0"
+!define PRODUCT_VERSION "0.35.2"
 !define PRODUCT_PUBLISHER "x3d_mutant"
 !define PRODUCT_EXE "overlay-host.exe"
 !define PRODUCT_INSTALL_DIR "$LOCALAPPDATA\suflyor-slint"

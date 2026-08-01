@@ -4,7 +4,7 @@
 
 **Stack:** pure **Rust + Slint** (the original Tauri 2 + React 19 + WebView2
 surface was removed in the Phase 7 cut, 2026-05-28 — see
-`docs/PHASE-7-CUT-PLAN.md`). No browser engine, no Node, no TypeScript. Two
+`docs/PHASE-7-CUT-PLAN.md`). No browser engine, no Node, no TypeScript. Three
 standalone crates, NO root workspace:
 
 - **`slint-experiment/`** — the `overlay-host` binary. Declarative UI in
@@ -14,6 +14,9 @@ standalone crates, NO root workspace:
 - **`overlay-backend/`** — the no-UI shared crate (audio / stt / ai /
   local_ai / config / runtime / events / journal / kb / health / update),
   consumed by `slint-experiment` via a path dep.
+- **`suflyor-tts/`** — read-aloud + diarization sidecar exe. Links
+  sherpa-onnx ONLY and MUST stay a separate process (two onnxruntimes
+  crash in one binary). Shipped in the installer alongside overlay-host.
 
 ## Data flow
 
@@ -128,18 +131,18 @@ by a Slint `Timer`):
 cargo run   --bin overlay-host
 cargo build --release --bin overlay-host
 
-# Tests + lint (both crates; no root workspace)
+# Tests + lint (all three crates; no root workspace)
 cargo test  --manifest-path overlay-backend\Cargo.toml
 cargo clippy --manifest-path overlay-backend\Cargo.toml --all-targets
 cargo clippy --manifest-path slint-experiment\Cargo.toml --bin overlay-host
+cargo test  --manifest-path suflyor-tts\Cargo.toml
 
 # Installer (NSIS)
 scripts\build-slint-release.ps1 -Installer
 #   → slint-experiment/target/release/bundle/suflyor-slint-setup.exe
 
-# Release
-gh release create vX.Y.Z slint-experiment/target/release/bundle/suflyor-slint-setup.exe `
-  --title "vX.Y.Z — …" --notes-file notes.md
+# Release: owner-only. Agents push a codex/<task> branch + open a PR;
+# only the owner merges, tags, and publishes after explicit authorization.
 ```
 
 Version is tracked in **2** places (keep in sync): `slint-experiment/Cargo.toml`

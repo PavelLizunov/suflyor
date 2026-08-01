@@ -99,19 +99,6 @@ impl RuntimeEvents for SlintEvents {
         self.bridge.forward_event(channel.to_string(), payload);
     }
 
-    fn spawn_tile(&self, spec: TileSpec) -> String {
-        // Soft-deprecated path. Maps to spawn_tile_full with Auto +
-        // stealth=false + Ai defaults — same shape as TauriEvents.
-        self.spawn_tile_full(spec, MonitorHint::Auto, false, TileKind::Ai)
-            .unwrap_or_else(|e| {
-                // slint-experiment doesn't pull in the `log` crate;
-                // surface failures via stderr to match the binary's
-                // existing pattern (`eprintln!("[overlay-host] ...")`).
-                eprintln!("[slint-events] spawn_tile failed: {e}");
-                String::new()
-            })
-    }
-
     fn spawn_tile_full(
         &self,
         spec: TileSpec,

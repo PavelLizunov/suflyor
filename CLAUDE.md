@@ -140,6 +140,9 @@ Alternative: the embedded Slint MCP server — run the binary with
 type. The debug binary's `eprintln!` startup log (hotkey registration, bar
 pin coords, transparency) is the cheapest smoke signal — launch, capture
 stderr ~5s, kill, read it. See memory `[[overlay-host-visual-verification]]`.
+For shared Settings changes, inspect all 16 tabs at 720x600. Then exercise all
+13 registered global shortcuts once against that exact binary and verify each
+distinct dispatch/result; registration logs alone are not a functional pass.
 
 ### Release protocol (adopted 2026-06-13 — after the v0.17.1→v0.18.0 run)
 

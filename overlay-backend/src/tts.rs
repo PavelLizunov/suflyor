@@ -7,9 +7,8 @@
 //! voices (for the Settings chooser) and forwards commands to the sidecar over
 //! its stdin (SPEAK/PAUSE/RESUME/STOP/VOICE/RATE).
 //!
-//! The public API (`init`/`speak`/`pause`/`resume`/`stop`/`set_rate`/`set_voice`/
-//! `voices`/`is_available`/[`VoiceInfo`]) is unchanged, so the tile 🔊/⏯ wiring
-//! and the Settings panel don't care that the engine moved out of process.
+//! The tile controls and Settings panel use this client API, so they don't care
+//! that the engine moved out of process.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -19,19 +18,17 @@ use std::sync::{Arc, Mutex};
 
 use base64::Engine as _;
 
-/// Estimated unix-ms when the current read-aloud finishes playing (incl. a tail
-/// cooldown). While `now < this`, [`is_speaking`] is true and the STT pipeline
-/// suppresses transcription of BOTH the system loopback (the TTS heard back) AND
-/// the microphone (the speakers' acoustic echo) — otherwise the read-aloud is
-/// transcribed and either shown on the bar or answered by the AI (the tester's
-/// "суфлёр слышит читалку и отвечает" loop + read-aloud text leaking onto the bar).
+/// Absolute unix-ms deadline for suppressing STT while read-aloud plays.
+/// `u64::MAX` means playback is paused and may resume later.
 static SPEAKING_UNTIL_MS: AtomicU64 = AtomicU64::new(0);
+static PAUSED_REMAINING_MS: AtomicU64 = AtomicU64::new(0);
 
 /// Current read rate (−10..+10), so the speaking-duration estimate scales with
 /// speed (a slower rate = longer audio = longer suppression window).
 static SPEAK_RATE: AtomicI32 = AtomicI32::new(0);
 
-/// True while a read-aloud is (estimated to be) playing through the speakers.
+/// True while a read-aloud is (estimated to be) playing through the speakers,
+/// OR is paused mid-utterance (playback will resume — keep suppressing STT).
 #[must_use]
 pub fn is_speaking() -> bool {
     (crate::journal::now_unix_ms() as u64) < SPEAKING_UNTIL_MS.load(Ordering::Acquire)
@@ -59,12 +56,38 @@ fn mark_speaking_for(chars: usize) {
     let speed = rate_to_speed(SPEAK_RATE.load(Ordering::Acquire));
     let play_s = (chars as f64) / (BASE_CPS * speed).max(1.0);
     let secs = SYNTH_LATENCY_S + play_s + TAIL_COOLDOWN_S;
+    PAUSED_REMAINING_MS.store(0, Ordering::Release);
     let until = (crate::journal::now_unix_ms() as u64).saturating_add((secs * 1000.0) as u64);
     SPEAKING_UNTIL_MS.store(until, Ordering::Release);
 }
 
 fn clear_speaking() {
+    PAUSED_REMAINING_MS.store(0, Ordering::Release);
     SPEAKING_UNTIL_MS.store(0, Ordering::Release);
+}
+
+fn paused_remaining(until_ms: u64, now_ms: u64) -> Option<u64> {
+    (until_ms != u64::MAX && now_ms < until_ms).then(|| until_ms - now_ms)
+}
+
+fn resumed_until(remaining_ms: u64, now_ms: u64) -> Option<u64> {
+    (remaining_ms > 0).then(|| now_ms.saturating_add(remaining_ms))
+}
+
+fn pause_speaking() {
+    let now = crate::journal::now_unix_ms() as u64;
+    let until = SPEAKING_UNTIL_MS.load(Ordering::Acquire);
+    if let Some(remaining) = paused_remaining(until, now) {
+        PAUSED_REMAINING_MS.store(remaining, Ordering::Release);
+        SPEAKING_UNTIL_MS.store(u64::MAX, Ordering::Release);
+    }
+}
+
+fn resume_speaking() {
+    let remaining = PAUSED_REMAINING_MS.swap(0, Ordering::AcqRel);
+    if let Some(until) = resumed_until(remaining, crate::journal::now_unix_ms() as u64) {
+        SPEAKING_UNTIL_MS.store(until, Ordering::Release);
+    }
 }
 
 /// Markdown → spoken-text cleanup. Read-aloud must voice the WORDS, not the
@@ -192,7 +215,7 @@ mod speech_text {
         let mut out = String::with_capacity(s.len());
         let mut blank_run = 0;
         for line in s.lines() {
-            let collapsed = line.split_whitespace().collect::<Vec<_>>().join(" ");
+            let collapsed = crate::text::collapse_ws(line);
             if collapsed.is_empty() {
                 blank_run += 1;
                 if blank_run <= 1 {
@@ -376,19 +399,33 @@ impl Tts {
     /// Speak `text` now, interrupting any current speech. `text` may be markdown
     /// (a tile answer) — it is cleaned to spoken text first so the synthesizer
     /// voices words, not `**` / backticks / `#`.
-    pub fn speak(&self, text: &str) {
+    ///
+    /// Returns whether playback was ACCEPTED — a voice is installed, the sidecar
+    /// exe is present (re-scanned like the free [`is_available`]), and the cleaned
+    /// text is non-empty. The STT suppression window is marked ONLY then, so a
+    /// missing sidecar/voice neither plays nor falsely silences the mic. Callers
+    /// gate their "this tile is speaking" state on this result.
+    pub fn speak(&self, text: &str) -> bool {
         let spoken = crate::tts_normalize::normalize_for_speech(&speech_text::to_speech(text));
         if spoken.trim().is_empty() {
-            return;
+            return false;
+        }
+        if !available_on_disk() {
+            return false;
         }
         mark_speaking_for(spoken.chars().count());
         let b64 = base64::engine::general_purpose::STANDARD.encode(&spoken);
         self.send(format!("SPEAK {b64}"));
+        true
     }
     pub fn pause(&self) {
+        // Preserve the remaining suppression before telling the sidecar to pause,
+        // so a long pause can't let the deadline expire.
+        pause_speaking();
         self.send("PAUSE".to_string());
     }
     pub fn resume(&self) {
+        resume_speaking();
         self.send("RESUME".to_string());
     }
     pub fn stop(&self) {
@@ -444,9 +481,12 @@ fn with<R>(f: impl FnOnce(&Tts) -> R) -> Option<R> {
     GLOBAL.get().and_then(|m| m.lock().ok()).map(|t| f(&t))
 }
 
-/// Speak `text` now (interrupts current speech). No-op if not initialized.
-pub fn speak(text: &str) {
-    with(|t| t.speak(text));
+/// Speak `text` now (interrupts current speech). Returns whether playback was
+/// ACCEPTED (TTS available + non-empty text) — the STT suppression window is
+/// marked only then. False if TTS is uninitialized or unavailable. Callers gate
+/// their visible "speaking" state on this so a missing engine isn't shown usable.
+pub fn speak(text: &str) -> bool {
+    with(|t| t.speak(text)).unwrap_or(false)
 }
 pub fn pause() {
     with(|t| t.pause());
@@ -479,6 +519,10 @@ pub fn voices() -> Vec<VoiceInfo> {
 /// so it flips to true right after the install button finishes.
 #[must_use]
 pub fn is_available() -> bool {
+    available_on_disk()
+}
+
+fn available_on_disk() -> bool {
     !scan_installed_voices().is_empty() && sidecar_exe_path().is_file()
 }
 
@@ -508,25 +552,12 @@ fn sidecar_stderr() -> Stdio {
     Stdio::null()
 }
 
-#[cfg(windows)]
 fn spawn_sidecar(exe: &Path) -> std::io::Result<Proc> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    Command::new(exe)
-        .stdin(Stdio::piped())
+    let mut cmd = Command::new(exe);
+    cmd.stdin(Stdio::piped())
         .stdout(Stdio::null())
-        .stderr(sidecar_stderr())
-        .creation_flags(CREATE_NO_WINDOW)
-        .spawn()
-}
-
-#[cfg(not(windows))]
-fn spawn_sidecar(exe: &Path) -> std::io::Result<Proc> {
-    Command::new(exe)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(sidecar_stderr())
-        .spawn()
+        .stderr(sidecar_stderr());
+    crate::download::no_window(&mut cmd).spawn()
 }
 
 /// `%APPDATA%\suflyor\tts`.
@@ -612,7 +643,17 @@ fn friendly_name(dir: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
+
+    #[test]
+    fn pause_and_resume_preserve_a_finite_deadline() {
+        assert_eq!(paused_remaining(11_000, 3_000), Some(8_000));
+        assert_eq!(resumed_until(8_000, 50_000), Some(58_000));
+        assert_eq!(paused_remaining(11_000, 11_000), None);
+        assert_eq!(paused_remaining(u64::MAX, 3_000), None);
+        assert_eq!(resumed_until(0, 50_000), None);
+    }
 
     #[test]
     fn rate_is_clamped() {

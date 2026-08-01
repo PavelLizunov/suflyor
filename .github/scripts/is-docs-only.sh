@@ -5,7 +5,8 @@
 # Prints "true" (docs-only) or "false" (full CI) to stdout.
 # Exits 1 on any error — callers must fail the job (fail-closed).
 #
-# docs-only ⟺ every changed path has suffix .md OR lives below docs/.
+# docs-only ⟺ every changed path has suffix .md OR lives below docs/, except
+# overlay-backend/knowledge/*.md because those files are compiled via include_str!.
 # --no-renames: a rename shows both old and new names, so renaming a source
 # file to .md still counts as a code change (conservative).
 #
@@ -38,11 +39,13 @@ if ! git diff --name-only -z --no-renames "$BASE_SHA" "$HEAD_SHA" > "$tmpfile"; 
 fi
 
 # Iterate NUL-delimited paths.  Each exact path is checked:
-#   *.md suffix   → docs-only OK
-#   docs/* prefix → docs-only OK
-#   anything else → full CI
+#   embedded knowledge → full CI
+#   *.md suffix        → docs-only OK
+#   docs/* prefix      → docs-only OK
+#   anything else      → full CI
 while IFS= read -r -d '' path; do
   case "$path" in
+    overlay-backend/knowledge/*) echo "false"; exit 0 ;;
     *.md | docs/*) ;;
     *) echo "false"; exit 0 ;;
   esac

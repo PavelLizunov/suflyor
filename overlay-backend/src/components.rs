@@ -7,9 +7,10 @@
 //! the install buttons already use, so the hub can never disagree with what the
 //! app actually sees as installed.
 //!
-//! Cheap: stat-only (no model loads), safe to call on Settings open / at
-//! startup. The labelling logic is split into small pure helpers so it is
-//! unit-testable without materialising multi-GB model files.
+//! No model loads: Settings/component rows use a stat-only candidate check, and
+//! worker-side model launch independently verifies the pinned 26B SHA-256. The
+//! labelling logic is split into small pure helpers so it is unit-testable
+//! without materialising multi-GB model files.
 
 use crate::config::Config;
 
@@ -18,7 +19,7 @@ use crate::config::Config;
 pub enum ComponentKind {
     /// llama.cpp runtime — the engine that serves the local model.
     Engine,
-    /// Local LLM weights — Gemma 4B base (+ optional 12B "smarter").
+    /// Local LLM weights — Gemma 12B QAT fallback (+ optional 26B-A4B primary).
     LocalModel,
     /// Local speech-to-text — GigaAM.
     Stt,
@@ -35,7 +36,7 @@ pub struct ComponentStatus {
     /// True when the component is installed + usable right now.
     pub installed: bool,
     /// Short, locale-neutral detail when installed (version / tier / engine),
-    /// e.g. `"b9637"`, `"Gemma 4B + 12B"`, `"Tesseract"`. Empty when not
+    /// e.g. `"b9637"`, `"Gemma 12B + 26B-A4B"`, `"Tesseract"`. Empty when not
     /// installed (the UI shows its own «⬇ установить» from `installed`).
     pub detail: String,
 }
@@ -54,13 +55,20 @@ pub fn status(cfg: &Config) -> Vec<ComponentStatus> {
         detail: engine_detail(engine_build),
     };
 
-    // Local model: 4B base is the minimum; 12B is optional on top.
+    // Local model: 12B QAT is the current fallback; a complete legacy 4B is
+    // still usable during an in-place upgrade until the user installs 12B.
     let base = crate::local_ai::base_model_present(&root);
     let quality = crate::local_ai::quality_model_present(&root);
+    let fallback = base.then(|| {
+        crate::local_ai::local_model_label(&crate::local_ai::active_local_model_name(
+            &root,
+            crate::local_ai::ManagedModel::Fallback12B,
+        ))
+    });
     let local_model = ComponentStatus {
         kind: ComponentKind::LocalModel,
         installed: base,
-        detail: local_model_detail(base, quality),
+        detail: local_model_detail(fallback.as_deref(), quality),
     };
 
     // STT (GigaAM): installed when the model file exists at the pinned size in
@@ -114,12 +122,12 @@ fn engine_detail(build: Option<u32>) -> String {
     build.map(|b| format!("b{b}")).unwrap_or_default()
 }
 
-/// Pure: local-model detail from the 4B / 12B presence flags.
-fn local_model_detail(base: bool, quality: bool) -> String {
-    match (base, quality) {
-        (false, _) => String::new(),
-        (true, true) => "Gemma 4B + 12B".to_string(),
-        (true, false) => "Gemma 4B".to_string(),
+/// Pure: local-model detail from the available fallback and optional primary.
+fn local_model_detail(fallback: Option<&str>, quality: bool) -> String {
+    match (fallback, quality) {
+        (None, _) => String::new(),
+        (Some(fallback), true) => format!("{fallback} + 26B-A4B"),
+        (Some(fallback), false) => fallback.to_string(),
     }
 }
 
@@ -135,10 +143,14 @@ mod tests {
 
     #[test]
     fn local_model_detail_covers_tiers() {
-        assert_eq!(local_model_detail(false, false), "");
-        assert_eq!(local_model_detail(false, true), ""); // 12B without 4B → still not usable
-        assert_eq!(local_model_detail(true, false), "Gemma 4B");
-        assert_eq!(local_model_detail(true, true), "Gemma 4B + 12B");
+        assert_eq!(local_model_detail(None, false), "");
+        assert_eq!(local_model_detail(None, true), ""); // 26B without fallback → incomplete
+        assert_eq!(local_model_detail(Some("Gemma 12B"), false), "Gemma 12B");
+        assert_eq!(
+            local_model_detail(Some("Gemma 12B"), true),
+            "Gemma 12B + 26B-A4B"
+        );
+        assert_eq!(local_model_detail(Some("Gemma 4B"), false), "Gemma 4B");
     }
 
     #[test]

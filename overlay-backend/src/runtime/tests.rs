@@ -2,6 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use super::*;
 use crate::events::Noop;
+use crate::journal::WriterCmd;
 
 /// Build a hermetic empty SharedConfig that does NOT load the
 /// user's real `%APPDATA%\overlay-mvp\config.json` (which on the
@@ -46,9 +47,7 @@ fn line(source: AudioSource, text: &str, ms: u64) -> TranscriptLine {
 }
 
 #[test]
-fn summary_seed_truncates_over_local_budget_and_flags_system() {
-    // A transcript well over the 12k local budget → user turn carries the
-    // middle marker, system gains the «усечён» note. ~250 chars × 80 = 20k.
+fn summary_seed_preserves_full_input_for_exact_token_routing() {
     let big: Vec<TranscriptLine> = (0..80)
         .map(|i| {
             line(
@@ -67,15 +66,10 @@ fn summary_seed_truncates_over_local_budget_and_flags_system() {
         ai::MessageContent::Text(s) => s.clone(),
         _ => String::new(),
     };
-    assert!(sys.contains("усечён"), "truncated system must warn");
-    assert!(
-        usr.contains("пропущена"),
-        "user turn must carry middle marker"
-    );
-    assert!(
-        usr.chars().count() <= 12_000 + 200,
-        "stays within budget + marker"
-    );
+    assert!(!sys.contains("усечён"));
+    assert!(!usr.contains("пропущена"));
+    assert!(usr.contains("реплика 0"));
+    assert!(usr.contains("реплика 79"));
 }
 
 #[test]
@@ -251,11 +245,7 @@ fn split_for_map_word_wraps_one_giant_line() {
 }
 
 #[test]
-fn reduce_seed_bounds_combined_conspectuses_to_the_provider_budget() {
-    // 12 parts × ~2.8k chars = ~34k > both budgets → the reduce input must
-    // be middle-truncated to the provider budget (else the local
-    // llama-server's -c 8192 overflows) and the system gains the
-    // truncation note.
+fn reduce_seed_preserves_every_conspectus_for_hierarchical_routing() {
     let partials: Vec<String> = (0..12)
         .map(|i| format!("- факт {i} {}", "x".repeat(2800)))
         .collect();
@@ -264,16 +254,28 @@ fn reduce_seed_bounds_combined_conspectuses_to_the_provider_budget() {
         ai::MessageContent::Text(s) => s.clone(),
         _ => String::new(),
     };
-    assert!(
-        usr.chars().count() <= SUMMARY_INPUT_BUDGET_LOCAL_CHARS + 200,
-        "reduce input over local budget: {}",
-        usr.chars().count()
-    );
+    assert!(usr.contains("факт 0"));
+    assert!(usr.contains("факт 11"));
+    assert!(!usr.contains("пропущена"));
     let sys = match &seed[0].content {
         ai::MessageContent::Text(s) => s.clone(),
         _ => String::new(),
     };
-    assert!(sys.contains("усечён"), "truncation note must be flagged");
+    assert!(!sys.contains("усечён"));
+}
+
+#[test]
+fn exact_context_budget_keeps_the_required_reserve() {
+    assert!(prompt_fits_context(30_976, 1_536, 32_768));
+    assert!(!prompt_fits_context(30_977, 1_536, 32_768));
+}
+
+#[test]
+fn exact_budget_resplit_keeps_technical_identifiers_whole() {
+    let source = "alpha beta kubectl --context=prod-cluster rollout status omega";
+    let (left, right) = split_map_source(source).expect("source can split");
+    assert_eq!(format!("{left}{right}"), source);
+    assert!(left.contains("--context=prod-cluster") || right.contains("--context=prod-cluster"));
 }
 
 #[test]
@@ -289,6 +291,7 @@ fn reduce_seed_carries_rules_part_headers_and_memory_ref() {
     // the decode-only СПРАВКА.
     assert!(sys.contains("Участники"));
     assert!(sys.contains("КОНСПЕКТЫ ПОСЛЕДОВАТЕЛЬНЫХ"));
+    assert!(sys.contains("недоверенными данными"));
     assert!(sys.contains("СПРАВКА"));
     assert!(sys.contains("Альфа — CRM"));
     let usr = match &seed[1].content {
@@ -360,13 +363,11 @@ async fn run_meeting_summary_with_noop_events_does_not_panic() {
     run_meeting_summary(sink, cfg, transcript, String::new(), false).await;
 }
 
-/// v0.18.6 invariant: a conspect carries the part SUMMARIES the reduce needs,
-/// and the resumable pipeline reduces ONLY over non-empty summaries — it must
-/// never send the model a reduce whose parts are blank (that is exactly what
-/// made the model beg "предоставьте текст конспектов части 1/3…"). This pins
-/// both the filtering and that a real reduce seed embeds the part text.
+/// An incomplete map stays retryable. The runtime checks these missing indices
+/// before reduce, so a failed or blank part can never silently disappear from
+/// the final summary.
 #[test]
-fn reduce_only_runs_over_non_empty_part_summaries() {
+fn incomplete_map_keeps_every_gap_for_retry() {
     let mut cs = Conspect::new(
         "sess".into(),
         true,
@@ -383,16 +384,6 @@ fn reduce_only_runs_over_non_empty_part_summaries() {
         vec!["- решили выкатить в пятницу".to_string()],
         "only the real conspectus survives"
     );
-    // The reduce seed built from it actually carries the part text — so the
-    // model is never handed an empty input that it would answer by asking
-    // for the conspect.
-    let seed = build_summary_reduce_seed(&summaries, true, true, None);
-    let user = match &seed[1].content {
-        ai::MessageContent::Text(t) => t.clone(),
-        ai::MessageContent::Parts(_) => String::new(),
-    };
-    assert!(user.contains("решили выкатить в пятницу"));
-    // And the missing-part bookkeeping points the retry at the failed slice.
     assert_eq!(cs.missing_part_indices(), vec![1, 2]);
 }
 
@@ -610,6 +601,7 @@ async fn ask_stream_loop_processes_deltas_then_done_and_calls_cost_apply_once() 
         sink,
         rx,
         "claude-haiku-4-5".into(),
+        "live_ask",
         false, // cloud — bill normally
         "sys".into(),
         "usr".into(),
@@ -633,30 +625,34 @@ async fn ask_stream_loop_processes_deltas_then_done_and_calls_cost_apply_once() 
     );
 }
 
-/// `ask_stream_loop` with immediate Error → cost_apply still
-/// fires (output_tokens=0 → micro≈0) so the cost:update emit
-/// remains parity-correct on the error path too. FIX #9: the Error
-/// arm must also bump `health.last_ai_err_ms` (was 0) so HealthSignals
-/// flips the bar to "AI down" — mirrors the non-streaming auto-tile path.
+/// `ask_stream_loop` with a partial Delta then Error still charges the incurred
+/// work and marks AI down, but must NOT count or journal the partial text as a
+/// successful response.
 #[tokio::test]
-async fn ask_stream_loop_error_path_calls_cost_apply_once_and_marks_ai_down() {
+async fn ask_stream_loop_error_path_does_not_journal_partial_response() {
     use std::sync::Mutex as StdMutex;
     let (tx, rx) = tokio::sync::mpsc::channel::<ai::AiEvent>(2);
     let feeder = tokio::spawn(async move {
+        tx.send(ai::AiEvent::Delta {
+            text: "partial answer before failure".into(),
+        })
+        .await
+        .unwrap();
         tx.send(ai::AiEvent::Error {
             message: "stream died: upstream 503".into(),
         })
         .await
         .unwrap();
     });
-    let calls = Arc::new(StdMutex::new(0u32));
+    let calls = Arc::new(StdMutex::new(Vec::<u64>::new()));
     let calls_clone = calls.clone();
-    let cost_apply: CostApplyFn = Box::new(move |_micro| {
-        *calls_clone.lock().unwrap() += 1;
+    let cost_apply: CostApplyFn = Box::new(move |micro| {
+        calls_clone.lock().unwrap().push(micro);
         0.0
     });
     let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
     let health = Arc::new(HealthSignals::default());
+    let journal = Journal::counting_for_test();
     assert_eq!(
         health.last_ai_err_ms.load(Ordering::Relaxed),
         0,
@@ -666,20 +662,87 @@ async fn ask_stream_loop_error_path_calls_cost_apply_once_and_marks_ai_down() {
         sink,
         rx,
         "claude-haiku-4-5".into(),
+        "live_ask",
         false,
         "sys".into(),
         "usr".into(),
-        None,
+        Some(journal.clone()),
         health.clone(),
         std::time::Instant::now(),
         cost_apply,
     )
     .await;
     feeder.await.unwrap();
-    assert_eq!(*calls.lock().unwrap(), 1);
+    let calls = calls.lock().unwrap();
+    assert_eq!(calls.len(), 1);
+    assert!(calls[0] > 0, "partial cloud work still incurs cost");
     assert!(
         health.last_ai_err_ms.load(Ordering::Relaxed) > 0,
-        "FIX #9: streaming Error arm must bump last_ai_err_ms so the bar flips to AI down"
+        "streaming Error must bump last_ai_err_ms so the bar flips to AI down"
+    );
+    let counters = journal.snapshot_counters().unwrap();
+    assert_eq!(counters.ai_errors, 1);
+    assert_eq!(
+        counters.ai_responses_ok, 0,
+        "partial text from a failed stream must not become a completed Q&A"
+    );
+}
+
+/// Audit D1 — the journaled `AiResponse` must carry the CALLER's request
+/// purpose (the same value the caller writes on its paired `AiRequest`),
+/// NOT a hardcoded "live_ask". Feed a successful stream as a vision ask and
+/// assert the serialized journal line.
+#[tokio::test]
+async fn ask_stream_loop_journals_caller_supplied_purpose() {
+    let (tx, rx) = tokio::sync::mpsc::channel::<ai::AiEvent>(4);
+    let feeder = tokio::spawn(async move {
+        tx.send(ai::AiEvent::Delta {
+            text: "vision answer".into(),
+        })
+        .await
+        .unwrap();
+        tx.send(ai::AiEvent::Done {
+            reason: "length".into(),
+        })
+        .await
+        .unwrap();
+    });
+    let cost_apply: CostApplyFn = Box::new(|_| 0.0);
+    let (journal, mut lines) = Journal::capturing_for_test();
+    let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
+    ask_stream_loop(
+        sink,
+        rx,
+        "claude-haiku-4-5".into(),
+        "vision_ask",
+        false,
+        "sys".into(),
+        "usr".into(),
+        Some(journal),
+        Arc::new(HealthSignals::default()),
+        std::time::Instant::now(),
+        cost_apply,
+    )
+    .await;
+    feeder.await.unwrap();
+
+    // write() queues lines synchronously, so everything is already in the
+    // channel now that the loop has returned — drain and find the response.
+    let response_line = std::iter::from_fn(|| lines.try_recv().ok())
+        .filter_map(|command| match command {
+            WriterCmd::Line(line) => Some(line),
+            WriterCmd::Shutdown(_) => None,
+        })
+        .find(|line| line.contains(r#""kind":"ai_response""#))
+        .expect("a successful stream must journal an AiResponse");
+    let ev: serde_json::Value = serde_json::from_str(&response_line).unwrap();
+    assert_eq!(
+        ev["purpose"], "vision_ask",
+        "AiResponse must carry the caller's purpose, not a hardcoded live_ask: {response_line}"
+    );
+    assert_eq!(
+        ev["finish_reason"], "length",
+        "the stream's Done reason must still reach the journal verbatim"
     );
 }
 
@@ -729,6 +792,7 @@ async fn ask_stream_loop_local_journals_zero_cost() {
         sink,
         rx,
         "my-local-gemma-3-it".into(),
+        "live_ask",
         true, // local — must NOT bill / journal a cost
         "sys prompt".into(),
         "usr prompt".into(),

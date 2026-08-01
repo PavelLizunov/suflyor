@@ -106,8 +106,8 @@ msgstr "Транскрипт не сохранён"
 msgid "Copy all"
 msgstr "Копировать всё"
 
-msgid "Copied ✓"
-msgstr "Скопировано ✓"
+msgid "Copied [ok]"
+msgstr "Скопировано [ok]"
 
 msgid "with timecodes [mm:ss]"
 msgstr "с таймкодами [mm:ss]"
@@ -258,6 +258,15 @@ msgstr "Поверх всех окон (HWND_TOPMOST)"
 
 msgid "Stealth (hide from screen capture)"
 msgstr "Скрытность (прятать от захвата экрана)"
+
+msgid "[ok] active - verify with a screen-share preview"
+msgstr "[ok] активна — проверьте через предпросмотр захвата экрана"
+
+msgid "[!] stealth unavailable"
+msgstr "[!] скрытность недоступна"
+
+msgid "[--] off"
+msgstr "[--] выключена"
 
 msgid "Tile opacity ({}%)"
 msgstr "Прозрачность тайлов ({}%)"
@@ -754,6 +763,159 @@ msgstr "Скачать умную модель (6 ГБ)"
 msgid "Downloading…"
 msgstr "Загрузка…"
 
+msgid "Bundled model profile. The 26B primary is selected only for the confirmed VRAM/RAM matrix; 12B QAT remains the RAM-safe fallback."
+msgstr "Профиль встроенной модели. Основная 26B выбирается только по подтверждённой матрице VRAM/RAM; 12B QAT остаётся безопасным для RAM резервом."
+
+msgid "Context window"
+msgstr "Окно контекста"
+
+msgid "[on] Auto"
+msgstr "[выбрано] Авто"
+
+msgid "8K"
+msgstr "8K"
+
+msgid "[on] 8K"
+msgstr "[выбрано] 8K"
+
+msgid "16K"
+msgstr "16K"
+
+msgid "[on] 16K"
+msgstr "[выбрано] 16K"
+
+msgid "32K"
+msgstr "32K"
+
+msgid "[on] 32K"
+msgstr "[выбрано] 32K"
+
+msgid "64K"
+msgstr "64K"
+
+msgid "[on] 64K"
+msgstr "[выбрано] 64K"
+
+msgid "96K"
+msgstr "96K"
+
+msgid "[on] 96K"
+msgstr "[выбрано] 96K"
+
+msgid "Auto uses a compact {}K context."
+msgstr "Авто использует компактный контекст {}K."
+
+msgid "The selected context is fixed for live answers and long summaries."
+msgstr "Выбранный контекст фиксирован для живых ответов и длинных итогов."
+
+msgid "Fallback (12B QAT)"
+msgstr "Резерв (12B QAT)"
+
+msgid "[on] Fallback (12B QAT)"
+msgstr "[выбрано] Резерв (12B QAT)"
+
+msgid "Primary (26B-A4B)"
+msgstr "Основная (26B-A4B)"
+
+msgid "[on] Primary (26B-A4B)"
+msgstr "[выбрано] Основная (26B-A4B)"
+
+msgid "Download primary model (9.8 GiB)"
+msgstr "Скачать основную модель (9,8 ГиБ)"
+
+msgid "Download only 26B (9.8 GiB)"
+msgstr "Скачать только 26B (9,8 ГиБ)"
+
+msgid "Bundled 12B/26B controls manage only Suflyor's own llama.cpp endpoint."
+msgstr "Управление встроенными 12B/26B работает только с собственным endpoint llama.cpp Suflyor."
+
+msgid "Choose the local model explicitly. Estimated total VRAM at Auto (model + context + runtime): 4B ~6 GiB, 12B ~9.5 GiB, 26B ~12 GiB."
+msgstr "Выберите локальную модель явно. Оценка общей VRAM в Auto (модель + контекст + служебная память): 4B ~6 ГиБ, 12B ~9,5 ГиБ, 26B ~12 ГиБ."
+
+msgid "Fast (4B)"
+msgstr "Быстрая (4B)"
+
+msgid "[on] Fast (4B)"
+msgstr "[x] Быстрая (4B)"
+
+msgid "Balanced (12B QAT)"
+msgstr "Сбалансированная (12B QAT)"
+
+msgid "[on] Balanced (12B QAT)"
+msgstr "[x] Сбалансированная (12B QAT)"
+
+msgid "Maximum (26B-A4B)"
+msgstr "Максимальная (26B-A4B)"
+
+msgid "[on] Maximum (26B-A4B)"
+msgstr "[x] Максимальная (26B-A4B)"
+
+msgid "Active"
+msgstr "активна"
+
+msgid "Installed"
+msgstr "установлена"
+
+msgid "Not installed"
+msgstr "не установлена"
+
+msgid "Requires supported hardware"
+msgstr "нужно совместимое железо"
+
+msgid "Download"
+msgstr "скачать"
+
+msgid "Hardware not in the confirmed matrix. The model may exceed VRAM, spill into system RAM, run very slowly, or fail. You accept this risk."
+msgstr "Железо не входит в подтверждённую матрицу. Модель может превысить VRAM, использовать системную RAM, работать очень медленно или не запуститься. Вы принимаете этот риск."
+
+msgid "Your GGUF model"
+msgstr "Ваша GGUF-модель"
+
+msgid "Active: {}"
+msgstr "Активна: {}"
+
+msgid "No user model selected"
+msgstr "Пользовательская модель не выбрана"
+
+msgid "Choose GGUF…"
+msgstr "Выбрать GGUF…"
+
+msgid "Use recommended 12B"
+msgstr "Использовать рекомендуемую 12B"
+
+msgid "Choose a trusted local GGUF file. User models run text-only; memory requirements are unknown."
+msgstr "Выберите доверенный локальный GGUF-файл. Пользовательские модели работают только с текстом; требования к памяти неизвестны."
+
+msgid "Local Vision requires the installed 12B model and its projector. Use the separate Vision section below for cloud or another server."
+msgstr "Для локального Vision нужны установленная модель 12B и её проектор. Для облака или другого сервера используйте отдельный раздел Vision ниже."
+
+msgid "Bundled 4B/12B/26B controls manage only Suflyor's own llama.cpp endpoint."
+msgstr "Управление встроенными 4B/12B/26B работает только с собственным endpoint llama.cpp Suflyor."
+
+msgid "Selected: Auto ({}K)"
+msgstr "Выбрано: Auto ({}K)"
+
+msgid "Selected: {}K"
+msgstr "Выбрано: {}K"
+
+msgid "Applying…"
+msgstr "Применение…"
+
+msgid "Apply context"
+msgstr "Применить контекст"
+
+msgid "Installs the local stack with Gemma 4 12B QAT as the fallback. On confirmed 8/32, 12/24-32 or 16/32 GB VRAM/RAM profiles it also installs the pinned Gemma 4 26B-A4B primary. Existing verified models are reused."
+msgstr "Устанавливает локальный стек с Gemma 4 12B QAT как резервом. Для подтверждённых профилей VRAM/RAM 8/32, 12/24–32 или 16/32 ГБ также устанавливается закреплённая основная Gemma 4 26B-A4B. Существующие проверенные модели используются повторно."
+
+msgid "Installs or completes the local stack: llama.cpp, the 12B fallback, speech components, and 26B on supported hardware. Complete verified files are reused; partial downloads resume. The optional 4B profile is kept when already present."
+msgstr "Устанавливает или дополняет локальный стек: llama.cpp, резервную 12B, речевые компоненты и 26B на поддерживаемом оборудовании. Готовые проверенные файлы используются повторно, а частичные загрузки продолжаются. Необязательная 4B сохраняется, если уже установлена."
+
+msgid "Engine (llama.cpp)"
+msgstr "Движок (llama.cpp)"
+
+msgid "The app checks it weekly and verifies a new build before replacing the current one."
+msgstr "Приложение проверяет его раз в неделю и проверяет новую сборку перед заменой текущей."
+
 msgid "The 12B model is noticeably smarter but ~2× slower and needs ~10 GB of video memory (VRAM). On a weaker GPU keep 4B."
 msgstr "Модель 12B заметно умнее, но примерно вдвое медленнее и требует ~10 ГБ видеопамяти (VRAM). На слабой видеокарте оставьте 4B."
 
@@ -780,6 +942,9 @@ msgstr "Установлено: {}"
 
 msgid "Install local AI"
 msgstr "Установить локальный AI"
+
+msgid "Install / complete local AI"
+msgstr "Установить / докачать локальный AI"
 
 msgid "Installing…"
 msgstr "Установка…"
@@ -900,8 +1065,26 @@ msgstr "URL whisper-server — http://127.0.0.1:8081/v1"
 msgid "whisper-server bearer token (optional)"
 msgstr "bearer-токен whisper-server (необязательно)"
 
-msgid "whisper model — e.g. whisper-large-v3-turbo"
-msgstr "модель whisper — напр. whisper-large-v3-turbo"
+msgid "Server model id (advanced) — e.g. whisper-large-v3-turbo"
+msgstr "Id модели на сервере (дополнительно) — напр. whisper-large-v3-turbo"
+
+msgid "Cloud: audio is sent to Groq's API for recognition. Requires a Groq API key. Supports many languages."
+msgstr "Облако: аудио отправляется в API Groq для распознавания. Нужен ключ API Groq. Поддерживает много языков."
+
+msgid "Local: runs entirely on this PC, no cloud. Russian only. Requires the GigaAM model folder set below."
+msgstr "Локально: работает полностью на этом ПК, без облака. Только русский. Нужна папка модели GigaAM (ниже)."
+
+msgid "Local: runs on your whisper-server. Multilingual. Configure the server URL and model below."
+msgstr "Локально: работает на вашем whisper-server. Много языков. Настройте URL и модель сервера ниже."
+
+msgid "Cloud recognition model"
+msgstr "Модель облачного распознавания"
+
+msgid "Fast — recommended (whisper-large-v3-turbo)"
+msgstr "Быстрая — рекомендуется (whisper-large-v3-turbo)"
+
+msgid "More accurate — slower (whisper-large-v3)"
+msgstr "Точнее — медленнее (whisper-large-v3)"
 
 msgid "Groq STT (Whisper) — API key + model. Used only when the engine above is Cloud."
 msgstr "Groq STT (Whisper) — ключ и модель. Используется, только если движок выше — Облако."
@@ -909,8 +1092,15 @@ msgstr "Groq STT (Whisper) — ключ и модель. Используетс�
 msgid "waiting for transcript... (mic/sys → STT)"
 msgstr "ожидаю транскрипт... (mic/sys → STT)"
 
+msgid "AI streaming"
+msgstr "AI стримит"
+
 msgid "✏ Write a question for the assistant"
 msgstr "✏ Напишите вопрос ассистенту"
+
+# V0.8.3 — text-ask window header label (the ✏ chip above opens it).
+msgid "Write a question for the assistant"
+msgstr "Напишите вопрос ассистенту"
 
 msgid "Type your question…"
 msgstr "Введите вопрос…"
@@ -1017,6 +1207,18 @@ msgstr "Справка"
 msgid "Help — icons, hotkeys & gestures"
 msgstr "Справка — иконки, хоткеи и жесты"
 
+msgid "How it works"
+msgstr "Как это работает"
+
+msgid "1) Start capture — press start on the bar. The mic records you; system audio records the other side."
+msgstr "1) Начните захват — нажмите старт на баре. Микрофон записывает вас, системный звук — собеседника."
+
+msgid "2) Get help — hold ask or grab for a voice question, or press F9. Answers appear in tiles."
+msgstr "2) Получайте помощь — удерживайте «спросить» или «захватить» для голосового вопроса, либо нажмите F9. Ответы появляются в тайлах."
+
+msgid "3) Stop and review — press stop to end the session; open the session archive (F7) for transcripts and summaries."
+msgstr "3) Остановите и посмотрите — нажмите стоп для завершения сессии, затем откройте архив сессий (F7) для стенограмм и сводок."
+
 msgid "Bar icons"
 msgstr "Иконки бара"
 
@@ -1100,6 +1302,19 @@ msgstr "Восстановить"
 # Phase 3a — session-archive browser (archive.slint)
 msgid "Session archive"
 msgstr "Архив сессий"
+
+# UX-clarity — the session count is attached to the heading (one label).
+msgid "Session archive ({})"
+msgstr "Архив сессий ({})"
+
+msgid "More actions"
+msgstr "Другие действия"
+
+msgid "Restore tile size"
+msgstr "Вернуть размер тайла"
+
+msgid "Maximize tile"
+msgstr "Развернуть тайл"
 
 msgid "search transcript + AI answers…"
 msgstr "поиск по транскрипту и ответам ИИ…"
@@ -1539,6 +1754,9 @@ msgstr "Проверить"
 msgid "Prepare a call profile — describe the call, the agent researches it into an active profile:"
 msgstr "Подготовить профиль созвона — опиши созвон, агент соберёт из этого активный профиль:"
 
+msgid "Prepare a call profile"
+msgstr "Подготовить профиль созвона"
+
 msgid "e.g. Interview at Acme, Senior SRE role"
 msgstr "напр. Собес в Acme, роль Senior SRE"
 
@@ -1574,3 +1792,62 @@ msgstr "2) Прямо здесь ниже: впиши вводную в «Под
 
 msgid "Auto"
 msgstr "Авто"
+
+# Replay window — enforced by tests/i18n_guard.rs.
+msgid "Replay"
+msgstr "Повтор"
+
+msgid "Filter:"
+msgstr "Фильтр:"
+
+msgid "reset"
+msgstr "сброс"
+
+msgid "(no events - choose a session above)"
+msgstr "(нет событий — выберите сессию выше)"
+
+msgid "{} events - {} AI responses"
+msgstr "Событий: {} · ответов AI: {}"
+
+msgid "Total cost: ${}"
+msgstr "Общая стоимость: ${}"
+
+msgid "Vision for 26B requires its matching ~1.1 GiB projector."
+msgstr "Для зрения 26B нужен совместимый проектор размером около 1,1 ГиБ."
+
+msgid "Update the local engine before installing Vision for 26B."
+msgstr "Обновите локальный движок перед установкой зрения для 26B."
+
+msgid "Installing Vision…"
+msgstr "Установка зрения…"
+
+msgid "Install Vision for 26B (~1.1 GiB)"
+msgstr "Установить зрение для 26B (~1,1 ГиБ)"
+
+# === Window titles + accessible labels (J1/J2 — i18n_guard now scans
+# `title:` / `accessible-label:` alongside `text:` / `placeholder-text:`).
+# "Session archive" and "Transcript" window titles reuse the msgids above.
+
+msgid "suflyor (Slint)"
+msgstr "suflyor (Slint)"
+
+msgid "tile"
+msgstr "Тайл"
+
+msgid "suflyor — capture"
+msgstr "suflyor — захват"
+
+msgid "suflyor — Replay"
+msgstr "suflyor — Повтор"
+
+msgid "F4 — KB palette"
+msgstr "F4 — палитра базы знаний"
+
+msgid "suflyor recover session (Slint)"
+msgstr "Восстановление сессии suflyor (Slint)"
+
+msgid "suflyor text ask (Slint)"
+msgstr "Текстовый вопрос suflyor (Slint)"
+
+msgid "Retry"
+msgstr "Повторить"

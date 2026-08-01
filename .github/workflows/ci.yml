@@ -8,13 +8,15 @@
 #
 # Windows-only by design — the product is pure Win32 + WASAPI + Slint. Mirrors
 # the local gate's 5 layers (fmt --check, clippy -D warnings, FULL cargo test —
-# NOT --lib, so the tests/ guard tests run) for BOTH standalone crates.
+# NOT --lib, so the tests/ guard tests run) for all three standalone crates
+# (overlay-backend, slint-experiment, suflyor-tts).
 #
 # Selected-path contract (docs-only fast path):
 #   Classification lives in .github/scripts/is-docs-only.sh (single source of
 #   truth, shared with security.yml).  A PR is docs-only when EVERY changed
 #   path in the raw git diff (--name-only --no-renames base..head) matches
-#   *.md OR lives under docs/.  Any other path — Rust source, Cargo.toml /
+#   *.md OR lives under docs/.  Embedded overlay-backend/knowledge/*.md files
+#   are code inputs and always select full CI.  Any other path — Rust source, Cargo.toml /
 #   Cargo.lock, *.slint, workflow YAML, scripts/, deny.toml, .gitleaks.toml,
 #   etc. — selects the full-CI path.  Detection never reads PR title, body,
 #   or labels.  Docs-only PRs skip the Windows rust job; the gate still

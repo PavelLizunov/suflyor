@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Suflyor 0.35.1 — проверка</title>
+<style>
+  :root { color-scheme: light dark; font: 16px/1.45 system-ui, sans-serif; }
+  body { max-width: 920px; margin: 32px auto; padding: 0 18px 48px; }
+  h1 { font-size: 1.65rem; }
+  h2 { margin-top: 30px; font-size: 1.15rem; }
+  label { display: block; margin: 10px 0; padding: 10px 12px; border: 1px solid #8886; border-radius: 8px; }
+  input { margin-right: 9px; }
+  small { display: block; margin: 4px 0 0 28px; opacity: .75; }
+  textarea { box-sizing: border-box; width: 100%; min-height: 130px; padding: 10px; }
+  code { font-size: .92em; }
+</style>
+<h1>Suflyor 0.35.1 — что проверить</h1>
+<p>Отмечайте пункты на той сборке, где в «Обновлениях» указана версия <b>0.35.1</b>.</p>
+
+<h2>Модели</h2>
+<label><input type="checkbox">1. Установленная 12B показана как «активна» или «установлена» и не скачивается заново.</label>
+<label><input type="checkbox">2. Установка отсутствующей 12B завершается без ошибки целостности.<small>Прерванная загрузка должна продолжаться, а не начинаться сначала.</small></label>
+<label><input type="checkbox">3. У 4B, 12B и 26B всегда понятен статус: активна, установлена, установить, скачать или неподдерживаемое оборудование.</label>
+<label><input type="checkbox">4. 26B остаётся видимой даже на неподдерживаемом компьютере, но запустить её нельзя.</label>
+<label><input type="checkbox">5. «Выбрать GGUF…» запускает выбранный локальный GGUF без копирования большого файла.</label>
+<label><input type="checkbox">6. Файл не-GGUF отклоняется; после удаления выбранного GGUF приложение безопасно возвращается к штатной модели.</label>
+
+<h2>Контекст и интерфейс</h2>
+<label><input type="checkbox">7. Ползунок имеет Auto, 8K, 16K, 32K, 64K и 96K; в нулевую позицию попасть нельзя.</label>
+<label><input type="checkbox">8. Текст остаётся одинаково чётким на Auto и всех ступенях.</label>
+<label><input type="checkbox">9. Быстрое перемещение ползунка не подвешивает страницу; подсказка памяти меняется сразу.</label>
+<label><input type="checkbox">10. До «Применить контекст» модель не перезапускается; после применения выбор сохраняется.</label>
+<label><input type="checkbox">11. Все 16 вкладок Настроек помещаются в окно 720×600: нет обрезанного текста, огромных пустот и горизонтального растяжения.</label>
+
+<h2>Vision и хоткеи</h2>
+<label><input type="checkbox">12. На установленной 12B с проектором включение «Локальная модель поддерживает изображения» сохраняется после закрытия Настроек, а F8 открывает выделение области.</label>
+<label><input type="checkbox">13. На 26B кнопка установки докачивает совместимый проектор (~1,1 ГиБ), после безопасного перезапуска включается Vision и F8; на 4B и пользовательском GGUF локальный Vision недоступен с понятной причиной.</label>
+<label><input type="checkbox">14. Проверены все сочетания: <code>F1 F3 F4 F6 F7 F8 Shift+F8 Ctrl+F8 F9 Shift+F9 Shift+Alt+1 Shift+Alt+2 Shift+Alt+3</code>.</label>
+<label><input type="checkbox">15. В «Диагностике» нет конфликтов хоткеев; F8 использует выбранный и сохранённый маршрут Vision.</label>
+
+<h2>Заметки</h2>
+<textarea id="notes" placeholder="Что произошло, на каком пункте, текст ошибки…"></textarea>
+<script>
+  const boxes = [...document.querySelectorAll('input')];
+  const key = 'suflyor-retest-v0.35.1';
+  const saved = JSON.parse(localStorage.getItem(key) || '{}');
+  boxes.forEach((box, i) => {
+    box.checked = !!saved[i];
+    box.onchange = () => {
+      const state = Object.fromEntries(boxes.map((item, n) => [n, item.checked]));
+      localStorage.setItem(key, JSON.stringify(state));
+    };
+  });
+  const notes = document.querySelector('#notes');
+  notes.value = localStorage.getItem(key + '-notes') || '';
+  notes.oninput = () => localStorage.setItem(key + '-notes', notes.value);
+</script>
+</html>

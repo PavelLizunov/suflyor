@@ -58,6 +58,7 @@ check false "workflow file"         .github/workflows/ci.yml
 check false "script"                scripts/ci.ps1
 check false "deny.toml"             deny.toml
 check false "gitleaks config"       .gitleaks.toml
+check false "embedded knowledge md" overlay-backend/knowledge/glossary.md
 check false "mixed docs+code"       docs/goal.md src/main.rs
 check false "mixed md+cargo"        README.md Cargo.lock
 

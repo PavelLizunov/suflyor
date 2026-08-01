@@ -34,6 +34,7 @@ pub(crate) fn wire_vision_settings(
     // ===== V4 — vision (screenshot) channel: provider switch + field saves + test =====
     {
         let cfg_c = cfg.clone();
+        let weak = win.as_weak();
         win.on_vision_provider_changed(move |idx| {
             let provider = match idx {
                 0 => "off",
@@ -41,13 +42,32 @@ pub(crate) fn wire_vision_settings(
                 3 => "local",
                 _ => "cloud",
             };
-            let mut c = cfg_c.write();
-            c.vision_provider = provider.to_string();
-            if let Err(e) = overlay_backend::config::save(&c) {
-                eprintln!("[overlay-host] vision_provider save failed: {e:#}");
-                return;
+            let saved_provider = {
+                let mut c = cfg_c.write();
+                c.vision_provider = provider.to_string();
+                // Re-apply the selected model's projector invariant so choosing
+                // "same" cannot route F8 to a managed text-only server.
+                overlay_backend::local_ai::repair_managed_model_state(
+                    &mut c,
+                    &overlay_backend::local_ai::default_root(),
+                );
+                if let Err(e) = overlay_backend::config::save(&c) {
+                    eprintln!("[overlay-host] vision_provider save failed: {e:#}");
+                    return;
+                }
+                c.vision_provider.clone()
+            };
+            if saved_provider != provider {
+                if let Some(w) = weak.upgrade() {
+                    w.set_vision_provider_index(match saved_provider.as_str() {
+                        "off" => 0,
+                        "same" => 1,
+                        "local" => 3,
+                        _ => 2,
+                    });
+                }
             }
-            diag!("vision_provider -> {provider}");
+            diag!("vision_provider -> {saved_provider}");
         });
     }
     {
