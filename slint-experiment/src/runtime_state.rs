@@ -175,6 +175,12 @@ pub struct SlintRuntime {
     /// error tile per line. We spawn at most one error tile per
     /// `AI_ERROR_TILE_DEBOUNCE_MS`. Zero = none spawned yet.
     pub last_ai_error_tile_ms: u64,
+
+    /// Suflyor E2 — latch for the mic-down notice tile emitted by the health
+    /// ticker (see `slint_session::mic_notice_decision`): ONE generic tile per
+    /// failure episode instead of one per 2s tick. Set when the notice spawns;
+    /// cleared when the mic health reads "ok" again and on session start/stop.
+    pub mic_down_notified: bool,
 }
 
 /// Convenience alias matching src-tauri's `SharedRuntime`.
@@ -223,6 +229,23 @@ pub fn push_transcript_line(rt: &mut SlintRuntime, line: TranscriptLine) {
     rt.transcript.push_back(line);
     while rt.transcript.len() > TRANSCRIPT_MAX_LINES {
         rt.transcript.pop_front();
+    }
+}
+
+/// Return the shared user-facing reason when the session has reached its cap.
+/// ASCII operators avoid tofu in the skia-rendered notice tile.
+#[must_use]
+pub fn cost_cap_reason(cap_usd: f64, current_microcents: u64) -> Option<String> {
+    if cap_usd <= 0.0 {
+        return None;
+    }
+    let current_usd = (current_microcents as f64) / 100_000_000.0;
+    if current_usd >= cap_usd {
+        Some(format!(
+            "over budget: ${current_usd:.4} spent >= ${cap_usd:.2} (Settings -> Max cost per session)"
+        ))
+    } else {
+        None
     }
 }
 
@@ -298,5 +321,15 @@ mod tests {
         // Oldest dropped — coverage shifted to the recent majority.
         let first = &s.full_transcript.front().expect("non-empty").text;
         assert_eq!(first, "line 5");
+    }
+
+    #[test]
+    fn cost_cap_reason_covers_boundaries_and_ui_text() {
+        assert!(cost_cap_reason(0.0, 100_000_000).is_none());
+        assert!(cost_cap_reason(-1.0, 100_000_000).is_none());
+        assert!(cost_cap_reason(1.0, 99_999_999).is_none());
+        let reason = cost_cap_reason(1.0, 100_000_000).expect("at cap");
+        assert!(reason.contains("$1.0000 spent >= $1.00"));
+        assert!(reason.contains("Settings -> Max cost per session"));
     }
 }

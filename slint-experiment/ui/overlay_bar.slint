@@ -13,6 +13,10 @@ import { Button, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Metrics } from "metrics.slint";
 
+global OverlayCursorPolicy {
+    in-out property <bool> force-arrow: false;
+}
+
 // ===== Reusable chip primitives =====
 
 component IconSlot inherits Rectangle {
@@ -116,7 +120,7 @@ component Chip inherits Rectangle {
         }
     }
     ta := TouchArea {
-        mouse-cursor: pointer;
+        mouse-cursor: OverlayCursorPolicy.force-arrow ? default : pointer;
         clicked => { root.clicked(); }
     }
 }
@@ -171,7 +175,7 @@ component LockChip inherits Rectangle {
         }
     }
     ta := TouchArea {
-        mouse-cursor: pointer;
+        mouse-cursor: OverlayCursorPolicy.force-arrow ? default : pointer;
         clicked => {
             root.clicked();
         }
@@ -320,7 +324,7 @@ component RecordBtn inherits Rectangle {
         }
     }
     TouchArea {
-        mouse-cursor: pointer;
+        mouse-cursor: OverlayCursorPolicy.force-arrow ? default : pointer;
         pointer-event(ev) => {
             if (ev.button == PointerEventButton.left) {
                 if (ev.kind == PointerEventKind.down) {
@@ -375,7 +379,7 @@ export component OverlayBarWindow inherits Window {
     property <bool> widgets-light: Theme.is-light;
     init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
-    title: "suflyor (Slint)";
+    title: @tr("suflyor (Slint)");
     icon: @image-url("../assets/icon.svg");
     background: transparent;
     no-frame: true;
@@ -463,6 +467,16 @@ export component OverlayBarWindow inherits Window {
     in-out property <bool> aggressive-active: false;
     // E10.2 — stealth on/off, so the 🎯 chip lights up + reflects restored state.
     in-out property <bool> stealth-active: false;
+    changed stealth-active => {
+        OverlayCursorPolicy.force-arrow = root.stealth-active;
+    }
+    // I1/I4 — verified stealth FAILURE: a WDA apply/readback (or the F8 capture
+    // overlay's HWND grab) failed, so the status pill shows the translated
+    // generic failure text instead of the mic/sys status until the next apply
+    // verifies. Set/cleared by Rust (surface_stealth_unavailable clears in
+    // apply_bar_stealth); the pill TEXT is translated here so RU follows
+    // ui_language (the pill's colour stays Rust-owned — colours don't translate).
+    in-out property <bool> stealth-fault: false;
 
     // Phase E6 v11 — live status indicators. `last-transcript-line`
     // shows the most recent STT output (truncated by Rust to ~120
@@ -586,15 +600,19 @@ export component OverlayBarWindow inherits Window {
             // TouchArea here is safe: its bbox is only the pill, so
             // it can't shadow the sibling chips' TouchAreas.
             Rectangle {
-                background: root.status-color.with-alpha(0.18);
-                border-color: root.status-color;
+                background: (root.stealth-fault ? Theme.warning : root.status-color).with-alpha(0.18);
+                border-color: root.stealth-fault ? Theme.warning : root.status-color;
                 border-width: 1px;
                 border-radius: Metrics.radius-control;
                 height: 22px;
                 horizontal-stretch: 0;
+                // The pill is the bar's status readout AND its drag handle —
+                // expose both to accessibility (no visible caption describes it).
+                accessible-role: text;
+                accessible-label: root.status-text + ". " + @tr("Drag to move the bar; shows the live state");
                 // Drag handle — press-and-drag to move the whole bar.
                 TouchArea {
-                    mouse-cursor: grab;
+                    mouse-cursor: OverlayCursorPolicy.force-arrow ? default : grab;
                     pointer-event(ev) => {
                         if (ev.button == PointerEventButton.left
                             && ev.kind == PointerEventKind.down) {
@@ -623,10 +641,14 @@ export component OverlayBarWindow inherits Window {
                         slot-height: 22px;
                     }
                     Text {
-                        text: root.status-text;
+                        // I1/I4 — a verified stealth failure overrides the
+                        // mic/sys status with the translated generic banner.
+                        text: root.stealth-fault
+                            ? @tr("[!] stealth unavailable")
+                            : root.status-text;
                         font-size: 11px;
                         font-weight: 600;
-                        color: root.status-color;
+                        color: root.stealth-fault ? Theme.warning : root.status-color;
                         vertical-alignment: center;
                     }
                 }
@@ -931,7 +953,8 @@ export component OverlayBarWindow inherits Window {
                 vertical-alignment: center;
                 horizontal-stretch: 0;
             }
-            // Source tag — "mic" green dot, "sys" cyan dot, "" gray.
+            // Source tag — "mic" green dot, "sys" cyan dot, "" gray. The dot is
+            // colour-ONLY, so accessibility gets a word for the source it marks.
             Rectangle {
                 width: 8px;
                 height: 8px;
@@ -940,6 +963,9 @@ export component OverlayBarWindow inherits Window {
                 background: root.last-transcript-source == "mic"
                     ? Theme.success
                     : (root.last-transcript-source == "sys" ? Theme.accent : Theme.border-strong);
+                accessible-role: text;
+                accessible-label: root.last-transcript-source == "mic" ? @tr("Microphone")
+                    : (root.last-transcript-source == "sys" ? @tr("System audio") : "");
             }
             // The live transcript text — elide when too long.
             Text {
@@ -976,7 +1002,7 @@ export component OverlayBarWindow inherits Window {
                         vertical-alignment: center;
                     }
                     Text {
-                        text: "AI streaming";
+                        text: @tr("AI streaming");
                         font-size: 10px;
                         color: #818cf8;
                         vertical-alignment: center;
@@ -1009,8 +1035,8 @@ export component OverlayBarWindow inherits Window {
                 // bar: only the pill is the drag zone, so it can't shadow the
                 // sibling buttons' TouchAreas). Tinted by the live session state.
                 Rectangle {
-                    background: root.status-color.with-alpha(0.18);
-                    border-color: root.status-color;
+                    background: (root.stealth-fault ? Theme.warning : root.status-color).with-alpha(0.18);
+                    border-color: root.stealth-fault ? Theme.warning : root.status-color;
                     border-width: 1px;
                     border-radius: Metrics.radius-control;
                     height: 22px;
@@ -1024,8 +1050,12 @@ export component OverlayBarWindow inherits Window {
                     // this, so the normal look is unchanged (full bar has 1200px,
                     // so it never needs the cap).
                     max-width: 150px;
+                    // Same accessibility label as the full bar's pill (status +
+                    // drag affordance) — zero layout impact.
+                    accessible-role: text;
+                    accessible-label: root.status-text + ". " + @tr("Drag to move the bar; shows the live state");
                     TouchArea {
-                        mouse-cursor: grab;
+                        mouse-cursor: OverlayCursorPolicy.force-arrow ? default : grab;
                         pointer-event(ev) => {
                             if (ev.button == PointerEventButton.left
                                 && ev.kind == PointerEventKind.down) {
@@ -1061,10 +1091,14 @@ export component OverlayBarWindow inherits Window {
                             slot-height: 22px;
                         }
                         Text {
-                            text: root.status-text;
+                            // I1/I4 — same translated stealth-failure override
+                            // as the full bar's pill.
+                            text: root.stealth-fault
+                                ? @tr("[!] stealth unavailable")
+                                : root.status-text;
                             font-size: 11px;
                             font-weight: 600;
-                            color: root.status-color;
+                            color: root.stealth-fault ? Theme.warning : root.status-color;
                             vertical-alignment: center;
                             // Elide a long status within the capped pill so it can
                             // never overflow the narrow compact window. Short

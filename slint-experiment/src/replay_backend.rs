@@ -1,8 +1,9 @@
 //! Pure-Rust data layer for the Replay viewer pilot.
 //!
-//! Day 2 of Phase 0 — this module replicates `journal::sessions_dir`,
-//! `list_sessions`, and `load_session` from `src-tauri/src/lib.rs`
-//! without pulling in any Tauri code. The migration plan asks for a
+//! Day 2 of Phase 0 — this module replicates `list_sessions` and
+//! `load_session` from `src-tauri/src/lib.rs` without pulling in any
+//! Tauri code. The sessions dir resolves through the canonical
+//! `overlay_backend::journal::sessions_dir`. The migration plan asks for a
 //! shared `replay_backend` module callable from both the Tauri command
 //! handlers AND the Slint pilot; pulling overlay_mvp_lib into the
 //! pilot crate would drag Tauri + WebView2 along, which defeats the
@@ -16,14 +17,7 @@
 //! follows.
 
 use anyhow::{Context, Result};
-use std::path::{Path, PathBuf};
-
-/// `%APPDATA%\suflyor\sessions\` (legacy `overlay-mvp` until migrated). Mirrors
-/// `journal::sessions_dir()` via the shared data-root resolver.
-pub fn sessions_dir() -> Result<PathBuf> {
-    let root = overlay_backend::paths::data_root().context("no config dir")?;
-    Ok(root.join("sessions"))
-}
+use std::path::Path;
 
 /// One row in the session combobox.
 #[derive(Debug, Clone)]
@@ -36,7 +30,7 @@ pub struct SessionInfo {
 
 /// List all `.jsonl` session journals, newest first.
 pub fn list_sessions() -> Result<Vec<SessionInfo>> {
-    let dir = sessions_dir()?;
+    let dir = overlay_backend::journal::sessions_dir()?;
     if !dir.exists() {
         return Ok(vec![]);
     }
@@ -81,7 +75,7 @@ pub fn list_sessions() -> Result<Vec<SessionInfo>> {
 pub fn load_session(path: &Path) -> Result<Vec<serde_json::Value>> {
     const MAX_BYTES: u64 = 10 * 1024 * 1024;
 
-    let sessions = sessions_dir()?
+    let sessions = overlay_backend::journal::sessions_dir()?
         .canonicalize()
         .context("canonicalize sessions dir")?;
     let canonical = path.canonicalize().context("canonicalize session path")?;
@@ -122,7 +116,7 @@ pub fn load_session(path: &Path) -> Result<Vec<serde_json::Value>> {
 /// Strip whitespace + collapse runs of spaces + truncate to N chars
 /// with an ellipsis. Mirrors React's `preview()`.
 pub fn preview(s: &str, n: usize) -> String {
-    let collapsed: String = s.split_whitespace().collect::<Vec<_>>().join(" ");
+    let collapsed = overlay_backend::text::collapse_ws(s);
     if collapsed.chars().count() > n {
         let head: String = collapsed.chars().take(n).collect();
         format!("{head}…")
@@ -175,7 +169,7 @@ fn ev_bool(ev: &serde_json::Value, key: &str) -> bool {
 /// `eventCost()`.
 fn event_cost_usd(ev: &serde_json::Value) -> f64 {
     if let Some(micro) = ev_u64(ev, "cost_microcents") {
-        return (micro as f64) / 100_000_000.0;
+        return overlay_backend::ai::microcents_to_usd(micro);
     }
     ev_f64(ev, "cost_usd").unwrap_or(0.0)
 }
@@ -219,7 +213,9 @@ pub fn render_event(ev: &serde_json::Value) -> (String, String) {
             // but the correct $X.XXXX in the footer. Match the React
             // behavior to avoid surprising users who've seen the
             // existing app.
-            let cost = ev_u64(ev, "total_cost_microcents").unwrap_or(0) as f64 / 100_000_000.0;
+            let cost = overlay_backend::ai::microcents_to_usd(
+                ev_u64(ev, "total_cost_microcents").unwrap_or(0),
+            );
             let mut tail = format!("{reqs} AI · {tiles} tiles");
             if rl > 0 {
                 tail.push_str(&format!(" · {rl} rate-limited"));

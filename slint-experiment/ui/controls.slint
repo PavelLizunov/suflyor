@@ -20,7 +20,13 @@ import { Theme } from "theme.slint";
 export component CloseButton inherits Rectangle {
     in property <length> box: 30px;
     in property <length> glyph: 16px;
+    // Icon-only control — accessibility gets a word instead of a glyph (same
+    // `a11y` pattern as the bar's chips and the archive RowIcon).
+    in property <string> a11y: @tr("Close");
     callback clicked();
+
+    accessible-role: button;
+    accessible-label: root.a11y;
 
     width: root.box;
     height: root.box;

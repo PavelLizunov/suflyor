@@ -186,9 +186,6 @@ pub struct TranscriptEvent {
 #[derive(Debug, Deserialize)]
 struct GroqResponse {
     text: String,
-    #[allow(dead_code)]
-    #[serde(default)]
-    language: Option<String>,
 }
 
 /// Spawn the STT pipeline. Returns receiver of TranscriptEvent.

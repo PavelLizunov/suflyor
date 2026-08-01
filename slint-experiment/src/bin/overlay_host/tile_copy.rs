@@ -88,7 +88,7 @@ pub(crate) fn format_transcript_for_copy(
         } else {
             "Система"
         };
-        let text = u.text.split_whitespace().collect::<Vec<_>>().join(" ");
+        let text = overlay_backend::text::collapse_ws(&u.text);
         // F1: timecode = the line's START (previous line's timestamp; first = origin),
         // matching the on-screen transcript + the player seek.
         let prefix = if with_timecodes {
@@ -793,7 +793,7 @@ fn build_select_text(vm: &VecModel<MarkdownBlock>) -> String {
             out.push_str("• "); // bullet marker (the • is a separate Text in block view)
         }
         // Collapse ALL internal whitespace (incl. newlines) → one flat line per block.
-        out.push_str(&r.text.split_whitespace().collect::<Vec<_>>().join(" "));
+        out.push_str(&overlay_backend::text::collapse_ws(&r.text));
         if out.len() >= CHAR_CAP {
             break;
         }
@@ -887,7 +887,9 @@ pub(crate) fn reset_pause() {
 /// prompts / earlier turns). Purely local — no network egress — so it stays safe
 /// under screen-share / stealth.
 pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayBarBridge>) {
-    tile.set_can_speak(true);
+    // Only advertise a working 🔊 when a voice + the sidecar are actually
+    // installed; a missing engine must not show a usable action (F2).
+    tile.set_can_speak(overlay_backend::tts::is_available());
     let bridge_speak = bridge.clone();
     {
         let weak = tile.as_weak();
@@ -896,12 +898,19 @@ pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayB
             if text.trim().is_empty() {
                 return;
             }
+            // `tts::speak` re-checks availability (the sidecar/voice may have
+            // vanished since wiring — TOCTOU) and marks the STT suppression
+            // window ONLY when playback is accepted. Gate the tile's speaking
+            // state on that result so a missing engine neither shows as speaking
+            // nor falsely silences the mic (F2).
+            if !overlay_backend::tts::speak(&text) {
+                return;
+            }
             reset_pause();
             if let Some(t) = weak.upgrade() {
                 t.set_speak_paused(false);
             }
             mark_speaking(convo_id);
-            overlay_backend::tts::speak(&text);
         });
     }
     let weak_p = tile.as_weak();

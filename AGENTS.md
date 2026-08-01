@@ -1,6 +1,6 @@
 # suflyor (overlay-mvp) — agent instructions
 
-Windows-only AI-interview overlay. **Pure Rust + Slint 1.16** (no Node, no web
+Windows-only AI-interview overlay. **Pure Rust + Slint 1.17** (no Node, no web
 engine). Read this file fully before editing; the checks below define "done".
 
 ## Project map (three standalone crates, NO root workspace)
@@ -36,15 +36,35 @@ Claude-Code twin of this file — same rules, different tooling notes.
 - Release build + installer (rarely needed by agents):
   `powershell -File scripts/build-slint-release.ps1 -Installer`.
 
+## Mandatory Slint MCP visual gate
+
+- After any `.slint` edit or Rust change that affects visible UI, use the
+  project skill `.agents/skills/slint-mcp-ui-audit/SKILL.md` before calling the
+  task done, committing it, or handing a build to the user.
+- Every visual fix must keep matching **before and after** screenshots of the
+  same surface, size, theme, language, and UI state at a stable artifact path;
+  link both from the PR. An after-only screenshot is not acceptance evidence.
+- A green compile/test gate is not visual verification. Launch the exact binary
+  with `SLINT_EMIT_DEBUG_INFO=1` and `SLINT_MCP_PORT=9123`, inspect live
+  screenshots through the embedded Slint MCP server, and report the surfaces
+  checked.
+- A change to a shared Settings primitive or layout requires screenshots of all
+  16 Settings tabs at 720x600. Never rely on computer-use screenshots for
+  transparent-window colours.
+- After the page pass, run the project skill's complete 13-shortcut global
+  hotkey smoke once against the same binary. Registration logs alone do not
+  prove dispatch; check the distinct result/log for every shortcut.
+
 Git hooks: run `git config core.hooksPath .githooks` once after clone —
 pre-commit runs fmt --check, pre-push runs clippy + tests (all crates).
 Do NOT bypass with --no-verify.
 
 ## Hard rules
 
-- **Never publish a GitHub release, never `gh release`, never push tags.**
-  Releases are owner-triggered only. Direct pushes to `master` are forbidden;
-  use a `codex/<task>` branch + PR.
+- **Publish a GitHub release or tag only after the owner explicitly
+  authorizes one specific version after verified build evidence was shown.**
+  Never publish on your own initiative. Direct pushes to `master` are
+  forbidden; use a `codex/<task>` branch + PR.
 - **Work on a branch `codex/<short-task-name>`**, one task = one branch =
   one coherent deliverable. Claude Code sessions share this checkout —
   branches prevent the commit races we've already been burned by.

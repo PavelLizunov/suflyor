@@ -24,6 +24,7 @@ fn merge_server_settings_takes_servers_keeps_locals() {
     current.ui_language = "en".into();
     current.color_scheme = 3;
     current.tile_font_size = 19;
+    current.ai_local_context = "64k".into();
     current.snippets = vec![Snippet {
         key: "loc".into(),
         title: "Local snippet".into(),
@@ -71,6 +72,7 @@ fn merge_server_settings_takes_servers_keeps_locals() {
     imported.mic_device = Some("Imported Mic (ignore)".into());
     imported.ui_language = "ru".into();
     imported.color_scheme = 0;
+    imported.ai_local_context = "96k".into();
     imported.snippets = vec![Snippet {
         key: "imp".into(),
         title: "Imported snippet (ignore)".into(),
@@ -124,6 +126,7 @@ fn merge_server_settings_takes_servers_keeps_locals() {
     assert_eq!(merged.ui_language, "en");
     assert_eq!(merged.color_scheme, 3);
     assert_eq!(merged.tile_font_size, 19);
+    assert_eq!(merged.ai_local_context, "64k");
     assert_eq!(merged.snippets.len(), 1);
     assert_eq!(merged.snippets[0].key, "loc");
 }
@@ -573,6 +576,7 @@ fn config_empty_object_yields_all_defaults() {
     let cfg: Config = serde_json::from_str("{}").expect("empty object should parse");
     assert_eq!(cfg.ai_bearer, "");
     assert_eq!(cfg.ai_model, "");
+    assert_eq!(cfg.ai_local_context, "auto");
     assert_eq!(cfg.response_language, "");
     assert!(!cfg.stealth_enabled);
 }
@@ -590,6 +594,8 @@ fn secret_redacted_blanks_every_secret_keeps_the_rest() {
         vision_local_bearer: "vision-local".into(),
         groq_api_key: "gsk_secret".into(),
         stt_whisper_bearer: "whisper-bearer".into(),
+        hermes_bridge_token: "hermes-bridge-token".into(),
+        hermes_api_key: "hermes-api-key".into(),
         ..Default::default()
     };
 
@@ -606,6 +612,11 @@ fn secret_redacted_blanks_every_secret_keeps_the_rest() {
         r.stt_whisper_bearer.is_empty(),
         "stt_whisper_bearer redacted"
     );
+    assert!(
+        r.hermes_bridge_token.is_empty(),
+        "hermes_bridge_token redacted"
+    );
+    assert!(r.hermes_api_key.is_empty(), "hermes_api_key redacted");
     assert_eq!(r.config_version, 7, "non-secret fields survive for undo");
     // And the serialized .bak bytes contain none of the secret values.
     let bytes = serde_json::to_vec(&r).expect("serialize redacted");
@@ -615,6 +626,8 @@ fn secret_redacted_blanks_every_secret_keeps_the_rest() {
         "gsk_secret",
         "whisper-bearer",
         "vision-bearer",
+        "hermes-bridge-token",
+        "hermes-api-key",
     ] {
         assert!(
             !s.contains(secret),

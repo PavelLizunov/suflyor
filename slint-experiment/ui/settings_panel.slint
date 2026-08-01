@@ -1,4 +1,4 @@
-﻿// Settings window — custom dark tab bar + content area (the std TabWidget
+// Settings window — custom dark tab bar + content area (the std TabWidget
 // clashes with our theme, and we want per-tab control of content rendering).
 // The sidebar groups tabs into SESSION / AI / APP; `active-tab` indexes the
 // content pane. Indices have gaps (5 + 8) where the Stats + Snippets panes
@@ -101,6 +101,7 @@ export struct ComponentRow {
 export component DarkCheck inherits Rectangle {
     in property <string> text;
     in-out property <bool> checked: false;
+    in property <bool> enabled: true;
     callback toggled(bool);
     // min-height (not a fixed height) so the row can GROW when a long label wraps
     // to a 2nd line instead of being clipped vertically. horizontal-stretch:1 fills
@@ -120,8 +121,8 @@ export component DarkCheck inherits Rectangle {
             y: (parent.height - self.height) / 2;
             border-radius: 11px;
             border-width: 1px;
-            border-color: root.checked ? Theme.accent : Theme.border;
-            background: root.checked ? Theme.accent.with-alpha(0.2) : #ffffff0f;
+            border-color: !root.enabled ? Theme.border.with-alpha(0.5) : root.checked ? Theme.accent : Theme.border;
+            background: !root.enabled ? #ffffff08 : root.checked ? Theme.accent.with-alpha(0.2) : #ffffff0f;
             animate background, border-color { duration: 140ms; }
             Rectangle {
                 width: 16px;
@@ -129,20 +130,21 @@ export component DarkCheck inherits Rectangle {
                 border-radius: 8px;
                 y: (parent.height - self.height) / 2;
                 x: root.checked ? parent.width - self.width - 3px : 3px;
-                background: root.checked ? Theme.accent : Theme.text-muted;
+                background: !root.enabled ? Theme.text-muted.with-alpha(0.45) : root.checked ? Theme.accent : Theme.text-muted;
                 animate x, background { duration: 140ms; }
             }
         }
         Text {
             text: root.text;
             font-size: Metrics.font-body;
-            color: Theme.text-primary;
+            color: root.enabled ? Theme.text-primary : Theme.text-muted;
             vertical-alignment: center;
             wrap: word-wrap;
             horizontal-stretch: 1;
         }
     }
     TouchArea {
+        enabled: root.enabled;
         clicked => {
             root.checked = !root.checked;
             root.toggled(root.checked);
@@ -169,7 +171,9 @@ component SettingsCard inherits Rectangle {
     border-width: Metrics.border-thin;
     border-color: Theme.border;
     clip: true;
-    VerticalLayout {
+    min-height: card-content.preferred-height;
+    preferred-height: card-content.preferred-height;
+    card-content := VerticalLayout {
         padding: Metrics.space-md;
         spacing: Metrics.space-sm;
         if root.title != "" : Text {
@@ -180,6 +184,21 @@ component SettingsCard inherits Rectangle {
         }
         @children
     }
+}
+
+// Settings fields use one fixed control height on every tab. Without it,
+// parent layouts stretch the same Fluent controls to different fractional
+// heights depending on how much content a page contains.
+component SettingsComboBox inherits ComboBox {
+    height: 32px;
+}
+
+component SettingsLineEdit inherits LineEdit {
+    height: 32px;
+}
+
+component SettingsSlider inherits Slider {
+    height: 20px;
 }
 
 // Phase E6 v39 — grouped sidebar, cherry-picked from the Claude Design
@@ -317,6 +336,13 @@ export component SettingsWindow inherits Window {
     // Persisted cross-window toggles (driven by overlay-host).
     in-out property <bool> always-on-top-toggle: true;
     in-out property <bool> stealth-toggle: false;
+    // I1 — verified (EFFECTIVE) stealth state for the Stealth tab status line.
+    // The toggle above is the config INTENT; this flag reports the verified
+    // WDA apply + readback. The status Text below renders the translated line
+    // from these two bools (@tr, so RU follows ui_language — no Rust-built
+    // string). Both are reseeded in populate_token_status on every open
+    // (reused-window rule).
+    in-out property <bool> stealth-effective: false;
 
     // Phase E6 — token status display + edit. Status strings are
     // populated by overlay-host on open from cfg.read().ai_bearer
@@ -419,22 +445,39 @@ export component SettingsWindow inherits Window {
     // user picks a loaded model instead of typing its id.
     in-out property <[string]> ai-local-models: [];
     in-out property <int> ai-local-model-index: 0;
+    in-out property <bool> managed-local-server: false;
+    in-out property <string> local-model-resource-warning: "";
     in-out property <bool> ai-local-vision: false;
+    in-out property <bool> ai-local-vision-available: true;
     // E10 — local-model "thinking"/reasoning toggle. Off (default) sends
     // enable_thinking=false for faster answers; on lets the model reason.
     in-out property <bool> ai-local-thinking: false;
-    // v0.18.0 — local LLM size choice: false = fast 4B (default), true = smart
-    // but ~2× slower 12B. The 12B is downloaded on demand (not bundled); these
-    // mirror config + the download worker state.
+    // Bundled local LLM profile: 0=legacy 4B, 1=12B QAT, 2=26B-A4B.
+    // ai-local-quality remains the backwards-compatible 26B flag.
     in-out property <bool> ai-local-quality: false;
+    in-out property <int> ai-local-model-profile-index: 1;
+    in-out property <bool> legacy-model-present: false;
+    in-out property <bool> fallback-model-present: false;
     in-out property <bool> quality-model-present: false;
+    // True when Rust confirms the current VRAM/RAM pair is in the
+    // owner-approved 26B matrix. Used only for a non-blocking warning;
+    // all model profiles remain selectable regardless of this flag.
+    in-out property <bool> quality-selection-allowed: false;
     in-out property <bool> quality-downloading: false;
     in-out property <bool> model-switching: false; // server relaunch in flight
     in-out property <float> quality-progress: 0.0; // 0.0..1.0
     in-out property <string> quality-status: "";
-    // v0.18.2 — 12B vision: its own projector (gemma4uv, ~175 MB) downloaded on
-    // demand, attachable ONLY on a new-enough engine (>= b9626). present = file
-    // on disk; supported = engine can load it; downloading = pull in flight.
+    in-out property <bool> ai-local-custom-active: false;
+    in-out property <string> ai-local-custom-model-name: "";
+    // Managed context: 0=Auto, 1=8K, 2=16K, 3=32K, 4=64K, 5=96K.
+    in-out property <int> ai-local-context-index: 0;
+    in-out property <int> ai-local-context-preview-index: 0;
+    in-out property <int> ai-local-hardware-profile-index: 0;
+    in-out property <int> ai-local-context-max-k: 32;
+    in-out property <int> ai-local-context-auto-k: 16;
+    in-out property <string> ai-local-context-vram-hint: "";
+    // The property/callback names are retained for ABI compatibility; they now
+    // drive the matching 26B projector.
     in-out property <bool> quality-vision-present: false;
     in-out property <bool> quality-vision-supported: false;
     in-out property <bool> vision12b-downloading: false;
@@ -493,12 +536,16 @@ export component SettingsWindow inherits Window {
     callback ai-local-models-refresh();
     callback ai-local-vision-changed(bool);
     callback ai-local-thinking-changed(bool);
-    // v0.18.0 — local model size: faster 4B vs smarter 12B. `model-quality-changed`
-    // writes config + restarts the local server with the other GGUF;
-    // `download-quality-clicked` pulls the 12B on demand (it isn't bundled).
-    callback model-quality-changed(bool);
-    callback download-quality-clicked();
-    // v0.18.2 — pull the 12B vision projector; update the llama.cpp engine.
+    // Local profile: legacy 4B, 12B QAT, or 26B-A4B primary.
+    // `model-profile-changed` transactionally restarts the managed server;
+    // `download-model-clicked(index)` pulls EXACTLY that bundled model on demand
+    // (4B/12B/26B) on any hardware, then the user switches to it once installed.
+    callback model-profile-changed(int);
+    callback ai-local-context-preview-changed(float);
+    callback ai-local-context-changed(int);
+    callback download-model-clicked(int);
+    callback choose-custom-gguf-clicked();
+    // Legacy projector callback plus llama.cpp engine update.
     callback download-vision12b-clicked();
     callback update-engine-clicked();
     callback ai-local-test-clicked();
@@ -509,6 +556,8 @@ export component SettingsWindow inherits Window {
     in-out property <int> stt-provider-index: 0;
     // Recognition language (stt_language): 0=auto-detect, 1=Russian, 2=English.
     in-out property <int> stt-language-index: 0;
+    // Cloud recognition model (stt_model): 0=turbo (fast), 1=large-v3 (accurate).
+    in-out property <int> stt-cloud-model-index: 0;
     in-out property <string> stt-gigaam-dir-input: "";
     // GigaAM GPU acceleration via the ONNX Runtime DirectML EP (default on).
     in-out property <bool> stt-gigaam-gpu: true;
@@ -518,6 +567,7 @@ export component SettingsWindow inherits Window {
     callback ai-bridge-test-clicked();
     callback stt-test-clicked();
     callback stt-provider-changed(int);
+    callback stt-cloud-model-changed(int);
     callback stt-language-changed(int);
     callback stt-gigaam-dir-save(string);
     callback stt-gigaam-gpu-changed(bool);
@@ -931,6 +981,19 @@ export component SettingsWindow inherits Window {
                                 checked <=> root.stealth-toggle;
                                 toggled(v) => { root.stealth-changed(v); }
                             }
+                            // I1 — verified (effective) stealth state: translated
+                            // here (@tr) and driven by the verified flag + toggle
+                            // intent; ASCII status markers only (skia-safe glyphs).
+                            Text {
+                                text: root.stealth-effective
+                                    ? @tr("[ok] active - verify with a screen-share preview")
+                                    : root.stealth-toggle
+                                        ? @tr("[!] stealth unavailable")
+                                        : @tr("[--] off");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
                         }
                         SettingsCard {
                             title: @tr("Tile opacity");
@@ -946,7 +1009,7 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
-                            Slider {
+                            SettingsSlider {
                                 minimum: 0.5;
                                 maximum: 1.0;
                                 value <=> root.tile-body-opacity;
@@ -1059,6 +1122,7 @@ export component SettingsWindow inherits Window {
                             { label: @tr("Global hotkeys"), level: root.diag-hotkeys-level, detail: root.diag-hotkeys-level == 3 ? @tr("registering…") : (root.diag-hotkeys-failed != "" ? @tr("conflict: {}", root.diag-hotkeys-failed) : (root.diag-hotkeys-detail != "" ? root.diag-hotkeys-detail : @tr("hotkey system unavailable"))) },
                             { label: @tr("Stealth"), level: 3, detail: root.diag-stealth-on ? @tr("on — verify with a screen-share preview") : @tr("off") },
                         ] : HorizontalLayout {
+                            min-height: detail-text.preferred-height + 8px;
                             padding: 4px;
                             spacing: 10px;
                             Text {
@@ -1083,7 +1147,7 @@ export component SettingsWindow inherits Window {
                                     : (row.level == 2 || row.level == 4) ? Theme.danger
                                     : Theme.text-muted;
                             }
-                            Text {
+                            detail-text := Text {
                                 text: row.detail;
                                 font-size: 11px;
                                 color: Theme.text-secondary;
@@ -1207,7 +1271,7 @@ export component SettingsWindow inherits Window {
                                     color: Theme.text-secondary;
                                     vertical-alignment: center;
                                 }
-                                ComboBox {
+                                SettingsComboBox {
                                     // Language names are themselves untranslated identifiers
                                     // (each appears in its own language as a self-label).
                                     model: ["Русский", "English"];
@@ -1235,7 +1299,8 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
-                            ComboBox {
+                            SettingsComboBox {
+                                height: 32px;
                                 model: root.tile-monitors;
                                 current-index <=> root.tile-monitor-index;
                                 selected(v) => { root.tile-monitor-changed(self.current-index); }
@@ -1261,7 +1326,7 @@ export component SettingsWindow inherits Window {
                                     color: Theme.text-secondary;
                                     vertical-alignment: center;
                                 }
-                                ComboBox {
+                                SettingsComboBox {
                                     // Self-labelled scheme names (proper nouns —
                                     // left untranslated so they read the same in
                                     // both languages).
@@ -1304,13 +1369,14 @@ export component SettingsWindow inherits Window {
                         // Voice chooser — only when at least one voice is installed.
                         if root.tts-available : HorizontalLayout {
                             spacing: 8px;
+                            height: 32px;
                             Text {
                                 text: @tr("Voice:");
                                 font-size: 11px;
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
-                            ComboBox {
+                            SettingsComboBox {
                                 model: root.tts-voice-names;
                                 current-index: root.tts-voice-index;
                                 selected => { root.tts-voice-changed(self.current-index); }
@@ -1321,6 +1387,7 @@ export component SettingsWindow inherits Window {
                         // bundled in the app installer).
                         if !root.tts-available : VerticalLayout {
                             spacing: 6px;
+                            vertical-stretch: 0;
                             Text {
                                 text: @tr("Neural voices aren't installed yet — download them (Irina + Ruslan, ~130 MB).");
                                 font-size: 11px;
@@ -1329,6 +1396,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 alignment: start;
+                                height: 32px;
                                 Button {
                                     text: root.tts-installing ? @tr("Installing…") : @tr("Install voices");
                                     enabled: !root.tts-installing;
@@ -1353,13 +1421,14 @@ export component SettingsWindow inherits Window {
                         // Speed preset (multipliers are language-neutral, untranslated).
                         HorizontalLayout {
                             spacing: 8px;
+                            height: 32px;
                             Text {
                                 text: @tr("Speed:");
                                 font-size: 11px;
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
-                            ComboBox {
+                            SettingsComboBox {
                                 model: ["0.75×", "1.0×", "1.3×", "1.5×", "2.0×"];
                                 current-index: root.tts-rate-index;
                                 selected => { root.tts-rate-changed(self.current-index); }
@@ -1368,6 +1437,7 @@ export component SettingsWindow inherits Window {
                         // Quick test of the current voice + speed.
                         HorizontalLayout {
                             alignment: start;
+                            height: 32px;
                             Button {
                                 text: @tr("Test voice");
                                 enabled: root.tts-available;
@@ -1547,7 +1617,7 @@ export component SettingsWindow inherits Window {
                         }
                         // Phase E6 v23 — real device list from
                         // audio::list_devices().inputs, wired by Rust.
-                        ComboBox {
+                        SettingsComboBox {
                             model: root.mic-devices;
                             current-index <=> root.mic-device-index;
                             selected(val) => { root.mic-device-selected(val); }
@@ -1589,14 +1659,14 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
-                            ComboBox {
+                            SettingsComboBox {
                                 model: [@tr("all (no limit)"), @tr("last N sessions"), @tr("last N days")];
                                 current-index <=> root.retention-mode;
                                 selected(v) => {
                                     root.retention-changed(root.retention-mode, root.retention-value);
                                 }
                             }
-                            if root.retention-mode != 0 : LineEdit {
+                            if root.retention-mode != 0 : SettingsLineEdit {
                                 width: 64px;
                                 text <=> root.retention-value;
                                 edited(t) => { root.retention-changed(root.retention-mode, t); }
@@ -1634,7 +1704,7 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
-                            LineEdit {
+                            SettingsLineEdit {
                                 width: 64px;
                                 text <=> root.journal-keep-value;
                                 edited(t) => { root.journal-retention-changed(t, root.journal-mb-value); }
@@ -1649,7 +1719,7 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
-                            LineEdit {
+                            SettingsLineEdit {
                                 width: 64px;
                                 text <=> root.journal-mb-value;
                                 edited(t) => { root.journal-retention-changed(root.journal-keep-value, t); }
@@ -1826,6 +1896,7 @@ export component SettingsWindow inherits Window {
                                 height: 150px;
                             }
                             Button {
+                                height: 32px;
                                 text: @tr("Save keywords");
                                 clicked => {
                                     root.trigger-keywords-save(root.trigger-keywords-input);
@@ -1870,13 +1941,14 @@ export component SettingsWindow inherits Window {
                         HorizontalLayout {
                             spacing: 6px;
                             alignment: start;
+                            vertical-stretch: 0;
                             Text {
                                 text: @tr("Profile:");
                                 font-size: 12px;
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
-                            if root.profile-names.length > 0 : ComboBox {
+                            if root.profile-names.length > 0 : SettingsComboBox {
                                 model: root.profile-names;
                                 current-index: root.active-profile-index;
                                 min-width: 170px;
@@ -1891,7 +1963,7 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-muted;
                                 vertical-alignment: center;
                             }
-                            LineEdit {
+                            SettingsLineEdit {
                                 placeholder-text: @tr("profile name");
                                 text <=> root.profile-name-input;
                                 horizontal-stretch: 1;
@@ -1900,6 +1972,8 @@ export component SettingsWindow inherits Window {
                         HorizontalLayout {
                             spacing: 6px;
                             alignment: start;
+                            vertical-stretch: 0;
+                            height: 32px;
                             Button {
                                 text: @tr("Add profile");
                                 clicked => {
@@ -1934,6 +2008,8 @@ export component SettingsWindow inherits Window {
                         HorizontalLayout {
                             spacing: 8px;
                             alignment: start;
+                            vertical-stretch: 0;
+                            height: 32px;
                             // Phase E6 v43 — voice dictation toggle.
                             Button {
                                 text: root.context-dictating
@@ -1953,14 +2029,12 @@ export component SettingsWindow inherits Window {
                                 enabled: !root.context-processing;
                                 clicked => { root.context-process-clicked(); }
                             }
-                            if root.meeting-context-result != "" : Text {
-                                text: root.meeting-context-result;
-                                font-size: 11px;
-                                color: Theme.accent;
-                                vertical-alignment: center;
-                                wrap: word-wrap;
-                                horizontal-stretch: 1;
-                            }
+                        }
+                        if root.meeting-context-result != "" : Text {
+                            text: root.meeting-context-result;
+                            font-size: 11px;
+                            color: Theme.accent;
+                            wrap: word-wrap;
                         }
                         }
                     }
@@ -1975,7 +2049,7 @@ export component SettingsWindow inherits Window {
                             wrap: word-wrap;
                         }
                         // ===== TYPE selector — gates everything below =====
-                        ComboBox {
+                        SettingsComboBox {
                             model: [@tr("Cloud (Claude bridge)"), @tr("Local (llama.cpp / Ollama)")];
                             current-index: root.ai-provider-index;
                             selected => {
@@ -1988,6 +2062,7 @@ export component SettingsWindow inherits Window {
                         // ============================ CLOUD ============================
                         if root.ai-provider-index == 0 : VerticalLayout {
                             spacing: 8px;
+                            vertical-stretch: 0;
                             Text {
                                 text: @tr("Cloud bridge");
                                 font-size: 12px;
@@ -2002,7 +2077,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("paste new bearer token then Save");
                                     text <=> root.ai-bearer-input;
                                     input-type: password;
@@ -2024,7 +2099,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("http://your.bridge.host:PORT/v1");
                                     text <=> root.ai-base-url-input;
                                     horizontal-stretch: 1;
@@ -2044,7 +2119,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                ComboBox {
+                                SettingsComboBox {
                                     model: root.ai-models;
                                     current-index: root.ai-model-index;
                                     horizontal-stretch: 1;
@@ -2094,6 +2169,7 @@ export component SettingsWindow inherits Window {
                         // ============================ LOCAL ============================
                         if root.ai-provider-index == 1 : VerticalLayout {
                             spacing: 8px;
+                            vertical-stretch: 0;
                             Text {
                                 text: @tr("Local model");
                                 font-size: 12px;
@@ -2102,7 +2178,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("local URL — http://127.0.0.1:8080/v1 (llama.cpp) or :11434 (Ollama)");
                                     text <=> root.ai-local-base-url-input;
                                     horizontal-stretch: 1;
@@ -2116,7 +2192,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                ComboBox {
+                                SettingsComboBox {
                                     model: root.ai-local-models;
                                     current-index: root.ai-local-model-index;
                                     horizontal-stretch: 1;
@@ -2139,7 +2215,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("local server bearer token (optional)");
                                     text <=> root.ai-local-bearer-input;
                                     input-type: password;
@@ -2156,9 +2232,51 @@ export component SettingsWindow inherits Window {
                             DarkCheck {
                                 text: @tr("Local model supports images (vision)");
                                 checked <=> root.ai-local-vision;
+                                enabled: root.ai-local-vision-available;
                                 toggled(v) => {
                                     root.ai-local-vision-changed(v);
                                 }
+                            }
+                            if root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index != 2 : Text {
+                                text: @tr("Local Vision requires the installed 12B model and its projector. Use the separate Vision section below for cloud or another server.");
+                                font-size: 10px;
+                                color: Theme.warning;
+                                wrap: word-wrap;
+                            }
+                            if root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index == 2 : Text {
+                                text: root.quality-vision-supported
+                                    ? @tr("Vision for 26B requires its matching ~1.1 GiB projector.")
+                                    : @tr("Update the local engine before installing Vision for 26B.");
+                                font-size: 10px;
+                                color: Theme.warning;
+                                wrap: word-wrap;
+                            }
+                            if root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index == 2 && root.quality-vision-supported : HorizontalLayout {
+                                spacing: 6px;
+                                vertical-stretch: 0;
+                                Button {
+                                    height: 32px;
+                                    text: root.vision12b-downloading
+                                        ? @tr("Installing Vision…")
+                                        : @tr("Install Vision for 26B (~1.1 GiB)");
+                                    enabled: !root.vision12b-downloading && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
+                                    clicked => {
+                                        root.download-vision12b-clicked();
+                                    }
+                                }
+                                if root.vision12b-downloading : Button {
+                                    height: 32px;
+                                    text: @tr("Cancel");
+                                    clicked => {
+                                        root.cancel-local-ai-clicked();
+                                    }
+                                }
+                            }
+                            if root.vision12b-status != "" : Text {
+                                text: root.vision12b-status;
+                                font-size: 11px;
+                                color: Theme.accent;
+                                wrap: word-wrap;
                             }
                             DarkCheck {
                                 text: @tr("Local model reasoning/thinking (slower, off = faster)");
@@ -2167,48 +2285,223 @@ export component SettingsWindow inherits Window {
                                     root.ai-local-thinking-changed(v);
                                 }
                             }
-                            // ----- v0.18.0 — local model: faster (4B) vs smarter (12B) -----
+                            // ----- bundled local model: 4B / 12B / 26B -----
                             Rectangle { background: Theme.border; height: 1px; }
                             Text {
-                                text: @tr("Local model: speed vs quality. Switching restarts the local server (~5s).");
+                                text: @tr("Choose the local model explicitly. Estimated total VRAM at Auto (model + context + runtime): 4B ~6 GiB, 12B ~9.5 GiB, 26B ~12 GiB.");
                                 font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
-                            HorizontalLayout {
+                            // Model names plus the translated selected marker do
+                            // not fit one row at the window's supported widths.
+                            VerticalLayout {
                                 spacing: 6px;
+                                vertical-stretch: 0;
                                 Button {
-                                    text: root.ai-local-quality ? @tr("Faster (4B)") : @tr("● Faster (4B)");
-                                    enabled: root.ai-local-quality && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
+                                    height: 32px;
+                                    text: @tr("Fast (4B)") + " - " +
+                                        (!root.ai-local-custom-active && root.ai-local-model-profile-index == 0 ? @tr("Active") :
+                                         root.legacy-model-present ? @tr("Installed") : @tr("Download"));
+                                    enabled: root.managed-local-server && (root.ai-local-custom-active || root.ai-local-model-profile-index != 0 || !root.legacy-model-present) && !root.quality-downloading && !root.model-switching && !root.local-ai-installing && !root.vision12b-downloading;
                                     clicked => {
-                                        root.model-quality-changed(false);
+                                        if root.legacy-model-present {
+                                            root.model-profile-changed(0);
+                                        } else {
+                                            root.download-model-clicked(0);
+                                        }
                                     }
                                 }
-                                if root.quality-model-present : Button {
-                                    text: root.ai-local-quality ? @tr("● Smarter (12B)") : @tr("Smarter (12B)");
-                                    enabled: !root.ai-local-quality && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
+                                Button {
+                                    height: 32px;
+                                    text: @tr("Balanced (12B QAT)") + " - " +
+                                        (!root.ai-local-custom-active && root.ai-local-model-profile-index == 1 ? @tr("Active") :
+                                         root.fallback-model-present ? @tr("Installed") : @tr("Download"));
+                                    enabled: root.managed-local-server && (root.ai-local-custom-active || root.ai-local-model-profile-index != 1 || !root.fallback-model-present) && !root.quality-downloading && !root.model-switching && !root.local-ai-installing && !root.vision12b-downloading;
                                     clicked => {
-                                        root.model-quality-changed(true);
+                                        if root.fallback-model-present {
+                                            root.model-profile-changed(1);
+                                        } else {
+                                            root.download-model-clicked(1);
+                                        }
                                     }
                                 }
-                                if !root.quality-model-present : Button {
-                                    text: root.quality-downloading ? @tr("Downloading…") : @tr("Download smart model (6 GB)");
-                                    enabled: !root.quality-downloading && !root.local-ai-installing;
+                                Button {
+                                    height: 32px;
+                                    text: @tr("Maximum (26B-A4B)") + " - " +
+                                        (!root.ai-local-custom-active && root.ai-local-model-profile-index == 2 ? @tr("Active") :
+                                         root.quality-model-present ? @tr("Installed") : @tr("Download"));
+                                    enabled: root.managed-local-server && (root.ai-local-custom-active || root.ai-local-model-profile-index != 2 || !root.quality-model-present) && !root.quality-downloading && !root.model-switching && !root.local-ai-installing && !root.vision12b-downloading;
                                     clicked => {
-                                        root.download-quality-clicked();
+                                        if root.quality-model-present {
+                                            root.model-profile-changed(2);
+                                        } else {
+                                            root.download-model-clicked(2);
+                                        }
                                     }
                                 }
-                                if root.quality-downloading : Button {
+                            }
+                            if !root.quality-selection-allowed && root.managed-local-server : Text {
+                                text: @tr("Hardware not in the confirmed matrix. The model may exceed VRAM, spill into system RAM, run very slowly, or fail. You accept this risk.");
+                                font-size: 10px;
+                                color: Theme.warning;
+                                wrap: word-wrap;
+                            }
+                            if root.quality-downloading : HorizontalLayout {
+                                spacing: 6px;
+                                vertical-stretch: 0;
+                                Button {
                                     text: @tr("Cancel");
                                     clicked => {
                                         root.cancel-local-ai-clicked();
                                     }
                                 }
                             }
+                            Rectangle { background: Theme.border; height: 1px; }
                             Text {
-                                text: @tr("The 12B model is noticeably smarter but ~2× slower and needs ~10 GB of video memory (VRAM). On a weaker GPU keep 4B.");
+                                text: @tr("Your GGUF model");
                                 font-size: 11px;
+                                font-weight: 700;
+                                color: Theme.text-primary;
+                            }
+                            Text {
+                                text: root.ai-local-custom-active
+                                    ? @tr("Active: {}", root.ai-local-custom-model-name)
+                                    : @tr("No user model selected");
+                                font-size: 10px;
+                                color: root.ai-local-custom-active ? Theme.accent : Theme.text-muted;
+                                overflow: elide;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                vertical-stretch: 0;
+                                Button {
+                                    height: 32px;
+                                    text: @tr("Choose GGUF…");
+                                    enabled: root.managed-local-server && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
+                                    clicked => {
+                                        root.choose-custom-gguf-clicked();
+                                    }
+                                }
+                                if root.ai-local-custom-active : Button {
+                                    height: 32px;
+                                    text: @tr("Use recommended 12B");
+                                    enabled: root.fallback-model-present && !root.model-switching;
+                                    clicked => {
+                                        root.model-profile-changed(1);
+                                    }
+                                }
+                            }
+                            Text {
+                                text: @tr("Choose a trusted local GGUF file. User models run text-only; memory requirements are unknown.");
+                                font-size: 10px;
                                 color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            if !root.managed-local-server : Text {
+                                text: @tr("Bundled 4B/12B/26B controls manage only Suflyor's own llama.cpp endpoint.");
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            if root.managed-local-server : VerticalLayout {
+                                spacing: 6px;
+                                vertical-stretch: 0;
+                                Text {
+                                    text: @tr("Context window");
+                                    font-size: 11px;
+                                    font-weight: 700;
+                                    color: Theme.text-primary;
+                                }
+                                SettingsSlider {
+                                    height: 20px;
+                                    // The visual range is 1..6; backend/config
+                                    // remain 0..5. The thumb can never reach zero,
+                                    // which avoids Fluent's blurry endpoint state.
+                                    minimum: 0.99;
+                                    maximum: root.ai-local-context-max-k >= 96 ? 6.01 :
+                                        root.ai-local-context-max-k >= 64 ? 5.01 :
+                                        root.ai-local-context-max-k >= 32 ? 4.01 :
+                                        root.ai-local-context-max-k >= 16 ? 3.01 : 2.01;
+                                    value: root.ai-local-context-preview-index + 1;
+                                    enabled: !root.model-switching && !root.local-ai-installing;
+                                    changed(v) => {
+                                        root.ai-local-context-preview-changed(v - 1);
+                                    }
+                                }
+                                HorizontalLayout {
+                                    Text {
+                                        text: @tr("Auto");
+                                        font-size: 9px;
+                                        color: Theme.text-muted;
+                                        horizontal-stretch: 1;
+                                    }
+                                    Text {
+                                        text: @tr("8K");
+                                        font-size: 9px;
+                                        color: Theme.text-muted;
+                                        horizontal-stretch: 1;
+                                        horizontal-alignment: center;
+                                    }
+                                    if root.ai-local-context-max-k >= 16 : Text {
+                                        text: @tr("16K");
+                                        font-size: 9px;
+                                        color: Theme.text-muted;
+                                        horizontal-stretch: 1;
+                                        horizontal-alignment: center;
+                                    }
+                                    if root.ai-local-context-max-k >= 32 : Text {
+                                        text: @tr("32K");
+                                        font-size: 9px;
+                                        color: Theme.text-muted;
+                                        horizontal-stretch: 1;
+                                        horizontal-alignment: center;
+                                    }
+                                    if root.ai-local-context-max-k >= 64 : Text {
+                                        text: @tr("64K");
+                                        font-size: 9px;
+                                        color: Theme.text-muted;
+                                        horizontal-stretch: 1;
+                                        horizontal-alignment: center;
+                                    }
+                                    if root.ai-local-context-max-k >= 96 : Text {
+                                        text: @tr("96K");
+                                        font-size: 9px;
+                                        color: Theme.text-muted;
+                                        horizontal-stretch: 1;
+                                        horizontal-alignment: right;
+                                    }
+                                }
+                                Text {
+                                    text: root.ai-local-context-preview-index == 0
+                                        ? @tr("Selected: Auto ({}K)", root.ai-local-context-auto-k)
+                                        : @tr("Selected: {}K", root.ai-local-context-preview-index == 1 ? 8 :
+                                            root.ai-local-context-preview-index == 2 ? 16 :
+                                            root.ai-local-context-preview-index == 3 ? 32 :
+                                            root.ai-local-context-preview-index == 4 ? 64 : 96);
+                                    font-size: 10px;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
+                                }
+                                Text {
+                                    text: root.ai-local-context-vram-hint;
+                                    font-size: 10px;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
+                                }
+                                Button {
+                                    height: 32px;
+                                    text: root.model-switching ? @tr("Applying…") : @tr("Apply context");
+                                    enabled: root.ai-local-context-preview-index != root.ai-local-context-index && !root.model-switching && !root.local-ai-installing;
+                                    clicked => {
+                                        root.ai-local-context-changed(root.ai-local-context-preview-index);
+                                    }
+                                }
+                            }
+                            Text {
+                                text: root.local-model-resource-warning;
+                                font-size: 11px;
+                                color: Theme.warning;
                                 wrap: word-wrap;
                             }
                             if root.quality-status != "" : Text {
@@ -2230,43 +2523,9 @@ export component SettingsWindow inherits Window {
                                     background: Theme.accent;
                                 }
                             }
-                            // ----- v0.18.2 — 12B vision (its own gemma4uv projector) -----
-                            if root.quality-model-present && root.quality-vision-supported && root.quality-vision-present : Text {
-                                text: @tr("12B vision projector installed — used when the 12B is the active model.");
-                                font-size: 11px;
-                                color: Theme.success;
-                                wrap: word-wrap;
-                            }
-                            if root.quality-model-present && root.quality-vision-supported && !root.quality-vision-present : HorizontalLayout {
-                                spacing: 6px;
-                                Button {
-                                    text: root.vision12b-downloading ? @tr("Downloading…") : @tr("Enable vision on 12B — download projector (175 MB)");
-                                    enabled: !root.vision12b-downloading && !root.quality-downloading && !root.model-switching && !root.local-ai-installing && !root.engine-updating;
-                                    clicked => {
-                                        root.download-vision12b-clicked();
-                                    }
-                                }
-                                if root.vision12b-downloading : Button {
-                                    text: @tr("Cancel");
-                                    clicked => {
-                                        root.cancel-local-ai-clicked();
-                                    }
-                                }
-                            }
-                            if root.quality-model-present && !root.quality-vision-supported : Text {
-                                text: @tr("12B vision needs a newer engine — use Update engine below.");
-                                font-size: 11px;
-                                color: Theme.warning;
-                                wrap: word-wrap;
-                            }
-                            if root.vision12b-status != "" : Text {
-                                text: root.vision12b-status;
-                                font-size: 11px;
-                                color: Theme.accent;
-                                wrap: word-wrap;
-                            }
                             HorizontalLayout {
                                 spacing: 6px;
+                                height: 32px;
                                 Button {
                                     text: @tr("Test local connection");
                                     clicked => {
@@ -2287,15 +2546,16 @@ export component SettingsWindow inherits Window {
                             // ----- one-click in-app local-AI installer -----
                             Rectangle { background: Theme.border; height: 1px; }
                             Text {
-                                text: @tr("Installs the local stack on this PC (~6 GB total): llama.cpp + Gemma-4-E4B (~5 GB; needs ~6 GB VRAM on GPU), whisper.cpp + Whisper-turbo (~0.9 GB), GigaAM-v3 (~0.2 GB). With NVIDIA it picks the CUDA build, otherwise CPU. Models you already have are reused, not re-downloaded.");
+                                text: @tr("Installs or completes the local stack: llama.cpp, the 12B fallback, speech components, and 26B on supported hardware. Complete verified files are reused; partial downloads resume. The optional 4B profile is kept when already present.");
                                 font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
                             HorizontalLayout {
                                 spacing: 6px;
+                                height: 32px;
                                 Button {
-                                    text: root.local-ai-installing ? @tr("Installing…") : @tr("Install local AI");
+                                    text: root.local-ai-installing ? @tr("Installing…") : @tr("Install / complete local AI");
                                     enabled: !root.local-ai-installing && !root.quality-downloading && !root.model-switching && !root.engine-updating && !root.vision12b-downloading;
                                     clicked => {
                                         root.install-local-ai-clicked();
@@ -2335,10 +2595,15 @@ export component SettingsWindow inherits Window {
                                     background: Theme.accent;
                                 }
                             }
-                            // ----- v0.18.2 — llama.cpp engine auto-update -----
-                            Rectangle { background: Theme.border; height: 1px; }
+                        }
+
+                        // Keep engine maintenance in its own card. The local-AI
+                        // card is intentionally long and Slint can under-report
+                        // the final conditional rows when sizing its ScrollView.
+                        if root.ai-provider-index == 1 : SettingsCard {
+                            title: @tr("Engine (llama.cpp)");
                             Text {
-                                text: @tr("Engine (llama.cpp). The app keeps it up to date automatically (checked weekly) so the local model stays fast and 12B vision works. A new build is verified to run before it replaces the current one.");
+                                text: @tr("The app checks it weekly and verifies a new build before replacing the current one.");
                                 font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
@@ -2461,7 +2726,7 @@ export component SettingsWindow inherits Window {
                             wrap: word-wrap;
                         }
                         Rectangle { background: Theme.border; height: 1px; }
-                        ComboBox {
+                        SettingsComboBox {
                             model: [@tr("Off"), @tr("Same as text model above"), @tr("Cloud (Sonnet via bridge)"), @tr("Local (2nd vision server)")];
                             current-index: root.vision-provider-index;
                             selected => {
@@ -2479,7 +2744,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("vision base URL (blank = text bridge)");
                                     text <=> root.vision-base-url-input;
                                     horizontal-stretch: 1;
@@ -2488,7 +2753,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("vision bearer (blank = text bridge)");
                                     text <=> root.vision-bearer-input;
                                     input-type: password;
@@ -2498,7 +2763,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("vision model (blank = claude-sonnet-4-6)");
                                     text <=> root.vision-model-input;
                                     horizontal-stretch: 1;
@@ -2516,7 +2781,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("vision local URL — http://127.0.0.1:8082/v1");
                                     text <=> root.vision-local-base-url-input;
                                     horizontal-stretch: 1;
@@ -2525,7 +2790,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("vision local model id");
                                     text <=> root.vision-local-model-input;
                                     horizontal-stretch: 1;
@@ -2534,7 +2799,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("vision local bearer (optional)");
                                     text <=> root.vision-local-bearer-input;
                                     input-type: password;
@@ -2618,7 +2883,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: "127.0.0.1";
                                     text <=> root.hermes-bridge-host;
                                     horizontal-stretch: 1;
@@ -2641,7 +2906,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: "8654";
                                     text <=> root.hermes-bridge-port;
                                     horizontal-stretch: 1;
@@ -2659,7 +2924,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     text <=> root.hermes-bridge-token;
                                     read-only: true;
                                     horizontal-stretch: 1;
@@ -2706,7 +2971,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: "http://127.0.0.1:8642/v1";
                                     text <=> root.hermes-api-url;
                                     horizontal-stretch: 1;
@@ -2723,7 +2988,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("paste API_SERVER_KEY then Save");
                                     text <=> root.hermes-api-key;
                                     input-type: password;
@@ -2764,7 +3029,9 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
-                            Rectangle { background: Theme.border; height: 1px; }
+                        }
+                        SettingsCard {
+                            title: @tr("Prepare a call profile");
                             Text {
                                 text: @tr("Prepare a call profile — describe the call, the agent researches it into an active profile:");
                                 font-size: 11px;
@@ -2773,7 +3040,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     placeholder-text: @tr("e.g. Interview at Acme, Senior SRE role");
                                     text <=> root.hermes-profile-seed;
                                     horizontal-stretch: 1;
@@ -2803,7 +3070,7 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
-                        ComboBox {
+                        SettingsComboBox {
                             model: [@tr("Cloud (Groq Whisper)"), @tr("Local GigaAM-v3 (Russian)"), @tr("Local Whisper (whisper.cpp)")];
                             current-index: root.stt-provider-index;
                             selected => {
@@ -2815,6 +3082,26 @@ export component SettingsWindow inherits Window {
                                 root.stt-provider-changed(self.current-index);
                             }
                         }
+                        // Contextual engine description — helps a novice understand
+                        // privacy / language / setup for the selected engine.
+                        if root.stt-provider-index == 0 : Text {
+                            text: @tr("Cloud: audio is sent to Groq's API for recognition. Requires a Groq API key. Supports many languages.");
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
+                        if root.stt-provider-index == 1 : Text {
+                            text: @tr("Local: runs entirely on this PC, no cloud. Russian only. Requires the GigaAM model folder set below.");
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
+                        if root.stt-provider-index == 2 : Text {
+                            text: @tr("Local: runs on your whisper-server. Multilingual. Configure the server URL and model below.");
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
                         // Recognition language (stt_language) — what the mic is
                         // transcribed as, by default.
                         Text {
@@ -2823,7 +3110,7 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
-                        ComboBox {
+                        SettingsComboBox {
                             model: [@tr("Auto-detect"), @tr("Russian"), @tr("English")];
                             current-index: root.stt-language-index;
                             selected => {
@@ -2831,9 +3118,24 @@ export component SettingsWindow inherits Window {
                                 root.stt-language-changed(self.current-index);
                             }
                         }
+                        // Cloud recognition model — only relevant for the Groq engine.
+                        if root.stt-provider-index == 0 : Text {
+                            text: @tr("Cloud recognition model");
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        if root.stt-provider-index == 0 : SettingsComboBox {
+                            model: [@tr("Fast — recommended (whisper-large-v3-turbo)"), @tr("More accurate — slower (whisper-large-v3)")];
+                            current-index: root.stt-cloud-model-index;
+                            selected => {
+                                root.stt-cloud-model-index = self.current-index;
+                                root.stt-cloud-model-changed(self.current-index);
+                            }
+                        }
                         if root.stt-provider-index == 1 : HorizontalLayout {
                             spacing: 6px;
-                            LineEdit {
+                            SettingsLineEdit {
                                 placeholder-text: @tr("GigaAM model dir — folder with model.int8.onnx + vocab.txt");
                                 text <=> root.stt-gigaam-dir-input;
                                 horizontal-stretch: 1;
@@ -2854,7 +3156,7 @@ export component SettingsWindow inherits Window {
                         }
                         if root.stt-provider-index == 2 : HorizontalLayout {
                             spacing: 6px;
-                            LineEdit {
+                            SettingsLineEdit {
                                 placeholder-text: @tr("whisper-server URL — http://127.0.0.1:8081/v1");
                                 text <=> root.stt-whisper-url-input;
                                 horizontal-stretch: 1;
@@ -2868,7 +3170,7 @@ export component SettingsWindow inherits Window {
                         }
                         if root.stt-provider-index == 2 : HorizontalLayout {
                             spacing: 6px;
-                            LineEdit {
+                            SettingsLineEdit {
                                 placeholder-text: @tr("whisper-server bearer token (optional)");
                                 input-type: password;
                                 text <=> root.stt-whisper-bearer-input;
@@ -2886,8 +3188,8 @@ export component SettingsWindow inherits Window {
                         }
                         if root.stt-provider-index == 2 : HorizontalLayout {
                             spacing: 6px;
-                            LineEdit {
-                                placeholder-text: @tr("whisper model — e.g. whisper-large-v3-turbo");
+                            SettingsLineEdit {
+                                placeholder-text: @tr("Server model id (advanced) — e.g. whisper-large-v3-turbo");
                                 text <=> root.stt-whisper-model-input;
                                 horizontal-stretch: 1;
                             }
@@ -2917,7 +3219,7 @@ export component SettingsWindow inherits Window {
                         }
                         HorizontalLayout {
                             spacing: 6px;
-                            LineEdit {
+                            SettingsLineEdit {
                                 placeholder-text: @tr("paste new Groq key then Save");
                                 text <=> root.groq-api-key-input;
                                 input-type: password;
@@ -2937,16 +3239,18 @@ export component SettingsWindow inherits Window {
                         // ----- Connection test (Phase E6 v27) -----
                         HorizontalLayout {
                             spacing: 6px;
+                            vertical-stretch: 0;
+                            height: 32px;
                             Button {
                                 text: @tr("Test STT connection");
                                 clicked => { root.stt-test-clicked(); }
                             }
-                            if root.stt-test-result != "" : Text {
-                                text: root.stt-test-result;
-                                font-size: 11px;
-                                color: Theme.accent;
-                                vertical-alignment: center;
-                            }
+                        }
+                        if root.stt-test-result != "" : Text {
+                            text: root.stt-test-result;
+                            font-size: 11px;
+                            color: Theme.accent;
+                            wrap: word-wrap;
                         }
 
                         // Text OUTER + TouchArea INNER: a TouchArea is NOT a layout
@@ -2984,7 +3288,7 @@ export component SettingsWindow inherits Window {
                         // approved list below.
                         HorizontalLayout {
                             spacing: 8px;
-                            LineEdit {
+                            SettingsLineEdit {
                                 placeholder-text: @tr("Your fact: project, term, names…");
                                 text <=> root.memory-add-text;
                                 horizontal-stretch: 1;
@@ -3153,7 +3457,7 @@ export component SettingsWindow inherits Window {
                             if root.memory-editing-id == m.id : HorizontalLayout {
                                 padding: 8px;
                                 spacing: 6px;
-                                LineEdit {
+                                SettingsLineEdit {
                                     text <=> root.memory-edit-text;
                                     horizontal-stretch: 1;
                                     accepted(t) => { root.memory-edit-save(m.id, t); }

@@ -93,7 +93,8 @@ impl Conspect {
     ) -> Self {
         Self {
             session_id,
-            created_ms: now_ms(),
+            // Best-effort unix-ms (0 when the clock is before the epoch / unavailable).
+            created_ms: u64::try_from(crate::journal::now_unix_ms()).unwrap_or(0),
             is_ru,
             fingerprint,
             single_pass,
@@ -139,15 +140,6 @@ impl Conspect {
             .map(|(i, _)| i)
             .collect()
     }
-}
-
-/// Best-effort unix-ms (0 when the clock is before the epoch / unavailable).
-fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .ok()
-        .and_then(|d| u64::try_from(d.as_millis()).ok())
-        .unwrap_or(0)
 }
 
 /// Stable hash of the formatted transcript — the reuse key for a bar re-press.

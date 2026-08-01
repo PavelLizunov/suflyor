@@ -17,18 +17,21 @@
 //! read back over **stdout**, so the user's screen pixels never touch disk
 //! (privacy — the OCR/read-aloud region is the user's choice and stays local).
 //!
-//! TRUST BOUNDARY: `%APPDATA%\suflyor\tesseract` is user-writable, and a child
-//! exe resolves its non-system DLL imports from its OWN directory first — so
-//! whoever can write that directory can run code in this process's context
-//! (which holds config.json's live keys + screen pixels). The integrity of the
-//! engine is therefore established at INSTALL time: the download-on-first-use
-//! step MUST fetch over HTTPS and verify the archive + extracted exe / DLLs /
-//! `*.traineddata` against SHA-256 hashes pinned in the binary BEFORE the first
-//! spawn (the same verify-before-execute bar as `update.rs` / the local-AI
-//! installer — tasks #137/#178), then the populated directory is trusted for
-//! repeated spawns (mirrors how the llama.cpp engine is handled). The
-//! `<exe_dir>\tesseract` candidate (admin-protected under Program Files) is
-//! preferred over the `%APPDATA%` one for exactly this reason.
+//! TRUST BOUNDARY: both candidate directories (`<exe_dir>\tesseract` and
+//! `%APPDATA%\suflyor\tesseract`) are user-writable — the app installs
+//! per-user into `%LOCALAPPDATA%\suflyor-slint\` (no admin elevation), and
+//! `%APPDATA%` is user-owned by design. A child exe resolves its non-system
+//! DLL imports from its OWN directory first, so whoever can write either
+//! directory can run code in this process's context (which holds
+//! config.json's live keys + screen pixels). The integrity of the engine is
+//! therefore established at INSTALL time: the download-on-first-use step
+//! MUST fetch over HTTPS and verify the archive + extracted exe / DLLs /
+//! `*.traineddata` against SHA-256 hashes pinned in the binary BEFORE the
+//! first spawn (the same verify-before-execute bar as `update.rs` / the
+//! local-AI installer — tasks #137/#178), then the populated directory is
+//! trusted for repeated spawns (mirrors how the llama.cpp engine is
+//! handled). The bundled `<exe_dir>\tesseract` candidate is checked first;
+//! both locations rely on the same verified-install contract.
 
 use anyhow::{anyhow, bail, Context, Result};
 use std::path::{Path, PathBuf};
@@ -139,29 +142,14 @@ pub fn run_ocr(bgra: &[u8], width: u32, height: u32, lang: &str) -> Result<Strin
 /// Spawn tesseract reading the image from stdin and writing text to stdout.
 /// `--oem 1` = LSTM engine (matches the `tessdata_fast` models), `--psm 6` =
 /// assume a single uniform block of text (a selected region).
-#[cfg(windows)]
 fn spawn_tesseract(exe: &Path, tessdata: &Path, lang: &str) -> std::io::Result<Child> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    Command::new(exe)
-        .args(["stdin", "stdout", "-l", lang, "--oem", "1", "--psm", "6"])
+    let mut cmd = Command::new(exe);
+    cmd.args(["stdin", "stdout", "-l", lang, "--oem", "1", "--psm", "6"])
         .env("TESSDATA_PREFIX", tessdata)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .creation_flags(CREATE_NO_WINDOW)
-        .spawn()
-}
-
-#[cfg(not(windows))]
-fn spawn_tesseract(exe: &Path, tessdata: &Path, lang: &str) -> std::io::Result<Child> {
-    Command::new(exe)
-        .args(["stdin", "stdout", "-l", lang, "--oem", "1", "--psm", "6"])
-        .env("TESSDATA_PREFIX", tessdata)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
+        .stderr(Stdio::null());
+    crate::download::no_window(&mut cmd).spawn()
 }
 
 /// Tidy tesseract output for text-to-speech: drop the per-page form-feed it

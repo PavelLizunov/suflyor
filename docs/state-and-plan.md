@@ -154,10 +154,12 @@
   легаси-доков. v0.5.0 = новый бренд + «+ тайл».
 - **WASAPI render добавлен** (`audio::play_test_clip`) тем же `wasapi`-крейтом, что
   и захват — render-петля симметрична `record_source_until_stop`. Без новых зависимостей.
-- Стек: чистый Rust + Slint. Две crate-ы:
+- Стек: чистый Rust + Slint. Три crate-ы (на момент v0.5.2 их было две;
+  `suflyor-tts/` добавлен позже — см. AGENTS.md):
   - `slint-experiment/` — бинарь `overlay-host` (UI в `ui/*.slint`, оркестрация
     в `src/bin/overlay_host.rs`).
   - `overlay-backend/` — audio/stt/ai/runtime/config/journal/kb (без UI).
+  - `suflyor-tts/` — read-aloud + diarization сайдкар (sherpa-onnx).
   - Сборка: `cargo build --release --bin overlay-host` (из slint-experiment).
     Инсталлятор: `scripts/build-slint-release.ps1 -Installer`.
 - Юзер на **локальном AI** (gemma @ 127.0.0.1:8080) + GigaAM STT; тема **Light Frost**
@@ -236,6 +238,6 @@
   генерация через `scripts/gen_icon.ps1`; SVG в Slint работает по умолчанию — НЕ
   добавлять `svg` в features slint (ломает выбор версии).
 - **Релиз:** поднять версию в `slint-experiment/Cargo.toml` + `scripts/slint-installer.nsi`
-  (PRODUCT_VERSION); `build-slint-release.ps1 -Installer`; `gh release create vX.Y.Z
-  <installer> --title ... --notes-file ...`.
+  (PRODUCT_VERSION); `build-slint-release.ps1 -Installer`. Публикация (merge, тег,
+  GitHub release) — только владелец после явной авторизации конкретной версии.
 - Не коммитить `nini-context-backup.txt` (личная подготовка юзера — держать локально).

@@ -154,9 +154,11 @@ impl Store {
     }
 
     /// Hard-delete a session from the catalog: its row (ON DELETE CASCADE drops
-    /// the utterances / ai_turns) plus its FTS rows (cleared explicitly — the
-    /// FTS5 index isn't FK-cascaded, same as `replace_session`). Idempotent:
-    /// deleting an absent session affects 0 rows and still commits.
+    /// the utterances / ai_turns), its FTS rows (cleared explicitly — the FTS5
+    /// index isn't FK-cascaded, same as `replace_session`), and its diarization
+    /// row (also cleared explicitly — the side-table isn't FK'd to the
+    /// projection so it survives re-indexing, but not a hard delete).
+    /// Idempotent: deleting an absent session affects 0 rows and still commits.
     pub fn delete_session(&mut self, session_id: &str) -> Result<()> {
         let tx = self.conn.transaction().context("begin delete tx")?;
         tx.execute(
@@ -164,6 +166,11 @@ impl Store {
             params![session_id],
         )
         .context("clear search rows")?;
+        tx.execute(
+            "DELETE FROM diarization WHERE session_id = ?1",
+            params![session_id],
+        )
+        .context("clear diarization row")?;
         tx.execute("DELETE FROM sessions WHERE id = ?1", params![session_id])
             .context("delete session row")?;
         tx.commit().context("commit delete tx")?;
@@ -338,16 +345,20 @@ impl Store {
             .context("backfill session models")
     }
 
-    /// The set of session ids already in the catalog — lets the indexer skip
-    /// immutable, already-indexed journals.
-    pub fn indexed_session_ids(&self) -> Result<std::collections::HashSet<String>> {
+    /// The set of FINALIZED session ids (status ≠ 'crashed') already in the
+    /// catalog — lets the indexer skip immutable, finished journals while still
+    /// re-indexing rows frozen as 'crashed' so a later graceful `SessionStop`
+    /// heals them to 'completed' (audit G1). A crashed row is deliberately NOT
+    /// in this set, so `index_all` re-projects it on every sweep until a stop
+    /// marker finalizes it.
+    pub fn finalized_session_ids(&self) -> Result<std::collections::HashSet<String>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id FROM sessions")
-            .context("prepare indexed ids")?;
+            .prepare("SELECT id FROM sessions WHERE status <> 'crashed'")
+            .context("prepare finalized ids")?;
         let rows = stmt
             .query_map([], |r| r.get::<_, String>(0))
-            .context("query indexed ids")?;
+            .context("query finalized ids")?;
         let mut set = std::collections::HashSet::new();
         for r in rows {
             set.insert(r.context("map id")?);
@@ -536,14 +547,14 @@ impl Store {
     }
 
     /// Approve a candidate: mark it `approved` AND mint a [`MemoryItem`] from it,
-    /// in ONE transaction. Returns the new item id. Errors if the candidate id
-    /// doesn't exist (the row read fails → the tx rolls back).
+    /// in ONE transaction. Returns the new item id. Errors if the candidate
+    /// doesn't exist or is no longer pending (the tx rolls back).
     pub fn approve_candidate(&mut self, candidate_id: i64, approved_at_ms: i64) -> Result<i64> {
         let tx = self.conn.transaction().context("begin approve tx")?;
         let (profile_id, kind, text, source): (String, String, String, Option<String>) = tx
             .query_row(
                 "SELECT profile_id, kind, text, source_session_id \
-                 FROM memory_candidates WHERE id = ?1",
+                 FROM memory_candidates WHERE id = ?1 AND status = 'pending'",
                 params![candidate_id],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
             )
@@ -796,12 +807,24 @@ mod tests {
         store
             .replace_session(&s, &[utt(&s.id, 1, "mic", "hash map lookup")], &[])
             .unwrap();
+        store
+            .put_diarization(&Diarization {
+                session_id: s.id.clone(),
+                created_at_ms: 111,
+                num_speakers: 0,
+                model_id: "test".into(),
+                segments: vec![],
+                speaker_names: Default::default(),
+            })
+            .unwrap();
         assert_eq!(store.count_utterances(&s.id).unwrap(), 1);
         assert!(!store.search("hash", 10).unwrap().is_empty());
+        assert!(store.get_diarization(&s.id).unwrap().is_some());
 
         store.delete_session(&s.id).unwrap();
         assert_eq!(store.count_utterances(&s.id).unwrap(), 0); // FK cascade
         assert!(store.search("hash", 10).unwrap().is_empty()); // FTS cleared
+        assert!(store.get_diarization(&s.id).unwrap().is_none());
         assert!(store.session_utterances(&s.id).unwrap().is_empty());
         // Idempotent: deleting an absent session is a no-op.
         store.delete_session(&s.id).unwrap();
@@ -1143,6 +1166,20 @@ mod tests {
         assert_eq!(items[0].source_session_id.as_deref(), Some("sess-1"));
         assert_eq!(items[0].approved_at_ms, 50);
         assert!(items[0].archived_at_ms.is_none());
+    }
+
+    #[test]
+    fn approve_candidate_twice_mints_only_one_item() {
+        let mut store = Store::open_in_memory().unwrap();
+        let cid = store
+            .insert_candidate(&new_cand("use a hash map"), 5)
+            .unwrap();
+        store.approve_candidate(cid, 50).unwrap();
+
+        assert!(store.approve_candidate(cid, 51).is_err());
+        let items = store.list_memory_items("default", true, -1).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].approved_at_ms, 50);
     }
 
     #[test]

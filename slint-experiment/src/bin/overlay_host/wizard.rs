@@ -26,10 +26,10 @@
 //! NOTE (§7): the parent crate-root symbols this module references are imported
 //! explicitly below.
 use super::{
-    apply_scheme_wizard, config, drag_begin, drag_update, focus_window, global_scheme,
-    global_stealth, grab_hwnd, present_window_stealth_aware, set_global_stealth, set_skip_taskbar,
-    set_stealth, try_acquire_mic, ComponentHandle, OverlayBarWindow, Rc, RefCell, SettingsWindow,
-    SharedString, WindowRegistry, WizardWindow,
+    apply_bar_stealth, apply_scheme_wizard, config, drag_begin, drag_update, focus_window,
+    global_scheme, global_stealth, grab_hwnd, present_window_stealth_aware, set_global_stealth,
+    try_acquire_mic, ComponentHandle, OverlayBarWindow, Rc, RefCell, SettingsWindow, SharedString,
+    WindowRegistry, WizardWindow,
 };
 
 /// Refill the step-7 summary rows. Renders ONLY secret-free values: the live
@@ -398,12 +398,12 @@ pub(crate) fn wire_wizard_steps(
                     );
                 }
             }
+            // I1 — the bar goes through the ONE shared apply path: the 🎯 chip
+            // + pill follow the VERIFIED exclusion (apply + readback), never the
+            // intent alone; a failure surfaces "stealth unavailable" while the
+            // config intent above is preserved for the next retry.
             if let Some(o) = ow.upgrade() {
-                o.set_stealth_active(on);
-                if let Ok(h) = grab_hwnd(o.window()) {
-                    let _ = set_stealth(h, on);
-                    let _ = set_skip_taskbar(h, on);
-                }
+                apply_bar_stealth(&o, &state_c, on);
             }
             // All other open windows (incl. this wizard) via the single path.
             registry_c.apply_stealth(on);

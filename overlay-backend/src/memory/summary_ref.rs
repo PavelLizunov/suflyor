@@ -148,7 +148,7 @@ pub fn format_summary_reference(matched: &[&MemoryItem]) -> String {
     let mut out = String::new();
     let mut used = 0usize;
     for it in matched.iter().take(MAX_REF_ITEMS) {
-        let collapsed: String = it.text.split_whitespace().collect::<Vec<_>>().join(" ");
+        let collapsed = crate::text::collapse_ws(&it.text);
         if collapsed.is_empty() {
             continue;
         }
