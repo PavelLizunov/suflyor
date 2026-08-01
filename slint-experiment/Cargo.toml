@@ -121,7 +121,7 @@ rfd = { version = "0.17", default-features = false }
 # it in a data: URI for the vision endpoint. The BitBlt itself uses the already-
 # enabled windows `Win32_Graphics_Gdi` feature.
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
-base64 = "0.22"
+base64 = "0.23"
 
 # V0.8.3 — 📋 copy a tile's answer to the Windows clipboard. clipboard-win is
 # already in the dependency tree (winit pulls it transitively), so declaring it
