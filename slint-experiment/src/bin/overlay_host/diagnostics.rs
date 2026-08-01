@@ -20,8 +20,8 @@
 //! NOTE (§7): the parent crate-root symbols this module references are imported
 //! explicitly below.
 use super::{
-    active_stack_label, hotkey_diag_row, try_acquire_mic, ComponentHandle, Duration,
-    SettingsWindow, SharedString, Timer,
+    active_stack_label, global_stealth_effective, hotkey_diag_row, try_acquire_mic,
+    ComponentHandle, Duration, SettingsWindow, SharedString, Timer,
 };
 
 /// #131 — push the config-only readiness snapshot + the active-stack summary
@@ -57,7 +57,13 @@ pub(crate) fn populate_diagnostics(
     win.set_diag_hotkeys_level(hk_level);
     win.set_diag_hotkeys_detail(SharedString::from(hk_registered));
     win.set_diag_hotkeys_failed(SharedString::from(hk_failed));
-    win.set_diag_stealth_on(r.stealth_on);
+    // I1 — the stealth row reports the EFFECTIVE state (the bar's last
+    // verified WDA apply + readback), not the config intent: a failed
+    // exclusion must read "off" here, never a false "on". LIMITATION: the
+    // effective global verifies the BAR's WDA only — per-window (tile /
+    // registry) exclusion failures are logged but not aggregated into this
+    // row (window_lifecycle.rs keeps the same note on STEALTH_EFFECTIVE).
+    win.set_diag_stealth_on(global_stealth_effective());
 }
 
 /// True if `s` is exactly a dotted IPv4 literal (four 0–255 octets). Used to mask
@@ -273,6 +279,17 @@ pub(crate) fn build_diag_report(cfg: &overlay_backend::config::SharedConfig) -> 
     } else {
         "unavailable".to_string()
     };
+    // I1 — report the EFFECTIVE stealth state (the bar's verified WDA apply +
+    // readback; per-window failures are logged, not aggregated), keeping the
+    // intent visible when it is on but NOT verified, so a support thread can
+    // tell "disabled" from "enabled but failing".
+    let stealth_line = if global_stealth_effective() {
+        "on (verified)".to_string()
+    } else if r.stealth_on {
+        "off (enabled, NOT verified)".to_string()
+    } else {
+        "off".to_string()
+    };
     let report = format!(
         "suflyor diagnostics (v{})\n\
          AI: {} — {}\n\
@@ -293,7 +310,7 @@ pub(crate) fn build_diag_report(cfg: &overlay_backend::config::SharedConfig) -> 
         dev(&r.mic.detail),
         dev(&r.sys.detail),
         hk_line,
-        if r.stealth_on { "on" } else { "off" },
+        stealth_line,
         std::env::consts::OS,
         std::env::consts::ARCH,
         GPU_CACHE.get().map(String::as_str).unwrap_or("unknown"),
@@ -437,7 +454,8 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
     // #131 — diagnostics "Проверить всё": live-ping the ACTIVE AI endpoint
     // (resolved via ai_endpoint — NOT the raw cloud fields) + the active STT
     // backend, in ONE off-thread runtime, and write both rows back. Mic / sys
-    // / stealth rows stay config-readiness (their live checks live on Audio).
+    // rows stay config-readiness (their live checks live on Audio); the stealth
+    // row reflects the live EFFECTIVE state (populate_diagnostics, I1).
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();

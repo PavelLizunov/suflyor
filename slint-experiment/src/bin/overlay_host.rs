@@ -1415,7 +1415,11 @@ fn main() -> Result<(), slint::PlatformError> {
             }
         });
     }
-    overlay.set_stealth_active(cfg.read().stealth_enabled);
+    // I1 — the 🎯 chip follows the VERIFIED stealth state, lit by the bar
+    // realization reveal (apply_overlay_hwnd → apply_bar_stealth) once the
+    // WDA exclusion is applied AND read back. Never seeded from config intent
+    // alone, so a failed exclusion can't present a false success.
+    overlay.set_stealth_active(false);
     overlay.set_timer_label(SharedString::from("00:00"));
     // v0.13.1 — the mic is LIVE (not muted) by default; the chip shows it lit.
     overlay.set_mic_active(true);
@@ -1428,7 +1432,7 @@ fn main() -> Result<(), slint::PlatformError> {
         st.mic_active = true;
     }
 
-    apply_overlay_hwnd(&overlay);
+    apply_overlay_hwnd(&overlay, &state);
 
     // ===== Mic chip = MUTE toggle (v0.13.1) =====
     //
@@ -2324,13 +2328,26 @@ fn main() -> Result<(), slint::PlatformError> {
                 if let Some(w) = weak.upgrade() {
                     match grab_hwnd(w.window()) {
                         Ok(hwnd) => {
-                            let s = set_stealth(hwnd, true); // WDA_EXCLUDEFROMCAPTURE
-                            let t = slint_replay::win32::set_skip_taskbar(hwnd, true);
+                            // WDA_EXCLUDEFROMCAPTURE — apply + readback (I1).
+                            let s = set_stealth(hwnd, true);
+                            let t = set_skip_taskbar(hwnd, true);
                             eprintln!(
                                 "[overlay-host] capture pre-stealth: stealth_ok={} taskbar_ok={}",
                                 s.is_ok(),
                                 t.is_ok()
                             );
+                            // Detail for the log; a pre-create miss also self-heals:
+                            // the F8 show path re-applies + verifies on EVERY show (I4).
+                            if let Err(e) = s {
+                                eprintln!(
+                                    "[overlay-host] capture pre-stealth: stealth FAILED: {e}"
+                                );
+                            }
+                            if let Err(e) = t {
+                                eprintln!(
+                                    "[overlay-host] capture pre-stealth: skip-taskbar FAILED: {e}"
+                                );
+                            }
                         }
                         Err(e) => {
                             eprintln!("[overlay-host] capture pre-stealth: grab_hwnd FAILED: {e}")
@@ -2895,15 +2912,13 @@ fn main() -> Result<(), slint::PlatformError> {
                     eprintln!("[overlay-host] stealth save failed (will not persist across restart): {e:#}");
                 }
             }
-            // Apply to overlay + light the bar 🎯 chip. The bar stays inline (NOT
-            // in the registry): it also drops its taskbar button under stealth so
-            // a screen-share viewer doesn't spot the app in the taskbar.
+            // Apply to the bar through the ONE shared path (I1): WDA apply +
+            // readback decide the EFFECTIVE state, and the 🎯 chip + status pill
+            // follow the readback — never the intent alone. On a forced/real
+            // failure the chip stays dark + the pill reads "stealth unavailable"
+            // while the config intent above is preserved for the next retry.
             if let Some(o) = weak.upgrade() {
-                o.set_stealth_active(new_stealth);
-                if let Ok(hwnd) = grab_hwnd(o.window()) {
-                    let _ = set_stealth(hwnd, new_stealth);
-                    let _ = set_skip_taskbar(hwnd, new_stealth);
-                }
+                apply_bar_stealth(&o, &s, new_stealth);
             }
             // Every other open window through the single registry path.
             registry_stealth.apply_stealth(new_stealth);
@@ -3870,77 +3885,115 @@ fn recenter_when_sized(weak: slint::Weak<OverlayBarWindow>, target_w_logical: f3
     });
 }
 
-fn apply_overlay_hwnd(overlay: &OverlayBarWindow) {
-    // Поток C (stealth bar-flash fix) — when stealth is on, park the bar OFF the
-    // virtual desktop synchronously NOW (this fn runs before overlay.run(), which
-    // composites the window). Without this the bar was shown at winit's default
-    // position and only stealthed ~200 ms later by the timer below, so a screen-
-    // share saw a flash of the bar on every cold start — and would on every
-    // emergency restart (Поток B). The timer applies WDA *before* the pin moves
-    // the bar on-screen, so the first on-screen frame is already capture-excluded.
-    // Mirrors present_tile_window for tiles.
-    if global_stealth() {
-        overlay
-            .window()
-            .set_position(slint::PhysicalPosition::new(-32000, -32000));
-    }
-    let weak = overlay.as_weak();
-    Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
-        let Some(o) = weak.upgrade() else { return };
-        match grab_hwnd(o.window()) {
-            Ok(hwnd) => {
-                match make_transparent_overlay(hwnd) {
-                    Ok(()) => eprintln!("[overlay-host] overlay transparency wired"),
-                    Err(e) => eprintln!("[overlay-host] overlay transparency failed: {e}"),
-                }
-                // Surface WHY transparency may look broken: per-pixel alpha needs
-                // DWM composition. If it's off (RDP / a VM without a GPU / very old
-                // driver) the overlay renders OPAQUE no matter the wiring. This is
-                // NOT the Windows "Transparency effects" toggle. Logged so a
-                // tester's "transparency doesn't work" report is diagnosable.
-                if slint_replay::win32::composition_enabled() {
-                    eprintln!(
-                        "[overlay-host] DWM composition: ON (overlay transparency available)"
-                    );
-                } else {
-                    eprintln!("[overlay-host] DWM composition: OFF — overlay renders OPAQUE (no per-pixel alpha). Cause is the environment (RDP/remote, a VM without a GPU, or an outdated GPU driver), not the app. NB: NOT the Windows 'Transparency effects' toggle.");
-                }
-                // #E10.2 — apply persisted stealth to the bar on launch.
-                if global_stealth() {
-                    let _ = set_stealth(hwnd, true);
-                    let _ = set_skip_taskbar(hwnd, true);
-                }
-                // #127 — pin the bar to the PRIMARY monitor. The bar has no
-                // position logic of its own; Slint/winit's default placement
-                // can drop it onto the user's PORTRAIT secondary (at negative
-                // X) or straddle two displays. Centre it near the top of
-                // primary. One-shot at launch — the user can still drag it
-                // afterward (the logo is a drag handle).
-                // Поток C — the pin MUST always land the bar on-screen: under
-                // stealth we parked it at (-32000) above, so any path that skips
-                // the move would strand the bar off the desktop (the bar is the
-                // whole control surface — the user would be locked out). Compute
-                // the target with safe fallbacks (primary monitor → its origin →
-                // (60, 24)) and ALWAYS move.
-                let primary = enum_monitors().into_iter().find(|m| m.is_primary);
-                let bar_w = get_window_rect(hwnd).map(|(_, _, w, _)| w).unwrap_or(0);
-                let (x, y) = match primary {
-                    Some(p) => (p.left + ((p.width() - bar_w) / 2).max(0), p.top + 24),
-                    None => (60, 24),
-                };
-                match move_window_pos_only(hwnd, x, y) {
-                    Ok(()) => eprintln!("[overlay-host] bar pinned at ({x}, {y})"),
-                    Err(e) => {
-                        // Last resort: even the pin failed — try a hard (60,24) so
-                        // a stealth-parked bar can't stay invisible at (-32000).
-                        eprintln!("[overlay-host] bar pin failed: {e}; retry at (60,24)");
-                        let _ = move_window_pos_only(hwnd, 60, 24);
+fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_replay::app_state::SharedState) {
+    // Поток C (stealth bar-flash fix) + I3: park the bar OFF the virtual desktop
+    // synchronously NOW (this fn runs before overlay.run(), which composites the
+    // window), ALWAYS — mirrors present_window_stealth_aware. Without parking the
+    // bar was shown at winit's default position and only decorated/stealthed later,
+    // so a screen-share saw a flash of the bar on every cold start — and would on
+    // every emergency restart (Поток B). The reveal attempt wires transparency +
+    // verified WDA *before* the pin moves the bar on-screen, so the first on-screen
+    // frame is already complete + capture-excluded. Parking unconditionally also
+    // closes the bare-outline flash for stealth-off starts (same reasoning as the
+    // aux-window helper).
+    overlay
+        .window()
+        .set_position(slint::PhysicalPosition::new(-32000, -32000));
+    let st = state.clone();
+    let attempt: Rc<dyn Fn(&OverlayBarWindow) -> bool> = Rc::new(move |o: &OverlayBarWindow| {
+        let Ok(hwnd) = grab_hwnd(o.window()) else {
+            return false;
+        };
+        match make_transparent_overlay(hwnd) {
+            Ok(()) => eprintln!("[overlay-host] overlay transparency wired"),
+            Err(e) => eprintln!("[overlay-host] overlay transparency failed: {e}"),
+        }
+        // Surface WHY transparency may look broken: per-pixel alpha needs
+        // DWM composition. If it's off (RDP / a VM without a GPU / very old
+        // driver) the overlay renders OPAQUE no matter the wiring. This is
+        // NOT the Windows "Transparency effects" toggle. Logged so a
+        // tester's "transparency doesn't work" report is diagnosable.
+        if slint_replay::win32::composition_enabled() {
+            eprintln!("[overlay-host] DWM composition: ON (overlay transparency available)");
+        } else {
+            eprintln!("[overlay-host] DWM composition: OFF — overlay renders OPAQUE (no per-pixel alpha). Cause is the environment (RDP/remote, a VM without a GPU, or an outdated GPU driver), not the app. NB: NOT the Windows 'Transparency effects' toggle.");
+        }
+        // #E10.2 + I1 — apply persisted stealth to the bar with a readback;
+        // the 🎯 chip + effective global follow the VERIFIED outcome (a failed
+        // exclusion leaves the chip dark + surfaces "stealth unavailable").
+        apply_bar_stealth(o, &st, global_stealth());
+        // #127 — pin the bar to the PRIMARY monitor. The bar has no
+        // position logic of its own; Slint/winit's default placement
+        // can drop it onto the user's PORTRAIT secondary (at negative
+        // X) or straddle two displays. Centre it near the top of
+        // primary. One-shot at launch — the user can still drag it
+        // afterward (the logo is a drag handle).
+        // Поток C — the pin MUST always land the bar on-screen: we parked it
+        // at (-32000) above, so any path that skips the move would strand the
+        // bar off the desktop (the bar is the whole control surface — the user
+        // would be locked out). Compute the target with safe fallbacks
+        // (primary monitor → its origin → (60, 24)) and ALWAYS move.
+        let primary = enum_monitors().into_iter().find(|m| m.is_primary);
+        let bar_w = get_window_rect(hwnd).map(|(_, _, w, _)| w).unwrap_or(0);
+        let (x, y) = match primary {
+            Some(p) => (p.left + ((p.width() - bar_w) / 2).max(0), p.top + 24),
+            None => (60, 24),
+        };
+        // I3 — success means the bar actually landed on-screen. If BOTH the
+        // computed pin and the hard (60,24) retry fail, report the attempt as
+        // FAILED so realize_with_retries keeps retrying and eventually runs
+        // the Slint fallback below — a parked bar must never stay invisible
+        // at (-32000) behind a claimed success.
+        match move_window_pos_only(hwnd, x, y) {
+            Ok(()) => {
+                eprintln!("[overlay-host] bar pinned at ({x}, {y})");
+                true
+            }
+            Err(e) => {
+                // Last resort: even the pin failed — try a hard (60,24) so
+                // a parked bar can't stay invisible at (-32000).
+                eprintln!("[overlay-host] bar pin failed: {e}; retry at (60,24)");
+                match move_window_pos_only(hwnd, 60, 24) {
+                    Ok(()) => {
+                        eprintln!("[overlay-host] bar pinned at hard fallback (60, 24)");
+                        true
+                    }
+                    Err(e2) => {
+                        eprintln!(
+                            "[overlay-host] bar hard pin failed too: {e2}; reveal will retry"
+                        );
+                        false
                     }
                 }
             }
-            Err(e) => eprintln!("[overlay-host] overlay HWND grab failed: {e}"),
         }
     });
+    // I3 — last-ditch reveal when the HWND NEVER becomes grabbable: the bar is
+    // the whole control surface, so (unlike aux windows) it is brought on-screen
+    // via Slint's own positioning EVEN UNDER stealth — and stealth is reported
+    // UNAVAILABLE, because without an HWND the exclusion could not be applied or
+    // verified (I1: never present a false success). The user keeps control; the
+    // log + pill surface the failure.
+    let fallback: Rc<dyn Fn(&OverlayBarWindow)> = Rc::new(move |o: &OverlayBarWindow| {
+        set_global_stealth_effective(false);
+        o.set_stealth_active(false);
+        if global_stealth() {
+            surface_stealth_unavailable(o);
+        }
+        diag!(
+            "[overlay-host] bar HWND never realized after retries; revealing via Slint fallback \
+             (stealth NOT verified — reported unavailable)"
+        );
+        let primary = enum_monitors().into_iter().find(|m| m.is_primary);
+        let (x, y) = match primary {
+            Some(p) => (p.left + 60, p.top + 24),
+            None => (60, 24),
+        };
+        o.window().set_position(slint::PhysicalPosition::new(x, y));
+    });
+    // The SAME retry/fallback schedule as the aux windows (I3) — fast attempt,
+    // two conservative retries, then the fallback above. No private timer loop.
+    realize_with_retries(overlay, attempt, fallback);
 }
 
 /// Open the settings window. Reuses existing instance if open.

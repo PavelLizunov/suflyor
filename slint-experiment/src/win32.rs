@@ -47,10 +47,10 @@ fn restore_arrow_after_message(message: u32) -> bool {
 }
 
 unsafe fn force_arrow_if_stealthed(hwnd: HWND) -> bool {
-    let mut affinity = 0;
-    if unsafe { GetWindowDisplayAffinity(hwnd, &mut affinity) }.is_err()
-        || affinity != WDA_EXCLUDEFROMCAPTURE.0
-    {
+    let Ok(affinity) = read_display_affinity(hwnd) else {
+        return false;
+    };
+    if affinity != WDA_EXCLUDEFROMCAPTURE.0 {
         return false;
     }
     let Ok(cursor) = (unsafe { LoadCursorW(None, IDC_ARROW) }) else {
@@ -311,31 +311,68 @@ pub fn set_always_on_top(hwnd: HWND, on: bool) -> Result<(), Box<dyn std::error:
 /// This is the "stealth" toggle in the existing overlay-mvp Settings
 /// → Stealth panel. WDA_EXCLUDEFROMCAPTURE is the Win32 mechanism
 /// behind it. Requires Windows 10 build 2004 / Windows 11.
+///
+/// I1: success means the exclusion was APPLIED AND READ BACK via
+/// `GetWindowDisplayAffinity` — callers reduce the Result through
+/// `presentable_stealth` to the EFFECTIVE state they show to the user,
+/// so a failed/unsupported exclusion can never be presented as stealth on.
 pub fn set_stealth(hwnd: HWND, on: bool) -> Result<(), Box<dyn std::error::Error>> {
     let affinity = if on { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE };
     unsafe {
         SetWindowDisplayAffinity(hwnd, affinity)?;
     }
-    install_stealth_cursor_guard(hwnd)?;
-    Ok(())
+    // The cursor guard is cosmetic (keeps the arrow over a stealthed window)
+    // and a repeat install on the same HWND legitimately fails — its error
+    // must not mask the capture exclusion verified below.
+    let _ = install_stealth_cursor_guard(hwnd);
+    let actual = read_display_affinity(hwnd)?;
+    if actual == affinity.0 {
+        Ok(())
+    } else {
+        Err(format!(
+            "display affinity readback mismatch: wanted 0x{:x}, got 0x{:x}",
+            affinity.0, actual
+        )
+        .into())
+    }
 }
 
-/// Show or hide the window's TASKBAR button. Wired to the stealth toggle so the
+/// Read the window's EFFECTIVE display affinity (WDA_* bits) back from the OS.
+/// `set_stealth` verifies through this; any path that must prove an exclusion
+/// independently can too (I1).
+pub fn read_display_affinity(hwnd: HWND) -> Result<u32, Box<dyn std::error::Error>> {
+    let mut affinity = 0u32;
+    unsafe {
+        GetWindowDisplayAffinity(hwnd, &mut affinity)?;
+    }
+    Ok(affinity)
+}
+
+/// The stealth state callers may PRESENT to the user (I1): active only when it
+/// was requested AND the apply/readback proved the exclusion. Any failure —
+/// forced or real — reduces to false; we never present a false success. Config
+/// intent is a separate decision: callers preserve it so the next apply
+/// retries.
+#[must_use]
+pub fn presentable_stealth(wanted: bool, applied: &Result<(), Box<dyn std::error::Error>>) -> bool {
+    wanted && applied.is_ok()
+}
+
+/// Toggle the window's TASKBAR exclusion. Wired to the stealth toggle so the
 /// overlay also disappears from the taskbar (a screen-share viewer shouldn't see
 /// "suflyor" in the taskbar). WS_EX_TOOLWINDOW/APPWINDOW only affect the taskbar
-/// at show-time, so we do a brief hide -> restyle -> show-no-activate and
-/// re-assert topmost. Only the TOOLWINDOW/APPWINDOW bits are touched; all other
-/// ex-style bits (layered / transparent / etc.) are preserved.
+/// at show-time, so a bit change does a brief hide -> restyle -> show-no-activate
+/// and re-asserts topmost. Only the TOOLWINDOW/APPWINDOW bits are touched (via
+/// `skip_taskbar_exstyle`); all other ex-style bits (layered / transparent /
+/// etc.) are preserved.
+///
+/// I2: BOTH directions force the TOOLWINDOW baseline + clear APPWINDOW, so an
+/// overlay window can never become a taskbar-eligible APPWINDOW through this
+/// toggle (and a winit re-show that dropped TOOLWINDOW gets it re-asserted).
 pub fn set_skip_taskbar(hwnd: HWND, skip: bool) -> Result<(), Box<dyn std::error::Error>> {
     unsafe {
         let before = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-        let tool = WS_EX_TOOLWINDOW.0 as isize;
-        let app = WS_EX_APPWINDOW.0 as isize;
-        let after = if skip {
-            (before | tool) & !app
-        } else {
-            (before & !tool) | app
-        };
+        let after = skip_taskbar_exstyle(before, skip);
         if after == before {
             return Ok(());
         }
@@ -354,6 +391,22 @@ pub fn set_skip_taskbar(hwnd: HWND, skip: bool) -> Result<(), Box<dyn std::error
         )?;
     }
     Ok(())
+}
+
+/// Pure ex-style transition behind `set_skip_taskbar` (I2), shared by every
+/// caller so the baseline cannot drift. Audit acceptance: an overlay window
+/// ALWAYS has the TOOLWINDOW baseline and NEVER APPWINDOW — so BOTH directions
+/// force TOOLWINDOW on + APPWINDOW off (a winit re-show may have dropped
+/// TOOLWINDOW; `skip = false` must re-assert it, not merely clear APPWINDOW).
+/// `skip` stays in the signature for call-site clarity; the baseline is
+/// identical in both directions. Every other ex-style bit (layered /
+/// transparent / topmost / …) is preserved.
+#[must_use]
+pub fn skip_taskbar_exstyle(before: isize, skip: bool) -> isize {
+    let _ = skip; // baseline is identical in both directions — see doc
+    let tool = WS_EX_TOOLWINDOW.0 as isize;
+    let app = WS_EX_APPWINDOW.0 as isize;
+    (before | tool) & !app
 }
 
 /// Bounds of a display monitor in screen-coordinate space.
@@ -984,5 +1037,58 @@ mod tests {
     fn stealth_cursor_guard_defers_mouse_move_restore() {
         assert!(restore_arrow_after_message(WM_MOUSEMOVE));
         assert!(!restore_arrow_after_message(WM_SETCURSOR));
+    }
+
+    /// I1 — a forced apply/readback failure must reduce to effective-off, even
+    /// when stealth was requested; we never present a false success.
+    #[test]
+    fn presentable_stealth_requires_a_verified_exclusion() {
+        let ok: Result<(), Box<dyn std::error::Error>> = Ok(());
+        let forced: Result<(), Box<dyn std::error::Error>> =
+            Err("forced apply/readback failure".into());
+        assert!(presentable_stealth(true, &ok));
+        assert!(!presentable_stealth(true, &forced));
+        assert!(!presentable_stealth(false, &ok));
+        assert!(!presentable_stealth(false, &forced));
+    }
+
+    /// I2 — BOTH directions must force the TOOLWINDOW baseline on and
+    /// APPWINDOW off (never APPWINDOW), while every unrelated ex-style bit
+    /// survives — including the audit's regression input: a window whose
+    /// ex-style LACKS TOOLWINDOW (winit dropped it on a re-show) and CARRIES
+    /// APPWINDOW.
+    #[test]
+    fn skip_taskbar_keeps_toolwindow_baseline() {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+        };
+        let tool = WS_EX_TOOLWINDOW.0 as isize;
+        let app = WS_EX_APPWINDOW.0 as isize;
+        let unrelated =
+            WS_EX_LAYERED.0 as isize | WS_EX_TRANSPARENT.0 as isize | WS_EX_TOPMOST.0 as isize;
+
+        // skip on: TOOLWINDOW forced, APPWINDOW cleared, other bits preserved.
+        assert_eq!(
+            skip_taskbar_exstyle(unrelated | app, true),
+            unrelated | tool
+        );
+        // skip off: SAME baseline — APPWINDOW cleared AND the missing
+        // TOOLWINDOW re-asserted (the old code left TOOLWINDOW absent here).
+        let off = skip_taskbar_exstyle(unrelated | app, false);
+        assert_eq!(off, unrelated | tool);
+        assert_eq!(off & app, 0);
+        // The bare regression input (no TOOLWINDOW, APPWINDOW set) lands the
+        // exact baseline in BOTH directions.
+        assert_eq!(skip_taskbar_exstyle(app, true), tool);
+        assert_eq!(skip_taskbar_exstyle(app, false), tool);
+        // Idempotent on an already-baseline window (caller skips the hide/show).
+        assert_eq!(
+            skip_taskbar_exstyle(unrelated | tool, true),
+            unrelated | tool
+        );
+        assert_eq!(
+            skip_taskbar_exstyle(unrelated | tool, false),
+            unrelated | tool
+        );
     }
 }

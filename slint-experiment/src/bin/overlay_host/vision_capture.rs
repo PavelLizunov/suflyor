@@ -37,11 +37,11 @@
 use super::{
     ai, apply_tile_hwnd_with_monitor, fire_followup_ask, fire_regenerate, grab_hwnd, journal,
     live_route, markdown, present_tile_window, ptt_tile_error, refresh_open_tiles,
-    set_always_on_top, toggle_tile_maximize, vision, wire_copy, wire_speak, wire_tile_drag,
-    wire_voice_followup, Arc, AskRoute, CaptureOverlay, ComponentHandle, MarkdownBlock, ModelRc,
-    MonitorHint, Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink, Rc, RefCell,
-    RuntimeEvents, SharedSlintRuntime, SharedString, TileKind, TileSpec, TileWindow, TileWindows,
-    VecModel, CONVO_SEQ, TILE_DISPLAY_SEQ,
+    set_always_on_top, set_stealth, surface_stealth_unavailable, toggle_tile_maximize, vision,
+    wire_copy, wire_speak, wire_tile_drag, wire_voice_followup, Arc, AskRoute, CaptureOverlay,
+    ComponentHandle, MarkdownBlock, ModelRc, MonitorHint, Ordering, OverlayBarBridge,
+    OverlayBarWindow, PttStreamSink, Rc, RefCell, RuntimeEvents, SharedSlintRuntime, SharedString,
+    TileKind, TileSpec, TileWindow, TileWindows, VecModel, CONVO_SEQ, TILE_DISPLAY_SEQ,
 };
 
 /// Build a Slint RGBA image from a top-down BGRA capture. Alpha is forced
@@ -267,16 +267,42 @@ pub(crate) fn fire_f8_vision_capture(
     }
 
     win.set_shown(true);
-    // The persistent HWND exists, so grab_hwnd works synchronously here. WDA
-    // stealth was set at pre-create and PERSISTS across hide/show — but winit
-    // re-applies the window's ex-style on show(), dropping WS_EX_TOOLWINDOW, so
-    // the taskbar button reappears. Re-apply it now: synchronous + lands before
-    // the shell creates the button = flash-free. (The overlay is WDA-hidden from
-    // any screen-share regardless.)
-    if let Ok(hwnd) = grab_hwnd(win.window()) {
-        let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
-        let _ = set_always_on_top(hwnd, true);
-        slint_replay::win32::focus_window(hwnd);
+    // The persistent HWND exists, so grab_hwnd works synchronously here. winit
+    // re-applies the window's ex-style on show() (it drops WS_EX_TOOLWINDOW, so
+    // the taskbar button would reappear) — and the pre-create WDA affinity must
+    // NEVER be assumed to have survived: I4 re-applies + READS BACK stealth on
+    // EVERY show. `set_stealth` verifies via GetWindowDisplayAffinity; on a
+    // failed exclusion we surface "stealth unavailable" instead of claiming it.
+    // Synchronous, so both land before the shell creates a taskbar button / the
+    // first composited frame = flash-free.
+    match grab_hwnd(win.window()) {
+        Ok(hwnd) => {
+            let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
+            let _ = set_always_on_top(hwnd, true);
+            match set_stealth(hwnd, true) {
+                Ok(()) => diag!("[overlay-host] F8 overlay stealth re-applied + verified"),
+                Err(e) => {
+                    diag!(
+                        "[overlay-host] F8 overlay stealth FAILED — capture overlay is \
+                         capturable: {e}"
+                    );
+                    if let Some(o) = weak_overlay.upgrade() {
+                        surface_stealth_unavailable(&o);
+                    }
+                }
+            }
+            slint_replay::win32::focus_window(hwnd);
+        }
+        Err(e) => {
+            diag!("[overlay-host] F8 overlay HWND grab failed — stealth NOT verified: {e}");
+            // I4 — without an HWND the exclusion could be neither applied nor
+            // verified; surface the SAME generic failure as a failed WDA apply
+            // above (a log-only miss would leave the user believing the capture
+            // overlay is hidden).
+            if let Some(o) = weak_overlay.upgrade() {
+                surface_stealth_unavailable(&o);
+            }
+        }
     }
 }
 
