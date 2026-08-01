@@ -446,10 +446,13 @@ fn spawn_text_tile(
     tiles.borrow_mut().push(tile);
     refresh_open_tiles(weak_overlay, tiles);
 
-    // Auto-start the read (mirror wire_speak's click handler).
-    reset_pause();
-    mark_speaking(convo_id);
-    overlay_backend::tts::speak(text);
+    // Auto-start the read (mirror wire_speak's click handler). Mark the tile as
+    // speaking ONLY when playback is accepted — a missing sidecar/voice must not
+    // show as speaking nor falsely suppress STT (F2).
+    if overlay_backend::tts::speak(text) {
+        reset_pause();
+        mark_speaking(convo_id);
+    }
 }
 
 /// Fill an already-spawned OCR placeholder tile with the recognized text and
@@ -496,10 +499,13 @@ pub(crate) fn fill_ocr_tile(
             rendered: trimmed.to_string(),
         },
     );
-    // Auto-read (mirror spawn_text_tile's tail).
-    reset_pause();
-    mark_speaking(convo_id);
-    overlay_backend::tts::speak(trimmed);
+    // Auto-read (mirror spawn_text_tile's tail). Mark the tile as speaking ONLY
+    // when playback is accepted — a missing sidecar/voice must not show as
+    // speaking nor falsely suppress STT (F2).
+    if overlay_backend::tts::speak(trimmed) {
+        reset_pause();
+        mark_speaking(convo_id);
+    }
 }
 
 /// Parse markdown source into the Slint `MarkdownBlock` rows a tile body
