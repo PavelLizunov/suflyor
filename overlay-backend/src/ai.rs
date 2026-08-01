@@ -514,20 +514,25 @@ pub fn pricing_per_million(model: &str) -> (f64, f64) {
     }
 }
 
-/// USD float view of cost — convenience wrapper. Internal accounting
-/// uses microcents (cost_microcents) to avoid f64 drift over long
-/// sessions. UI displays the float.
-#[allow(dead_code)]
-pub fn cost_usd(model: &str, input_tokens: u64, output_tokens: u64) -> f64 {
-    // 1 USD = 100_000_000 microcents (1 microcent = 10⁻⁸ USD).
-    (cost_microcents(model, input_tokens, output_tokens) as f64) / 100_000_000.0
+/// The single canonical money-conversion rule: 1 USD = 100_000_000
+/// microcents (1 microcent = 10⁻⁸ USD). Internal accounting uses
+/// microcents (u64) to avoid f64 drift over long sessions; display
+/// paths convert with [`microcents_to_usd`].
+pub const MICROCENTS_PER_USD: f64 = 100_000_000.0;
+
+/// USD float view of a microcents amount — the display conversion shared
+/// by every UI path. Internal accounting stays in microcents
+/// ([`cost_microcents`]) to avoid f64 precision loss over long sessions.
+#[must_use]
+pub fn microcents_to_usd(microcents: u64) -> f64 {
+    (microcents as f64) / MICROCENTS_PER_USD
 }
 
-/// Cost in microcents (1 USD = 100_000_000 microcents). Use this for
+/// Cost in microcents (see [`MICROCENTS_PER_USD`]). Use this for
 /// internal accumulation to avoid f64 precision loss over long sessions.
 pub fn cost_microcents(model: &str, input_tokens: u64, output_tokens: u64) -> u64 {
     let (p_in_per_m, p_out_per_m) = pricing_per_million(model);
-    // microcents per token = price_per_million_usd × 100_000_000 / 1_000_000 = price × 100
+    // microcents per token = price_per_million_usd × MICROCENTS_PER_USD / 1_000_000 = price × 100
     let micro_in = (p_in_per_m * 100.0) as u64; // microcents per input token
     let micro_out = (p_out_per_m * 100.0) as u64;
     input_tokens
@@ -535,7 +540,7 @@ pub fn cost_microcents(model: &str, input_tokens: u64, output_tokens: u64) -> u6
         .saturating_add(output_tokens.saturating_mul(micro_out))
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct TokenUsage {
     pub input: u64,
     pub output: u64,
@@ -543,6 +548,12 @@ pub struct TokenUsage {
     /// `timings.predicted_per_second` when present, else completion_tokens over
     /// the wall-clock request time. 0.0 if unknown. Feeds the per-tile label.
     pub tok_per_sec: f64,
+    /// The provider's own `choices[0].finish_reason` — "stop" (natural end),
+    /// "length" (truncated by max_tokens), etc. Falls back to "stop" when the
+    /// provider omits/empties it, so journaling sites can carry it verbatim
+    /// (audit D4: non-streaming sites previously hardcoded "stop" and lost
+    /// real truncation signals).
+    pub finish_reason: String,
 }
 
 /// Rolling tokens/sec across recent AI requests (streaming + non-streaming both
@@ -792,6 +803,18 @@ async fn complete_once(
         .and_then(|u| u.get("completion_tokens"))
         .and_then(|n| n.as_u64())
         .unwrap_or(0);
+    // The provider's real finish reason ("stop", "length" = truncated by
+    // max_tokens, …). Absent/empty/null → "stop", the safe default the
+    // journaling sites used to hardcode (audit D4).
+    let finish_reason = v
+        .get("choices")
+        .and_then(|c| c.as_array())
+        .and_then(|a| a.first())
+        .and_then(|c| c.get("finish_reason"))
+        .and_then(|r| r.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("stop")
+        .to_string();
     // Prefer llama.cpp's own server-side timing (excludes our network + queue);
     // fall back to completion_tokens over the wall-clock request time.
     let tok_per_sec = v
@@ -812,6 +835,7 @@ async fn complete_once(
         input,
         output,
         tok_per_sec,
+        finish_reason,
     };
     Ok((text, usage))
 }
@@ -1228,7 +1252,7 @@ mod tests {
         // microcents per token: input=300, output=1500
         let m = cost_microcents("claude-sonnet-4-6", 100_000, 50_000);
         assert_eq!(m, 100_000 * 300 + 50_000 * 1500);
-        assert!((cost_usd("claude-sonnet-4-6", 100_000, 50_000) - 1.05).abs() < 0.001);
+        assert!((microcents_to_usd(m) - 1.05).abs() < 0.001);
     }
 
     #[test]
@@ -1245,7 +1269,19 @@ mod tests {
     #[test]
     fn cost_zero_tokens_is_zero() {
         assert_eq!(cost_microcents("claude-haiku-4-5", 0, 0), 0);
-        assert_eq!(cost_usd("claude-haiku-4-5", 0, 0), 0.0);
+        assert_eq!(
+            microcents_to_usd(cost_microcents("claude-haiku-4-5", 0, 0)),
+            0.0
+        );
+    }
+
+    #[test]
+    fn microcents_to_usd_boundaries() {
+        assert_eq!(microcents_to_usd(0), 0.0);
+        assert!((microcents_to_usd(50_000_000) - 0.5).abs() < 1e-12);
+        assert!((microcents_to_usd(MICROCENTS_PER_USD as u64) - 1.0).abs() < 1e-12);
+        // u64::MAX must not panic; the float view stays finite.
+        assert!(microcents_to_usd(u64::MAX).is_finite());
     }
 
     #[test]
@@ -1335,5 +1371,61 @@ mod tests {
         } else {
             panic!("user content should be parts when screenshot attached");
         }
+    }
+
+    // ── Audit D4: provider finish_reason must survive the non-streaming path ──
+
+    /// One-shot mock OpenAI-compatible server: answers the FIRST
+    /// /chat/completions POST with `body`, then exits. Mirrors the bridge.rs
+    /// tiny_http pattern (same dependency, no new test infra).
+    fn serve_one_completion(body: &'static str) -> String {
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", server.server_addr());
+        std::thread::spawn(move || {
+            if let Ok(req) = server.recv() {
+                let mut resp = tiny_http::Response::from_string(body);
+                if let Ok(h) =
+                    tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..])
+                {
+                    resp = resp.with_header(h);
+                }
+                let _ = req.respond(resp);
+            }
+        });
+        url
+    }
+
+    /// A provider reporting `finish_reason: "length"` (answer truncated by
+    /// max_tokens) must surface the REAL reason to callers — the non-streaming
+    /// journaling sites (reask_last, manual_spawn_tile, auto_tile) write
+    /// `usage.finish_reason` verbatim into JournalEvent::AiResponse.
+    #[tokio::test]
+    async fn complete_with_usage_surfaces_provider_length_finish_reason() {
+        let url = serve_one_completion(
+            r#"{"choices":[{"message":{"content":"truncated answer"},"finish_reason":"length"}],"usage":{"prompt_tokens":11,"completion_tokens":7}}"#,
+        );
+        let (text, usage) = complete_with_usage(&url, "", "mock-model", Vec::new(), 16)
+            .await
+            .unwrap();
+        assert_eq!(text, "truncated answer");
+        assert_eq!(usage.input, 11);
+        assert_eq!(usage.output, 7);
+        assert_eq!(
+            usage.finish_reason, "length",
+            "the provider's real finish_reason must reach the caller, not a hardcoded stop"
+        );
+    }
+
+    /// When the provider omits finish_reason entirely, fall back to "stop"
+    /// (the value every non-streaming site journaled before) — never empty.
+    #[tokio::test]
+    async fn complete_with_usage_defaults_finish_reason_to_stop_when_absent() {
+        let url = serve_one_completion(
+            r#"{"choices":[{"message":{"content":"plain answer"}}],"usage":{"prompt_tokens":3,"completion_tokens":2}}"#,
+        );
+        let (_text, usage) = complete_with_usage(&url, "", "mock-model", Vec::new(), 16)
+            .await
+            .unwrap();
+        assert_eq!(usage.finish_reason, "stop");
     }
 }

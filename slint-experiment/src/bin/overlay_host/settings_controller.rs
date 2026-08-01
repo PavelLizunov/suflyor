@@ -45,16 +45,17 @@
 // `open_wizard`, `try_acquire_mic` / `release_mic`, and `active_stack_label`
 // through it). That is intentional for the move; imports narrow in a later pass.
 use super::{
-    active_stack_label, ai, apply_scheme_bar, apply_scheme_settings, audio, clamp_scheme, config,
-    drag_begin, drag_update, fetch_models, grab_hwnd, make_transparent_tile, open_wizard,
+    active_stack_label, ai, apply_bar_stealth, apply_scheme_bar, apply_scheme_settings, audio,
+    clamp_scheme, cloud_model_index, config, drag_begin, drag_update, fetch_models,
+    global_stealth_effective, grab_hwnd, make_transparent_tile, open_wizard,
     parse_tile_monitor_pin, populate_diagnostics, present_window_stealth_aware,
     preset_for_tts_rate, refresh_local_context_controls, refresh_local_model_resource_warning,
     set_always_on_top, set_global_scheme, set_global_stealth, set_global_tile_monitor,
-    set_global_tile_opacity, set_stealth, spawn_ptt_watchdog, stt, try_acquire_mic,
-    wire_ai_settings, wire_diagnostics, wire_import_export, wire_local_ai, wire_memory,
-    wire_stt_settings, wire_updates, wire_vision_settings, wire_voice_settings, Arc, AtomicBool,
-    ComponentHandle, ComponentRow, ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell,
-    SettingsWindow, SharedString, TileWindows, VecModel, WindowRegistry,
+    set_global_tile_opacity, spawn_ptt_watchdog, stt, try_acquire_mic, wire_ai_settings,
+    wire_diagnostics, wire_import_export, wire_local_ai, wire_memory, wire_stt_settings,
+    wire_updates, wire_vision_settings, wire_voice_settings, Arc, AtomicBool, ComponentHandle,
+    ComponentRow, ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell, SettingsWindow,
+    SharedString, TileWindows, VecModel, WindowRegistry,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -355,17 +356,21 @@ pub(crate) fn open_settings(
     let cfg_st = cfg.clone();
     // Phase 1 (§5.1) — ONE registry clone replaces the per-window stealth loops
     // (tiles / this Settings window / text_ask / palette / 🆘 help / recover-offer
-    // / wizard). Note: unlike the bar + wizard handlers, the Settings-tab toggle
-    // does NOT drop the bar's taskbar button — that behaviour is preserved by
-    // driving the bar inline here without `set_skip_taskbar`.
+    // / wizard). I1: the bar is driven through the SAME `apply_bar_stealth` as
+    // the bar + wizard handlers (chip/pill follow the VERIFIED exclusion), and
+    // the Stealth-tab status line below echoes the effective state. I2: the
+    // unified path can no longer turn the bar into an APPWINDOW — `skip = false`
+    // keeps the TOOLWINDOW baseline.
     let registry_stealth = registry.clone();
+    let weak_stealth_status = win.as_weak();
     win.on_stealth_changed(move |on| {
         if let Ok(mut st) = s3.lock() {
             st.stealth = on;
         }
         // #111 — global source-of-truth so later-created windows inherit it.
         set_global_stealth(on);
-        // #E10.2 — persist so stealth survives a restart.
+        // #E10.2 — persist so stealth survives a restart. Intent is preserved
+        // even when the apply below fails, so the next toggle retries (I1).
         {
             let mut c = cfg_st.write();
             c.stealth_enabled = on;
@@ -374,11 +379,16 @@ pub(crate) fn open_settings(
         // #111 — also flip the overlay bar itself (toggling stealth here
         // previously left it visible to capture). The bar stays inline (it is not
         // in the registry); the Settings window itself is covered by the registry.
-        if let Some(o) = overlay_for_stealth.upgrade() {
-            o.set_stealth_active(on);
-            if let Ok(hwnd) = grab_hwnd(o.window()) {
-                let _ = set_stealth(hwnd, on);
-            }
+        let effective = if let Some(o) = overlay_for_stealth.upgrade() {
+            apply_bar_stealth(&o, &s3, on)
+        } else {
+            false
+        };
+        // I1 — the tab status line shows the EFFECTIVE state ("[!] stealth
+        // unavailable" on a failed exclusion), never the intent alone. The
+        // Slint `@tr` ternary combines this flag with the toggle intent.
+        if let Some(w) = weak_stealth_status.upgrade() {
+            w.set_stealth_effective(effective);
         }
         // Every other open window (incl. this Settings window) via the one path.
         registry_stealth.apply_stealth(on);
@@ -1318,6 +1328,14 @@ pub(crate) fn populate_token_status(
     // Phase E6 v20 — load tile opacity from config so the slider
     // reflects the saved value on Settings re-open.
     win.set_tile_body_opacity(c.tile_body_opacity);
+    // I1 — Stealth-tab EFFECTIVE-state line, reseeded on every open (reused-
+    // window rule): a stale failure / active state from a previous session
+    // must not survive the reopen. The Slint `@tr` ternary renders the line
+    // from two bools: the verified state (the bar's last apply + readback)
+    // and the toggle INTENT — reseed the toggle from config too, so the
+    // intent side of the line can never go stale on the reuse path.
+    win.set_stealth_toggle(c.stealth_enabled);
+    win.set_stealth_effective(global_stealth_effective());
     // Tile-placement monitor dropdown — rebuilt here AND on a live language
     // switch (Rust-built labels don't auto-refresh like @tr bindings do).
     populate_tile_monitors(win, &c);
@@ -1510,6 +1528,8 @@ pub(crate) fn populate_token_status(
         Some("en") => 2,
         _ => 0,
     });
+    // Cloud recognition model (stt_model): turbo → 0, large-v3 → 1.
+    win.set_stt_cloud_model_index(cloud_model_index(&c.stt_model));
     win.set_stt_gigaam_dir_input(SharedString::from(c.stt_gigaam_dir.clone()));
     win.set_stt_gigaam_gpu(c.stt_gigaam_gpu);
     win.set_stt_whisper_url_input(SharedString::from(c.stt_whisper_url.clone()));

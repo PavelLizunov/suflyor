@@ -10,11 +10,11 @@
 use super::{
     ai, apply_tile_hwnd_with_monitor, audio, classify_ai_error, fire_followup_ask, fire_regenerate,
     grab_hwnd, journal, live_route, markdown, present_tile_window, refresh_open_tiles, stt,
-    toggle_tile_maximize, wire_copy, wire_escalate, wire_speak, wire_tile_drag,
-    wire_voice_followup, Arc, AskRoute, AtomicBool, ComponentHandle, Duration, MarkdownBlock,
-    ModelRc, Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink, RuntimeEvents,
-    SharedSlintRuntime, SharedString, TileWindow, TileWindows, VecModel, AI_STREAM_MAX_TOKENS,
-    CONVO_SEQ, TILE_DISPLAY_SEQ,
+    toggle_tile_maximize, warn_if_over_cost_cap, wire_copy, wire_escalate, wire_speak,
+    wire_tile_drag, wire_voice_followup, Arc, AskRoute, AtomicBool, ComponentHandle, Duration,
+    MarkdownBlock, ModelRc, Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink,
+    RuntimeEvents, SharedSlintRuntime, SharedString, TileWindow, TileWindows, VecModel,
+    AI_STREAM_MAX_TOKENS, CONVO_SEQ, TILE_DISPLAY_SEQ,
 };
 /// Phase E6 v42 — hard cap on a push-to-record hold (30 s). Backstop for a
 /// lost pointer-up (alt-tab / focus loss mid-hold): without it the record
@@ -113,9 +113,10 @@ pub(crate) fn fire_ptt_ask(
     tile.set_convo_id(convo_id);
     tile.set_followup_busy(true);
     wire_tile_drag(&tile);
+    // Plain text, no hourglass glyph (tofu on the skia font fallback).
     tile.set_blocks(ModelRc::new(VecModel::from(vec![MarkdownBlock {
         kind: markdown::kind::PARAGRAPH,
-        text: SharedString::from("⏳ Расшифровка…"),
+        text: SharedString::from("Расшифровка…"),
         lang: SharedString::from(""),
         marked: false,
     }])));
@@ -268,13 +269,15 @@ pub(crate) fn fire_ptt_ask(
         let micro = if is_local { 0 } else { micro };
         let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
         s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
-        (s.session_cost_microcents as f64) / 100_000_000.0
+        overlay_backend::ai::microcents_to_usd(s.session_cost_microcents)
     });
 
     // ===== 5. Spawn transcribe → ask (detached: never stored in ai_task, so a
     // later F9/PTT/followup can't abort it) =====
     let bridge_for_task = bridge.clone();
     let events_inner = events.clone();
+    let cfg_for_task = cfg.clone();
+    let slint_rt_for_task = slint_rt.clone();
     rt_handle.spawn(async move {
         let whisper_prompt = stt::build_whisper_prompt(&trigger_keywords, &meeting_context);
         let result = if !stt_is_local && groq_key.is_empty() {
@@ -361,10 +364,13 @@ pub(crate) fn fire_ptt_ask(
                 .unwrap_or_default(),
             None => String::new(),
         };
+        // Audit D1 — the SAME purpose must tag the paired AiResponse that
+        // ask_stream_loop journals (previously hardcoded "live_ask" there).
+        let purpose = "ptt_ask";
         if let Some(j) = journal_for_loop.as_ref() {
             j.write(&journal::JournalEvent::AiRequest {
                 unix_ms: journal::now_unix_ms(),
-                purpose: "ptt_ask",
+                purpose,
                 model: &model,
                 system_prompt: &sys_full,
                 user_prompt: &usr_full,
@@ -373,6 +379,14 @@ pub(crate) fn fire_ptt_ask(
                     / 4,
             });
         }
+        // PTT matches other manual asks: warn before a billable call, then proceed.
+        warn_if_over_cost_cap(
+            &events_inner,
+            &cfg_for_task,
+            &slint_rt_for_task,
+            is_local,
+            "ptt_ask",
+        );
         let t0 = std::time::Instant::now();
         let ai_rx = ai::stream_chat(
             base_url,
@@ -385,6 +399,7 @@ pub(crate) fn fire_ptt_ask(
             sink,
             ai_rx,
             model,
+            purpose,
             is_local,
             sys_full,
             usr_full,

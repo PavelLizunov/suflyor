@@ -259,6 +259,15 @@ msgstr "Поверх всех окон (HWND_TOPMOST)"
 msgid "Stealth (hide from screen capture)"
 msgstr "Скрытность (прятать от захвата экрана)"
 
+msgid "[ok] active - verify with a screen-share preview"
+msgstr "[ok] активна — проверьте через предпросмотр захвата экрана"
+
+msgid "[!] stealth unavailable"
+msgstr "[!] скрытность недоступна"
+
+msgid "[--] off"
+msgstr "[--] выключена"
+
 msgid "Tile opacity ({}%)"
 msgstr "Прозрачность тайлов ({}%)"
 
@@ -1056,8 +1065,26 @@ msgstr "URL whisper-server — http://127.0.0.1:8081/v1"
 msgid "whisper-server bearer token (optional)"
 msgstr "bearer-токен whisper-server (необязательно)"
 
-msgid "whisper model — e.g. whisper-large-v3-turbo"
-msgstr "модель whisper — напр. whisper-large-v3-turbo"
+msgid "Server model id (advanced) — e.g. whisper-large-v3-turbo"
+msgstr "Id модели на сервере (дополнительно) — напр. whisper-large-v3-turbo"
+
+msgid "Cloud: audio is sent to Groq's API for recognition. Requires a Groq API key. Supports many languages."
+msgstr "Облако: аудио отправляется в API Groq для распознавания. Нужен ключ API Groq. Поддерживает много языков."
+
+msgid "Local: runs entirely on this PC, no cloud. Russian only. Requires the GigaAM model folder set below."
+msgstr "Локально: работает полностью на этом ПК, без облака. Только русский. Нужна папка модели GigaAM (ниже)."
+
+msgid "Local: runs on your whisper-server. Multilingual. Configure the server URL and model below."
+msgstr "Локально: работает на вашем whisper-server. Много языков. Настройте URL и модель сервера ниже."
+
+msgid "Cloud recognition model"
+msgstr "Модель облачного распознавания"
+
+msgid "Fast — recommended (whisper-large-v3-turbo)"
+msgstr "Быстрая — рекомендуется (whisper-large-v3-turbo)"
+
+msgid "More accurate — slower (whisper-large-v3)"
+msgstr "Точнее — медленнее (whisper-large-v3)"
 
 msgid "Groq STT (Whisper) — API key + model. Used only when the engine above is Cloud."
 msgstr "Groq STT (Whisper) — ключ и модель. Используется, только если движок выше — Облако."
@@ -1180,6 +1207,18 @@ msgstr "Справка"
 msgid "Help — icons, hotkeys & gestures"
 msgstr "Справка — иконки, хоткеи и жесты"
 
+msgid "How it works"
+msgstr "Как это работает"
+
+msgid "1) Start capture — press start on the bar. The mic records you; system audio records the other side."
+msgstr "1) Начните захват — нажмите старт на баре. Микрофон записывает вас, системный звук — собеседника."
+
+msgid "2) Get help — hold ask or grab for a voice question, or press F9. Answers appear in tiles."
+msgstr "2) Получайте помощь — удерживайте «спросить» или «захватить» для голосового вопроса, либо нажмите F9. Ответы появляются в тайлах."
+
+msgid "3) Stop and review — press stop to end the session; open the session archive (F7) for transcripts and summaries."
+msgstr "3) Остановите и посмотрите — нажмите стоп для завершения сессии, затем откройте архив сессий (F7) для стенограмм и сводок."
+
 msgid "Bar icons"
 msgstr "Иконки бара"
 
@@ -1263,6 +1302,19 @@ msgstr "Восстановить"
 # Phase 3a — session-archive browser (archive.slint)
 msgid "Session archive"
 msgstr "Архив сессий"
+
+# UX-clarity — the session count is attached to the heading (one label).
+msgid "Session archive ({})"
+msgstr "Архив сессий ({})"
+
+msgid "More actions"
+msgstr "Другие действия"
+
+msgid "Restore tile size"
+msgstr "Вернуть размер тайла"
+
+msgid "Maximize tile"
+msgstr "Развернуть тайл"
 
 msgid "search transcript + AI answers…"
 msgstr "поиск по транскрипту и ответам ИИ…"
@@ -1771,3 +1823,31 @@ msgstr "Установка зрения…"
 
 msgid "Install Vision for 26B (~1.1 GiB)"
 msgstr "Установить зрение для 26B (~1,1 ГиБ)"
+
+# === Window titles + accessible labels (J1/J2 — i18n_guard now scans
+# `title:` / `accessible-label:` alongside `text:` / `placeholder-text:`).
+# "Session archive" and "Transcript" window titles reuse the msgids above.
+
+msgid "suflyor (Slint)"
+msgstr "suflyor (Slint)"
+
+msgid "tile"
+msgstr "Тайл"
+
+msgid "suflyor — capture"
+msgstr "suflyor — захват"
+
+msgid "suflyor — Replay"
+msgstr "suflyor — Повтор"
+
+msgid "F4 — KB palette"
+msgstr "F4 — палитра базы знаний"
+
+msgid "suflyor recover session (Slint)"
+msgstr "Восстановление сессии suflyor (Slint)"
+
+msgid "suflyor text ask (Slint)"
+msgstr "Текстовый вопрос suflyor (Slint)"
+
+msgid "Retry"
+msgstr "Повторить"

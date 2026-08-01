@@ -597,8 +597,10 @@ pub const fn primary_26b_allowed(profile: HardwareModelProfile) -> bool {
     profile.uses_primary_26b()
 }
 
-/// Select only an owner-confirmed VRAM/RAM pair. Inputs are nominal binary GiB:
-/// 8/16 -> 12B; 8/32, 12/24-32, and 16/32 -> the corresponding 26B profile.
+/// Select an owner-confirmed NVIDIA VRAM tier with its minimum RAM threshold.
+/// Inputs are nominal binary GiB: each VRAM tier keeps its minimum RAM but
+/// accepts any greater value:
+/// 16/32+, 12/24+, 8/32+ -> the corresponding 26B profile; 8/16..31 -> 12B.
 #[must_use]
 pub const fn select_hardware_model_profile(
     vram_gib: Option<u64>,
@@ -608,10 +610,10 @@ pub const fn select_hardware_model_profile(
         return HardwareModelProfile::Unknown;
     };
     match (vram, ram) {
-        (16, 32) => HardwareModelProfile::Primary26Vram16,
-        (12, 24..=32) => HardwareModelProfile::Primary26Vram12,
-        (8, 32) => HardwareModelProfile::Primary26Vram8,
-        (8, 16) => HardwareModelProfile::Fallback12B,
+        (16, 32..) => HardwareModelProfile::Primary26Vram16,
+        (12, 24..) => HardwareModelProfile::Primary26Vram12,
+        (8, 32..) => HardwareModelProfile::Primary26Vram8,
+        (8, 16..=31) => HardwareModelProfile::Fallback12B,
         _ => HardwareModelProfile::Unknown,
     }
 }
@@ -654,16 +656,16 @@ fn hardware_profile_status(profile: HardwareModelProfile) -> String {
             "Hardware profile unknown — installing the Gemma 12B fallback".to_string()
         }
         HardwareModelProfile::Fallback12B => {
-            "Hardware profile 8 GB VRAM / 16 GB RAM — using Gemma 12B".to_string()
+            "Hardware profile 8 GB VRAM / 16-31 GB RAM — using Gemma 12B".to_string()
         }
         HardwareModelProfile::Primary26Vram8 => {
-            "Hardware profile 8 GB VRAM / 32 GB RAM — using Gemma 26B-A4B".to_string()
+            "Hardware profile 8 GB VRAM / 32+ GB RAM — using Gemma 26B-A4B".to_string()
         }
         HardwareModelProfile::Primary26Vram12 => {
-            "Hardware profile 12 GB VRAM / 24-32 GB RAM — using Gemma 26B-A4B".to_string()
+            "Hardware profile 12 GB VRAM / 24+ GB RAM — using Gemma 26B-A4B".to_string()
         }
         HardwareModelProfile::Primary26Vram16 => {
-            "Hardware profile 16 GB VRAM / 32 GB RAM — using Gemma 26B-A4B".to_string()
+            "Hardware profile 16 GB VRAM / 32+ GB RAM — using Gemma 26B-A4B".to_string()
         }
     }
 }
@@ -1012,8 +1014,8 @@ fn profile_for_model(detected: HardwareModelProfile, prefer_quality: bool) -> Ha
 /// The confirmed matrix is NVIDIA-only. AMD/Intel remain on the safe fallback
 /// until they have their own measured profiles.
 ///
-/// Raw readings pass through ±1 GiB normalization before the exact matrix
-/// lookup, absorbing iGPU memory reservations and firmware underreport.
+/// Raw readings pass through ±1 GiB normalization before the minimum-RAM
+/// matrix lookup, absorbing iGPU memory reservations and firmware underreport.
 fn hardware_profile_from_discovery(
     force_cpu: bool,
     nvidia_vram_gib: Option<u64>,
@@ -2418,9 +2420,9 @@ pub fn local_model_resource_warning(root: &Path, base_url: &str, model_id: &str)
     if lower.contains("26b-a4b") {
         let profile = detected_hardware_model_profile(false);
         let matrix = match profile {
-            HardwareModelProfile::Primary26Vram8 => "профиль 8 ГБ VRAM / 32 ГБ RAM",
-            HardwareModelProfile::Primary26Vram12 => "профиль 12 ГБ VRAM / 24-32 ГБ RAM",
-            HardwareModelProfile::Primary26Vram16 => "профиль 16 ГБ VRAM / 32 ГБ RAM",
+            HardwareModelProfile::Primary26Vram8 => "профиль 8 ГБ VRAM / 32+ ГБ RAM",
+            HardwareModelProfile::Primary26Vram12 => "профиль 12 ГБ VRAM / 24+ ГБ RAM",
+            HardwareModelProfile::Primary26Vram16 => "профиль 16 ГБ VRAM / 32+ ГБ RAM",
             HardwareModelProfile::Unknown | HardwareModelProfile::Fallback12B => {
                 "профиль железа не подтверждён"
             }
@@ -2431,7 +2433,7 @@ pub fn local_model_resource_warning(root: &Path, base_url: &str, model_id: &str)
         )
     } else if lower.contains("12b") {
         format!(
-            "[!] Gemma 12B QAT fallback: {:.1} GiB на диске. Матрица 8 ГБ VRAM / 16 ГБ RAM подтверждена владельцем. Память для vision: неизвестно.",
+            "[!] Gemma 12B QAT fallback: {:.1} GiB на диске. Матрица 8 ГБ VRAM / 16-31 ГБ RAM подтверждена владельцем. Память для vision: неизвестно.",
             GEMMA_SIZE as f64 / GIB as f64
         )
     } else if lower.contains("e4b") || lower.contains("4b") {
