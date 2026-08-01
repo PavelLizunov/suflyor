@@ -1123,7 +1123,7 @@ pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<Transcrip
                             },
                         );
                         match indexed {
-                            Ok(sess) => {
+                            Ok(Some(sess)) => {
                                 let done = sess.status == "completed";
                                 log_info(&format!(
                                     "archive: indexed closed session {} ({} lines, {} ai turns, {}{})",
@@ -1138,6 +1138,9 @@ pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<Transcrip
                                     break;
                                 }
                             }
+                            // No usable event yet (the journal writer is still
+                            // draining the stop marker) — retry on the next pass.
+                            Ok(None) => last_err = None,
                             Err(e) => last_err = Some(e),
                         }
                     }

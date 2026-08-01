@@ -345,16 +345,20 @@ impl Store {
             .context("backfill session models")
     }
 
-    /// The set of session ids already in the catalog — lets the indexer skip
-    /// immutable, already-indexed journals.
-    pub fn indexed_session_ids(&self) -> Result<std::collections::HashSet<String>> {
+    /// The set of FINALIZED session ids (status ≠ 'crashed') already in the
+    /// catalog — lets the indexer skip immutable, finished journals while still
+    /// re-indexing rows frozen as 'crashed' so a later graceful `SessionStop`
+    /// heals them to 'completed' (audit G1). A crashed row is deliberately NOT
+    /// in this set, so `index_all` re-projects it on every sweep until a stop
+    /// marker finalizes it.
+    pub fn finalized_session_ids(&self) -> Result<std::collections::HashSet<String>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id FROM sessions")
-            .context("prepare indexed ids")?;
+            .prepare("SELECT id FROM sessions WHERE status <> 'crashed'")
+            .context("prepare finalized ids")?;
         let rows = stmt
             .query_map([], |r| r.get::<_, String>(0))
-            .context("query indexed ids")?;
+            .context("query finalized ids")?;
         let mut set = std::collections::HashSet::new();
         for r in rows {
             set.insert(r.context("map id")?);

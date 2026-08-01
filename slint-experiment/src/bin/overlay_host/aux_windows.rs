@@ -35,6 +35,23 @@ use slint::Model;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
+/// The archive's catalog handle, opened lazily OFF the event loop. `None` until
+/// the open worker lands — or permanently `None` if the catalog can't be opened,
+/// which puts the window in its "unavailable" state. Shared by every archive
+/// closure AND the open worker (which publishes the `Send` `Store` back via
+/// `invoke_from_event_loop`), so it is an `Arc<Mutex<..>>`. Callers hold the lock
+/// only for a single read/write and drop it before re-entrant UI callbacks.
+type StoreSlot = Arc<Mutex<Option<Store>>>;
+
+/// Lock the catalog slot, recovering a poisoned lock (the codebase mutex idiom).
+/// Contention can't happen in practice — every access runs on the event loop.
+fn lock_store(slot: &StoreSlot) -> std::sync::MutexGuard<'_, Option<Store>> {
+    match slot.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    }
+}
+
 /// v0.14.0 — PROCESS-GLOBAL one-job-at-a-time guard for archive re-transcription.
 ///
 /// The per-window `retranscribe-busy` Slint property drives this window's UI
@@ -450,9 +467,10 @@ impl PaletteResultExt for PaletteResult {
 /// transcript + AI Q&A over the SQLite catalog; activating a row spawns a
 /// read-only tile with that session's content (via [`spawn_content_tile`], the
 /// same path the KB palette uses). Stealth-aware + skip-taskbar like the other
-/// aux windows. The window holds ONE [`Store`] (opened here) for its lifetime,
-/// reused across the list / search / detail queries; if the catalog can't be
-/// opened it shows a graceful "unavailable" state instead of a blank panel.
+/// aux windows. The window shows immediately and opens its ONE [`Store`] OFF the
+/// event loop (a worker thread also runs the reindex sweep + initial list), then
+/// reuses that handle across the list / search / detail queries; if the catalog
+/// can't be opened it shows a graceful "unavailable" state instead of a blank panel.
 ///
 /// SECURITY: renders ONLY the user's own transcript + AI answers — no bearer /
 /// base_url / config secret ever reaches its scope (like the palette).
@@ -508,25 +526,13 @@ pub(crate) fn open_archive(
         .as_ref()
         .and_then(overlay_backend::journal::Journal::current_path)
         .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()));
-    if cfg.read().session_archive_enabled {
-        match overlay_backend::persistence::reindex_default(active_id.as_deref()) {
-            Ok(st) => eprintln!(
-                "[overlay-host] archive: reindex on open — {} new, {} skipped, {} failed",
-                st.indexed, st.skipped, st.failed
-            ),
-            Err(e) => eprintln!("[overlay-host] archive: reindex on open failed: {e:#}"),
-        }
-    }
-
-    // Open ONE catalog handle for this browse session (reused by the closures
-    // below). On failure the window degrades to an "unavailable" state.
-    let store: Option<Rc<RefCell<Store>>> = match open_default_store() {
-        Ok(s) => Some(Rc::new(RefCell::new(s))),
-        Err(e) => {
-            eprintln!("[overlay-host] archive: catalog open failed: {e}");
-            None
-        }
-    };
+    // The catalog open, the initial list, AND the reindex SWEEP (read_dir + parse
+    // + index of every new journal) all block, so they run on a worker thread; the
+    // window above is already on screen and shows an empty list until the rows land.
+    // The handle is published to a shared slot the closures below read lazily, so a
+    // click that arrives before the open finishes is a graceful no-op, and a failed
+    // open leaves the slot empty → the "unavailable" state.
+    let store: StoreSlot = Arc::new(Mutex::new(None));
 
     // One recordings snapshot for this browse session (v0.17.1 — was a
     // filesystem stat PER ROW per rebuild; see recording_ids_snapshot).
@@ -541,25 +547,59 @@ pub(crate) fn open_archive(
     const ARCHIVE_LIST_CAP: usize = 300;
     const _: () = assert!(ARCHIVE_LIST_CAP * 60 + 200 < 32_767);
 
-    match store.as_ref() {
-        Some(store_rc) => {
-            let sessions = store_rc.borrow().list_sessions().unwrap_or_default();
-            // v0.17.1 — plain count (the 🗄 now lives in the header SVG icon).
-            win.set_summary(SharedString::from(sessions.len().to_string()));
-            // Re-snapshot conspect ids fresh each (re)build so a row flips to
-            // "Просмотреть" the moment its summary lands (A2) — one cheap dir read.
-            let conspects = overlay_backend::conspect::session_ids();
-            let debriefs = overlay_backend::conspect::debrief_session_ids();
-            let rows: Vec<ArchiveRow> = sessions
-                .iter()
-                .take(ARCHIVE_LIST_CAP)
-                .map(|s| session_to_row(s, &recordings, &conspects, &debriefs))
-                .collect();
-            win.set_results(ModelRc::new(VecModel::from(rows)));
-        }
-        None => {
-            win.set_unavailable(true);
-        }
+    {
+        let weak_load = win.as_weak();
+        let slot_load = store.clone();
+        let active_id_load = active_id.clone();
+        let archive_enabled = cfg.read().session_archive_enabled;
+        std::thread::spawn(move || {
+            // Reindex SWEEP first (gated on the archive toggle), so the list below
+            // catches anything finished since the launch-time sweep.
+            if archive_enabled {
+                match overlay_backend::persistence::reindex_default(active_id_load.as_deref()) {
+                    Ok(st) => eprintln!(
+                        "[overlay-host] archive: reindex on open — {} new, {} skipped, {} failed",
+                        st.indexed, st.skipped, st.failed
+                    ),
+                    Err(e) => eprintln!("[overlay-host] archive: reindex on open failed: {e:#}"),
+                }
+            }
+            // Open the read handle OFF the event loop (it runs migrations + WAL
+            // setup) and build the initial rows from it.
+            let opened: Option<Store> = match open_default_store() {
+                Ok(s) => Some(s),
+                Err(e) => {
+                    eprintln!("[overlay-host] archive: catalog open failed: {e}");
+                    None
+                }
+            };
+            let initial: Option<(Vec<ArchiveRow>, usize)> = opened.as_ref().map(|st| {
+                let sessions = st.list_sessions().unwrap_or_default();
+                let total = sessions.len();
+                let recordings = recording_ids_snapshot();
+                let conspects = overlay_backend::conspect::session_ids();
+                let debriefs = overlay_backend::conspect::debrief_session_ids();
+                let rows = sessions
+                    .iter()
+                    .take(ARCHIVE_LIST_CAP)
+                    .map(|s| session_to_row(s, &recordings, &conspects, &debriefs))
+                    .collect();
+                (rows, total)
+            });
+            let _ = slint::invoke_from_event_loop(move || {
+                let Some(p) = weak_load.upgrade() else {
+                    return;
+                };
+                match opened {
+                    Some(s) => *lock_store(&slot_load) = Some(s),
+                    None => p.set_unavailable(true),
+                }
+                if let Some((rows, total)) = initial {
+                    p.set_summary(SharedString::from(total.to_string()));
+                    p.set_results(ModelRc::new(VecModel::from(rows)));
+                }
+            });
+        });
     }
 
     // Search-as-you-type: empty query → full list; else an FTS5 prefix search
@@ -572,35 +612,34 @@ pub(crate) fn open_archive(
             let Some(p) = weak.upgrade() else {
                 return;
             };
-            let Some(store_rc) = store_q.as_ref() else {
-                return;
-            };
             let trimmed = q.trim();
             // Fresh conspect snapshot per rebuild (A2): after a summary completes we
             // invoke_query_changed, and this re-read flips the row to "Просмотреть".
             let conspects = overlay_backend::conspect::session_ids();
             let debriefs = overlay_backend::conspect::debrief_session_ids();
-            let rows: Vec<ArchiveRow> = if trimmed.is_empty() {
-                store_rc
-                    .borrow()
-                    .list_sessions()
-                    .unwrap_or_default()
-                    .iter()
-                    .take(ARCHIVE_LIST_CAP)
-                    .map(|s| session_to_row(s, &recordings_q, &conspects, &debriefs))
-                    .collect()
-            } else {
-                let fts = fts_query(trimmed);
-                if fts.is_empty() {
-                    Vec::new()
-                } else {
-                    store_rc
-                        .borrow()
-                        .search(&fts, 60)
+            let rows: Vec<ArchiveRow> = {
+                let slot = lock_store(&store_q);
+                let Some(st) = slot.as_ref() else {
+                    return;
+                };
+                if trimmed.is_empty() {
+                    st.list_sessions()
                         .unwrap_or_default()
                         .iter()
-                        .map(|h| hit_to_row(h, &recordings_q, &conspects, &debriefs))
+                        .take(ARCHIVE_LIST_CAP)
+                        .map(|s| session_to_row(s, &recordings_q, &conspects, &debriefs))
                         .collect()
+                } else {
+                    let fts = fts_query(trimmed);
+                    if fts.is_empty() {
+                        Vec::new()
+                    } else {
+                        st.search(&fts, 60)
+                            .unwrap_or_default()
+                            .iter()
+                            .map(|h| hit_to_row(h, &recordings_q, &conspects, &debriefs))
+                            .collect()
+                    }
                 }
             };
             // v0.22.0 — a list rebuild invalidates the index-keyed rename state,
@@ -623,16 +662,16 @@ pub(crate) fn open_archive(
             let Some(p) = weak.upgrade() else {
                 return;
             };
-            let Some(store_rc) = store_a.as_ref() else {
-                return;
-            };
             let results = p.get_results();
             let Some(row) = archive_row_at(&results, idx) else {
                 return;
             };
             let sid = row.id.to_string();
             let (session, utts, turns) = {
-                let st = store_rc.borrow();
+                let slot = lock_store(&store_a);
+                let Some(st) = slot.as_ref() else {
+                    return;
+                };
                 (
                     st.get_session(&sid).ok().flatten(),
                     st.session_utterances(&sid).unwrap_or_default(),
@@ -702,9 +741,6 @@ pub(crate) fn open_archive(
             let Some(p) = weak.upgrade() else {
                 return;
             };
-            let Some(store_rc) = store_g.as_ref() else {
-                return;
-            };
             let results = p.get_results();
             let Some(row) = archive_row_at(&results, idx) else {
                 return;
@@ -713,13 +749,17 @@ pub(crate) fn open_archive(
             if sid.is_empty() {
                 return;
             }
-            let lines: Vec<String> = store_rc
-                .borrow()
-                .session_utterances(&sid)
-                .unwrap_or_default()
-                .iter()
-                .map(|u| u.text.clone())
-                .collect();
+            let lines: Vec<String> = {
+                let slot = lock_store(&store_g);
+                let Some(st) = slot.as_ref() else {
+                    return;
+                };
+                st.session_utterances(&sid)
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|u| u.text.clone())
+                    .collect()
+            };
             if lines.is_empty() {
                 return;
             }
@@ -785,12 +825,9 @@ pub(crate) fn open_archive(
             let Some(p) = weak.upgrade() else {
                 return;
             };
-            p.set_confirm_delete_index(-1); // dismiss the overlay
-            let Some(store_rc) = store_d.as_ref() else {
-                return;
-            };
-            // Re-fetch + re-validate by index (the list can't change behind the modal
-            // scrim, but stay defensive).
+            // Dismiss, then re-fetch + re-validate by index (the list can't change
+            // behind the modal scrim, but stay defensive).
+            p.set_confirm_delete_index(-1);
             let results = p.get_results();
             let Some(row) = archive_row_at(&results, idx) else {
                 return;
@@ -799,14 +836,16 @@ pub(crate) fn open_archive(
             if sid.is_empty() || active_del.as_deref() == Some(sid.as_str()) {
                 return;
             }
-            // CRITICAL: drop the store borrow BEFORE rebuilding. invoke_query_changed
-            // dispatches the search handler SYNCHRONOUSLY (Slint callbacks run inline),
-            // and that handler borrows the SAME RefCell — holding borrow_mut across it
-            // double-borrows → panic. (Latent in the original ТЗ2a code; the native
-            // modal crashed first, so this path was never reached.)
+            // CRITICAL: drop the store lock BEFORE rebuilding. invoke_query_changed
+            // dispatches the search handler SYNCHRONOUSLY (Slint callbacks run inline)
+            // and that handler locks the SAME slot — holding the guard across it
+            // deadlocks the Mutex.
             let outcome = {
-                let mut st = store_rc.borrow_mut();
-                overlay_backend::session_admin::delete_session_everywhere(&mut st, &sid)
+                let mut slot = lock_store(&store_d);
+                match slot.as_mut() {
+                    Some(st) => overlay_backend::session_admin::delete_session_everywhere(st, &sid),
+                    None => return,
+                }
             };
             match outcome {
                 Ok(()) => {
@@ -845,9 +884,6 @@ pub(crate) fn open_archive(
             let Some(p) = weak.upgrade() else {
                 return;
             };
-            let Some(store_rc) = store_t.as_ref() else {
-                return;
-            };
             let results = p.get_results();
             let Some(row) = archive_row_at(&results, idx) else {
                 return;
@@ -857,13 +893,16 @@ pub(crate) fn open_archive(
                 return;
             }
             let (session, utts) = {
-                let st = store_rc.borrow();
+                let slot = lock_store(&store_t);
+                let Some(st) = slot.as_ref() else {
+                    return;
+                };
                 (
                     st.get_session(&sid).ok().flatten(),
                     st.session_utterances(&sid).unwrap_or_default(),
                 )
             };
-            open_transcript(&tslot, session.as_ref(), &utts, store_rc, &rt_t);
+            open_transcript(&tslot, session.as_ref(), &utts, &store_t, &rt_t);
         });
     }
 
@@ -910,10 +949,12 @@ pub(crate) fn open_archive(
             // own Summary tile, exactly like the re-STT path below. Additive: the
             // has-recordings path past this branch is unchanged.
             if !row.has_recordings {
-                let src = store_s
-                    .as_ref()
-                    .and_then(|s| overlay_backend::summary_source::from_catalog(&s.borrow(), &sid))
-                    .or_else(|| overlay_backend::summary_source::from_jsonl_prompts(&sid));
+                let src = {
+                    let slot = lock_store(&store_s);
+                    slot.as_ref()
+                        .and_then(|st| overlay_backend::summary_source::from_catalog(st, &sid))
+                        .or_else(|| overlay_backend::summary_source::from_jsonl_prompts(&sid))
+                };
                 let Some(transcript) = src else {
                     drop(rt_guard);
                     p.set_retranscribe_busy(false);
@@ -2112,7 +2153,7 @@ fn wire_transcript_search(win: &TranscriptWindow, model: &Rc<VecModel<Transcript
 #[allow(clippy::too_many_arguments)]
 fn wire_transcript_diarization(
     win: &TranscriptWindow,
-    store: &Rc<RefCell<Store>>,
+    store: &StoreSlot,
     rt_handle: &tokio::runtime::Handle,
     session_id: &str,
     session_finished: bool,
@@ -2144,7 +2185,9 @@ fn wire_transcript_diarization(
         );
 
     let diar: Rc<RefCell<Option<Diarization>>> = Rc::new(RefCell::new(
-        store.borrow().get_diarization(session_id).ok().flatten(),
+        lock_store(store)
+            .as_ref()
+            .and_then(|st| st.get_diarization(session_id).ok().flatten()),
     ));
     let utts_rc: Rc<Vec<Utterance>> = Rc::new(utts_display.to_vec());
 
@@ -2210,9 +2253,11 @@ fn wire_transcript_diarization(
                 return;
             };
             {
-                let st = store_c.borrow();
-                let _ = st.rename_speaker(&sid, id, name.as_str());
-                *diar_c.borrow_mut() = st.get_diarization(&sid).ok().flatten();
+                let slot = lock_store(&store_c);
+                if let Some(st) = slot.as_ref() {
+                    let _ = st.rename_speaker(&sid, id, name.as_str());
+                    *diar_c.borrow_mut() = st.get_diarization(&sid).ok().flatten();
+                }
             }
             if let Some(d) = diar_c.borrow().as_ref() {
                 // F-fix (fable): the rename now commits per-keystroke (`edited`), so do NOT rebuild
@@ -2300,7 +2345,9 @@ fn wire_transcript_diarization(
                     w.set_diarizing(false);
                     match result {
                         Ok(d) => {
-                            let _ = store_p.borrow().put_diarization(&d);
+                            if let Some(st) = lock_store(&store_p).as_ref() {
+                                let _ = st.put_diarization(&d);
+                            }
                             apply_voice_labels(&model_p, &utts_p, &d);
                             set_speaker_list(&w, &d, &utts_p);
                             *diar_p.borrow_mut() = Some(d);
@@ -2402,7 +2449,7 @@ pub(crate) fn open_transcript(
     slot: &Rc<RefCell<Option<TranscriptWindow>>>,
     session: Option<&Session>,
     utts: &[Utterance],
-    store: &Rc<RefCell<Store>>,
+    store: &StoreSlot,
     rt_handle: &tokio::runtime::Handle,
 ) {
     // Build the model once — shared by the reuse + first-open paths.
