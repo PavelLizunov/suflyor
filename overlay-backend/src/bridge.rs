@@ -261,13 +261,6 @@ fn qget<'a>(query: &'a [(String, String)], key: &str) -> Option<&'a str> {
         .map(|(_, v)| v.as_str())
 }
 
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
-}
-
 /// Route a request. Returns `(http_status, json_body, needs_config_save)`.
 /// Pure with respect to the filesystem: mutations touch only `store` (the
 /// caller's DB — in-memory in tests) and the in-memory `cfg`; persisting the
@@ -473,7 +466,8 @@ fn dispatch(
                 text: text.to_string(),
                 reason,
             };
-            match store.insert_candidate(&cand, now_ms()) {
+            let now = i64::try_from(crate::journal::now_unix_ms()).unwrap_or(0);
+            match store.insert_candidate(&cand, now) {
                 Ok(id) => (200, serde_json::json!({"queued": true, "id": id}), false),
                 Err(_) => (500, serde_json::json!({"error": "queue failed"}), false),
             }

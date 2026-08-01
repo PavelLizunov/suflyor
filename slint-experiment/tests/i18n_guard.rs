@@ -1,9 +1,10 @@
 //! i18n drift guard (added 2026-06-13 during the UI-audit methodology pass).
 //!
 //! Catches the two classes that kept reaching the user: a bare string literal
-//! in a Slint `text` / `placeholder-text` expression, or an `@tr("English…")`
-//! string with NO matching `msgid` in the Russian `.po`. clippy/cargo-test were
-//! blind to both — now they aren't. Pure file parsing, no UI build needed.
+//! in a Slint `text` / `placeholder-text` / `title` / `accessible-label`
+//! expression, or an `@tr("English…")` string with NO matching `msgid` in the
+//! Russian `.po`. clippy/cargo-test were blind to both — now they aren't.
+//! Pure file parsing, no UI build needed.
 //!
 //! If this fails: either add the `msgid`/`msgstr` pair to
 //! `translations/ru/LC_MESSAGES/slint-replay.po`, or (rarely) the string is a
@@ -71,7 +72,10 @@ fn po_msgids(src: &str) -> HashSet<String> {
         .collect()
 }
 
-/// Return `text` / `placeholder-text` expressions with their source line.
+/// Return `text` / `placeholder-text` / `title` / `accessible-label`
+/// expressions with their source line. Window titles (taskbar / alt-tab) and
+/// accessible labels (screen readers) are user-facing too. Struct field
+/// declarations (`title: string,`) end in `,` and are NOT collected.
 /// This is deliberately a tiny Slint-shaped scanner, not a general parser:
 /// property expressions end at the first non-string `;`.
 fn text_expressions(src: &str) -> Vec<(usize, &str)> {
@@ -123,11 +127,16 @@ fn text_expressions(src: &str) -> Vec<(usize, &str)> {
 
         let previous_is_ident =
             i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || matches!(bytes[i - 1], b'_' | b'-'));
-        let property_len = [b"placeholder-text".as_slice(), b"text".as_slice()]
-            .into_iter()
-            .find_map(|name| {
-                (!previous_is_ident && bytes[i..].starts_with(name)).then_some(name.len())
-            });
+        let property_len = [
+            b"placeholder-text".as_slice(),
+            b"accessible-label".as_slice(),
+            b"title".as_slice(),
+            b"text".as_slice(),
+        ]
+        .into_iter()
+        .find_map(|name| {
+            (!previous_is_ident && bytes[i..].starts_with(name)).then_some(name.len())
+        });
         let Some(property_len) = property_len else {
             i += 1;
             continue;
@@ -289,12 +298,21 @@ fn bare_literal_scanner_distinguishes_display_text_from_tokens() {
         Text { text: "AI"; }
         Text { text: "127.0.0.1"; }
         Text { text: "\{root.pos} / \{root.count}"; }
+        Window { title: "Session archive"; }
+        Window { title: @tr("Help"); }
+        Window { title: root.dynamic-title; }
+        Rectangle { accessible-label: "Retry"; }
+        Rectangle { accessible-label: @tr("Close"); }
+        struct S { title: string, }
     "#;
     let found: Vec<String> = text_expressions(src)
         .into_iter()
         .flat_map(|(_, expression)| bare_text_literals(expression))
         .collect();
-    assert_eq!(found, ["Replay", " events", "Send"]);
+    assert_eq!(
+        found,
+        ["Replay", " events", "Send", "Session archive", "Retry"]
+    );
 }
 
 #[test]

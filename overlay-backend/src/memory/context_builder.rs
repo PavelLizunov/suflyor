@@ -59,7 +59,7 @@ pub fn format_memory_block(items: &[MemoryItem]) -> String {
     let mut out = String::new();
     let mut used = 0usize;
     for it in items.iter().take(MAX_ITEMS) {
-        let collapsed: String = it.text.split_whitespace().collect::<Vec<_>>().join(" ");
+        let collapsed = crate::text::collapse_ws(&it.text);
         if collapsed.is_empty() {
             continue;
         }

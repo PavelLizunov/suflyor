@@ -14,7 +14,7 @@ use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc;
 
 /// Max number of session journals to keep on disk. Older ones get pruned
@@ -142,23 +142,41 @@ pub struct SessionCounters {
 
 #[derive(Clone, Default)]
 pub struct Journal {
-    tx: Option<Arc<mpsc::UnboundedSender<String>>>,
     path: Option<Arc<PathBuf>>,
     /// Running totals used for the SessionSummary event on close. Same
     /// struct shape as the SessionSummary JournalEvent variant.
     counters: Option<Arc<Mutex<SessionCounters>>>,
+    /// Sender, join handle, and shutdown outcome shared by every clone.
+    writer: Option<Arc<Mutex<WriterState>>>,
 }
 
 impl Journal {
     #[cfg(test)]
     pub(crate) fn counting_for_test() -> Self {
-        let (tx, rx) = mpsc::unbounded_channel::<String>();
-        drop(rx);
         Self {
-            tx: Some(Arc::new(tx)),
             path: None,
             counters: Some(Arc::new(Mutex::new(SessionCounters::default()))),
+            writer: None,
         }
+    }
+
+    /// Like [`Journal::counting_for_test`], but KEEPS the writer channel's
+    /// receiver so a test can inspect the exact serialized JSONL commands
+    /// (`write()` sends them synchronously, so after the code under test
+    /// returns they are all queued — drain with `try_recv`).
+    #[cfg(test)]
+    pub(crate) fn capturing_for_test() -> (Self, mpsc::UnboundedReceiver<WriterCmd>) {
+        let (tx, rx) = mpsc::unbounded_channel::<WriterCmd>();
+        let journal = Self {
+            path: None,
+            counters: Some(Arc::new(Mutex::new(SessionCounters::default()))),
+            writer: Some(Arc::new(Mutex::new(WriterState {
+                tx: Some(tx),
+                join: None,
+                shutdown: None,
+            }))),
+        };
+        (journal, rx)
     }
 
     /// Open with the pre-v0.15 hard-coded retention (keep 100 / 500 MB).
@@ -200,7 +218,7 @@ impl Journal {
             Err(e) => log::warn!("journal prune failed (non-fatal): {e:#}"),
         }
 
-        let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+        let (tx, rx) = mpsc::unbounded_channel::<WriterCmd>();
 
         // Dedicated writer on a STD thread (NOT tokio::spawn) — `writeln!` is a
         // blocking syscall, and running it on a tokio worker stalls the same
@@ -208,40 +226,7 @@ impl Journal {
         // full disk (esp. under aggressive mode's 30-50 events/min). The tokio
         // UnboundedSender stays (Sync, multi-producer); the thread drains it via
         // blocking_recv() so journal disk I/O never touches the async runtime.
-        std::thread::Builder::new()
-            .name("journal-writer".into())
-            .spawn(move || {
-                // BufWriter so a burst of events collapses into ONE write syscall
-                // instead of one-per-line (audit P4). We flush after draining each
-                // batch (below), so durability matches the old unbuffered writer:
-                // no line ever sits unflushed while the thread is parked on recv.
-                let mut file = BufWriter::new(file);
-                while let Some(line) = rx.blocking_recv() {
-                    // A single transient write error (disk full, AV lock,
-                    // network-drive hiccup) must NOT kill journaling for the rest
-                    // of the session: `break` here left the unbounded sender open
-                    // (silent data loss + the channel grows forever under
-                    // aggressive mode). Keep draining; at worst we lose the one
-                    // failed line and recover when disk does.
-                    if let Err(e) = writeln!(file, "{line}") {
-                        log::warn!("journal write failed (continuing): {e}");
-                    }
-                    // Drain any further already-queued lines WITHOUT blocking, so a
-                    // 30-50 events/min burst becomes a single flush, then flush so
-                    // the batch is durable before we park again.
-                    while let Ok(line) = rx.try_recv() {
-                        if let Err(e) = writeln!(file, "{line}") {
-                            log::warn!("journal write failed (continuing): {e}");
-                        }
-                    }
-                    if let Err(e) = file.flush() {
-                        log::warn!("journal flush failed (continuing): {e}");
-                    }
-                }
-                let _ = file.flush();
-                log::debug!("journal writer thread exit");
-            })
-            .context("spawn journal writer thread")?;
+        let join = spawn_writer(rx, file).context("spawn journal writer thread")?;
 
         let counters = Arc::new(Mutex::new(SessionCounters {
             start_unix_ms: now_unix_ms(),
@@ -249,9 +234,13 @@ impl Journal {
         }));
 
         Ok(Self {
-            tx: Some(Arc::new(tx)),
             path: Some(Arc::new(path)),
             counters: Some(counters),
+            writer: Some(Arc::new(Mutex::new(WriterState {
+                tx: Some(tx),
+                join: Some(join),
+                shutdown: None,
+            }))),
         })
     }
 
@@ -259,18 +248,23 @@ impl Journal {
     /// task does actual disk I/O. If channel is dropped (session closed),
     /// silently no-op.
     pub fn write(&self, event: &JournalEvent<'_>) {
-        let Some(tx) = &self.tx else { return };
-        // Bump aggregate counters first — these feed SessionSummary.
+        // Writer-less test journals still need counters.
         if let Some(c) = &self.counters {
             bump_counters(&mut c.lock(), event);
         }
-        match serde_json::to_string(event) {
-            Ok(line) => {
-                if tx.send(line).is_err() {
-                    log::debug!("journal channel closed; dropped event");
-                }
+        let Some(writer) = &self.writer else { return };
+        let line = match serde_json::to_string(event) {
+            Ok(line) => line,
+            Err(e) => {
+                log::warn!("journal serialize failed: {e}");
+                return;
             }
-            Err(e) => log::warn!("journal serialize failed: {e}"),
+        };
+        let state = writer.lock();
+        if let Some(tx) = &state.tx {
+            if tx.send(WriterCmd::Line(line)).is_err() {
+                log::debug!("journal channel closed; dropped event");
+            }
         }
     }
 
@@ -280,12 +274,168 @@ impl Journal {
         self.counters.as_ref().map(|c| c.lock().clone())
     }
 
-    /// Path of the open journal file, if any. Used by tests and reserved
-    /// for future "show current journal" debug UI.
-    #[allow(dead_code)]
+    /// Path of the open journal file, if any.
     pub fn current_path(&self) -> Option<PathBuf> {
         self.path.as_ref().map(|p| (**p).clone())
     }
+
+    /// Flush every queued line and join the writer within `timeout`.
+    /// A recorded failure is replayed by later calls instead of becoming a
+    /// false success.
+    pub fn shutdown(&self, timeout: Duration) -> Result<()> {
+        let Some(writer) = &self.writer else {
+            return Ok(());
+        };
+
+        let (tx, join) = {
+            let mut state = writer.lock();
+            match &state.shutdown {
+                Some(ShutdownState::Done(result)) => {
+                    return result.clone().map_err(anyhow::Error::msg);
+                }
+                Some(ShutdownState::InProgress) => {
+                    return Err(anyhow::anyhow!("journal shutdown already in progress"));
+                }
+                None => {}
+            }
+            state.shutdown = Some(ShutdownState::InProgress);
+            (state.tx.take(), state.join.take())
+        };
+
+        let (ack_tx, ack_rx) = std::sync::mpsc::channel::<Result<(), String>>();
+        let (mut outcome, safe_to_join): (Result<(), String>, bool) = match tx {
+            Some(tx) => match tx.send(WriterCmd::Shutdown(ack_tx)) {
+                Ok(()) => match ack_rx.recv_timeout(timeout) {
+                    Ok(ack) => (ack, true),
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => (
+                        Err(format!(
+                            "journal shutdown timed out after {timeout:?}; queued entries may not be durable"
+                        )),
+                        false,
+                    ),
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => (
+                        Err("journal writer exited without acknowledging shutdown".to_string()),
+                        true,
+                    ),
+                },
+                Err(_) => (
+                    Err("journal writer channel closed before shutdown".to_string()),
+                    true,
+                ),
+            },
+            None => (
+                Err("journal writer sender missing before shutdown".to_string()),
+                false,
+            ),
+        };
+
+        if safe_to_join {
+            outcome = if let Some(join) = join {
+                match join.join() {
+                    Ok(()) => outcome,
+                    Err(_) => Err("journal writer thread panicked".to_string()),
+                }
+            } else {
+                Err("journal writer join handle missing".to_string())
+            };
+        }
+
+        writer.lock().shutdown = Some(ShutdownState::Done(outcome.clone()));
+        outcome.map_err(anyhow::Error::msg)
+    }
+}
+
+pub(crate) enum WriterCmd {
+    Line(String),
+    Shutdown(std::sync::mpsc::Sender<Result<(), String>>),
+}
+
+struct WriterState {
+    tx: Option<mpsc::UnboundedSender<WriterCmd>>,
+    join: Option<std::thread::JoinHandle<()>>,
+    shutdown: Option<ShutdownState>,
+}
+
+#[derive(Clone)]
+enum ShutdownState {
+    InProgress,
+    Done(Result<(), String>),
+}
+
+fn note_write_error(first_error: &mut Option<String>, e: std::io::Error) {
+    log::warn!("journal write failed (continuing): {e}");
+    if first_error.is_none() {
+        *first_error = Some(e.to_string());
+    }
+}
+
+fn finish_writer(
+    file: &mut BufWriter<std::fs::File>,
+    first_error: Option<String>,
+    ack: std::sync::mpsc::Sender<Result<(), String>>,
+) {
+    let flush_result = file
+        .flush()
+        .map_err(|e| format!("journal final flush failed: {e}"));
+    let outcome = match first_error {
+        Some(e) => Err(format!("earlier journal write failed: {e}")),
+        None => flush_result,
+    };
+    let _ = ack.send(outcome);
+    log::debug!("journal writer thread exit (shutdown)");
+}
+
+fn spawn_writer(
+    mut rx: mpsc::UnboundedReceiver<WriterCmd>,
+    file: std::fs::File,
+) -> std::io::Result<std::thread::JoinHandle<()>> {
+    std::thread::Builder::new()
+        .name("journal-writer".into())
+        .spawn(move || {
+            // BufWriter so a burst of events collapses into ONE write syscall
+            // instead of one-per-line (audit P4). We flush after draining each
+            // batch (below), so durability matches the old unbuffered writer:
+            // no line ever sits unflushed while the thread is parked on recv.
+            let mut file = BufWriter::new(file);
+            let mut first_error: Option<String> = None;
+
+            loop {
+                match rx.blocking_recv() {
+                    Some(WriterCmd::Line(line)) => {
+                        if let Err(e) = writeln!(file, "{line}") {
+                            note_write_error(&mut first_error, e);
+                        }
+                        // Drain queued commands into the same flush batch.
+                        loop {
+                            match rx.try_recv() {
+                                Ok(WriterCmd::Line(line)) => {
+                                    if let Err(e) = writeln!(file, "{line}") {
+                                        note_write_error(&mut first_error, e);
+                                    }
+                                }
+                                Ok(WriterCmd::Shutdown(ack)) => {
+                                    finish_writer(&mut file, first_error, ack);
+                                    return;
+                                }
+                                Err(_) => break,
+                            }
+                        }
+                        if let Err(e) = file.flush() {
+                            note_write_error(&mut first_error, e);
+                        }
+                    }
+                    Some(WriterCmd::Shutdown(ack)) => {
+                        finish_writer(&mut file, first_error, ack);
+                        return;
+                    }
+                    None => {
+                        let _ = file.flush();
+                        log::debug!("journal writer thread exit (channel closed)");
+                        return;
+                    }
+                }
+            }
+        })
 }
 
 /// Mutates `c` based on the kind of `event`. Pure function (excluding
@@ -836,6 +986,102 @@ mod tests {
         let j = Journal::default();
         j.write(&JournalEvent::SessionStop { unix_ms: 0 });
         assert!(j.current_path().is_none());
+    }
+
+    // ── C3: per-journal shutdown contract ──
+    // Exercise the real writer thread against a temp file (via the
+    // `spawn_writer` seam) so we never touch the user's `%APPDATA%` journals.
+
+    /// Open a real journal (writer thread + file) at an explicit path.
+    fn open_journal_at(path: &Path) -> Journal {
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .unwrap();
+        let (tx, rx) = mpsc::unbounded_channel::<WriterCmd>();
+        let join = spawn_writer(rx, file).unwrap();
+        Journal {
+            path: Some(Arc::new(path.to_path_buf())),
+            counters: Some(Arc::new(Mutex::new(SessionCounters::default()))),
+            writer: Some(Arc::new(Mutex::new(WriterState {
+                tx: Some(tx),
+                join: Some(join),
+                shutdown: None,
+            }))),
+        }
+    }
+
+    #[test]
+    fn shutdown_drains_burst_and_terminal_stop_durably() {
+        let tmp =
+            std::env::temp_dir().join(format!("overlay-journal-shutdown-{}.jsonl", now_unix_ms()));
+        let _ = std::fs::remove_file(&tmp);
+        let j = open_journal_at(&tmp);
+
+        // Queue a burst INCLUDING the terminal SessionStop, then shut down.
+        for i in 0..50u64 {
+            j.write(&JournalEvent::TranscriptLine {
+                unix_ms: u128::from(i),
+                source: "mic",
+                text: "line",
+                audio_ms: i,
+            });
+        }
+        j.write(&JournalEvent::SessionStop { unix_ms: 999 });
+
+        j.shutdown(Duration::from_secs(5))
+            .expect("shutdown must confirm durability");
+
+        // No sleep: a successful shutdown guarantees every queued line is on
+        // disk and the writer is joined.
+        let content = std::fs::read_to_string(&tmp).unwrap();
+        let lines: Vec<&str> = content.lines().collect();
+        assert_eq!(lines.len(), 51, "50 transcript + 1 stop, all durable");
+        assert!(lines[49].contains(r#""kind":"transcript_line""#));
+        assert!(
+            lines[50].contains(r#""kind":"session_stop""#),
+            "stop is last"
+        );
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn shutdown_is_idempotent_and_rejects_later_writes() {
+        let tmp =
+            std::env::temp_dir().join(format!("overlay-journal-idem-{}.jsonl", now_unix_ms()));
+        let _ = std::fs::remove_file(&tmp);
+        let j = open_journal_at(&tmp);
+        j.write(&JournalEvent::TranscriptLine {
+            unix_ms: 1,
+            source: "mic",
+            text: "before",
+            audio_ms: 1,
+        });
+        j.shutdown(Duration::from_secs(5)).unwrap();
+        let durable = std::fs::read_to_string(&tmp).unwrap();
+        assert_eq!(durable.lines().count(), 1, "the one pre-shutdown line");
+
+        // Repeat shutdown after success → no-op Ok (never a false Err, never a
+        // re-join hang).
+        j.shutdown(Duration::from_secs(5))
+            .expect("repeat shutdown after success is a no-op Ok");
+
+        // A write after shutdown is rejected: the sender is gone and the writer
+        // is joined, so it must NOT reach the file.
+        j.write(&JournalEvent::TranscriptLine {
+            unix_ms: 2,
+            source: "mic",
+            text: "after",
+            audio_ms: 2,
+        });
+        let after = std::fs::read_to_string(&tmp).unwrap();
+        assert_eq!(
+            after, durable,
+            "writes after shutdown must not mutate the journal"
+        );
+        assert!(!after.contains("after"));
+        let _ = std::fs::remove_file(&tmp);
     }
 
     #[tokio::test]

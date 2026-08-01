@@ -99,7 +99,7 @@ pub(crate) fn fire_f3_reask(
                     .saturating_add(out.cost_microcents_delta);
                 s.last_question = Some(out.display_question);
                 s.last_answer = Some(out.answer_trimmed);
-                (s.session_cost_microcents as f64) / 100_000_000.0
+                overlay_backend::ai::microcents_to_usd(s.session_cost_microcents)
             };
             events_c.emit("cost:update", serde_json::json!({ "session_usd": total }));
         }
@@ -145,7 +145,7 @@ pub(crate) fn fire_f6_manual_spawn(
                     .saturating_add(out.cost_microcents_delta);
                 s.last_question = Some(out.display_question);
                 s.last_answer = Some(out.answer_trimmed);
-                (s.session_cost_microcents as f64) / 100_000_000.0
+                overlay_backend::ai::microcents_to_usd(s.session_cost_microcents)
             };
             events_c.emit("cost:update", serde_json::json!({ "session_usd": total }));
         }
@@ -282,9 +282,10 @@ pub(crate) fn fire_f9_ask(
     tile.set_convo_id(convo_id);
     tile.set_followup_busy(true);
     wire_tile_drag(&tile);
+    // Plain text, no hourglass glyph (tofu on the skia font fallback).
     let placeholder = vec![MarkdownBlock {
         kind: markdown::kind::PARAGRAPH,
-        text: SharedString::from("⏳ Asking AI…"),
+        text: SharedString::from("Asking AI…"),
         lang: SharedString::from(""),
         marked: false,
     }];
@@ -440,29 +441,16 @@ pub(crate) fn fire_f9_ask(
             ),
         )
     };
-    // Audit (prompt-context): the F9 / typed-ask LLM prompt must carry the user's
-    // APPROVED memory + profile, the same as the auto/F6/re-ask paths —
-    // context_for_meeting folds the bounded memory block in (no-op when nothing
-    // is approved, so the request is byte-identical for users without memory).
-    // ТЗ 2026-07-06 (A) — a typed ✏ question selects the RELEVANT facts; a plain
-    // F9 (no explicit question) keeps the recency block.
-    let meeting_context =
-        overlay_backend::memory::context_for_meeting(&meeting_context, typed_question.as_deref());
     let current_micro = slint_replay::runtime_state::lock(slint_rt).session_cost_microcents;
-    if current_micro > 0 && cap_usd > 0.0 {
-        let usd = (current_micro as f64) / 100_000_000.0;
-        if usd >= cap_usd {
-            events.emit(
-                "cost:cap-hit",
-                serde_json::json!({
-                    "reason": format!(
-                        "over budget: ${usd:.4} spent ≥ ${cap_usd:.2} (Settings → Max cost per session)"
-                    ),
-                    "source": "live_ask",
-                    "blocking": false,
-                }),
-            );
-        }
+    if let Some(reason) = cost_cap_reason(cap_usd, current_micro) {
+        events.emit(
+            "cost:cap-hit",
+            serde_json::json!({
+                "reason": reason,
+                "source": "live_ask",
+                "blocking": false,
+            }),
+        );
     }
 
     let (transcript_lines, screenshot) = {
@@ -482,71 +470,13 @@ pub(crate) fn fire_f9_ask(
     } else {
         screenshot
     };
+    let attached_screenshot = screenshot.is_some();
 
-    // V0.8.3 — a typed "✏ Написать" question is answered DIRECTLY (the typed
-    // text IS the question; no live-transcript / screenshot noise). A normal F9
-    // ask is built from the live transcript as before.
-    let messages = match typed_question.as_deref() {
-        Some(q) => ai::build_request(&meeting_context, &response_language, &[], None, Some(q)),
-        None => ai::build_request(
-            &meeting_context,
-            &response_language,
-            &transcript_lines,
-            screenshot.as_deref(),
-            None,
-        ),
-    };
-
-    // Phase E6 v45 — record the sent messages in the streaming slot so
-    // AiEvent::Done can fold this turn into the tile's conversation for
-    // follow-ups. Done before the stream task spawns → no race.
-    {
-        let mut slot = match bridge.current_streaming.lock() {
-            Ok(g) => g,
-            Err(p) => p.into_inner(),
-        };
-        if let Some(s) = slot.as_mut() {
-            s.request_messages = messages.clone();
-        }
-    }
-
-    let (journal_for_request, journal_for_loop, health_for_stream) = {
+    let (journal_for_loop, health_for_stream) = {
         let s = slint_replay::runtime_state::lock(slint_rt);
-        let j = s.journal.clone();
-        (j.clone(), j, s.health.clone())
+        (s.journal.clone(), s.health.clone())
     };
-    let sys_full = messages
-        .first()
-        .and_then(|m| match &m.content {
-            ai::MessageContent::Text(t) => Some(t.clone()),
-            _ => None,
-        })
-        .unwrap_or_default();
-    let usr_full = match messages.get(1).map(|m| &m.content) {
-        Some(ai::MessageContent::Text(t)) => t.clone(),
-        Some(ai::MessageContent::Parts(parts)) => parts
-            .iter()
-            .find_map(|p| match p {
-                ai::ContentPart::Text { text } => Some(text.clone()),
-                _ => None,
-            })
-            .unwrap_or_default(),
-        None => String::new(),
-    };
-    let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
-    if let Some(j) = journal_for_request.as_ref() {
-        j.write(&journal::JournalEvent::AiRequest {
-            unix_ms: journal::now_unix_ms(),
-            purpose: if is_text { "text_ask" } else { "live_ask" },
-            model: &model,
-            system_prompt: &sys_full,
-            user_prompt: &usr_full,
-            attached_screenshot: screenshot.is_some(),
-            input_tokens_est,
-        });
-    }
-
-    // ===== 4. Cancel in-flight + build cost_apply closure =====
+    // ===== 4. Cancel in-flight (UI thread, immediate — same as before) =====
     {
         let mut s = slint_replay::runtime_state::lock(slint_rt);
         if let Some(h) = s.ai_task.take() {
@@ -554,45 +484,123 @@ pub(crate) fn fire_f9_ask(
         }
     }
 
-    let rt_for_cost = slint_rt.clone();
-    let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
-        // Local inference is free — don't bill it (and don't trip the cap).
-        let micro = if is_local { 0 } else { micro };
-        let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
-        s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
-        (s.session_cost_microcents as f64) / 100_000_000.0
-    });
-
-    let t0 = std::time::Instant::now();
-    let events_for_task = gated_events(bridge, events.clone(), generation);
-    // CRITICAL: `ai::stream_chat` internally calls `tokio::spawn`,
-    // which panics with "there is no reactor running" when called
-    // from a non-tokio thread (Slint UI / hotkey poll Timer closure).
-    // The same trap is documented in src-tauri/src/runtime.rs:1804
-    // ("must be tauri::async_runtime::spawn, NOT tokio::spawn").
-    // We move stream_chat INSIDE the rt_handle.spawn future so the
-    // tokio runtime context exists when it runs.
-    let task = rt_handle.spawn(async move {
-        let ai_rx = ai::stream_chat(
-            base_url,
-            bearer,
-            model.clone(),
-            messages,
-            AI_STREAM_MAX_TOKENS,
+    // `context_for_meeting` is a blocking SQLite read, so the prompt is built on a
+    // worker and the slot-fill + journal + stream spawn return to the event loop.
+    // The generation guard drops this ask if a newer one superseded it mid-read.
+    // ТЗ 2026-07-06 (A) — a typed ✏ question selects the RELEVANT facts; a plain
+    // F9 keeps the recency block.
+    let bridge_for_work = bridge.clone();
+    let events_for_work = events.clone();
+    let slint_rt_for_work = slint_rt.clone();
+    let rt_handle_for_work = rt_handle.clone();
+    std::thread::spawn(move || {
+        // BLOCKING — off the event loop: fold in approved memory + build prompt.
+        let meeting_context = overlay_backend::memory::context_for_meeting(
+            &meeting_context,
+            typed_question.as_deref(),
         );
-        overlay_backend::runtime::ask_stream_loop(
-            events_for_task,
-            ai_rx,
-            model,
-            is_local,
-            sys_full,
-            usr_full,
-            journal_for_loop,
-            health_for_stream,
-            t0,
-            cost_apply,
-        )
-        .await;
+        // V0.8.3 — a typed "✏ Написать" question is answered DIRECTLY (the typed
+        // text IS the question; no live-transcript / screenshot noise). A normal
+        // F9 ask is built from the live transcript as before.
+        let messages = match typed_question.as_deref() {
+            Some(q) => ai::build_request(&meeting_context, &response_language, &[], None, Some(q)),
+            None => ai::build_request(
+                &meeting_context,
+                &response_language,
+                &transcript_lines,
+                screenshot.as_deref(),
+                None,
+            ),
+        };
+        let sys_full = messages
+            .first()
+            .and_then(|m| match &m.content {
+                ai::MessageContent::Text(t) => Some(t.clone()),
+                _ => None,
+            })
+            .unwrap_or_default();
+        let usr_full = match messages.get(1).map(|m| &m.content) {
+            Some(ai::MessageContent::Text(t)) => t.clone(),
+            Some(ai::MessageContent::Parts(parts)) => parts
+                .iter()
+                .find_map(|p| match p {
+                    ai::ContentPart::Text { text } => Some(text.clone()),
+                    _ => None,
+                })
+                .unwrap_or_default(),
+            None => String::new(),
+        };
+        let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
+        // The request and response must carry the same journal purpose.
+        let purpose = if is_text { "text_ask" } else { "live_ask" };
+        let _ = slint::invoke_from_event_loop(move || {
+            // A newer ask may have superseded this one while the worker ran; the
+            // generation check skips the fill/stream so the latest ask wins (the
+            // same invariant gated_events enforces on the stream's emits).
+            if bridge_for_work.stream_gen.load(Ordering::SeqCst) != generation {
+                return;
+            }
+            // Phase E6 v45 — record the sent messages in the streaming slot so
+            // AiEvent::Done can fold this turn into the tile's conversation for
+            // follow-ups. Filled before the stream task spawns → no race.
+            {
+                let mut slot = match bridge_for_work.current_streaming.lock() {
+                    Ok(g) => g,
+                    Err(p) => p.into_inner(),
+                };
+                if let Some(s) = slot.as_mut() {
+                    s.request_messages = messages.clone();
+                }
+            }
+            if let Some(j) = journal_for_loop.as_ref() {
+                j.write(&journal::JournalEvent::AiRequest {
+                    unix_ms: journal::now_unix_ms(),
+                    purpose,
+                    model: &model,
+                    system_prompt: &sys_full,
+                    user_prompt: &usr_full,
+                    attached_screenshot,
+                    input_tokens_est,
+                });
+            }
+            let rt_for_cost = slint_rt_for_work.clone();
+            let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
+                // Local inference is free — don't bill it (and don't trip the cap).
+                let micro = if is_local { 0 } else { micro };
+                let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
+                s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
+                overlay_backend::ai::microcents_to_usd(s.session_cost_microcents)
+            });
+            let t0 = std::time::Instant::now();
+            let events_for_task =
+                gated_events(&bridge_for_work, events_for_work.clone(), generation);
+            // CRITICAL: `ai::stream_chat` internally calls `tokio::spawn`, which
+            // panics with "there is no reactor running" off a tokio thread; the
+            // rt_handle.spawn future provides the runtime context.
+            let task = rt_handle_for_work.spawn(async move {
+                let ai_rx = ai::stream_chat(
+                    base_url,
+                    bearer,
+                    model.clone(),
+                    messages,
+                    AI_STREAM_MAX_TOKENS,
+                );
+                overlay_backend::runtime::ask_stream_loop(
+                    events_for_task,
+                    ai_rx,
+                    model,
+                    purpose,
+                    is_local,
+                    sys_full,
+                    usr_full,
+                    journal_for_loop,
+                    health_for_stream,
+                    t0,
+                    cost_apply,
+                )
+                .await;
+            });
+            slint_replay::runtime_state::lock(&slint_rt_for_work).ai_task = Some(task);
+        });
     });
-    slint_replay::runtime_state::lock(slint_rt).ai_task = Some(task);
 }

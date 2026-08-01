@@ -446,15 +446,18 @@ fn spawn_text_tile(
     tiles.borrow_mut().push(tile);
     refresh_open_tiles(weak_overlay, tiles);
 
-    // Auto-start the read (mirror wire_speak's click handler).
-    reset_pause();
-    mark_speaking(convo_id);
-    overlay_backend::tts::speak(text);
+    // Auto-start the read (mirror wire_speak's click handler). Mark the tile as
+    // speaking ONLY when playback is accepted — a missing sidecar/voice must not
+    // show as speaking nor falsely suppress STT (F2).
+    if overlay_backend::tts::speak(text) {
+        reset_pause();
+        mark_speaking(convo_id);
+    }
 }
 
 /// Fill an already-spawned OCR placeholder tile with the recognized text and
 /// read it aloud — the Ctrl+F8 / Shift+Alt+2 Tesseract path. The capture flow
-/// (`launch_vision_for_bgra`) creates the tile with a "⏳ Распознаю…"
+/// (`launch_vision_for_bgra`) creates the tile with a "Распознаю текст…"
 /// placeholder, runs Tesseract off-thread, then marshals the result here on the
 /// Slint UI thread. Mirrors the tail of `spawn_text_tile` (seed conversation →
 /// auto-read), but the tile already exists.
@@ -496,10 +499,13 @@ pub(crate) fn fill_ocr_tile(
             rendered: trimmed.to_string(),
         },
     );
-    // Auto-read (mirror spawn_text_tile's tail).
-    reset_pause();
-    mark_speaking(convo_id);
-    overlay_backend::tts::speak(trimmed);
+    // Auto-read (mirror spawn_text_tile's tail). Mark the tile as speaking ONLY
+    // when playback is accepted — a missing sidecar/voice must not show as
+    // speaking nor falsely suppress STT (F2).
+    if overlay_backend::tts::speak(trimmed) {
+        reset_pause();
+        mark_speaking(convo_id);
+    }
 }
 
 /// Parse markdown source into the Slint `MarkdownBlock` rows a tile body
@@ -1001,6 +1007,10 @@ fn main() -> Result<(), slint::PlatformError> {
         last_transcript_push: std::sync::Mutex::new(
             std::time::Instant::now() - std::time::Duration::from_secs(1),
         ),
+        // Backdate so the first cap hit is visible immediately.
+        last_cap_notice: std::sync::Mutex::new(
+            std::time::Instant::now() - std::time::Duration::from_secs(20),
+        ),
     });
     let events: Arc<dyn RuntimeEvents> = Arc::new(SlintEvents::new(bridge.clone()));
 
@@ -1405,7 +1415,11 @@ fn main() -> Result<(), slint::PlatformError> {
             }
         });
     }
-    overlay.set_stealth_active(cfg.read().stealth_enabled);
+    // I1 — the 🎯 chip follows the VERIFIED stealth state, lit by the bar
+    // realization reveal (apply_overlay_hwnd → apply_bar_stealth) once the
+    // WDA exclusion is applied AND read back. Never seeded from config intent
+    // alone, so a failed exclusion can't present a false success.
+    overlay.set_stealth_active(false);
     overlay.set_timer_label(SharedString::from("00:00"));
     // v0.13.1 — the mic is LIVE (not muted) by default; the chip shows it lit.
     overlay.set_mic_active(true);
@@ -1418,7 +1432,7 @@ fn main() -> Result<(), slint::PlatformError> {
         st.mic_active = true;
     }
 
-    apply_overlay_hwnd(&overlay);
+    apply_overlay_hwnd(&overlay, &state);
 
     // ===== Mic chip = MUTE toggle (v0.13.1) =====
     //
@@ -1942,13 +1956,6 @@ fn main() -> Result<(), slint::PlatformError> {
                     let c = cfg_for_poll.read();
                     (c.meeting_context.clone(), c.response_language.clone())
                 };
-                // Audit (prompt-context): seed the completed-tile history with the
-                // SAME effective context (profile + approved memory) the live answer
-                // paths use, so a follow-up/regenerate matches the original request.
-                let meeting_context = overlay_backend::memory::context_for_meeting(
-                    &meeting_context,
-                    Some(req.spec.question.as_str()),
-                );
                 let question = req.spec.question.clone();
                 // v0.12.2 — Summary tiles seed their dialog with the REAL recap
                 // payload ([summary-prompt, transcript]) instead of the bare title,
@@ -1964,7 +1971,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 // leave them OFF for that (rare) tile below. Displayed answer is
                 // unaffected (already computed). Stays true for every non-Summary kind.
                 let mut summary_seed_has_transcript = true;
-                let mut messages = if matches!(req.kind, TileKind::Summary) {
+                if matches!(req.kind, TileKind::Summary) {
                     let (is_local, transcript) = {
                         let is_local = cfg_for_poll.read().ai_endpoint(true).is_local;
                         let tx = slint_replay::runtime_state::lock(&slint_rt_for_poll)
@@ -2018,33 +2025,65 @@ fn main() -> Result<(), slint::PlatformError> {
                     summary_seed_has_transcript = !formatted.trim().is_empty();
                     let memory_ref =
                         overlay_backend::memory::summary_reference_for_transcript(&formatted);
-                    overlay_backend::runtime::build_summary_seed_from_formatted(
+                    let mut messages = overlay_backend::runtime::build_summary_seed_from_formatted(
                         &formatted,
                         is_ru,
                         is_local,
                         memory_ref.as_deref(),
-                    )
+                    );
+                    messages.push(ai::ChatMessage {
+                        role: "assistant".into(),
+                        content: ai::MessageContent::Text(req.spec.answer.clone()),
+                    });
+                    // FIX #8 — bounded insert (caps + half-evicts the map).
+                    bridge_for_poll.store_conversation(
+                        convo_id,
+                        ConvoState {
+                            messages,
+                            rendered: req.spec.answer.clone(),
+                        },
+                    );
                 } else {
-                    ai::build_request(
-                        &meeting_context,
-                        &response_language,
-                        &[],
-                        None,
-                        Some(&question),
-                    )
-                };
-                messages.push(ai::ChatMessage {
-                    role: "assistant".into(),
-                    content: ai::MessageContent::Text(req.spec.answer.clone()),
-                });
-                // FIX #8 — bounded insert (caps + half-evicts the map).
-                bridge_for_poll.store_conversation(
-                    convo_id,
-                    ConvoState {
-                        messages,
-                        rendered: req.spec.answer.clone(),
-                    },
-                );
+                    // Seed the completed-tile history with the SAME effective context
+                    // (profile + approved memory) the live answer paths use, so a
+                    // follow-up/regenerate matches the original request. `context_for_meeting`
+                    // is a blocking SQLite read, so build the seed off the event loop.
+                    // Mark the tile busy until the seed lands — an immediate follow-up would
+                    // otherwise read a not-yet-stored conversation and silently no-op.
+                    tile.set_followup_busy(true);
+                    let bridge_seed = bridge_for_poll.clone();
+                    let weak_seed = tile.as_weak();
+                    let rendered = req.spec.answer.clone();
+                    std::thread::spawn(move || {
+                        let meeting_context = overlay_backend::memory::context_for_meeting(
+                            &meeting_context,
+                            Some(question.as_str()),
+                        );
+                        let mut messages = ai::build_request(
+                            &meeting_context,
+                            &response_language,
+                            &[],
+                            None,
+                            Some(&question),
+                        );
+                        messages.push(ai::ChatMessage {
+                            role: "assistant".into(),
+                            content: ai::MessageContent::Text(rendered.clone()),
+                        });
+                        let _ = slint::invoke_from_event_loop(move || {
+                            // Seed + un-busy ONLY if that exact tile still exists — a tile
+                            // closed mid-build must not get a late, orphaned conversation.
+                            // FIX #8 — bounded insert (caps + half-evicts the map).
+                            if let Some(t) = weak_seed.upgrade() {
+                                bridge_seed.store_conversation(
+                                    convo_id,
+                                    ConvoState { messages, rendered },
+                                );
+                                t.set_followup_busy(false);
+                            }
+                        });
+                    });
+                }
                 // V0.8.1 — per-tile live route (sticky-cloud after 🧠).
                 let live = live_route(AskRoute::Text);
                 {
@@ -2289,13 +2328,26 @@ fn main() -> Result<(), slint::PlatformError> {
                 if let Some(w) = weak.upgrade() {
                     match grab_hwnd(w.window()) {
                         Ok(hwnd) => {
-                            let s = set_stealth(hwnd, true); // WDA_EXCLUDEFROMCAPTURE
-                            let t = slint_replay::win32::set_skip_taskbar(hwnd, true);
+                            // WDA_EXCLUDEFROMCAPTURE — apply + readback (I1).
+                            let s = set_stealth(hwnd, true);
+                            let t = set_skip_taskbar(hwnd, true);
                             eprintln!(
                                 "[overlay-host] capture pre-stealth: stealth_ok={} taskbar_ok={}",
                                 s.is_ok(),
                                 t.is_ok()
                             );
+                            // Detail for the log; a pre-create miss also self-heals:
+                            // the F8 show path re-applies + verifies on EVERY show (I4).
+                            if let Err(e) = s {
+                                eprintln!(
+                                    "[overlay-host] capture pre-stealth: stealth FAILED: {e}"
+                                );
+                            }
+                            if let Err(e) = t {
+                                eprintln!(
+                                    "[overlay-host] capture pre-stealth: skip-taskbar FAILED: {e}"
+                                );
+                            }
                         }
                         Err(e) => {
                             eprintln!("[overlay-host] capture pre-stealth: grab_hwnd FAILED: {e}")
@@ -2621,13 +2673,34 @@ fn main() -> Result<(), slint::PlatformError> {
         let weak = overlay.as_weak();
         let cfg_p = cfg.clone();
         let tx = ptt_pcm_tx.clone();
+        let state_busy = state.clone();
         overlay.on_ptt_mic_pressed(move || {
             if ptt_state.borrow().is_some() {
                 return; // one PTT at a time
             }
             // M2 — single-mic guard (shared with voice follow-up + dictation).
             let Some(mic_guard) = try_acquire_mic() else {
-                return; // mic held by a tile voice follow-up / dictation
+                // Suflyor E1 — mic held by a tile voice follow-up / dictation.
+                // Used to return SILENTLY; now flash the same generic notice
+                // the sibling mic consumers show (no device names) on the bar's
+                // status pill, reverting after STATUS_REVERT_SECS exactly like
+                // the sys-probe result does.
+                if let Some(o) = weak.upgrade() {
+                    o.set_status_text(SharedString::from("микрофон занят"));
+                    o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x9b, 0x2b));
+                }
+                let weak_revert = weak.clone();
+                let state_revert = state_busy.clone();
+                slint::Timer::single_shot(Duration::from_secs(STATUS_REVERT_SECS), move || {
+                    if let Some(o) = weak_revert.upgrade() {
+                        refresh_status(
+                            &o,
+                            get_mic_active(&state_revert),
+                            get_sys_active(&state_revert),
+                        );
+                    }
+                });
+                return;
             };
             let stop = Arc::new(AtomicBool::new(false));
             *ptt_state.borrow_mut() = Some(PttRec {
@@ -2860,15 +2933,13 @@ fn main() -> Result<(), slint::PlatformError> {
                     eprintln!("[overlay-host] stealth save failed (will not persist across restart): {e:#}");
                 }
             }
-            // Apply to overlay + light the bar 🎯 chip. The bar stays inline (NOT
-            // in the registry): it also drops its taskbar button under stealth so
-            // a screen-share viewer doesn't spot the app in the taskbar.
+            // Apply to the bar through the ONE shared path (I1): WDA apply +
+            // readback decide the EFFECTIVE state, and the 🎯 chip + status pill
+            // follow the readback — never the intent alone. On a forced/real
+            // failure the chip stays dark + the pill reads "stealth unavailable"
+            // while the config intent above is preserved for the next retry.
             if let Some(o) = weak.upgrade() {
-                o.set_stealth_active(new_stealth);
-                if let Ok(hwnd) = grab_hwnd(o.window()) {
-                    let _ = set_stealth(hwnd, new_stealth);
-                    let _ = set_skip_taskbar(hwnd, new_stealth);
-                }
+                apply_bar_stealth(&o, &s, new_stealth);
             }
             // Every other open window through the single registry path.
             registry_stealth.apply_stealth(new_stealth);
@@ -2997,6 +3068,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 st.tiles_spawned
             };
             overlay.set_tiles_spawned(seq as i32);
+            let display_seq = TILE_DISPLAY_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
             // Synchronous id — the abort-registry key (the HWND isn't realized
             // yet at this point, so keying on it lost the registration).
             let tile_id = next_tile_id();
@@ -3010,10 +3082,10 @@ fn main() -> Result<(), slint::PlatformError> {
             };
 
             // "+ тайл" — real AI ask about the recent transcript. The tile is
-            // shown IMMEDIATELY (below) with a ⏳ placeholder, then filled when
-            // the resolved AI endpoint answers — so the button always gives
-            // instant feedback even if the model is slow/down. User: "+ тайл
-            // не прожимается".
+            // shown IMMEDIATELY (below) with a plain-text placeholder, then
+            // filled when the resolved AI endpoint answers — so the button
+            // always gives instant feedback even if the model is slow/down.
+            // User: "+ тайл не прожимается".
             let recent_tx = {
                 let st = slint_replay::runtime_state::lock(&slint_rt_c);
                 select_recent_labeled(&st.transcript, 8).join("\n")
@@ -3024,25 +3096,26 @@ fn main() -> Result<(), slint::PlatformError> {
             } else {
                 String::new()
             };
-            let heading = if has_tx {
-                format!("Вопрос по встрече #{seq}")
-            } else {
-                format!("Тайл #{seq}")
-            };
-            tile.set_sequence(seq as i32);
+            // The visible number is owned by the tile UI ALONE (tile.slint
+            // prepends #<sequence>); the title carries none — the old
+            // "Вопрос по встрече #3" rendered doubled: "#3  Вопрос по встрече #3".
+            let heading = manual_tile_heading(has_tx);
+            tile.set_sequence(display_seq as i32);
             tile.set_tile_id(tile_id);
-            tile.set_tile_title(SharedString::from(heading.clone()));
+            tile.set_tile_title(SharedString::from(heading));
             tile.set_source_label(SharedString::from("ai · asking…"));
             wire_tile_drag(&tile);
 
-            // Initial body — shown instantly: the AI-in-flight hint, or the
-            // no-transcript hint when there's nothing to ask yet.
+            // Initial body — shown instantly: the AI-in-flight hint, or a
+            // plain, ACTIONABLE empty-state hint when there's nothing to ask
+            // yet. No hourglass glyph — rare Unicode renders as a tofu square
+            // on the skia font fallback (project no-tofu rule).
             let placeholder = vec![MarkdownBlock {
                 kind: markdown::kind::PARAGRAPH,
                 text: SharedString::from(if has_tx {
-                    "⏳ Спрашиваю AI…"
+                    "Спрашиваю AI…"
                 } else {
-                    "Нет транскрипта. Начните сессию (захват аудио) — когда появятся реплики, «+ тайл» спросит AI по последним из них."
+                    "Транскрипт пока пуст. Нажмите старт на баре (или удерживайте «спросить») — AI ответит по последним репликам."
                 }),
                 lang: SharedString::from(""),
                 marked: false,
@@ -3130,7 +3203,7 @@ fn main() -> Result<(), slint::PlatformError> {
             }
 
             let question_for_task = question.clone();
-            let heading_for_task = heading.clone();
+            let heading_for_task = heading;
             let slint_rt_cost = slint_rt_c.clone();
             let tile_spawn_handle = rt.spawn(async move {
                 let messages = vec![ai::ChatMessage {
@@ -3161,7 +3234,7 @@ fn main() -> Result<(), slint::PlatformError> {
                             } else {
                                 ai::cost_microcents(&model, usage.input, usage.output)
                             };
-                            let cost_usd = cost_micro as f64 / 100_000_000.0;
+                            let cost_usd = ai::microcents_to_usd(cost_micro);
                             let md = format!("# {heading_for_task}\n\n{response}\n");
                             let blocks: Vec<MarkdownBlock> = markdown::parse(&md)
                                 .into_iter()
@@ -3684,6 +3757,8 @@ fn main() -> Result<(), slint::PlatformError> {
     }
 
     let result = overlay.run();
+    // All event-loop exits share the normal session stop path.
+    let _ = slint_session::stop_session(slint_rt.clone(), &cfg);
     // E10.4 — kill any local-AI servers the in-app installer launched so they
     // do not outlive the app (best-effort; clean-exit path only).
     let local_ai_servers = {
@@ -3833,77 +3908,115 @@ fn recenter_when_sized(weak: slint::Weak<OverlayBarWindow>, target_w_logical: f3
     });
 }
 
-fn apply_overlay_hwnd(overlay: &OverlayBarWindow) {
-    // Поток C (stealth bar-flash fix) — when stealth is on, park the bar OFF the
-    // virtual desktop synchronously NOW (this fn runs before overlay.run(), which
-    // composites the window). Without this the bar was shown at winit's default
-    // position and only stealthed ~200 ms later by the timer below, so a screen-
-    // share saw a flash of the bar on every cold start — and would on every
-    // emergency restart (Поток B). The timer applies WDA *before* the pin moves
-    // the bar on-screen, so the first on-screen frame is already capture-excluded.
-    // Mirrors present_tile_window for tiles.
-    if global_stealth() {
-        overlay
-            .window()
-            .set_position(slint::PhysicalPosition::new(-32000, -32000));
-    }
-    let weak = overlay.as_weak();
-    Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
-        let Some(o) = weak.upgrade() else { return };
-        match grab_hwnd(o.window()) {
-            Ok(hwnd) => {
-                match make_transparent_overlay(hwnd) {
-                    Ok(()) => eprintln!("[overlay-host] overlay transparency wired"),
-                    Err(e) => eprintln!("[overlay-host] overlay transparency failed: {e}"),
-                }
-                // Surface WHY transparency may look broken: per-pixel alpha needs
-                // DWM composition. If it's off (RDP / a VM without a GPU / very old
-                // driver) the overlay renders OPAQUE no matter the wiring. This is
-                // NOT the Windows "Transparency effects" toggle. Logged so a
-                // tester's "transparency doesn't work" report is diagnosable.
-                if slint_replay::win32::composition_enabled() {
-                    eprintln!(
-                        "[overlay-host] DWM composition: ON (overlay transparency available)"
-                    );
-                } else {
-                    eprintln!("[overlay-host] DWM composition: OFF — overlay renders OPAQUE (no per-pixel alpha). Cause is the environment (RDP/remote, a VM without a GPU, or an outdated GPU driver), not the app. NB: NOT the Windows 'Transparency effects' toggle.");
-                }
-                // #E10.2 — apply persisted stealth to the bar on launch.
-                if global_stealth() {
-                    let _ = set_stealth(hwnd, true);
-                    let _ = set_skip_taskbar(hwnd, true);
-                }
-                // #127 — pin the bar to the PRIMARY monitor. The bar has no
-                // position logic of its own; Slint/winit's default placement
-                // can drop it onto the user's PORTRAIT secondary (at negative
-                // X) or straddle two displays. Centre it near the top of
-                // primary. One-shot at launch — the user can still drag it
-                // afterward (the logo is a drag handle).
-                // Поток C — the pin MUST always land the bar on-screen: under
-                // stealth we parked it at (-32000) above, so any path that skips
-                // the move would strand the bar off the desktop (the bar is the
-                // whole control surface — the user would be locked out). Compute
-                // the target with safe fallbacks (primary monitor → its origin →
-                // (60, 24)) and ALWAYS move.
-                let primary = enum_monitors().into_iter().find(|m| m.is_primary);
-                let bar_w = get_window_rect(hwnd).map(|(_, _, w, _)| w).unwrap_or(0);
-                let (x, y) = match primary {
-                    Some(p) => (p.left + ((p.width() - bar_w) / 2).max(0), p.top + 24),
-                    None => (60, 24),
-                };
-                match move_window_pos_only(hwnd, x, y) {
-                    Ok(()) => eprintln!("[overlay-host] bar pinned at ({x}, {y})"),
-                    Err(e) => {
-                        // Last resort: even the pin failed — try a hard (60,24) so
-                        // a stealth-parked bar can't stay invisible at (-32000).
-                        eprintln!("[overlay-host] bar pin failed: {e}; retry at (60,24)");
-                        let _ = move_window_pos_only(hwnd, 60, 24);
+fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_replay::app_state::SharedState) {
+    // Поток C (stealth bar-flash fix) + I3: park the bar OFF the virtual desktop
+    // synchronously NOW (this fn runs before overlay.run(), which composites the
+    // window), ALWAYS — mirrors present_window_stealth_aware. Without parking the
+    // bar was shown at winit's default position and only decorated/stealthed later,
+    // so a screen-share saw a flash of the bar on every cold start — and would on
+    // every emergency restart (Поток B). The reveal attempt wires transparency +
+    // verified WDA *before* the pin moves the bar on-screen, so the first on-screen
+    // frame is already complete + capture-excluded. Parking unconditionally also
+    // closes the bare-outline flash for stealth-off starts (same reasoning as the
+    // aux-window helper).
+    overlay
+        .window()
+        .set_position(slint::PhysicalPosition::new(-32000, -32000));
+    let st = state.clone();
+    let attempt: Rc<dyn Fn(&OverlayBarWindow) -> bool> = Rc::new(move |o: &OverlayBarWindow| {
+        let Ok(hwnd) = grab_hwnd(o.window()) else {
+            return false;
+        };
+        match make_transparent_overlay(hwnd) {
+            Ok(()) => eprintln!("[overlay-host] overlay transparency wired"),
+            Err(e) => eprintln!("[overlay-host] overlay transparency failed: {e}"),
+        }
+        // Surface WHY transparency may look broken: per-pixel alpha needs
+        // DWM composition. If it's off (RDP / a VM without a GPU / very old
+        // driver) the overlay renders OPAQUE no matter the wiring. This is
+        // NOT the Windows "Transparency effects" toggle. Logged so a
+        // tester's "transparency doesn't work" report is diagnosable.
+        if slint_replay::win32::composition_enabled() {
+            eprintln!("[overlay-host] DWM composition: ON (overlay transparency available)");
+        } else {
+            eprintln!("[overlay-host] DWM composition: OFF — overlay renders OPAQUE (no per-pixel alpha). Cause is the environment (RDP/remote, a VM without a GPU, or an outdated GPU driver), not the app. NB: NOT the Windows 'Transparency effects' toggle.");
+        }
+        // #E10.2 + I1 — apply persisted stealth to the bar with a readback;
+        // the 🎯 chip + effective global follow the VERIFIED outcome (a failed
+        // exclusion leaves the chip dark + surfaces "stealth unavailable").
+        apply_bar_stealth(o, &st, global_stealth());
+        // #127 — pin the bar to the PRIMARY monitor. The bar has no
+        // position logic of its own; Slint/winit's default placement
+        // can drop it onto the user's PORTRAIT secondary (at negative
+        // X) or straddle two displays. Centre it near the top of
+        // primary. One-shot at launch — the user can still drag it
+        // afterward (the logo is a drag handle).
+        // Поток C — the pin MUST always land the bar on-screen: we parked it
+        // at (-32000) above, so any path that skips the move would strand the
+        // bar off the desktop (the bar is the whole control surface — the user
+        // would be locked out). Compute the target with safe fallbacks
+        // (primary monitor → its origin → (60, 24)) and ALWAYS move.
+        let primary = enum_monitors().into_iter().find(|m| m.is_primary);
+        let bar_w = get_window_rect(hwnd).map(|(_, _, w, _)| w).unwrap_or(0);
+        let (x, y) = match primary {
+            Some(p) => (p.left + ((p.width() - bar_w) / 2).max(0), p.top + 24),
+            None => (60, 24),
+        };
+        // I3 — success means the bar actually landed on-screen. If BOTH the
+        // computed pin and the hard (60,24) retry fail, report the attempt as
+        // FAILED so realize_with_retries keeps retrying and eventually runs
+        // the Slint fallback below — a parked bar must never stay invisible
+        // at (-32000) behind a claimed success.
+        match move_window_pos_only(hwnd, x, y) {
+            Ok(()) => {
+                eprintln!("[overlay-host] bar pinned at ({x}, {y})");
+                true
+            }
+            Err(e) => {
+                // Last resort: even the pin failed — try a hard (60,24) so
+                // a parked bar can't stay invisible at (-32000).
+                eprintln!("[overlay-host] bar pin failed: {e}; retry at (60,24)");
+                match move_window_pos_only(hwnd, 60, 24) {
+                    Ok(()) => {
+                        eprintln!("[overlay-host] bar pinned at hard fallback (60, 24)");
+                        true
+                    }
+                    Err(e2) => {
+                        eprintln!(
+                            "[overlay-host] bar hard pin failed too: {e2}; reveal will retry"
+                        );
+                        false
                     }
                 }
             }
-            Err(e) => eprintln!("[overlay-host] overlay HWND grab failed: {e}"),
         }
     });
+    // I3 — last-ditch reveal when the HWND NEVER becomes grabbable: the bar is
+    // the whole control surface, so (unlike aux windows) it is brought on-screen
+    // via Slint's own positioning EVEN UNDER stealth — and stealth is reported
+    // UNAVAILABLE, because without an HWND the exclusion could not be applied or
+    // verified (I1: never present a false success). The user keeps control; the
+    // log + pill surface the failure.
+    let fallback: Rc<dyn Fn(&OverlayBarWindow)> = Rc::new(move |o: &OverlayBarWindow| {
+        set_global_stealth_effective(false);
+        o.set_stealth_active(false);
+        if global_stealth() {
+            surface_stealth_unavailable(o);
+        }
+        diag!(
+            "[overlay-host] bar HWND never realized after retries; revealing via Slint fallback \
+             (stealth NOT verified — reported unavailable)"
+        );
+        let primary = enum_monitors().into_iter().find(|m| m.is_primary);
+        let (x, y) = match primary {
+            Some(p) => (p.left + 60, p.top + 24),
+            None => (60, 24),
+        };
+        o.window().set_position(slint::PhysicalPosition::new(x, y));
+    });
+    // The SAME retry/fallback schedule as the aux windows (I3) — fast attempt,
+    // two conservative retries, then the fallback above. No private timer loop.
+    realize_with_retries(overlay, attempt, fallback);
 }
 
 /// Open the settings window. Reuses existing instance if open.
@@ -3959,6 +4072,38 @@ pub(crate) fn active_stack_label(c: &overlay_backend::config::Config) -> String 
         "mixed"
     };
     format!("{tag}: {stt} · {model}")
+}
+
+/// Title of a manually spawned "+ tile". The visible number is owned by the
+/// tile UI ALONE — `tile.slint` prepends `#<sequence>` to `tile-title` — so the
+/// title must carry NO `#N` of its own (the old `Вопрос по встрече #3` rendered
+/// doubled: `#3  Вопрос по встрече #3`). Every other spawn path (F9, PTT,
+/// vision, auto, read-only content tiles) already passes an unnumbered title.
+fn manual_tile_heading(has_transcript: bool) -> &'static str {
+    if has_transcript {
+        "Вопрос по встрече"
+    } else {
+        "Тайл"
+    }
+}
+
+#[cfg(test)]
+mod tile_heading_tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)] // test asserts
+    use super::manual_tile_heading;
+
+    /// Double-numbering guard: `tile.slint` prepends `#<sequence>`, so a title
+    /// carrying its own number (or digit) renders doubled in the tile header.
+    #[test]
+    fn manual_tile_heading_carries_no_number() {
+        for heading in [manual_tile_heading(true), manual_tile_heading(false)] {
+            assert!(!heading.contains('#'), "heading carries #: {heading:?}");
+            assert!(
+                !heading.chars().any(|c| c.is_ascii_digit()),
+                "heading carries a digit: {heading:?}"
+            );
+        }
+    }
 }
 
 #[cfg(test)]

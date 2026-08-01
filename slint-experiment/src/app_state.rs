@@ -186,7 +186,7 @@ pub fn format_timer(secs: u64) -> String {
 /// line) pass through unchanged.
 #[must_use]
 pub fn tile_title_line(s: &str) -> String {
-    s.split_whitespace().collect::<Vec<_>>().join(" ")
+    overlay_backend::text::collapse_ws(s)
 }
 
 /// Plain-Rust shape produced by the palette adapter before wrapping

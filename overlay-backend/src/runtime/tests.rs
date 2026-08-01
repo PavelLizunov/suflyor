@@ -2,6 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use super::*;
 use crate::events::Noop;
+use crate::journal::WriterCmd;
 
 /// Build a hermetic empty SharedConfig that does NOT load the
 /// user's real `%APPDATA%\overlay-mvp\config.json` (which on the
@@ -600,6 +601,7 @@ async fn ask_stream_loop_processes_deltas_then_done_and_calls_cost_apply_once() 
         sink,
         rx,
         "claude-haiku-4-5".into(),
+        "live_ask",
         false, // cloud — bill normally
         "sys".into(),
         "usr".into(),
@@ -660,6 +662,7 @@ async fn ask_stream_loop_error_path_does_not_journal_partial_response() {
         sink,
         rx,
         "claude-haiku-4-5".into(),
+        "live_ask",
         false,
         "sys".into(),
         "usr".into(),
@@ -682,6 +685,64 @@ async fn ask_stream_loop_error_path_does_not_journal_partial_response() {
     assert_eq!(
         counters.ai_responses_ok, 0,
         "partial text from a failed stream must not become a completed Q&A"
+    );
+}
+
+/// Audit D1 — the journaled `AiResponse` must carry the CALLER's request
+/// purpose (the same value the caller writes on its paired `AiRequest`),
+/// NOT a hardcoded "live_ask". Feed a successful stream as a vision ask and
+/// assert the serialized journal line.
+#[tokio::test]
+async fn ask_stream_loop_journals_caller_supplied_purpose() {
+    let (tx, rx) = tokio::sync::mpsc::channel::<ai::AiEvent>(4);
+    let feeder = tokio::spawn(async move {
+        tx.send(ai::AiEvent::Delta {
+            text: "vision answer".into(),
+        })
+        .await
+        .unwrap();
+        tx.send(ai::AiEvent::Done {
+            reason: "length".into(),
+        })
+        .await
+        .unwrap();
+    });
+    let cost_apply: CostApplyFn = Box::new(|_| 0.0);
+    let (journal, mut lines) = Journal::capturing_for_test();
+    let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
+    ask_stream_loop(
+        sink,
+        rx,
+        "claude-haiku-4-5".into(),
+        "vision_ask",
+        false,
+        "sys".into(),
+        "usr".into(),
+        Some(journal),
+        Arc::new(HealthSignals::default()),
+        std::time::Instant::now(),
+        cost_apply,
+    )
+    .await;
+    feeder.await.unwrap();
+
+    // write() queues lines synchronously, so everything is already in the
+    // channel now that the loop has returned — drain and find the response.
+    let response_line = std::iter::from_fn(|| lines.try_recv().ok())
+        .filter_map(|command| match command {
+            WriterCmd::Line(line) => Some(line),
+            WriterCmd::Shutdown(_) => None,
+        })
+        .find(|line| line.contains(r#""kind":"ai_response""#))
+        .expect("a successful stream must journal an AiResponse");
+    let ev: serde_json::Value = serde_json::from_str(&response_line).unwrap();
+    assert_eq!(
+        ev["purpose"], "vision_ask",
+        "AiResponse must carry the caller's purpose, not a hardcoded live_ask: {response_line}"
+    );
+    assert_eq!(
+        ev["finish_reason"], "length",
+        "the stream's Done reason must still reach the journal verbatim"
     );
 }
 
@@ -731,6 +792,7 @@ async fn ask_stream_loop_local_journals_zero_cost() {
         sink,
         rx,
         "my-local-gemma-3-it".into(),
+        "live_ask",
         true, // local — must NOT bill / journal a cost
         "sys prompt".into(),
         "usr prompt".into(),

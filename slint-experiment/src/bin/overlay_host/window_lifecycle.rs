@@ -16,10 +16,11 @@
 //! NOTE (§7): the parent crate-root symbols this module references are imported
 //! explicitly below.
 use super::{
-    enum_monitors, get_window_rect, grab_hwnd, move_window_pos_only, pick_monitor, set_stealth, ui,
-    ArchiveWindow, ComponentHandle, Duration, HelpWindow, OverlayBarWindow, PaletteWindow, Rc,
-    RecoverOfferWindow, RefCell, SettingsWindow, TextAskWindow, TileWindow, TileWindows, Timer,
-    TranscriptWindow, WizardWindow, HWND_GRAB_DELAY_MS, HWND_REVEAL_FAST_MS,
+    enum_monitors, get_mic_active, get_sys_active, get_window_rect, grab_hwnd,
+    move_window_pos_only, pick_monitor, refresh_status, set_stealth, ui, ArchiveWindow,
+    ComponentHandle, Duration, HelpWindow, OverlayBarWindow, PaletteWindow, Rc, RecoverOfferWindow,
+    RefCell, SettingsWindow, TextAskWindow, TileWindow, TileWindows, Timer, TranscriptWindow,
+    WizardWindow, HWND_GRAB_DELAY_MS, HWND_REVEAL_FAST_MS,
 };
 
 /// Phase E6 v36 — process-global tile body opacity (raw f32 bits in an
@@ -59,6 +60,100 @@ pub(crate) fn set_global_stealth(on: bool) {
 /// Read the current global stealth state (defaults to off).
 pub(crate) fn global_stealth() -> bool {
     STEALTH_ON.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// I1 — process-global EFFECTIVE stealth: the bar's last VERIFIED
+/// capture-exclusion state (apply + `GetWindowDisplayAffinity` readback).
+/// Distinct from `STEALTH_ON` (the config INTENT, which is preserved so the
+/// next apply retries): this flag is the honest source for every visible
+/// success indicator — the bar chip, the Settings Stealth-tab status line,
+/// and the Diagnostics row. Starts false: until the bar's HWND is realized
+/// and the exclusion is read back, stealth cannot be claimed.
+/// LIMITATION (kept explicit so the indicators never overclaim): the global
+/// verifies the BAR's WDA only. Per-window (tile / registry / capture-overlay)
+/// exclusion failures are logged (`apply_stealth_one`, the F8 path) but NOT
+/// aggregated here — a tile whose exclusion failed stays capturable while this
+/// flag can still read true; the log is the diagnostic channel for those.
+static STEALTH_EFFECTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Store the verified effective stealth state (bar apply + readback outcome).
+pub(crate) fn set_global_stealth_effective(on: bool) {
+    STEALTH_EFFECTIVE.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Read the verified effective stealth state (defaults to false).
+pub(crate) fn global_stealth_effective() -> bool {
+    STEALTH_EFFECTIVE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// I1 — surface a stealth apply/readback failure on the bar's status pill:
+/// raise the `stealth-fault` flag so the pill's text binding swaps in the
+/// TRANSLATED generic failure message (overlay_bar.slint `@tr`), and tint the
+/// pill amber (colours are not translated, so Rust keeps owning them).
+/// Deliberately generic + secret/path-free; the caller's log line carries the
+/// Win32 detail. `apply_bar_stealth` clears the flag once a later apply
+/// verifies, restoring the mic/sys truth.
+pub(crate) fn surface_stealth_unavailable(bar: &OverlayBarWindow) {
+    bar.set_stealth_fault(true);
+    bar.set_status_color(slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24));
+}
+
+/// Apply a stealth toggle to the BAR — the one window outside the
+/// `WindowRegistry` (it also carries the taskbar-button side effect). I1: the
+/// WDA apply + readback decide the EFFECTIVE state; the chip, the status pill,
+/// and the process-global effective flag all follow the readback, never the
+/// intent alone. Config intent is preserved by the caller regardless, so the
+/// next toggle/realize retries. Returns the effective state so callers can
+/// echo it (Settings status line). Shared by all three stealth-toggle paths
+/// (bar / Settings / wizard) so their semantics cannot drift.
+pub(crate) fn apply_bar_stealth(
+    bar: &OverlayBarWindow,
+    state: &slint_replay::app_state::SharedState,
+    on: bool,
+) -> bool {
+    let effective = match grab_hwnd(bar.window()) {
+        Ok(hwnd) => {
+            let applied = set_stealth(hwnd, on);
+            let effective = slint_replay::win32::presentable_stealth(on, &applied);
+            if let Err(e) = &applied {
+                diag!(
+                    "[overlay-host] bar stealth apply failed (effective=off, config intent \
+                     preserved for retry): {e}"
+                );
+            }
+            // I2 — the taskbar style follows the EFFECTIVE state; both
+            // directions force the TOOLWINDOW baseline + clear APPWINDOW, so
+            // the bar can never become a taskbar-eligible APPWINDOW.
+            if let Err(e) = slint_replay::win32::set_skip_taskbar(hwnd, effective) {
+                diag!("[overlay-host] bar skip-taskbar failed: {e}");
+            }
+            effective
+        }
+        Err(e) => {
+            diag!("[overlay-host] bar stealth: HWND not realized (effective=off): {e}");
+            false
+        }
+    };
+    set_global_stealth_effective(effective);
+    bar.set_stealth_active(effective);
+    if on && !effective {
+        surface_stealth_unavailable(bar);
+    } else if bar.get_stealth_fault() {
+        // A previous failure banner is stale — clear the flag and restore the
+        // mic/sys truth on the pill.
+        bar.set_stealth_fault(false);
+        refresh_status(bar, get_mic_active(state), get_sys_active(state));
+    }
+    effective
+}
+
+/// Apply WDA to a single registry/realize window, logging (never swallowing)
+/// a failure (I1): a window whose exclusion failed stays capturable, and the
+/// user must be able to diagnose it from the log.
+fn apply_stealth_one(hwnd: windows::Win32::Foundation::HWND, on: bool) {
+    if let Err(e) = set_stealth(hwnd, on) {
+        diag!("[overlay-host] stealth apply failed (window stays capturable): {e}");
+    }
 }
 
 /// Process-global tile-monitor PIN — the `(left, top)` of the display the user
@@ -201,7 +296,8 @@ pub(crate) fn present_window_stealth_aware_at<W, F>(
         };
         decorate(hwnd);
         if global_stealth() {
-            let _ = set_stealth(hwnd, true);
+            // I1 — a failed exclusion is logged, never silently swallowed.
+            apply_stealth_one(hwnd, true);
         }
         // The off-screen frame is now painted + decorated (+ WDA under stealth):
         // reveal it at the RESTORED position when one is saved and still visible
@@ -255,18 +351,28 @@ pub(crate) fn present_window_stealth_aware_at<W, F>(
                 .set_position(slint::PhysicalPosition::new(100, 100));
         }
     });
-    // Reveal schedule: fast attempt (~1-2 frames), then two conservative retries at
-    // the old blind-wait delay before the stealth-safe fallback — so a slow
-    // first-realize (heavy paint / busy compositor) no longer gives up after a
-    // single miss and strands the window off-screen.
+    realize_with_retries(win, do_reveal, fallback_reveal);
+}
+
+/// The ONE realize-then-reveal retry schedule (I3): a fast attempt once the
+/// HWND is usually realized (~1-2 frames), two conservative retries, then the
+/// caller's fallback so no window is stranded off-screen after a `grab_hwnd`
+/// miss. `attempt` returns true once it has revealed the window. Shared by
+/// `present_window_stealth_aware_at` (aux windows) AND the bar realization in
+/// `overlay_host.rs` — a slow first-realize (heavy paint / busy compositor)
+/// no longer gives up after a single miss, and there is exactly one retry
+/// implementation to maintain.
+pub(crate) fn realize_with_retries<W>(
+    win: &W,
+    attempt: Rc<dyn Fn(&W) -> bool>,
+    fallback: Rc<dyn Fn(&W)>,
+) where
+    W: slint::ComponentHandle + 'static,
+{
     let weak = win.as_weak();
     Timer::single_shot(Duration::from_millis(HWND_REVEAL_FAST_MS), move || {
         let Some(w) = weak.upgrade() else { return };
-        let revealed = {
-            let f = &*do_reveal;
-            f(&w)
-        };
-        if revealed {
+        if attempt(&w) {
             return;
         }
         // Retry #1 SOON (80ms, not the full 200ms) — the heavy Settings window
@@ -274,30 +380,21 @@ pub(crate) fn present_window_stealth_aware_at<W, F>(
         // gap was the "Settings opens with a delay" the user saw. Still only
         // reveals once grab_hwnd succeeds (window painted off-screen → no flash).
         let weak2 = w.as_weak();
-        let do_reveal2 = do_reveal.clone();
-        let fallback2 = fallback_reveal.clone();
+        let attempt2 = attempt.clone();
+        let fallback2 = fallback.clone();
         Timer::single_shot(Duration::from_millis(80), move || {
             let Some(w) = weak2.upgrade() else { return };
-            let revealed = {
-                let f = &*do_reveal2;
-                f(&w)
-            };
-            if revealed {
+            if attempt2(&w) {
                 return;
             }
-            // Retry #2 (final) at a longer delay; on a final miss, warn + fallback.
+            // Retry #2 (final) at a longer delay; on a final miss, run the fallback.
             let weak3 = w.as_weak();
-            let do_reveal3 = do_reveal2.clone();
+            let attempt3 = attempt2.clone();
             let fallback3 = fallback2.clone();
             Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS * 2), move || {
                 let Some(w) = weak3.upgrade() else { return };
-                let revealed = {
-                    let f = &*do_reveal3;
-                    f(&w)
-                };
-                if !revealed {
-                    let f = &*fallback3;
-                    f(&w);
+                if !attempt3(&w) {
+                    fallback3(&w);
                 }
             });
         });
@@ -363,10 +460,12 @@ pub(crate) fn apply_scheme_archive(w: &ArchiveWindow, scheme: i32) {
 /// stay in lock-step (§5.1). Every field is an `Rc<RefCell<…>>` clone of the
 /// slot created in `main`, so the whole struct is cheap to `clone()` into each
 /// handler closure. The bar (`OverlayBarWindow`) is intentionally NOT a field:
-/// it is the composition root, has bespoke stealth side effects (the taskbar
-/// button + the `stealth-active` chip), and the three handlers drive it inline
-/// with subtly different rules (only some toggle `set_skip_taskbar`). The
-/// persistent, pre-stealthed capture overlay is likewise excluded (§5.1).
+/// it is the composition root with bespoke stealth side effects (the taskbar
+/// button + the `stealth-active` chip); all three stealth-toggle handlers
+/// drive it through the ONE shared `apply_bar_stealth` (I1: chip/pill follow
+/// the verified WDA readback; I2: the taskbar baseline can never drift to
+/// APPWINDOW). The persistent capture overlay is likewise excluded (§5.1) —
+/// it re-applies + verifies WDA on every show (I4, vision_capture.rs).
 #[derive(Clone)]
 pub(crate) struct WindowRegistry {
     pub tiles: TileWindows,
@@ -396,59 +495,72 @@ impl WindowRegistry {
     /// below mirror those loops exactly (same `grab_hwnd` + `set_stealth`
     /// pattern, same UI-property echoes), so the only behavioural change is
     /// that Help + the recover-offer can never again be forgotten in one loop.
-    /// The caller still drives the bar itself inline (the taskbar button is
-    /// toggled in some handlers but not all). The capture overlay is excluded
-    /// (it is pre-stealthed for its whole lifetime).
+    /// The caller drives the bar itself through `apply_bar_stealth` BEFORE
+    /// this walk, so the Settings status line seeded below already reflects
+    /// the verified outcome (I1). The capture overlay is excluded — it
+    /// re-applies + verifies WDA on every show (I4, vision_capture.rs).
     pub(crate) fn apply_stealth(&self, on: bool) {
         // All tiles.
         for t in self.tiles.borrow().iter() {
             if let Ok(hwnd) = grab_hwnd(t.window()) {
-                let _ = set_stealth(hwnd, on);
+                apply_stealth_one(hwnd, on);
             }
         }
-        // Settings — also reflect the new state in its in-window Switch.
+        // Settings — also reflect the new state in its in-window Switch + the
+        // EFFECTIVE-state status line (I1). The caller drove the bar through
+        // `apply_bar_stealth` BEFORE this registry walk, so the effective
+        // global below is already the outcome of the verified apply.
         if let Some(sw) = self.settings.borrow().as_ref() {
             sw.set_stealth_toggle(on);
+            // I1 — the status line follows the verified EFFECTIVE state (the
+            // Slint `@tr` ternary combines it with the toggle intent above).
+            let effective = global_stealth_effective();
+            sw.set_stealth_effective(effective);
+            // The Diagnostics stealth row is otherwise seeded only when
+            // Settings opens (populate_diagnostics); echo the same effective
+            // state so a toggle made while Settings is already open is
+            // reflected immediately, not after a close/reopen.
+            sw.set_diag_stealth_on(effective);
             if let Ok(hwnd) = grab_hwnd(sw.window()) {
-                let _ = set_stealth(hwnd, on);
+                apply_stealth_one(hwnd, on);
             }
         }
         // F4 KB palette.
         if let Some(p) = self.palette.borrow().as_ref() {
             if let Ok(hwnd) = grab_hwnd(p.window()) {
-                let _ = set_stealth(hwnd, on);
+                apply_stealth_one(hwnd, on);
             }
         }
         // "✏ Написать" text-input window.
         if let Some(t) = self.text_ask.borrow().as_ref() {
             if let Ok(hwnd) = grab_hwnd(t.window()) {
-                let _ = set_stealth(hwnd, on);
+                apply_stealth_one(hwnd, on);
             }
         }
         // First-run wizard — also reflect the new state in its in-window Switch.
         if let Some(wz) = self.wizard.borrow().as_ref() {
             if let Ok(hwnd) = grab_hwnd(wz.window()) {
-                let _ = set_stealth(hwnd, on);
+                apply_stealth_one(hwnd, on);
             }
             wz.set_stealth_on(on);
         }
         // 🆘 Help window (FIX #6 — previously dropped from some loops).
         if let Some(h) = self.help.borrow().as_ref() {
             if let Ok(hwnd) = grab_hwnd(h.window()) {
-                let _ = set_stealth(hwnd, on);
+                apply_stealth_one(hwnd, on);
             }
         }
         // Crash-recovery-offer window (FIX #6 — previously dropped from some loops).
         if let Some(ro) = self.recover_offer.borrow().as_ref() {
             if let Ok(hwnd) = grab_hwnd(ro.window()) {
-                let _ = set_stealth(hwnd, on);
+                apply_stealth_one(hwnd, on);
             }
         }
         // ТЗ1 transcript viewer — verbatim meeting transcript, the most sensitive
         // surface; must never stay captured after an OFF→ON toggle.
         if let Some(t) = self.transcript.borrow().as_ref() {
             if let Ok(hwnd) = grab_hwnd(t.window()) {
-                let _ = set_stealth(hwnd, on);
+                apply_stealth_one(hwnd, on);
             }
         }
         // 🗄 Session archive — session titles + FTS snippets carry transcript
@@ -457,7 +569,7 @@ impl WindowRegistry {
         // HWND affinity changes, not the window's data).
         if let Some(a) = self.archive.borrow().as_ref() {
             if let Ok(hwnd) = grab_hwnd(a.window()) {
-                let _ = set_stealth(hwnd, on);
+                apply_stealth_one(hwnd, on);
             }
         }
     }

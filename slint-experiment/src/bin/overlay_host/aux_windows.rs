@@ -25,7 +25,7 @@ use super::{
     AskRoute, ComponentHandle, HelpWindow, MarkdownBlock, ModelRc, OverlayBarBridge,
     OverlayBarWindow, PaletteResult, PaletteWindow, Rc, RefCell, RuntimeEvents, SharedSlintRuntime,
     SharedString, SpeakerRow, TextAskWindow, TileWindow, TileWindows, TranscriptLine,
-    TranscriptWindow, VecModel,
+    TranscriptWindow, VecModel, TILE_DISPLAY_SEQ,
 };
 use overlay_backend::persistence::{
     open_default_store, AiTurn, Diarization, SearchHit, Session, Store, Utterance,
@@ -34,6 +34,23 @@ use overlay_backend::persistence::{
 use slint::Model;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+
+/// The archive's catalog handle, opened lazily OFF the event loop. `None` until
+/// the open worker lands — or permanently `None` if the catalog can't be opened,
+/// which puts the window in its "unavailable" state. Shared by every archive
+/// closure AND the open worker (which publishes the `Send` `Store` back via
+/// `invoke_from_event_loop`), so it is an `Arc<Mutex<..>>`. Callers hold the lock
+/// only for a single read/write and drop it before re-entrant UI callbacks.
+type StoreSlot = Arc<Mutex<Option<Store>>>;
+
+/// Lock the catalog slot, recovering a poisoned lock (the codebase mutex idiom).
+/// Contention can't happen in practice — every access runs on the event loop.
+fn lock_store(slot: &StoreSlot) -> std::sync::MutexGuard<'_, Option<Store>> {
+    match slot.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    }
+}
 
 /// v0.14.0 — PROCESS-GLOBAL one-job-at-a-time guard for archive re-transcription.
 ///
@@ -46,25 +63,27 @@ use std::sync::Mutex;
 /// close+reopen still sees the running job. One `try_acquire` pairs with exactly
 /// one `release` in the worker's completion path. (Same pattern as `MIC_BUSY`.)
 static RETRANSCRIBE_BUSY: AtomicBool = AtomicBool::new(false);
+static DIAR_BUSY: AtomicBool = AtomicBool::new(false);
+/// V-1 — same latch for the diarization model download: the install outlives
+/// the transcript window, but the per-window `installing-diar-models` property
+/// dies with it — a close+reopen would otherwise spawn a second `install_models`
+/// racing the first on the same .download/staging/live files. One
+/// `try_acquire_busy` pairs with the worker's completion (RAII guard).
+static DIAR_INSTALL_BUSY: AtomicBool = AtomicBool::new(false);
 
-/// RAII release for the retranscribe latch. Dropping it — on ANY exit of the
-/// spawned task, including a panic unwinding the awaited re-STT/Summary future —
-/// frees the latch, so a panic in the heaviest job in the app can't leave the
-/// "↻ Summary" button dead for the rest of the process (audit Q1). The `()`
-/// field is private so only `try_acquire_retranscribe` can mint one.
-struct RetranscribeGuard(());
+/// Shared RAII guard for process-global background-job latches.
+struct BusyGuard<'a>(&'a AtomicBool);
 
-impl Drop for RetranscribeGuard {
+impl Drop for BusyGuard<'_> {
     fn drop(&mut self) {
-        RETRANSCRIBE_BUSY.store(false, Ordering::Release);
+        self.0.store(false, Ordering::Release);
     }
 }
 
-fn try_acquire_retranscribe() -> Option<RetranscribeGuard> {
-    RETRANSCRIBE_BUSY
-        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+fn try_acquire_busy(busy: &AtomicBool) -> Option<BusyGuard<'_>> {
+    busy.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_ok()
-        .then(|| RetranscribeGuard(()))
+        .then(|| BusyGuard(busy))
 }
 
 /// v0.10.1 — format the active profile/persona for the text-ask header so the
@@ -450,9 +469,10 @@ impl PaletteResultExt for PaletteResult {
 /// transcript + AI Q&A over the SQLite catalog; activating a row spawns a
 /// read-only tile with that session's content (via [`spawn_content_tile`], the
 /// same path the KB palette uses). Stealth-aware + skip-taskbar like the other
-/// aux windows. The window holds ONE [`Store`] (opened here) for its lifetime,
-/// reused across the list / search / detail queries; if the catalog can't be
-/// opened it shows a graceful "unavailable" state instead of a blank panel.
+/// aux windows. The window shows immediately and opens its ONE [`Store`] OFF the
+/// event loop (a worker thread also runs the reindex sweep + initial list), then
+/// reuses that handle across the list / search / detail queries; if the catalog
+/// can't be opened it shows a graceful "unavailable" state instead of a blank panel.
 ///
 /// SECURITY: renders ONLY the user's own transcript + AI answers — no bearer /
 /// base_url / config secret ever reaches its scope (like the palette).
@@ -508,29 +528,21 @@ pub(crate) fn open_archive(
         .as_ref()
         .and_then(overlay_backend::journal::Journal::current_path)
         .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()));
-    if cfg.read().session_archive_enabled {
-        match overlay_backend::persistence::reindex_default(active_id.as_deref()) {
-            Ok(st) => eprintln!(
-                "[overlay-host] archive: reindex on open — {} new, {} skipped, {} failed",
-                st.indexed, st.skipped, st.failed
-            ),
-            Err(e) => eprintln!("[overlay-host] archive: reindex on open failed: {e:#}"),
-        }
-    }
-
-    // Open ONE catalog handle for this browse session (reused by the closures
-    // below). On failure the window degrades to an "unavailable" state.
-    let store: Option<Rc<RefCell<Store>>> = match open_default_store() {
-        Ok(s) => Some(Rc::new(RefCell::new(s))),
-        Err(e) => {
-            eprintln!("[overlay-host] archive: catalog open failed: {e}");
-            None
-        }
-    };
+    // The catalog open, the initial list, AND the reindex SWEEP (read_dir + parse
+    // + index of every new journal) all block, so they run on a worker thread; the
+    // window above is already on screen and shows an empty list until the rows land.
+    // The handle is published to a shared slot the closures below read lazily, so a
+    // click that arrives before the open finishes is a graceful no-op, and a failed
+    // open leaves the slot empty → the "unavailable" state.
+    let store: StoreSlot = Arc::new(Mutex::new(None));
 
     // One recordings snapshot for this browse session (v0.17.1 — was a
     // filesystem stat PER ROW per rebuild; see recording_ids_snapshot).
     let recordings = Rc::new(recording_ids_snapshot());
+
+    // Row wording language, snapshotted for this browse session (mirrors the
+    // other per-open snapshots; a language switch applies on the next open).
+    let ru = cfg.read().ui_language == "ru";
 
     // Баг5-class guard: the archive results render in an UN-VIRTUALIZED 50px-row
     // `for` inside a ScrollView (archive.slint:299), so cap the DISPLAYED rows —
@@ -541,25 +553,59 @@ pub(crate) fn open_archive(
     const ARCHIVE_LIST_CAP: usize = 300;
     const _: () = assert!(ARCHIVE_LIST_CAP * 60 + 200 < 32_767);
 
-    match store.as_ref() {
-        Some(store_rc) => {
-            let sessions = store_rc.borrow().list_sessions().unwrap_or_default();
-            // v0.17.1 — plain count (the 🗄 now lives in the header SVG icon).
-            win.set_summary(SharedString::from(sessions.len().to_string()));
-            // Re-snapshot conspect ids fresh each (re)build so a row flips to
-            // "Просмотреть" the moment its summary lands (A2) — one cheap dir read.
-            let conspects = overlay_backend::conspect::session_ids();
-            let debriefs = overlay_backend::conspect::debrief_session_ids();
-            let rows: Vec<ArchiveRow> = sessions
-                .iter()
-                .take(ARCHIVE_LIST_CAP)
-                .map(|s| session_to_row(s, &recordings, &conspects, &debriefs))
-                .collect();
-            win.set_results(ModelRc::new(VecModel::from(rows)));
-        }
-        None => {
-            win.set_unavailable(true);
-        }
+    {
+        let weak_load = win.as_weak();
+        let slot_load = store.clone();
+        let active_id_load = active_id.clone();
+        let archive_enabled = cfg.read().session_archive_enabled;
+        std::thread::spawn(move || {
+            // Reindex SWEEP first (gated on the archive toggle), so the list below
+            // catches anything finished since the launch-time sweep.
+            if archive_enabled {
+                match overlay_backend::persistence::reindex_default(active_id_load.as_deref()) {
+                    Ok(st) => eprintln!(
+                        "[overlay-host] archive: reindex on open — {} new, {} skipped, {} failed",
+                        st.indexed, st.skipped, st.failed
+                    ),
+                    Err(e) => eprintln!("[overlay-host] archive: reindex on open failed: {e:#}"),
+                }
+            }
+            // Open the read handle OFF the event loop (it runs migrations + WAL
+            // setup) and build the initial rows from it.
+            let opened: Option<Store> = match open_default_store() {
+                Ok(s) => Some(s),
+                Err(e) => {
+                    eprintln!("[overlay-host] archive: catalog open failed: {e}");
+                    None
+                }
+            };
+            let initial: Option<(Vec<ArchiveRow>, usize)> = opened.as_ref().map(|st| {
+                let sessions = st.list_sessions().unwrap_or_default();
+                let total = sessions.len();
+                let recordings = recording_ids_snapshot();
+                let conspects = overlay_backend::conspect::session_ids();
+                let debriefs = overlay_backend::conspect::debrief_session_ids();
+                let rows = sessions
+                    .iter()
+                    .take(ARCHIVE_LIST_CAP)
+                    .map(|s| session_to_row(s, &recordings, &conspects, &debriefs, ru))
+                    .collect();
+                (rows, total)
+            });
+            let _ = slint::invoke_from_event_loop(move || {
+                let Some(p) = weak_load.upgrade() else {
+                    return;
+                };
+                match opened {
+                    Some(s) => *lock_store(&slot_load) = Some(s),
+                    None => p.set_unavailable(true),
+                }
+                if let Some((rows, total)) = initial {
+                    p.set_summary(SharedString::from(total.to_string()));
+                    p.set_results(ModelRc::new(VecModel::from(rows)));
+                }
+            });
+        });
     }
 
     // Search-as-you-type: empty query → full list; else an FTS5 prefix search
@@ -572,35 +618,34 @@ pub(crate) fn open_archive(
             let Some(p) = weak.upgrade() else {
                 return;
             };
-            let Some(store_rc) = store_q.as_ref() else {
-                return;
-            };
             let trimmed = q.trim();
             // Fresh conspect snapshot per rebuild (A2): after a summary completes we
             // invoke_query_changed, and this re-read flips the row to "Просмотреть".
             let conspects = overlay_backend::conspect::session_ids();
             let debriefs = overlay_backend::conspect::debrief_session_ids();
-            let rows: Vec<ArchiveRow> = if trimmed.is_empty() {
-                store_rc
-                    .borrow()
-                    .list_sessions()
-                    .unwrap_or_default()
-                    .iter()
-                    .take(ARCHIVE_LIST_CAP)
-                    .map(|s| session_to_row(s, &recordings_q, &conspects, &debriefs))
-                    .collect()
-            } else {
-                let fts = fts_query(trimmed);
-                if fts.is_empty() {
-                    Vec::new()
-                } else {
-                    store_rc
-                        .borrow()
-                        .search(&fts, 60)
+            let rows: Vec<ArchiveRow> = {
+                let slot = lock_store(&store_q);
+                let Some(st) = slot.as_ref() else {
+                    return;
+                };
+                if trimmed.is_empty() {
+                    st.list_sessions()
                         .unwrap_or_default()
                         .iter()
-                        .map(|h| hit_to_row(h, &recordings_q, &conspects, &debriefs))
+                        .take(ARCHIVE_LIST_CAP)
+                        .map(|s| session_to_row(s, &recordings_q, &conspects, &debriefs, ru))
                         .collect()
+                } else {
+                    let fts = fts_query(trimmed);
+                    if fts.is_empty() {
+                        Vec::new()
+                    } else {
+                        st.search(&fts, 60)
+                            .unwrap_or_default()
+                            .iter()
+                            .map(|h| hit_to_row(h, &recordings_q, &conspects, &debriefs, ru))
+                            .collect()
+                    }
                 }
             };
             // v0.22.0 — a list rebuild invalidates the index-keyed rename state,
@@ -623,16 +668,16 @@ pub(crate) fn open_archive(
             let Some(p) = weak.upgrade() else {
                 return;
             };
-            let Some(store_rc) = store_a.as_ref() else {
-                return;
-            };
             let results = p.get_results();
             let Some(row) = archive_row_at(&results, idx) else {
                 return;
             };
             let sid = row.id.to_string();
             let (session, utts, turns) = {
-                let st = store_rc.borrow();
+                let slot = lock_store(&store_a);
+                let Some(st) = slot.as_ref() else {
+                    return;
+                };
                 (
                     st.get_session(&sid).ok().flatten(),
                     st.session_utterances(&sid).unwrap_or_default(),
@@ -702,9 +747,6 @@ pub(crate) fn open_archive(
             let Some(p) = weak.upgrade() else {
                 return;
             };
-            let Some(store_rc) = store_g.as_ref() else {
-                return;
-            };
             let results = p.get_results();
             let Some(row) = archive_row_at(&results, idx) else {
                 return;
@@ -713,13 +755,17 @@ pub(crate) fn open_archive(
             if sid.is_empty() {
                 return;
             }
-            let lines: Vec<String> = store_rc
-                .borrow()
-                .session_utterances(&sid)
-                .unwrap_or_default()
-                .iter()
-                .map(|u| u.text.clone())
-                .collect();
+            let lines: Vec<String> = {
+                let slot = lock_store(&store_g);
+                let Some(st) = slot.as_ref() else {
+                    return;
+                };
+                st.session_utterances(&sid)
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|u| u.text.clone())
+                    .collect()
+            };
             if lines.is_empty() {
                 return;
             }
@@ -785,12 +831,9 @@ pub(crate) fn open_archive(
             let Some(p) = weak.upgrade() else {
                 return;
             };
-            p.set_confirm_delete_index(-1); // dismiss the overlay
-            let Some(store_rc) = store_d.as_ref() else {
-                return;
-            };
-            // Re-fetch + re-validate by index (the list can't change behind the modal
-            // scrim, but stay defensive).
+            // Dismiss, then re-fetch + re-validate by index (the list can't change
+            // behind the modal scrim, but stay defensive).
+            p.set_confirm_delete_index(-1);
             let results = p.get_results();
             let Some(row) = archive_row_at(&results, idx) else {
                 return;
@@ -799,14 +842,16 @@ pub(crate) fn open_archive(
             if sid.is_empty() || active_del.as_deref() == Some(sid.as_str()) {
                 return;
             }
-            // CRITICAL: drop the store borrow BEFORE rebuilding. invoke_query_changed
-            // dispatches the search handler SYNCHRONOUSLY (Slint callbacks run inline),
-            // and that handler borrows the SAME RefCell — holding borrow_mut across it
-            // double-borrows → panic. (Latent in the original ТЗ2a code; the native
-            // modal crashed first, so this path was never reached.)
+            // CRITICAL: drop the store lock BEFORE rebuilding. invoke_query_changed
+            // dispatches the search handler SYNCHRONOUSLY (Slint callbacks run inline)
+            // and that handler locks the SAME slot — holding the guard across it
+            // deadlocks the Mutex.
             let outcome = {
-                let mut st = store_rc.borrow_mut();
-                overlay_backend::session_admin::delete_session_everywhere(&mut st, &sid)
+                let mut slot = lock_store(&store_d);
+                match slot.as_mut() {
+                    Some(st) => overlay_backend::session_admin::delete_session_everywhere(st, &sid),
+                    None => return,
+                }
             };
             match outcome {
                 Ok(()) => {
@@ -845,9 +890,6 @@ pub(crate) fn open_archive(
             let Some(p) = weak.upgrade() else {
                 return;
             };
-            let Some(store_rc) = store_t.as_ref() else {
-                return;
-            };
             let results = p.get_results();
             let Some(row) = archive_row_at(&results, idx) else {
                 return;
@@ -857,13 +899,16 @@ pub(crate) fn open_archive(
                 return;
             }
             let (session, utts) = {
-                let st = store_rc.borrow();
+                let slot = lock_store(&store_t);
+                let Some(st) = slot.as_ref() else {
+                    return;
+                };
                 (
                     st.get_session(&sid).ok().flatten(),
                     st.session_utterances(&sid).unwrap_or_default(),
                 )
             };
-            open_transcript(&tslot, session.as_ref(), &utts, store_rc, &rt_t);
+            open_transcript(&tslot, session.as_ref(), &utts, &store_t, &rt_t);
         });
     }
 
@@ -900,7 +945,7 @@ pub(crate) fn open_archive(
             // window's `retranscribe-busy` starts false). Silently no-op while a
             // job runs, like MIC_BUSY. RAII guard moved into the task below frees
             // it on every exit incl. an awaited-future panic.
-            let Some(rt_guard) = try_acquire_retranscribe() else {
+            let Some(rt_guard) = try_acquire_busy(&RETRANSCRIBE_BUSY) else {
                 return;
             };
             p.set_retranscribe_busy(true);
@@ -910,10 +955,12 @@ pub(crate) fn open_archive(
             // own Summary tile, exactly like the re-STT path below. Additive: the
             // has-recordings path past this branch is unchanged.
             if !row.has_recordings {
-                let src = store_s
-                    .as_ref()
-                    .and_then(|s| overlay_backend::summary_source::from_catalog(&s.borrow(), &sid))
-                    .or_else(|| overlay_backend::summary_source::from_jsonl_prompts(&sid));
+                let src = {
+                    let slot = lock_store(&store_s);
+                    slot.as_ref()
+                        .and_then(|st| overlay_backend::summary_source::from_catalog(st, &sid))
+                        .or_else(|| overlay_backend::summary_source::from_jsonl_prompts(&sid))
+                };
                 let Some(transcript) = src else {
                     drop(rt_guard);
                     p.set_retranscribe_busy(false);
@@ -1209,10 +1256,11 @@ pub(crate) fn spawn_content_tile(
     if let Some(o) = weak_overlay.upgrade() {
         o.set_tiles_spawned(seq as i32);
     }
+    let display_seq = TILE_DISPLAY_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
     let Ok(tile) = TileWindow::new() else {
         return;
     };
-    tile.set_sequence(seq as i32);
+    tile.set_sequence(display_seq as i32);
     tile.set_tile_title(SharedString::from(title.to_string()));
     tile.set_source_label(SharedString::from(source_label.to_string()));
     wire_tile_drag(&tile);
@@ -1321,14 +1369,27 @@ fn archive_time_label(started_at_ms: Option<i64>, id: &str) -> String {
     }
 }
 
-/// Status → a compact prefix for the row title. The COMPLETED case (the normal
-/// 99%) gets NO prefix so a named/timed title reads clean; only the abnormal
-/// states are flagged (so "done Обзор функций" → just "Обзор функций").
-fn status_glyph(status: &str) -> &'static str {
+/// Status → a short LOCALIZED human label for the row subtitle. The COMPLETED
+/// case (the normal 99%) gets NO label so a named/timed row reads clean; only
+/// the abnormal states are flagged. The raw DB tokens (`crashed` / `active`)
+/// never reach a visible row — the user sees a word in the UI language.
+fn status_label(status: &str, ru: bool) -> &'static str {
     match status {
-        "crashed" => "crashed",
-        "active" => "active",
-        _ => "", // completed / unknown — clean title, no prefix
+        "crashed" => {
+            if ru {
+                "Прервана"
+            } else {
+                "Interrupted"
+            }
+        }
+        "active" => {
+            if ru {
+                "Идёт сейчас"
+            } else {
+                "In progress"
+            }
+        }
+        _ => "", // completed / unknown — clean row, no status flag
     }
 }
 
@@ -1357,42 +1418,53 @@ fn session_title(started_at_ms: Option<i64>, id: &str) -> String {
     overlay_backend::session_names::get(id).unwrap_or_else(|| archive_time_label(started_at_ms, id))
 }
 
-/// Map an indexed [`Session`] to an archive list row. Counts are emoji-coded
-/// as plain text counts so the row needs no per-language string;
-/// the cost shows only when non-zero (local runs are $0 → blank).
+/// Map an indexed [`Session`] to an archive list row. Counts + status use
+/// short LOCALIZED labels (`ru` mirrors `cfg.ui_language`, like the other
+/// Rust-built strings) so the row reads as human wording — no code-like
+/// `lines N · ai N` metadata, no placeholder dash for an unknown model, and
+/// no raw `crashed` / `active` token. The cost shows only when non-zero
+/// (local runs are $0 → blank).
 fn session_to_row(
     s: &Session,
     recordings: &std::collections::HashSet<String>,
     conspects: &std::collections::HashSet<String>,
     debriefs: &std::collections::HashSet<String>,
+    ru: bool,
 ) -> ArchiveRow {
     let time = archive_time_label(s.started_at_ms, &s.id);
     let name = overlay_backend::session_names::get(&s.id);
-    // Prefer the session NAME (v0.22.0) as the row title; fall back to the time.
-    let label = name.clone().unwrap_or_else(|| time.clone());
-    let model = s.ai_model.as_deref().unwrap_or("—");
-    // When a name is the title, keep the time visible in the subtitle.
-    let subtitle = if name.is_some() {
-        format!(
-            "{time} · lines {} · ai {} · {model}",
-            s.transcript_lines, s.ai_turns_count
-        )
+    // Prefer the session NAME (v0.22.0) as the row title; fall back to the
+    // time. The title carries NO status prefix — an abnormal state is flagged
+    // in the subtitle instead (localized, next to the counts).
+    let title = name.clone().unwrap_or_else(|| time.clone());
+    let transcript_word = if ru {
+        "Стенограмма"
     } else {
-        format!(
-            "lines {} · ai {} · {model}",
-            s.transcript_lines, s.ai_turns_count
-        )
+        "Transcript"
     };
+    let ai_word = if ru { "ИИ" } else { "AI" };
+    // Subtitle = time (when a NAME is the title) · transcript count · AI count
+    // · model (only when known) · status (only when abnormal).
+    let mut parts: Vec<String> = Vec::new();
+    if name.is_some() {
+        parts.push(time);
+    }
+    parts.push(format!("{}: {}", transcript_word, s.transcript_lines));
+    parts.push(format!("{}: {}", ai_word, s.ai_turns_count));
+    if let Some(model) = s.ai_model.as_deref().filter(|m| !m.is_empty()) {
+        parts.push(model.to_string());
+    }
+    let status = status_label(&s.status, ru);
+    if !status.is_empty() {
+        parts.push(status.to_string());
+    }
+    let subtitle = parts.join(" · ");
     let meta = if s.total_cost_microcents > 0 {
-        format!("${:.3}", (s.total_cost_microcents as f64) / 100_000_000.0)
+        // SessionRow stores i64; the >0 guard makes the checked conversion exact.
+        let micro = u64::try_from(s.total_cost_microcents).unwrap_or(0);
+        format!("${:.3}", overlay_backend::ai::microcents_to_usd(micro))
     } else {
         String::new()
-    };
-    let glyph = status_glyph(&s.status);
-    let title = if glyph.is_empty() {
-        label
-    } else {
-        format!("{glyph} {label}")
     };
     ArchiveRow {
         id: SharedString::from(s.id.clone()),
@@ -1414,12 +1486,14 @@ fn session_to_row(
 
 /// Map an FTS [`SearchHit`] to an archive list row: the session label + a
 /// whitespace-collapsed, length-capped snippet of the matched body, tagged with
-/// the hit kind (question · answer · utterance).
+/// a LOCALIZED hit-kind word (the raw journal tags `question` / `answer` /
+/// `utterance` never reach the row verbatim).
 fn hit_to_row(
     h: &SearchHit,
     recordings: &std::collections::HashSet<String>,
     conspects: &std::collections::HashSet<String>,
     debriefs: &std::collections::HashSet<String>,
+    ru: bool,
 ) -> ArchiveRow {
     // Prefer the session NAME (v0.22.0) so a named session reads the same in
     // search results as in the full list; fall back to the МСК time. Keep the
@@ -1428,11 +1502,30 @@ fn hit_to_row(
     let label = name
         .clone()
         .unwrap_or_else(|| archive_time_label(None, &h.session_id));
-    let kind_glyph = match h.kind.as_str() {
-        "question" => "question",
-        "answer" => "answer",
-        _ => "line",
+    let kind_word = match h.kind.as_str() {
+        "question" => {
+            if ru {
+                "вопрос"
+            } else {
+                "question"
+            }
+        }
+        "answer" => {
+            if ru {
+                "ответ"
+            } else {
+                "answer"
+            }
+        }
+        _ => {
+            if ru {
+                "строка"
+            } else {
+                "line"
+            }
+        }
     };
+    let search_word = if ru { "Поиск" } else { "Search" };
     let snippet: String = h
         .body
         .split_whitespace()
@@ -1443,9 +1536,9 @@ fn hit_to_row(
         .collect();
     ArchiveRow {
         id: SharedString::from(h.session_id.clone()),
-        title: SharedString::from(format!("search {label}")),
+        title: SharedString::from(format!("{search_word}: {label}")),
         subtitle: SharedString::from(snippet),
-        meta: SharedString::from(kind_glyph),
+        meta: SharedString::from(kind_word),
         has_recordings: recordings.contains(&h.session_id),
         name: SharedString::from(name.unwrap_or_default()),
         // An FTS hit exists only because transcript / AI text matched → always
@@ -1898,7 +1991,61 @@ thread_local! {
     // The «Определить говорящих» result-poll timer — held so it outlives the run
     // closure; the timer clears itself on completion (and on window close).
     static DIAR_TIMER: RefCell<Option<slint::Timer>> = const { RefCell::new(None) };
+    // The model-INSTALL poll timer (V-1). Kept SEPARATE from DIAR_TIMER so a
+    // reopen — which drops DIAR_TIMER to re-attach the result poll — can't abort
+    // an in-flight model download, and the install poll's self-clear can't drop
+    // the result poll. The two flows are mutually exclusive by gating
+    // (install ⇄ needs_diar_models, run ⇄ can_diarize), but distinct timers make
+    // that independence structural rather than incidental.
+    static DIAR_INSTALL_TIMER: RefCell<Option<slint::Timer>> = const { RefCell::new(None) };
+    // suflyor H2 — the live job's shared slots (worker → UI poll) + its session
+    // id, so a window closed + reopened mid-run RE-ATTACHES a poll to the running
+    // job instead of spawning a second sidecar. UI-thread-only (like DIAR_TIMER).
+    static DIAR_JOB: RefCell<Option<DiarJobHandles>> = const { RefCell::new(None) };
+    // V-1 — the live model install's shared result slot (worker → UI poll), so a
+    // close+reopen mid-download RE-ATTACHES a poll to the running install instead
+    // of spawning a second one. UI-thread-only (like DIAR_JOB).
+    static DIAR_INSTALL_JOB: RefCell<Option<DiarInstallSlot>> = const { RefCell::new(None) };
 }
+
+/// suflyor H2 — the running diarization job's cross-thread slots. The worker
+/// (spawn_blocking) writes them; the UI-thread poll ([`start_diar_poll`]) reads
+/// them. Cloned between the run callback, `DIAR_JOB`, and the poll, so a
+/// re-attached poll after a close+reopen consumes the SAME job.
+#[derive(Clone)]
+struct DiarJobHandles {
+    /// The terminal outcome (`None` while the job runs).
+    slot: Arc<Mutex<Option<Result<Diarization, DiarFailure>>>>,
+    /// The latest sidecar step message (taken once by the poll → status line).
+    progress: Arc<Mutex<Option<String>>>,
+    /// The session the job runs for — a re-attached poll paints ONLY when the
+    /// window still shows this session (it may have been repurposed mid-run).
+    session_id: String,
+}
+
+/// V-1 — the running model install's shared result slot. The worker
+/// (spawn_blocking) writes the terminal outcome (`None` while it downloads);
+/// the UI-thread poll ([`start_diar_install_poll`]) takes it. Cloned between
+/// the install callback, `DIAR_INSTALL_JOB`, and the poll, so a re-attached
+/// poll after a close+reopen consumes the SAME install.
+type DiarInstallSlot = Arc<Mutex<Option<Result<(), String>>>>;
+
+/// suflyor H3 — how a finished job failed, so the UI never paints a result that
+/// was NOT persisted. `Run` = the sidecar/parse failed (path-safe reason via
+/// `diarize::friendly_error`); `Save` = the run succeeded but the catalog write
+/// failed (details go to the log ONLY — the store error chain can carry the
+/// catalog path, so the shown line is a fixed generic).
+enum DiarFailure {
+    Run(String),
+    Save,
+}
+
+/// A user-facing line for a rename/save failure (Rust-built RU is allowed; the
+/// `.slint` strings stay English `@tr`). Shared const so the rename callback can
+/// recognize — and clear — its OWN failure text on a later successful keystroke
+/// without touching an in-flight job's progress text.
+const DIAR_SAVE_FAILED_MSG: &str = "Не удалось сохранить результат.";
+const DIAR_RENAME_FAILED_MSG: &str = "Не удалось сохранить имя говорящего.";
 
 /// A distinct colour per speaker id (cycled), vivid enough on light + dark surfaces.
 fn speaker_palette(id: i32) -> slint::Color {
@@ -2001,6 +2148,160 @@ fn speaker_rows(diar: &Diarization, utts: &[Utterance]) -> Vec<SpeakerRow> {
 fn set_speaker_list(win: &TranscriptWindow, diar: &Diarization, utts: &[Utterance]) {
     let rows = speaker_rows(diar, utts);
     win.set_speakers(ModelRc::from(Rc::new(VecModel::from(rows))));
+}
+
+/// suflyor H2 — start (replacing any prior) the UI-thread poll that consumes the
+/// running diarization job for display: progress step → status line, then the
+/// terminal outcome. The WORKER already persisted a successful result, so the Ok
+/// arm only PAINTS (re-reading the authoritative state back from the catalog);
+/// `paint_session_id` is the session the window shows now — a job that finishes
+/// for a DIFFERENT session (the window was repurposed mid-run) just clears the
+/// busy state instead of mislabelling another session's lines. Panic backstop:
+/// a worker that freed the latch without posting an outcome (it unwound) fails
+/// the UI clean instead of a forever-busy button.
+fn start_diar_poll(
+    weak: slint::Weak<TranscriptWindow>,
+    store: StoreSlot,
+    diar: Rc<RefCell<Option<Diarization>>>,
+    model: Rc<VecModel<TranscriptLine>>,
+    utts: Rc<Vec<Utterance>>,
+    handles: DiarJobHandles,
+    paint_session_id: String,
+) {
+    let poll = slint::Timer::default();
+    let slot = handles.slot;
+    let progress = handles.progress;
+    let job_sid = handles.session_id;
+    poll.start(
+        slint::TimerMode::Repeated,
+        std::time::Duration::from_millis(200),
+        move || {
+            if let Some(message) = progress.lock().ok().and_then(|mut value| value.take()) {
+                if let Some(w) = weak.upgrade() {
+                    w.set_diar_status(SharedString::from(message));
+                }
+            }
+            let done = slot.lock().ok().and_then(|mut g| g.take());
+            let Some(result) = done else {
+                // Panic backstop: the latch is free but no outcome was posted —
+                // the worker unwound. Fail clean (the RAII guard already freed
+                // the latch, so a new job is possible once this clears).
+                if !DIAR_BUSY.load(Ordering::Acquire) {
+                    DIAR_TIMER.with(|t| *t.borrow_mut() = None); // stop + drop self
+                    DIAR_JOB.with(|j| *j.borrow_mut() = None);
+                    if let Some(w) = weak.upgrade() {
+                        w.set_diarizing(false);
+                        w.set_diar_status(SharedString::from("Не удалось определить говорящих."));
+                    }
+                }
+                return;
+            };
+            DIAR_TIMER.with(|t| *t.borrow_mut() = None); // stop + drop self
+            DIAR_JOB.with(|j| *j.borrow_mut() = None);
+            let Some(w) = weak.upgrade() else {
+                // Window closed — nothing to paint; the worker already persisted
+                // the result, and the next open reads it from the catalog.
+                return;
+            };
+            w.set_diarizing(false);
+            match result {
+                Ok(d) if job_sid == paint_session_id => {
+                    // Re-read the persisted state so the UI can never diverge
+                    // from the catalog (falls back to the worker's value if the
+                    // read races a maintenance vacuum — same data, no failure).
+                    let d = lock_store(&store)
+                        .as_ref()
+                        .and_then(|st| st.get_diarization(&job_sid).ok().flatten())
+                        .unwrap_or(d);
+                    apply_voice_labels(&model, &utts, &d);
+                    set_speaker_list(&w, &d, &utts);
+                    *diar.borrow_mut() = Some(d);
+                    w.set_has_diarization(true);
+                    w.set_by_voice(true);
+                    // F — a fresh result carries no custom names; clear the guard and the
+                    // confirm that may have triggered this re-run.
+                    w.set_has_speaker_names(false);
+                    w.set_confirm_rediar(false);
+                    w.set_diar_status(SharedString::default());
+                }
+                Ok(_) => {
+                    // The job was for another session (repurposed window): the
+                    // worker persisted it; just drop the busy state here.
+                    w.set_diar_status(SharedString::default());
+                }
+                Err(DiarFailure::Run(e)) => {
+                    // I-5: surface the specific, path-safe reason (>3h / no speech)
+                    // instead of a bare generic line.
+                    w.set_diar_status(SharedString::from(
+                        overlay_backend::diarize::friendly_error(&e),
+                    ));
+                }
+                Err(DiarFailure::Save) => {
+                    // suflyor H3 — the result was NOT saved: a generic line (the
+                    // detail chain is in the log and can carry the catalog path),
+                    // and NO voice labels / has-diarization flip.
+                    w.set_diar_status(SharedString::from(DIAR_SAVE_FAILED_MSG));
+                }
+            }
+        },
+    );
+    DIAR_TIMER.with(|t| *t.borrow_mut() = Some(poll));
+}
+
+/// V-1 — start (replacing any prior) the UI-thread poll that consumes the
+/// running model install for display. The worker only downloads — the models
+/// land on disk window-independently — so the Ok arm re-checks the fs and flips
+/// can_diarize only when BOTH really landed (a partial install keeps the prompt
+/// up). A close+reopen re-attaches this poll to the SAME slot via
+/// `DIAR_INSTALL_JOB`; the worker's latch guard makes a second installer
+/// impossible regardless of the per-window property. Panic backstop: a worker
+/// that freed the latch without posting an outcome (it unwound) fails the UI
+/// clean instead of a forever-busy button.
+fn start_diar_install_poll(weak: slint::Weak<TranscriptWindow>, slot: DiarInstallSlot) {
+    let poll = slint::Timer::default();
+    poll.start(
+        slint::TimerMode::Repeated,
+        std::time::Duration::from_millis(300),
+        move || {
+            let done = slot.lock().ok().and_then(|mut g| g.take());
+            let Some(result) = done else {
+                // Panic backstop (same as the diarization poll): the latch is
+                // free but no outcome was posted — the worker unwound.
+                if !DIAR_INSTALL_BUSY.load(Ordering::Acquire) {
+                    DIAR_INSTALL_TIMER.with(|t| *t.borrow_mut() = None); // stop + drop self
+                    DIAR_INSTALL_JOB.with(|j| *j.borrow_mut() = None);
+                    if let Some(w) = weak.upgrade() {
+                        w.set_installing_diar_models(false);
+                        w.set_diar_status(SharedString::from("Не удалось скачать модели"));
+                    }
+                }
+                return;
+            };
+            DIAR_INSTALL_TIMER.with(|t| *t.borrow_mut() = None); // stop + drop self
+            DIAR_INSTALL_JOB.with(|j| *j.borrow_mut() = None);
+            let Some(w) = weak.upgrade() else {
+                // Window closed — nothing to paint; the models are on disk and
+                // the next open recomputes readiness from the fs.
+                return;
+            };
+            w.set_installing_diar_models(false);
+            match result {
+                Ok(()) => {
+                    // Re-check the fs rather than assume — only enable detect if BOTH
+                    // models really landed (a partial install keeps the prompt up).
+                    let ready = overlay_backend::diarize::models_ready();
+                    w.set_can_diarize(ready);
+                    w.set_needs_diar_models(!ready);
+                    w.set_diar_status(SharedString::default());
+                }
+                Err(e) => {
+                    w.set_diar_status(SharedString::from("Не удалось скачать модели"));
+                    log::warn!("diar model install failed: {e}");
+                }
+            }
+        },
+    );
+    DIAR_INSTALL_TIMER.with(|t| *t.borrow_mut() = Some(poll));
 }
 
 /// I (2026-07-05) — case-insensitive substring match (full Unicode lowercasing, so Cyrillic
@@ -2110,15 +2411,38 @@ fn wire_transcript_search(win: &TranscriptWindow, model: &Rc<VecModel<Transcript
 #[allow(clippy::too_many_arguments)]
 fn wire_transcript_diarization(
     win: &TranscriptWindow,
-    store: &Rc<RefCell<Store>>,
+    store: &StoreSlot,
     rt_handle: &tokio::runtime::Handle,
     session_id: &str,
     session_finished: bool,
     utts_display: &[Utterance],
     model: &Rc<VecModel<TranscriptLine>>,
 ) {
-    // A stale poll timer from a prior session's window (the window is reused).
+    // suflyor H2 — a live job (this window's or a closed one's) outlives this
+    // wiring: grab its handles BEFORE dropping the poll timer so the job's poll
+    // is re-attached below (a close+reopen keeps consuming the running job
+    // instead of spawning a second sidecar). No live job → the timer being
+    // dropped is just a stale one from a prior session's reused window.
+    let live_job = DIAR_BUSY
+        .load(Ordering::Acquire)
+        .then(|| DIAR_JOB.with(|j| j.borrow().clone()))
+        .flatten();
+    let job_busy = live_job.is_some();
     DIAR_TIMER.with(|t| *t.borrow_mut() = None);
+    // V-1 — same for the model install: grab the running download's slot BEFORE
+    // dropping its poll timer so the poll re-attaches below. Latch free + a slot
+    // still present = the install finished while the window was closed: readiness
+    // is recomputed from disk below, so just clear the stale handle — the new
+    // window must not show a busy button over an already-landed download.
+    let live_install = DIAR_INSTALL_BUSY
+        .load(Ordering::Acquire)
+        .then(|| DIAR_INSTALL_JOB.with(|j| j.borrow().clone()))
+        .flatten();
+    let install_busy = live_install.is_some();
+    DIAR_INSTALL_TIMER.with(|t| *t.borrow_mut() = None);
+    if !install_busy {
+        DIAR_INSTALL_JOB.with(|j| *j.borrow_mut() = None);
+    }
 
     let has_sys_audio_ms = utts_display
         .iter()
@@ -2142,13 +2466,17 @@ fn wire_transcript_diarization(
         );
 
     let diar: Rc<RefCell<Option<Diarization>>> = Rc::new(RefCell::new(
-        store.borrow().get_diarization(session_id).ok().flatten(),
+        lock_store(store)
+            .as_ref()
+            .and_then(|st| st.get_diarization(session_id).ok().flatten()),
     ));
     let utts_rc: Rc<Vec<Utterance>> = Rc::new(utts_display.to_vec());
 
     win.set_can_diarize(can_diarize);
     win.set_needs_diar_models(needs_diar_models);
-    win.set_installing_diar_models(false);
+    // V-1 — honest busy state: a download that outlived the window shows as
+    // downloading on (re)open; the re-attached poll clears it when it lands.
+    win.set_installing_diar_models(install_busy);
     win.set_timeline_unreliable(timeline_unreliable);
     win.set_has_diarization(diar.borrow().is_some());
     // F — arm the re-detect guard iff the stored result already has custom names; reset the
@@ -2160,8 +2488,16 @@ fn wire_transcript_diarization(
     );
     win.set_confirm_rediar(false);
     win.set_by_voice(false);
-    win.set_diarizing(false);
-    win.set_diar_status(SharedString::default());
+    // suflyor H2 — honest busy state: a job still running (from a closed window
+    // or a rep here) shows as running on (re)open; the re-attached poll below
+    // clears it when the job lands. The run callback's latch gate makes a second
+    // sidecar impossible regardless of what this property says.
+    win.set_diarizing(job_busy);
+    win.set_diar_status(SharedString::from(if job_busy {
+        "Определение говорящих…"
+    } else {
+        ""
+    }));
     let default_count = diar
         .borrow()
         .as_ref()
@@ -2172,6 +2508,26 @@ fn wire_transcript_diarization(
     // but defends against a stale prior-session list if the gating ever changes.
     win.set_speakers(ModelRc::from(Rc::new(VecModel::<SpeakerRow>::default())));
     apply_role_labels(model, &utts_rc);
+
+    // suflyor H2 — re-attach the result poll to a job that outlived the window:
+    // the worker persists the result itself, and this poll consumes it for the
+    // UI (painting only if this session is still the one on screen).
+    if let Some(handles) = live_job {
+        start_diar_poll(
+            win.as_weak(),
+            store.clone(),
+            diar.clone(),
+            model.clone(),
+            utts_rc.clone(),
+            handles,
+            session_id.to_string(),
+        );
+    }
+    // V-1 — re-attach the install poll to a download that outlived the window
+    // (same lifecycle as above; the worker commits on disk window-independently).
+    if let Some(slot) = live_install {
+        start_diar_install_poll(win.as_weak(), slot);
+    }
 
     // Toggle role ↔ voice.
     {
@@ -2207,11 +2563,24 @@ fn wire_transcript_diarization(
             let Some(w) = weak.upgrade() else {
                 return;
             };
-            {
-                let st = store_c.borrow();
-                let _ = st.rename_speaker(&sid, id, name.as_str());
-                *diar_c.borrow_mut() = st.get_diarization(&sid).ok().flatten();
+            // suflyor H3 — the rename Result is authoritative: on failure the
+            // name was NOT saved, so the transcript is NOT relabelled from a
+            // state that never reached the catalog and no success is painted.
+            let renamed = {
+                let slot = lock_store(&store_c);
+                match slot.as_ref() {
+                    Some(st) => st.rename_speaker(&sid, id, name.as_str()),
+                    None => return,
+                }
+            };
+            if let Err(e) = renamed {
+                log::warn!("diar: rename speaker {id} NOT persisted: {e:#}");
+                w.set_diar_status(SharedString::from(DIAR_RENAME_FAILED_MSG));
+                return;
             }
+            *diar_c.borrow_mut() = lock_store(&store_c)
+                .as_ref()
+                .and_then(|st| st.get_diarization(&sid).ok().flatten());
             if let Some(d) = diar_c.borrow().as_ref() {
                 // F-fix (fable): the rename now commits per-keystroke (`edited`), so do NOT rebuild
                 // the speaker list here — that recreates the focused LineEdit on every keystroke and
@@ -2220,14 +2589,23 @@ fn wire_transcript_diarization(
                 apply_voice_labels(&model_c, &utts_c, d);
                 let has_names = d.speaker_names.values().any(|n| !n.trim().is_empty());
                 w.set_has_speaker_names(has_names);
+                // Clear OUR failure text once a keystroke saved again — but never
+                // an in-flight job's progress line (it only re-posts on a new step).
+                if w.get_diar_status().as_str() == DIAR_RENAME_FAILED_MSG {
+                    w.set_diar_status(SharedString::default());
+                }
                 log::debug!("diar: rename speaker {id} (has_custom_names={has_names})");
             }
         });
     }
 
-    // Run diarization: spawn the blocking sidecar off-thread; a UI-thread poll timer
-    // picks up the Send result and persists + repaints (the !Sync store + Rc model
-    // stay on the UI thread).
+    // Run diarization: spawn the blocking sidecar off-thread behind the process-
+    // global latch (suflyor H2 — one job process-wide; a close+reopen re-attaches
+    // instead of spawning a second sidecar). The WORKER persists the result
+    // through its own catalog handle (WAL + busy_timeout make that safe) BEFORE
+    // releasing the latch, so a completed result survives the window closing and
+    // a failed save is never painted as a success (suflyor H3). The UI-thread
+    // poll ([`start_diar_poll`]) only consumes the outcome for display.
     {
         let weak = win.as_weak();
         let store_c = store.clone();
@@ -2240,22 +2618,38 @@ fn wire_transcript_diarization(
             let Some(w) = weak.upgrade() else {
                 return;
             };
-            if w.get_diarizing() {
+            let Some(guard) = try_acquire_busy(&DIAR_BUSY) else {
+                // A job from another (possibly closed) window is still running:
+                // honest busy state, NO second sidecar. The running job's poll
+                // (re-attached on reopen) clears this when it lands.
+                w.set_diarizing(true);
+                w.set_diar_status(SharedString::from("Определение говорящих уже выполняется…"));
+                // Dismiss the re-detect confirm (if this run came through it) so
+                // the busy line is visible and the card doesn't linger.
+                w.set_confirm_rediar(false);
                 return;
-            }
+            };
             let count = w.get_speaker_count().clamp(0, 8);
             w.set_diarizing(true);
             w.set_diar_status(SharedString::from("Определение говорящих…"));
 
-            let slot: Arc<Mutex<Option<Result<Diarization, String>>>> = Arc::new(Mutex::new(None));
-            let progress: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-            let utts_owned: Vec<Utterance> = utts_c.as_ref().clone();
+            let handles = DiarJobHandles {
+                slot: Arc::new(Mutex::new(None)),
+                progress: Arc::new(Mutex::new(None)),
+                session_id: sid.clone(),
+            };
+            DIAR_JOB.with(|j| *j.borrow_mut() = Some(handles.clone()));
             {
-                let slot_w = slot.clone();
-                let progress_w = progress.clone();
+                let slot_w = handles.slot.clone();
+                let progress_w = handles.progress.clone();
                 let sid_w = sid.clone();
+                let utts_owned: Vec<Utterance> = utts_c.as_ref().clone();
                 rt.spawn_blocking(move || {
-                    let r = overlay_backend::diarize::run_diarization(
+                    // Held until the outcome is posted — on EVERY exit, including
+                    // a panic unwinding the sidecar run (RAII; the latch can't be
+                    // leaked and wedge the feature until restart).
+                    let guard = guard;
+                    let outcome = match overlay_backend::diarize::run_diarization(
                         &sid_w,
                         count,
                         &utts_owned,
@@ -2264,70 +2658,51 @@ fn wire_transcript_diarization(
                                 *value = Some(message);
                             }
                         },
-                    )
-                    .map_err(|e| format!("{e:#}"));
+                    ) {
+                        Ok(d) => {
+                            // Persist HERE, off the window: a worker-owned catalog
+                            // handle (the archive window does the same). The poll's
+                            // Ok arm only paints what this write committed.
+                            match open_default_store().and_then(|st| st.put_diarization(&d)) {
+                                Ok(()) => Ok(d),
+                                Err(e) => {
+                                    log::warn!("diarization result NOT persisted: {e:#}");
+                                    Err(DiarFailure::Save)
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::warn!("diarization failed: {e:#}");
+                            Err(DiarFailure::Run(format!("{e:#}")))
+                        }
+                    };
                     if let Ok(mut g) = slot_w.lock() {
-                        *g = Some(r);
+                        *g = Some(outcome);
+                        // Publish and release the latch while still holding the
+                        // slot lock: the poll cannot consume a terminal result
+                        // and race a final, still-busy latch state.
+                        drop(guard);
                     }
                 });
             }
-
-            let poll = slint::Timer::default();
-            let weak_p = weak.clone();
-            let store_p = store_c.clone();
-            let diar_p = diar_c.clone();
-            let model_p = model_c.clone();
-            let utts_p = utts_c.clone();
-            poll.start(
-                slint::TimerMode::Repeated,
-                std::time::Duration::from_millis(200),
-                move || {
-                    if let Some(message) = progress.lock().ok().and_then(|mut value| value.take()) {
-                        if let Some(w) = weak_p.upgrade() {
-                            w.set_diar_status(SharedString::from(message));
-                        }
-                    }
-                    let done = slot.lock().ok().and_then(|mut g| g.take());
-                    let Some(result) = done else {
-                        return;
-                    };
-                    DIAR_TIMER.with(|t| *t.borrow_mut() = None); // stop + drop self
-                    let Some(w) = weak_p.upgrade() else {
-                        return;
-                    };
-                    w.set_diarizing(false);
-                    match result {
-                        Ok(d) => {
-                            let _ = store_p.borrow().put_diarization(&d);
-                            apply_voice_labels(&model_p, &utts_p, &d);
-                            set_speaker_list(&w, &d, &utts_p);
-                            *diar_p.borrow_mut() = Some(d);
-                            w.set_has_diarization(true);
-                            w.set_by_voice(true);
-                            // F — a fresh result carries no custom names; clear the guard and the
-                            // confirm that may have triggered this re-run.
-                            w.set_has_speaker_names(false);
-                            w.set_confirm_rediar(false);
-                            w.set_diar_status(SharedString::default());
-                        }
-                        Err(e) => {
-                            // I-5: surface the specific, path-safe reason (>3h / no speech)
-                            // instead of a bare generic line.
-                            w.set_diar_status(SharedString::from(
-                                overlay_backend::diarize::friendly_error(&e),
-                            ));
-                            log::warn!("diarization failed: {e}");
-                        }
-                    }
-                },
+            start_diar_poll(
+                weak.clone(),
+                store_c.clone(),
+                diar_c.clone(),
+                model_c.clone(),
+                utts_c.clone(),
+                handles,
+                sid.clone(),
             );
-            DIAR_TIMER.with(|t| *t.borrow_mut() = Some(poll));
         });
     }
 
-    // V-1 — install the diarization models off-thread; a UI-thread poll flips
-    // can_diarize when they land (mirrors run-diarization — the store + models are
-    // UI-thread-bound, so the worker only downloads and the poll updates the UI).
+    // V-1 — install the diarization models off-thread behind the process-global
+    // latch (the download outlives the window; a close+reopen re-attaches the
+    // poll via DIAR_INSTALL_JOB instead of spawning a second `install_models`
+    // on the same .download/staging/live files). The WORKER only downloads —
+    // the models commit on disk window-independently — and the UI-thread poll
+    // ([`start_diar_install_poll`]) consumes the outcome for display.
     {
         let weak = win.as_weak();
         let rt = rt_handle.clone();
@@ -2335,59 +2710,40 @@ fn wire_transcript_diarization(
             let Some(w) = weak.upgrade() else {
                 return;
             };
-            if w.get_installing_diar_models() {
+            let Some(guard) = try_acquire_busy(&DIAR_INSTALL_BUSY) else {
+                // An install from another (possibly closed) window is still
+                // running: honest busy state, NO second worker. The running
+                // install's poll (re-attached on reopen) clears this when it lands.
+                w.set_installing_diar_models(true);
+                w.set_diar_status(SharedString::default());
                 return;
-            }
+            };
             w.set_installing_diar_models(true);
             w.set_diar_status(SharedString::default());
 
-            let slot: Arc<Mutex<Option<Result<(), String>>>> = Arc::new(Mutex::new(None));
+            let slot: DiarInstallSlot = Arc::new(Mutex::new(None));
+            DIAR_INSTALL_JOB.with(|j| *j.borrow_mut() = Some(slot.clone()));
             {
                 let slot_w = slot.clone();
                 rt.spawn_blocking(move || {
-                    let cancel = std::sync::atomic::AtomicBool::new(false);
+                    // Held until the outcome is posted — on EVERY exit, including
+                    // a panic unwinding the download (RAII; the latch can't be
+                    // leaked and wedge the feature until restart).
+                    let guard = guard;
+                    let cancel = AtomicBool::new(false);
                     // ponytail: no per-file progress marshalling — the button's
                     // "Downloading…" state is enough for a one-time ~30 MB fetch.
                     let r = overlay_backend::diar_install::install_models(&cancel, &|_| {})
                         .map_err(|e| format!("{e:#}"));
                     if let Ok(mut g) = slot_w.lock() {
                         *g = Some(r);
+                        // Keep result publication + latch release ordered for
+                        // the poll (same contract as the diarization worker).
+                        drop(guard);
                     }
                 });
             }
-
-            let poll = slint::Timer::default();
-            let weak_p = weak.clone();
-            poll.start(
-                slint::TimerMode::Repeated,
-                std::time::Duration::from_millis(300),
-                move || {
-                    let done = slot.lock().ok().and_then(|mut g| g.take());
-                    let Some(result) = done else {
-                        return;
-                    };
-                    DIAR_TIMER.with(|t| *t.borrow_mut() = None); // stop + drop self
-                    let Some(w) = weak_p.upgrade() else {
-                        return;
-                    };
-                    w.set_installing_diar_models(false);
-                    match result {
-                        Ok(()) => {
-                            // Re-check the fs rather than assume — only enable detect if BOTH
-                            // models really landed (a partial install keeps the prompt up).
-                            let ready = overlay_backend::diarize::models_ready();
-                            w.set_can_diarize(ready);
-                            w.set_needs_diar_models(!ready);
-                            w.set_diar_status(SharedString::default());
-                        }
-                        Err(e) => {
-                            w.set_diar_status(SharedString::from("Не удалось скачать модели"));
-                            log::warn!("diar model install failed: {e}");
-                        }
-                    }
-                },
-            );
-            DIAR_TIMER.with(|t| *t.borrow_mut() = Some(poll));
+            start_diar_install_poll(weak.clone(), slot);
         });
     }
 }
@@ -2400,7 +2756,7 @@ pub(crate) fn open_transcript(
     slot: &Rc<RefCell<Option<TranscriptWindow>>>,
     session: Option<&Session>,
     utts: &[Utterance],
-    store: &Rc<RefCell<Store>>,
+    store: &StoreSlot,
     rt_handle: &tokio::runtime::Handle,
 ) {
     // Build the model once — shared by the reuse + first-open paths.
@@ -2446,7 +2802,7 @@ pub(crate) fn open_transcript(
             // Role view uses the theme accent (Slint side); this is only read in the
             // «По голосам» view, where `rebuild_speaker_labels` overwrites it.
             speaker_color: slint::Color::from_rgb_u8(0, 0, 0),
-            text: SharedString::from(u.text.split_whitespace().collect::<Vec<_>>().join(" ")),
+            text: SharedString::from(overlay_backend::text::collapse_ws(&u.text)),
             checked: false,
             marked: false,
             start_ms: off.unwrap_or(0) as i32,
@@ -2524,7 +2880,15 @@ pub(crate) fn open_transcript(
         let weak = win.as_weak();
         win.on_close_requested(move || {
             transcript_player::reset(); // stop audio + poll timer when the window closes
-            DIAR_TIMER.with(|t| *t.borrow_mut() = None); // stop the diarization poll too
+                                        // suflyor H2 / V-1 — dropping the polls only stops the cosmetic
+                                        // consumption: a running job holds its process-global latch, lands
+                                        // the outcome window-independently (the diar worker persists from
+                                        // its own catalog handle; the install commits on disk), and a
+                                        // reopen re-attaches a poll via DIAR_JOB / DIAR_INSTALL_JOB — so
+                                        // closing neither loses the result nor frees the latch for a
+                                        // second worker.
+            DIAR_TIMER.with(|t| *t.borrow_mut() = None);
+            DIAR_INSTALL_TIMER.with(|t| *t.borrow_mut() = None);
             if let Some(w) = weak.upgrade() {
                 let _ = w.hide();
             }
@@ -2560,7 +2924,7 @@ pub(crate) fn open_transcript(
 }
 
 /// Render a session's content as the markdown body of a read-only tile:
-/// a heading (status + label + counts), the transcript, then the AI Q&A.
+/// a heading (label + human counts), the transcript, then the AI Q&A.
 /// Pure → unit-tested.
 fn build_session_markdown(
     session: Option<&Session>,
@@ -2570,15 +2934,20 @@ fn build_session_markdown(
     let mut out = String::new();
     if let Some(s) = session {
         out.push_str(&format!("# {}\n\n", session_title(s.started_at_ms, &s.id)));
-        let model = s.ai_model.as_deref().unwrap_or("—");
-        out.push_str(&format!(
-            "lines {} · ai {} · {model}",
-            s.transcript_lines, s.ai_turns_count
-        ));
+        // The SAME human wording as the archive rows (the body is Russian,
+        // like the rest of this markdown) — no code-like `lines N · ai N`
+        // metadata and no "—" dash for an unknown model.
+        out.push_str(&format!("Стенограмма: {}", s.transcript_lines));
+        out.push_str(&format!(" · ИИ: {}", s.ai_turns_count));
+        if let Some(model) = s.ai_model.as_deref().filter(|m| !m.is_empty()) {
+            out.push_str(&format!(" · {model}"));
+        }
         if s.total_cost_microcents > 0 {
+            // SessionRow stores i64; the >0 guard makes the checked conversion exact.
+            let micro = u64::try_from(s.total_cost_microcents).unwrap_or(0);
             out.push_str(&format!(
                 " · ${:.3}",
-                (s.total_cost_microcents as f64) / 100_000_000.0
+                overlay_backend::ai::microcents_to_usd(micro)
             ));
         }
         out.push_str("\n\n");
@@ -2596,7 +2965,7 @@ fn build_session_markdown(
                 "Система"
             };
             // Collapse internal whitespace/newlines so one utterance = one line.
-            let text = u.text.split_whitespace().collect::<Vec<_>>().join(" ");
+            let text = overlay_backend::text::collapse_ws(&u.text);
             // F1: start = previous line's timestamp (first = origin); see session_audio.
             match overlay_backend::session_audio::line_start_offset_ms(utterances, i, session_start)
             {
@@ -2626,6 +2995,44 @@ fn build_session_markdown(
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+
+    /// Pins the one-job contract on a private atomic, so parallel tests never
+    /// touch either process-global latch.
+    #[test]
+    fn diar_latch_is_a_single_job_gate() {
+        let latch = AtomicBool::new(false);
+        assert!(!latch.load(Ordering::Acquire), "a fresh latch is free");
+
+        let g1 = try_acquire_busy(&latch);
+        assert!(g1.is_some(), "first acquire on a free latch must succeed");
+        assert!(latch.load(Ordering::Acquire));
+
+        let g2 = try_acquire_busy(&latch);
+        assert!(g2.is_none(), "a second acquire while held must fail");
+        assert!(
+            latch.load(Ordering::Acquire),
+            "a FAILED acquire must NOT free the held latch (then vs then_some)"
+        );
+
+        drop(g1);
+        assert!(
+            !latch.load(Ordering::Acquire),
+            "dropping the guard releases the latch"
+        );
+
+        let g3 = try_acquire_busy(&latch);
+        assert!(g3.is_some(), "the latch is reusable after release");
+        assert!(latch.load(Ordering::Acquire));
+        drop(g3);
+        assert!(!latch.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn diar_failure_messages_are_distinct_and_non_empty() {
+        assert!(!DIAR_SAVE_FAILED_MSG.trim().is_empty());
+        assert!(!DIAR_RENAME_FAILED_MSG.trim().is_empty());
+        assert_ne!(DIAR_SAVE_FAILED_MSG, DIAR_RENAME_FAILED_MSG);
+    }
 
     #[test]
     fn pretty_label_parses_stem() {
@@ -2722,12 +3129,13 @@ mod tests {
     }
 
     #[test]
-    fn session_row_uses_plain_counts() {
+    fn session_row_uses_localized_human_counts() {
         let row = session_to_row(
             &sample_session(),
             &no_recordings(),
             &no_recordings(),
             &no_recordings(),
+            true,
         );
         // v0.17.2 — the label is МСК wall-clock from started_at_ms, not the UTC id.
         // v0.22.0 — a COMPLETED session has no status prefix (the "done " was
@@ -2737,16 +3145,87 @@ mod tests {
             "got {:?}",
             row.title
         );
-        assert!(row.subtitle.as_str().contains("lines 12"));
-        assert!(row.subtitle.as_str().contains("ai 3"));
+        // UX-clarity — short LOCALIZED labels instead of code-like metadata.
+        assert!(row.subtitle.as_str().contains("Стенограмма: 12"));
+        assert!(row.subtitle.as_str().contains("ИИ: 3"));
+        assert!(row.subtitle.as_str().contains("gemma"));
         assert_eq!(row.meta.as_str(), ""); // zero cost → blank meta
+
+        let en = session_to_row(
+            &sample_session(),
+            &no_recordings(),
+            &no_recordings(),
+            &no_recordings(),
+            false,
+        );
+        assert!(en.subtitle.as_str().contains("Transcript: 12"));
+        assert!(en.subtitle.as_str().contains("AI: 3"));
+    }
+
+    /// Regression guard (UX-clarity): no code-like row metadata or raw internal
+    /// state token may reach a visible archive row — in EITHER language.
+    #[test]
+    fn session_row_never_shows_raw_metadata_or_state() {
+        for ru in [true, false] {
+            for status in ["completed", "crashed", "active"] {
+                let mut s = sample_session();
+                s.status = status.into();
+                s.ai_model = None; // the old code showed a "—" dash here
+                let row =
+                    session_to_row(&s, &no_recordings(), &no_recordings(), &no_recordings(), ru);
+                let visible = format!("{} | {} | {}", row.title, row.subtitle, row.meta);
+                for raw in ["lines ", "ai ", "—", "crashed", "active"] {
+                    assert!(!visible.contains(raw), "raw token {raw:?} in {visible:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn session_row_flags_abnormal_status_with_a_localized_word() {
+        let mut s = sample_session();
+        s.status = "crashed".into();
+        let ru = session_to_row(
+            &s,
+            &no_recordings(),
+            &no_recordings(),
+            &no_recordings(),
+            true,
+        );
+        // The title stays clean; the status reads as a word in the subtitle.
+        assert!(ru.title.as_str().starts_with("24.05.2026 03:00:00 (МСК)"));
+        assert!(
+            ru.subtitle.as_str().ends_with("Прервана"),
+            "got {:?}",
+            ru.subtitle
+        );
+
+        s.status = "active".into();
+        let en = session_to_row(
+            &s,
+            &no_recordings(),
+            &no_recordings(),
+            &no_recordings(),
+            false,
+        );
+        assert!(
+            en.subtitle.as_str().ends_with("In progress"),
+            "got {:?}",
+            en.subtitle
+        );
     }
 
     #[test]
     fn session_row_shows_cost_when_nonzero() {
         let mut s = sample_session();
         s.total_cost_microcents = 2_400_000; // $0.024
-        let row = session_to_row(&s, &no_recordings(), &no_recordings(), &no_recordings());
+        let row = session_to_row(
+            &s,
+            &no_recordings(),
+            &no_recordings(),
+            &no_recordings(),
+            true,
+        );
         assert_eq!(row.meta.as_str(), "$0.024");
     }
 
@@ -2759,17 +3238,39 @@ mod tests {
             body: "a   key value   structure".into(),
             rank: -1.0,
         };
-        let row = hit_to_row(&h, &no_recordings(), &no_recordings(), &no_recordings());
+        let row = hit_to_row(
+            &h,
+            &no_recordings(),
+            &no_recordings(),
+            &no_recordings(),
+            true,
+        );
         // Hits carry only the UTC id stamp → parsed + shifted to МСК (+3h).
         assert!(
             row.title
                 .as_str()
-                .starts_with("search 04.06.2026 12:30:00 (МСК)"),
+                .starts_with("Поиск: 04.06.2026 12:30:00 (МСК)"),
             "got {:?}",
             row.title
         );
-        assert_eq!(row.meta.as_str(), "answer");
+        assert_eq!(row.meta.as_str(), "ответ"); // localized hit kind
         assert_eq!(row.subtitle.as_str(), "a key value structure"); // whitespace collapsed
+
+        let en = hit_to_row(
+            &h,
+            &no_recordings(),
+            &no_recordings(),
+            &no_recordings(),
+            false,
+        );
+        assert!(
+            en.title
+                .as_str()
+                .starts_with("Search: 04.06.2026 12:30:00 (МСК)"),
+            "got {:?}",
+            en.title
+        );
+        assert_eq!(en.meta.as_str(), "answer");
     }
 
     #[test]

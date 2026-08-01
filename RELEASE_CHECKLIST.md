@@ -10,7 +10,7 @@ only manifest at runtime. Every release MUST pass all gates before push.
 ## Gate 1 — Static checks
 
 ```powershell
-powershell scripts\ci.ps1     # fmt + clippy -D warnings + tests (slint + overlay-backend)
+powershell scripts\ci.ps1     # fmt + clippy -D warnings + tests (slint-experiment + overlay-backend + suflyor-tts)
 ```
 
 Exit 0. **Fail:** fix before going further.
@@ -38,7 +38,7 @@ with any prior build). Quit a running instance first:
 
 ## Gate 4 — Smoke test (visual)
 
-Launch + screenshot (`scripts\capture_window.ps1 -TitleLike "overlay-mvp (Slint)"`
+Launch + screenshot (`slint-experiment\scripts\capture_window.ps1 -TitleLike "suflyor (Slint)"`
 or `capture_primary.ps1`). Verify:
 
 1. Overlay bar appears at a sane position + size; right edge ≤ screen width, left ≥ 0.
@@ -73,12 +73,13 @@ Orphan processes hold the global hotkeys and break the next launch.
 
 ## After all gates pass
 
-```powershell
-git add <files>
-git commit -m "vX.Y.Z - ..."
-git push origin master
-gh release create vX.Y.Z slint-experiment\target\release\bundle\suflyor-slint-setup.exe --title "..." --notes-file notes.md
-```
+Agents work on a `codex/<task>` branch, push that branch, and open a PR
+against `master`. Direct pushes to `master` are forbidden.
+
+Only the **owner** may merge the PR, publish a GitHub release, or create
+tags — and only after explicitly authorizing one specific version whose
+verified build evidence was shown. Agents must never run release or
+tagging commands on their own initiative.
 
 ## What this does NOT catch
 

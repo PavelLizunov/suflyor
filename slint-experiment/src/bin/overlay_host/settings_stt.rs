@@ -26,6 +26,45 @@
 //! imports narrow in a later pass.
 use super::{ComponentHandle, SettingsWindow, SharedString};
 
+/// The two Groq cloud model ids exposed in the STT tab combobox.
+/// Index 0 = turbo (fast, recommended), index 1 = large-v3 (more accurate).
+pub(crate) const CLOUD_MODELS: [&str; 2] = ["whisper-large-v3-turbo", "whisper-large-v3"];
+
+/// Map a cloud-model combobox index to the Groq model id.
+/// Unknown indices fall back to the recommended turbo model.
+pub(crate) fn cloud_model_from_index(idx: i32) -> &'static str {
+    match idx {
+        1 => CLOUD_MODELS[1],
+        _ => CLOUD_MODELS[0],
+    }
+}
+
+/// Map a persisted Groq model id back to the combobox index.
+/// Only the two supported values are matched; anything else (empty,
+/// legacy, hand-edited) maps to 0 so the UI shows a valid selection.
+pub(crate) fn cloud_model_index(model: &str) -> i32 {
+    match model {
+        "whisper-large-v3" => 1,
+        _ => 0,
+    }
+}
+
+fn update_cloud_model<E>(
+    config: &mut overlay_backend::config::Config,
+    idx: i32,
+    save: impl FnOnce(&overlay_backend::config::Config) -> Result<(), E>,
+) -> Result<(), E> {
+    let previous = std::mem::replace(
+        &mut config.stt_model,
+        cloud_model_from_index(idx).to_string(),
+    );
+    if let Err(error) = save(config) {
+        config.stt_model = previous;
+        return Err(error);
+    }
+    Ok(())
+}
+
 /// Wire the STT-tab Settings callbacks onto the Settings window. Moved VERBATIM
 /// out of `open_settings` (P1 domain split) — same captures, same behavior.
 /// Needs only `win` (for the closures + the test's `as_weak()`) and `cfg`
@@ -94,6 +133,26 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
                 return;
             }
             diag!("stt_provider -> {provider}");
+        });
+    }
+    // Cloud recognition model (stt_model): 0=turbo (fast), 1=large-v3 (accurate).
+    // Handy-style rollback: on save failure the in-memory config value AND the
+    // visible combobox selection revert to the previous state.
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_stt_cloud_model_changed(move |idx| {
+            let mut c = cfg_c.write();
+            if let Err(e) = update_cloud_model(&mut c, idx, overlay_backend::config::save) {
+                let prev_idx = cloud_model_index(&c.stt_model);
+                drop(c);
+                eprintln!("[overlay-host] stt_model save failed: {e:#}");
+                if let Some(w) = weak.upgrade() {
+                    w.set_stt_cloud_model_index(prev_idx);
+                }
+                return;
+            }
+            diag!("stt_model -> {}", cloud_model_from_index(idx));
         });
     }
     {
@@ -166,5 +225,37 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
             }
             diag!("stt_whisper_model saved ({} chars)", trimmed.len());
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use super::*;
+
+    #[test]
+    fn cloud_model_mapping_is_bounded() {
+        for (idx, model) in CLOUD_MODELS.iter().enumerate() {
+            assert_eq!(cloud_model_from_index(idx as i32), *model);
+            assert_eq!(cloud_model_index(model), idx as i32);
+        }
+        assert_eq!(cloud_model_from_index(-1), "whisper-large-v3-turbo");
+        assert_eq!(cloud_model_from_index(2), "whisper-large-v3-turbo");
+        assert_eq!(cloud_model_index(""), 0);
+        assert_eq!(cloud_model_index("bogus"), 0);
+    }
+
+    #[test]
+    fn failed_cloud_model_save_rolls_back() {
+        let mut config = overlay_backend::config::Config {
+            stt_model: "whisper-large-v3-turbo".into(),
+            ..Default::default()
+        };
+
+        let result = update_cloud_model(&mut config, 1, |_| Err("disk full"));
+
+        assert_eq!(result, Err("disk full"));
+        assert_eq!(config.stt_model, "whisper-large-v3-turbo");
     }
 }

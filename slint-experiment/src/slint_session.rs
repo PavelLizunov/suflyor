@@ -122,6 +122,15 @@ fn start_session_inner(
         // NEXT session already showing "AI недоступен" (stale err >= ok=0).
         s.health.last_ai_err_ms.store(0, Ordering::Relaxed);
         s.last_ai_error_tile_ms = 0;
+        // Suflyor E2 — seed the per-source mic clock with the session start
+        // (NOT 0): a mic that fails to open/capture never bumps it, so it ages
+        // through the standard 15s/60s thresholds on `snapshot` instead of
+        // hiding behind the system loopback; a healthy mic overwrites the seed
+        // with its first chunk. Re-arm the mic-down notice for the new session.
+        s.health
+            .last_mic_frame_ms
+            .store(now_unix_ms() as u64, Ordering::Relaxed);
+        s.mic_down_notified = false;
         s.speech_window.clear();
         s.meeting_ending_emitted = false;
         s.recent_question_prefixes.clear();
@@ -305,6 +314,8 @@ fn start_session_inner(
     // ===== 6. Spawn health emitter (2s ticker) =====
     let health_for_tick = health.clone();
     let events_for_tick = events.clone();
+    let rt_for_tick = rt.clone();
+    let cfg_for_tick = cfg.clone();
     let health_task = tokio::spawn(async move {
         let mut tick = tokio::time::interval(Duration::from_secs(2));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -312,6 +323,35 @@ fn start_session_inner(
             tick.tick().await;
             let now_ms = now_unix_ms() as u64;
             let snap = health_for_tick.snapshot(now_ms);
+            // Suflyor E2 — a mic that fails to open/capture used to be
+            // log-only; now one GENERIC notice tile per failure episode
+            // (latched; re-arms on recovery). Same Error-tile machinery as
+            // the AI-down notice — no new notification path. The health dot
+            // (audio → degraded/down via the per-source fold) covers the
+            // transient case; the tile fires only on a sustained "down".
+            let notify_mic_down = {
+                let mut s = lock(&rt_for_tick);
+                let (notify, latch) = mic_notice_decision(snap.mic, s.mic_down_notified);
+                s.mic_down_notified = latch;
+                notify
+            };
+            if notify_mic_down {
+                log_info("mic health DOWN (no mic frames) — spawning one generic notice tile");
+                let stealth = cfg_for_tick.read().stealth_enabled;
+                let _ = events_for_tick.spawn_tile_full(
+                    TileSpec {
+                        question: "Микрофон не слышен".into(),
+                        answer: "Микрофон не передаёт звук: ваша речь не расшифровывается.\n\nПроверьте устройство ввода (Настройки -> STT) и убедитесь, что микрофон не отключён и не занят другим приложением.".into(),
+                        source: "mic_error".into(),
+                        is_translation: false,
+                        highlights: vec!["mic down".into()],
+                        summary_session: None,
+                    },
+                    MonitorHint::Auto,
+                    stealth,
+                    TileKind::Error,
+                );
+            }
             let payload = serde_json::to_value(&snap).unwrap_or(serde_json::Value::Null);
             events_for_tick.emit("health:update", payload);
             // (speech:coach emit lives in the snapshot_speech_coach
@@ -354,6 +394,24 @@ fn forward_audio_chunks(
         while let Some(chunk) = src_rx.recv().await {
             let (paused, mic_muted) = {
                 let state = lock(&rt);
+                let now_ms = now_unix_ms() as u64;
+                // Capture is alive even when pause/mute keeps this chunk away
+                // from STT. Keep the shared signal fresh at this common gate.
+                state
+                    .health
+                    .last_audio_frame_ms
+                    .store(now_ms, Ordering::Relaxed);
+                // Suflyor E2 — per-source mic liveness, bumped BEFORE the
+                // mute/pause gates: a muted or paused mic is still ALIVE, and
+                // only a mic that delivers nothing must age into the
+                // degraded/down health state (a failed open/capture otherwise
+                // hid behind the system loopback's shared-signal bumps).
+                if matches!(chunk.source, AudioSource::Mic) {
+                    state
+                        .health
+                        .last_mic_frame_ms
+                        .store(now_ms, Ordering::Relaxed);
+                }
                 (
                     state.paused,
                     matches!(chunk.source, AudioSource::Mic) && state.mic_muted,
@@ -362,10 +420,16 @@ fn forward_audio_chunks(
             if paused {
                 continue;
             }
-            if !mic_muted {
-                if let Some(recorder) = recorder.as_ref() {
-                    recorder.feed(&chunk);
-                }
+            // Suflyor E5 — muted mic audio is dropped at the earliest shared
+            // gate, BEFORE STT submission (previously it was transcribed and
+            // only then discarded) and — unchanged — before the recorder tee
+            // (v0.13.1 mute contract: mic mute drops mic transcript + mic
+            // recording; system audio is unaffected).
+            if mic_muted {
+                continue;
+            }
+            if let Some(recorder) = recorder.as_ref() {
+                recorder.feed(&chunk);
             }
             let permit = match stt_tx.reserve().await {
                 Ok(permit) => permit,
@@ -416,7 +480,10 @@ async fn transcript_forwarder(
             ev.source,
             ev.text.chars().count()
         ));
-        // Mic-mute drop — same semantic as src-tauri's check.
+        // Mic-mute drop — same semantic as src-tauri's check. Suflyor E5 gates
+        // muted mic chunks BEFORE STT submission (in `forward_audio_chunks`),
+        // so this is now belt-and-braces for an utterance already buffered
+        // with pre-mute mic audio when mute was pressed mid-flight.
         if matches!(ev.source, AudioSource::Mic) && lock(&rt).mic_muted {
             log_info("  -> dropped (mic muted)");
             continue;
@@ -537,6 +604,21 @@ const QA_CACHE_MAX_ENTRIES: usize = 256;
 /// at most one "AI недоступен" tile per this window so the user is informed
 /// once, not spammed. 20s balances "noticed promptly" vs "not nagging".
 const AI_ERROR_TILE_DEBOUNCE_MS: u64 = 20_000;
+
+/// Suflyor E2 — latch decision for the health ticker's mic-down notice tile.
+/// Returns `(notify_now, new_latch)`. Fires ONCE when the per-source mic
+/// health enters "down"; the latch holds back repeats while the failure
+/// persists (the ticker runs every 2s) and re-arms only when the mic reads
+/// "ok" again. "idle"/"degraded" leave the latch untouched, so the
+/// degraded→down ramp notifies exactly once, at "down". Pure + unit-tested.
+#[must_use]
+fn mic_notice_decision(mic_state: &str, latch: bool) -> (bool, bool) {
+    match mic_state {
+        "down" => (!latch, true),
+        "ok" => (false, false),
+        _ => (false, latch),
+    }
+}
 
 /// Phase E4 — Slint-side auto-tile detector + AI ask pipeline.
 ///
@@ -771,25 +853,20 @@ async fn maybe_spawn_auto_tile(
     // ===== Cost cap — BLOCK the auto-tile cloud spend once over budget =====
     // Local inference is free (cost stays 0), so this only ever trips on the
     // cloud bridge. Auto-tiles are the "spend without an explicit keypress"
-    // path, so honour the user's cap here by returning after the chip — manual
+    // path, so honour the user's cap here by returning after the notice — manual
     // F9/F6 asks still proceed (that path deliberately only warns). Audit #18:
     // the cap previously warned but proceeded, so it never actually capped.
     let current_micro = lock(&rt).session_cost_microcents;
-    if cap_usd > 0.0 {
-        let current_usd = (current_micro as f64) / 100_000_000.0;
-        if current_usd >= cap_usd {
-            events.emit(
-                "cost:cap-hit",
-                serde_json::json!({
-                    "reason": format!(
-                        "over budget: ${current_usd:.4} spent ≥ ${cap_usd:.2} (Settings → Max cost per session)"
-                    ),
-                    "source": "auto_tile",
-                    "blocking": true,
-                }),
-            );
-            return;
-        }
+    if let Some(reason) = crate::runtime_state::cost_cap_reason(cap_usd, current_micro) {
+        events.emit(
+            "cost:cap-hit",
+            serde_json::json!({
+                "reason": reason,
+                "source": "auto_tile",
+                "blocking": true,
+            }),
+        );
+        return;
     }
 
     // ===== Recent transcript context (last 5 labeled lines) =====
@@ -967,7 +1044,7 @@ async fn maybe_spawn_auto_tile(
     let total_usd = {
         let mut s = lock(&rt);
         s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
-        (s.session_cost_microcents as f64) / 100_000_000.0
+        ai::microcents_to_usd(s.session_cost_microcents)
     };
     events.emit(
         "cost:update",
@@ -979,7 +1056,9 @@ async fn maybe_spawn_auto_tile(
         purpose: "auto_tile",
         model: &model,
         latency_ms,
-        finish_reason: "stop",
+        // The provider's real reason ("stop", "length" = truncated, …) —
+        // surfaced by `complete_once` (audit D4; previously hardcoded).
+        finish_reason: &usage.finish_reason,
         text: &answer,
         output_tokens_est: usage.output,
         cost_microcents: micro,
@@ -1067,15 +1146,21 @@ pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<Transcrip
     // clean between sessions (defense-in-depth alongside the M1 gen-guard).
     s.health.last_ai_err_ms.store(0, Ordering::Relaxed);
     s.last_ai_error_tile_ms = 0;
+    // Suflyor E2 — zero (NOT seed) so the final post-stop emit reads "idle",
+    // and re-arm the mic-down notice for the next session.
+    s.health.last_mic_frame_ms.store(0, Ordering::Relaxed);
+    s.mic_down_notified = false;
     let snapshot: Vec<TranscriptLine> = s.transcript.iter().cloned().collect();
     s.transcript.clear();
     // v0.12.0 — deliberately NOT clearing s.full_transcript here: the
     // Summary button must still work after Стоп (it resets on the next
     // Старт in start_session_inner).
+    let journal = s.journal.take();
+    drop(s);
     // Write the SessionSummary roll-up + SessionStop marker before closing, so
     // the journal has the "how did this session go" one-liner on disk (audit:
     // these were defined + counted but never emitted on the shipping stack).
-    if let Some(j) = s.journal.take() {
+    if let Some(j) = journal {
         if let Some(c) = j.snapshot_counters() {
             let now = overlay_backend::journal::now_unix_ms();
             j.write(&overlay_backend::journal::JournalEvent::SessionSummary {
@@ -1095,6 +1180,11 @@ pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<Transcrip
             });
             j.write(&overlay_backend::journal::JournalEvent::SessionStop { unix_ms: now });
         }
+        if let Err(e) = j.shutdown(Duration::from_secs(3)) {
+            log_warn(&format!(
+                "journal shutdown on stop did not confirm durability: {e:#}"
+            ));
+        }
         let journal_path = j.current_path();
         drop(j);
         // v0.17.2 (тестер P0.1) — project the just-closed session into the
@@ -1108,15 +1198,8 @@ pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<Transcrip
         if cfg.read().session_archive_enabled {
             if let Some(path) = journal_path {
                 std::thread::spawn(move || {
-                    // `j.write(SessionStop)` only ENQUEUES into the journal's
-                    // mpsc — the writer thread drains it asynchronously, so a
-                    // single read here can race the stop marker onto disk and
-                    // freeze the row as "crashed" forever (the launch / open
-                    // sweeps skip already-indexed ids). Wholesale replace
-                    // makes re-indexing idempotent: retry until the row reads
-                    // "completed" (a partial row is still kept if we give
-                    // up). The pauses also absorb a transient SQLITE_BUSY
-                    // from a concurrent archive-open sweep.
+                    // Shutdown above normally made SessionStop durable. Retain
+                    // the retries for a shutdown error or transient SQLITE_BUSY.
                     let mut last_err: Option<anyhow::Error> = None;
                     for attempt in 0..4u8 {
                         if attempt > 0 {
@@ -1128,7 +1211,7 @@ pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<Transcrip
                             },
                         );
                         match indexed {
-                            Ok(sess) => {
+                            Ok(Some(sess)) => {
                                 let done = sess.status == "completed";
                                 log_info(&format!(
                                     "archive: indexed closed session {} ({} lines, {} ai turns, {}{})",
@@ -1143,6 +1226,9 @@ pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<Transcrip
                                     break;
                                 }
                             }
+                            // No usable event yet (the journal writer is still
+                            // draining the stop marker) — retry on the next pass.
+                            Ok(None) => last_err = None,
                             Err(e) => last_err = Some(e),
                         }
                     }
@@ -1364,6 +1450,140 @@ mod tests {
         drop(source_tx);
         assert_eq!(stt_rx.recv().await.unwrap().timestamp_ms, 2);
         assert!(stt_rx.recv().await.is_none());
+    }
+
+    /// Suflyor E5 — a muted mic chunk is dropped at the shared gate BEFORE
+    /// STT submission (previously it was transcribed, then discarded), while
+    /// system audio keeps flowing. Unmuting restores the mic flow.
+    #[tokio::test]
+    async fn audio_forwarder_drops_muted_mic_before_stt() {
+        use crate::runtime_state::{lock, shared_runtime};
+
+        let rt = shared_runtime();
+        lock(&rt).mic_muted = true;
+        let (source_tx, source_rx) = tokio::sync::mpsc::channel(4);
+        let mut stt_rx = forward_audio_chunks(source_rx, rt.clone(), None);
+        source_tx
+            .send(AudioChunk {
+                source: AudioSource::Mic,
+                pcm_i16: vec![1],
+                timestamp_ms: 1,
+            })
+            .await
+            .unwrap();
+        source_tx
+            .send(AudioChunk {
+                source: AudioSource::System,
+                pcm_i16: vec![2],
+                timestamp_ms: 2,
+            })
+            .await
+            .unwrap();
+        drop(source_tx);
+        let chunk = stt_rx.recv().await.unwrap();
+        assert_eq!(chunk.source, AudioSource::System);
+        assert!(
+            stt_rx.recv().await.is_none(),
+            "muted mic must not reach STT"
+        );
+        let health = lock(&rt)
+            .health
+            .snapshot(overlay_backend::journal::now_unix_ms() as u64);
+        assert_eq!(
+            health.audio, "ok",
+            "capture health must stay fresh before the mute/STT gates"
+        );
+        assert_eq!(
+            health.mic, "ok",
+            "mic health must stay fresh before the mute/STT gates"
+        );
+
+        lock(&rt).mic_muted = false;
+        let (source_tx, source_rx) = tokio::sync::mpsc::channel(4);
+        let mut stt_rx = forward_audio_chunks(source_rx, rt, None);
+        source_tx
+            .send(AudioChunk {
+                source: AudioSource::Mic,
+                pcm_i16: vec![3],
+                timestamp_ms: 3,
+            })
+            .await
+            .unwrap();
+        drop(source_tx);
+        assert_eq!(stt_rx.recv().await.unwrap().timestamp_ms, 3);
+        assert!(stt_rx.recv().await.is_none());
+    }
+
+    /// Suflyor E5 (recorder half of the v0.13.1 mute contract) — muted mic
+    /// audio is NOT written to the session recording while system audio IS.
+    /// The WAV writer creates each channel file lazily on the first sample,
+    /// so a fully muted-mic stream must leave no `mic.wav` at all.
+    #[tokio::test]
+    async fn audio_forwarder_keeps_muted_mic_out_of_recording() {
+        use crate::runtime_state::{lock, shared_runtime};
+
+        let dir = std::env::temp_dir().join(format!(
+            "suflyor-e5-test-{}",
+            overlay_backend::journal::now_unix_ms()
+        ));
+        let recorder = overlay_backend::recorder::SessionRecorder::start_in(dir.clone()).unwrap();
+        let rt = shared_runtime();
+        lock(&rt).mic_muted = true;
+        let (source_tx, source_rx) = tokio::sync::mpsc::channel(4);
+        let mut stt_rx = forward_audio_chunks(source_rx, rt, Some(recorder));
+        source_tx
+            .send(AudioChunk {
+                source: AudioSource::Mic,
+                pcm_i16: vec![7; 320],
+                timestamp_ms: 20,
+            })
+            .await
+            .unwrap();
+        source_tx
+            .send(AudioChunk {
+                source: AudioSource::System,
+                pcm_i16: vec![9; 320],
+                timestamp_ms: 20,
+            })
+            .await
+            .unwrap();
+        drop(source_tx);
+        while stt_rx.recv().await.is_some() {}
+        // The forwarder finalises the recorder on the blocking pool; wait
+        // (bounded) for the writer thread to flush system.wav.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !dir.join("system.wav").exists() {
+            assert!(std::time::Instant::now() < deadline, "system.wav missing");
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        // Let the writer thread finish finalising before the assertions +
+        // cleanup touch the dir.
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        assert!(
+            !dir.join("mic.wav").exists(),
+            "muted mic must not be recorded"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Suflyor E2 — the mic-down notice fires once per failure episode and
+    /// re-arms only on recovery (the health ticker runs every 2s, so the
+    /// latch is what keeps a sustained outage at ONE tile).
+    #[test]
+    fn mic_notice_fires_once_per_down_episode() {
+        assert_eq!(mic_notice_decision("ok", false), (false, false));
+        // degraded alone never notifies (the health dot covers it).
+        assert_eq!(mic_notice_decision("degraded", false), (false, false));
+        // First "down" → notify + latch.
+        assert_eq!(mic_notice_decision("down", false), (true, true));
+        // Sustained down → silent.
+        assert_eq!(mic_notice_decision("down", true), (false, true));
+        // Recovery re-arms...
+        assert_eq!(mic_notice_decision("ok", true), (false, false));
+        // ...so the NEXT episode notifies again.
+        assert_eq!(mic_notice_decision("down", false), (true, true));
+        // idle (between sessions) leaves the latch untouched.
+        assert_eq!(mic_notice_decision("idle", true), (false, true));
     }
 
     #[test]

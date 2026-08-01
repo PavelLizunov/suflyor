@@ -445,7 +445,8 @@ pub(crate) fn fire_followup_ask(
     if let Some(tile) = tile_weak.upgrade() {
         tile.set_followup_busy(true);
         tile.set_source_label(SharedString::from("ai · asking…"));
-        let shown = format!("{prefix}⏳ …");
+        // Plain ellipsis — no hourglass glyph (tofu on the skia font fallback).
+        let shown = format!("{prefix}…");
         tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&shown))));
     }
     let generation = install_streaming_tile(
@@ -459,8 +460,9 @@ pub(crate) fn fire_followup_ask(
         },
     );
 
-    // Snapshot config + journal/health, abort any in-flight task, then
-    // spawn the stream (mirrors fire_f9_ask's tail).
+    // Snapshot config + journal/health and abort any in-flight task on the UI
+    // thread; the blocking approved-memory read + reframe then run on a worker
+    // (mirrors fire_f9_ask's tail — audit C2/G2).
     let (base_url, bearer, model, is_local, max_tokens, response_language, meeting_context) = {
         let c = cfg.read();
         let ep = route.endpoint(&c);
@@ -474,16 +476,7 @@ pub(crate) fn fire_followup_ask(
             c.meeting_context.clone(),
         )
     };
-    // Audit (prompt-context): the follow-up LLM prompt carries approved memory +
-    // profile too (reframe builds a fresh neutral system prompt, so no double-add).
-    // ТЗ 2026-07-06 (A) — the follow-up question selects the RELEVANT facts.
-    let meeting_context =
-        overlay_backend::memory::context_for_meeting(&meeting_context, Some(&question));
-    // THE FIX — send a reframed copy (neutral continuation system + demoted
-    // transcript turns) so the model answers THIS question, not the original
-    // transcript question. The STORED history (request_messages installed above)
-    // stays original — the reframe is recomputed fresh on every turn.
-    let send_messages = reframe_for_send(&messages, &response_language, &meeting_context);
+    let attached_screenshot = route.attaches_screenshot();
     // v0.8.2 (MAJOR-2) — a sticky-cloud follow-up is billable; warn if the
     // session cost cap is already exceeded (mirrors fire_f9_ask).
     warn_if_over_cost_cap(events, cfg, slint_rt, is_local, "followup_ask");
@@ -497,59 +490,87 @@ pub(crate) fn fire_followup_ask(
             h.abort();
         }
     }
-    let sys_full = send_messages
-        .first()
-        .and_then(|m| match &m.content {
-            ai::MessageContent::Text(t) => Some(t.clone()),
-            _ => None,
-        })
-        .unwrap_or_default();
-    let usr_full = question.clone();
-    // Journal the follow-up request so it pairs with the AiResponse that
-    // ask_stream_loop writes on completion (F9 + PTT already do this;
-    // without it every follow-up turn leaves an orphaned response).
-    if let Some(j) = journal_for_loop.as_ref() {
-        j.write(&journal::JournalEvent::AiRequest {
-            unix_ms: journal::now_unix_ms(),
-            purpose: "followup_ask",
-            model: &model,
-            system_prompt: &sys_full,
-            user_prompt: &usr_full,
-            attached_screenshot: route.attaches_screenshot(),
-            input_tokens_est: ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4,
+    // `context_for_meeting` is a blocking SQLite read, so it + the reframe run on
+    // a worker; the generation guard drops this turn if a newer ask superseded it.
+    // ТЗ 2026-07-06 (A) — the follow-up question selects the RELEVANT facts.
+    let bridge_for_work = bridge.clone();
+    let events_for_work = events.clone();
+    let slint_rt_for_work = slint_rt.clone();
+    let rt_handle_for_work = rt_handle.clone();
+    std::thread::spawn(move || {
+        // BLOCKING — off the event loop. The reframe builds a fresh neutral system
+        // prompt (no double-add of memory).
+        let meeting_context =
+            overlay_backend::memory::context_for_meeting(&meeting_context, Some(&question));
+        // THE FIX — send a reframed copy (neutral continuation system + demoted
+        // transcript turns) so the model answers THIS question, not the original
+        // transcript question. The STORED history (request_messages installed
+        // above) stays original — the reframe is recomputed fresh on every turn.
+        let send_messages = reframe_for_send(&messages, &response_language, &meeting_context);
+        let sys_full = send_messages
+            .first()
+            .and_then(|m| match &m.content {
+                ai::MessageContent::Text(t) => Some(t.clone()),
+                _ => None,
+            })
+            .unwrap_or_default();
+        let usr_full = question.clone();
+        let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
+        let purpose = "followup_ask";
+        let _ = slint::invoke_from_event_loop(move || {
+            if bridge_for_work.stream_gen.load(Ordering::SeqCst) != generation {
+                return;
+            }
+            // Journal the follow-up request so it pairs with the AiResponse that
+            // ask_stream_loop writes on completion (F9 + PTT already do this;
+            // without it every follow-up turn leaves an orphaned response).
+            if let Some(j) = journal_for_loop.as_ref() {
+                j.write(&journal::JournalEvent::AiRequest {
+                    unix_ms: journal::now_unix_ms(),
+                    purpose,
+                    model: &model,
+                    system_prompt: &sys_full,
+                    user_prompt: &usr_full,
+                    attached_screenshot,
+                    input_tokens_est,
+                });
+            }
+            let rt_for_cost = slint_rt_for_work.clone();
+            let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
+                // Local inference is free — don't bill it (and don't trip the cap).
+                let micro = if is_local { 0 } else { micro };
+                let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
+                s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
+                overlay_backend::ai::microcents_to_usd(s.session_cost_microcents)
+            });
+            let t0 = std::time::Instant::now();
+            let events_for_task =
+                gated_events(&bridge_for_work, events_for_work.clone(), generation);
+            let task = rt_handle_for_work.spawn(async move {
+                let ai_rx =
+                    ai::stream_chat(base_url, bearer, model.clone(), send_messages, max_tokens);
+                overlay_backend::runtime::ask_stream_loop(
+                    events_for_task,
+                    ai_rx,
+                    model,
+                    purpose,
+                    is_local,
+                    sys_full,
+                    usr_full,
+                    journal_for_loop,
+                    health_for_stream,
+                    t0,
+                    cost_apply,
+                )
+                .await;
+            });
+            slint_replay::runtime_state::lock(&slint_rt_for_work).ai_task = Some(task);
+            diag!(
+                "followup sent (convo_id={convo_id}, {} chars)",
+                question.len()
+            );
         });
-    }
-    let rt_for_cost = slint_rt.clone();
-    let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
-        // Local inference is free — don't bill it (and don't trip the cap).
-        let micro = if is_local { 0 } else { micro };
-        let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
-        s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
-        (s.session_cost_microcents as f64) / 100_000_000.0
     });
-    let t0 = std::time::Instant::now();
-    let events_for_task = gated_events(bridge, events.clone(), generation);
-    let task = rt_handle.spawn(async move {
-        let ai_rx = ai::stream_chat(base_url, bearer, model.clone(), send_messages, max_tokens);
-        overlay_backend::runtime::ask_stream_loop(
-            events_for_task,
-            ai_rx,
-            model,
-            is_local,
-            sys_full,
-            usr_full,
-            journal_for_loop,
-            health_for_stream,
-            t0,
-            cost_apply,
-        )
-        .await;
-    });
-    slint_replay::runtime_state::lock(slint_rt).ai_task = Some(task);
-    diag!(
-        "followup sent (convo_id={convo_id}, {} chars)",
-        question.len()
-    );
 }
 
 /// V5 — regenerate: re-run the last request (dropping the trailing assistant
@@ -611,37 +632,13 @@ pub(crate) fn fire_regenerate(
             c.meeting_context.clone(),
         )
     };
-    // Re-asking a FOLLOW-UP turn (≥2 user turns) inherits the same transcript
-    // anchors as fire_followup_ask → reframe at send time so the model answers
-    // THAT turn, not the original. A plain 🧠/🔄 of the ORIGINAL answer (1 user
-    // turn) keeps the rich F9 system so the cloud re-answer has full meeting
-    // context. Send-time only — the STORED history stays original.
-    let send_messages = if messages.iter().filter(|m| m.role == "user").count() >= 2 {
-        // Audit (prompt-context): the reframed follow-up prompt carries approved
-        // memory + profile. Computed ONLY on this branch — a 1-turn regenerate
-        // sends the stored (already-effective) system as-is, no extra catalog read.
-        // ТЗ 2026-07-06 (A) — the turn being re-asked (the last user TEXT message)
-        // selects the RELEVANT facts; a Parts (vision) turn → None → recency.
-        let last_user_q = messages
-            .iter()
-            .rev()
-            .find(|m| m.role == "user")
-            .and_then(|m| match &m.content {
-                ai::MessageContent::Text(t) => Some(t.clone()),
-                ai::MessageContent::Parts(_) => None,
-            });
-        let meeting_context =
-            overlay_backend::memory::context_for_meeting(&meeting_context, last_user_q.as_deref());
-        reframe_for_send(&messages, &response_language, &meeting_context)
-    } else {
-        messages.clone()
-    };
+    let attached_screenshot = route.attaches_screenshot();
     // v0.8.2 (MAJOR-2) — a sticky-cloud regenerate is billable; warn over cap.
     warn_if_over_cost_cap(events, cfg, slint_rt, is_local, "regenerate");
     if let Some(t) = tile_weak.upgrade() {
         t.set_followup_busy(true);
         t.set_source_label(SharedString::from("ai · перегенерация…"));
-        t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks("⏳ …"))));
+        t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks("…"))));
     }
     // V0.8.3 (escalate→followup bug) — route the regenerate through the SAME
     // `current_streaming` slot + generation gating as fire_followup_ask (was a
@@ -673,60 +670,100 @@ pub(crate) fn fire_regenerate(
             h.abort();
         }
     }
-    let sys_full = send_messages
-        .first()
-        .and_then(|m| match &m.content {
-            ai::MessageContent::Text(t) => Some(t.clone()),
-            _ => None,
-        })
-        .unwrap_or_default();
-    // The re-asked question = the last user turn in the (assistant-trimmed)
-    // history. Journal the request so it pairs with the AiResponse (parity with
-    // F9/follow-up; regenerate previously left an orphan response).
-    let usr_full = messages
-        .iter()
-        .rev()
-        .find(|m| m.role == "user")
-        .map(|m| message_text(&m.content))
-        .unwrap_or_default();
-    if let Some(j) = journal_for_loop.as_ref() {
-        j.write(&journal::JournalEvent::AiRequest {
-            unix_ms: journal::now_unix_ms(),
-            purpose: "regenerate",
-            model: &model,
-            system_prompt: &sys_full,
-            user_prompt: &usr_full,
-            attached_screenshot: route.attaches_screenshot(),
-            input_tokens_est: ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4,
+    // Re-asking a FOLLOW-UP turn (≥2 user turns) reframes with approved memory (a
+    // blocking SQLite read); a 1-turn regenerate sends the stored system as-is. The
+    // build runs on a worker so the read never blocks the UI, and the generation
+    // guard drops this turn if a newer ask superseded it. ТЗ 2026-07-06 (A) — the
+    // re-asked turn (last user TEXT) selects the facts; a Parts turn → recency.
+    let bridge_for_work = bridge.clone();
+    let events_for_work = events.clone();
+    let slint_rt_for_work = slint_rt.clone();
+    let rt_handle_for_work = rt_handle.clone();
+    std::thread::spawn(move || {
+        // BLOCKING — off the event loop, and ONLY on the ≥2-user-turn branch.
+        let send_messages = if messages.iter().filter(|m| m.role == "user").count() >= 2 {
+            let last_user_q =
+                messages
+                    .iter()
+                    .rev()
+                    .find(|m| m.role == "user")
+                    .and_then(|m| match &m.content {
+                        ai::MessageContent::Text(t) => Some(t.clone()),
+                        ai::MessageContent::Parts(_) => None,
+                    });
+            let meeting_context = overlay_backend::memory::context_for_meeting(
+                &meeting_context,
+                last_user_q.as_deref(),
+            );
+            reframe_for_send(&messages, &response_language, &meeting_context)
+        } else {
+            messages.clone()
+        };
+        let sys_full = send_messages
+            .first()
+            .and_then(|m| match &m.content {
+                ai::MessageContent::Text(t) => Some(t.clone()),
+                _ => None,
+            })
+            .unwrap_or_default();
+        // The re-asked question = the last user turn in the (assistant-trimmed)
+        // history. Journal the request so it pairs with the AiResponse (parity
+        // with F9/follow-up; regenerate previously left an orphan response).
+        let usr_full = messages
+            .iter()
+            .rev()
+            .find(|m| m.role == "user")
+            .map(|m| message_text(&m.content))
+            .unwrap_or_default();
+        let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
+        let purpose = "regenerate";
+        let _ = slint::invoke_from_event_loop(move || {
+            if bridge_for_work.stream_gen.load(Ordering::SeqCst) != generation {
+                return;
+            }
+            if let Some(j) = journal_for_loop.as_ref() {
+                j.write(&journal::JournalEvent::AiRequest {
+                    unix_ms: journal::now_unix_ms(),
+                    purpose,
+                    model: &model,
+                    system_prompt: &sys_full,
+                    user_prompt: &usr_full,
+                    attached_screenshot,
+                    input_tokens_est,
+                });
+            }
+            let rt_for_cost = slint_rt_for_work.clone();
+            let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
+                let micro = if is_local { 0 } else { micro };
+                let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
+                s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
+                overlay_backend::ai::microcents_to_usd(s.session_cost_microcents)
+            });
+            let t0 = std::time::Instant::now();
+            let events_for_task =
+                gated_events(&bridge_for_work, events_for_work.clone(), generation);
+            let task = rt_handle_for_work.spawn(async move {
+                let ai_rx =
+                    ai::stream_chat(base_url, bearer, model.clone(), send_messages, max_tokens);
+                overlay_backend::runtime::ask_stream_loop(
+                    events_for_task,
+                    ai_rx,
+                    model,
+                    purpose,
+                    is_local,
+                    sys_full,
+                    usr_full,
+                    journal_for_loop,
+                    health_for_stream,
+                    t0,
+                    cost_apply,
+                )
+                .await;
+            });
+            slint_replay::runtime_state::lock(&slint_rt_for_work).ai_task = Some(task);
+            diag!("regenerate sent (convo_id={convo_id}, route={route:?})");
         });
-    }
-    let rt_for_cost = slint_rt.clone();
-    let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
-        let micro = if is_local { 0 } else { micro };
-        let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
-        s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
-        (s.session_cost_microcents as f64) / 100_000_000.0
     });
-    let t0 = std::time::Instant::now();
-    let events_for_task = gated_events(bridge, events.clone(), generation);
-    let task = rt_handle.spawn(async move {
-        let ai_rx = ai::stream_chat(base_url, bearer, model.clone(), send_messages, max_tokens);
-        overlay_backend::runtime::ask_stream_loop(
-            events_for_task,
-            ai_rx,
-            model,
-            is_local,
-            sys_full,
-            usr_full,
-            journal_for_loop,
-            health_for_stream,
-            t0,
-            cost_apply,
-        )
-        .await;
-    });
-    slint_replay::runtime_state::lock(slint_rt).ai_task = Some(task);
-    diag!("regenerate sent (convo_id={convo_id}, route={route:?})");
 }
 
 #[cfg(test)]

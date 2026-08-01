@@ -24,7 +24,7 @@ export component PaletteWindow inherits Window {
     property <bool> widgets-light: Theme.is-light;
     init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
-    title: "F4 — KB palette";
+    title: @tr("F4 — KB palette");
     // Phase E6 fix: was `background: transparent` + frameless which
     // combined with WS_EX_LAYERED via make_transparent_overlay on the
     // HWND causes text to render invisible (alpha-clamped). Use solid

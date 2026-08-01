@@ -2092,7 +2092,9 @@ pub async fn reask_last(
             purpose: "reask",
             model: &model,
             latency_ms: t0.elapsed().as_millis() as u64,
-            finish_reason: "stop",
+            // The provider's real reason ("stop", "length" = truncated, …) —
+            // surfaced by `complete_once` (audit D4; previously hardcoded).
+            finish_reason: &usage.finish_reason,
             text: &answer,
             output_tokens_est: usage.output,
             cost_microcents: micro,
@@ -2353,7 +2355,9 @@ pub async fn manual_spawn_tile(
             purpose: "manual_spawn",
             model: &model,
             latency_ms: t0.elapsed().as_millis() as u64,
-            finish_reason: "stop",
+            // The provider's real reason ("stop", "length" = truncated, …) —
+            // surfaced by `complete_once` (audit D4; previously hardcoded).
+            finish_reason: &usage.finish_reason,
             text: &answer,
             output_tokens_est: usage.output,
             cost_microcents: micro,
@@ -2426,14 +2430,20 @@ pub async fn manual_spawn_tile(
 /// `tokio::spawn`'d task on potentially a different thread.
 pub type CostApplyFn = Box<dyn FnOnce(u64) -> f64 + Send>;
 
-/// Streaming body of F9 Live Ask. Runs inside the `tokio::spawn` that
-/// the src-tauri shim creates — owns the AiEvent stream receiver,
-/// emits each event verbatim to the React side, accumulates the
-/// answer text, then at end-of-stream estimates token cost,
-/// invokes the shim-provided `cost_apply` callback to mutate
-/// session_cost (under rt lock on the shim side), writes
+/// Streaming body of a streamed ask (F9 live/text, PTT, follow-up,
+/// regenerate, vision). Runs inside the `tokio::spawn` that the shim
+/// creates — owns the AiEvent stream receiver, emits each event verbatim
+/// to the UI side, accumulates the answer text, then at end-of-stream
+/// estimates token cost, invokes the shim-provided `cost_apply` callback
+/// to mutate session_cost (under rt lock on the shim side), writes
 /// JournalEvent::AiResponse on successful completion, and emits `cost:update`
 /// with the new session USD total.
+///
+/// `purpose` tags the journaled `AiResponse` and MUST be the same value the
+/// caller wrote on its paired `AiRequest` ("live_ask", "text_ask", "ptt_ask",
+/// "followup_ask", "regenerate", "vision_ask") — audit D1: it was previously
+/// hardcoded to "live_ask" here, corrupting journal purpose grouping for
+/// every non-F9 stream.
 ///
 /// `t0` is the `Instant::now()` captured before `ai::stream_chat`
 /// returned the receiver — used for `AiResponse.latency_ms`.
@@ -2458,6 +2468,7 @@ pub async fn ask_stream_loop(
     events: Arc<dyn RuntimeEvents>,
     mut ai_rx: tokio::sync::mpsc::Receiver<ai::AiEvent>,
     model: String,
+    purpose: &'static str,
     is_local: bool,
     sys_full: String,
     usr_full: String,
@@ -2535,7 +2546,7 @@ pub async fn ask_stream_loop(
     if let (Some(j), Some(finish)) = (journal.as_ref(), finish.as_deref()) {
         j.write(&JournalEvent::AiResponse {
             unix_ms: crate::journal::now_unix_ms(),
-            purpose: "live_ask",
+            purpose,
             model: &model,
             latency_ms: t0.elapsed().as_millis() as u64,
             finish_reason: finish,

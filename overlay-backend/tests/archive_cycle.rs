@@ -81,7 +81,7 @@ fn full_cycle_record_transcribe_journal_index_archive() {
         ],
     );
     let mut store = Store::open_in_memory().unwrap();
-    let sess = index_journal_file(&mut store, &jpath).unwrap();
+    let sess = index_journal_file(&mut store, &jpath).unwrap().unwrap();
     assert_eq!(sess.status, "completed");
     assert_eq!(sess.transcript_lines, 2, "счётчик строк НЕ «0»");
     assert_eq!(sess.ai_turns_count, 1, "счётчик AI НЕ «0»");
@@ -126,7 +126,7 @@ fn session_finished_in_current_run_becomes_visible_after_stop_index() {
     );
 
     // Точечная индексация на stop_session → сессия видна БЕЗ перезапуска.
-    index_journal_file(&mut store, &jpath).unwrap();
+    assert!(index_journal_file(&mut store, &jpath).unwrap().is_some());
     let listed = store.list_sessions().unwrap();
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].status, "completed");
@@ -148,7 +148,7 @@ fn stop_index_replaces_partial_row_wholesale() {
         ],
     );
     let mut store = Store::open_in_memory().unwrap();
-    let partial = index_journal_file(&mut store, &jpath).unwrap();
+    let partial = index_journal_file(&mut store, &jpath).unwrap().unwrap();
     assert_eq!(partial.status, "crashed", "без session_stop строка «сырая»");
     assert_eq!(partial.transcript_lines, 1);
 
@@ -163,7 +163,7 @@ fn stop_index_replaces_partial_row_wholesale() {
             r#"{"kind":"session_stop","unix_ms":3000}"#,
         ],
     );
-    let fixed = index_journal_file(&mut store, &jpath2).unwrap();
+    let fixed = index_journal_file(&mut store, &jpath2).unwrap().unwrap();
     assert_eq!(fixed.status, "completed");
     assert_eq!(fixed.transcript_lines, 2);
     let listed = store.list_sessions().unwrap();
