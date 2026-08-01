@@ -519,47 +519,58 @@ fn primary_model_requires_the_tested_llama_build() {
     assert!(llama_build_supports_26b(tmp.path()));
 }
 
+/// The owner matrix is minimum-RAM based: each VRAM tier keeps its profile at
+/// the documented minimum and at any larger RAM value, while insufficient or
+/// missing inputs stay `Unknown` (never promoted into a stronger profile).
 #[test]
-fn owner_hardware_matrix_is_exact() {
+fn owner_hardware_matrix_is_minimum_ram() {
+    use HardwareModelProfile::*;
+    let cases: &[(Option<u64>, Option<u64>, HardwareModelProfile)] = &[
+        // Exact minimums.
+        (Some(8), Some(16), Fallback12B),
+        (Some(8), Some(32), Primary26Vram8),
+        (Some(12), Some(24), Primary26Vram12),
+        (Some(16), Some(32), Primary26Vram16),
+        // Extra RAM beyond the minimum keeps the tier (monotonic).
+        (Some(8), Some(64), Primary26Vram8),
+        (Some(12), Some(64), Primary26Vram12),
+        (Some(16), Some(64), Primary26Vram16),
+        // 8 VRAM with RAM inside the 16..31 fallback band.
+        (Some(8), Some(24), Fallback12B),
+        // Insufficient RAM for the VRAM tier.
+        (Some(16), Some(24), Unknown),
+        (Some(12), Some(16), Unknown),
+        (Some(8), Some(8), Unknown),
+        // Missing inputs.
+        (None, Some(32), Unknown),
+        (Some(16), None, Unknown),
+        (None, None, Unknown),
+    ];
+    for (vram, ram, want) in cases {
+        assert_eq!(
+            select_hardware_model_profile(*vram, *ram),
+            *want,
+            "vram={vram:?} ram={ram:?}"
+        );
+    }
+}
+
+/// Tester regression: 16 GiB VRAM + 64 GiB RAM must flow through discovery to
+/// Primary26Vram16 (previously rejected as Unknown), keeping Auto compact at
+/// 16K while K96 and the profile ceiling both reach 96K.
+#[test]
+fn tester_16vram_64ram_gets_primary26_and_full_context() {
+    let profile = hardware_profile_from_discovery(false, Some(16), Some(64));
+    assert_eq!(profile, HardwareModelProfile::Primary26Vram16);
+    assert!(primary_26b_allowed(profile));
+    assert_eq!(profile.context_tokens(false), 98_304);
     assert_eq!(
-        select_hardware_model_profile(Some(8), Some(16)),
-        HardwareModelProfile::Fallback12B
+        LocalContextPreset::Auto.context_tokens(profile, false),
+        16_384
     );
     assert_eq!(
-        select_hardware_model_profile(Some(8), Some(32)),
-        HardwareModelProfile::Primary26Vram8
-    );
-    assert_eq!(
-        select_hardware_model_profile(Some(12), Some(24)),
-        HardwareModelProfile::Primary26Vram12
-    );
-    assert_eq!(
-        select_hardware_model_profile(Some(12), Some(32)),
-        HardwareModelProfile::Primary26Vram12
-    );
-    assert_eq!(
-        select_hardware_model_profile(Some(16), Some(32)),
-        HardwareModelProfile::Primary26Vram16
-    );
-    assert_eq!(
-        select_hardware_model_profile(Some(16), Some(24)),
-        HardwareModelProfile::Unknown
-    );
-    assert_eq!(
-        select_hardware_model_profile(Some(8), Some(24)),
-        HardwareModelProfile::Unknown
-    );
-    assert_eq!(
-        select_hardware_model_profile(Some(12), Some(64)),
-        HardwareModelProfile::Unknown
-    );
-    assert_eq!(
-        select_hardware_model_profile(Some(16), Some(64)),
-        HardwareModelProfile::Unknown
-    );
-    assert_eq!(
-        select_hardware_model_profile(None, Some(32)),
-        HardwareModelProfile::Unknown
+        LocalContextPreset::K96.context_tokens(profile, false),
+        98_304
     );
 }
 
