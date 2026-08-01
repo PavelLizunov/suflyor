@@ -448,21 +448,17 @@ pub(crate) fn fire_f9_ask(
     // F9 (no explicit question) keeps the recency block.
     let meeting_context =
         overlay_backend::memory::context_for_meeting(&meeting_context, typed_question.as_deref());
+    // Manual asks warn at the shared cap but continue.
     let current_micro = slint_replay::runtime_state::lock(slint_rt).session_cost_microcents;
-    if current_micro > 0 && cap_usd > 0.0 {
-        let usd = overlay_backend::ai::microcents_to_usd(current_micro);
-        if usd >= cap_usd {
-            events.emit(
-                "cost:cap-hit",
-                serde_json::json!({
-                    "reason": format!(
-                        "over budget: ${usd:.4} spent ≥ ${cap_usd:.2} (Settings → Max cost per session)"
-                    ),
-                    "source": "live_ask",
-                    "blocking": false,
-                }),
-            );
-        }
+    if let Some(reason) = cost_cap_reason(cap_usd, current_micro) {
+        events.emit(
+            "cost:cap-hit",
+            serde_json::json!({
+                "reason": reason,
+                "source": "live_ask",
+                "blocking": false,
+            }),
+        );
     }
 
     let (transcript_lines, screenshot) = {

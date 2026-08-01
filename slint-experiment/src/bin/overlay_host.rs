@@ -1007,6 +1007,10 @@ fn main() -> Result<(), slint::PlatformError> {
         last_transcript_push: std::sync::Mutex::new(
             std::time::Instant::now() - std::time::Duration::from_secs(1),
         ),
+        // Backdate so the first cap hit is visible immediately.
+        last_cap_notice: std::sync::Mutex::new(
+            std::time::Instant::now() - std::time::Duration::from_secs(20),
+        ),
     });
     let events: Arc<dyn RuntimeEvents> = Arc::new(SlintEvents::new(bridge.clone()));
 

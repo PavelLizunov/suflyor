@@ -771,25 +771,20 @@ async fn maybe_spawn_auto_tile(
     // ===== Cost cap — BLOCK the auto-tile cloud spend once over budget =====
     // Local inference is free (cost stays 0), so this only ever trips on the
     // cloud bridge. Auto-tiles are the "spend without an explicit keypress"
-    // path, so honour the user's cap here by returning after the chip — manual
+    // path, so honour the user's cap here by returning after the notice — manual
     // F9/F6 asks still proceed (that path deliberately only warns). Audit #18:
     // the cap previously warned but proceeded, so it never actually capped.
     let current_micro = lock(&rt).session_cost_microcents;
-    if cap_usd > 0.0 {
-        let current_usd = ai::microcents_to_usd(current_micro);
-        if current_usd >= cap_usd {
-            events.emit(
-                "cost:cap-hit",
-                serde_json::json!({
-                    "reason": format!(
-                        "over budget: ${current_usd:.4} spent ≥ ${cap_usd:.2} (Settings → Max cost per session)"
-                    ),
-                    "source": "auto_tile",
-                    "blocking": true,
-                }),
-            );
-            return;
-        }
+    if let Some(reason) = crate::runtime_state::cost_cap_reason(cap_usd, current_micro) {
+        events.emit(
+            "cost:cap-hit",
+            serde_json::json!({
+                "reason": reason,
+                "source": "auto_tile",
+                "blocking": true,
+            }),
+        );
+        return;
     }
 
     // ===== Recent transcript context (last 5 labeled lines) =====

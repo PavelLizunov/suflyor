@@ -226,6 +226,23 @@ pub fn push_transcript_line(rt: &mut SlintRuntime, line: TranscriptLine) {
     }
 }
 
+/// Return the shared user-facing reason when the session has reached its cap.
+/// ASCII operators avoid tofu in the skia-rendered notice tile.
+#[must_use]
+pub fn cost_cap_reason(cap_usd: f64, current_microcents: u64) -> Option<String> {
+    if cap_usd <= 0.0 {
+        return None;
+    }
+    let current_usd = (current_microcents as f64) / 100_000_000.0;
+    if current_usd >= cap_usd {
+        Some(format!(
+            "over budget: ${current_usd:.4} spent >= ${cap_usd:.2} (Settings -> Max cost per session)"
+        ))
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,
@@ -298,5 +315,15 @@ mod tests {
         // Oldest dropped — coverage shifted to the recent majority.
         let first = &s.full_transcript.front().expect("non-empty").text;
         assert_eq!(first, "line 5");
+    }
+
+    #[test]
+    fn cost_cap_reason_covers_boundaries_and_ui_text() {
+        assert!(cost_cap_reason(0.0, 100_000_000).is_none());
+        assert!(cost_cap_reason(-1.0, 100_000_000).is_none());
+        assert!(cost_cap_reason(1.0, 99_999_999).is_none());
+        let reason = cost_cap_reason(1.0, 100_000_000).expect("at cap");
+        assert!(reason.contains("$1.0000 spent >= $1.00"));
+        assert!(reason.contains("Settings -> Max cost per session"));
     }
 }
