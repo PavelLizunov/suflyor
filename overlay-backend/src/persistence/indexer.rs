@@ -23,8 +23,13 @@ pub struct IndexStats {
 }
 
 /// Index ONE journal file into the catalog (replacing any prior rows for it).
-/// Returns the indexed [`Session`].
-pub fn index_journal_file(store: &mut Store, path: &Path) -> Result<Session> {
+/// Returns the indexed [`Session`], or `None` when the journal holds NO usable
+/// event (an empty file, or one whose lines are all corrupt/unknown) — such a
+/// file is skipped WITHOUT inserting a row, so it never becomes a permanent
+/// empty "crashed" session and is re-scanned once real content appears (audit
+/// G3). A journal with even a single `session_start` is usable (a real crashed
+/// session) and still yields `Some`.
+pub fn index_journal_file(store: &mut Store, path: &Path) -> Result<Option<Session>> {
     let id = path
         .file_stem()
         .and_then(|s| s.to_str())
@@ -42,6 +47,9 @@ pub fn index_journal_file(store: &mut Store, path: &Path) -> Result<Session> {
     let mut utterances: Vec<Utterance> = Vec::new();
     let mut ai_turns: Vec<AiTurn> = Vec::new();
     let mut cost_sum: i64 = 0;
+    // Set on the first recognized event; stays false for an empty / all-corrupt
+    // journal so we skip it instead of inserting a permanent empty crashed row.
+    let mut has_event = false;
     // An ai_request awaiting its ai_response, so a turn carries both the
     // question and the answer.
     let mut pending: Option<AiTurn> = None;
@@ -56,23 +64,31 @@ pub fn index_journal_file(store: &mut Store, path: &Path) -> Result<Session> {
         };
         match v.get("kind").and_then(Value::as_str).unwrap_or_default() {
             "session_start" => {
+                has_event = true;
                 started_at_ms = num(&v, "unix_ms");
                 let m = text(&v, "ai_model");
                 if !m.is_empty() {
                     ai_model = Some(m);
                 }
             }
-            "session_stop" => finished_at_ms = num(&v, "unix_ms"),
-            "transcript_line" => utterances.push(Utterance {
-                session_id: id.clone(),
-                unix_ms: num(&v, "unix_ms").unwrap_or(0),
-                source: text(&v, "source"),
-                text: text(&v, "text"),
-                // F1: audio offset (ms from recording start); None for old journals
-                // that never wrote it → player falls back to the wall-clock approx.
-                audio_ms: num(&v, "audio_ms"),
-            }),
+            "session_stop" => {
+                has_event = true;
+                finished_at_ms = num(&v, "unix_ms");
+            }
+            "transcript_line" => {
+                has_event = true;
+                utterances.push(Utterance {
+                    session_id: id.clone(),
+                    unix_ms: num(&v, "unix_ms").unwrap_or(0),
+                    source: text(&v, "source"),
+                    text: text(&v, "text"),
+                    // F1: audio offset (ms from recording start); None for old journals
+                    // that never wrote it → player falls back to the wall-clock approx.
+                    audio_ms: num(&v, "audio_ms"),
+                });
+            }
             "ai_request" => {
+                has_event = true;
                 // A new request before the prior one got a response → flush the
                 // prior as an answer-less (errored / incomplete) turn.
                 if let Some(p) = pending.take() {
@@ -90,6 +106,7 @@ pub fn index_journal_file(store: &mut Store, path: &Path) -> Result<Session> {
                 });
             }
             "ai_response" => {
+                has_event = true;
                 cost_sum = cost_sum.saturating_add(num(&v, "cost_microcents").unwrap_or(0));
                 let answer = text(&v, "text");
                 let latency = num(&v, "latency_ms");
@@ -121,6 +138,13 @@ pub fn index_journal_file(store: &mut Store, path: &Path) -> Result<Session> {
         ai_turns.push(p);
     }
 
+    // G3: an empty / all-corrupt journal has no usable event → skip it WITHOUT
+    // inserting a row, so it never becomes a permanent empty crashed session and
+    // is re-scanned (and indexed) once real content lands.
+    if !has_event {
+        return Ok(None);
+    }
+
     let session = Session {
         id,
         journal_path: path.display().to_string(),
@@ -137,23 +161,26 @@ pub fn index_journal_file(store: &mut Store, path: &Path) -> Result<Session> {
         transcript_lines: utterances.len() as i64,
         ai_turns_count: ai_turns.len() as i64,
         total_cost_microcents: cost_sum,
-        indexed_at_ms: now_ms(),
+        indexed_at_ms: i64::try_from(crate::journal::now_unix_ms()).unwrap_or(0),
     };
     store.replace_session(&session, &utterances, &ai_turns)?;
-    Ok(session)
+    Ok(Some(session))
 }
 
-/// Index every `*.jsonl` under `sessions_dir` that isn't already cataloged.
+/// Index every `*.jsonl` under `sessions_dir` that isn't already FINALIZED.
 /// `skip_active` (the live session's id / file stem) is never indexed — its
-/// file is still being written. Already-indexed (immutable) journals are
-/// skipped. A single file failing is logged + counted, never aborts the sweep.
+/// file is still being written. Finalized (status ≠ 'crashed') journals are
+/// skipped as immutable; rows frozen as 'crashed' are RE-indexed so a later
+/// graceful stop heals them to 'completed' (audit G1). Empty / no-usable-event
+/// journals are skipped without a row (audit G3). A single file failing is
+/// logged + counted, never aborts the sweep.
 pub fn index_all(
     store: &mut Store,
     sessions_dir: &Path,
     skip_active: Option<&str>,
 ) -> Result<IndexStats> {
     let mut stats = IndexStats::default();
-    let already = store.indexed_session_ids()?;
+    let finalized = store.finalized_session_ids()?;
     let Ok(entries) = std::fs::read_dir(sessions_dir) else {
         return Ok(stats); // no sessions dir yet → nothing to index
     };
@@ -168,12 +195,15 @@ pub fn index_all(
             .and_then(|s| s.to_str())
             .unwrap_or_default()
             .to_string();
-        if stem.is_empty() || Some(stem.as_str()) == skip_active || already.contains(&stem) {
+        if stem.is_empty() || Some(stem.as_str()) == skip_active || finalized.contains(&stem) {
             stats.skipped += 1;
             continue;
         }
         match index_journal_file(store, &path) {
-            Ok(_) => stats.indexed += 1,
+            Ok(Some(_)) => stats.indexed += 1,
+            // An empty / no-usable-event journal: no row inserted, count it as
+            // skipped so it is re-scanned once content appears (G3).
+            Ok(None) => stats.skipped += 1,
             Err(e) => {
                 log::warn!("catalog: index {} failed: {e:#}", path.display());
                 stats.failed += 1;
@@ -197,14 +227,6 @@ fn text(v: &Value, key: &str) -> String {
 
 fn flag(v: &Value, key: &str) -> bool {
     v.get(key).and_then(Value::as_bool).unwrap_or(false)
-}
-
-fn now_ms() -> i64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -238,7 +260,7 @@ mod tests {
                 r#"{"kind":"session_stop","unix_ms":2000}"#,
             ],
         );
-        let s = index_journal_file(&mut store, &path).unwrap();
+        let s = index_journal_file(&mut store, &path).unwrap().unwrap();
         assert_eq!(s.id, "2026-06-04_10-00-00_ab12");
         assert_eq!(s.status, "completed");
         assert_eq!(s.started_at_ms, Some(1000));
@@ -265,7 +287,7 @@ mod tests {
                 r#"{"kind":"session_start","unix_ms":10,"ai_model":"m","prep_model":"p","response_language":"ru"}"#,
             ],
         );
-        let s = index_journal_file(&mut store, &path).unwrap();
+        let s = index_journal_file(&mut store, &path).unwrap().unwrap();
         assert_eq!(s.status, "crashed");
         assert!(s.finished_at_ms.is_none());
     }
@@ -283,7 +305,7 @@ mod tests {
                 r#"{"kind":"session_stop","unix_ms":2}"#,
             ],
         );
-        let s = index_journal_file(&mut store, &path).unwrap();
+        let s = index_journal_file(&mut store, &path).unwrap().unwrap();
         assert_eq!(s.transcript_lines, 1);
         assert_eq!(s.status, "completed");
     }
@@ -326,5 +348,102 @@ mod tests {
         let mut store = Store::open_in_memory().unwrap();
         let stats = index_all(&mut store, Path::new("C:/no/such/dir/here"), None).unwrap();
         assert_eq!(stats, IndexStats::default());
+    }
+
+    /// G1 — a row indexed as 'crashed' (no stop marker yet) must HEAL to
+    /// 'completed' on a later sweep once the JSONL gains a `session_stop`,
+    /// instead of being skipped forever as "already indexed".
+    #[test]
+    fn index_all_heals_a_crashed_row_once_a_stop_appears() {
+        let mut store = Store::open_in_memory().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        // First sweep: only a start → indexed as crashed.
+        write_jsonl(
+            dir.path(),
+            "heal.jsonl",
+            &[r#"{"kind":"session_start","unix_ms":1000}"#],
+        );
+        let first = index_all(&mut store, dir.path(), None).unwrap();
+        assert_eq!(first.indexed, 1);
+        assert_eq!(
+            store.list_sessions().unwrap()[0].status,
+            "crashed",
+            "no stop marker yet → crashed"
+        );
+
+        // The session then stops gracefully: the journal gains a stop event.
+        write_jsonl(
+            dir.path(),
+            "heal.jsonl",
+            &[
+                r#"{"kind":"session_start","unix_ms":1000}"#,
+                r#"{"kind":"session_stop","unix_ms":2000}"#,
+            ],
+        );
+        // Second sweep: the crashed row is NOT finalized → re-indexed → healed.
+        let second = index_all(&mut store, dir.path(), None).unwrap();
+        assert_eq!(second.indexed, 1, "crashed row is re-indexed, not skipped");
+        let sessions = store.list_sessions().unwrap();
+        assert_eq!(
+            sessions.len(),
+            1,
+            "re-index replaces wholesale, no duplicate"
+        );
+        assert_eq!(sessions[0].status, "completed");
+        assert_eq!(sessions[0].finished_at_ms, Some(2000));
+
+        // Third sweep: now finalized → skipped, still a single completed row.
+        let third = index_all(&mut store, dir.path(), None).unwrap();
+        assert_eq!(third.indexed, 0);
+        assert_eq!(third.skipped, 1);
+        assert_eq!(store.list_sessions().unwrap()[0].status, "completed");
+    }
+
+    /// G3 — an empty (no usable event) journal must NOT create a permanent empty
+    /// crashed row, and must become indexable once real content appears later.
+    #[test]
+    fn index_all_skips_empty_journal_then_indexes_later_content() {
+        let mut store = Store::open_in_memory().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        // An empty .jsonl (created, zero bytes).
+        write_jsonl(dir.path(), "empty.jsonl", &[]);
+
+        // First sweep: scanned, but no usable event → skipped, NO catalog row.
+        let first = index_all(&mut store, dir.path(), None).unwrap();
+        assert_eq!(first.scanned, 1);
+        assert_eq!(first.indexed, 0);
+        assert_eq!(first.skipped, 1);
+        assert!(
+            store.list_sessions().unwrap().is_empty(),
+            "empty journal must not poison the catalog with a crashed row"
+        );
+
+        // Corrupt and unknown lines are not usable events either.
+        write_jsonl(
+            dir.path(),
+            "empty.jsonl",
+            &["not-json", r#"{"kind":"future_event"}"#],
+        );
+        let corrupt = index_all(&mut store, dir.path(), None).unwrap();
+        assert_eq!(corrupt.indexed, 0);
+        assert_eq!(corrupt.skipped, 1);
+        assert!(store.list_sessions().unwrap().is_empty());
+
+        // Content lands later (start + stop) in the SAME file.
+        write_jsonl(
+            dir.path(),
+            "empty.jsonl",
+            &[
+                r#"{"kind":"session_start","unix_ms":1000}"#,
+                r#"{"kind":"session_stop","unix_ms":2000}"#,
+            ],
+        );
+        // Second sweep: the file is re-scanned (never finalized) → indexed.
+        let second = index_all(&mut store, dir.path(), None).unwrap();
+        assert_eq!(second.indexed, 1);
+        let sessions = store.list_sessions().unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].id, "empty");
+        assert_eq!(sessions[0].status, "completed");
     }
 }

@@ -78,6 +78,10 @@ pub struct Config {
     /// until the user sets it.
     #[serde(default)]
     pub ai_local_model: String,
+    /// User-selected GGUF file for Suflyor's managed llama.cpp server.
+    /// Empty keeps the pinned 4B/12B/26B profiles. This path is machine-local.
+    #[serde(default)]
+    pub ai_local_custom_gguf: String,
     /// Local model for prep/structuring; empty → falls back to ai_local_model.
     #[serde(default)]
     pub ai_local_prep_model: String,
@@ -92,14 +96,17 @@ pub struct Config {
     /// model to think. Only affects the LOCAL provider.
     #[serde(default)]
     pub ai_local_thinking: bool,
-    /// Local LLM size preference: `false` (default) = the fast ~4B model
-    /// (Gemma 4 E4B), `true` = the smarter but ~2× slower 12B (Gemma 4 12B
-    /// QAT). The local server loads ONE GGUF; flipping this restarts
-    /// llama-server with the other file. `true` is honoured only when the 12B
-    /// GGUF is actually present on disk (downloaded on demand from Settings),
-    /// else we transparently fall back to the 4B so the server always starts.
+    /// Backwards-compatible 26B flag for the bundled local LLM. `true` selects
+    /// the owner-approved Gemma 4 26B-A4B primary; `false` uses the explicit
+    /// 4B/12B filename in `ai_local_model`. A missing or invalid target falls
+    /// back to an installed managed model.
     #[serde(default)]
     pub ai_local_quality: bool,
+    /// Managed llama.cpp context preset: "auto", "8k", "16k", "32k",
+    /// "64k", or "96k". Auto uses a compact 16K context (8K on unknown
+    /// hardware); manual values are clamped to the safe hardware ceiling.
+    #[serde(default = "default_ai_local_context")]
+    pub ai_local_context: String,
 
     /// Screenshot/vision channel — resolved INDEPENDENTLY of the text AI (via
     /// [`Config::vision_endpoint`]) so a local text model can keep answering
@@ -565,10 +572,12 @@ impl Config {
             ai_local_base_url: default_ai_local_base_url(),
             ai_local_bearer: String::new(),
             ai_local_model: String::new(),
+            ai_local_custom_gguf: String::new(),
             ai_local_prep_model: String::new(),
             ai_local_vision: false,
             ai_local_thinking: false,
             ai_local_quality: false,
+            ai_local_context: default_ai_local_context(),
             vision_provider: default_vision_provider(),
             vision_base_url: String::new(),
             vision_bearer: String::new(),
@@ -919,6 +928,10 @@ fn default_ai_local_base_url() -> String {
     // llama.cpp (the shipped setup-local-ai.ps1 pipeline) serves on :8080.
     // Ollama users can change this to :11434 in Settings.
     "http://127.0.0.1:8080/v1".into()
+}
+
+fn default_ai_local_context() -> String {
+    "auto".into()
 }
 
 fn default_stt_provider() -> String {
@@ -1293,6 +1306,8 @@ fn secret_redacted(cfg: &Config) -> Config {
     c.vision_local_bearer.clear();
     c.groq_api_key.clear();
     c.stt_whisper_bearer.clear();
+    c.hermes_bridge_token.clear();
+    c.hermes_api_key.clear();
     c
 }
 

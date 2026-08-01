@@ -71,7 +71,7 @@ export component TranscriptWindow inherits Window {
     init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
 
-    title: "Transcript";
+    title: @tr("Transcript");
     icon: @image-url("../assets/icon.svg");
     // Opaque (NOT transparent) — a transparent + WS_EX_LAYERED frameless window
     // alpha-clamps text invisible (archive.slint learned this the hard way).
@@ -314,7 +314,7 @@ export component TranscriptWindow inherits Window {
                             // Per-scheme WCAG-AA text colour on the accent fill (white
                             // fails on the bright mint scheme); matches every other
                             // filled-accent control.
-                            text: root.copied ? @tr("Copied ✓") : @tr("Copy all");
+                            text: root.copied ? @tr("Copied [ok]") : @tr("Copy all");
                             color: Theme.on-accent;
                             font-size: Metrics.font-label;
                             font-weight: 600;
@@ -339,7 +339,7 @@ export component TranscriptWindow inherits Window {
                             }
                         }
                         Text {
-                            text: root.copied ? @tr("Copied ✓") : @tr("Copy selected");
+                            text: root.copied ? @tr("Copied [ok]") : @tr("Copy selected");
                             color: Theme.accent;
                             font-size: Metrics.font-label;
                             font-weight: 600;
@@ -569,6 +569,9 @@ export component TranscriptWindow inherits Window {
                                     text: sp.label;
                                     width: 108px;
                                     font-size: Metrics.font-label;
+                                    // A re-detect replaces the whole diarization row. Prevent a
+                                    // late rename write from restoring the previous segments.
+                                    enabled: !root.diarizing;
                                     // F-fix (fable, live-proven): commit AS-TYPED, not just on Enter.
                                     // The old Enter-only `accepted` let a typed-but-uncommitted name sit
                                     // VISIBLE while the store stayed empty → the re-detect guard saw no

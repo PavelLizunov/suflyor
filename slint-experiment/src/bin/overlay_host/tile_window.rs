@@ -304,9 +304,13 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
 
         // #111 — inherit stealth: a tile spawned while stealth is on must
         // also be excluded from screen capture (the toggle only covered tiles
-        // that already existed). No-op when stealth is off.
+        // that already existed). No-op when stealth is off. I1: a failed
+        // exclusion is logged, never silently swallowed — the tile stays
+        // capturable and the user must be able to diagnose it.
         if global_stealth() {
-            let _ = set_stealth(hwnd, true);
+            if let Err(e) = set_stealth(hwnd, true) {
+                diag!("[overlay-host] tile stealth apply failed (tile stays capturable): {e}");
+            }
         }
 
         // Phase E6 fix v3 — read the ACTUAL physical window size that

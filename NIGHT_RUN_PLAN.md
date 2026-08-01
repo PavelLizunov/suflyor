@@ -1,3 +1,12 @@
+> **⚠ HISTORICAL / SUPERSEDED.** This document is a log of past autonomous
+> overnight runs (v0.8–v0.9 era, June 2026). It is preserved for context only.
+> Do NOT follow any instructions, commands, or release procedures below — they
+> reflect the state at the time of writing and are no longer current. For the
+> live state see `docs/CODEX_HANDOFF.md`; for release policy see
+> `RELEASE_CHECKLIST.md` and `AGENTS.md`.
+
+---
+
 # Autonomous work plan
 
 ## 🔧 Interactive follow-up (2026-06-03) — recovery strip-on-reseed (Phase 2 DONE)

@@ -4,7 +4,7 @@
 # fails on skia-rendered layered windows).
 param(
   [string]$TitleLike = "suflyor (Slint)",
-  [string]$Out = "C:\Users\x3d_mutant\Natively\overlay-mvp\slint-experiment\verify.png",
+  [string]$Out = (Join-Path $PSScriptRoot "..\verify.png"),
   [int]$Margin = 8
 )
 

@@ -22,20 +22,91 @@
 #![allow(clippy::missing_errors_doc)]
 
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use windows::Win32::Foundation::{HWND, RECT};
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Dwm::{
     DwmEnableBlurBehindWindow, DwmExtendFrameIntoClientArea, DwmIsCompositionEnabled,
     DWM_BB_BLURREGION, DWM_BB_ENABLE, DWM_BLURBEHIND,
 };
 use windows::Win32::Graphics::Gdi::{CreateRectRgn, DeleteObject};
 use windows::Win32::UI::Controls::MARGINS;
+use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetWindowLongPtrW, SetWindowDisplayAffinity, SetWindowLongPtrW, SetWindowPos, ShowWindow,
-    GWL_EXSTYLE, GWL_STYLE, HWND_NOTOPMOST, HWND_TOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE,
-    SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE, SW_SHOWNOACTIVATE, WDA_EXCLUDEFROMCAPTURE,
-    WDA_NONE, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_MAXIMIZEBOX, WS_MINIMIZEBOX,
-    WS_SYSMENU,
+    GetWindowDisplayAffinity, GetWindowLongPtrW, KillTimer, LoadCursorW, SetCursor, SetTimer,
+    SetWindowDisplayAffinity, SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, GWL_STYLE,
+    HWND_NOTOPMOST, HWND_TOPMOST, IDC_ARROW, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
+    SWP_NOSIZE, SWP_NOZORDER, SW_HIDE, SW_SHOWNOACTIVATE, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
+    WM_MOUSEMOVE, WM_SETCURSOR, WM_TIMER, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
+    WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SYSMENU,
 };
+
+const STEALTH_CURSOR_SUBCLASS_ID: usize = 0x55F1_0001;
+const STEALTH_CURSOR_TIMER_ID: usize = 0x55F1_0002;
+
+fn restore_arrow_after_message(message: u32) -> bool {
+    message == WM_MOUSEMOVE
+}
+
+unsafe fn force_arrow_if_stealthed(hwnd: HWND) -> bool {
+    let Ok(affinity) = read_display_affinity(hwnd) else {
+        return false;
+    };
+    if affinity != WDA_EXCLUDEFROMCAPTURE.0 {
+        return false;
+    }
+    let Ok(cursor) = (unsafe { LoadCursorW(None, IDC_ARROW) }) else {
+        return false;
+    };
+    unsafe {
+        SetCursor(Some(cursor));
+    }
+    true
+}
+
+/// WDA hides window pixels from capture, but the OS cursor remains visible.
+/// Keep the normal arrow over stealthed windows without swallowing mouse input.
+unsafe extern "system" fn stealth_cursor_subclass_proc(
+    hwnd: HWND,
+    message: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+    _subclass_id: usize,
+    _ref_data: usize,
+) -> LRESULT {
+    if message == WM_SETCURSOR && unsafe { force_arrow_if_stealthed(hwnd) } {
+        return LRESULT(1);
+    }
+    if message == WM_TIMER && wparam.0 == STEALTH_CURSOR_TIMER_ID {
+        let _ = unsafe { KillTimer(Some(hwnd), STEALTH_CURSOR_TIMER_ID) };
+        let _ = unsafe { force_arrow_if_stealthed(hwnd) };
+        return LRESULT(0);
+    }
+
+    let result = unsafe { DefSubclassProc(hwnd, message, wparam, lparam) };
+    // Slint handles the pointer event after this native callback returns and
+    // calls SetCursor directly. Restore once after its deferred work runs.
+    if restore_arrow_after_message(message) && unsafe { force_arrow_if_stealthed(hwnd) } {
+        unsafe {
+            SetTimer(Some(hwnd), STEALTH_CURSOR_TIMER_ID, 1, None);
+        }
+    }
+    result
+}
+
+fn install_stealth_cursor_guard(hwnd: HWND) -> Result<(), Box<dyn std::error::Error>> {
+    let installed = unsafe {
+        SetWindowSubclass(
+            hwnd,
+            Some(stealth_cursor_subclass_proc),
+            STEALTH_CURSOR_SUBCLASS_ID,
+            0,
+        )
+    };
+    if installed.as_bool() {
+        Ok(())
+    } else {
+        Err(windows::core::Error::from_thread().into())
+    }
+}
 
 /// Extract a raw Win32 HWND from any Slint window. Requires the
 /// `raw-window-handle-06` feature on `slint`.
@@ -240,30 +311,68 @@ pub fn set_always_on_top(hwnd: HWND, on: bool) -> Result<(), Box<dyn std::error:
 /// This is the "stealth" toggle in the existing overlay-mvp Settings
 /// → Stealth panel. WDA_EXCLUDEFROMCAPTURE is the Win32 mechanism
 /// behind it. Requires Windows 10 build 2004 / Windows 11.
+///
+/// I1: success means the exclusion was APPLIED AND READ BACK via
+/// `GetWindowDisplayAffinity` — callers reduce the Result through
+/// `presentable_stealth` to the EFFECTIVE state they show to the user,
+/// so a failed/unsupported exclusion can never be presented as stealth on.
 pub fn set_stealth(hwnd: HWND, on: bool) -> Result<(), Box<dyn std::error::Error>> {
     let affinity = if on { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE };
     unsafe {
         SetWindowDisplayAffinity(hwnd, affinity)?;
     }
-    Ok(())
+    // The cursor guard is cosmetic (keeps the arrow over a stealthed window)
+    // and a repeat install on the same HWND legitimately fails — its error
+    // must not mask the capture exclusion verified below.
+    let _ = install_stealth_cursor_guard(hwnd);
+    let actual = read_display_affinity(hwnd)?;
+    if actual == affinity.0 {
+        Ok(())
+    } else {
+        Err(format!(
+            "display affinity readback mismatch: wanted 0x{:x}, got 0x{:x}",
+            affinity.0, actual
+        )
+        .into())
+    }
 }
 
-/// Show or hide the window's TASKBAR button. Wired to the stealth toggle so the
+/// Read the window's EFFECTIVE display affinity (WDA_* bits) back from the OS.
+/// `set_stealth` verifies through this; any path that must prove an exclusion
+/// independently can too (I1).
+pub fn read_display_affinity(hwnd: HWND) -> Result<u32, Box<dyn std::error::Error>> {
+    let mut affinity = 0u32;
+    unsafe {
+        GetWindowDisplayAffinity(hwnd, &mut affinity)?;
+    }
+    Ok(affinity)
+}
+
+/// The stealth state callers may PRESENT to the user (I1): active only when it
+/// was requested AND the apply/readback proved the exclusion. Any failure —
+/// forced or real — reduces to false; we never present a false success. Config
+/// intent is a separate decision: callers preserve it so the next apply
+/// retries.
+#[must_use]
+pub fn presentable_stealth(wanted: bool, applied: &Result<(), Box<dyn std::error::Error>>) -> bool {
+    wanted && applied.is_ok()
+}
+
+/// Toggle the window's TASKBAR exclusion. Wired to the stealth toggle so the
 /// overlay also disappears from the taskbar (a screen-share viewer shouldn't see
 /// "suflyor" in the taskbar). WS_EX_TOOLWINDOW/APPWINDOW only affect the taskbar
-/// at show-time, so we do a brief hide -> restyle -> show-no-activate and
-/// re-assert topmost. Only the TOOLWINDOW/APPWINDOW bits are touched; all other
-/// ex-style bits (layered / transparent / etc.) are preserved.
+/// at show-time, so a bit change does a brief hide -> restyle -> show-no-activate
+/// and re-asserts topmost. Only the TOOLWINDOW/APPWINDOW bits are touched (via
+/// `skip_taskbar_exstyle`); all other ex-style bits (layered / transparent /
+/// etc.) are preserved.
+///
+/// I2: BOTH directions force the TOOLWINDOW baseline + clear APPWINDOW, so an
+/// overlay window can never become a taskbar-eligible APPWINDOW through this
+/// toggle (and a winit re-show that dropped TOOLWINDOW gets it re-asserted).
 pub fn set_skip_taskbar(hwnd: HWND, skip: bool) -> Result<(), Box<dyn std::error::Error>> {
     unsafe {
         let before = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-        let tool = WS_EX_TOOLWINDOW.0 as isize;
-        let app = WS_EX_APPWINDOW.0 as isize;
-        let after = if skip {
-            (before | tool) & !app
-        } else {
-            (before & !tool) | app
-        };
+        let after = skip_taskbar_exstyle(before, skip);
         if after == before {
             return Ok(());
         }
@@ -282,6 +391,22 @@ pub fn set_skip_taskbar(hwnd: HWND, skip: bool) -> Result<(), Box<dyn std::error
         )?;
     }
     Ok(())
+}
+
+/// Pure ex-style transition behind `set_skip_taskbar` (I2), shared by every
+/// caller so the baseline cannot drift. Audit acceptance: an overlay window
+/// ALWAYS has the TOOLWINDOW baseline and NEVER APPWINDOW — so BOTH directions
+/// force TOOLWINDOW on + APPWINDOW off (a winit re-show may have dropped
+/// TOOLWINDOW; `skip = false` must re-assert it, not merely clear APPWINDOW).
+/// `skip` stays in the signature for call-site clarity; the baseline is
+/// identical in both directions. Every other ex-style bit (layered /
+/// transparent / topmost / …) is preserved.
+#[must_use]
+pub fn skip_taskbar_exstyle(before: isize, skip: bool) -> isize {
+    let _ = skip; // baseline is identical in both directions — see doc
+    let tool = WS_EX_TOOLWINDOW.0 as isize;
+    let app = WS_EX_APPWINDOW.0 as isize;
+    (before | tool) & !app
 }
 
 /// Bounds of a display monitor in screen-coordinate space.
@@ -864,25 +989,20 @@ pub fn clipboard_clear() {
 /// Each event carries its real hardware SCAN CODE (via `MapVirtualKeyW`), not
 /// just the virtual key: some apps — notably Telegram Desktop and other Qt
 /// builds — read the scan code and IGNORE a synthetic keystroke whose `wScan`
-/// is 0, so a bare-vk Ctrl+C copied nothing there. Right-Alt is an extended key,
-/// flagged so its scan code is interpreted correctly.
+/// is 0, so a bare-vk Ctrl+C copied nothing there.
 pub fn send_ctrl_c() {
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         MapVirtualKeyW, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
-        KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, MAPVK_VK_TO_VSC, VIRTUAL_KEY, VK_CONTROL, VK_LMENU,
-        VK_LSHIFT, VK_MENU, VK_RMENU, VK_RSHIFT, VK_SHIFT,
+        KEYEVENTF_KEYUP, MAPVK_VK_TO_VSC, VIRTUAL_KEY, VK_CONTROL,
     };
     let vk_c = VIRTUAL_KEY(0x43); // 'C'
     let ev = |vk: VIRTUAL_KEY, up: bool| {
         let scan = unsafe { MapVirtualKeyW(u32::from(vk.0), MAPVK_VK_TO_VSC) } as u16;
-        let mut flags = if up {
+        let flags = if up {
             KEYEVENTF_KEYUP
         } else {
             KEYBD_EVENT_FLAGS(0)
         };
-        if vk == VK_RMENU {
-            flags |= KEYEVENTF_EXTENDEDKEY; // right-Alt is an extended key
-        }
         INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: INPUT_0 {
@@ -896,17 +1016,7 @@ pub fn send_ctrl_c() {
             },
         }
     };
-    // CRITICAL: the Shift+Alt that fired the hotkey are still physically DOWN, so
-    // a bare Ctrl+C injection reads as Shift+Alt+Ctrl+C (NOT copy). Release both
-    // modifiers (all L/R variants) first, in the same atomic SendInput batch, so
-    // the Ctrl+C lands clean and actually copies the selection.
     let inputs = [
-        ev(VK_LMENU, true),
-        ev(VK_RMENU, true),
-        ev(VK_MENU, true),
-        ev(VK_LSHIFT, true),
-        ev(VK_RSHIFT, true),
-        ev(VK_SHIFT, true),
         ev(VK_CONTROL, false),
         ev(vk_c, false),
         ev(vk_c, true),
@@ -914,5 +1024,71 @@ pub fn send_ctrl_c() {
     ];
     unsafe {
         SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use super::*;
+
+    #[test]
+    fn stealth_cursor_guard_defers_mouse_move_restore() {
+        assert!(restore_arrow_after_message(WM_MOUSEMOVE));
+        assert!(!restore_arrow_after_message(WM_SETCURSOR));
+    }
+
+    /// I1 — a forced apply/readback failure must reduce to effective-off, even
+    /// when stealth was requested; we never present a false success.
+    #[test]
+    fn presentable_stealth_requires_a_verified_exclusion() {
+        let ok: Result<(), Box<dyn std::error::Error>> = Ok(());
+        let forced: Result<(), Box<dyn std::error::Error>> =
+            Err("forced apply/readback failure".into());
+        assert!(presentable_stealth(true, &ok));
+        assert!(!presentable_stealth(true, &forced));
+        assert!(!presentable_stealth(false, &ok));
+        assert!(!presentable_stealth(false, &forced));
+    }
+
+    /// I2 — BOTH directions must force the TOOLWINDOW baseline on and
+    /// APPWINDOW off (never APPWINDOW), while every unrelated ex-style bit
+    /// survives — including the audit's regression input: a window whose
+    /// ex-style LACKS TOOLWINDOW (winit dropped it on a re-show) and CARRIES
+    /// APPWINDOW.
+    #[test]
+    fn skip_taskbar_keeps_toolwindow_baseline() {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+        };
+        let tool = WS_EX_TOOLWINDOW.0 as isize;
+        let app = WS_EX_APPWINDOW.0 as isize;
+        let unrelated =
+            WS_EX_LAYERED.0 as isize | WS_EX_TRANSPARENT.0 as isize | WS_EX_TOPMOST.0 as isize;
+
+        // skip on: TOOLWINDOW forced, APPWINDOW cleared, other bits preserved.
+        assert_eq!(
+            skip_taskbar_exstyle(unrelated | app, true),
+            unrelated | tool
+        );
+        // skip off: SAME baseline — APPWINDOW cleared AND the missing
+        // TOOLWINDOW re-asserted (the old code left TOOLWINDOW absent here).
+        let off = skip_taskbar_exstyle(unrelated | app, false);
+        assert_eq!(off, unrelated | tool);
+        assert_eq!(off & app, 0);
+        // The bare regression input (no TOOLWINDOW, APPWINDOW set) lands the
+        // exact baseline in BOTH directions.
+        assert_eq!(skip_taskbar_exstyle(app, true), tool);
+        assert_eq!(skip_taskbar_exstyle(app, false), tool);
+        // Idempotent on an already-baseline window (caller skips the hide/show).
+        assert_eq!(
+            skip_taskbar_exstyle(unrelated | tool, true),
+            unrelated | tool
+        );
+        assert_eq!(
+            skip_taskbar_exstyle(unrelated | tool, false),
+            unrelated | tool
+        );
     }
 }

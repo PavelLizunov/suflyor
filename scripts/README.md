@@ -6,17 +6,17 @@ Workflow tooling for the Slint build + the testing methodology in `../CLAUDE.md`
 
 | File | Purpose |
 |---|---|
-| `ci.ps1` | Local CI — fmt + clippy + tests for slint-experiment + overlay-backend |
+| `ci.ps1` | Local CI — fmt + clippy + tests for slint-experiment + overlay-backend + suflyor-tts |
 | `build-slint-release.ps1` | `-Installer` → release `overlay-host.exe` + NSIS `suflyor-slint-setup.exe` |
 | `slint-installer.nsi` | NSIS script (installs to `%LOCALAPPDATA%\suflyor-slint\`) |
-| `capture_window.ps1` / `capture_primary.ps1` | DPI-aware screenshots (the Slint windows are layered → PrintWindow fails; these grab the composited pixels) |
+| `slint-experiment/scripts/capture_window.ps1` / `capture_primary.ps1` | DPI-aware screenshots (the Slint windows are layered → PrintWindow fails; these grab the composited pixels) |
 | `click_at.ps1` / `hold_at.ps1` / `send_key.ps1` / `type_text.ps1` | Synthetic input for verifying the overlay |
 
 ## Quick usage
 
 ```powershell
 # Before every commit:
-powershell scripts\ci.ps1                 # fmt + clippy + tests (both crates)
+powershell scripts\ci.ps1                 # fmt + clippy + tests (all three crates)
 # (then in your Claude session)
 # → Agent(subagent_type:"general-purpose", prompt = docs/REVIEW_AGENT_PROMPT.md)
 
