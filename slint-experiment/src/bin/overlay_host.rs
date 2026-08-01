@@ -454,7 +454,7 @@ fn spawn_text_tile(
 
 /// Fill an already-spawned OCR placeholder tile with the recognized text and
 /// read it aloud — the Ctrl+F8 / Shift+Alt+2 Tesseract path. The capture flow
-/// (`launch_vision_for_bgra`) creates the tile with a "⏳ Распознаю…"
+/// (`launch_vision_for_bgra`) creates the tile with a "Распознаю текст…"
 /// placeholder, runs Tesseract off-thread, then marshals the result here on the
 /// Slint UI thread. Mirrors the tail of `spawn_text_tile` (seed conversation →
 /// auto-read), but the tile already exists.
@@ -2997,6 +2997,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 st.tiles_spawned
             };
             overlay.set_tiles_spawned(seq as i32);
+            let display_seq = TILE_DISPLAY_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
             // Synchronous id — the abort-registry key (the HWND isn't realized
             // yet at this point, so keying on it lost the registration).
             let tile_id = next_tile_id();
@@ -3010,10 +3011,10 @@ fn main() -> Result<(), slint::PlatformError> {
             };
 
             // "+ тайл" — real AI ask about the recent transcript. The tile is
-            // shown IMMEDIATELY (below) with a ⏳ placeholder, then filled when
-            // the resolved AI endpoint answers — so the button always gives
-            // instant feedback even if the model is slow/down. User: "+ тайл
-            // не прожимается".
+            // shown IMMEDIATELY (below) with a plain-text placeholder, then
+            // filled when the resolved AI endpoint answers — so the button
+            // always gives instant feedback even if the model is slow/down.
+            // User: "+ тайл не прожимается".
             let recent_tx = {
                 let st = slint_replay::runtime_state::lock(&slint_rt_c);
                 select_recent_labeled(&st.transcript, 8).join("\n")
@@ -3024,25 +3025,26 @@ fn main() -> Result<(), slint::PlatformError> {
             } else {
                 String::new()
             };
-            let heading = if has_tx {
-                format!("Вопрос по встрече #{seq}")
-            } else {
-                format!("Тайл #{seq}")
-            };
-            tile.set_sequence(seq as i32);
+            // The visible number is owned by the tile UI ALONE (tile.slint
+            // prepends #<sequence>); the title carries none — the old
+            // "Вопрос по встрече #3" rendered doubled: "#3  Вопрос по встрече #3".
+            let heading = manual_tile_heading(has_tx);
+            tile.set_sequence(display_seq as i32);
             tile.set_tile_id(tile_id);
-            tile.set_tile_title(SharedString::from(heading.clone()));
+            tile.set_tile_title(SharedString::from(heading));
             tile.set_source_label(SharedString::from("ai · asking…"));
             wire_tile_drag(&tile);
 
-            // Initial body — shown instantly: the AI-in-flight hint, or the
-            // no-transcript hint when there's nothing to ask yet.
+            // Initial body — shown instantly: the AI-in-flight hint, or a
+            // plain, ACTIONABLE empty-state hint when there's nothing to ask
+            // yet. No hourglass glyph — rare Unicode renders as a tofu square
+            // on the skia font fallback (project no-tofu rule).
             let placeholder = vec![MarkdownBlock {
                 kind: markdown::kind::PARAGRAPH,
                 text: SharedString::from(if has_tx {
-                    "⏳ Спрашиваю AI…"
+                    "Спрашиваю AI…"
                 } else {
-                    "Нет транскрипта. Начните сессию (захват аудио) — когда появятся реплики, «+ тайл» спросит AI по последним из них."
+                    "Транскрипт пока пуст. Нажмите старт на баре (или удерживайте «спросить») — AI ответит по последним репликам."
                 }),
                 lang: SharedString::from(""),
                 marked: false,
@@ -3130,7 +3132,7 @@ fn main() -> Result<(), slint::PlatformError> {
             }
 
             let question_for_task = question.clone();
-            let heading_for_task = heading.clone();
+            let heading_for_task = heading;
             let slint_rt_cost = slint_rt_c.clone();
             let tile_spawn_handle = rt.spawn(async move {
                 let messages = vec![ai::ChatMessage {
@@ -3959,6 +3961,38 @@ pub(crate) fn active_stack_label(c: &overlay_backend::config::Config) -> String 
         "mixed"
     };
     format!("{tag}: {stt} · {model}")
+}
+
+/// Title of a manually spawned "+ tile". The visible number is owned by the
+/// tile UI ALONE — `tile.slint` prepends `#<sequence>` to `tile-title` — so the
+/// title must carry NO `#N` of its own (the old `Вопрос по встрече #3` rendered
+/// doubled: `#3  Вопрос по встрече #3`). Every other spawn path (F9, PTT,
+/// vision, auto, read-only content tiles) already passes an unnumbered title.
+fn manual_tile_heading(has_transcript: bool) -> &'static str {
+    if has_transcript {
+        "Вопрос по встрече"
+    } else {
+        "Тайл"
+    }
+}
+
+#[cfg(test)]
+mod tile_heading_tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)] // test asserts
+    use super::manual_tile_heading;
+
+    /// Double-numbering guard: `tile.slint` prepends `#<sequence>`, so a title
+    /// carrying its own number (or digit) renders doubled in the tile header.
+    #[test]
+    fn manual_tile_heading_carries_no_number() {
+        for heading in [manual_tile_heading(true), manual_tile_heading(false)] {
+            assert!(!heading.contains('#'), "heading carries #: {heading:?}");
+            assert!(
+                !heading.chars().any(|c| c.is_ascii_digit()),
+                "heading carries a digit: {heading:?}"
+            );
+        }
+    }
 }
 
 #[cfg(test)]

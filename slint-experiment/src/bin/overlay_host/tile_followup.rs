@@ -445,7 +445,8 @@ pub(crate) fn fire_followup_ask(
     if let Some(tile) = tile_weak.upgrade() {
         tile.set_followup_busy(true);
         tile.set_source_label(SharedString::from("ai · asking…"));
-        let shown = format!("{prefix}⏳ …");
+        // Plain ellipsis — no hourglass glyph (tofu on the skia font fallback).
+        let shown = format!("{prefix}…");
         tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&shown))));
     }
     let generation = install_streaming_tile(
@@ -641,7 +642,7 @@ pub(crate) fn fire_regenerate(
     if let Some(t) = tile_weak.upgrade() {
         t.set_followup_busy(true);
         t.set_source_label(SharedString::from("ai · перегенерация…"));
-        t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks("⏳ …"))));
+        t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks("…"))));
     }
     // V0.8.3 (escalate→followup bug) — route the regenerate through the SAME
     // `current_streaming` slot + generation gating as fire_followup_ask (was a

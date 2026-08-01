@@ -197,14 +197,6 @@ export component HelpWindow inherits Window {
                         alignment: start;
                         BrandHeaderMark { mark-size: 22px; }
                         Text {
-                            text: "::";
-                            font-family: Theme.font-mono;
-                            font-size: 13px;
-                            font-weight: 700;
-                            color: Theme.text-muted;
-                            vertical-alignment: center;
-                        }
-                        Text {
                             text: @tr("Help — icons, hotkeys & gestures");
                             font-size: 15px;
                             font-weight: 700;
@@ -224,6 +216,35 @@ export component HelpWindow inherits Window {
                 VerticalLayout {
                     spacing: 0px;
 
+                    // Plain three-step workflow so the window explains WHAT TO
+                    // DO first; the icon / hotkey reference follows below.
+                    Text {
+                        text: @tr("How it works");
+                        font-weight: 700;
+                        font-size: Metrics.font-body;
+                        color: Theme.accent;
+                    }
+                    Rectangle { height: 8px; }
+                    Text {
+                        text: @tr("1) Start capture — press start on the bar. The mic records you; system audio records the other side.");
+                        font-size: Metrics.font-label;
+                        color: Theme.text-secondary;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: @tr("2) Get help — hold ask or grab for a voice question, or press F9. Answers appear in tiles.");
+                        font-size: Metrics.font-label;
+                        color: Theme.text-secondary;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: @tr("3) Stop and review — press stop to end the session; open the session archive (F7) for transcripts and summaries.");
+                        font-size: Metrics.font-label;
+                        color: Theme.text-secondary;
+                        wrap: word-wrap;
+                    }
+
+                    Rectangle { height: 18px; }
                     Text {
                         text: @tr("Bar icons");
                         font-weight: 700;
@@ -277,6 +298,7 @@ export component HelpWindow inherits Window {
                         ["F6", @tr("Manual tile from the last transcript line")],
                         ["F7", @tr("Session archive (browse and search)")],
                         ["Shift+F8", @tr("Screenshot → translate text (AI vision)")],
+                        ["Ctrl+F8", @tr("Screenshot → OCR the text, then read it aloud")],
                         ["Shift+Alt+1", @tr("Read the selected text aloud (TTS)")],
                         ["Shift+Alt+2", @tr("OCR a screen region and read it aloud")],
                         ["Shift+Alt+3", @tr("Pause / resume reading aloud")],

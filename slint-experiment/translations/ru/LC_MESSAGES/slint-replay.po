@@ -1180,6 +1180,18 @@ msgstr "Справка"
 msgid "Help — icons, hotkeys & gestures"
 msgstr "Справка — иконки, хоткеи и жесты"
 
+msgid "How it works"
+msgstr "Как это работает"
+
+msgid "1) Start capture — press start on the bar. The mic records you; system audio records the other side."
+msgstr "1) Начните захват — нажмите старт на баре. Микрофон записывает вас, системный звук — собеседника."
+
+msgid "2) Get help — hold ask or grab for a voice question, or press F9. Answers appear in tiles."
+msgstr "2) Получайте помощь — удерживайте «спросить» или «захватить» для голосового вопроса, либо нажмите F9. Ответы появляются в тайлах."
+
+msgid "3) Stop and review — press stop to end the session; open the session archive (F7) for transcripts and summaries."
+msgstr "3) Остановите и посмотрите — нажмите стоп для завершения сессии, затем откройте архив сессий (F7) для стенограмм и сводок."
+
 msgid "Bar icons"
 msgstr "Иконки бара"
 
@@ -1263,6 +1275,19 @@ msgstr "Восстановить"
 # Phase 3a — session-archive browser (archive.slint)
 msgid "Session archive"
 msgstr "Архив сессий"
+
+# UX-clarity — the session count is attached to the heading (one label).
+msgid "Session archive ({})"
+msgstr "Архив сессий ({})"
+
+msgid "More actions"
+msgstr "Другие действия"
+
+msgid "Restore tile size"
+msgstr "Вернуть размер тайла"
+
+msgid "Maximize tile"
+msgstr "Развернуть тайл"
 
 msgid "search transcript + AI answers…"
 msgstr "поиск по транскрипту и ответам ИИ…"

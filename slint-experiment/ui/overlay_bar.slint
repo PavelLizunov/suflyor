@@ -599,6 +599,10 @@ export component OverlayBarWindow inherits Window {
                 border-radius: Metrics.radius-control;
                 height: 22px;
                 horizontal-stretch: 0;
+                // The pill is the bar's status readout AND its drag handle —
+                // expose both to accessibility (no visible caption describes it).
+                accessible-role: text;
+                accessible-label: root.status-text + ". " + @tr("Drag to move the bar; shows the live state");
                 // Drag handle — press-and-drag to move the whole bar.
                 TouchArea {
                     mouse-cursor: OverlayCursorPolicy.force-arrow ? default : grab;
@@ -938,7 +942,8 @@ export component OverlayBarWindow inherits Window {
                 vertical-alignment: center;
                 horizontal-stretch: 0;
             }
-            // Source tag — "mic" green dot, "sys" cyan dot, "" gray.
+            // Source tag — "mic" green dot, "sys" cyan dot, "" gray. The dot is
+            // colour-ONLY, so accessibility gets a word for the source it marks.
             Rectangle {
                 width: 8px;
                 height: 8px;
@@ -947,6 +952,9 @@ export component OverlayBarWindow inherits Window {
                 background: root.last-transcript-source == "mic"
                     ? Theme.success
                     : (root.last-transcript-source == "sys" ? Theme.accent : Theme.border-strong);
+                accessible-role: text;
+                accessible-label: root.last-transcript-source == "mic" ? @tr("Microphone")
+                    : (root.last-transcript-source == "sys" ? @tr("System audio") : "");
             }
             // The live transcript text — elide when too long.
             Text {
@@ -1031,6 +1039,10 @@ export component OverlayBarWindow inherits Window {
                     // this, so the normal look is unchanged (full bar has 1200px,
                     // so it never needs the cap).
                     max-width: 150px;
+                    // Same accessibility label as the full bar's pill (status +
+                    // drag affordance) — zero layout impact.
+                    accessible-role: text;
+                    accessible-label: root.status-text + ". " + @tr("Drag to move the bar; shows the live state");
                     TouchArea {
                         mouse-cursor: OverlayCursorPolicy.force-arrow ? default : grab;
                         pointer-event(ev) => {

@@ -113,9 +113,10 @@ pub(crate) fn fire_ptt_ask(
     tile.set_convo_id(convo_id);
     tile.set_followup_busy(true);
     wire_tile_drag(&tile);
+    // Plain text, no hourglass glyph (tofu on the skia font fallback).
     tile.set_blocks(ModelRc::new(VecModel::from(vec![MarkdownBlock {
         kind: markdown::kind::PARAGRAPH,
-        text: SharedString::from("⏳ Расшифровка…"),
+        text: SharedString::from("Расшифровка…"),
         lang: SharedString::from(""),
         marked: false,
     }])));

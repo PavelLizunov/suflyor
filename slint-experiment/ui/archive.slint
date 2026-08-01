@@ -8,10 +8,11 @@
 // `overlay_backend::persistence::Store` queries (list / search / detail), and
 // the tile spawn. Structurally a sibling of palette.slint (searchable list).
 //
-// i18n: the DATA rows are language-NEUTRAL (emoji-coded counts/status, built in
-// Rust) so there is no per-row translation; only the window CHROME (title,
-// search placeholder, empty / hint strings) is `@tr`, with the msgid as English
-// and the Russian in translations/ru/.../slint-replay.po.
+// i18n: the DATA rows are built in Rust with short LOCALIZED labels switched by
+// the UI language (transcript / AI counts, a human status — no raw internal
+// tokens); only the window CHROME (title, search placeholder, empty / hint
+// strings) is `@tr`, with the msgid as English and the Russian in
+// translations/ru/.../slint-replay.po.
 
 import { LineEdit, ScrollView, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
@@ -23,8 +24,8 @@ import { Metrics } from "metrics.slint";
 export struct ArchiveRow {
     id: string,        // session id (file stem) — passed back on activation
     title: string,     // session: "Обзор функций" or "2026-06-04 10:00:00"; hit: the snippet header
-    subtitle: string,  // session: "💬 12 · 🤖 3 · model"; hit: the matched snippet
-    meta: string,      // session: cost (e.g. "$0.024"); hit: kind emoji
+    subtitle: string,  // session: localized "Transcript: 12 · AI: 3 · model" (+status); hit: the matched snippet
+    meta: string,      // session: cost (e.g. "$0.024"); hit: localized hit kind (question / answer / line)
     has-recordings: bool, // v0.14.0 — recordings/<id>/ exists → show "↻ Summary"
     name: string,      // v0.22.0 — the raw editable session name ("" if unnamed) — pre-fills the inline rename field
     has-data: bool,    // F4 — has a saved transcript OR recording → "↻ Summary" is actionable
@@ -85,7 +86,9 @@ export component ArchiveWindow inherits Window {
     in-out property <string> query: "";
     in-out property <[ArchiveRow]> results: [];
     in-out property <int> selected-index: 0;
-    // Header summary (Rust-built, language-neutral count, e.g. "128 · 5304💬").
+    // Header count (Rust-built, language-neutral number, e.g. "128"). Rendered
+    // INSIDE the "Session archive" heading so it reads as one label, not a
+    // detached number; empty until the catalog lists → plain heading.
     in-out property <string> summary: "";
     // True ONLY when the catalog can't be opened — an @tr'd message replaces the
     // list so the window degrades gracefully (never a blank panel).
@@ -214,17 +217,18 @@ export component ArchiveWindow inherits Window {
                                 vertical-alignment: center;
                             }
                             Text {
-                                text: @tr("Session archive");
+                                // The session count is part of the heading (one
+                                // label, not a detached number); empty summary =
+                                // catalog not listed yet / unavailable → plain title.
+                                text: root.summary == "" ? @tr("Session archive") : @tr("Session archive ({})", root.summary);
                                 font-size: Metrics.font-heading;
                                 font-weight: 700;
                                 color: Theme.text-primary;
                                 vertical-alignment: center;
                             }
-                            Text {
-                                text: root.summary;
-                                font-size: Metrics.font-caption;
-                                color: Theme.text-muted;
-                                vertical-alignment: center;
+                            // Spacer keeping the close button on the right edge
+                            // (the count moved into the heading above).
+                            Rectangle {
                                 horizontal-stretch: 1;
                             }
                         }

@@ -25,7 +25,7 @@ use super::{
     AskRoute, ComponentHandle, HelpWindow, MarkdownBlock, ModelRc, OverlayBarBridge,
     OverlayBarWindow, PaletteResult, PaletteWindow, Rc, RefCell, RuntimeEvents, SharedSlintRuntime,
     SharedString, SpeakerRow, TextAskWindow, TileWindow, TileWindows, TranscriptLine,
-    TranscriptWindow, VecModel,
+    TranscriptWindow, VecModel, TILE_DISPLAY_SEQ,
 };
 use overlay_backend::persistence::{
     open_default_store, AiTurn, Diarization, SearchHit, Session, Store, Utterance,
@@ -532,6 +532,10 @@ pub(crate) fn open_archive(
     // filesystem stat PER ROW per rebuild; see recording_ids_snapshot).
     let recordings = Rc::new(recording_ids_snapshot());
 
+    // Row wording language, snapshotted for this browse session (mirrors the
+    // other per-open snapshots; a language switch applies on the next open).
+    let ru = cfg.read().ui_language == "ru";
+
     // Баг5-class guard: the archive results render in an UN-VIRTUALIZED 50px-row
     // `for` inside a ScrollView (archive.slint:299), so cap the DISPLAYED rows —
     // content must stay under the Slint SW-renderer's i16 (32767px) coordinate
@@ -544,7 +548,8 @@ pub(crate) fn open_archive(
     match store.as_ref() {
         Some(store_rc) => {
             let sessions = store_rc.borrow().list_sessions().unwrap_or_default();
-            // v0.17.1 — plain count (the 🗄 now lives in the header SVG icon).
+            // Plain count — the .slint attaches it to the "Session archive"
+            // heading (v0.17.1: the 🗄 lives in the header SVG icon).
             win.set_summary(SharedString::from(sessions.len().to_string()));
             // Re-snapshot conspect ids fresh each (re)build so a row flips to
             // "Просмотреть" the moment its summary lands (A2) — one cheap dir read.
@@ -553,7 +558,7 @@ pub(crate) fn open_archive(
             let rows: Vec<ArchiveRow> = sessions
                 .iter()
                 .take(ARCHIVE_LIST_CAP)
-                .map(|s| session_to_row(s, &recordings, &conspects, &debriefs))
+                .map(|s| session_to_row(s, &recordings, &conspects, &debriefs, ru))
                 .collect();
             win.set_results(ModelRc::new(VecModel::from(rows)));
         }
@@ -587,7 +592,7 @@ pub(crate) fn open_archive(
                     .unwrap_or_default()
                     .iter()
                     .take(ARCHIVE_LIST_CAP)
-                    .map(|s| session_to_row(s, &recordings_q, &conspects, &debriefs))
+                    .map(|s| session_to_row(s, &recordings_q, &conspects, &debriefs, ru))
                     .collect()
             } else {
                 let fts = fts_query(trimmed);
@@ -599,7 +604,7 @@ pub(crate) fn open_archive(
                         .search(&fts, 60)
                         .unwrap_or_default()
                         .iter()
-                        .map(|h| hit_to_row(h, &recordings_q, &conspects, &debriefs))
+                        .map(|h| hit_to_row(h, &recordings_q, &conspects, &debriefs, ru))
                         .collect()
                 }
             };
@@ -1209,10 +1214,11 @@ pub(crate) fn spawn_content_tile(
     if let Some(o) = weak_overlay.upgrade() {
         o.set_tiles_spawned(seq as i32);
     }
+    let display_seq = TILE_DISPLAY_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
     let Ok(tile) = TileWindow::new() else {
         return;
     };
-    tile.set_sequence(seq as i32);
+    tile.set_sequence(display_seq as i32);
     tile.set_tile_title(SharedString::from(title.to_string()));
     tile.set_source_label(SharedString::from(source_label.to_string()));
     wire_tile_drag(&tile);
@@ -1321,14 +1327,27 @@ fn archive_time_label(started_at_ms: Option<i64>, id: &str) -> String {
     }
 }
 
-/// Status → a compact prefix for the row title. The COMPLETED case (the normal
-/// 99%) gets NO prefix so a named/timed title reads clean; only the abnormal
-/// states are flagged (so "done Обзор функций" → just "Обзор функций").
-fn status_glyph(status: &str) -> &'static str {
+/// Status → a short LOCALIZED human label for the row subtitle. The COMPLETED
+/// case (the normal 99%) gets NO label so a named/timed row reads clean; only
+/// the abnormal states are flagged. The raw DB tokens (`crashed` / `active`)
+/// never reach a visible row — the user sees a word in the UI language.
+fn status_label(status: &str, ru: bool) -> &'static str {
     match status {
-        "crashed" => "crashed",
-        "active" => "active",
-        _ => "", // completed / unknown — clean title, no prefix
+        "crashed" => {
+            if ru {
+                "Прервана"
+            } else {
+                "Interrupted"
+            }
+        }
+        "active" => {
+            if ru {
+                "Идёт сейчас"
+            } else {
+                "In progress"
+            }
+        }
+        _ => "", // completed / unknown — clean row, no status flag
     }
 }
 
@@ -1357,42 +1376,51 @@ fn session_title(started_at_ms: Option<i64>, id: &str) -> String {
     overlay_backend::session_names::get(id).unwrap_or_else(|| archive_time_label(started_at_ms, id))
 }
 
-/// Map an indexed [`Session`] to an archive list row. Counts are emoji-coded
-/// as plain text counts so the row needs no per-language string;
-/// the cost shows only when non-zero (local runs are $0 → blank).
+/// Map an indexed [`Session`] to an archive list row. Counts + status use
+/// short LOCALIZED labels (`ru` mirrors `cfg.ui_language`, like the other
+/// Rust-built strings) so the row reads as human wording — no code-like
+/// `lines N · ai N` metadata, no placeholder dash for an unknown model, and
+/// no raw `crashed` / `active` token. The cost shows only when non-zero
+/// (local runs are $0 → blank).
 fn session_to_row(
     s: &Session,
     recordings: &std::collections::HashSet<String>,
     conspects: &std::collections::HashSet<String>,
     debriefs: &std::collections::HashSet<String>,
+    ru: bool,
 ) -> ArchiveRow {
     let time = archive_time_label(s.started_at_ms, &s.id);
     let name = overlay_backend::session_names::get(&s.id);
-    // Prefer the session NAME (v0.22.0) as the row title; fall back to the time.
-    let label = name.clone().unwrap_or_else(|| time.clone());
-    let model = s.ai_model.as_deref().unwrap_or("—");
-    // When a name is the title, keep the time visible in the subtitle.
-    let subtitle = if name.is_some() {
-        format!(
-            "{time} · lines {} · ai {} · {model}",
-            s.transcript_lines, s.ai_turns_count
-        )
+    // Prefer the session NAME (v0.22.0) as the row title; fall back to the
+    // time. The title carries NO status prefix — an abnormal state is flagged
+    // in the subtitle instead (localized, next to the counts).
+    let title = name.clone().unwrap_or_else(|| time.clone());
+    let transcript_word = if ru {
+        "Стенограмма"
     } else {
-        format!(
-            "lines {} · ai {} · {model}",
-            s.transcript_lines, s.ai_turns_count
-        )
+        "Transcript"
     };
+    let ai_word = if ru { "ИИ" } else { "AI" };
+    // Subtitle = time (when a NAME is the title) · transcript count · AI count
+    // · model (only when known) · status (only when abnormal).
+    let mut parts: Vec<String> = Vec::new();
+    if name.is_some() {
+        parts.push(time);
+    }
+    parts.push(format!("{}: {}", transcript_word, s.transcript_lines));
+    parts.push(format!("{}: {}", ai_word, s.ai_turns_count));
+    if let Some(model) = s.ai_model.as_deref().filter(|m| !m.is_empty()) {
+        parts.push(model.to_string());
+    }
+    let status = status_label(&s.status, ru);
+    if !status.is_empty() {
+        parts.push(status.to_string());
+    }
+    let subtitle = parts.join(" · ");
     let meta = if s.total_cost_microcents > 0 {
         format!("${:.3}", (s.total_cost_microcents as f64) / 100_000_000.0)
     } else {
         String::new()
-    };
-    let glyph = status_glyph(&s.status);
-    let title = if glyph.is_empty() {
-        label
-    } else {
-        format!("{glyph} {label}")
     };
     ArchiveRow {
         id: SharedString::from(s.id.clone()),
@@ -1414,12 +1442,14 @@ fn session_to_row(
 
 /// Map an FTS [`SearchHit`] to an archive list row: the session label + a
 /// whitespace-collapsed, length-capped snippet of the matched body, tagged with
-/// the hit kind (question · answer · utterance).
+/// a LOCALIZED hit-kind word (the raw journal tags `question` / `answer` /
+/// `utterance` never reach the row verbatim).
 fn hit_to_row(
     h: &SearchHit,
     recordings: &std::collections::HashSet<String>,
     conspects: &std::collections::HashSet<String>,
     debriefs: &std::collections::HashSet<String>,
+    ru: bool,
 ) -> ArchiveRow {
     // Prefer the session NAME (v0.22.0) so a named session reads the same in
     // search results as in the full list; fall back to the МСК time. Keep the
@@ -1428,11 +1458,30 @@ fn hit_to_row(
     let label = name
         .clone()
         .unwrap_or_else(|| archive_time_label(None, &h.session_id));
-    let kind_glyph = match h.kind.as_str() {
-        "question" => "question",
-        "answer" => "answer",
-        _ => "line",
+    let kind_word = match h.kind.as_str() {
+        "question" => {
+            if ru {
+                "вопрос"
+            } else {
+                "question"
+            }
+        }
+        "answer" => {
+            if ru {
+                "ответ"
+            } else {
+                "answer"
+            }
+        }
+        _ => {
+            if ru {
+                "строка"
+            } else {
+                "line"
+            }
+        }
     };
+    let search_word = if ru { "Поиск" } else { "Search" };
     let snippet: String = h
         .body
         .split_whitespace()
@@ -1443,9 +1492,9 @@ fn hit_to_row(
         .collect();
     ArchiveRow {
         id: SharedString::from(h.session_id.clone()),
-        title: SharedString::from(format!("search {label}")),
+        title: SharedString::from(format!("{search_word}: {label}")),
         subtitle: SharedString::from(snippet),
-        meta: SharedString::from(kind_glyph),
+        meta: SharedString::from(kind_word),
         has_recordings: recordings.contains(&h.session_id),
         name: SharedString::from(name.unwrap_or_default()),
         // An FTS hit exists only because transcript / AI text matched → always
@@ -2560,7 +2609,7 @@ pub(crate) fn open_transcript(
 }
 
 /// Render a session's content as the markdown body of a read-only tile:
-/// a heading (status + label + counts), the transcript, then the AI Q&A.
+/// a heading (label + human counts), the transcript, then the AI Q&A.
 /// Pure → unit-tested.
 fn build_session_markdown(
     session: Option<&Session>,
@@ -2570,11 +2619,14 @@ fn build_session_markdown(
     let mut out = String::new();
     if let Some(s) = session {
         out.push_str(&format!("# {}\n\n", session_title(s.started_at_ms, &s.id)));
-        let model = s.ai_model.as_deref().unwrap_or("—");
-        out.push_str(&format!(
-            "lines {} · ai {} · {model}",
-            s.transcript_lines, s.ai_turns_count
-        ));
+        // The SAME human wording as the archive rows (the body is Russian,
+        // like the rest of this markdown) — no code-like `lines N · ai N`
+        // metadata and no "—" dash for an unknown model.
+        out.push_str(&format!("Стенограмма: {}", s.transcript_lines));
+        out.push_str(&format!(" · ИИ: {}", s.ai_turns_count));
+        if let Some(model) = s.ai_model.as_deref().filter(|m| !m.is_empty()) {
+            out.push_str(&format!(" · {model}"));
+        }
         if s.total_cost_microcents > 0 {
             out.push_str(&format!(
                 " · ${:.3}",
@@ -2722,12 +2774,13 @@ mod tests {
     }
 
     #[test]
-    fn session_row_uses_plain_counts() {
+    fn session_row_uses_localized_human_counts() {
         let row = session_to_row(
             &sample_session(),
             &no_recordings(),
             &no_recordings(),
             &no_recordings(),
+            true,
         );
         // v0.17.2 — the label is МСК wall-clock from started_at_ms, not the UTC id.
         // v0.22.0 — a COMPLETED session has no status prefix (the "done " was
@@ -2737,16 +2790,87 @@ mod tests {
             "got {:?}",
             row.title
         );
-        assert!(row.subtitle.as_str().contains("lines 12"));
-        assert!(row.subtitle.as_str().contains("ai 3"));
+        // UX-clarity — short LOCALIZED labels instead of code-like metadata.
+        assert!(row.subtitle.as_str().contains("Стенограмма: 12"));
+        assert!(row.subtitle.as_str().contains("ИИ: 3"));
+        assert!(row.subtitle.as_str().contains("gemma"));
         assert_eq!(row.meta.as_str(), ""); // zero cost → blank meta
+
+        let en = session_to_row(
+            &sample_session(),
+            &no_recordings(),
+            &no_recordings(),
+            &no_recordings(),
+            false,
+        );
+        assert!(en.subtitle.as_str().contains("Transcript: 12"));
+        assert!(en.subtitle.as_str().contains("AI: 3"));
+    }
+
+    /// Regression guard (UX-clarity): no code-like row metadata or raw internal
+    /// state token may reach a visible archive row — in EITHER language.
+    #[test]
+    fn session_row_never_shows_raw_metadata_or_state() {
+        for ru in [true, false] {
+            for status in ["completed", "crashed", "active"] {
+                let mut s = sample_session();
+                s.status = status.into();
+                s.ai_model = None; // the old code showed a "—" dash here
+                let row =
+                    session_to_row(&s, &no_recordings(), &no_recordings(), &no_recordings(), ru);
+                let visible = format!("{} | {} | {}", row.title, row.subtitle, row.meta);
+                for raw in ["lines ", "ai ", "—", "crashed", "active"] {
+                    assert!(!visible.contains(raw), "raw token {raw:?} in {visible:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn session_row_flags_abnormal_status_with_a_localized_word() {
+        let mut s = sample_session();
+        s.status = "crashed".into();
+        let ru = session_to_row(
+            &s,
+            &no_recordings(),
+            &no_recordings(),
+            &no_recordings(),
+            true,
+        );
+        // The title stays clean; the status reads as a word in the subtitle.
+        assert!(ru.title.as_str().starts_with("24.05.2026 03:00:00 (МСК)"));
+        assert!(
+            ru.subtitle.as_str().ends_with("Прервана"),
+            "got {:?}",
+            ru.subtitle
+        );
+
+        s.status = "active".into();
+        let en = session_to_row(
+            &s,
+            &no_recordings(),
+            &no_recordings(),
+            &no_recordings(),
+            false,
+        );
+        assert!(
+            en.subtitle.as_str().ends_with("In progress"),
+            "got {:?}",
+            en.subtitle
+        );
     }
 
     #[test]
     fn session_row_shows_cost_when_nonzero() {
         let mut s = sample_session();
         s.total_cost_microcents = 2_400_000; // $0.024
-        let row = session_to_row(&s, &no_recordings(), &no_recordings(), &no_recordings());
+        let row = session_to_row(
+            &s,
+            &no_recordings(),
+            &no_recordings(),
+            &no_recordings(),
+            true,
+        );
         assert_eq!(row.meta.as_str(), "$0.024");
     }
 
@@ -2759,17 +2883,39 @@ mod tests {
             body: "a   key value   structure".into(),
             rank: -1.0,
         };
-        let row = hit_to_row(&h, &no_recordings(), &no_recordings(), &no_recordings());
+        let row = hit_to_row(
+            &h,
+            &no_recordings(),
+            &no_recordings(),
+            &no_recordings(),
+            true,
+        );
         // Hits carry only the UTC id stamp → parsed + shifted to МСК (+3h).
         assert!(
             row.title
                 .as_str()
-                .starts_with("search 04.06.2026 12:30:00 (МСК)"),
+                .starts_with("Поиск: 04.06.2026 12:30:00 (МСК)"),
             "got {:?}",
             row.title
         );
-        assert_eq!(row.meta.as_str(), "answer");
+        assert_eq!(row.meta.as_str(), "ответ"); // localized hit kind
         assert_eq!(row.subtitle.as_str(), "a key value structure"); // whitespace collapsed
+
+        let en = hit_to_row(
+            &h,
+            &no_recordings(),
+            &no_recordings(),
+            &no_recordings(),
+            false,
+        );
+        assert!(
+            en.title
+                .as_str()
+                .starts_with("Search: 04.06.2026 12:30:00 (МСК)"),
+            "got {:?}",
+            en.title
+        );
+        assert_eq!(en.meta.as_str(), "answer");
     }
 
     #[test]
