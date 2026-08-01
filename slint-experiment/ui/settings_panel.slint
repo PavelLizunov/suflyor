@@ -1122,6 +1122,7 @@ export component SettingsWindow inherits Window {
                             { label: @tr("Global hotkeys"), level: root.diag-hotkeys-level, detail: root.diag-hotkeys-level == 3 ? @tr("registering…") : (root.diag-hotkeys-failed != "" ? @tr("conflict: {}", root.diag-hotkeys-failed) : (root.diag-hotkeys-detail != "" ? root.diag-hotkeys-detail : @tr("hotkey system unavailable"))) },
                             { label: @tr("Stealth"), level: 3, detail: root.diag-stealth-on ? @tr("on — verify with a screen-share preview") : @tr("off") },
                         ] : HorizontalLayout {
+                            min-height: detail-text.preferred-height + 8px;
                             padding: 4px;
                             spacing: 10px;
                             Text {
@@ -1146,7 +1147,7 @@ export component SettingsWindow inherits Window {
                                     : (row.level == 2 || row.level == 4) ? Theme.danger
                                     : Theme.text-muted;
                             }
-                            Text {
+                            detail-text := Text {
                                 text: row.detail;
                                 font-size: 11px;
                                 color: Theme.text-secondary;

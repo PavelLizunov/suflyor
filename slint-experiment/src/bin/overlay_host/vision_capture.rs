@@ -344,30 +344,32 @@ pub(crate) fn launch_vision_for_bgra(
     tile.set_sequence(seq as i32);
     // Per-mode tile chrome. The trigger_label doubles as the "Practice" badge
     // so a test-practice answer is always visibly marked as self-check.
+    // Placeholders are plain text — no hourglass glyph (tofu square on the
+    // skia font fallback; project no-tofu rule).
     let (title_s, source_s, trigger_s, placeholder_s) = match mode {
         vision::VisionMode::Translate => (
             "🌐 Перевод",
             "vision · перевод…",
             "🌐 Shift+F8 перевод",
-            "⏳ Перевожу…",
+            "Перевожу…",
         ),
         vision::VisionMode::TestPractice => (
             "🎓 Тренировка",
             "vision · тренировка…",
             "🎓 Practice",
-            "⏳ Решаю вопрос…",
+            "Решаю вопрос…",
         ),
         vision::VisionMode::Describe => (
             "📷 Скриншот",
             "vision · анализ…",
             "📷 F8 vision",
-            "⏳ Распознаю экран…",
+            "Распознаю экран…",
         ),
         vision::VisionMode::Ocr => (
             "🔊 Текст с экрана",
             "vision · текст…",
             "🔊 Ctrl+F8 текст",
-            "⏳ Распознаю текст…",
+            "Распознаю текст…",
         ),
     };
     tile.set_tile_title(SharedString::from(title_s));

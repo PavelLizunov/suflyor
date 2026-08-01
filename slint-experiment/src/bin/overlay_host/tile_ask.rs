@@ -282,9 +282,10 @@ pub(crate) fn fire_f9_ask(
     tile.set_convo_id(convo_id);
     tile.set_followup_busy(true);
     wire_tile_drag(&tile);
+    // Plain text, no hourglass glyph (tofu on the skia font fallback).
     let placeholder = vec![MarkdownBlock {
         kind: markdown::kind::PARAGRAPH,
-        text: SharedString::from("⏳ Asking AI…"),
+        text: SharedString::from("Asking AI…"),
         lang: SharedString::from(""),
         marked: false,
     }];

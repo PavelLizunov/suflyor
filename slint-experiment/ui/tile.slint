@@ -310,7 +310,7 @@ export component TileWindow inherits Window {
                         width: parent.width;
                     }
                 }
-                Rectangle {
+                if root.source-label != "" : Rectangle {
                     background: transparent;
                     border-color: Theme.border-strong;
                     border-width: 1px;
@@ -358,6 +358,8 @@ export component TileWindow inherits Window {
                     border-radius: 6px;
                     border-width: 1px;
                     border-color: Theme.border-strong;
+                    accessible-role: button;
+                    accessible-label: root.copied ? @tr("copied") : @tr("Copy");
                     copy-touch := TouchArea {
                         clicked => { root.copy-clicked(); }
                     }
@@ -384,6 +386,10 @@ export component TileWindow inherits Window {
                     border-radius: 6px;
                     border-width: 1px;
                     border-color: Theme.border-strong;
+                    // Icon-only overflow — a word for accessibility instead of
+                    // just the ⋯ glyph.
+                    accessible-role: button;
+                    accessible-label: @tr("More actions");
                     more-touch := TouchArea {
                         clicked => { overflow-popup.show(); }
                     }
@@ -480,6 +486,8 @@ export component TileWindow inherits Window {
                     border-radius: 6px;
                     border-width: 1px;
                     border-color: Theme.border-strong;
+                    accessible-role: button;
+                    accessible-label: @tr("Read aloud");
                     speak-touch := TouchArea {
                         clicked => { root.speak-clicked(); }
                     }
@@ -500,6 +508,8 @@ export component TileWindow inherits Window {
                     border-radius: 6px;
                     border-width: 1px;
                     border-color: Theme.border-strong;
+                    accessible-role: button;
+                    accessible-label: @tr("Pause / resume reading aloud");
                     pausespk-touch := TouchArea {
                         clicked => { root.speak-pause-clicked(); }
                     }
@@ -522,6 +532,8 @@ export component TileWindow inherits Window {
                     border-radius: 6px;
                     border-width: 1px;
                     border-color: Theme.border-strong;
+                    accessible-role: button;
+                    accessible-label: root.tile-maximized ? @tr("Restore tile size") : @tr("Maximize tile");
                     max-touch := TouchArea {
                         clicked => { root.maximize-clicked(); }
                     }
