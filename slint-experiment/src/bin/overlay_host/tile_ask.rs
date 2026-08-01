@@ -534,10 +534,14 @@ pub(crate) fn fire_f9_ask(
         None => String::new(),
     };
     let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
+    // Audit D1 — the SAME purpose must tag the paired AiResponse that
+    // ask_stream_loop journals (it previously hardcoded "live_ask" there,
+    // so text asks journaled request=text_ask / response=live_ask).
+    let purpose = if is_text { "text_ask" } else { "live_ask" };
     if let Some(j) = journal_for_request.as_ref() {
         j.write(&journal::JournalEvent::AiRequest {
             unix_ms: journal::now_unix_ms(),
-            purpose: if is_text { "text_ask" } else { "live_ask" },
+            purpose,
             model: &model,
             system_prompt: &sys_full,
             user_prompt: &usr_full,
@@ -584,6 +588,7 @@ pub(crate) fn fire_f9_ask(
             events_for_task,
             ai_rx,
             model,
+            purpose,
             is_local,
             sys_full,
             usr_full,

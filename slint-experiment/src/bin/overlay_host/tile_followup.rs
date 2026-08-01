@@ -508,10 +508,13 @@ pub(crate) fn fire_followup_ask(
     // Journal the follow-up request so it pairs with the AiResponse that
     // ask_stream_loop writes on completion (F9 + PTT already do this;
     // without it every follow-up turn leaves an orphaned response).
+    // Audit D1 — the SAME purpose tags that AiResponse (ask_stream_loop
+    // previously hardcoded "live_ask" there).
+    let purpose = "followup_ask";
     if let Some(j) = journal_for_loop.as_ref() {
         j.write(&journal::JournalEvent::AiRequest {
             unix_ms: journal::now_unix_ms(),
-            purpose: "followup_ask",
+            purpose,
             model: &model,
             system_prompt: &sys_full,
             user_prompt: &usr_full,
@@ -535,6 +538,7 @@ pub(crate) fn fire_followup_ask(
             events_for_task,
             ai_rx,
             model,
+            purpose,
             is_local,
             sys_full,
             usr_full,
@@ -689,10 +693,13 @@ pub(crate) fn fire_regenerate(
         .find(|m| m.role == "user")
         .map(|m| message_text(&m.content))
         .unwrap_or_default();
+    // Audit D1 — the SAME purpose tags the paired AiResponse that
+    // ask_stream_loop journals (previously hardcoded "live_ask" there).
+    let purpose = "regenerate";
     if let Some(j) = journal_for_loop.as_ref() {
         j.write(&journal::JournalEvent::AiRequest {
             unix_ms: journal::now_unix_ms(),
-            purpose: "regenerate",
+            purpose,
             model: &model,
             system_prompt: &sys_full,
             user_prompt: &usr_full,
@@ -715,6 +722,7 @@ pub(crate) fn fire_regenerate(
             events_for_task,
             ai_rx,
             model,
+            purpose,
             is_local,
             sys_full,
             usr_full,

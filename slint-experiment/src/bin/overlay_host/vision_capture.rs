@@ -629,10 +629,13 @@ pub(crate) fn launch_vision_for_bgra(
             convo_id,
             messages.clone(),
         ));
+        // Audit D1 — the SAME purpose must tag the paired AiResponse that
+        // ask_stream_loop journals (previously hardcoded "live_ask" there).
+        let purpose = "vision_ask";
         if let Some(j) = journal_for_loop.as_ref() {
             j.write(&journal::JournalEvent::AiRequest {
                 unix_ms: journal::now_unix_ms(),
-                purpose: "vision_ask",
+                purpose,
                 model: &model,
                 system_prompt: &sys_full,
                 user_prompt: &usr_full,
@@ -652,6 +655,7 @@ pub(crate) fn launch_vision_for_bgra(
             sink,
             ai_rx,
             model,
+            purpose,
             is_local,
             sys_full,
             usr_full,
