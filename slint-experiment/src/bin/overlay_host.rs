@@ -2673,13 +2673,34 @@ fn main() -> Result<(), slint::PlatformError> {
         let weak = overlay.as_weak();
         let cfg_p = cfg.clone();
         let tx = ptt_pcm_tx.clone();
+        let state_busy = state.clone();
         overlay.on_ptt_mic_pressed(move || {
             if ptt_state.borrow().is_some() {
                 return; // one PTT at a time
             }
             // M2 — single-mic guard (shared with voice follow-up + dictation).
             let Some(mic_guard) = try_acquire_mic() else {
-                return; // mic held by a tile voice follow-up / dictation
+                // Suflyor E1 — mic held by a tile voice follow-up / dictation.
+                // Used to return SILENTLY; now flash the same generic notice
+                // the sibling mic consumers show (no device names) on the bar's
+                // status pill, reverting after STATUS_REVERT_SECS exactly like
+                // the sys-probe result does.
+                if let Some(o) = weak.upgrade() {
+                    o.set_status_text(SharedString::from("микрофон занят"));
+                    o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x9b, 0x2b));
+                }
+                let weak_revert = weak.clone();
+                let state_revert = state_busy.clone();
+                slint::Timer::single_shot(Duration::from_secs(STATUS_REVERT_SECS), move || {
+                    if let Some(o) = weak_revert.upgrade() {
+                        refresh_status(
+                            &o,
+                            get_mic_active(&state_revert),
+                            get_sys_active(&state_revert),
+                        );
+                    }
+                });
+                return;
             };
             let stop = Arc::new(AtomicBool::new(false));
             *ptt_state.borrow_mut() = Some(PttRec {
