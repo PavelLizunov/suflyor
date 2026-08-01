@@ -1,112 +1,229 @@
-# suflyor
+# Suflyor
 
-Личный AI-overlay для технических собеседований под Windows. Слушает звук, транскрибирует речь и спрашивает LLM — **в облаке (Groq + Claude) или полностью локально на твоём ПК** — и показывает ответ в маленьком плавающем окошке («тайле») рядом с окном встречи.
+A native Windows overlay that listens to your meetings, transcribes speech in
+real time, and answers technical questions through an LLM — cloud or fully
+local — in small floating windows ("tiles") beside your meeting window.
 
-Pet-project (текущая версия — см. [Releases](https://github.com/PavelLizunov/suflyor/releases)). Под одного пользователя. Без code-signing, без телеметрии. **🇷🇺 Русский / 🇬🇧 English** — переключение интерфейса на лету.
+Built in **pure Rust + [Slint](https://slint.dev)** (skia renderer, no browser
+engine, no Node). Transparent, always-on-top, with Windows capture exclusion
+available through an explicit stealth toggle.
 
-> Нативное приложение на **Rust + [Slint](https://slint.dev)** — без браузерного движка. Прозрачное, поверх всех окон, прячется от захвата экрана.
+**Windows 10/11 only.** Single user, no telemetry, no code signing.
+Interface languages: English and Russian (switchable at runtime).
 
-## Что умеет
+Latest published build: see [GitHub Releases](https://github.com/PavelLizunov/suflyor/releases).
+The `master` branch may contain unreleased work.
 
-- **Облако или локально.** Работай через облако (Groq Whisper + Claude) или полностью на своём ПК. Кнопка **«Установить локальный AI»** в Настройках → AI сама поставит llama.cpp + Gemma и локальный STT (GigaAM-v3 / Whisper), поднимет серверы, выберет сборку под GPU (CUDA) и всё пропишет — наружу не уходит ничего.
-- **Прозрачный бар** поверх всех окон. Сгруппирован: статус · 🎤/🔊 захват (тумблеры) · спросить/захватить (запись голосом) · ⏱ таймер · $ стоимость · 🎯🔥 действия · + тайл · ⚙ · ✕. Внизу — активный стек (какой STT + какая AI-модель сейчас отвечают).
-- **Кнопки записи (push-to-talk):** удерживай **🎤 спросить** (свой голос) или **🔊 захватить** (собеседник) → запись → распознавание (Groq Whisper) → ответ AI приходит тайлом.
-- **Тайлы** с ответом: Markdown-рендер, перетаскивание, 📌 закрепить, развернуть, ✕ закрыть, 📋 копировать, **продолжить диалог** (follow-up прямо в тайле). Прозрачность настраивается (Настройки → Скрытность).
-- **Авто-тайлы** — детектор вопросов/ключевых слов в транскрипте автоматически открывает тайл с ответом.
-- **Summary созвона** — кнопка на баре собирает весь транскрипт и AI делает структурную сводку встречи отдельным тайлом. Длинные дни (7-8+ часов) обрабатываются по частям (map-reduce), без обрезки.
-- **Запись аудио созвона** (опц.) — мик и системный звук пишутся раздельно в WAV; политика хранения (всё / последние N сессий / N дней). Из архива можно офлайн **ре-транскрибировать** запись и пересобрать Summary (точнее, чем live).
-- **Архив сессий (F7)** — окно над каталогом прошлых созвонов: полнотекстовый поиск (FTS5) по транскрипту и AI-ответам, клик по строке → read-only тайл сессии.
-- **Личная память (💭)** — свои факты, термины и имена (внутренние проекты, аббревиатуры). Бот подмешивает их в ответы и в Summary (помечено как СПРАВКА). Кандидаты извлекаются из сессий + ручное добавление, с ревью-апрувом.
-- **Скриншот → Vision-AI (F8)** — выдели область экрана: разбор/описание, **Shift+F8** — перевод, либо режим **Test Practice** (разбор тестового вопроса с объяснением, опционально в Настройках → Vision).
-- **F4 — палитра базы знаний** (встроено ~1696 записей: глоссарий / команды / паттерны). Поиск → Enter/клик → тайл из записи, без вызова AI ($0).
-- **Профиль + контекст:** постоянный контекст для каждого запроса к AI (голос и текст одинаково). Голосовая диктовка (🎤) + структурирование текста через AI (✨).
-- **Настройки** (сгруппированный сайдбар: Сессия / AI / Приложение), тумблеры, проверка подключения к AI-мосту и STT, экспорт/импорт профиля, темы оформления.
-- **Скрытность** — окна невидимы для захвата экрана (Print Screen / Teams / Meet / OBS) через `WDA_EXCLUDEFROMCAPTURE`.
-- **Авто-обновление** — приложение само проверяет GitHub Releases, качает и запускает установщик новой версии.
+## Screenshots
 
-## Установка
+| | |
+|---|---|
+| ![Overlay bar — Glacier theme](docs/showcase/overlay-bar-glacier.png) | ![Overlay bar — Graphite theme](docs/showcase/overlay-bar-graphite.png) |
+| ![Overlay bar — Obsidian theme](docs/showcase/overlay-bar-obsidian.png) | ![Overlay bar — Light Frost theme](docs/showcase/overlay-bar-light-frost.png) |
+| ![Seven-step setup wizard](docs/showcase/setup-wizard.png) | ![Interface settings](docs/showcase/settings-interface.png) |
+| ![Empty answer tile with usage guidance](docs/showcase/tile-empty.png) | ![Searchable session archive](docs/showcase/session-archive.png) |
 
-1. Скачать **`suflyor-slint-setup.exe`** из [Releases](https://github.com/PavelLizunov/suflyor/releases).
-2. Запустить. Бинарник не подписан → SmartScreen может предупредить: **«Подробнее» → «Выполнить в любом случае»**.
-3. Ставится в `%LOCALAPPDATA%\suflyor-slint\` — **без прав администратора**, ярлык в Пуске.
-4. Запустить, затем вписать свои ключи в **Настройках**:
-   - **🧠 AI мост** — bearer-токен + базовый URL + модель.
-   - **🗣 STT** — ключ Groq.
+## Features
 
-Конфиг хранится в `%APPDATA%\suflyor\config.json` (его можно править и вручную):
+- **Cloud or local AI.** Use a cloud LLM (Claude via an OpenAI-compatible
+  bridge) or install llama.cpp with an in-app choice of Gemma 4B / 12B / 26B
+  profiles (CUDA or CPU). Combine it with local STT for an offline meeting
+  pipeline. The standalone PowerShell script installs the lightweight 4B
+  profile.
+- **Speech-to-text.** Cloud (Groq Whisper), local whisper.cpp server, or
+  GigaAM-v3 running in-process (CPU or DirectML GPU). Groq and whisper.cpp
+  support mixed Russian + English; GigaAM is the Russian specialist.
+- **Transparent overlay bar.** Always-on-top HUD showing session status,
+  live transcript, mic/system-audio toggles, timer, cost, and action chips.
+- **AI tiles.** Markdown-rendered answers with pin, maximize, copy, follow-up
+  conversation, and adjustable opacity.
+- **Auto-tiles.** Question/keyword detector in the transcript spawns answer
+  tiles automatically (configurable; can skip your own mic input).
+- **Meeting summary.** One-click structured summary of the full transcript.
+  Long sessions (7–8+ hours) are processed via map-reduce without truncation.
+- **Audio recording.** Mic and system audio recorded to separate WAV files
+  with a configurable retention policy. Offline re-transcription and summary
+  rebuild from the archive.
+- **Session archive (F7).** Full-text search (SQLite FTS5) across past
+  sessions — transcripts and AI answers. Includes a built-in audio player
+  with click-to-seek and per-line highlighting.
+- **Personal memory.** Your facts, terms, and names (internal projects,
+  abbreviations) injected into AI answers and summaries. Candidates extracted
+  from sessions with manual review.
+- **Vision AI (F8).** Select a screen region for analysis or description.
+  **Shift+F8** translates the captured text. **Ctrl+F8** runs OCR for the
+  read-aloud pipeline.
+- **Read-aloud (TTS).** Neural text-to-speech via a separate sidecar process
+  (sherpa-onnx). **Shift+Alt+1** reads selected text, **Shift+Alt+2** reads
+  an OCR region, **Shift+Alt+3** pauses/resumes.
+- **Speaker diarization.** Offline speaker segmentation (pyannote + WeSpeaker)
+  through the TTS sidecar, available from the archive.
+- **Knowledge base palette (F4).** ~1600 built-in entries (glossary, commands,
+  patterns). Search and open as a tile — no AI call, zero cost.
+- **Stealth mode.** Windows request capture exclusion through
+  `WDA_EXCLUDEFROMCAPTURE`, used by modern Windows capture APIs. Capture
+  software can vary, so verify it with your own meeting setup before relying
+  on it.
+- **Auto-update.** Checks GitHub Releases, downloads the installer, and
+  launches it. Downloads are restricted to github.com / githubusercontent.com.
+- **Hermes plugin.** Optional two-way integration with a local Hermes agent
+  instance — install the plugin from Settings.
+- **Context window control.** Auto / 8K / 16K / 32K / 64K / 96K presets for
+  the managed local llama.cpp server, with cached memory estimates.
 
-```json
-{
-  "groq_api_key": "gsk_…",
-  "ai_bearer": "<BRIDGE_SECRET>",
-  "ai_base_url": "http://127.0.0.1:18902/v1",
-  "ai_model": "claude-haiku-4-5",
-  "prep_model": "claude-sonnet-4-6",
-  "stt_model": "whisper-large-v3",
-  "response_language": "ru",
-  "ui_language": "ru",
-  "mic_device": null,
-  "system_audio_device": null
-}
-```
+## Installation
 
-## Локальный AI (опционально) — всё на своём ПК
+1. Download **`suflyor-slint-setup.exe`** from
+   [GitHub Releases](https://github.com/PavelLizunov/suflyor/releases).
+2. Run it. The binary is unsigned, so SmartScreen may warn:
+   **More info → Run anyway**.
+3. Installs to `%LOCALAPPDATA%\suflyor-slint\` — no admin rights required.
+   A Start menu shortcut is created.
+4. Launch the app. A seven-step wizard walks through cloud/local mode, AI,
+   speech recognition, microphone, system audio, and overlay preferences.
 
-Можно работать **без облака**: распознавание голоса и LLM крутятся локально, наружу не уходит ничего.
+Configuration is stored in `%APPDATA%\suflyor\config.json`.
 
-**Проще всего:** в приложении → Настройки → **AI** → кнопка **«Установить локальный AI»**. Она сама скачает llama.cpp + whisper.cpp + модели, поднимет серверы, выберет сборку под GPU (CUDA) и пропишет всё в настройки. Прогресс и режим GPU/CPU видно прямо в окне.
+### Local AI (optional — everything on your PC)
 
-Либо вручную одним скриптом — он делает то же самое:
+From the app: **Settings → AI → Install local AI**. This downloads llama.cpp,
+whisper.cpp, and models, detects your GPU (CUDA), starts the servers, and
+writes the settings.
+
+Or run the standalone script:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\setup-local-ai.ps1
 ```
 
-Что ставится (в `%USERPROFILE%\suflyor-local-ai`):
+What gets installed (into `%USERPROFILE%\suflyor-local-ai`):
 
-- **llama.cpp** + **Gemma-4-E4B** (LLM) → сервер `http://127.0.0.1:8080/v1`. CUDA-сборка если найдена NVIDIA (cudart в комплекте), иначе CPU.
-- **whisper.cpp** + **Whisper large-v3-turbo** (STT, RU+EN вперемешку) → сервер `http://127.0.0.1:8081/v1`.
-- **GigaAM-v3** (STT, лучший русский) — крутится **в самом приложении**, отдельный сервер не нужен; скрипт кладёт `model.int8.onnx` + `vocab.txt` в `…\gigaam-v3`.
+| Component | Role | Endpoint |
+|---|---|---|
+| llama.cpp + Gemma 4B | LLM | `http://127.0.0.1:8080/v1` |
+| whisper.cpp + Whisper large-v3-turbo | STT (mixed RU+EN) | `http://127.0.0.1:8081/v1` |
+| GigaAM-v3 | STT (best Russian) | in-process, no server |
 
-После установки скрипт печатает точные значения для **Настройки → AI / STT**:
+Script flags: `-Cpu` (force CPU), `-NoLaunch` (download only),
+`-SkipLlama` / `-SkipWhisper` / `-SkipGigaam`. Re-running resumes partial
+downloads and skips completed components.
 
-- **AI** → провайдер *Local*, URL `http://127.0.0.1:8080/v1`, модель выбрать из списка.
-- **STT** → *Local Whisper* (URL `http://127.0.0.1:8081/v1`) **или** *Local GigaAM-v3* (папка `…\gigaam-v3`).
+## First five minutes
 
-Флаги: `-Cpu` (форсить CPU без GPU), `-NoLaunch` (только скачать, не запускать), `-SkipLlama` / `-SkipWhisper` / `-SkipGigaam`. Повторный запуск дозакачивает недокачанное, пропускает готовое и перезапускает серверы.
+1. Complete the first-launch wizard. Each hardware/service step has its own
+   test, and **Settings → Diagnostics → Check all** is the single place to
+   confirm the complete stack later.
+2. Treat the long top bar as the control panel: microphone and speaker chips
+   choose what Suflyor hears; **Start** begins a session; **+ tile** opens a
+   manual answer window.
+3. Speak normally. The second line of the bar shows the latest transcript and
+   whether it came from your microphone or system audio. Automatic answers
+   appear as tiles when question detection is enabled.
+4. Press **F1** for the in-app help, or **F7** to search past
+   sessions. Every shortcut is also listed in **Settings → Hotkeys**;
+   **Settings → Diagnostics** shows whether each one registered successfully.
 
-## Хоткеи (глобальные)
+## Hotkeys
 
-| Клавиша | Действие |
+| Key | Action |
 |---|---|
-| **F9** | Спросить AI сейчас — ответ стримится в тайл |
-| **Shift+F9** | Спросить AI с эскалацией к умной облачной модели (глубже рассуждает, разово — не меняет провайдера по умолчанию; на тайле значок 🧠) |
-| **F8** | Скриншот → Vision-AI — выделите область экрана мышью, Esc — отмена. **Shift+F8** — перевод выделенного |
-| **F7** | Архив сессий — окно с поиском по прошлым созвонам (открыть / закрыть) |
-| **F3** | Переспросить последний вопрос с учётом свежего контекста |
-| **F4** | Палитра базы знаний — открыть / закрыть |
-| **F6** | Тайл вручную из последней реплики транскрипта |
+| **F1** | Toggle help window |
+| **F3** | Re-ask the last question with fresh context |
+| **F4** | Toggle knowledge base palette |
+| **F6** | Manual tile from the last transcript line |
+| **F7** | Toggle session archive |
+| **F8** | Screenshot → Vision AI (select a region; Esc cancels) |
+| **Shift+F8** | Screenshot → translate captured text |
+| **Ctrl+F8** | Screenshot → OCR / read-aloud |
+| **F9** | Ask the AI now (streaming answer) |
+| **Shift+F9** | Ask with cloud escalation (deeper reasoning, one-shot) |
+| **Shift+Alt+1** | Read selected text aloud (clipboard) |
+| **Shift+Alt+2** | Read an OCR region aloud |
+| **Shift+Alt+3** | Pause / resume read-aloud |
 
-Запись голосом — **удержанием** кнопок 🎤 спросить / 🔊 захватить на баре (не хоткей).
+Push-to-talk: hold **ask** for your microphone or **grab** for system audio.
 
-## Стек
+## Architecture
 
-Чистый **Rust + Slint** (рендер winit + skia, без WebView). Прозрачные always-on-top окна — через Win32 (`WS_EX_LAYERED` / DWM blur-behind / `SetWindowDisplayAffinity`). **Groq Whisper Large v3** для STT. **Claude** через OpenAI-совместимый мост (auto-retry на 5xx, лимит стоимости на сессию). **WASAPI loopback** для системного звука.
+Three standalone crates (no root workspace):
 
-Структура репозитория:
-- `slint-experiment/` — приложение `overlay-host` (UI на Slint + оркестрация).
-- `overlay-backend/` — общая логика (audio / stt / ai / local_ai / vision / journal / kb / memory / persistence / recorder / re_transcribe / config / runtime / update).
-- `scripts/build-slint-release.ps1 -Installer` — сборка релиза + NSIS-установщик.
-- `scripts/setup-local-ai.ps1` — установка локального AI-стека (llama.cpp + whisper.cpp + GigaAM) и запуск серверов.
+```
+slint-experiment/     overlay-host binary — Slint UI (ui/*.slint compiled
+                      in via build.rs), Win32 transparency/stealth, hotkey
+                      dispatch, tile lifecycle, settings orchestration
 
-## Дефолты
+overlay-backend/      shared no-UI library — audio (WASAPI loopback + mic),
+                      STT dispatch (Groq / whisper.cpp / GigaAM), AI client
+                      (OpenAI-compatible, streaming, retry, cost tracking),
+                      local AI installer, vision, OCR, TTS/diarization control,
+                      journal, KB, memory, config, auto-update
 
-- `max_session_cost_usd` = **0 (выкл)** — любое положительное число включит жёлтый чип стоимости при превышении (AI при этом НЕ блокируется, только предупреждение).
-- `auto_tiles_enabled` — детектор авто-тайлов; `detector_skip_mic` = true (не реагирует на твой голос, только на собеседника).
-- `stealth_enabled` = false — overlay виден при screen-share; включи в Настройках → 🎯 Скрытность.
-- `stt_model` = `whisper-large-v3` (точнее) → `whisper-large-v3-turbo` (≈3× быстрее, чуть хуже на редких терминах).
-- `ai_model` = `claude-haiku-4-5` (живые ответы), `prep_model` = `claude-sonnet-4-6` (подготовка контекста / разбор после встречи).
+suflyor-tts/          neural read-aloud + diarization worker — links
+                      sherpa-onnx only; must stay a separate process (two
+                      static onnxruntimes in one binary crash)
+```
 
-## Лицензия
+Data flow: WASAPI capture → STT → transcript ring buffer → question/keyword
+detector → prompt build (with KB + memory injection) → AI (local or cloud) →
+tile spawn on the UI thread.
 
-GPL-3.0
+Overlay windows use Win32 `WS_EX_LAYERED` / DWM blur-behind /
+`SetWindowDisplayAffinity` for transparency, always-on-top, and stealth.
+
+See [`docs/architecture.md`](docs/architecture.md) for the full developer
+overview and [`CONTRIBUTING.md`](CONTRIBUTING.md) for the build setup.
+
+## Privacy and security
+
+- **No telemetry.** Nothing is collected or reported.
+- **Local-first option.** When AI and STT are both local, meeting audio,
+  transcripts, and prompts are processed on your machine.
+- **Secrets stay local.** API keys are stored in
+  `%APPDATA%\suflyor\config.json` and sent only to the services you configure.
+  The app avoids logging secret values, and UI errors hide URLs and hosts.
+- **Update downloads are host-restricted.** The auto-updater only accepts
+  URLs on github.com / githubusercontent.com.
+- **Stealth is explicit.** Screen-capture exclusion is off by default and
+  toggled in Settings.
+
+## Limitations
+
+- **Windows only.** WASAPI for audio capture, Win32 for window management —
+  there is no macOS or Linux support.
+- **No code signing.** SmartScreen will warn on first launch. This is a
+  deliberate choice for a single-user tool.
+- **Single user.** No multi-user profiles, no concurrent sessions.
+- **GPU-dependent local AI quality.** The 26B Gemma profile needs a GPU with
+  sufficient VRAM; CPU fallback uses smaller models.
+- **Stealth vs. interaction.** Stealthed windows force an arrow cursor to
+  avoid leaking the overlay's custom cursor into screen captures.
+- **Capture exclusion is not a universal guarantee.** Test stealth with the
+  exact meeting/recording software and Windows version you use.
+
+## Building from source
+
+Prerequisites: Windows 10/11, Rust (stable-msvc toolchain), Visual Studio
+Build Tools 2022 with the C++ workload.
+
+```powershell
+# Dev build + run
+cargo run --bin overlay-host --manifest-path slint-experiment\Cargo.toml
+
+# Release build + NSIS installer
+powershell -ExecutionPolicy Bypass -File scripts\build-slint-release.ps1 -Installer
+# → slint-experiment\target\release\bundle\suflyor-slint-setup.exe
+
+# Full CI gate (fmt + clippy + tests for all 3 crates + i18n guard)
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci.ps1
+```
+
+## License
+
+[GPL-3.0](LICENSE)
+
+## Origin
+
+Suflyor is a 100% vibe-coded product. The product owner has not manually read
+or written a single line of its source code. Their role has been to choose the
+stack, define the product direction, and make technical decisions. The
+implementation was produced with Codex, Claude Code, and Qwen Code.
