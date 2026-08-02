@@ -1225,6 +1225,9 @@ msgstr "Иконки бара"
 msgid "Drag to move the bar; shows the live state"
 msgstr "Перетащить = двигать бар; показывает состояние"
 
+msgid "Drag to move the window"
+msgstr "Перетащите, чтобы переместить окно"
+
 msgid "Toggle continuous mic capture (your voice)"
 msgstr "Постоянный захват микрофона (твой голос)"
 

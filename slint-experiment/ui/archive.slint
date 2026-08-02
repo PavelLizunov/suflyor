@@ -16,7 +16,7 @@
 
 import { LineEdit, ScrollView, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { CloseButton } from "controls.slint";
+import { CloseButton, DragGrip } from "controls.slint";
 import { Metrics } from "metrics.slint";
 
 // One archive row — a past SESSION or a SEARCH HIT (the Rust side fills both
@@ -198,6 +198,7 @@ export component ArchiveWindow inherits Window {
                     Rectangle {
                         horizontal-stretch: 1;
                         TouchArea {
+                            mouse-cursor: grab;
                             pointer-event(ev) => {
                                 if (ev.button == PointerEventButton.left
                                     && ev.kind == PointerEventKind.down) {
@@ -216,6 +217,7 @@ export component ArchiveWindow inherits Window {
                                 image-fit: contain;
                                 vertical-alignment: center;
                             }
+                            DragGrip { }
                             Text {
                                 // The session count is part of the heading (one
                                 // label, not a detached number); empty summary =

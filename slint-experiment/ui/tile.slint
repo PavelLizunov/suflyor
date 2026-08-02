@@ -8,7 +8,7 @@
 import { Button, LineEdit, ScrollView, TextEdit, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Metrics } from "metrics.slint";
-import { CloseButton, SelectableText } from "controls.slint";
+import { CloseButton, DragGrip, SelectableText } from "controls.slint";
 
 // MarkdownBlock is shared with markdown_spike — defined here in the
 // canonical location and re-exported through index.slint.
@@ -289,6 +289,7 @@ export component TileWindow inherits Window {
                 Rectangle {
                     horizontal-stretch: 1;
                     drag-area := TouchArea {
+                        mouse-cursor: grab;
                         pointer-event(ev) => {
                             if (ev.button == PointerEventButton.left
                                 && ev.kind == PointerEventKind.down) {
@@ -299,15 +300,19 @@ export component TileWindow inherits Window {
                             if (self.pressed) { root.drag-moved(); }
                         }
                     }
-                    Text {
+                    DragGrip {
                         x: 0;
+                        y: (parent.height - self.height) / 2;
+                    }
+                    Text {
+                        x: 17px;
                         text: @tr("#{}  {}", root.sequence, root.tile-title);
                         font-size: Metrics.font-body;
                         font-weight: 700;
                         color: Theme.text-primary;
                         vertical-alignment: center;
                         overflow: elide;
-                        width: parent.width;
+                        width: parent.width - 17px;
                     }
                 }
                 if root.source-label != "" : Rectangle {

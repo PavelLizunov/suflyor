@@ -14,7 +14,7 @@
 
 import { LineEdit, Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { CloseButton } from "controls.slint";
+import { CloseButton, DragGrip } from "controls.slint";
 import { Metrics } from "metrics.slint";
 
 component IconSlot inherits Rectangle {
@@ -120,6 +120,7 @@ export component TextAskWindow inherits Window {
                             glyph-size: 15px;
                             slot-size: 18px;
                         }
+                        DragGrip { slot-height: 20px; }
                         Text {
                             text: @tr("Write a question for the assistant");
                             color: Theme.text-secondary;
