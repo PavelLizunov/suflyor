@@ -65,6 +65,11 @@ Run-Step "slint clippy -D warnings" {
 Run-Step "slint test" {
     & $cargoExe test --manifest-path slint-experiment/Cargo.toml --quiet
 }
+Run-Step "slint ui-mcp feature check" {
+    # QA-only rot guard: default builds intentionally omit the embedded MCP
+    # server, so this path needs its own fast compile check. Not a release feature.
+    & $cargoExe check --locked --manifest-path slint-experiment/Cargo.toml --bin overlay-host --features ui-mcp
+}
 
 # --- overlay-backend (shared logic) ---
 Run-Step "backend fmt --check" {
