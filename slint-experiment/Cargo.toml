@@ -41,6 +41,9 @@ path = "src/bin/markdown_spike.rs"
 name = "overlay-host"
 path = "src/bin/overlay_host.rs"
 
+[features]
+ui-mcp = ["slint/mcp"]
+
 [build-dependencies]
 # Compiles ui/*.slint into Rust at build time. include_modules!() in
 # src/main.rs pulls the generated code in.
@@ -57,7 +60,6 @@ winresource = "0.1"
 # directly.
 slint = { version = "1.17", features = [
     "raw-window-handle-06",
-    "mcp",
     # G1 (2026-07-03) — per-window winit event filter for layout-independent Ctrl+C/V/X/A
     # (see src/bin/overlay_host/kbd_shortcuts.rs). Slint's purpose-built interception point;
     # Keep compile-checking this unstable API on every Slint update.
@@ -145,9 +147,9 @@ path = "../overlay-backend"
 
 [dev-dependencies]
 # i-slint-backend-testing is the OFFICIAL test framework (not
-# "slint-testing"). With Slint 1.17 the `mcp` feature is enabled directly on
-# `slint`; running the live binary with SLINT_EMIT_DEBUG_INFO=1 +
-# SLINT_MCP_PORT=N starts the embedded MCP server at
+# "slint-testing"). Enable Slint 1.17's MCP only for QA with
+# `--features ui-mcp`; SLINT_EMIT_DEBUG_INFO=1 + SLINT_MCP_PORT=N then
+# starts the embedded MCP server at
 # http://127.0.0.1:N/mcp. Claude Code (any MCP-capable agent) can then
 # inspect the UI tree, take screenshots, click, and type — replaces
 # visual_check.ps1 + computer-use.
