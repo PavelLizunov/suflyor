@@ -217,7 +217,15 @@ export component ArchiveWindow inherits Window {
                                 image-fit: contain;
                                 vertical-alignment: center;
                             }
-                            DragGrip { }
+                            // Optical alignment: the title font sits below the
+                            // geometric row centre, so place the 26 px grip slot
+                            // two pixels below that centre without growing the row.
+                            Rectangle {
+                                width: 13px;
+                                height: 30px;
+                                horizontal-stretch: 0;
+                                DragGrip { y: 4px; }
+                            }
                             Text {
                                 // The session count is part of the heading (one
                                 // label, not a detached number); empty summary =
@@ -294,6 +302,9 @@ export component ArchiveWindow inherits Window {
                     vertical-stretch: 1;
                     VerticalLayout {
                         spacing: 2px;
+                        // ScrollView paints its bar over the viewport. Keep row
+                        // borders and actions in a dedicated content gutter.
+                        padding-right: 14px;
                         if root.results.length == 0 : Text {
                             text: root.query == ""
                                 ? @tr("No archived sessions yet.")
@@ -399,10 +410,11 @@ export component ArchiveWindow inherits Window {
                                 // (re-show the saved recap as a tile, NO AI) + a
                                 // secondary ↻ (regenerate, confirmed); has data but no
                                 // summary → "Generate"; no data → the inert hint (F4).
-                                if !root.retranscribe-busy && row.has-data : HorizontalLayout {
+                                if !root.retranscribe-busy && row.has-data : VerticalLayout {
                                     alignment: center;
-                                    spacing: 4px;
                                     horizontal-stretch: 0;
+                                    HorizontalLayout {
+                                        spacing: 4px;
                                     Rectangle {
                                         width: 96px;
                                         height: 26px;
@@ -491,6 +503,7 @@ export component ArchiveWindow inherits Window {
                                         debrief-ta := TouchArea {
                                             clicked => { root.view-debrief-requested(i); }
                                         }
+                                    }
                                     }
                                 }
                                 // F4 — no transcript AND no recording: nothing to
