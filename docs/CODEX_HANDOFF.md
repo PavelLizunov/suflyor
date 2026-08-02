@@ -1,49 +1,54 @@
-# Codex handoff — v0.35.2 release
+# Codex handoff — v0.35.3 preparation
 
-Updated 2026-07-31. Read `AGENTS.md` before acting.
+Updated 2026-08-02. Read `AGENTS.md` before acting.
 
 ## Current state
 
-- Worktree: `C:\Users\x3d_mutant\Natively\suflyor-qwen-0352-integration`
-- Branch: `codex/owner-authorized-release`
-- Base: `origin/master`
-- Version: `0.35.2` in Cargo and NSIS.
-- Do not merge or push `master`. Release or tag only if the owner explicitly
-  authorizes this specific version after verified build evidence was shown.
+- Worktree: `C:\Users\x3d_mutant\Natively\suflyor-release-0353`
+- Branch: `codex/release-0.35.3`
+- Base: `origin/master` at `5bcf3c4`
+- Version: `0.35.3` in Cargo, Cargo.lock, and NSIS.
+- Never push directly to `master`.
+- Do not create a tag or publish the release until the owner has seen the
+  verified v0.35.3 build evidence and explicitly authorizes this exact version.
 
-## Included
+## Included since v0.35.2
 
-- Restored explicit 4B / 12B / 26B model states and custom GGUF selection.
-- Corrected the pinned 12B size (the old value was 1472 bytes short), with
-  resumable downloads and a regression test.
-- Added the pinned 26B `mmproj-F16.gguf` from the same immutable Hugging Face
-  revision, exact size/SHA verification, on-demand install, safe model restart,
-  persisted Vision state, and working F8 routing.
-- Added Auto / 8K / 16K / 32K / 64K / 96K context control with cached memory
-  estimates and no physical zero position.
-- Fixed shared Settings scroll extent through `SettingsCard.preferred-height`;
-  AI, Audio, Hermes, and the other Settings tabs no longer have artificial gaps.
-- Fixed Vision setting persistence and the off-route F8 notice.
-- Fixed `Shift+Alt+1`: wait for hotkey modifiers to release, then inject only
-  Ctrl+C (no orphan Alt/Shift key-up events).
-- Updated the project Slint MCP audit skill and v0.35.1 retest checklist.
+- Fixed local-AI context preset selection on high-RAM systems.
+- Kept TTS suppression aligned with playback and pause/resume.
+- Added visible, debounced session cost-cap notices.
+- Moved persistence work off the UI thread and flush session data on exit.
+- Verified effective stealth state and surfaced capture-exclusion failures.
+- Fixed diarization installation and auxiliary-window lifecycle.
+- Added guided STT provider and cloud-model selection.
+- Improved Help, Archive, empty-tile, Diagnostics, and audio-source clarity.
+- Added a consistent drag grip to movable auxiliary windows and the wizard.
+- Hardened journal semantics, i18n coverage, CI, release documentation, and
+  the opt-in Slint MCP QA path.
+- Updated Slint, base64, and TTS dependencies.
 
-## Verified
+## Verification state
 
-- Exact command passed on 2026-07-31:
-  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci.ps1`
-- Final line: `All gating layers green.`
-- Backend: 529 passed, 1 ignored. TTS: 9 passed.
-- Slint MCP: Settings 720x600, all 16 tabs inspected; long AI, Audio, and
-  Hermes pages reached their bottoms with no large gap or clipping.
-- Live 26B Vision: projector SHA verified, 26B restarted, F8 region request
-  completed successfully.
-- Live `Shift+Alt+1`: copied the full 21-character disposable marker and
-  restored the clipboard sentinel.
+- Exact v0.35.3 full gate passed with `All gating layers green`.
+- Exact `ui-mcp` QA build passed the live Slint MCP visual audit at 720x600.
+  English before/after evidence shows Updates changing from 0.35.2 to 0.35.3;
+  fresh English Help, wizard, and STT-model screenshots were inspected.
+- All 13 global shortcuts reached distinct handlers. The debug-only QA build
+  could not launch `suflyor-tts.exe`; the complete sidecar was subsequently
+  built into the release bundle.
+- Release binaries and NSIS installer built successfully. `overlay-host.exe`
+  reports product/file version 0.35.3; the installer is 23,535,506 bytes with
+  SHA-256 `957F6853832079D3955F7E6333A2601CCC36F5E530E6BBDD04C81BC2BDCDA0D9`.
+- Installed runtime checks and owner visual acceptance are still pending.
+- Qwen `qwen3.8-max-preview` release audit: `READY`, no code blockers.
 
 ## Remaining action
 
-Commit the release-policy and v0.35.2 retest files, push
-`codex/owner-authorized-release`, and open a ready PR against `master`. After
-that PR is merged, publish v0.35.2 with the verified installer: the owner
-explicitly authorized this specific release after the evidence above was shown.
+1. Install and verify version, cost-cap notice, stealth, TTS/STT suppression,
+   diarization lifecycle, STT model persistence, context presets, drag grips,
+   audio-source labels, journal flush, and clean exit.
+2. Push this branch and open a PR against `master`; do not push `master`.
+3. Show the evidence to the owner and wait for explicit post-evidence approval
+   of v0.35.3 before merge, tag, or GitHub release publication.
+4. After publication, review and merge the automation PR that updates the
+   README latest-release marker to v0.35.3.
