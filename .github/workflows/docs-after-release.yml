@@ -1,0 +1,90 @@
+name: Documentation after release
+
+on:
+  release:
+    types: [published]
+  schedule:
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  sync-release-facts:
+    if: github.event_name != 'release' || github.event.release.prerelease == false
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Resolve latest published release
+        id: release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $release = gh release view --json tagName,url,isPrerelease | ConvertFrom-Json
+          if ($release.isPrerelease) { throw 'The latest release is a prerelease.' }
+          "tag=$($release.tagName)" >> $env:GITHUB_OUTPUT
+          "url=$($release.url)" >> $env:GITHUB_OUTPUT
+
+      - name: Update deterministic release facts
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_URL: ${{ steps.release.outputs.url }}
+        run: ./scripts/sync-release-docs.ps1 -Tag $env:RELEASE_TAG -ReleaseUrl $env:RELEASE_URL
+
+      - name: Open documentation PR when needed
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          if (git diff --quiet -- README.md) {
+            Write-Output 'Documentation already matches the latest release.'
+            exit 0
+          }
+
+          $branch = "automation/docs-$($env:TAG)"
+          $open = gh pr list --state open --head $branch --json number --jq '.[0].number'
+          if ($open) {
+            Write-Output "PR #$open already tracks $($env:TAG)."
+            exit 0
+          }
+
+          $remote = git ls-remote --heads origin $branch
+          if ($remote) {
+            $title = "[docs] Review $($env:TAG) post-release update"
+            $issue = gh issue list --state open --search "in:title `"$title`"" --json number --jq '.[0].number'
+            if (-not $issue) {
+              gh issue create --title $title --body "The deterministic update is ready on branch ``$branch``. Review: https://github.com/${{ github.repository }}/compare/master...$branch"
+            }
+            exit 0
+          }
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c $branch
+          git add README.md
+          git commit -m "docs: sync latest release to $($env:TAG)"
+          git push -u origin $branch
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to push the documentation branch.' }
+          $body = @'
+          Deterministic post-release update generated from the published GitHub release. No product claims were generated or changed.
+
+          Release documentation review:
+          - [ ] README features and commands still match the released binary
+          - [ ] screenshots show current UI and model choices without private data
+          - [ ] CONTRIBUTING build and gate instructions are current
+          - [ ] SECURITY guarantees and supported-version text are current
+          '@
+          gh pr create --base master --head $branch --title "docs: sync latest release to $($env:TAG)" --body $body
+          if ($LASTEXITCODE -ne 0) {
+            $title = "[docs] Review $($env:TAG) post-release update"
+            gh issue create --title $title --body "GitHub Actions could not create a PR under the current repository policy. The deterministic update is ready on branch ``$branch``. Review: https://github.com/${{ github.repository }}/compare/master...$branch"
+          }

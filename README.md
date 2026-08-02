@@ -11,7 +11,9 @@ available through an explicit stealth toggle.
 **Windows 10/11 only.** Single user, no telemetry, no code signing.
 Interface languages: English and Russian (switchable at runtime).
 
-Latest published build: see [GitHub Releases](https://github.com/PavelLizunov/suflyor/releases).
+<!-- latest-release:start -->
+Latest published build: [v0.33.0](https://github.com/PavelLizunov/suflyor/releases/tag/v0.33.0).
+<!-- latest-release:end -->
 The `master` branch may contain unreleased work.
 
 ## Screenshots
@@ -20,13 +22,13 @@ The `master` branch may contain unreleased work.
 |---|---|
 | ![Overlay bar — Glacier theme](docs/showcase/overlay-bar-glacier.png) | ![Overlay bar — Graphite theme](docs/showcase/overlay-bar-graphite.png) |
 | ![Overlay bar — Obsidian theme](docs/showcase/overlay-bar-obsidian.png) | ![Overlay bar — Light Frost theme](docs/showcase/overlay-bar-light-frost.png) |
-| ![Seven-step setup wizard](docs/showcase/setup-wizard.png) | ![Interface settings](docs/showcase/settings-interface.png) |
+| ![Seven-step setup wizard](docs/showcase/setup-wizard.png) | ![Settings → STT: local Whisper model selected](docs/showcase/settings-stt-local.png) |
 | ![Empty answer tile with usage guidance](docs/showcase/tile-empty.png) | ![Searchable session archive](docs/showcase/session-archive.png) |
 
 ## Features
 
 - **Cloud or local AI.** Use a cloud LLM (Claude via an OpenAI-compatible
-  bridge) or install llama.cpp with an in-app choice of Gemma 4B / 12B / 26B
+  bridge) or install llama.cpp with an in-app choice of Gemma 4 E4B / 12B / 26B-A4B
   profiles (CUDA or CPU). Combine it with local STT for an offline meeting
   pipeline. The standalone PowerShell script installs the lightweight 4B
   profile.
@@ -34,13 +36,13 @@ The `master` branch may contain unreleased work.
   GigaAM-v3 running in-process (CPU or DirectML GPU). Groq and whisper.cpp
   support mixed Russian + English; GigaAM is the Russian specialist.
 - **Transparent overlay bar.** Always-on-top HUD showing session status,
-  live transcript, mic/system-audio toggles, timer, cost, and action chips.
+  live transcript, mic/system-audio toggles, timer, and action chips.
 - **AI tiles.** Markdown-rendered answers with pin, maximize, copy, follow-up
   conversation, and adjustable opacity.
 - **Auto-tiles.** Question/keyword detector in the transcript spawns answer
   tiles automatically (configurable; can skip your own mic input).
 - **Meeting summary.** One-click structured summary of the full transcript.
-  Long sessions (7–8+ hours) are processed via map-reduce without truncation.
+  Long sessions are chunked and processed via map-reduce without truncation.
 - **Audio recording.** Mic and system audio recorded to separate WAV files
   with a configurable retention policy. Offline re-transcription and summary
   rebuild from the archive.
@@ -58,18 +60,19 @@ The `master` branch may contain unreleased work.
   an OCR region, **Shift+Alt+3** pauses/resumes.
 - **Speaker diarization.** Offline speaker segmentation (pyannote + WeSpeaker)
   through the TTS sidecar, available from the archive.
-- **Knowledge base palette (F4).** ~1600 built-in entries (glossary, commands,
+- **Knowledge base palette (F4).** A large built-in library (glossary, commands,
   patterns). Search and open as a tile — no AI call, zero cost.
 - **Stealth mode.** Windows request capture exclusion through
   `WDA_EXCLUDEFROMCAPTURE`, used by modern Windows capture APIs. Capture
   software can vary, so verify it with your own meeting setup before relying
   on it.
-- **Auto-update.** Checks GitHub Releases, downloads the installer, and
-  launches it. Downloads are restricted to github.com / githubusercontent.com.
+- **Auto-update.** Checks GitHub Releases, downloads the installer, verifies
+  its SHA-256 digest against the release metadata, and launches it. Verification
+  is fail-closed, and downloads are restricted to GitHub hosts.
 - **Hermes plugin.** Optional two-way integration with a local Hermes agent
   instance — install the plugin from Settings.
 - **Context window control.** Auto / 8K / 16K / 32K / 64K / 96K presets for
-  the managed local llama.cpp server, with cached memory estimates.
+  the managed local llama.cpp server, with hardware-aware memory estimates.
 
 ## Installation
 
@@ -86,7 +89,7 @@ Configuration is stored in `%APPDATA%\suflyor\config.json`.
 
 ### Local AI (optional — everything on your PC)
 
-From the app: **Settings → AI → Install local AI**. This downloads llama.cpp,
+From the app: **Settings → AI bridge → Install / complete local AI**. This downloads llama.cpp,
 whisper.cpp, and models, detects your GPU (CUDA), starts the servers, and
 writes the settings.
 
@@ -181,15 +184,18 @@ overview and [`CONTRIBUTING.md`](CONTRIBUTING.md) for the build setup.
 - **Secrets stay local.** API keys are stored in
   `%APPDATA%\suflyor\config.json` and sent only to the services you configure.
   The app avoids logging secret values, and UI errors hide URLs and hosts.
-- **Update downloads are host-restricted.** The auto-updater only accepts
-  URLs on github.com / githubusercontent.com.
+- **Update downloads are verified.** The auto-updater only accepts GitHub-hosted
+  assets and verifies the installer's SHA-256 digest against GitHub release
+  metadata before execution. The installer is not Authenticode-signed.
 - **Stealth is explicit.** Screen-capture exclusion is off by default and
   toggled in Settings.
 
 ## Limitations
 
 - **Windows only.** WASAPI for audio capture, Win32 for window management —
-  there is no macOS or Linux support.
+  there is no macOS or Linux support today.
+- **Roadmap.** Native Linux and macOS versions are planned, but no builds or
+  delivery dates are promised yet.
 - **No code signing.** SmartScreen will warn on first launch. This is a
   deliberate choice for a single-user tool.
 - **Single user.** No multi-user profiles, no concurrent sessions.
