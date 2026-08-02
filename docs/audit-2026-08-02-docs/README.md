@@ -22,9 +22,10 @@ security guidance, and post-release documentation maintenance.
 
 - Before: `docs/showcase/settings-interface.png` showed language/theme controls
   but no speech model.
-- After: [`settings-stt-local.png`](../showcase/settings-stt-local.png) shows
-  `Local Whisper (whisper.cpp)` and `whisper-large-v3-turbo`. Only a loopback
-  URL is visible; keys, private paths, and conversation data are absent.
+- After: [`settings-stt-cloud.png`](../showcase/settings-stt-cloud.png) shows
+  the `Cloud (Groq Whisper)` provider, English recognition, and the selected
+  `whisper-large-v3` model. Keys, private paths, URLs, and conversation data
+  are absent.
 
 The exact debug binary was built from master commit `f3dad30` with Slint debug
 info and captured through the embedded Slint MCP server at 720×600.
