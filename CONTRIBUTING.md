@@ -13,6 +13,7 @@ Single-user pet project, but if you fork or want to send a PR — here's the lay
 ```bash
 git clone https://github.com/PavelLizunov/suflyor.git
 cd suflyor
+git config core.hooksPath .githooks
 ```
 
 **Dev loop:**
@@ -41,6 +42,11 @@ It runs fmt, clippy with warnings denied, full tests for `overlay-backend`,
 `slint-experiment`, and `suflyor-tts`, plus the i18n guard. Do not replace it
 with `cargo test --lib`; that skips integration guard tests.
 
+Visible UI changes also require the repository's Slint MCP audit against the
+exact binary being reviewed. Keep matching before/after screenshots for every
+changed surface. Shared Settings layout changes require all 16 tabs at 720×600,
+followed by the complete 13-shortcut smoke test.
+
 ## Project layout
 
 ```
@@ -50,9 +56,9 @@ slint-experiment/        # the product: `overlay-host` binary
   src/                    # app_state, slint_session, win32 (HWND helpers), markdown, …
   ui/*.slint              # overlay_bar / tile / palette / settings_panel + tokens
   translations/ru/…/*.po  # bundled RU translation (gettext-style, msgctxt-free)
-overlay-backend/         # shared crate (no UI): audio, stt, ai, journal, kb, config, runtime
-  knowledge/*.md          # embedded KB (~1696 entries) — glossary + commands + patterns
-suflyor-tts/             # separate read-aloud/diarization sidecar (must stay a separate process)
+overlay-backend/         # shared crate (no UI): audio, stt, ai, persistence, journal, kb, config
+  knowledge/*.md          # embedded KB — glossary + commands + patterns
+suflyor-tts/             # separate read-aloud/diarization sidecar; voices/models install on demand
 scripts/                 # build-slint-release.ps1, ci.ps1, capture/click helpers
 docs/                    # ADRs + migration history (the React→Slint move)
 .claude/                 # Claude Code hooks (git-gate, etc.)
@@ -71,6 +77,9 @@ README.md                # user-facing
 - Rust: `cargo fmt` (4-space). Comments explain WHY, not WHAT; cite live-test / bug-hunt origin where relevant.
 - Crate lints deny `unwrap_used` / `expect_used` / `panic` — use `?`, `match`, `unwrap_or_*`.
 - Commit messages: imperative mood, first line < 70 chars, body explains motivation + tradeoffs.
+- Work on a `codex/<task>` branch and open a PR. Never push directly to `master`.
+- Never commit API keys, `%APPDATA%\suflyor\config.json`, private transcripts,
+  local paths, LAN addresses, or screenshots containing them.
 
 ## Version bump / release
 
@@ -80,10 +89,14 @@ Releases and tags are owner-triggered only. When explicitly requested, keep
 `scripts\build-slint-release.ps1 -Installer`. Do not publish or push a tag
 without the owner's explicit command.
 
+After a GitHub release is published, `.github/workflows/docs-after-release.yml`
+updates the README's latest-release marker on an automation branch and opens a
+reviewable PR. It never writes directly to `master`.
+
 ## Security
 
 - `%APPDATA%\suflyor\config.json` holds live API credentials. NEVER print its contents to chat, logs, or screenshots.
-- The diagnostic dump (Settings → Updates) blanks secrets before writing.
+- The diagnostic dump and copied report blank secrets and redact local paths.
 
 ## License
 
