@@ -53,6 +53,46 @@ export component CloseButton inherits Rectangle {
     }
 }
 
+// Shared identity mark for auxiliary window headers. Settings keeps its local
+// copy so this UI-only change does not alter the shared Settings layout.
+export component BrandHeaderMark inherits Rectangle {
+    in property <length> mark-size: 22px;
+    width: mark-size;
+    height: mark-size;
+    horizontal-stretch: 0;
+
+    Image {
+        source: @image-url("../assets/brand-head.svg");
+        colorize: Theme.is-light ? #111827 : #ffffff;
+        width: root.mark-size;
+        height: root.mark-size;
+        image-fit: contain;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+}
+
+// One visible drag affordance for every movable auxiliary window.
+export component DragGrip inherits Rectangle {
+    in property <length> glyph-size: 13px;
+    in property <length> slot-height: 26px;
+    width: root.glyph-size;
+    height: root.slot-height;
+    horizontal-stretch: 0;
+    accessible-role: image;
+    accessible-label: @tr("Drag to move the window");
+
+    Image {
+        source: @image-url("../assets/icons/grip.svg");
+        colorize: Theme.accent;
+        width: root.glyph-size;
+        height: root.glyph-size;
+        image-fit: contain;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+}
+
 // ТЗ 2026-07-03 — selectable read-only text (shared by tiles/summaries/archive
 // AND the transcript). Slint's `Text` can't be selected; a read-only `TextInput`
 // can — real mouse drag / double-click word / triple-click paragraph / Ctrl+A —

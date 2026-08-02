@@ -18,7 +18,7 @@
 import { Button, Switch } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Metrics } from "metrics.slint";
-import { CloseButton } from "controls.slint";
+import { BrandHeaderMark, CloseButton, DragGrip } from "controls.slint";
 
 // One row in the left progress rail. state: 0 future · 1 current · 2 done.
 component RailStep inherits Rectangle {
@@ -215,8 +215,8 @@ export component WizardWindow inherits Window {
                 padding: 20px;
                 spacing: 14px;
 
-                // Header: step counter + corner close. Doubles as the window
-                // drag handle (frameless — no native title bar); the drag
+                // Header: brand · grip · step counter + corner close. Doubles
+                // as the drag handle (frameless — no native title bar); the
                 // TouchArea sits BEHIND the row so the CloseButton on top still
                 // captures its own clicks (same idiom as Settings).
                 Rectangle {
@@ -232,6 +232,9 @@ export component WizardWindow inherits Window {
                         moved => { if (self.pressed) { root.drag-moved(); } }
                     }
                     HorizontalLayout {
+                        spacing: 7px;
+                        BrandHeaderMark { mark-size: 22px; }
+                        DragGrip { }
                         Text {
                             text: @tr("Step {} of 7", root.step + 1);
                             color: Theme.text-secondary;

@@ -1,6 +1,6 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { CloseButton } from "controls.slint";
+import { BrandHeaderMark, CloseButton, DragGrip } from "controls.slint";
 import { Metrics } from "metrics.slint";
 
 component IconSlot inherits Rectangle {
@@ -18,23 +18,6 @@ component IconSlot inherits Rectangle {
         colorize: root.tint;
         width: root.glyph-size;
         height: root.glyph-size;
-        image-fit: contain;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-    }
-}
-
-component BrandHeaderMark inherits Rectangle {
-    in property <length> mark-size: 22px;
-    width: mark-size;
-    height: mark-size;
-    horizontal-stretch: 0;
-
-    Image {
-        source: @image-url("../assets/brand-head.svg");
-        colorize: Theme.is-light ? #111827 : #ffffff;
-        width: root.mark-size;
-        height: root.mark-size;
         image-fit: contain;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
@@ -196,6 +179,7 @@ export component HelpWindow inherits Window {
                         spacing: 7px;
                         alignment: start;
                         BrandHeaderMark { mark-size: 22px; }
+                        DragGrip { }
                         Text {
                             text: @tr("Help — icons, hotkeys & gestures");
                             font-size: 15px;

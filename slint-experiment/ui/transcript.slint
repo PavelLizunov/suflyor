@@ -9,7 +9,7 @@
 
 import { ListView, Palette, LineEdit, TextEdit, Button, ScrollView, ComboBox, Slider } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { CloseButton, SelectableText } from "controls.slint";
+import { CloseButton, DragGrip, SelectableText } from "controls.slint";
 import { Metrics } from "metrics.slint";
 import { DarkCheck } from "settings_panel.slint";
 
@@ -248,6 +248,7 @@ export component TranscriptWindow inherits Window {
                     Rectangle {
                         horizontal-stretch: 1;
                         TouchArea {
+                            mouse-cursor: grab;
                             pointer-event(ev) => {
                                 if (ev.button == PointerEventButton.left
                                     && ev.kind == PointerEventKind.down) {
@@ -266,6 +267,7 @@ export component TranscriptWindow inherits Window {
                                 image-fit: contain;
                                 vertical-alignment: center;
                             }
+                            DragGrip { }
                             Text {
                                 text: @tr("Transcript");
                                 font-size: Metrics.font-heading;
