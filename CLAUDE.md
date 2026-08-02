@@ -131,15 +131,16 @@ bad commits. Setup:
 ### Live-smoke / visual verification (layer 5) — CRITICAL gotcha
 
 **computer-use screenshots MIS-RENDER the transparent overlay's COLOURS**
-(they showed the bar dark when the active theme is light). Ground truth =
-**`CopyFromScreen` at the window's HWND rect** (Win32 `EnumWindows` +
-`GetWindowRect`, filter by pid + window title `suflyor (Slint)`), saved
-to PNG and `Read`. Layout/text read fine in computer-use; colour does not.
-Alternative: the embedded Slint MCP server — run the binary with
+(they showed the bar dark when the active theme is light). Ground truth is the
+embedded Slint MCP `take_screenshot` result. Build the QA binary with
+`--features ui-mcp`, then run it with
 `SLINT_EMIT_DEBUG_INFO=1 SLINT_MCP_PORT=N` to inspect the UI tree / click /
-type. The debug binary's `eprintln!` startup log (hotkey registration, bar
-pin coords, transparency) is the cheapest smoke signal — launch, capture
-stderr ~5s, kill, read it. See memory `[[overlay-host-visual-verification]]`.
+type. Environment variables alone do not enable MCP. Use `CopyFromScreen` at
+the window's HWND rect only as the documented fallback when MCP capture is
+unavailable. The debug binary's `eprintln!` startup log (hotkey registration,
+bar pin coords, transparency) is the cheapest smoke signal — launch, capture
+stderr ~5s, kill, read it. See memory
+`[[overlay-host-visual-verification]]`.
 For shared Settings changes, inspect all 16 tabs at 720x600. Then exercise all
 13 registered global shortcuts once against that exact binary and verify each
 distinct dispatch/result; registration logs alone are not a functional pass.
@@ -169,10 +170,12 @@ self-gate, with no human visual acceptance. See memory `[[release-protocol]]`.
      real state** (no "Готово" when not done); signs/punctuation/spacing.
    - **(b) UI-review agent** on the `.slint` + wiring diff (the category that
      slips through static gates).
-   - **(c) Slint-MCP** — `SLINT_EMIT_DEBUG_INFO=1 SLINT_MCP_PORT=N` binds
-     `http://127.0.0.1:N/mcp` (VERIFIED working in the release build
-     2026-06-13). Drive/read the UI tree programmatically — reliable, unlike
-     computer-use clicks on the floating gear.
+   - **(c) Slint-MCP** — this is now a QA-only build, not the shipped release
+     binary. You **MUST** build with `--features ui-mcp`; environment variables
+     alone do not enable the server. Then
+     `SLINT_EMIT_DEBUG_INFO=1 SLINT_MCP_PORT=N` binds
+     `http://127.0.0.1:N/mcp`. Drive/read the UI tree programmatically —
+     reliable, unlike computer-use clicks on the floating gear.
 4. Present to the user as EVIDENCE ("here are the screenshots + checklist
    results, look at X"), never "all green, releasing".
 
@@ -185,9 +188,12 @@ The "illogical UI" class is invisible to clippy/test. Run these on any UI diff:
   `ru.po` (RU user → English fallback). It caught 3 strings whose `.po` msgids
   still had old emoji prefixes (`🎤 Dictate`) after the .slint was
   de-emojified — a silent drift. **This test is now part of the gate.**
-- **Slint-MCP live inspection** — build, then launch with
-  `SLINT_MCP_PORT=9123` (+ optional `SLINT_EMIT_DEBUG_INFO=1`). Stateless
-  JSON-RPC at `http://127.0.0.1:9123/mcp`. Recipe:
+- **Slint-MCP live inspection** — you **MUST** build the QA binary with
+  `cargo build --locked --bin overlay-host --features ui-mcp --manifest-path
+  slint-experiment/Cargo.toml` (environment variables alone do not enable MCP),
+  then launch that binary with `SLINT_MCP_PORT=9123` (+ optional
+  `SLINT_EMIT_DEBUG_INFO=1`). Stateless JSON-RPC at
+  `http://127.0.0.1:9123/mcp`. Recipe:
   `curl -s -X POST .../mcp -H 'Content-Type: application/json'
   -H 'Accept: application/json, text/event-stream' -d '{jsonrpc,id,method,params}'`.
   `initialize` → `tools/call list_windows` → `get_element_tree {elementHandle}`

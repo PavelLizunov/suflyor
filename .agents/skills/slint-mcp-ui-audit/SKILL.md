@@ -9,7 +9,19 @@ Treat live visual verification as mandatory for UI changes. Compilation and test
 
 ## Run the audit
 
-1. Build the exact binary being validated. Kill existing `overlay-host.exe` and `suflyor-tts.exe` instances before a release build.
+1. Build the exact QA binary being validated. The embedded Slint MCP server is
+   compiled in **only** by the `ui-mcp` Cargo feature; setting
+   `SLINT_MCP_PORT` / `SLINT_EMIT_DEBUG_INFO` on a normal build does not
+   enable it. You **must** build the feature-enabled binary with exactly:
+
+   ```powershell
+   cargo build --locked --bin overlay-host --features ui-mcp --manifest-path slint-experiment/Cargo.toml
+   ```
+
+   Audit that binary (`slint-experiment/target/debug/overlay-host.exe`). A
+   binary built without `--features ui-mcp` has no MCP server and cannot pass
+   this audit. Kill existing `overlay-host.exe` and `suflyor-tts.exe`
+   instances before a release build.
 2. Launch that binary with:
 
    ```powershell

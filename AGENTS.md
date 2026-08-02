@@ -25,7 +25,8 @@ Claude-Code twin of this file — same rules, different tooling notes.
 
 - Full gate (REQUIRED green before any commit is considered done):
   `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci.ps1`
-  = fmt --check + clippy -D warnings + tests for all 3 crates + i18n_guard.
+  = fmt --check + clippy -D warnings + tests for all 3 crates + i18n_guard +
+  the `ui-mcp` QA-feature compile check.
   Takes ~9 min. Run it yourself; do not declare success without it.
 - Quick compile check: `cargo check --bin overlay-host --manifest-path
   slint-experiment/Cargo.toml`
@@ -44,10 +45,14 @@ Claude-Code twin of this file — same rules, different tooling notes.
 - Every visual fix must keep matching **before and after** screenshots of the
   same surface, size, theme, language, and UI state at a stable artifact path;
   link both from the PR. An after-only screenshot is not acceptance evidence.
-- A green compile/test gate is not visual verification. Launch the exact binary
-  with `SLINT_EMIT_DEBUG_INFO=1` and `SLINT_MCP_PORT=9123`, inspect live
-  screenshots through the embedded Slint MCP server, and report the surfaces
-  checked.
+- A green compile/test gate is not visual verification. The embedded Slint MCP
+  server is compiled in **only** by the `ui-mcp` Cargo feature; setting the
+  environment variables on a normal build does nothing. You **MUST** build the
+  audited binary with `cargo build --locked --bin overlay-host --features
+  ui-mcp --manifest-path slint-experiment/Cargo.toml`, then launch **that**
+  binary with `SLINT_EMIT_DEBUG_INFO=1` and `SLINT_MCP_PORT=9123`, inspect
+  live screenshots through the embedded Slint MCP server, and report the
+  surfaces checked.
 - A change to a shared Settings primitive or layout requires screenshots of all
   16 Settings tabs at 720x600. Never rely on computer-use screenshots for
   transparent-window colours.

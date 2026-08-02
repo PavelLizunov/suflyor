@@ -39,13 +39,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci.ps1
 ```
 
 It runs fmt, clippy with warnings denied, full tests for `overlay-backend`,
-`slint-experiment`, and `suflyor-tts`, plus the i18n guard. Do not replace it
-with `cargo test --lib`; that skips integration guard tests.
+`slint-experiment`, and `suflyor-tts`, plus the i18n guard and a compile
+check for the `ui-mcp` QA feature. Do not replace it with `cargo test --lib`;
+that skips integration guard tests.
 
 Visible UI changes also require the repository's Slint MCP audit against the
 exact binary being reviewed. Keep matching before/after screenshots for every
 changed surface. Shared Settings layout changes require all 16 tabs at 720×600,
 followed by the complete 13-shortcut smoke test.
+
+The MCP server is compiled in **only** by the `ui-mcp` Cargo feature;
+`SLINT_MCP_PORT` / `SLINT_EMIT_DEBUG_INFO` alone do not enable it. Build the
+audited binary with `cargo build --locked --bin overlay-host --features ui-mcp
+--manifest-path slint-experiment/Cargo.toml` and audit that exact binary.
 
 ## Project layout
 
