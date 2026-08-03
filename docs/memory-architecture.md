@@ -78,10 +78,10 @@ dedup/merge-on-write → retrieve (FTS BM25 top-K [+ cosine RRF in Phase 4], rec
    preserved both ways. Fail ⇒ store heuristic text, `norm_status='failed'`, keep raw. «мэру.сь.»
    becomes a literal test fixture.
 
-Per-source: ⭐transcript line = layers 1+2; ⭐tile block = trim only (AI answers already clean;
-rewriting code = harm); «Извлечь» candidates = 1+2 batched; deep-extract = is the LLM pass;
-typed fact = trim only (user authored it; rewriting uninvited breaks consent). Un-normalized
-(server down) → `norm_status='heuristic'`, lazily retried on Memory-tab open / next «Извлечь».
+Per-source: every explicit ⭐/selection save and typed fact = trim only (the user approved this
+exact text; rewriting tables, code, identifiers, or transcript fragments breaks consent).
+«Извлечь» candidates may be normalized before the user approves them; deep-extract is the LLM pass.
+Approved items are never queued for background rewriting.
 
 ## 4. Storage — migration `0005_memory_v2.sql` (additive only)
 `memory_items` + `memory_candidates` gain: `source_text` (verbatim; NULL=text is source),

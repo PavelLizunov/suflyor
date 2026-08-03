@@ -636,9 +636,8 @@ impl Store {
         Ok(out)
     }
 
-    /// Edit an approved item's text. D3 (P3): also resets `norm_status` to `'none'` — a user-authored
-    /// edit is neither AI- nor heuristic-normalized, so it must NOT keep a stale «подчищено ИИ» badge
-    /// nor be re-picked by `sweep_pending` (which only touches `'pending'`).
+    /// Edit an approved item's text. Also resets `norm_status` to `'none'`: a
+    /// user-authored edit must not keep a stale normalization badge.
     pub fn update_memory_item_text(&mut self, id: i64, text: &str) -> Result<()> {
         self.conn
             .execute(
@@ -649,32 +648,22 @@ impl Store {
         Ok(())
     }
 
-    /// M1 (0005): replace an item's text after normalization and record the outcome
-    /// (`norm_status` = `heuristic` | `llm`, plus the extracted `entity` if any). The
-    /// background normalizer calls this once a rewrite clears the grounding gate; the
-    /// raw text stays in `source_text` (set at insert) as provenance.
-    ///
-    /// Guards against SQLite rowid REUSE: `id` is a rowid (no AUTOINCREMENT), so if the
-    /// original 'pending' row was deleted — or a bulk-clear reset the counter — during the
-    /// async normalize window, `id` may now point at a DIFFERENT capture. We only finalize a
-    /// row that is still `'pending'` AND whose `source_text` is the exact raw span we
-    /// normalized; otherwise the background write is a harmless no-op (0 rows).
-    pub fn update_memory_item_normalized(
-        &mut self,
-        id: i64,
-        source_text: &str,
-        text: &str,
-        entity: Option<&str>,
-        norm_status: &str,
-    ) -> Result<()> {
-        self.conn
+    /// Restore the verbatim capture kept beside a previously normalized item.
+    /// This is deliberately user-triggered: approved memory is never rewritten
+    /// automatically. `entity` is legacy normalizer metadata, so restoring the
+    /// raw source clears it. Returns whether a source was available and restored.
+    pub fn restore_memory_item_source(&mut self, id: i64) -> Result<bool> {
+        let changed = self
+            .conn
             .execute(
-                "UPDATE memory_items SET text = ?3, entity = ?4, norm_status = ?5 \
-                 WHERE id = ?1 AND norm_status = 'pending' AND source_text = ?2",
-                params![id, source_text, text, entity, norm_status],
+                "UPDATE memory_items SET text = source_text, source_text = NULL, \
+                 entity = NULL, norm_status = 'none' \
+                 WHERE id = ?1 AND source_text IS NOT NULL AND source_text != '' \
+                 AND COALESCE(norm_status, 'none') != 'none'",
+                params![id],
             )
-            .context("update memory item normalized")?;
-        Ok(())
+            .context("restore memory item source")?;
+        Ok(changed > 0)
     }
 
     /// Soft-delete (archive) an item — it stops feeding context but stays on
@@ -1247,7 +1236,7 @@ mod tests {
     }
 
     #[test]
-    fn normalization_columns_round_trip_and_update() {
+    fn normalization_columns_round_trip_and_manual_edit() {
         let mut store = Store::open_in_memory().unwrap();
         let id = store
             .insert_memory_item(
@@ -1268,37 +1257,87 @@ mod tests {
         assert_eq!(it.source_text.as_deref(), Some("ну это бекап сервер z14"));
         assert_eq!(it.norm_status, "pending");
         assert_eq!(it.entity, None);
-        // Rowid-reuse guard: a WRONG source_text (a different capture that reused the id) is a
-        // no-op — the row stays 'pending' with its heuristic text.
-        store
-            .update_memory_item_normalized(id, "чужой источник", "hacked", None, "llm")
-            .unwrap();
-        let it = &store.list_memory_items("default", true, -1).unwrap()[0];
-        assert_eq!(it.norm_status, "pending");
-        assert_eq!(it.text, "бекап сервер z14");
-        // Correct source_text → the normalizer flips text/entity/status; source_text stays.
-        store
-            .update_memory_item_normalized(
-                id,
-                "ну это бекап сервер z14",
-                "Бекап-сервер z14",
-                Some("z14"),
-                "llm",
-            )
-            .unwrap();
-        let it = &store.list_memory_items("default", true, -1).unwrap()[0];
-        assert_eq!(it.text, "Бекап-сервер z14");
-        assert_eq!(it.entity.as_deref(), Some("z14"));
-        assert_eq!(it.norm_status, "llm");
-        assert_eq!(it.source_text.as_deref(), Some("ну это бекап сервер z14"));
-        // D3 (P3): a manual text edit resets norm_status to 'none' — a user-authored fact is
-        // neither AI- nor heuristic-normalized, so it drops its badge AND won't be re-swept.
+        // A manual text edit resets the legacy normalization status.
         store
             .update_memory_item_text(id, "мой правленый факт")
             .unwrap();
         let it = &store.list_memory_items("default", true, -1).unwrap()[0];
         assert_eq!(it.text, "мой правленый факт");
         assert_eq!(it.norm_status, "none");
+    }
+
+    #[test]
+    fn restore_memory_item_source_is_explicit_and_lossless() {
+        let mut store = Store::open_in_memory().unwrap();
+        let raw = "BI-Портал | 03.08.2026 – 09.08.2026\n\
+АльфаОтчетность | 07.09.2026 – 13.09.2026\n\
+АльфаРепликация | 14.09.2026 – 20.09.2026\n\
+Финансовое хранилище данных | 14.09.2026 – 20.09.2026";
+        let id = store
+            .insert_memory_item(
+                &NewMemoryItem {
+                    profile_id: "default".into(),
+                    kind: "note".into(),
+                    text: "BI-Портал; АльфаОтчетность; АльфаРепликация".into(),
+                    source_session_id: None,
+                    source_text: Some(raw.into()),
+                    entity: Some("DRP".into()),
+                    norm_status: "llm".into(),
+                },
+                10,
+            )
+            .unwrap();
+
+        assert!(store.restore_memory_item_source(id).unwrap());
+        let item = &store.list_memory_items("default", false, -1).unwrap()[0];
+        assert_eq!(item.text, raw);
+        assert_eq!(item.source_text, None);
+        assert_eq!(item.entity, None);
+        assert_eq!(item.norm_status, "none");
+        assert!(!store.restore_memory_item_source(id).unwrap());
+
+        let empty_source_id = store
+            .insert_memory_item(
+                &NewMemoryItem {
+                    profile_id: "default".into(),
+                    kind: "note".into(),
+                    text: "keep me".into(),
+                    source_session_id: None,
+                    source_text: Some(String::new()),
+                    entity: None,
+                    norm_status: "pending".into(),
+                },
+                11,
+            )
+            .unwrap();
+        assert!(!store.restore_memory_item_source(empty_source_id).unwrap());
+        assert_eq!(
+            store.list_memory_items("default", false, -1).unwrap()[0].text,
+            "keep me"
+        );
+
+        let edited_id = store
+            .insert_memory_item(
+                &NewMemoryItem {
+                    profile_id: "default".into(),
+                    kind: "note".into(),
+                    text: "normalized".into(),
+                    source_session_id: None,
+                    source_text: Some("original".into()),
+                    entity: None,
+                    norm_status: "llm".into(),
+                },
+                12,
+            )
+            .unwrap();
+        store
+            .update_memory_item_text(edited_id, "manual edit")
+            .unwrap();
+        assert!(!store.restore_memory_item_source(edited_id).unwrap());
+        assert_eq!(
+            store.list_memory_items("default", false, -1).unwrap()[0].text,
+            "manual edit"
+        );
     }
 
     #[test]

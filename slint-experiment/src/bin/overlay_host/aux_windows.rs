@@ -1747,7 +1747,7 @@ fn wire_transcript_actions(
                                 continue;
                             }
                             if !joined.is_empty() {
-                                joined.push_str("; ");
+                                joined.push('\n');
                             }
                             joined.push_str(line);
                         }
@@ -1804,8 +1804,7 @@ fn wire_transcript_actions(
         let weak = win.as_weak();
         win.on_save_capture(move || {
             let Some(w) = weak.upgrade() else { return };
-            // Every save condenses (feature A): a selected span, a joined multi-⭐, and a single
-            // starred line all go through the same AI condense on the background worker.
+            // Saving is explicit approval: keep the selected text verbatim.
             super::tile_copy::insert_approved_note(w.get_capture_text().as_str());
             w.set_capture_pending(false);
             w.set_capture_text(slint::SharedString::default());

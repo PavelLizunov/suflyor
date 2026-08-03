@@ -1287,6 +1287,12 @@ msgstr "Удержание кнопки записи = запись, отпус�
 msgid "Restore the previous session?"
 msgstr "Восстановить прошлую сессию?"
 
+msgid "Restore original"
+msgstr "Вернуть оригинал"
+
+msgid "Original available"
+msgstr "Доступен оригинал"
+
 msgid "The last session ended without closing. Carry its context into a new one?"
 msgstr "Прошлая сессия завершилась без закрытия. Перенести её контекст в новую?"
 

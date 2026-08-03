@@ -38,7 +38,6 @@ use super::{
     TileWindow, Timer, VecModel,
 };
 use slint::Model;
-use std::sync::atomic::{AtomicBool, Ordering};
 // `conversations_evict_keys` lives in `tile_controller.rs`; only this module's
 // eviction unit test (`copy_tests`) exercises it, so import it TEST-ONLY — a
 // plain module-level import would be unused in the normal build (clippy -D).
@@ -309,52 +308,18 @@ pub(crate) fn wire_code_copy(tile: &TileWindow) {
     });
 }
 
-/// A2 (ТЗ 2026-07-02) — persist `text` as an APPROVED memory note (kind "note",
-/// profile "default"): the shared write behind BOTH the per-block «⭐ В память» on
-/// tiles and the per-line one on the transcript. The user typing / confirming the
-/// fact IS the approval consent (same rule as the Settings "add fact"). Empty /
-/// whitespace is a no-op. Local SQLite — no egress; errors are logged, not fatal.
-///
-/// Feature A (condense — M1-b-2): the text — a tile answer OR a raw STT span — is stored
-/// INSTANTLY as its heuristic-clean (so the ⭐ feels instant), with the raw kept in `source_text`;
-/// then a background thread asks the AI for 1–3 VERBATIM quotes and — only quotes that `locate_span`
-/// finds as a contiguous source fragment (P4 quote-span) — swaps in the source slices (`norm_status`
-/// → `llm`), else keeps the heuristic text (`heuristic`). Every ⭐/selection save comes here; typed «свой факт» (Settings)
-/// does NOT (it's stored verbatim via its own path).
+/// Persist an explicitly approved note exactly as the user confirmed it. Only
+/// outer whitespace is trimmed; internal whitespace, newlines, table rows,
+/// identifiers, and repeated words are data and must not be rewritten later.
 pub(crate) fn insert_approved_note(text: &str) {
+    if let Some(verbatim) = approved_note_text(text) {
+        let _ = store_note(verbatim, None, "none");
+    }
+}
+
+fn approved_note_text(text: &str) -> Option<&str> {
     let trimmed = text.trim();
-    if trimmed.is_empty() {
-        return;
-    }
-    // Store the heuristic-clean immediately (raw kept as provenance), then condense in the
-    // background so the ⭐ never waits on an AI round-trip.
-    let raw = trimmed.to_string();
-    let cleaned = overlay_backend::memory::heuristic_clean(&raw);
-    let cleaned = if cleaned.trim().is_empty() {
-        raw.clone()
-    } else {
-        cleaned
-    };
-    let Some(id) = store_note(&cleaned, Some(&raw), "pending") else {
-        return; // insert failed (already logged)
-    };
-    let ep = overlay_backend::config::load().ai_endpoint(true);
-    if ep.base_url.trim().is_empty() {
-        // No AI configured → terminal heuristic: store the best clauses, not the whole raw line.
-        let h = overlay_backend::memory::heuristic_condense(&cleaned);
-        finalize_normalized(id, &raw, &h, None, "heuristic");
-        return;
-    }
-    // ponytail: one OS thread per save. Saves are user-initiated + infrequent and ai::complete's
-    // AI_SEMAPHORE caps concurrent AI calls, so an unbounded spawn is fine; add a bounded pool
-    // only if rapid-fire saving is ever shown to pile up threads.
-    std::thread::spawn(move || {
-        // P3: a transport Err LEAVES the row 'pending' (not 'heuristic') so `sweep_pending` retries
-        // it once the AI is back — the whole offline-reliability fix. Ok(_) is terminal (set inside).
-        if let Err(e) = condense_one(id, &raw, &cleaned, &ep) {
-            eprintln!("[overlay-host] normalize deferred, left 'pending' (AI offline?): {e:#}");
-        }
-    });
+    (!trimmed.is_empty()).then_some(trimmed)
 }
 
 /// Insert one approved note; returns its id (None on failure, logged). Stamps `now` here.
@@ -385,128 +350,6 @@ fn store_note(text: &str, source_text: Option<&str>, norm_status: &str) -> Optio
         Err(e) => {
             eprintln!("[overlay-host] add-to-memory: store open failed: {e:#}");
             None
-        }
-    }
-}
-
-/// Record the normalization outcome on item `id` (text + entity + status). `source_text` is the
-/// raw span we normalized — the rowid-reuse guard (see `update_memory_item_normalized`).
-/// Best-effort.
-fn finalize_normalized(id: i64, source_text: &str, text: &str, entity: Option<&str>, status: &str) {
-    match overlay_backend::persistence::open_default_store() {
-        Ok(mut store) => {
-            if let Err(e) =
-                store.update_memory_item_normalized(id, source_text, text, entity, status)
-            {
-                eprintln!("[overlay-host] normalize update failed: {e:#}");
-            }
-        }
-        Err(e) => eprintln!("[overlay-host] normalize: store open failed: {e:#}"),
-    }
-}
-
-/// P3 — normalize ONE row SYNCHRONOUSLY (blocks the calling thread on a current-thread runtime; the
-/// caller owns the thread). `Ok(())` = a TERMINAL outcome was recorded (`llm` if a fact located, else
-/// `heuristic`); `Err` = the AI CALL failed (offline/timeout, or runtime build failed) → the row is
-/// LEFT `'pending'` for a later retry. The single normalize+finalize path shared by the per-save
-/// worker and [`sweep_pending`]. `cleaned` is the heuristic fallback; `ep` the resolved endpoint
-/// (local OR cloud — provider-agnostic, same egress class as answers on a cloud provider).
-fn condense_one(
-    id: i64,
-    raw: &str,
-    cleaned: &str,
-    ep: &overlay_backend::config::AiEndpoint,
-) -> anyhow::Result<()> {
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
-    // The inner `?` propagates a transport Err (→ stays 'pending'); Ok(None) is terminal 'heuristic'.
-    match rt.block_on(overlay_backend::memory::normalize_fact(
-        raw,
-        &ep.base_url,
-        &ep.bearer,
-        &ep.model,
-    ))? {
-        Some(fact) => finalize_normalized(id, raw, &fact.text, fact.entity.as_deref(), "llm"),
-        // Terminal heuristic: store the BEST clauses, not the whole raw ramble (fable's fallback).
-        None => finalize_normalized(
-            id,
-            raw,
-            &overlay_backend::memory::heuristic_condense(cleaned),
-            None,
-            "heuristic",
-        ),
-    }
-    Ok(())
-}
-
-/// Re-entrancy guard for [`sweep_pending`]: boot AND every Настройки→Память open trigger it, so this
-/// keeps two sweeps from double-condensing the same rows at once.
-static SWEEP_RUNNING: AtomicBool = AtomicBool::new(false);
-
-/// Clears [`SWEEP_RUNNING`] on EVERY exit of the sweep thread (early return, break, or panic).
-struct SweepGuard;
-impl Drop for SweepGuard {
-    fn drop(&mut self) {
-        SWEEP_RUNNING.store(false, Ordering::Release);
-    }
-}
-
-/// P3 offline-reliability (D1 + D4): retry every memory row still `'pending'` — a save whose AI
-/// condense never completed because the AI was offline at save time. ONE background thread, SEQUENTIAL,
-/// and ABORTS on the first transport `Err` (AI still down → don't hammer it; the next trigger resumes).
-/// Re-entrancy-guarded. Fires on boot (after a short delay so network/AI can settle) and on each
-/// Настройки→Память open. No-op when no AI is configured (rows stay honestly `'pending'`).
-pub(crate) fn sweep_pending() {
-    if SWEEP_RUNNING.swap(true, Ordering::AcqRel) {
-        return; // a sweep is already in flight
-    }
-    std::thread::spawn(move || {
-        let _guard = SweepGuard; // release SWEEP_RUNNING however this thread exits
-        let ep = overlay_backend::config::load().ai_endpoint(true);
-        if ep.base_url.trim().is_empty() {
-            return; // no AI → nothing to retry against
-        }
-        let pending = list_pending();
-        if pending.is_empty() {
-            return;
-        }
-        eprintln!(
-            "[overlay-host] memory sweep: {} pending row(s)",
-            pending.len()
-        );
-        for (id, raw, cleaned) in pending {
-            if let Err(e) = condense_one(id, &raw, &cleaned, &ep) {
-                eprintln!(
-                    "[overlay-host] memory sweep: AI offline, stopping ({e:#}) — retry later"
-                );
-                break; // AI still down — stop; the next trigger picks up the rest
-            }
-        }
-    });
-}
-
-/// The `'pending'` notes we can retry: `(id, raw source_text, heuristic-clean fallback)`. Rows with no
-/// `source_text` (pre-M1) are skipped — no raw to re-normalize. Read-only; on error → empty (logged).
-fn list_pending() -> Vec<(i64, String, String)> {
-    let store = match overlay_backend::persistence::open_default_store() {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("[overlay-host] memory sweep: store open failed: {e:#}");
-            return Vec::new();
-        }
-    };
-    // include_archived: an archived row still deserves its clean text; cap is a sanity bound (5000
-    // offline saves is absurd — it just stops a pathological unbounded scan).
-    match store.list_memory_items("default", true, 5000) {
-        Ok(items) => items
-            .into_iter()
-            .filter(|it| it.norm_status == "pending")
-            .filter_map(|it| it.source_text.map(|raw| (it.id, raw, it.text)))
-            .collect(),
-        Err(e) => {
-            eprintln!("[overlay-host] memory sweep: list failed: {e:#}");
-            Vec::new()
         }
     }
 }
@@ -594,10 +437,8 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
             let Some(vm) = blocks.as_any().downcast_ref::<VecModel<MarkdownBlock>>() else {
                 return;
             };
-            // Single mark → the (possibly edited) buffer. Multiple → ONE joined record
-            // (G2a, ТЗ part 2): related facts stop fragmenting into separate rows — the
-            // «z14-backup → имя / подсеть / IP = 3 rows» complaint. Refine later in
-            // Настройки → Память (A1). "; " sep keeps the joined note single-line-editable.
+            // Single mark → the (possibly edited) buffer. Multiple → ONE joined record.
+            // Keep block boundaries: they may be rows of a table or list.
             if t.get_marked_count() == 1 {
                 insert_approved_note(t.get_capture_text().as_str());
             } else {
@@ -666,7 +507,7 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
         });
     }
     {
-        // P5 — «Копировать» on the mark bar: join every marked block (block order, "; " — the same
+        // P5 — «Копировать» on the mark bar: join every marked block (block order, newlines — the same
         // join as save-marked) and write it to the clipboard. Non-destructive: the marks stay.
         let weak = tile.as_weak();
         tile.on_copy_marked(move || {
@@ -750,16 +591,14 @@ fn clear_all_marks(vm: &VecModel<MarkdownBlock>) {
     }
 }
 
-/// G2a (ТЗ part 2) — join every marked block's text into ONE record (in block order,
-/// `"; "` separated, single-line-editable) so a multi-⭐ save is one coherent fact, not
-/// N fragmented rows. Pure → tested.
+/// Join every marked block's text into one record, preserving block boundaries.
 fn join_marked_text(vm: &VecModel<MarkdownBlock>) -> String {
     let mut out = String::new();
     for j in 0..vm.row_count() {
         if let Some(r) = vm.row_data(j) {
             if r.marked {
                 if !out.is_empty() {
-                    out.push_str("; ");
+                    out.push('\n');
                 }
                 out.push_str(r.text.as_str());
             }
@@ -1007,12 +846,25 @@ mod copy_tests {
             mk("Подсеть: 10.255.28.96/27", true),
             mk("IP: 10.255.28.116", true),
         ]);
-        // G2a — ONE record, "; "-joined, marked-only, in block order (un-fragmenting the
-        // z14-backup «имя / подсеть / IP = 3 rows» example).
+        // One record, marked-only, in block order, with row boundaries preserved.
         assert_eq!(
             join_marked_text(&vm),
-            "Имя: z14-4443-backup; Подсеть: 10.255.28.96/27; IP: 10.255.28.116"
+            "Имя: z14-4443-backup\nПодсеть: 10.255.28.96/27\nIP: 10.255.28.116"
         );
+    }
+
+    #[test]
+    fn approved_note_preserves_structured_schedule_verbatim() {
+        let schedule = "\nBI-Портал | ВС | Финансы | 03.08.2026 – 09.08.2026\n\
+АльфаОтчетность | ВС | Финансы | 07.09.2026 – 13.09.2026\n\
+АльфаРепликация | ВС | Финансы | 14.09.2026 – 20.09.2026\n\
+Финансовое хранилище данных | ВС | Финансы | 14.09.2026 – 20.09.2026\n";
+        assert_eq!(approved_note_text(schedule), Some(schedule.trim()));
+        assert_eq!(
+            approved_note_text(schedule).map(|s| s.lines().count()),
+            Some(4)
+        );
+        assert!(approved_note_text(" \n\t ").is_none());
     }
 
     #[test]
