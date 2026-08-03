@@ -191,19 +191,12 @@ pub fn composition_enabled() -> bool {
 }
 
 fn apply_transparency(hwnd: HWND, click_through: bool) -> Result<(), Box<dyn std::error::Error>> {
+    // A top-level window can reach this shared path with WS_EX_APPWINDOW.
+    // Merely OR-ing TOOLWINDOW leaves both bits set, so Explorer keeps a taskbar button.
+    // This shared transition also performs the required hide/restyle/show refresh.
+    set_skip_taskbar(hwnd, true)?;
     let before = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
-    let target = if click_through {
-        // Overlay bar — clicks pass through everywhere except
-        // explicit TouchAreas (Slint engine).
-        before | WS_EX_TRANSPARENT.0 as isize | WS_EX_TOOLWINDOW.0 as isize
-    } else {
-        // Tiles — explicitly CLEAR WS_EX_TRANSPARENT (Slint's
-        // frameless+transparent-background setup sets it implicitly
-        // on Windows). Without this AND-NOT, tiles silently swallow
-        // every click → drag/buttons never fire. Phase E6 v6 root
-        // cause of "тайлы нельзя двигать".
-        (before | WS_EX_TOOLWINDOW.0 as isize) & !(WS_EX_TRANSPARENT.0 as isize)
-    };
+    let target = transparency_exstyle(before, click_through);
     unsafe {
         SetWindowLongPtrW(hwnd, GWL_EXSTYLE, target);
     }
@@ -281,6 +274,16 @@ fn apply_transparency(hwnd: HWND, click_through: bool) -> Result<(), Box<dyn std
     }
 
     Ok(())
+}
+
+#[must_use]
+fn transparency_exstyle(before: isize, click_through: bool) -> isize {
+    let taskbar_safe = skip_taskbar_exstyle(before, true);
+    if click_through {
+        taskbar_safe | WS_EX_TRANSPARENT.0 as isize
+    } else {
+        taskbar_safe & !(WS_EX_TRANSPARENT.0 as isize)
+    }
 }
 
 /// Toggle HWND_TOPMOST. `true` puts the window above all non-topmost
@@ -1090,5 +1093,24 @@ mod tests {
             skip_taskbar_exstyle(unrelated | tool, false),
             unrelated | tool
         );
+    }
+
+    #[test]
+    fn transparent_windows_clear_appwindow_without_losing_other_flags() {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+        };
+        let app = WS_EX_APPWINDOW.0 as isize;
+        let tool = WS_EX_TOOLWINDOW.0 as isize;
+        let transparent = WS_EX_TRANSPARENT.0 as isize;
+        let preserved = WS_EX_LAYERED.0 as isize | WS_EX_TOPMOST.0 as isize;
+
+        let overlay = transparency_exstyle(preserved | app, true);
+        assert_eq!(overlay, preserved | tool | transparent);
+        assert_eq!(overlay & app, 0);
+
+        let tile = transparency_exstyle(preserved | app | transparent, false);
+        assert_eq!(tile, preserved | tool);
+        assert_eq!(tile & app, 0);
     }
 }
