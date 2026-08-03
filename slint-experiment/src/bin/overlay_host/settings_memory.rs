@@ -110,6 +110,20 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
     }
     {
         let weak = win.as_weak();
+        win.on_memory_restore_item(move |id| {
+            if let Some(w) = weak.upgrade() {
+                mutate_and_reload(&w, move || {
+                    if let Ok(mut store) = open_default_store() {
+                        if let Err(e) = store.restore_memory_item_source(i64::from(id)) {
+                            eprintln!("[overlay-host] memory restore failed: {e:#}");
+                        }
+                    }
+                });
+            }
+        });
+    }
+    {
+        let weak = win.as_weak();
         win.on_memory_extract(move || {
             let Some(w) = weak.upgrade() else { return };
             // P1-3: the extractor scans candidate texts + reads AI turns for the
@@ -249,12 +263,6 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
 /// Best-effort: a catalog-open failure leaves the lists empty. Runs OFF the
 /// event loop — never call it on the Slint UI thread.
 fn read_memory_lists() -> (Vec<MemoryCandidate>, Vec<MemoryItem>) {
-    // P3: refreshing the tab retries any row stuck 'pending' (AI was offline at save).
-    // Re-entrancy-guarded + a no-op when nothing's pending, so calling it from every
-    // reload is cheap. ponytail: swept rows show 'llm' on the NEXT reload, not this
-    // one — fine, the boot sweep already caught prior-session pendings. sweep_pending
-    // spawns its own thread, so it never blocks here.
-    super::tile_copy::sweep_pending();
     match open_default_store() {
         Ok(store) => (
             store

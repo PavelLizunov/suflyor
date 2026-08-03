@@ -321,6 +321,7 @@ export component SettingsWindow inherits Window {
     callback memory-approve(int);
     callback memory-reject(int);
     callback memory-delete-item(int);
+    callback memory-restore-item(int);
     callback memory-extract();
     // v0.16.0 — manual "add your own fact" input (personal knowledge base):
     // the text goes straight into the APPROVED memory_items (typing it IS the
@@ -3413,11 +3414,10 @@ export component SettingsWindow inherits Window {
                                     // M1-b-2 observability — normalization state + the raw source,
                                     // so it's visible the AI tidied the fact. Hidden for verbatim
                                     // (none) captures.
-                                    // P3: 'pending' can mean the AI is OFFLINE and the row is queued
-                                    // for the next sweep — «ждёт ИИ» is honest for what the user sees
-                                    // (the active-condense case resolves in seconds, before they look).
-                                    if m.norm-status == "pending" : Text {
-                                        text: @tr("waiting for AI");
+                                    // Legacy pending rows are no longer rewritten in the background.
+                                    // Their verbatim capture can be restored explicitly below.
+                                    if m.norm-status == "pending" && m.source-text != "" && m.source-text != m.text : Text {
+                                        text: @tr("Original available");
                                         font-size: 10px;
                                         color: Theme.text-muted;
                                     }
@@ -3436,6 +3436,11 @@ export component SettingsWindow inherits Window {
                                         color: Theme.text-muted;
                                         wrap: word-wrap;
                                     }
+                                }
+                                Button {
+                                    visible: m.norm-status != "none" && m.source-text != "" && m.source-text != m.text;
+                                    text: @tr("Restore original");
+                                    clicked => { root.memory-restore-item(m.id); }
                                 }
                                 Button {
                                     text: @tr("Edit");
