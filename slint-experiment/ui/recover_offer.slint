@@ -20,7 +20,7 @@
 
 import { Button, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { CloseButton } from "controls.slint";
+import { CloseButton, DragGrip } from "controls.slint";
 import { Metrics } from "metrics.slint";
 
 export component RecoverOfferWindow inherits Window {
@@ -47,6 +47,8 @@ export component RecoverOfferWindow inherits Window {
     callback recover-accepted();
     // Emitted on Dismiss / Esc — the host just closes the window.
     callback dismissed();
+    callback drag-start-requested();
+    callback drag-moved();
 
     FocusScope {
         // Esc dismisses; everything else falls through.
@@ -67,13 +69,34 @@ export component RecoverOfferWindow inherits Window {
             // Quit + the tile close).
             HorizontalLayout {
                 spacing: Metrics.space-sm;   // was 8px
-                Text {
-                    text: @tr("Restore the previous session?");
-                    color: Theme.text-primary;
-                    font-size: 15px;   // one-off heading size; no exact token (font-heading=18)
-                    font-weight: 700;
-                    vertical-alignment: center;
+                Rectangle {
                     horizontal-stretch: 1;
+                    height: 30px;
+                    TouchArea {
+                        mouse-cursor: grab;
+                        pointer-event(ev) => {
+                            if (ev.button == PointerEventButton.left
+                                && ev.kind == PointerEventKind.down) {
+                                root.drag-start-requested();
+                            }
+                        }
+                        moved => { if (self.pressed) { root.drag-moved(); } }
+                    }
+                    HorizontalLayout {
+                        spacing: Metrics.space-sm;
+                        Rectangle {
+                            width: 13px;
+                            height: 30px;
+                            DragGrip { y: 2px; }
+                        }
+                        Text {
+                            text: @tr("Restore the previous session?");
+                            color: Theme.text-primary;
+                            font-size: 15px;   // one-off heading size; no exact token (font-heading=18)
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
                 }
                 CloseButton {
                     clicked => { root.dismissed(); }
@@ -93,6 +116,7 @@ export component RecoverOfferWindow inherits Window {
                 vertical-stretch: 1;
                 VerticalLayout {
                     spacing: Metrics.space-sm;   // was 8px
+                    padding-right: 14px;
 
                     Text {
                         visible: root.has-qa;

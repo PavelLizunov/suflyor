@@ -58,7 +58,7 @@ pub async fn run_post_meeting_debrief(
     transcript: Vec<TranscriptLine>,
     session_id: String,
 ) {
-    let (base_url, bearer, model, response_language, preferred_monitor, stealth) = {
+    let (base_url, bearer, model, response_language, ui_is_ru, preferred_monitor, stealth) = {
         let c = cfg.read();
         // Resolve the ACTIVE endpoint (local vs cloud) like every other ask path
         // (reask / manual / F9). The old code read the cloud fields directly, so
@@ -70,6 +70,7 @@ pub async fn run_post_meeting_debrief(
             ep.bearer,
             ep.model,
             c.response_language.clone(),
+            c.ui_is_ru(),
             c.tile_monitor_name.clone(),
             c.stealth_enabled,
         )
@@ -82,9 +83,8 @@ pub async fn run_post_meeting_debrief(
         .map(|l| l.text.as_str())
         .collect::<Vec<_>>()
         .join("\n");
-    // Localise BOTH the prompt body and the tile title — Russian-only
-    // output would be confusing for an English-speaking user even with
-    // a trailing "Respond in English" directive.
+    // Generated coaching follows the AI response language; deterministic tile
+    // chrome and notices follow the independent application UI language.
     let is_ru = response_language == "ru";
     let system_prompt = if is_ru {
         "Ты — speech coach. На входе — полный mic-транскрипт пользователя за встречу \
@@ -121,7 +121,7 @@ pub async fn run_post_meeting_debrief(
             log::warn!("post-meeting debrief AI call failed: {e:#}");
             // C — don't vanish silently: a GENERIC error tile (no base_url /
             // error chain — it can land in a screenshot).
-            let body = if is_ru {
+            let body = if ui_is_ru {
                 "Не удалось сформировать разбор (ошибка ИИ). Подробности — в логе («Собрать логи» в Диагностике).".to_string()
             } else {
                 "Couldn't generate the debrief (AI error). Details in the log (Diagnostics → Collect logs).".to_string()
@@ -138,10 +138,10 @@ pub async fn run_post_meeting_debrief(
         crate::conspect::save_debrief(&session_id, &answer);
     }
 
-    let tile_title = if is_ru {
-        "🎯 Debrief: что улучшить".to_string()
+    let tile_title = if ui_is_ru {
+        "Разбор: что улучшить".to_string()
     } else {
-        "🎯 Debrief: what to improve".to_string()
+        "Debrief: what to improve".to_string()
     };
     // Carry the OS-side monitor-name pin from cfg through the trait
     // boundary. The Tauri adapter passes the name straight into
@@ -175,9 +175,9 @@ pub async fn run_post_meeting_debrief(
 /// configured" notice) so the post-meeting debrief never fails SILENTLY. `body`
 /// must be GENERIC (no base_url / error chain — it can land in a screenshot).
 pub fn spawn_debrief_notice(events: &dyn RuntimeEvents, cfg: &SharedConfig, body: String) {
-    let (preferred_monitor, stealth) = {
+    let (ui_is_ru, preferred_monitor, stealth) = {
         let c = cfg.read();
-        (c.tile_monitor_name.clone(), c.stealth_enabled)
+        (c.ui_is_ru(), c.tile_monitor_name.clone(), c.stealth_enabled)
     };
     let monitor_hint = match preferred_monitor.as_deref() {
         Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
@@ -185,7 +185,7 @@ pub fn spawn_debrief_notice(events: &dyn RuntimeEvents, cfg: &SharedConfig, body
     };
     if let Err(e) = events.spawn_tile_full(
         TileSpec {
-            question: "🎯 Debrief".to_string(),
+            question: if ui_is_ru { "Разбор" } else { "Debrief" }.to_string(),
             answer: body,
             source: "debrief".into(),
             is_translation: false,
@@ -682,6 +682,7 @@ pub async fn run_meeting_summary(
 ) {
     let (
         response_language,
+        ui_is_ru,
         preferred_monitor,
         stealth,
         base_url,
@@ -697,6 +698,7 @@ pub async fn run_meeting_summary(
         let ep = c.ai_endpoint(true);
         (
             c.response_language.clone(),
+            c.ui_is_ru(),
             c.tile_monitor_name.clone(),
             c.stealth_enabled,
             ep.base_url,
@@ -708,7 +710,7 @@ pub async fn run_meeting_summary(
         )
     };
     let is_ru = response_language == "ru";
-    let tile_title = summary_tile_title(is_ru);
+    let tile_title = summary_tile_title(ui_is_ru);
     let monitor_hint = monitor_hint_from(preferred_monitor.as_deref());
     let formatted = format_transcript_for_summary(&transcript, is_ru);
     let fp = conspect::fingerprint(&formatted);
@@ -743,6 +745,7 @@ pub async fn run_meeting_summary(
                     tile_title,
                     monitor_hint,
                     stealth,
+                    ui_is_ru,
                 )
                 .await;
                 return;
@@ -794,7 +797,16 @@ pub async fn run_meeting_summary(
         Conspect::new(session_id, is_ru, fp, false, parts)
     };
     conspect::save(&cs);
-    finish_summary_from_conspect(&events, &cfg, cs, tile_title, monitor_hint, stealth).await;
+    finish_summary_from_conspect(
+        &events,
+        &cfg,
+        cs,
+        tile_title,
+        monitor_hint,
+        stealth,
+        ui_is_ru,
+    )
+    .await;
     // B3 — forced run finished: keep the fresh recap if it produced one, else restore
     // the backed-up previous summary (the rebuild failed → don't lose the old copy).
     if let Some(sid) = rollback_sid {
@@ -818,23 +830,18 @@ pub async fn retry_meeting_summary(
     cfg: SharedConfig,
     session_id: String,
 ) {
-    let (response_language, preferred_monitor, stealth) = {
+    let (ui_is_ru, preferred_monitor, stealth) = {
         let c = cfg.read();
-        (
-            c.response_language.clone(),
-            c.tile_monitor_name.clone(),
-            c.stealth_enabled,
-        )
+        (c.ui_is_ru(), c.tile_monitor_name.clone(), c.stealth_enabled)
     };
-    let is_ru = response_language == "ru";
-    let tile_title = summary_tile_title(is_ru);
+    let tile_title = summary_tile_title(ui_is_ru);
     let monitor_hint = monitor_hint_from(preferred_monitor.as_deref());
     let Some(cs) = conspect::load(&session_id) else {
         // Nothing to resume (old session predating persistence, or the very
         // first part never saved). Show the failure WITHOUT a retry button so
         // the user isn't stuck re-pressing a no-op.
         log::warn!("meeting summary retry: no saved conspect for this session");
-        spawn_summary_error_tile(&events, tile_title, monitor_hint, stealth, is_ru, None);
+        spawn_summary_error_tile(&events, tile_title, monitor_hint, stealth, ui_is_ru, None);
         return;
     };
     if let Some(answer) = cs.final_summary.clone() {
@@ -849,7 +856,16 @@ pub async fn retry_meeting_summary(
         );
         return;
     }
-    finish_summary_from_conspect(&events, &cfg, cs, tile_title, monitor_hint, stealth).await;
+    finish_summary_from_conspect(
+        &events,
+        &cfg,
+        cs,
+        tile_title,
+        monitor_hint,
+        stealth,
+        ui_is_ru,
+    )
+    .await;
 }
 
 struct ManagedPrepSession {
@@ -1218,6 +1234,7 @@ async fn finish_summary_from_conspect(
     tile_title: String,
     monitor_hint: MonitorHint,
     stealth: bool,
+    ui_is_ru: bool,
 ) {
     let prep = match ManagedPrepSession::start(cfg).await {
         Ok(prep) => prep,
@@ -1228,7 +1245,7 @@ async fn finish_summary_from_conspect(
                 tile_title,
                 monitor_hint,
                 stealth,
-                cs.is_ru,
+                ui_is_ru,
                 Some(cs.session_id),
             );
             return;
@@ -1241,6 +1258,7 @@ async fn finish_summary_from_conspect(
         tile_title,
         monitor_hint,
         stealth,
+        ui_is_ru,
         prep.is_some(),
     )
     .await;
@@ -1249,6 +1267,9 @@ async fn finish_summary_from_conspect(
     }
 }
 
+// These are distinct persisted-summary, presentation, and exclusive-run inputs;
+// grouping them would only move the same plumbing into a one-use wrapper.
+#[allow(clippy::too_many_arguments)]
 async fn finish_summary_from_conspect_inner(
     events: &Arc<dyn RuntimeEvents>,
     cfg: &SharedConfig,
@@ -1256,6 +1277,7 @@ async fn finish_summary_from_conspect_inner(
     tile_title: String,
     monitor_hint: MonitorHint,
     stealth: bool,
+    ui_is_ru: bool,
     exclusive: bool,
 ) {
     let (base_url, bearer, model, is_local, prefer_quality, local_context) = {
@@ -1285,7 +1307,7 @@ async fn finish_summary_from_conspect_inner(
                 tile_title,
                 monitor_hint,
                 stealth,
-                is_ru,
+                ui_is_ru,
                 Some(cs.session_id),
             );
             return;
@@ -1337,7 +1359,7 @@ async fn finish_summary_from_conspect_inner(
                 tile_title,
                 monitor_hint,
                 stealth,
-                is_ru,
+                ui_is_ru,
                 Some(cs.session_id),
             );
             return;
@@ -1396,7 +1418,7 @@ async fn finish_summary_from_conspect_inner(
                 tile_title,
                 monitor_hint,
                 stealth,
-                is_ru,
+                ui_is_ru,
                 Some(cs.session_id),
             );
             return;
@@ -1439,7 +1461,7 @@ async fn finish_summary_from_conspect_inner(
                 tile_title,
                 monitor_hint,
                 stealth,
-                is_ru,
+                ui_is_ru,
                 Some(cs.session_id),
             );
         }
@@ -1447,9 +1469,9 @@ async fn finish_summary_from_conspect_inner(
 }
 
 /// The localized Summary tile title.
-fn summary_tile_title(is_ru: bool) -> String {
-    if is_ru {
-        "Summary созвона".to_string()
+fn summary_tile_title(ui_is_ru: bool) -> String {
+    if ui_is_ru {
+        "Сводка встречи".to_string()
     } else {
         "Meeting summary".to_string()
     }
@@ -1500,10 +1522,10 @@ fn spawn_summary_error_tile(
     tile_title: String,
     monitor_hint: MonitorHint,
     stealth: bool,
-    is_ru: bool,
+    ui_is_ru: bool,
     session_id: Option<String>,
 ) {
-    let msg = if is_ru {
+    let msg = if ui_is_ru {
         "Не получилось составить summary — AI недоступен. \
          Проверьте Настройки → AI и попробуйте ещё раз."
     } else {
@@ -1948,6 +1970,7 @@ pub async fn reask_last(
         model,
         is_local,
         response_language,
+        ui_is_ru,
         meeting_context,
         preferred_monitor,
         stealth,
@@ -1960,6 +1983,7 @@ pub async fn reask_last(
             ep.model,
             ep.is_local,
             c.response_language.clone(),
+            c.ui_is_ru(),
             c.meeting_context.clone(),
             c.tile_monitor_name.clone(),
             c.stealth_enabled,
@@ -2051,8 +2075,12 @@ pub async fn reask_last(
             // journal + log.
             let _ = events.spawn_tile_full(
                     TileSpec {
-                        question: format!("🔁 reask: {last_q}"),
-                        answer: if response_language == "ru" {
+                        question: if ui_is_ru {
+                            format!("Повтор: {last_q}")
+                        } else {
+                            format!("Reask: {last_q}")
+                        },
+                        answer: if ui_is_ru {
                             "Не удалось получить ответ от AI. Проверьте, что выбранный провайдер запущен (Настройки → AI)."
                         } else {
                             "Couldn't get a response from AI. Check that the selected provider is running (Settings → AI)."
@@ -2204,6 +2232,7 @@ pub async fn manual_spawn_tile(
         model,
         is_local,
         response_language,
+        ui_is_ru,
         meeting_context,
         preferred_monitor,
         stealth,
@@ -2216,6 +2245,7 @@ pub async fn manual_spawn_tile(
             ep.model,
             ep.is_local,
             c.response_language.clone(),
+            c.ui_is_ru(),
             c.meeting_context.clone(),
             c.tile_monitor_name.clone(),
             c.stealth_enabled,
@@ -2233,8 +2263,13 @@ pub async fn manual_spawn_tile(
         // completely dead. Now the user always gets a tile explaining why.
         let _ = events.spawn_tile_full(
             TileSpec {
-                question: "Ручной запрос (F6)".into(),
-                answer: if response_language == "ru" {
+                question: if ui_is_ru {
+                    "Ручной запрос (F6)"
+                } else {
+                    "Manual ask (F6)"
+                }
+                .into(),
+                answer: if ui_is_ru {
                     "Транскрипт пустой — нечего спрашивать. Запустите сессию (захват аудио), дождитесь реплик и снова нажмите F6."
                 } else {
                     "Transcript is empty — nothing to ask. Start a session (audio capture), wait for lines, then press F6 again."
@@ -2322,7 +2357,7 @@ pub async fn manual_spawn_tile(
             let _ = events.spawn_tile_full(
                     TileSpec {
                         question: line.text.clone(),
-                        answer: if response_language == "ru" {
+                        answer: if ui_is_ru {
                             "Не удалось получить ответ от AI. Проверьте, что выбранный провайдер запущен (Настройки → AI)."
                         } else {
                             "Couldn't get a response from AI. Check that the selected provider is running (Settings → AI)."

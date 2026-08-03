@@ -12,9 +12,13 @@ Treat live visual verification as mandatory for UI changes. Compilation and test
 1. Build the exact QA binary being validated. The embedded Slint MCP server is
    compiled in **only** by the `ui-mcp` Cargo feature; setting
    `SLINT_MCP_PORT` / `SLINT_EMIT_DEBUG_INFO` on a normal build does not
-   enable it. You **must** build the feature-enabled binary with exactly:
+   enable it. Debug info must be present **while Slint compiles the UI**;
+   setting it only when the finished binary starts leaves MCP with a root-only
+   element tree. Build the feature-enabled binary with exactly:
 
    ```powershell
+   $env:CARGO_INCREMENTAL='0'
+   $env:SLINT_EMIT_DEBUG_INFO='1'
    cargo build --locked --bin overlay-host --features ui-mcp --manifest-path slint-experiment/Cargo.toml
    ```
 
@@ -22,7 +26,7 @@ Treat live visual verification as mandatory for UI changes. Compilation and test
    binary built without `--features ui-mcp` has no MCP server and cannot pass
    this audit. Kill existing `overlay-host.exe` and `suflyor-tts.exe`
    instances before a release build.
-2. Launch that binary with:
+2. Launch that same binary with:
 
    ```powershell
    $env:SLINT_EMIT_DEBUG_INFO='1'
@@ -43,9 +47,27 @@ Treat live visual verification as mandatory for UI changes. Compilation and test
 
 ## Required coverage
 
-- For a local component change, capture every affected state before and after the change.
+- Before the first edit, create `docs/audit-YYYY-MM-DD-<task>/` and capture the
+  baseline. Keep each before/after pair at the same window size, DPI, theme,
+  language, query/data state and scroll position. Record those conditions in
+  the directory's `README.md`; an after-only image is not evidence.
+- For a local component change, capture every affected state before and after
+  the change. For list/search surfaces use the smallest state matrix that can
+  expose the defect: empty, one/few rows, enough rows to show the scrollbar,
+  no-match/long text, selected/busy where applicable, and declared minimum
+  window size.
 - For a shared Settings primitive or layout change, visit all 16 Settings tabs at 720×600.
 - Check clipping, overflow, accidental stretching, large gaps, scroll reachability, button enabled/selected state, translations, and status accuracy.
+- Treat geometry as pass/fail, not taste: header icon/grip/text centres differ
+  by at most 2 px; fixed-row top/bottom gaps differ by at most 2 px; controls
+  keep at least 8 px from a row border; overlay scrollbars get a constant 14 px
+  content gutter; interactive targets are at least 24×24 px.
+- Run changed user-facing states once in English and Russian. Rust-built text
+  is not covered by the `.slint` i18n guard, so inspect MCP element values as
+  well as pixels.
+- Never commit screenshots containing keys, URLs/IPs, user paths, real session
+  titles or transcript text. Use a no-match query or synthetic data; keep any
+  unavoidable private runtime evidence outside the repository.
 - For transparent-window colours, trust Slint MCP screenshots. Computer-use screenshots are not colour ground truth for this project; use `CopyFromScreen` only as the documented fallback.
 
 ## Global-hotkey smoke

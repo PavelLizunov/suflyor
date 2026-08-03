@@ -337,11 +337,15 @@ fn start_session_inner(
             };
             if notify_mic_down {
                 log_info("mic health DOWN (no mic frames) — spawning one generic notice tile");
-                let stealth = cfg_for_tick.read().stealth_enabled;
+                let (stealth, ui_is_ru) = {
+                    let c = cfg_for_tick.read();
+                    (c.stealth_enabled, c.ui_is_ru())
+                };
+                let (question, answer) = mic_down_notice(ui_is_ru);
                 let _ = events_for_tick.spawn_tile_full(
                     TileSpec {
-                        question: "Микрофон не слышен".into(),
-                        answer: "Микрофон не передаёт звук: ваша речь не расшифровывается.\n\nПроверьте устройство ввода (Настройки -> STT) и убедитесь, что микрофон не отключён и не занят другим приложением.".into(),
+                        question: question.into(),
+                        answer: answer.into(),
                         source: "mic_error".into(),
                         is_translation: false,
                         highlights: vec!["mic down".into()],
@@ -617,6 +621,20 @@ fn mic_notice_decision(mic_state: &str, latch: bool) -> (bool, bool) {
         "down" => (!latch, true),
         "ok" => (false, false),
         _ => (false, latch),
+    }
+}
+
+fn mic_down_notice(ui_is_ru: bool) -> (&'static str, &'static str) {
+    if ui_is_ru {
+        (
+            "Микрофон не слышен",
+            "Микрофон не передаёт звук: ваша речь не расшифровывается.\n\nПроверьте устройство ввода (Настройки -> STT) и убедитесь, что микрофон не отключён и не занят другим приложением.",
+        )
+    } else {
+        (
+            "Microphone unavailable",
+            "The microphone is not providing audio, so your speech cannot be transcribed.\n\nCheck the input device in Settings -> STT and make sure the microphone is enabled and not used by another app.",
+        )
     }
 }
 
@@ -1322,7 +1340,7 @@ pub fn maybe_run_debrief(
             // C — surface a NOTICE for the cases the user would expect feedback
             // on; stay silent for "disabled" and trivially-short / no-speech
             // sessions (don't nag on quick test runs).
-            let is_ru = cfg.read().response_language == "ru";
+            let is_ru = cfg.read().ui_is_ru();
             let mic_lines = transcript
                 .iter()
                 .filter(|l| matches!(l.source, AudioSource::Mic))
@@ -1584,6 +1602,14 @@ mod tests {
         assert_eq!(mic_notice_decision("down", false), (true, true));
         // idle (between sessions) leaves the latch untouched.
         assert_eq!(mic_notice_decision("idle", true), (false, true));
+    }
+
+    #[test]
+    fn mic_down_notice_follows_ui_language() {
+        assert_eq!(mic_down_notice(false).0, "Microphone unavailable");
+        assert!(mic_down_notice(false).1.starts_with("The microphone"));
+        assert_eq!(mic_down_notice(true).0, "Микрофон не слышен");
+        assert!(mic_down_notice(true).1.starts_with("Микрофон"));
     }
 
     #[test]

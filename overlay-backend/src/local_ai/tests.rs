@@ -988,21 +988,35 @@ fn strict_readiness_rejects_stale_server_after_new_child_exits() {
     const EXPECTED: &str = "newly-launched-model";
     let (base_url, stop, server) = spawn_stale_llama_server(EXPECTED);
     let models_url = format!("{base_url}/models");
-    let models = curl_success_body(&["-f", "-sS", "--max-time", "3", &models_url]);
     let completion_url = format!("{base_url}/chat/completions");
-    let completion = curl_success_body(&[
-        "-f",
-        "-sS",
-        "--max-time",
-        "3",
-        "-X",
-        "POST",
-        &completion_url,
-        "-H",
-        "Content-Type: application/json",
-        "-d",
-        r#"{"model":"newly-launched-model","messages":[{"role":"user","content":"hi"}],"max_tokens":1}"#,
-    ]);
+    let probe_deadline = Instant::now() + Duration::from_secs(2);
+    let (models, completion) = loop {
+        let models = curl_success_body(&["-f", "-sS", "--max-time", "1", &models_url]);
+        let completion = curl_success_body(&[
+            "-f",
+            "-sS",
+            "--max-time",
+            "1",
+            "-X",
+            "POST",
+            &completion_url,
+            "-H",
+            "Content-Type: application/json",
+            "-d",
+            r#"{"model":"newly-launched-model","messages":[{"role":"user","content":"hi"}],"max_tokens":1}"#,
+        ]);
+        if expected_model_is_ready(
+            models.is_some(),
+            models.as_deref().unwrap_or_default(),
+            EXPECTED,
+            completion.is_some(),
+            completion.as_deref().unwrap_or_default(),
+        ) || Instant::now() >= probe_deadline
+        {
+            break (models, completion);
+        }
+        thread::sleep(Duration::from_millis(10));
+    };
     assert!(
         expected_model_is_ready(
             models.is_some(),

@@ -1235,6 +1235,18 @@ fn add_profile_does_not_clone_active_profile_context() {
     assert_eq!(c.context_profiles[0].context, "ninitux description");
 }
 
+#[test]
+fn ui_language_is_independent_from_ai_response_language() {
+    let mut c = Config::defaults();
+    c.ui_language = "en".into();
+    c.response_language = "ru".into();
+    assert!(!c.ui_is_ru());
+
+    c.ui_language = "ru".into();
+    c.response_language = "en".into();
+    assert!(c.ui_is_ru());
+}
+
 // P0-2: a bracketed IPv6 host WITHOUT a port must be fully masked — rfind(':')
 // used to keep ':abcd]' and leak the IPv6 tail. Keep a port only when ':<digits>'
 // follows the closing ']'.

@@ -94,10 +94,29 @@ fn try_acquire_busy(busy: &AtomicBool) -> Option<BusyGuard<'_>> {
 /// reused window.
 fn text_ask_profile_label(cfg: &overlay_backend::config::SharedConfig) -> String {
     let c = cfg.read();
-    match c.active_profile.as_deref() {
-        Some(n) if !n.trim().is_empty() => format!("Профиль: {n}"),
-        _ if !c.meeting_context.trim().is_empty() => "Профиль: свой контекст".to_string(),
-        _ => "Профиль: не задан".to_string(),
+    text_ask_profile_label_for(
+        c.active_profile.as_deref(),
+        !c.meeting_context.trim().is_empty(),
+        c.ui_language == "ru",
+    )
+}
+
+fn text_ask_profile_label_for(
+    active_profile: Option<&str>,
+    has_custom_context: bool,
+    is_ru: bool,
+) -> String {
+    match (
+        active_profile.filter(|name| !name.trim().is_empty()),
+        has_custom_context,
+        is_ru,
+    ) {
+        (Some(name), _, true) => format!("Профиль: {name}"),
+        (Some(name), _, false) => format!("Profile: {name}"),
+        (None, true, true) => "Профиль: свой контекст".to_string(),
+        (None, true, false) => "Profile: custom context".to_string(),
+        (None, false, true) => "Профиль: не задан".to_string(),
+        (None, false, false) => "Profile: not set".to_string(),
     }
 }
 
@@ -362,6 +381,27 @@ pub(crate) fn open_palette(
         }
         *palette_close.borrow_mut() = None;
     });
+
+    // Frameless drag — the new header owns the grab target; the close button
+    // remains a sibling so pointer events never conflict.
+    {
+        let weak = win.as_weak();
+        win.on_drag_start_requested(move || {
+            if let Some(w) = weak.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(w.window()) {
+                    drag_begin(hwnd);
+                }
+            }
+        });
+        let weak_move = win.as_weak();
+        win.on_drag_moved(move || {
+            if let Some(w) = weak_move.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(w.window()) {
+                    drag_update(hwnd);
+                }
+            }
+        });
+    }
 
     let s_ref = state.clone();
     let tiles_ref2 = tiles_ref.clone();
@@ -1160,10 +1200,17 @@ pub(crate) fn open_archive(
             if let Some(text) =
                 overlay_backend::conspect::load_debrief(&sid).filter(|t| !t.trim().is_empty())
             {
-                let stealth = cfg_c.read().stealth_enabled;
+                let (stealth, ui_is_ru) = {
+                    let c = cfg_c.read();
+                    (c.stealth_enabled, c.ui_is_ru())
+                };
                 let _ = events_c.spawn_tile_full(
                     overlay_backend::events::TileSpec {
-                        question: format!("🎯 Debrief · {}", row.title),
+                        question: format!(
+                            "{} · {}",
+                            if ui_is_ru { "Разбор" } else { "Debrief" },
+                            row.title
+                        ),
                         answer: text,
                         source: "debrief".into(),
                         is_translation: false,
@@ -2995,6 +3042,22 @@ fn build_session_markdown(
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+
+    #[test]
+    fn text_ask_profile_label_follows_ui_language() {
+        assert_eq!(
+            text_ask_profile_label_for(Some("Interview"), false, false),
+            "Profile: Interview"
+        );
+        assert_eq!(
+            text_ask_profile_label_for(None, true, false),
+            "Profile: custom context"
+        );
+        assert_eq!(
+            text_ask_profile_label_for(None, false, true),
+            "Профиль: не задан"
+        );
+    }
 
     /// Pins the one-job contract on a private atomic, so parallel tests never
     /// touch either process-global latch.

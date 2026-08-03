@@ -1146,6 +1146,7 @@ pub(crate) fn open_settings(
     // before WDA is applied; the DWM call is the `decorate` step (always runs).
     present_window_stealth_aware(&win, |hwnd| {
         let _ = make_transparent_tile(hwnd);
+        let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
     });
     *settings_slot = Some(win);
 }

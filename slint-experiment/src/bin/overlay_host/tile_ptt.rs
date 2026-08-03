@@ -29,14 +29,36 @@ pub(crate) fn spawn_ptt_watchdog(stop: Arc<AtomicBool>) {
     });
 }
 
+fn ptt_initial_copy(is_ru: bool) -> (&'static str, &'static str, &'static str, &'static str) {
+    if is_ru {
+        (
+            "Запись",
+            "stt · расшифровка…",
+            "Расшифровка…",
+            "голосовой запрос",
+        )
+    } else {
+        (
+            "Recording",
+            "stt · transcribing…",
+            "Transcribing…",
+            "push-to-talk",
+        )
+    }
+}
+
 /// Phase E6 v42 — set a PTT tile's body to an error line. Called from the
 /// transcribe task (off the UI thread) so it hops back via the event loop;
 /// `slint::Weak` is Send, the strong handle is not.
-pub(crate) fn ptt_tile_error(weak: slint::Weak<TileWindow>, msg: &str) {
+pub(crate) fn ptt_tile_error(weak: slint::Weak<TileWindow>, msg: &str, is_ru: bool) {
     let msg = msg.to_string();
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(t) = weak.upgrade() {
-            t.set_source_label(SharedString::from("stt · error"));
+            t.set_source_label(SharedString::from(if is_ru {
+                "stt · ошибка"
+            } else {
+                "stt · error"
+            }));
             t.set_blocks(ModelRc::new(VecModel::from(vec![MarkdownBlock {
                 kind: markdown::kind::PARAGRAPH,
                 text: SharedString::from(msg),
@@ -69,6 +91,7 @@ pub(crate) fn fire_ptt_ask(
     weak_overlay: &slint::Weak<OverlayBarWindow>,
 ) {
     let (source, pcm) = recording;
+    let ui_is_ru = cfg.read().ui_is_ru();
     let icon = match source {
         audio::AudioSource::Mic => "mic",
         audio::AudioSource::System => "sys",
@@ -87,7 +110,11 @@ pub(crate) fn fire_ptt_ask(
         // the bar instead of nothing. (A short MIC hold stays silent — fat-finger.)
         if matches!(source, audio::AudioSource::System) && pcm.len() < 1600 {
             if let Some(o) = weak_overlay.upgrade() {
-                o.set_status_text(SharedString::from("системный звук не пойман"));
+                o.set_status_text(SharedString::from(if ui_is_ru {
+                    "системный звук не пойман"
+                } else {
+                    "system audio not captured"
+                }));
                 o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x9b, 0x2b));
             }
         }
@@ -103,10 +130,11 @@ pub(crate) fn fire_ptt_ask(
         }
     };
     let seq = TILE_DISPLAY_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
+    let (title, source_label, placeholder, trigger) = ptt_initial_copy(ui_is_ru);
     tile.set_sequence(seq as i32);
-    tile.set_tile_title(SharedString::from(format!("{icon} Запись")));
-    tile.set_source_label(SharedString::from("stt · расшифровка…"));
-    tile.set_trigger_label(SharedString::from(format!("{icon} push-to-talk")));
+    tile.set_tile_title(SharedString::from(format!("{icon} {title}")));
+    tile.set_source_label(SharedString::from(source_label));
+    tile.set_trigger_label(SharedString::from(format!("{icon} {trigger}")));
     tile.set_trigger_color(slint::Color::from_rgb_u8(0xef, 0x44, 0x44));
     // Phase E6 v45 — PTT answers are continuable dialogs too.
     let convo_id = CONVO_SEQ.fetch_add(1, Ordering::Relaxed) as i32;
@@ -116,7 +144,7 @@ pub(crate) fn fire_ptt_ask(
     // Plain text, no hourglass glyph (tofu on the skia font fallback).
     tile.set_blocks(ModelRc::new(VecModel::from(vec![MarkdownBlock {
         kind: markdown::kind::PARAGRAPH,
-        text: SharedString::from("Расшифровка…"),
+        text: SharedString::from(placeholder),
         lang: SharedString::from(""),
         marked: false,
     }])));
@@ -294,7 +322,15 @@ pub(crate) fn fire_ptt_ask(
         let question = match result {
             Ok(q) if !q.trim().is_empty() => q.trim().to_string(),
             Ok(_) => {
-                ptt_tile_error(weak_for_title.clone(), "Речь не распознана (тишина?)");
+                ptt_tile_error(
+                    weak_for_title.clone(),
+                    if ui_is_ru {
+                        "Речь не распознана (тишина?)"
+                    } else {
+                        "Speech was not recognized (silence?)"
+                    },
+                    ui_is_ru,
+                );
                 return;
             }
             Err(e) => {
@@ -304,7 +340,16 @@ pub(crate) fn fire_ptt_ask(
                 // auth/etc. without echoing any URL.
                 ptt_tile_error(
                     weak_for_title.clone(),
-                    &format!("Ошибка STT: {}", classify_ai_error(&format!("{e:#}"))),
+                    &format!(
+                        "{}: {}",
+                        if ui_is_ru {
+                            "Ошибка STT"
+                        } else {
+                            "STT error"
+                        },
+                        classify_ai_error(&format!("{e:#}"))
+                    ),
+                    ui_is_ru,
                 );
                 return;
             }
@@ -410,4 +455,31 @@ pub(crate) fn fire_ptt_ask(
         )
         .await;
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ptt_initial_copy;
+
+    #[test]
+    fn ptt_initial_copy_has_both_ui_languages() {
+        assert_eq!(
+            ptt_initial_copy(false),
+            (
+                "Recording",
+                "stt · transcribing…",
+                "Transcribing…",
+                "push-to-talk"
+            )
+        );
+        assert_eq!(
+            ptt_initial_copy(true),
+            (
+                "Запись",
+                "stt · расшифровка…",
+                "Расшифровка…",
+                "голосовой запрос"
+            )
+        );
+    }
 }

@@ -1,0 +1,10 @@
+# Local raw/private evidence. Keep it available for the owner, never publish it.
+*-tree.json
+before-text-ask.png
+after-text-ask.png
+before-palette.png
+after-palette.png
+after-palette-results-2.png
+before-bar.png
+before-help-window.json
+baseline-*

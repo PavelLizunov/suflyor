@@ -3,6 +3,7 @@
 use super::*;
 use crate::events::Noop;
 use crate::journal::WriterCmd;
+use std::sync::Mutex;
 
 /// Build a hermetic empty SharedConfig that does NOT load the
 /// user's real `%APPDATA%\overlay-mvp\config.json` (which on the
@@ -15,6 +16,24 @@ use crate::journal::WriterCmd;
 fn hermetic_empty_config() -> crate::config::SharedConfig {
     use parking_lot::RwLock;
     Arc::new(RwLock::new(crate::config::Config::default()))
+}
+
+#[derive(Default)]
+struct CapturedTile(Mutex<Option<TileSpec>>);
+
+impl RuntimeEvents for CapturedTile {
+    fn emit(&self, _channel: &str, _payload: serde_json::Value) {}
+
+    fn spawn_tile_full(
+        &self,
+        spec: TileSpec,
+        _monitor: MonitorHint,
+        _stealth: bool,
+        _kind: TileKind,
+    ) -> Result<String, String> {
+        self.0.lock().unwrap().replace(spec);
+        Ok("captured".into())
+    }
 }
 
 /// Smoke test that the debrief port compiles + runs with Noop
@@ -830,6 +849,57 @@ async fn manual_spawn_tile_empty_transcript_returns_none() {
         outcome.is_none(),
         "empty-transcript path must return None (got {outcome:?})"
     );
+}
+
+#[tokio::test]
+async fn manual_spawn_empty_notice_follows_ui_not_response_language() {
+    for (ui, response, title, body_prefix) in [
+        ("en", "ru", "Manual ask (F6)", "Transcript is empty"),
+        ("ru", "en", "Ручной запрос (F6)", "Транскрипт пустой"),
+    ] {
+        let cfg = hermetic_empty_config();
+        {
+            let mut c = cfg.write();
+            c.ui_language = ui.into();
+            c.response_language = response.into();
+        }
+        let captured = Arc::new(CapturedTile::default());
+        let sink: Arc<dyn RuntimeEvents> = captured.clone();
+        let inputs = ManualSpawnInputs {
+            recent_transcript_labeled: vec![],
+            last_line: None,
+            cost_cap_reason: None,
+            journal: None,
+            health: Arc::new(HealthSignals::default()),
+        };
+        assert!(manual_spawn_tile(sink, cfg, inputs).await.is_none());
+        let tile = captured.0.lock().unwrap().clone().unwrap();
+        assert_eq!(tile.question, title);
+        assert!(
+            tile.answer.starts_with(body_prefix),
+            "got {:?}",
+            tile.answer
+        );
+    }
+}
+
+#[test]
+fn deterministic_summary_and_debrief_chrome_follow_ui_language() {
+    assert_eq!(summary_tile_title(false), "Meeting summary");
+    assert_eq!(summary_tile_title(true), "Сводка встречи");
+
+    for (ui, response, expected) in [("en", "ru", "Debrief"), ("ru", "en", "Разбор")] {
+        let cfg = hermetic_empty_config();
+        {
+            let mut c = cfg.write();
+            c.ui_language = ui.into();
+            c.response_language = response.into();
+        }
+        let captured = CapturedTile::default();
+        spawn_debrief_notice(&captured, &cfg, "body".into());
+        let tile = captured.0.lock().unwrap().clone().unwrap();
+        assert_eq!(tile.question, expected);
+    }
 }
 
 /// Manual spawn with a transcript line + over-budget cap +

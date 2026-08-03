@@ -466,6 +466,13 @@ pub struct ContextProfile {
 pub const DEFAULT_PROFILE_NAME: &str = "Основной";
 
 impl Config {
+    /// Whether deterministic application chrome and notices should use Russian.
+    /// AI answer language is a separate `response_language` preference.
+    #[must_use]
+    pub fn ui_is_ru(&self) -> bool {
+        self.ui_language == "ru"
+    }
+
     /// Index of the active profile within `context_profiles`, if one is set and
     /// still present.
     #[must_use]

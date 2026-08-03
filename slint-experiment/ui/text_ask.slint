@@ -99,7 +99,7 @@ export component TextAskWindow inherits Window {
                 // stays a sibling on top so its clicks are its own.
                 Rectangle {
                     horizontal-stretch: 1;
-                    height: 20px;
+                    height: 30px;
                     TouchArea {
                         mouse-cursor: grab;
                         pointer-event(ev) => {
@@ -114,13 +114,22 @@ export component TextAskWindow inherits Window {
                     }
                     HorizontalLayout {
                         spacing: Metrics.space-sm;
-                        IconSlot {
-                            icon: @image-url("../assets/icons/pencil.svg");
-                            tint: Theme.accent;
-                            glyph-size: 15px;
-                            slot-size: 18px;
+                        Rectangle {
+                            width: 18px;
+                            height: 30px;
+                            IconSlot {
+                                y: 6px;
+                                icon: @image-url("../assets/icons/pencil.svg");
+                                tint: Theme.accent;
+                                glyph-size: 15px;
+                                slot-size: 18px;
+                            }
                         }
-                        DragGrip { slot-height: 20px; }
+                        Rectangle {
+                            width: 13px;
+                            height: 30px;
+                            DragGrip { y: 2px; }
+                        }
                         Text {
                             text: @tr("Write a question for the assistant");
                             color: Theme.text-secondary;

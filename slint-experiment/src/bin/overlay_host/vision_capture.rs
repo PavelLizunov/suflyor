@@ -103,11 +103,7 @@ pub(crate) fn fire_f8_vision_capture(
     if ep.is_none() && !ocr_ready {
         let (is_ru, preferred_monitor, stealth) = {
             let c = cfg.read();
-            (
-                c.response_language == "ru",
-                c.tile_monitor_name.clone(),
-                c.stealth_enabled,
-            )
+            (c.ui_is_ru(), c.tile_monitor_name.clone(), c.stealth_enabled)
         };
         let answer = if is_ru {
             "Vision выключен. Выберите маршрут в Настройки → AI мост → Vision."
@@ -315,6 +311,62 @@ pub(crate) fn fire_f8_vision_capture(
 /// no endpoint). If a non-OCR path is reached with `ep == None` — only possible
 /// if the OCR engine vanished between the `is_available()` checks (TOCTOU) — a
 /// generic "OCR недоступен" tile is shown instead of a network call.
+fn vision_tile_copy(
+    mode: vision::VisionMode,
+    is_ru: bool,
+) -> (&'static str, &'static str, &'static str, &'static str) {
+    match (mode, is_ru) {
+        (vision::VisionMode::Translate, true) => (
+            "Перевод",
+            "vision · перевод…",
+            "Shift+F8 перевод",
+            "Перевожу…",
+        ),
+        (vision::VisionMode::Translate, false) => (
+            "Translation",
+            "vision · translating…",
+            "Shift+F8 translate",
+            "Translating…",
+        ),
+        (vision::VisionMode::TestPractice, true) => (
+            "Тренировка",
+            "vision · тренировка…",
+            "Practice",
+            "Решаю вопрос…",
+        ),
+        (vision::VisionMode::TestPractice, false) => (
+            "Practice",
+            "vision · practice…",
+            "Practice",
+            "Solving question…",
+        ),
+        (vision::VisionMode::Describe, true) => (
+            "Скриншот",
+            "vision · анализ…",
+            "F8 vision",
+            "Распознаю экран…",
+        ),
+        (vision::VisionMode::Describe, false) => (
+            "Screenshot",
+            "vision · analyzing…",
+            "F8 vision",
+            "Analyzing screen…",
+        ),
+        (vision::VisionMode::Ocr, true) => (
+            "Текст с экрана",
+            "vision · текст…",
+            "Ctrl+F8 текст",
+            "Распознаю текст…",
+        ),
+        (vision::VisionMode::Ocr, false) => (
+            "Screen text",
+            "vision · text…",
+            "Ctrl+F8 text",
+            "Recognizing text…",
+        ),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn launch_vision_for_bgra(
     shot: slint_replay::capture::CapturedBgra,
@@ -346,32 +398,8 @@ pub(crate) fn launch_vision_for_bgra(
     // so a test-practice answer is always visibly marked as self-check.
     // Placeholders are plain text — no hourglass glyph (tofu square on the
     // skia font fallback; project no-tofu rule).
-    let (title_s, source_s, trigger_s, placeholder_s) = match mode {
-        vision::VisionMode::Translate => (
-            "🌐 Перевод",
-            "vision · перевод…",
-            "🌐 Shift+F8 перевод",
-            "Перевожу…",
-        ),
-        vision::VisionMode::TestPractice => (
-            "🎓 Тренировка",
-            "vision · тренировка…",
-            "🎓 Practice",
-            "Решаю вопрос…",
-        ),
-        vision::VisionMode::Describe => (
-            "📷 Скриншот",
-            "vision · анализ…",
-            "📷 F8 vision",
-            "Распознаю экран…",
-        ),
-        vision::VisionMode::Ocr => (
-            "🔊 Текст с экрана",
-            "vision · текст…",
-            "🔊 Ctrl+F8 текст",
-            "Распознаю текст…",
-        ),
-    };
+    let ui_is_ru = cfg.read().ui_is_ru();
+    let (title_s, source_s, trigger_s, placeholder_s) = vision_tile_copy(mode, ui_is_ru);
     tile.set_tile_title(SharedString::from(title_s));
     tile.set_source_label(SharedString::from(source_s));
     tile.set_trigger_label(SharedString::from(trigger_s));
@@ -561,7 +589,15 @@ pub(crate) fn launch_vision_for_bgra(
     // engine dir mid-drag). Show a generic tile instead of calling the VLM with
     // empty credentials.
     let Some(ep) = ep else {
-        ptt_tile_error(weak_for_title.clone(), "OCR недоступен.");
+        ptt_tile_error(
+            weak_for_title.clone(),
+            if ui_is_ru {
+                "OCR недоступен."
+            } else {
+                "OCR is unavailable."
+            },
+            ui_is_ru,
+        );
         return;
     };
 
@@ -627,12 +663,28 @@ pub(crate) fn launch_vision_for_bgra(
                 // local image data, but this is the one streaming path that
                 // didn't route through a sanitizer).
                 diag!("[overlay-host] F8 encode failed: {e}");
-                ptt_tile_error(weak_for_title.clone(), "Не удалось обработать кадр экрана.");
+                ptt_tile_error(
+                    weak_for_title.clone(),
+                    if ui_is_ru {
+                        "Не удалось обработать кадр экрана."
+                    } else {
+                        "Couldn't process the screen capture."
+                    },
+                    ui_is_ru,
+                );
                 return;
             }
             Err(e) => {
                 diag!("[overlay-host] F8 encode task failed: {e}");
-                ptt_tile_error(weak_for_title.clone(), "Сбой кодирования кадра.");
+                ptt_tile_error(
+                    weak_for_title.clone(),
+                    if ui_is_ru {
+                        "Сбой кодирования кадра."
+                    } else {
+                        "Screen capture encoding failed."
+                    },
+                    ui_is_ru,
+                );
                 return;
             }
         };
@@ -700,4 +752,27 @@ pub(crate) fn launch_vision_for_bgra(
         )
         .await;
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::vision_tile_copy;
+    use overlay_backend::vision::VisionMode;
+
+    #[test]
+    fn deterministic_vision_copy_follows_ui_language() {
+        assert_eq!(
+            vision_tile_copy(VisionMode::Describe, false).0,
+            "Screenshot"
+        );
+        assert_eq!(
+            vision_tile_copy(VisionMode::Ocr, false).3,
+            "Recognizing text…"
+        );
+        assert_eq!(vision_tile_copy(VisionMode::Translate, true).0, "Перевод");
+        assert_eq!(
+            vision_tile_copy(VisionMode::TestPractice, true).3,
+            "Решаю вопрос…"
+        );
+    }
 }
