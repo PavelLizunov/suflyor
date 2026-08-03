@@ -28,8 +28,11 @@ $env:CARGO_INCREMENTAL = "0"
 # slint-replay, overlay-spike, markdown-spike) at once; at the default job
 # count that exhausts RAM (rustc-LLVM ERROR: out of memory). -j2 fits. This
 # only constrains the gate — interactive `cargo run`/`build` (no env set) keeps
-# full parallelism, and it never hits this because it rebuilds ONE crate.
-$env:CARGO_BUILD_JOBS = "2"
+# full parallelism, and it never hits this because it rebuilds ONE crate. Keep
+# an explicit caller limit for low-memory or concurrently-used machines.
+if (-not $env:CARGO_BUILD_JOBS) {
+    $env:CARGO_BUILD_JOBS = "2"
+}
 
 $cargoExe = "$env:USERPROFILE\.cargo\bin\cargo.exe"
 if (-not (Test-Path $cargoExe)) {

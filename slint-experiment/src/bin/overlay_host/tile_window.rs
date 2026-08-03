@@ -34,9 +34,9 @@
 use super::{
     apply_scheme_tile, drag_begin, drag_update, enum_monitors, get_window_rect, global_scheme,
     global_stealth, global_tile_monitor, global_tile_opacity, grab_hwnd, make_transparent_tile,
-    move_window_pos_only, pick_monitor, set_always_on_top, set_stealth, work_area_for_window,
-    ComponentHandle, Duration, TileWindow, Timer, HWND_GRAB_DELAY_MS, TILE_DEFAULT_H,
-    TILE_DEFAULT_W,
+    move_window_pos_only, pick_monitor, set_always_on_top, set_skip_taskbar, set_stealth,
+    work_area_for_window, ComponentHandle, Duration, TileWindow, Timer, HWND_GRAB_DELAY_MS,
+    TILE_DEFAULT_H, TILE_DEFAULT_W,
 };
 
 /// Atomic counter for tile-slot index — increments per spawn so
@@ -292,6 +292,7 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
         // press → drag-to-move never fired. Same root cause as user
         // complaint "тайлы нельзя двигать".
         let _ = make_transparent_tile(hwnd);
+        let _ = set_skip_taskbar(hwnd, true);
 
         // Phase E6 v5 — Slint's `always-on-top: true` declaration is
         // applied at window creation but doesn't reliably translate

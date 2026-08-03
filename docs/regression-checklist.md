@@ -35,7 +35,7 @@ $be = "overlay-backend\Cargo.toml"; $se = "slint-experiment\Cargo.toml"
 Запуск (release): `Start-Process target\release\overlay-host.exe -RedirectStandardError <log>`.
 В логе должно быть, БЕЗ `panic`:
 - [ ] `=== suflyor overlay-host vX.Y.Z start ===` (правильная версия).
-- [ ] Все хоткеи: `F1 F3 F4 F6 F7 F8 Shift+F8 F9 Shift+F9 hotkey registered` (9 шт).
+- [ ] Все 13 хоткеев зарегистрированы: `F1 F3 F4 F6 F7 F8 Shift+F8 Ctrl+F8 F9 Shift+F9 Shift+Alt+1 Shift+Alt+2 Shift+Alt+3`.
 - [ ] `catalog: indexed N sessions (M skipped, 0 failed)` (SQLite-каталог жив).
 - [ ] `bar pinned at (x, y)` — на ПЕРВИЧНОМ мониторе.
 - [ ] `capture pre-stealth: stealth_ok=true taskbar_ok=true`.
@@ -58,7 +58,8 @@ $be = "overlay-backend\Cargo.toml"; $se = "slint-experiment\Cargo.toml"
 - [ ] EN и RU проверены отдельно, включая текст, сформированный в Rust.
 - [ ] В `docs/audit-YYYY-MM-DD-<task>/README.md` лежат пары before/after и условия;
       нет ключей, IP/URL, путей пользователя, реальных сессий или транскрипта.
-- [ ] Бар не обрезан (правый кластер `✏ +тайл 📷 ⚙ 🆘 🔄 X` виден целиком, ширина 1160).
+- [ ] Бар не обрезан: правый кластер archive / summary / write / +tile / screenshot /
+      Settings / Help / restart / compact / quit виден целиком, ширина 1200.
 - [ ] Все глифы рендерятся, НЕ «тофу»-квадрат (🎤🔊🎯🔥🗄📷⚙🆘🔄 + 📝🔁➕ в памяти).
 - [ ] Цвет/тема корректны (light/dark по `color_scheme`).
 
@@ -74,6 +75,8 @@ $be = "overlay-backend\Cargo.toml"; $se = "slint-experiment\Cargo.toml"
 
 ### Тайлы (F9 / авто / F6)
 - [ ] F9 ask стримит ответ; markdown ок (таблицы, code no-wrap+scroll).
+- [ ] Settings и новые тайлы не создают кнопку в Windows taskbar/Alt-Tab — ни постоянно,
+      ни кратким миганием при первом кадре; повторить после F8 hide/show и серией из 10 тайлов.
 - [ ] 📋 copy, ✏ follow-up, 🔄/🧠 regen/escalate, close/pin/maximize, драг.
 - [ ] Размещение на правильном мониторе (primary, либо landscape-вторичный ≥ширины).
 - [ ] AI/STT ошибка → GENERIC текст (НЕ error chain, НЕ base_url/IP).

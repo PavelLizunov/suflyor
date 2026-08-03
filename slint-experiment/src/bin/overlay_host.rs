@@ -956,6 +956,12 @@ fn main() -> Result<(), slint::PlatformError> {
     let tiles: TileWindows = Rc::new(RefCell::new(Vec::new()));
     let settings: Rc<RefCell<Option<SettingsWindow>>> = Rc::new(RefCell::new(None));
 
+    use slint::winit_030::winit::platform::windows::WindowAttributesExtWindows;
+    slint::BackendSelector::new()
+        .backend_name("winit".into())
+        .with_winit_window_attributes_hook(|attributes| attributes.with_skip_taskbar(true))
+        .select()?;
+    diag!("[overlay-host] Slint windows excluded from taskbar at creation");
     let overlay = OverlayBarWindow::new()?;
     // Seed the process-global colour scheme from config, then apply to the bar's
     // Theme global so the very first paint uses the user's choice (default
@@ -2671,7 +2677,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 // status pill, reverting after STATUS_REVERT_SECS exactly like
                 // the sys-probe result does.
                 if let Some(o) = weak.upgrade() {
-                    o.set_status_text(SharedString::from("микрофон занят"));
+                    o.set_status_text(SharedString::from(mic_busy_status(cfg_p.read().ui_is_ru())));
                     o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x9b, 0x2b));
                 }
                 let weak_revert = weak.clone();
@@ -4071,6 +4077,14 @@ fn summary_empty_copy(is_ru: bool) -> (&'static str, &'static str) {
     }
 }
 
+fn mic_busy_status(is_ru: bool) -> &'static str {
+    if is_ru {
+        "микрофон занят"
+    } else {
+        "microphone busy"
+    }
+}
+
 fn manual_tile_placeholder(has_transcript: bool, is_ru: bool) -> &'static str {
     match (has_transcript, is_ru) {
         (true, true) => "Спрашиваю AI…",
@@ -4101,7 +4115,7 @@ mod tile_heading_tests {
     #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)] // test asserts
     use super::{
         manual_tile_failure, manual_tile_heading, manual_tile_not_configured,
-        manual_tile_placeholder, summary_empty_copy,
+        manual_tile_placeholder, mic_busy_status, summary_empty_copy,
     };
 
     /// Double-numbering guard: `tile.slint` prepends `#<sequence>`, so a title
@@ -4141,6 +4155,12 @@ mod tile_heading_tests {
         assert!(summary_empty_copy(false).1.starts_with("No transcript"));
         assert_eq!(summary_empty_copy(true).0, "Сводка встречи");
         assert!(summary_empty_copy(true).1.starts_with("Транскрипта"));
+    }
+
+    #[test]
+    fn mic_busy_status_follows_ui_language() {
+        assert_eq!(mic_busy_status(false), "microphone busy");
+        assert_eq!(mic_busy_status(true), "микрофон занят");
     }
 }
 

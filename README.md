@@ -23,7 +23,7 @@ The `master` branch may contain unreleased work.
 | ![Overlay bar — Glacier theme](docs/showcase/overlay-bar-glacier.png) | ![Overlay bar — Graphite theme](docs/showcase/overlay-bar-graphite.png) |
 | ![Overlay bar — Obsidian theme](docs/showcase/overlay-bar-obsidian.png) | ![Overlay bar — Light Frost theme](docs/showcase/overlay-bar-light-frost.png) |
 | ![Seven-step setup wizard](docs/showcase/setup-wizard.png) | ![Settings → STT: Groq Whisper provider and model selected](docs/showcase/settings-stt-cloud.png) |
-| ![AI answer tile using the local model](docs/showcase/tile-answer.png) | ![Searchable session archive](docs/showcase/session-archive.png) |
+| ![English AI answer tile with the current controls](docs/showcase/tile-answer.png) | ![Searchable session archive](docs/showcase/session-archive.png) |
 
 ## Features
 
