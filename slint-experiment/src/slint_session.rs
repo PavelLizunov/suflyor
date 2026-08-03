@@ -1322,7 +1322,7 @@ pub fn maybe_run_debrief(
             // C — surface a NOTICE for the cases the user would expect feedback
             // on; stay silent for "disabled" and trivially-short / no-speech
             // sessions (don't nag on quick test runs).
-            let is_ru = cfg.read().response_language == "ru";
+            let is_ru = cfg.read().ui_is_ru();
             let mic_lines = transcript
                 .iter()
                 .filter(|l| matches!(l.source, AudioSource::Mic))

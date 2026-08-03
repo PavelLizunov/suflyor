@@ -2562,6 +2562,12 @@ fn main() -> Result<(), slint::PlatformError> {
                     let bridge_sa1 = hp_bridge.clone();
                     let tiles_sa1 = hp_tiles.clone();
                     let overlay_sa1 = hp_weak_overlay.clone();
+                    let title = if hp_cfg.read().ui_is_ru() {
+                        "Выделенный текст"
+                    } else {
+                        "Selected text"
+                    }
+                    .to_string();
                     // The callback fires on key-down. Let Shift+Alt come up before
                     // synthesising Ctrl+C, otherwise Windows receives
                     // Ctrl+Shift+Alt+C and the foreground selection is not copied.
@@ -2585,7 +2591,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                 // which auto-starts the read-aloud.
                                 spawn_text_tile(
                                     &text,
-                                    "🔊 Выделенный текст",
+                                    &title,
                                     "Shift+Alt+1",
                                     &bridge_sa1,
                                     &tiles_sa1,
@@ -3350,25 +3356,9 @@ fn main() -> Result<(), slint::PlatformError> {
                 // send the user in a circle (review-agent finding).
                 let (is_ru, stealth, preferred_monitor) = {
                     let c = cfg_for_summary.read();
-                    (
-                        c.response_language == "ru",
-                        c.stealth_enabled,
-                        c.tile_monitor_name.clone(),
-                    )
+                    (c.ui_is_ru(), c.stealth_enabled, c.tile_monitor_name.clone())
                 };
-                let (title, msg) = if is_ru {
-                    (
-                        "Summary созвона",
-                        "Транскрипта пока нет. Нажмите Старт, поговорите — \
-                         и Summary соберёт итог встречи.",
-                    )
-                } else {
-                    (
-                        "Meeting summary",
-                        "No transcript yet. Press Start and talk a bit — \
-                         then Summary will assemble the meeting recap.",
-                    )
-                };
+                let (title, msg) = summary_empty_copy(is_ru);
                 // Same monitor policy as the real summary tile (and every
                 // other ask path) — Named pin from config, else Auto.
                 let hint = match preferred_monitor.as_deref() {
@@ -4067,6 +4057,20 @@ fn manual_tile_heading(has_transcript: bool, is_ru: bool) -> &'static str {
     }
 }
 
+fn summary_empty_copy(is_ru: bool) -> (&'static str, &'static str) {
+    if is_ru {
+        (
+            "Сводка встречи",
+            "Транскрипта пока нет. Нажмите Старт, поговорите — и Сводка соберёт итог встречи.",
+        )
+    } else {
+        (
+            "Meeting summary",
+            "No transcript yet. Press Start and talk a bit — then Summary will assemble the meeting recap.",
+        )
+    }
+}
+
 fn manual_tile_placeholder(has_transcript: bool, is_ru: bool) -> &'static str {
     match (has_transcript, is_ru) {
         (true, true) => "Спрашиваю AI…",
@@ -4097,7 +4101,7 @@ mod tile_heading_tests {
     #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)] // test asserts
     use super::{
         manual_tile_failure, manual_tile_heading, manual_tile_not_configured,
-        manual_tile_placeholder,
+        manual_tile_placeholder, summary_empty_copy,
     };
 
     /// Double-numbering guard: `tile.slint` prepends `#<sequence>`, so a title
@@ -4129,6 +4133,14 @@ mod tile_heading_tests {
         assert!(manual_tile_placeholder(false, true).starts_with("Транскрипт"));
         assert!(manual_tile_not_configured(true).contains("не настроен"));
         assert!(manual_tile_failure("Тайл", "offline", true).contains("Не удалось"));
+    }
+
+    #[test]
+    fn summary_empty_notice_has_both_ui_languages() {
+        assert_eq!(summary_empty_copy(false).0, "Meeting summary");
+        assert!(summary_empty_copy(false).1.starts_with("No transcript"));
+        assert_eq!(summary_empty_copy(true).0, "Сводка встречи");
+        assert!(summary_empty_copy(true).1.starts_with("Транскрипта"));
     }
 }
 

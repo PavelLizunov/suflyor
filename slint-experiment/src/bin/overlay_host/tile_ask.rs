@@ -152,6 +152,20 @@ pub(crate) fn fire_f6_manual_spawn(
     });
 }
 
+fn missing_cloud_auth_copy(is_ru: bool) -> (&'static str, &'static str) {
+    if is_ru {
+        (
+            "Облачный запрос (Shift+F9)",
+            "Облачный ИИ не настроен. Добавьте токен доступа в Настройки → AI и повторите Shift+F9.",
+        )
+    } else {
+        (
+            "Cloud ask (Shift+F9)",
+            "Cloud AI is not configured. Add its access token in Settings → AI, then press Shift+F9 again.",
+        )
+    }
+}
+
 /// Phase E3 slice 2 — F9 ask handler.
 ///
 /// Runs on the Slint UI thread (called from the hotkey poll Timer
@@ -199,26 +213,11 @@ pub(crate) fn fire_f9_ask(
 ) {
     let missing_cloud_auth = {
         let c = cfg.read();
-        (!route.has_required_auth(&c)).then(|| {
-            (
-                c.response_language == "ru",
-                c.tile_monitor_name.clone(),
-                c.stealth_enabled,
-            )
-        })
+        (!route.has_required_auth(&c))
+            .then(|| (c.ui_is_ru(), c.tile_monitor_name.clone(), c.stealth_enabled))
     };
     if let Some((is_ru, preferred_monitor, stealth)) = missing_cloud_auth {
-        let (title, answer) = if is_ru {
-            (
-                "Облачный запрос (Shift+F9)",
-                "Облачный ИИ не настроен. Добавьте токен доступа в Настройки → AI и повторите Shift+F9.",
-            )
-        } else {
-            (
-                "Cloud ask (Shift+F9)",
-                "Cloud AI is not configured. Add its access token in Settings → AI, then press Shift+F9 again.",
-            )
-        };
+        let (title, answer) = missing_cloud_auth_copy(is_ru);
         let monitor = match preferred_monitor.as_deref() {
             Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
             _ => MonitorHint::Auto,
@@ -603,4 +602,20 @@ pub(crate) fn fire_f9_ask(
             slint_replay::runtime_state::lock(&slint_rt_for_work).ai_task = Some(task);
         });
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::missing_cloud_auth_copy;
+
+    #[test]
+    fn cloud_auth_notice_has_both_ui_languages() {
+        assert_eq!(missing_cloud_auth_copy(false).0, "Cloud ask (Shift+F9)");
+        assert!(missing_cloud_auth_copy(false).1.starts_with("Cloud AI"));
+        assert_eq!(
+            missing_cloud_auth_copy(true).0,
+            "Облачный запрос (Shift+F9)"
+        );
+        assert!(missing_cloud_auth_copy(true).1.starts_with("Облачный ИИ"));
+    }
 }

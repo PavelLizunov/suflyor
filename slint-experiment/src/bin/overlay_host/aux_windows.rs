@@ -1200,10 +1200,17 @@ pub(crate) fn open_archive(
             if let Some(text) =
                 overlay_backend::conspect::load_debrief(&sid).filter(|t| !t.trim().is_empty())
             {
-                let stealth = cfg_c.read().stealth_enabled;
+                let (stealth, ui_is_ru) = {
+                    let c = cfg_c.read();
+                    (c.stealth_enabled, c.ui_is_ru())
+                };
                 let _ = events_c.spawn_tile_full(
                     overlay_backend::events::TileSpec {
-                        question: format!("🎯 Debrief · {}", row.title),
+                        question: format!(
+                            "{} · {}",
+                            if ui_is_ru { "Разбор" } else { "Debrief" },
+                            row.title
+                        ),
                         answer: text,
                         source: "debrief".into(),
                         is_translation: false,
