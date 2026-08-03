@@ -8,7 +8,7 @@ Checked the eight images embedded by `README.md` against the v0.35.3 UI.
 | `setup-wizard.png` | Current: English seven-step wizard from v0.35.3. |
 | `settings-stt-cloud.png` | Current: English STT provider/model selection from v0.35.3. |
 | `tile-empty.png` | Replaced: it used the older tile chrome and Russian copy. The new `tile-answer.png` shows the current English tile, drag grip, actions, follow-up field, and a local-AI answer. |
-| `session-archive.png` | Replaced: the previous empty-state capture predated the current archive header and drag grip. The new privacy-safe search state contains only synthetic English question/answer text created for the capture, with no pre-existing user sessions. |
+| `session-archive.png` | Replaced: the previous empty-state capture predated the current archive header and drag grip. The final privacy-safe English no-match state demonstrates archive search without exposing locale-specific timestamps or session text. |
 
 The two replaced images can be compared with their [v0.35.3 pre-fix tile](https://github.com/PavelLizunov/suflyor/blob/28811ff/docs/showcase/tile-empty.png) and [v0.35.3 pre-fix archive](https://github.com/PavelLizunov/suflyor/blob/28811ff/docs/showcase/session-archive.png).
 
