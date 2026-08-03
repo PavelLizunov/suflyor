@@ -3075,10 +3075,11 @@ fn main() -> Result<(), slint::PlatformError> {
             } else {
                 String::new()
             };
+            let is_ru = cfg_ref.read().ui_language == "ru";
             // The visible number is owned by the tile UI ALONE (tile.slint
             // prepends #<sequence>); the title carries none — the old
             // "Вопрос по встрече #3" rendered doubled: "#3  Вопрос по встрече #3".
-            let heading = manual_tile_heading(has_tx);
+            let heading = manual_tile_heading(has_tx, is_ru);
             tile.set_sequence(display_seq as i32);
             tile.set_tile_id(tile_id);
             tile.set_tile_title(SharedString::from(heading));
@@ -3091,11 +3092,7 @@ fn main() -> Result<(), slint::PlatformError> {
             // on the skia font fallback (project no-tofu rule).
             let placeholder = vec![MarkdownBlock {
                 kind: markdown::kind::PARAGRAPH,
-                text: SharedString::from(if has_tx {
-                    "Спрашиваю AI…"
-                } else {
-                    "Транскрипт пока пуст. Нажмите старт на баре (или удерживайте «спросить») — AI ответит по последним репликам."
-                }),
+                text: SharedString::from(manual_tile_placeholder(has_tx, is_ru)),
                 lang: SharedString::from(""),
                 marked: false,
             }];
@@ -3164,9 +3161,7 @@ fn main() -> Result<(), slint::PlatformError> {
             // why "+ tile" wrongly said "AI не настроен" for a working local model.
             if base_url.is_empty() || (!is_local && bearer.is_empty()) {
                 if let Some(t) = weak_for_ai.upgrade() {
-                    let blocks: Vec<MarkdownBlock> = markdown::parse(
-                        "**AI не настроен.** Откройте Настройки → AI и выберите провайдера (локальный сервер или облачный мост).",
-                    )
+                    let blocks: Vec<MarkdownBlock> = markdown::parse(manual_tile_not_configured(is_ru))
                     .into_iter()
                     .map(|b| MarkdownBlock {
                         kind: b.kind,
@@ -3176,7 +3171,11 @@ fn main() -> Result<(), slint::PlatformError> {
                     })
                     .collect();
                     t.set_blocks(ModelRc::new(VecModel::from(blocks)));
-                    t.set_source_label(SharedString::from("ai · не настроен"));
+                    t.set_source_label(SharedString::from(if is_ru {
+                        "ai · не настроен"
+                    } else {
+                        "ai · not configured"
+                    }));
                 }
                 return;
             }
@@ -3255,9 +3254,7 @@ fn main() -> Result<(), slint::PlatformError> {
                             // target/visual/. Caught by review-agent
                             // 2026-05-27.
                             let category = classify_ai_error(&format!("{e:#}"));
-                            let md = format!(
-                                "# {heading_for_task}\n\n**Не удалось получить ответ AI:** {category}\n\nПроверьте локальный AI-сервер или AI-мост (Настройки → AI).",
-                            );
+                            let md = manual_tile_failure(heading_for_task, category, is_ru);
                             let blocks: Vec<MarkdownBlock> = markdown::parse(&md)
                                 .into_iter()
                                 .map(|b| MarkdownBlock {
@@ -4058,30 +4055,80 @@ pub(crate) fn active_stack_label(c: &overlay_backend::config::Config) -> String 
 /// title must carry NO `#N` of its own (the old `Вопрос по встрече #3` rendered
 /// doubled: `#3  Вопрос по встрече #3`). Every other spawn path (F9, PTT,
 /// vision, auto, read-only content tiles) already passes an unnumbered title.
-fn manual_tile_heading(has_transcript: bool) -> &'static str {
-    if has_transcript {
+fn manual_tile_heading(has_transcript: bool, is_ru: bool) -> &'static str {
+    if !is_ru && has_transcript {
+        "Meeting question"
+    } else if !is_ru {
+        "Tile"
+    } else if has_transcript {
         "Вопрос по встрече"
     } else {
         "Тайл"
     }
 }
 
+fn manual_tile_placeholder(has_transcript: bool, is_ru: bool) -> &'static str {
+    match (has_transcript, is_ru) {
+        (true, true) => "Спрашиваю AI…",
+        (true, false) => "Asking AI…",
+        (false, true) => "Транскрипт пока пуст. Нажмите старт на баре (или удерживайте «спросить») — AI ответит по последним репликам.",
+        (false, false) => "The transcript is empty. Start a session from the bar (or hold ask) and AI will answer from the latest lines.",
+    }
+}
+
+fn manual_tile_not_configured(is_ru: bool) -> &'static str {
+    if is_ru {
+        "**AI не настроен.** Откройте Настройки → AI и выберите провайдера (локальный сервер или облачный мост)."
+    } else {
+        "**AI is not configured.** Open Settings → AI and choose a provider (local server or cloud bridge)."
+    }
+}
+
+fn manual_tile_failure(heading: &str, category: &str, is_ru: bool) -> String {
+    if is_ru {
+        format!("# {heading}\n\n**Не удалось получить ответ AI:** {category}\n\nПроверьте локальный AI-сервер или AI-мост (Настройки → AI).")
+    } else {
+        format!("# {heading}\n\n**AI could not return an answer:** {category}\n\nCheck the local AI server or AI bridge in Settings → AI.")
+    }
+}
+
 #[cfg(test)]
 mod tile_heading_tests {
     #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)] // test asserts
-    use super::manual_tile_heading;
+    use super::{
+        manual_tile_failure, manual_tile_heading, manual_tile_not_configured,
+        manual_tile_placeholder,
+    };
 
     /// Double-numbering guard: `tile.slint` prepends `#<sequence>`, so a title
     /// carrying its own number (or digit) renders doubled in the tile header.
     #[test]
     fn manual_tile_heading_carries_no_number() {
-        for heading in [manual_tile_heading(true), manual_tile_heading(false)] {
+        for heading in [
+            manual_tile_heading(true, true),
+            manual_tile_heading(false, true),
+            manual_tile_heading(true, false),
+            manual_tile_heading(false, false),
+        ] {
             assert!(!heading.contains('#'), "heading carries #: {heading:?}");
             assert!(
                 !heading.chars().any(|c| c.is_ascii_digit()),
                 "heading carries a digit: {heading:?}"
             );
         }
+    }
+
+    #[test]
+    fn manual_tile_copy_follows_ui_language() {
+        assert_eq!(manual_tile_heading(false, false), "Tile");
+        assert!(manual_tile_placeholder(false, false).starts_with("The transcript"));
+        assert!(manual_tile_not_configured(false).contains("not configured"));
+        assert!(manual_tile_failure("Tile", "offline", false).contains("could not"));
+
+        assert_eq!(manual_tile_heading(false, true), "Тайл");
+        assert!(manual_tile_placeholder(false, true).starts_with("Транскрипт"));
+        assert!(manual_tile_not_configured(true).contains("не настроен"));
+        assert!(manual_tile_failure("Тайл", "offline", true).contains("Не удалось"));
     }
 }
 

@@ -9,6 +9,7 @@
 
 import { LineEdit, ScrollView, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { BrandHeaderMark, CloseButton, DragGrip } from "controls.slint";
 import { Metrics } from "metrics.slint";
 
 export struct PaletteResult {
@@ -52,6 +53,8 @@ export component PaletteWindow inherits Window {
     callback chip-clicked(string);
     callback result-activated(int);
     callback close-requested();
+    callback drag-start-requested();
+    callback drag-moved();
 
     // Phase E6 v37 — direct initial keyboard focus to the search box so
     // the palette is ready to type the instant it opens AND so Escape
@@ -101,9 +104,48 @@ export component PaletteWindow inherits Window {
                 padding: Metrics.space-md;   // was 12px
                 spacing: Metrics.space-sm;   // was 8px
 
+                HorizontalLayout {
+                    spacing: Metrics.space-sm;
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        height: 30px;
+                        TouchArea {
+                            mouse-cursor: grab;
+                            pointer-event(ev) => {
+                                if (ev.button == PointerEventButton.left
+                                    && ev.kind == PointerEventKind.down) {
+                                    root.drag-start-requested();
+                                }
+                            }
+                            moved => { if (self.pressed) { root.drag-moved(); } }
+                        }
+                        HorizontalLayout {
+                            spacing: 7px;
+                            Rectangle {
+                                width: 22px;
+                                height: 30px;
+                                BrandHeaderMark { y: 4px; mark-size: 22px; }
+                            }
+                            Rectangle {
+                                width: 13px;
+                                height: 30px;
+                                DragGrip { y: 2px; }
+                            }
+                            Text {
+                                text: @tr("Knowledge palette");
+                                font-size: 15px;
+                                font-weight: 700;
+                                color: Theme.text-primary;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                    CloseButton { clicked => { root.close-requested(); } }
+                }
+
                 // Input field
                 search-input := LineEdit {
-                    placeholder-text: @tr("type to search KB / snippets — /snip lists snippets, +key body adds one");
+                    placeholder-text: @tr("Search knowledge or snippets…");
                     text <=> root.query;
                     // Reset the highlight to the top on every edit so the
                     // selection never points past a shorter result set.
@@ -165,6 +207,7 @@ export component PaletteWindow inherits Window {
                 vertical-stretch: 1;
                 VerticalLayout {
                     spacing: 2px;
+                    padding-right: 14px;
                     if root.results.length == 0 : Text {
                         text: root.query == ""
                             ? @tr("Start typing to search the embedded knowledge base (1,696 entries)…")
@@ -187,6 +230,7 @@ export component PaletteWindow inherits Window {
 
                             VerticalLayout {
                                 horizontal-stretch: 1;
+                                alignment: center;
                                 spacing: 0px;
                                 HorizontalLayout {
                                     spacing: Metrics.space-sm;   // was 8px

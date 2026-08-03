@@ -233,7 +233,11 @@ export component WizardWindow inherits Window {
                     }
                     HorizontalLayout {
                         spacing: 7px;
-                        BrandHeaderMark { mark-size: 22px; }
+                        Rectangle {
+                            width: 22px;
+                            height: 26px;
+                            BrandHeaderMark { y: 2px; mark-size: 22px; }
+                        }
                         DragGrip { }
                         Text {
                             text: @tr("Step {} of 7", root.step + 1);

@@ -162,7 +162,7 @@ export component HelpWindow inherits Window {
                 spacing: Metrics.space-sm;
                 Rectangle {
                     horizontal-stretch: 1;
-                    height: Metrics.control-lg;
+                    height: 30px;
                     TouchArea {
                         mouse-cursor: grab;
                         pointer-event(ev) => {
@@ -178,8 +178,16 @@ export component HelpWindow inherits Window {
                     HorizontalLayout {
                         spacing: 7px;
                         alignment: start;
-                        BrandHeaderMark { mark-size: 22px; }
-                        DragGrip { }
+                        Rectangle {
+                            width: 22px;
+                            height: 30px;
+                            BrandHeaderMark { y: 4px; mark-size: 22px; }
+                        }
+                        Rectangle {
+                            width: 13px;
+                            height: 30px;
+                            DragGrip { y: 2px; }
+                        }
                         Text {
                             text: @tr("Help — icons, hotkeys & gestures");
                             font-size: 15px;
@@ -197,8 +205,10 @@ export component HelpWindow inherits Window {
             Rectangle { background: Theme.border; height: 1px; }
 
             ScrollView {
+                vertical-stretch: 1;
                 VerticalLayout {
                     spacing: 0px;
+                    padding-right: 14px;
 
                     // Plain three-step workflow so the window explains WHAT TO
                     // DO first; the icon / hotkey reference follows below.

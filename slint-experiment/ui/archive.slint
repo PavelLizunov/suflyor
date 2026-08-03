@@ -209,13 +209,18 @@ export component ArchiveWindow inherits Window {
                         }
                         HorizontalLayout {
                             spacing: Metrics.space-sm;
-                            Image {
-                                source: @image-url("../assets/icons/archive.svg");
-                                colorize: Theme.text-primary;
+                            Rectangle {
                                 width: 18px;
-                                height: 18px;
-                                image-fit: contain;
-                                vertical-alignment: center;
+                                height: 30px;
+                                horizontal-stretch: 0;
+                                Image {
+                                    y: 6px;
+                                    source: @image-url("../assets/icons/archive.svg");
+                                    colorize: Theme.text-primary;
+                                    width: 18px;
+                                    height: 18px;
+                                    image-fit: contain;
+                                }
                             }
                             // Optical alignment: the title font sits below the
                             // geometric row centre, so place the 26 px grip slot
@@ -334,6 +339,7 @@ export component ArchiveWindow inherits Window {
 
                                 VerticalLayout {
                                     horizontal-stretch: 1;
+                                    alignment: center;
                                     spacing: 1px;
                                     HorizontalLayout {
                                         spacing: Metrics.space-sm;

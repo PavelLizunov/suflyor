@@ -73,8 +73,11 @@ msgstr "Продолжить диалог…"
 
 # === palette.slint ===
 
-msgid "type to search KB / snippets — /snip lists snippets, +key body adds one"
-msgstr "поиск по базе знаний / сниппетам — /snip список сниппетов, +ключ тело добавляет новый"
+msgid "Knowledge palette"
+msgstr "Палитра знаний"
+
+msgid "Search knowledge or snippets…"
+msgstr "Поиск по базе знаний или сниппетам…"
 
 msgid "recent:"
 msgstr "недавние:"

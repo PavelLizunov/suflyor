@@ -259,15 +259,25 @@ export component TranscriptWindow inherits Window {
                         }
                         HorizontalLayout {
                             spacing: Metrics.space-sm;
-                            Image {
-                                source: @image-url("../assets/icons/bubble.svg");
-                                colorize: Theme.text-primary;
+                            Rectangle {
                                 width: 18px;
-                                height: 18px;
-                                image-fit: contain;
-                                vertical-alignment: center;
+                                height: 30px;
+                                horizontal-stretch: 0;
+                                Image {
+                                    y: 6px;
+                                    source: @image-url("../assets/icons/bubble.svg");
+                                    colorize: Theme.text-primary;
+                                    width: 18px;
+                                    height: 18px;
+                                    image-fit: contain;
+                                }
                             }
-                            DragGrip { }
+                            Rectangle {
+                                width: 13px;
+                                height: 30px;
+                                horizontal-stretch: 0;
+                                DragGrip { y: 4px; }
+                            }
                             Text {
                                 text: @tr("Transcript");
                                 font-size: Metrics.font-heading;
@@ -704,9 +714,9 @@ export component TranscriptWindow inherits Window {
                             HorizontalLayout {
                                 spacing: Metrics.space-sm;
                                 padding-left: 4px;
-                                // P1/C2 — keep the ⭐ column left of the ListView scrollbar (reuse the
-                                // tiles' right-inset), so stars stay clickable and aren't overdrawn.
-                                padding-right: 18px;
+                                // Keep the star column left of the ListView scrollbar using the
+                                // standard visual-audit gutter, so it stays clickable and visible.
+                                padding-right: 14px;
                                 padding-top: 1px;
                                 padding-bottom: 1px;
                                 Tick {

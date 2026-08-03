@@ -1,6 +1,7 @@
 # Регресс-чеклист — overlay-mvp (suflyor)
 
-Дата: 2026-06-04 · покрывает состояние после **v0.9.2** (архив + курируемая память).
+Обновлено: 2026-08-03 · актуальная методика визуальной проверки описана также в
+`.agents/skills/slint-mcp-ui-audit/SKILL.md`.
 
 **Зачем:** методология «без марафонов» — статические проверки (clippy/test) проходили,
 а пользователь ловил регрессы ЖИВЬЮ (layout, focus-расы, мульти-монитор, i18n). Этот
@@ -40,9 +41,23 @@ $be = "overlay-backend\Cargo.toml"; $se = "slint-experiment\Cargo.toml"
 - [ ] `capture pre-stealth: stealth_ok=true taskbar_ok=true`.
 - [ ] `local STT warmed` (если GigaAM) / стек-строка без секретов (`base_url=set`, не значение).
 
-## Слой 5b — визуал (computer-use ВРЁТ про цвета прозрачного оверлея!)
-Истина = `CopyFromScreen` по HWND-rect (EnumWindows+GetWindowRect, фильтр по pid+title
-`overlay-mvp (Slint)`), сохранить PNG, прочитать.
+## Слой 5b — измеримый визуальный gate
+
+Основной канал = Slint MCP точного `--features ui-mcp` бинарника, собранного с
+`SLINT_EMIT_DEBUG_INFO=1`. Для каждой правки сначала сохранить baseline, затем
+повторить тот же размер/DPI/тему/язык/данные/scroll-position после изменения.
+Прозрачные окна оценивать по MCP screenshot; `CopyFromScreen` — запасной канал.
+
+- [ ] Заголовок: центры SVG/drag-grip/текста расходятся не более чем на 2 px.
+- [ ] Строка: верхний и нижний внутренние отступы расходятся не более чем на 2 px;
+      до рамки не менее 8 px; hit target не меньше 24×24 px.
+- [ ] ScrollView со строками резервирует постоянный правый gutter 14 px — рамки,
+      выделение и кнопки не заходят под overlay-scrollbar.
+- [ ] Матрица состояния: empty · one/few · scrollbar-visible · no-match/long text ·
+      selected/busy (если есть) · заявленный min-size.
+- [ ] EN и RU проверены отдельно, включая текст, сформированный в Rust.
+- [ ] В `docs/audit-YYYY-MM-DD-<task>/README.md` лежат пары before/after и условия;
+      нет ключей, IP/URL, путей пользователя, реальных сессий или транскрипта.
 - [ ] Бар не обрезан (правый кластер `✏ +тайл 📷 ⚙ 🆘 🔄 X` виден целиком, ширина 1160).
 - [ ] Все глифы рендерятся, НЕ «тофу»-квадрат (🎤🔊🎯🔥🗄📷⚙🆘🔄 + 📝🔁➕ в памяти).
 - [ ] Цвет/тема корректны (light/dark по `color_scheme`).
@@ -64,10 +79,11 @@ $be = "overlay-backend\Cargo.toml"; $se = "slint-experiment\Cargo.toml"
 - [ ] AI/STT ошибка → GENERIC текст (НЕ error chain, НЕ base_url/IP).
 
 ### Хоткеи
-- [ ] F3 reask · F4 палитра (toggle+Esc+Enter спавнит) · F6 manual · **F7 архив (toggle)** ·
-      F8 vision · Shift+F8 translate · F9 ask · Shift+F9 cloud-escalate · F1 help.
+- [ ] Полный smoke: F1 · F3 · F4 · F6 · F7 · F8 · Shift+F8 · Ctrl+F8 · F9 ·
+      Shift+F9 · Shift+Alt+1 · Shift+Alt+2 · Shift+Alt+3. Для каждого подтверждён
+      отдельный dispatch/result, а не только registration log.
 
-### Настройки (14 вкладок) — ⚙ чип загорается, X закрывает
+### Настройки (16 вкладок) — ⚙ чип загорается, X закрывает
 - [ ] Каждая вкладка грузится, Save персистится в config.json, рестарт подхватывает.
 - [ ] Смена схемы пропагируется на ВСЕ окна; смена языка ru/en переводит UI.
 

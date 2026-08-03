@@ -25,9 +25,9 @@
 //! NOTE (§7): the parent crate-root symbols this module references are imported
 //! explicitly below.
 use super::{
-    clamp_scheme, focus_window, global_scheme, grab_hwnd, present_window_stealth_aware,
-    slint_session, ui, Arc, ComponentHandle, OverlayBarWindow, Rc, RecoverOfferWindow, RefCell,
-    RuntimeEvents, SharedSlintRuntime, SharedString,
+    clamp_scheme, drag_begin, drag_update, focus_window, global_scheme, grab_hwnd,
+    present_window_stealth_aware, slint_session, ui, Arc, ComponentHandle, OverlayBarWindow, Rc,
+    RecoverOfferWindow, RefCell, RuntimeEvents, SharedSlintRuntime, SharedString,
 };
 
 /// Opening marker that brackets the recovered-context block prepended to
@@ -235,6 +235,27 @@ pub(crate) fn open_recover_offer(
                 let _ = w.hide();
             }
             *slot.borrow_mut() = None;
+        });
+    }
+
+    // Frameless drag — keep the recovery offer consistent with every other
+    // movable auxiliary window.
+    {
+        let weak = win.as_weak();
+        win.on_drag_start_requested(move || {
+            if let Some(w) = weak.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(w.window()) {
+                    drag_begin(hwnd);
+                }
+            }
+        });
+        let weak_move = win.as_weak();
+        win.on_drag_moved(move || {
+            if let Some(w) = weak_move.upgrade() {
+                if let Ok(hwnd) = grab_hwnd(w.window()) {
+                    drag_update(hwnd);
+                }
+            }
         });
     }
 
