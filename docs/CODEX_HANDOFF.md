@@ -1,16 +1,17 @@
-# Codex handoff — v0.36.0 preparation
+# Codex handoff — v0.36.0 released
 
 Updated 2026-08-04. Read `AGENTS.md` before acting.
 
 ## Current state
 
-- Worktree: `C:\Users\x3d_mutant\Natively\suflyor-release-0360`
-- Branch: `codex/release-0.36.0`
-- Base: `origin/master` at `7fe425c`
-- Version: `0.36.0` in Cargo, Cargo.lock, and NSIS.
+- Worktree: `C:\Users\x3d_mutant\Natively\suflyor-post-release-0360`
+- Branch: `codex/post-release-0.36.0`
+- Base: `origin/master` at `6e2fe92`.
+- Version `v0.36.0` is published at
+  <https://github.com/PavelLizunov/suflyor/releases/tag/v0.36.0>.
+- The release tag points to merge commit `bb9c42a`; `master` additionally
+  contains the post-release README sync in `6e2fe92`.
 - Never push directly to `master`.
-- Do not create a tag or publish the release until the owner has seen the
-  verified v0.36.0 build evidence and explicitly authorizes this exact version.
 
 ## Included since v0.35.3
 
@@ -54,9 +55,6 @@ Updated 2026-08-04. Read `AGENTS.md` before acting.
 
 ## Remaining action
 
-1. Push this branch, open a PR against `master`, wait for fresh GitHub CI, and
-   merge only through the PR.
-2. Show the verified evidence to the owner and wait for explicit authorization
-   of `v0.36.0` before creating the tag or GitHub Release.
-3. After publication, review the automation PR that updates the README latest
-   release marker to v0.36.0.
+No v0.36.0 release work remains. Start the next product change from current
+`origin/master` in a new `codex/<task>` branch and worktree. Do not retag or
+replace the published release assets.
