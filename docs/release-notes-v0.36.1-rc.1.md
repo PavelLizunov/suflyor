@@ -17,6 +17,9 @@ AI and fixes language-dependent labels in Settings.
 - Component names, install hints, TTS voice names, and installer progress now
   follow the selected English or Russian interface language, including a live
   language switch.
+- The installer now includes the matching DirectML runtime so the app starts on
+  supported older Windows 10 systems whose built-in DirectML lacks the required
+  API.
 
 ## Release-candidate note
 
