@@ -21,12 +21,28 @@ use std::sync::atomic::{AtomicBool, Ordering};
 pub struct VoicePack {
     /// On-disk directory name (also the sherpa archive stem) — stable id.
     pub id: &'static str,
-    /// Friendly label for progress messages.
+    /// Friendly label for progress messages, Russian UI.
     pub label: &'static str,
+    /// Friendly label for progress messages, English UI.
+    pub label_en: &'static str,
     /// `.tar.bz2` download URL (sherpa-onnx tts-models release).
     pub url: &'static str,
     /// SHA-256 of the `.tar.bz2`, verified before extraction.
     pub sha256: &'static str,
+}
+
+impl VoicePack {
+    /// The progress label in the UI's current language. Interpolated into the
+    /// localized @tr phase templates ("Downloading: {}…" etc.), so an English
+    /// UI no longer shows Cyrillic voice names.
+    #[must_use]
+    pub fn label_for(&self, ru: bool) -> &'static str {
+        if ru {
+            self.label
+        } else {
+            self.label_en
+        }
+    }
 }
 
 /// The voices offered by the installer button. Both are Piper RU (the app's
@@ -35,16 +51,31 @@ pub const VOICE_PACKS: &[VoicePack] = &[
     VoicePack {
         id: "vits-piper-ru_RU-irina-medium",
         label: "Ирина (ж)",
+        label_en: "Irina (F)",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-ru_RU-irina-medium.tar.bz2",
         sha256: "1fc0f54e5e084fe287c07909f2f6e0ba6d857864cf800e3ab80286a4e8233008",
     },
     VoicePack {
         id: "vits-piper-ru_RU-ruslan-medium",
         label: "Руслан (м)",
+        label_en: "Ruslan (M)",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-ru_RU-ruslan-medium.tar.bz2",
         sha256: "0690b1cad01f86e8db9ba988af24898bdc1af774e23cb2e46b9c730269b6fd83",
     },
 ];
+
+/// Re-render an in-flight progress label after a live UI-language switch.
+/// Handles both one pack and the comma-separated partial-failure list.
+#[must_use]
+pub fn relocalize_voice_labels(label: &str, ru: bool) -> String {
+    let mut out = label.to_string();
+    for pack in VOICE_PACKS {
+        let target = pack.label_for(ru);
+        let source = pack.label_for(!ru);
+        out = out.replace(source, target);
+    }
+    out
+}
 
 /// Coarse progress for the Settings UI (no byte bar — the packs are small and
 /// the steps are quick; a step label is enough and robust).
@@ -89,8 +120,9 @@ pub fn any_voice_installed() -> bool {
 
 /// Download + verify + extract every not-yet-installed voice pack. Blocking —
 /// the caller runs it on a worker thread (mirrors `local_ai::install`). `cancel`
-/// is polled between packs; `on` receives step messages for the UI.
-pub fn install_voices(cancel: &AtomicBool, on: &dyn Fn(VoiceProgress)) -> Result<()> {
+/// is polled between packs; `on` receives step messages for the UI. `ru` picks
+/// the pack-label language interpolated into the localized phase templates.
+pub fn install_voices(cancel: &AtomicBool, on: &dyn Fn(VoiceProgress), ru: bool) -> Result<()> {
     let root = tts_dir().context("APPDATA not set — no voices dir")?;
     std::fs::create_dir_all(&root).with_context(|| format!("create {}", root.display()))?;
 
@@ -106,16 +138,18 @@ pub fn install_voices(cancel: &AtomicBool, on: &dyn Fn(VoiceProgress)) -> Result
         }
         let dir = root.join(pack.id);
         if pack_installed(&dir) {
-            on(VoiceProgress::AlreadyInstalled(pack.label.to_string()));
+            on(VoiceProgress::AlreadyInstalled(
+                pack.label_for(ru).to_string(),
+            ));
             ok += 1;
             continue;
         }
-        match install_one(pack, &root, &dir, on) {
+        match install_one(pack, &root, &dir, ru, on) {
             Ok(()) => ok += 1,
             Err(e) => {
                 log::warn!("voice pack '{}' failed: {e:#}", pack.id);
-                failed.push(pack.label);
-                on(VoiceProgress::PackFailed(pack.label.to_string()));
+                failed.push(pack.label_for(ru));
+                on(VoiceProgress::PackFailed(pack.label_for(ru).to_string()));
             }
         }
     }
@@ -137,26 +171,28 @@ fn install_one(
     pack: &VoicePack,
     root: &Path,
     dir: &Path,
+    ru: bool,
     on: &dyn Fn(VoiceProgress),
 ) -> Result<()> {
-    on(VoiceProgress::Downloading(pack.label.to_string()));
+    let label = pack.label_for(ru);
+    on(VoiceProgress::Downloading(label.to_string()));
     let tarball = root.join(format!("{}.download.tar.bz2", pack.id));
     let _ = std::fs::remove_file(&tarball);
-    curl_download(pack.url, &tarball).with_context(|| format!("download {}", pack.label))?;
+    curl_download(pack.url, &tarball).with_context(|| format!("download {label}"))?;
 
-    on(VoiceProgress::Verifying(pack.label.to_string()));
-    verify_sha256(&tarball, pack.sha256, pack.label)?;
+    on(VoiceProgress::Verifying(label.to_string()));
+    verify_sha256(&tarball, pack.sha256, label)?;
 
-    on(VoiceProgress::Unpacking(pack.label.to_string()));
+    on(VoiceProgress::Unpacking(label.to_string()));
     if let Err(e) = extract_tar_bz2(&tarball, root) {
         let _ = std::fs::remove_dir_all(dir);
         let _ = std::fs::remove_file(&tarball);
-        return Err(e).with_context(|| format!("extract {}", pack.label));
+        return Err(e).with_context(|| format!("extract {label}"));
     }
     let _ = std::fs::remove_file(&tarball);
     if !pack_installed(dir) {
         let _ = std::fs::remove_dir_all(dir);
-        bail!("{} установлен не полностью", pack.label);
+        bail!("{label} установлен не полностью");
     }
     Ok(())
 }
@@ -176,5 +212,37 @@ mod tests {
             assert_eq!(p.sha256.len(), 64, "{} sha must be 64 hex chars", p.id);
             assert!(p.sha256.chars().all(|c| c.is_ascii_hexdigit()));
         }
+    }
+
+    /// Progress labels follow the UI language — an English UI used to show
+    /// «Ирина (ж)» inside the localized @tr phase templates.
+    #[test]
+    fn pack_labels_follow_ui_language() {
+        for p in VOICE_PACKS {
+            assert!(!p.label.is_empty());
+            assert!(!p.label_en.is_empty());
+            assert_ne!(
+                p.label, p.label_en,
+                "{} labels must differ per language",
+                p.id
+            );
+            assert!(
+                p.label.chars().any(|c| ('А'..='я').contains(&c)),
+                "{} RU label should be Cyrillic",
+                p.id
+            );
+            assert!(
+                !p.label_en.chars().any(|c| ('А'..='я').contains(&c)),
+                "{} EN label must not carry Cyrillic",
+                p.id
+            );
+            assert_eq!(p.label_for(true), p.label);
+            assert_eq!(p.label_for(false), p.label_en);
+        }
+        assert_eq!(
+            relocalize_voice_labels("Irina (F), Ruslan (M)", true),
+            "Ирина (ж), Руслан (м)"
+        );
+        assert_eq!(relocalize_voice_labels("Ирина (ж)", false), "Irina (F)");
     }
 }

@@ -130,6 +130,18 @@ pub(crate) fn wire_local_ai(
             if w.get_local_ai_installing() {
                 return; // re-entry guard (same window)
             }
+            // Deep lock (v0.37): the managed server is deliberately unloaded —
+            // an install would silently resurrect it. Unlock from the bar first.
+            {
+                let c = cfg_c.read();
+                if c.deep_lock {
+                    let ru = c.ui_is_ru();
+                    w.set_local_ai_status(SharedString::from(
+                        overlay_backend::deep_lock::lifecycle_guard_notice(ru),
+                    ));
+                    return;
+                }
+            }
             // B3 — process-global dedup: the per-window bool above resets when
             // Settings is closed+reopened, so a 2nd click on a fresh window could
             // spawn a 2nd worker. This flag survives window reuse; the guard frees
@@ -528,6 +540,18 @@ pub(crate) fn wire_local_ai(
             if !w.get_managed_local_server() {
                 return;
             }
+            // Deep lock (v0.37): a model switch restarts :8080 — refuse while
+            // the user wants the managed server unloaded.
+            {
+                let c = cfg_c.read();
+                if c.deep_lock {
+                    let ru = c.ui_is_ru();
+                    w.set_quality_status(SharedString::from(
+                        overlay_backend::deep_lock::lifecycle_guard_notice(ru),
+                    ));
+                    return;
+                }
+            }
             let root = overlay_backend::local_ai::default_root();
             if custom_path.is_none()
                 && !overlay_backend::local_ai::managed_model_present(&root, want_model)
@@ -861,6 +885,20 @@ pub(crate) fn wire_local_ai(
                 return;
             }
 
+            // Deep lock (v0.37): applying this context restarts :8080 — refuse
+            // while the managed server must stay unloaded (the save-only path
+            // above already returned without touching the server).
+            {
+                let c = cfg_c.read();
+                if c.deep_lock {
+                    let ru = c.ui_is_ru();
+                    w.set_quality_status(SharedString::from(
+                        overlay_backend::deep_lock::lifecycle_guard_notice(ru),
+                    ));
+                    return;
+                }
+            }
+
             let Some(busy_guard) = slint_replay::app_state::LocalAiBusyGuard::try_acquire({
                 let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
                 s.local_ai_busy.clone()
@@ -1174,8 +1212,14 @@ pub(crate) fn wire_local_ai(
                 let root = overlay_backend::local_ai::default_root();
                 let res = overlay_backend::local_ai::download_quality_vision(&root, &cancel, &on);
                 // Hold the lifecycle lock ONLY for the restart so the long
-                // download never blocks the watchdog. RAII release.
-                let restarted = if res.is_ok() && cfg_t.read().ai_local_quality {
+                // download never blocks the watchdog. RAII release. A deep
+                // lock keeps the server unloaded — the download still lands,
+                // the restart is skipped (status offers the app-restart path).
+                let restart_allowed = {
+                    let c = cfg_t.read();
+                    c.ai_local_quality && !c.deep_lock
+                };
+                let restarted = if res.is_ok() && restart_allowed {
                     let lifecycle_lock = {
                         let s = state_t.lock().unwrap_or_else(|p| p.into_inner());
                         s.local_ai_lock.clone()
@@ -1275,6 +1319,18 @@ pub(crate) fn wire_local_ai(
             let Some(w) = weak.upgrade() else { return };
             if w.get_engine_updating() {
                 return; // re-entry guard (same window)
+            }
+            // Deep lock (v0.37): a real engine swap stops :8080 and the
+            // watchdog won't restart it while locked — refuse until unlocked.
+            {
+                let c = cfg_c.read();
+                if c.deep_lock {
+                    let ru = c.ui_is_ru();
+                    w.set_engine_update_status(SharedString::from(
+                        overlay_backend::deep_lock::lifecycle_guard_notice(ru),
+                    ));
+                    return;
+                }
             }
             // B3 — process-global dedup (survives Settings reopen) + RAII release.
             let Some(busy_guard) = slint_replay::app_state::LocalAiBusyGuard::try_acquire({

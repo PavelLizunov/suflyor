@@ -237,6 +237,12 @@ pub fn palette_row_from(entry: &overlay_backend::kb::KBEntry) -> PaletteRow {
 /// can contain both).
 #[must_use]
 pub fn classify_ai_error(msg: &str) -> &'static str {
+    // Deep lock (v0.37) first: an intentionally-locked managed server is not
+    // a bridge outage. High-level sites swap in the localized notice; this
+    // English string is the fallback for any path that only classifies.
+    if overlay_backend::deep_lock::is_blocked_error(msg) {
+        return "Local AI is deep-locked (unlock from the bar's lock chip)";
+    }
     let lower = msg.to_lowercase();
     if lower.contains("timed out") || lower.contains("timeout") {
         "AI bridge timed out"

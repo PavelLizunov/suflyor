@@ -131,13 +131,19 @@ component Chip inherits Rectangle {
 // → the shaking lock answers. Uses a raw Image (not IconSlot) so it can rotate.
 component LockChip inherits Rectangle {
     in property <bool> locked: false;
+    // Deep lock (managed-local third state, v0.37): implies `locked`, turns
+    // the chip red and STOPS the tremble — an unloaded server is a firm,
+    // static state, distinct from the shaking "tiles held back" listening mode.
+    in property <bool> deep: false;
     in property <string> a11y;
-    in property <color> accent: #f59e0b;
+    in property <color> accent: root.deep ? Theme.danger : #f59e0b;
     callback clicked();
     property <bool> phase: false;
 
     accessible-role: button;
     accessible-label: a11y;
+    accessible-checkable: true;
+    accessible-checked: locked;
     background: locked
         ? accent.with-alpha(0.18)
         : (ta.pressed
@@ -151,11 +157,12 @@ component LockChip inherits Rectangle {
     horizontal-stretch: 0;
     animate background { duration: 80ms; }
 
-    // Trembles only while locked: flip `phase` every 90ms and let `animate` swing the padlock
-    // between +7° and -7°, so it visibly shakes; at rest (unlocked) it sits flat.
+    // Trembles only while locked in LISTENING mode: flip `phase` every 90ms and
+    // let `animate` swing the padlock between +7° and -7°, so it visibly shakes;
+    // at rest (unlocked) it sits flat, and a DEEP lock holds it still.
     Timer {
         interval: 90ms;
-        running: root.locked;
+        running: root.locked && !root.deep;
         triggered => {
             root.phase = !root.phase;
         }
@@ -168,7 +175,7 @@ component LockChip inherits Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         // transform-rotation pivots around the element centre by default → a clean wobble.
-        transform-rotation: root.locked ? (root.phase ? 7deg : -7deg) : 0deg;
+        transform-rotation: root.locked && !root.deep ? (root.phase ? 7deg : -7deg) : 0deg;
         animate transform-rotation {
             duration: 85ms;
             easing: ease-in-out;
@@ -532,6 +539,13 @@ export component OverlayBarWindow inherits Window {
     // v0.28 — "listening mode" (config.suppress_tiles): the bar lock chip toggles this; when
     // true, auto AI tiles are suppressed (slint_session::maybe_spawn_auto_tile early-returns).
     in-out property <bool> suppress-tiles: false;
+    // v0.37 — deep lock (managed-local only): the lock chip's third state —
+    // the app-owned llama-server is unloaded and managed requests are refused.
+    // Implies suppress-tiles (Rust keeps the two consistent).
+    in-out property <bool> deep-lock: false;
+    // Localized per-state lock-chip description (a11y label; there is no
+    // hover-tooltip surface). Rust rebuilds it on transitions + language switch.
+    in property <string> lock-a11y: "";
 
     // ===== Callbacks =====
     callback mic-toggle-clicked();
@@ -755,11 +769,13 @@ export component OverlayBarWindow inherits Window {
                 clicked => { root.aggressive-toggle-clicked(); }
             }
             // 🔒 Lock tiles (listening mode) — stop auto AI tiles popping (e.g. over a game).
-            // Trembles while active so their absence is obviously ON PURPOSE.
+            // Trembles while active so their absence is obviously ON PURPOSE. For the
+            // app-managed local server the SAME chip runs a third state (deep lock,
+            // v0.37): red + still, the managed server unloaded until the next click.
             LockChip {
                 locked: root.suppress-tiles;
-                a11y: "Lock tiles — stop pop-ups (listening mode)";
-                accent: #f59e0b;
+                deep: root.deep-lock;
+                a11y: root.lock-a11y;
                 clicked => { root.suppress-tiles-toggle-clicked(); }
             }
             // 🗄 Session archive (also F7) — browse + search past sessions.
@@ -1153,11 +1169,12 @@ export component OverlayBarWindow inherits Window {
                     accent: #fbbf24;
                     clicked => { root.pause-toggle-clicked(); }
                 }
-                // 🔒 Lock tiles (listening mode) — same toggle as the full bar; trembles while active.
+                // 🔒 Lock tiles (listening mode) — same toggle as the full bar; trembles
+                // while active, turns red + still in the deep-lock state (v0.37).
                 LockChip {
                     locked: root.suppress-tiles;
-                    a11y: "Lock tiles — stop pop-ups (listening mode)";
-                    accent: #f59e0b;
+                    deep: root.deep-lock;
+                    a11y: root.lock-a11y;
                     clicked => { root.suppress-tiles-toggle-clicked(); }
                 }
                 // Spring — absorbs the slack so the status pill stays natural-

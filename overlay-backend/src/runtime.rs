@@ -120,8 +120,12 @@ pub async fn run_post_meeting_debrief(
         Err(e) => {
             log::warn!("post-meeting debrief AI call failed: {e:#}");
             // C — don't vanish silently: a GENERIC error tile (no base_url /
-            // error chain — it can land in a screenshot).
-            let body = if ui_is_ru {
+            // error chain — it can land in a screenshot). A deep-locked
+            // managed server gets the specific localized notice instead.
+            let chain = format!("{e:#}");
+            let body = if crate::deep_lock::is_blocked_error(&chain) {
+                crate::deep_lock::blocked_notice(ui_is_ru).to_string()
+            } else if ui_is_ru {
                 "Не удалось сформировать разбор (ошибка ИИ). Подробности — в логе («Собрать логи» в Диагностике).".to_string()
             } else {
                 "Couldn't generate the debrief (AI error). Details in the log (Diagnostics → Collect logs).".to_string()
@@ -892,6 +896,13 @@ impl ManagedPrepSession {
         };
         if !managed {
             return Ok(None);
+        }
+        // Deep lock (bar lock chip): the managed server is deliberately
+        // unloaded — a summary must not restart it. The request-level guard
+        // would refuse the AI calls anyway; bail BEFORE draining permits and
+        // touching the lifecycle lock so the failure is instant.
+        if crate::deep_lock::deep_lock_active() {
+            anyhow::bail!(crate::deep_lock::BLOCKED_ERROR);
         }
         let profile = crate::local_ai::current_server_profile(model.is_quality());
         if profile == crate::local_ai::HardwareModelProfile::Unknown {
@@ -2080,7 +2091,9 @@ pub async fn reask_last(
                         } else {
                             format!("Reask: {last_q}")
                         },
-                        answer: if ui_is_ru {
+                        answer: if crate::deep_lock::is_blocked_error(&format!("{e:#}")) {
+                            crate::deep_lock::blocked_notice(ui_is_ru)
+                        } else if ui_is_ru {
                             "Не удалось получить ответ от AI. Проверьте, что выбранный провайдер запущен (Настройки → AI)."
                         } else {
                             "Couldn't get a response from AI. Check that the selected provider is running (Settings → AI)."
@@ -2357,7 +2370,9 @@ pub async fn manual_spawn_tile(
             let _ = events.spawn_tile_full(
                     TileSpec {
                         question: line.text.clone(),
-                        answer: if ui_is_ru {
+                        answer: if crate::deep_lock::is_blocked_error(&format!("{e:#}")) {
+                            crate::deep_lock::blocked_notice(ui_is_ru)
+                        } else if ui_is_ru {
                             "Не удалось получить ответ от AI. Проверьте, что выбранный провайдер запущен (Настройки → AI)."
                         } else {
                             "Couldn't get a response from AI. Check that the selected provider is running (Settings → AI)."

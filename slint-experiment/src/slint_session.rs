@@ -1002,7 +1002,30 @@ async fn maybe_spawn_auto_tile(
             };
             if should_notify {
                 // Generic message — NEVER the raw chain (it carries the local
-                // server's LAN IP / base_url; the tile is screen-shared).
+                // server's LAN IP / base_url; the tile is screen-shared). A
+                // deep-locked managed server gets the specific localized
+                // notice so the absence of answers reads as deliberate.
+                let ui_is_ru = cfg.read().ui_is_ru();
+                if overlay_backend::deep_lock::is_blocked_error(&chain) {
+                    let _ = events.spawn_tile_full(
+                        TileSpec {
+                            question: if ui_is_ru {
+                                "Локальный ИИ заблокирован".into()
+                            } else {
+                                "Local AI is locked".into()
+                            },
+                            answer: overlay_backend::deep_lock::blocked_notice(ui_is_ru).into(),
+                            source: "ai_error".into(),
+                            is_translation: false,
+                            highlights: vec!["AI error".into()],
+                            summary_session: None,
+                        },
+                        MonitorHint::Auto,
+                        stealth,
+                        TileKind::Error,
+                    );
+                    return;
+                }
                 let reason = crate::app_state::classify_ai_error(&chain);
                 let _ = events.spawn_tile_full(
                         TileSpec {

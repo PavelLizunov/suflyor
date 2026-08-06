@@ -738,6 +738,23 @@ fn main() -> Result<(), slint::PlatformError> {
     // because Settings tab will eventually mutate it.
     let cfg = config::shared();
 
+    // Deep lock (bar lock chip, managed-local only, v0.37): mirror the
+    // PERSISTED flag into the process-wide request guard BEFORE anything can
+    // hit the managed endpoint (boot warm-up below, the watchdog, every ask
+    // path). Deep lock implies tile suppression — normalize a hand-edited
+    // config once so the chip state can never contradict the lock.
+    {
+        let mut c = cfg.write();
+        if c.deep_lock && overlay_backend::deep_lock::cfg_is_managed_local(&c) && !c.suppress_tiles
+        {
+            c.suppress_tiles = true;
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] deep-lock normalize save failed: {e:#}");
+            }
+        }
+        overlay_backend::deep_lock::set_deep_lock_active(c.deep_lock);
+    }
+
     // Hermes bridge (ТЗ 2026-07-09): auto-start the loopback API server if the
     // user left it enabled (settings_hermes owns the process-lived handle). No-op
     // + safe status when disabled/blank-token; never blocks boot.
@@ -885,7 +902,9 @@ fn main() -> Result<(), slint::PlatformError> {
             let (ai_local, ai_ep, stt_local, stt_backend) = {
                 let c = cfg_w.read();
                 (
-                    c.ai_provider == "local",
+                    // A deep-locked managed server is deliberately unloaded —
+                    // don't warm what the user asked to keep out of RAM/VRAM.
+                    c.ai_provider == "local" && !c.deep_lock,
                     c.ai_endpoint(false),
                     c.stt_provider == "gigaam" || c.stt_provider == "whisper",
                     c.stt_backend(),
@@ -973,6 +992,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let (spawn_tx, mut spawn_rx) = tokio_mpsc::unbounded_channel::<SpawnTileRequest>();
     let bridge = Arc::new(OverlayBarBridge {
         overlay_weak: overlay.as_weak(),
+        cfg: cfg.clone(),
         spawn_tx,
         tile_seq: AtomicU64::new(0),
         current_streaming: std::sync::Mutex::new(None),
@@ -1052,6 +1072,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let overlay_w = overlay.as_weak();
         std::thread::spawn(move || {
             let root = overlay_backend::local_ai::default_root();
+            let deep_locked_at_boot = cfg_w.read().deep_lock;
             // fs-audit #1 — GC orphaned engine-update leftovers (a crashed
             // mid-update's `.llama-staging-update` + stale rollback backups) so
             // they don't accumulate when the user stops updating. Held UNDER the
@@ -1069,6 +1090,12 @@ fn main() -> Result<(), slint::PlatformError> {
                     return;
                 };
                 overlay_backend::local_ai::sweep_orphaned_engine_artifacts(&root);
+                // A persisted deep lock also reclaims an app-owned orphan left
+                // behind by a crash. Owner-aware: a foreign :8080 listener is
+                // never killed, and Whisper :8081 is not touched.
+                if deep_locked_at_boot && !overlay_backend::local_ai::free_llama_port(&root) {
+                    eprintln!("[overlay-host] deep lock boot: foreign :8080 listener left alive");
+                }
             }
             // Bring the local servers UP FIRST (on the CURRENT engine) so AI + STT
             // are available immediately; the throttled engine refresh further down
@@ -1106,7 +1133,10 @@ fn main() -> Result<(), slint::PlatformError> {
             {
                 let want_llama = {
                     let c = cfg_w.read();
+                    // A persisted deep lock survives restart: the managed
+                    // server stays unloaded until the user clicks the chip.
                     c.ai_provider == "local"
+                        && !c.deep_lock
                         && overlay_backend::local_ai::is_managed_llama_endpoint(
                             &c.ai_local_base_url,
                         )
@@ -1201,7 +1231,13 @@ fn main() -> Result<(), slint::PlatformError> {
             // never brick local AI — on any failure the engine is left as-is. On a
             // real swap :8080 is stopped; the watchdog loop below brings the new
             // binary up within one tick.
-            if overlay_backend::local_ai::should_check_engine_update(&root) {
+            // A deep-locked server must stay unloaded — skip the engine
+            // auto-update too (a real swap stops :8080, and the watchdog below
+            // won't bring it back while locked). Not marking the check done, so
+            // the first unlocked boot catches up.
+            if !cfg_w.read().deep_lock
+                && overlay_backend::local_ai::should_check_engine_update(&root)
+            {
                 let lifecycle_lock = {
                     let s = state_w.lock().unwrap_or_else(|p| p.into_inner());
                     s.local_ai_lock.clone()
@@ -1236,7 +1272,10 @@ fn main() -> Result<(), slint::PlatformError> {
                 let (want_llama, choice) = {
                     let c = cfg_w.read();
                     (
+                        // A deep lock means the user WANTS :8080 empty — the
+                        // watchdog must not resurrect the server behind them.
                         c.ai_provider == "local"
+                            && !c.deep_lock
                             && overlay_backend::local_ai::is_managed_llama_endpoint(
                                 &c.ai_local_base_url,
                             ),
@@ -3255,8 +3294,15 @@ fn main() -> Result<(), slint::PlatformError> {
                             // include the full base_url (LAN IP) which
                             // would leak into screenshots saved under
                             // target/visual/. Caught by review-agent
-                            // 2026-05-27.
-                            let category = classify_ai_error(&format!("{e:#}"));
+                            // 2026-05-27. A deep-locked managed server gets
+                            // the specific localized notice.
+                            let chain = format!("{e:#}");
+                            let category = if overlay_backend::deep_lock::is_blocked_error(&chain)
+                            {
+                                overlay_backend::deep_lock::blocked_notice(is_ru)
+                            } else {
+                                classify_ai_error(&chain)
+                            };
                             let md = manual_tile_failure(heading_for_task, category, is_ru);
                             let blocks: Vec<MarkdownBlock> = markdown::parse(&md)
                                 .into_iter()
@@ -3460,26 +3506,332 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // 🔒 Lock tiles (listening mode). The bar lock chip mirrors config.suppress_tiles — the SAME
-    // field the Settings "listening mode" checkbox and slint_session::maybe_spawn_auto_tile read,
-    // so toggling here suppresses/resumes auto AI tiles live (no restart, no extra flag). The
-    // chip trembles while active so their absence reads as deliberate.
+    // 🔒 Lock tiles (listening mode) + DEEP LOCK (v0.37, managed-local only).
+    // The bar lock chip mirrors config.suppress_tiles — the SAME field the
+    // Settings "listening mode" checkbox and slint_session::maybe_spawn_auto_tile
+    // read, so toggling here suppresses/resumes auto AI tiles live (no restart,
+    // no extra flag). The chip trembles while active so their absence reads as
+    // deliberate.
+    //
+    // For the app-managed llama-server the SAME chip is three-state (see
+    // overlay_backend::deep_lock): listening mode -> deep lock (unload the
+    // app-owned :8080 server owner-aware to free RAM/VRAM) -> the next click
+    // starts the selected model back up and only a CONFIRMED ready releases
+    // the lock. Cloud / external Ollama keep the legacy two-state toggle —
+    // external processes are never stopped.
     {
         let cfg_for_lock = cfg.clone();
+        let state_for_lock = state.clone();
+        let events_for_lock = events.clone();
+        let lock_transition_busy = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let busy_for_lock = lock_transition_busy.clone();
         let weak_for_lock = overlay.as_weak();
         if let Some(o) = weak_for_lock.upgrade() {
-            o.set_suppress_tiles(cfg_for_lock.read().suppress_tiles);
+            refresh_lock_chip(&o, &cfg_for_lock);
         }
         overlay.on_suppress_tiles_toggle_clicked(move || {
-            let new_state = {
-                let mut c = cfg_for_lock.write();
-                c.suppress_tiles = !c.suppress_tiles;
-                let _ = overlay_backend::config::save(&c);
-                c.suppress_tiles
+            use overlay_backend::deep_lock::{LockAction, LockStatus};
+            let action = {
+                let c = cfg_for_lock.read();
+                overlay_backend::deep_lock::next_lock_action(
+                    overlay_backend::deep_lock::cfg_is_managed_local(&c),
+                    c.suppress_tiles,
+                    c.deep_lock,
+                )
             };
-            eprintln!("[overlay-host] suppress-tiles (listening mode) -> {new_state}");
-            if let Some(o) = weak_for_lock.upgrade() {
-                o.set_suppress_tiles(new_state);
+            match action {
+                LockAction::ToggleSuppress => {
+                    let new_state = {
+                        let mut c = cfg_for_lock.write();
+                        c.suppress_tiles = !c.suppress_tiles;
+                        let _ = overlay_backend::config::save(&c);
+                        c.suppress_tiles
+                    };
+                    eprintln!("[overlay-host] suppress-tiles (listening mode) -> {new_state}");
+                    if let Some(o) = weak_for_lock.upgrade() {
+                        refresh_lock_chip(&o, &cfg_for_lock);
+                        let ru = cfg_for_lock.read().ui_is_ru();
+                        o.set_status_text(SharedString::from(
+                            overlay_backend::deep_lock::status_text(
+                                ru,
+                                if new_state {
+                                    LockStatus::ListeningOn
+                                } else {
+                                    LockStatus::ListeningOff
+                                },
+                            ),
+                        ));
+                    }
+                }
+                LockAction::EnableListening => {
+                    {
+                        let mut c = cfg_for_lock.write();
+                        c.suppress_tiles = true;
+                        let _ = overlay_backend::config::save(&c);
+                    }
+                    eprintln!("[overlay-host] listening mode on (one more click deep-locks)");
+                    if let Some(o) = weak_for_lock.upgrade() {
+                        refresh_lock_chip(&o, &cfg_for_lock);
+                        let ru = cfg_for_lock.read().ui_is_ru();
+                        o.set_status_text(SharedString::from(
+                            overlay_backend::deep_lock::status_text(ru, LockStatus::ListeningOn),
+                        ));
+                    }
+                }
+                LockAction::EnterDeepLock => {
+                    if busy_for_lock
+                        .compare_exchange(
+                            false,
+                            true,
+                            std::sync::atomic::Ordering::AcqRel,
+                            std::sync::atomic::Ordering::Acquire,
+                        )
+                        .is_err()
+                    {
+                        return;
+                    }
+                    // RECORD the lock before the lifecycle lock so a racing
+                    // boot/watchdog sees it; the runtime guard flips right away
+                    // so managed requests fail instead of hitting a dying server.
+                    let saved = {
+                        let mut c = cfg_for_lock.write();
+                        c.deep_lock = true;
+                        c.suppress_tiles = true;
+                        match overlay_backend::config::save(&c) {
+                            Ok(()) => true,
+                            Err(e) => {
+                                // Listening mode was already on. If the durable
+                                // lock cannot be recorded, do not unload the
+                                // server and leave the two states consistent.
+                                c.deep_lock = false;
+                                eprintln!(
+                                    "[overlay-host] deep lock save failed; server left running: {e:#}"
+                                );
+                                false
+                            }
+                        }
+                    };
+                    if !saved {
+                        busy_for_lock.store(false, std::sync::atomic::Ordering::Release);
+                        if let Some(o) = weak_for_lock.upgrade() {
+                            refresh_lock_chip(&o, &cfg_for_lock);
+                        }
+                        return;
+                    }
+                    overlay_backend::deep_lock::set_deep_lock_active(true);
+                    eprintln!(
+                        "[overlay-host] deep lock engaged — unloading the managed llama-server"
+                    );
+                    if let Some(o) = weak_for_lock.upgrade() {
+                        refresh_lock_chip(&o, &cfg_for_lock);
+                        let ru = cfg_for_lock.read().ui_is_ru();
+                        o.set_status_text(SharedString::from(
+                            overlay_backend::deep_lock::status_text(ru, LockStatus::Unloading),
+                        ));
+                    }
+                    let state_stop = state_for_lock.clone();
+                    let cfg_stop = cfg_for_lock.clone();
+                    let weak_stop = weak_for_lock.clone();
+                    let busy_stop = busy_for_lock.clone();
+                    std::thread::spawn(move || {
+                        let root = overlay_backend::local_ai::default_root();
+                        let lifecycle_lock = {
+                            let s = state_stop.lock().unwrap_or_else(|p| p.into_inner());
+                            s.local_ai_lock.clone()
+                        };
+                        if let Some(_guard) =
+                            overlay_backend::local_ai::blocking_acquire_lifecycle(&lifecycle_lock)
+                        {
+                            // Owner-aware stop: only a listener under our install
+                            // dir is killed — a foreign :8080 stays alive (the
+                            // request guard still blocks OUR managed traffic).
+                            // Whisper :8081 is untouched — recording + local STT
+                            // continue under deep lock.
+                            if !overlay_backend::local_ai::free_llama_port(&root) {
+                                eprintln!(
+                                    "[overlay-host] deep lock: :8080 is held by a foreign process — left alive"
+                                );
+                            }
+                        }
+                        // Reap exited server handles so kill-on-quit tracking
+                        // stays honest.
+                        state_stop
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .local_ai_servers
+                            .retain_mut(|c| !matches!(c.try_wait(), Ok(Some(_))));
+                        let ru = cfg_stop.read().ui_is_ru();
+                        busy_stop.store(false, std::sync::atomic::Ordering::Release);
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(o) = weak_stop.upgrade() {
+                                o.set_status_text(SharedString::from(
+                                    overlay_backend::deep_lock::status_text(
+                                        ru,
+                                        LockStatus::Unloaded,
+                                    ),
+                                ));
+                            }
+                        });
+                    });
+                }
+                LockAction::Unlock => {
+                    if busy_for_lock
+                        .compare_exchange(
+                            false,
+                            true,
+                            std::sync::atomic::Ordering::AcqRel,
+                            std::sync::atomic::Ordering::Acquire,
+                        )
+                        .is_err()
+                    {
+                        return;
+                    }
+                    // The model can take the full strict-ready budget — say so
+                    // immediately; the chip stays red + deep until confirmed.
+                    {
+                        let ru = cfg_for_lock.read().ui_is_ru();
+                        if let Some(o) = weak_for_lock.upgrade() {
+                            o.set_status_text(SharedString::from(
+                                overlay_backend::deep_lock::status_text(ru, LockStatus::Unlocking),
+                            ));
+                        }
+                    }
+                    eprintln!(
+                        "[overlay-host] deep lock unlock requested — starting the managed model"
+                    );
+                    let state_unlock = state_for_lock.clone();
+                    let cfg_unlock = cfg_for_lock.clone();
+                    let weak_unlock = weak_for_lock.clone();
+                    let events_unlock = events_for_lock.clone();
+                    let busy_unlock = busy_for_lock.clone();
+                    std::thread::spawn(move || {
+                        let root = overlay_backend::local_ai::default_root();
+                        let choice = {
+                            let mut c = cfg_unlock.write();
+                            // Repair a stale persisted tier before selecting the
+                            // launch target. A genuinely selected model that
+                            // then fails readiness is still an unlock failure.
+                            let _ = overlay_backend::local_ai::repair_managed_model_state(
+                                &mut c, &root,
+                            );
+                            overlay_backend::local_ai::ManagedLlamaChoice::from_config(
+                                &c.ai_local_model,
+                                c.ai_local_quality,
+                                &c.ai_local_custom_gguf,
+                                overlay_backend::local_ai::LocalContextPreset::from_config(
+                                    &c.ai_local_context,
+                                ),
+                            )
+                        };
+                        let lifecycle_lock = {
+                            let s = state_unlock.lock().unwrap_or_else(|p| p.into_inner());
+                            s.local_ai_lock.clone()
+                        };
+                        let (outcome, started) = match
+                            overlay_backend::local_ai::blocking_acquire_lifecycle(&lifecycle_lock)
+                        {
+                            Some(guard) => {
+                                let result =
+                                    overlay_backend::local_ai::restart_llama_server_for_unlock(
+                                        &root, choice,
+                                    );
+                                drop(guard);
+                                result
+                            }
+                            None => (
+                                overlay_backend::local_ai::ModelSwitch::FailedToStart,
+                                Vec::new(),
+                            ),
+                        };
+                        let success = outcome == overlay_backend::local_ai::ModelSwitch::Switched;
+                        // ONLY a confirmed-ready server releases deep lock +
+                        // suppression. Persist that release before exposing it;
+                        // if the save fails, stop the just-started server and
+                        // keep the durable/runtime lock intact.
+                        let ready = if success {
+                            let mut c = cfg_unlock.write();
+                            overlay_backend::local_ai::repair_managed_model_state_after_verification(
+                                &mut c, &root,
+                            );
+                            c.deep_lock = false;
+                            c.suppress_tiles = false;
+                            match overlay_backend::config::save(&c) {
+                                Ok(()) => {
+                                    overlay_backend::deep_lock::set_deep_lock_active(false);
+                                    Some((c.ui_is_ru(), active_stack_label(&c)))
+                                }
+                                Err(e) => {
+                                    c.deep_lock = true;
+                                    c.suppress_tiles = true;
+                                    eprintln!(
+                                        "[overlay-host] deep lock release save failed; lock kept: {e:#}"
+                                    );
+                                    None
+                                }
+                            }
+                        } else {
+                            eprintln!(
+                                "[overlay-host] deep lock unlock FAILED ({outcome:?}) — lock kept"
+                            );
+                            None
+                        };
+                        if ready.is_some() {
+                            let mut s = state_unlock.lock().unwrap_or_else(|p| p.into_inner());
+                            s.local_ai_servers
+                                .retain_mut(|c| !matches!(c.try_wait(), Ok(Some(_))));
+                            s.local_ai_servers.extend(started);
+                        } else {
+                            overlay_backend::local_ai::terminate_servers(started);
+                        }
+                        busy_unlock.store(false, std::sync::atomic::Ordering::Release);
+                        let _ = slint::invoke_from_event_loop(move || {
+                            let Some(o) = weak_unlock.upgrade() else {
+                                return;
+                            };
+                            refresh_lock_chip(&o, &cfg_unlock);
+                            match ready {
+                                Some((ru, label)) => {
+                                    o.set_active_stack(SharedString::from(label));
+                                    o.set_status_text(SharedString::from(
+                                        overlay_backend::deep_lock::status_text(
+                                            ru,
+                                            LockStatus::UnlockReady,
+                                        ),
+                                    ));
+                                }
+                                None => {
+                                    let ru = cfg_unlock.read().ui_is_ru();
+                                    o.set_status_text(SharedString::from(
+                                        overlay_backend::deep_lock::status_text(
+                                            ru,
+                                            LockStatus::UnlockFailed,
+                                        ),
+                                    ));
+                                    // The status pill is small — also spawn the
+                                    // concise localized error tile so a failed
+                                    // reload is impossible to miss.
+                                    let _ = events_unlock.spawn_tile_full(
+                                        overlay_backend::events::TileSpec {
+                                            question: if ru {
+                                                "Локальный ИИ".into()
+                                            } else {
+                                                "Local AI".into()
+                                            },
+                                            answer: overlay_backend::deep_lock::unlock_failed_notice(ru).into(),
+                                            source: "ai_error".into(),
+                                            is_translation: false,
+                                            highlights: vec!["AI error".into()],
+                                            summary_session: None,
+                                        },
+                                        overlay_backend::events::MonitorHint::Auto,
+                                        false,
+                                        overlay_backend::events::TileKind::Error,
+                                    );
+                                }
+                            }
+                        });
+                    });
+                }
             }
         });
     }
@@ -4099,6 +4451,24 @@ fn manual_tile_failure(heading: &str, category: &str, is_ru: bool) -> String {
     } else {
         format!("# {heading}\n\n**AI could not return an answer:** {category}\n\nCheck the local AI server or AI bridge in Settings → AI.")
     }
+}
+
+/// Push the lock-chip UI state (suppress / deep / localized a11y) from the
+/// LIVE config. Called on every chip transition AND on a live language switch
+/// (the per-state description is Rust-built, so @tr does not refresh it).
+pub(crate) fn refresh_lock_chip(o: &OverlayBarWindow, cfg: &config::SharedConfig) {
+    let snap = cfg.read();
+    let managed = overlay_backend::deep_lock::cfg_is_managed_local(&snap);
+    o.set_suppress_tiles(snap.suppress_tiles);
+    // Cloud and external/Ollama keep the original two-state visual even when a
+    // dormant managed-local deep lock is persisted for a later provider switch.
+    o.set_deep_lock(managed && snap.deep_lock);
+    o.set_lock_a11y(SharedString::from(overlay_backend::deep_lock::state_hint(
+        snap.ui_is_ru(),
+        managed,
+        snap.suppress_tiles,
+        snap.deep_lock,
+    )));
 }
 
 #[cfg(test)]

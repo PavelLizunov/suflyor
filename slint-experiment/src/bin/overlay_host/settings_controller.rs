@@ -80,6 +80,7 @@ pub(crate) fn open_settings(
     let mut settings_slot = settings_ref.borrow_mut();
     if let Some(existing) = settings_slot.as_ref() {
         // Refresh token status + profiles — config might have changed since last open.
+        reset_component_install_state(existing);
         populate_token_status(existing, cfg);
         populate_diagnostics(existing, cfg);
         {
@@ -106,6 +107,7 @@ pub(crate) fn open_settings(
             return;
         }
     };
+    reset_component_install_state(&win);
     {
         let st = state.lock().ok();
         if let Some(st) = st {
@@ -167,6 +169,9 @@ pub(crate) fn open_settings(
             w.set_component_busy_index(idx);
             w.set_component_busy_phase(1); // preparing
             w.set_component_busy_label(SharedString::from(""));
+            // Language for the voice-pack labels interpolated into the @tr
+            // phase templates (English UI must not show Cyrillic names).
+            let ru = cfg_inst.read().ui_is_ru();
             let weak_done = w.as_weak();
             let cfg_t = cfg_inst.clone();
             std::thread::spawn(move || {
@@ -195,7 +200,7 @@ pub(crate) fn open_settings(
                                 }
                             });
                         };
-                        overlay_backend::tts_install::install_voices(&cancel, &on)
+                        overlay_backend::tts_install::install_voices(&cancel, &on, ru)
                             .map_err(|e| format!("{e:#}"))
                     }
                     4 => {
@@ -235,6 +240,7 @@ pub(crate) fn open_settings(
                         w.set_component_busy_phase(8); // generic failure
                     } else {
                         // Refresh from live state — the just-installed row goes green.
+                        reset_component_install_state(&w);
                         let snap = cfg_t.read();
                         populate_component_rows(&w, &snap);
                     }
@@ -415,7 +421,7 @@ pub(crate) fn open_settings(
     // Extracted to settings_ai.rs (P1 domain split) — wired verbatim there
     // (`ModelTarget` + `fetch_models` moved with it). The install/updater
     // closures below stay in open_settings (separate later wave).
-    wire_ai_settings(&win, cfg);
+    wire_ai_settings(&win, cfg, overlay_weak);
     crate::settings_hermes::wire_hermes_settings(&win, cfg);
 
     // ===== V4 — vision (screenshot) channel: provider switch + field saves + test =====
@@ -496,6 +502,7 @@ pub(crate) fn open_settings(
     {
         let cfg_lang = cfg.clone();
         let win_lang = win.as_weak();
+        let overlay_lang = overlay_weak.clone();
         win.on_language_selected(move |idx| {
             let lang = if idx == 1 { "en" } else { "ru" };
             match slint::select_bundled_translation(lang) {
@@ -509,10 +516,31 @@ pub(crate) fn open_settings(
                     eprintln!("[overlay-host] ui_language save failed: {e:#}");
                 }
             }
-            // The @tr() bindings re-evaluate automatically; the Rust-built monitor
-            // dropdown labels do not — rebuild them in the new language.
+            // The @tr() bindings re-evaluate automatically; the Rust-built
+            // strings do NOT — rebuild them in the new language: monitor
+            // dropdown labels, Components hub names/hints, TTS voice labels,
+            // and the bar lock chip's per-state description.
+            let snap = cfg_lang.read();
             if let Some(w) = win_lang.upgrade() {
-                populate_tile_monitors(&w, &cfg_lang.read());
+                populate_tile_monitors(&w, &snap);
+                populate_component_rows(&w, &snap);
+                populate_tts_voices(&w, &snap);
+                w.set_tts_install_label(SharedString::from(
+                    overlay_backend::tts_install::relocalize_voice_labels(
+                        w.get_tts_install_label().as_str(),
+                        snap.ui_is_ru(),
+                    ),
+                ));
+                w.set_component_busy_label(SharedString::from(
+                    overlay_backend::tts_install::relocalize_voice_labels(
+                        w.get_component_busy_label().as_str(),
+                        snap.ui_is_ru(),
+                    ),
+                ));
+            }
+            drop(snap);
+            if let Some(o) = overlay_lang.upgrade() {
+                crate::refresh_lock_chip(&o, &cfg_lang);
             }
         });
     }
@@ -604,6 +632,7 @@ pub(crate) fn open_settings(
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
+        let overlay = overlay_weak.clone();
         win.on_import_profile_clicked(move || {
             let picked = rfd::FileDialog::new()
                 .set_title("Import suflyor settings")
@@ -612,16 +641,22 @@ pub(crate) fn open_settings(
             let Some(w) = weak.upgrade() else { return };
             let msg = match picked {
                 None => "import cancelled".to_string(),
-                Some(path) => match overlay_backend::config::import_from(&path) {
-                    Ok(imported) => {
-                        // Push the freshly-loaded values into the shared
-                        // config so the running session sees them, then
-                        // refresh the token-status display.
-                        *cfg_c.write() = imported;
-                        msg_refresh_after_import(&w, &cfg_c)
+                Some(path) => {
+                    let local_deep_lock = cfg_c.read().deep_lock;
+                    match overlay_backend::config::import_from(&path, local_deep_lock) {
+                        Ok(imported) => {
+                            // Push the freshly-loaded values into the shared
+                            // config so the running session sees them, then
+                            // refresh the token-status display.
+                            *cfg_c.write() = imported;
+                            if let Some(o) = overlay.upgrade() {
+                                crate::refresh_lock_chip(&o, &cfg_c);
+                            }
+                            msg_refresh_after_import(&w, &cfg_c)
+                        }
+                        Err(e) => format!("[err] {e:#}"),
                     }
-                    Err(e) => format!("[err] {e:#}"),
-                },
+                }
             };
             w.set_profile_io_result(SharedString::from(msg));
         });
@@ -633,7 +668,7 @@ pub(crate) fn open_settings(
     // there (`apply_server_preview` moved with it; the shared
     // `pending_server_import` cell is threaded in). The PROFILE export/import
     // (above) + `refresh_profiles` + `msg_refresh_after_import` STAY here.
-    wire_import_export(&win, cfg, &pending_server_import);
+    wire_import_export(&win, cfg, &pending_server_import, overlay_weak);
 
     // Phase E6 v29 — meeting-context (Profile) save. Writes to
     // cfg.meeting_context + persists; new AI calls read it from cfg
@@ -870,7 +905,21 @@ pub(crate) fn open_settings(
     }
     {
         let cfg_c = cfg.clone();
+        let weak_suppress = win.as_weak();
         win.on_suppress_tiles_changed(move |on| {
+            // Deep lock implies suppression — while it is active the checkbox
+            // can't release tiles (the chip is the only way out). Snap the
+            // control back so the UI never lies about the state.
+            let deep_managed = {
+                let c = cfg_c.read();
+                c.deep_lock && overlay_backend::deep_lock::cfg_is_managed_local(&c)
+            };
+            if !on && deep_managed {
+                if let Some(w) = weak_suppress.upgrade() {
+                    w.set_suppress_tiles(true);
+                }
+                return;
+            }
             let mut c = cfg_c.write();
             c.suppress_tiles = on;
             let _ = overlay_backend::config::save(&c);
@@ -922,6 +971,7 @@ pub(crate) fn open_settings(
             w.set_context_processing(true);
             w.set_meeting_context_result(SharedString::from("обработка через AI…"));
             let weak2 = w.as_weak();
+            let cfg_err = cfg_c.clone();
             // Off-thread with a local current-thread runtime (reqwest is
             // async-only); same pattern as the AI-bridge / STT test buttons.
             std::thread::spawn(move || {
@@ -969,9 +1019,19 @@ pub(crate) fn open_settings(
                         Ok(_) => w.set_meeting_context_result(SharedString::from(
                             "[--] AI вернул пустой ответ",
                         )),
-                        Err(e) => w.set_meeting_context_result(SharedString::from(format!(
-                            "[--] ошибка AI: {e}"
-                        ))),
+                        Err(e) => {
+                            let msg =
+                                if overlay_backend::deep_lock::is_blocked_error(&e.to_string()) {
+                                    let ru = cfg_err.read().ui_is_ru();
+                                    format!(
+                                        "[--] {}",
+                                        overlay_backend::deep_lock::blocked_notice(ru)
+                                    )
+                                } else {
+                                    format!("[--] ошибка AI: {e}")
+                                };
+                            w.set_meeting_context_result(SharedString::from(msg));
+                        }
                     }
                 });
             });
@@ -1162,21 +1222,85 @@ pub(crate) fn msg_refresh_after_import(
     "[ok] imported — restart binary for full effect".to_string()
 }
 
+/// EN/RU copy for the Components hub rows (name + where-to-install hint).
+/// Pure so the localization table is testable without a Slint window.
+#[must_use]
+pub(crate) fn component_row_copy(
+    kind: overlay_backend::components::ComponentKind,
+    ru: bool,
+) -> (&'static str, &'static str) {
+    use overlay_backend::components::ComponentKind;
+    match kind {
+        ComponentKind::Engine => {
+            if ru {
+                (
+                    "Движок (llama.cpp)",
+                    "Настройки → AI → AI мост → «Обновить движок»",
+                )
+            } else {
+                (
+                    "Engine (llama.cpp)",
+                    "Settings → AI → AI bridge → Update engine",
+                )
+            }
+        }
+        ComponentKind::LocalModel => {
+            if ru {
+                (
+                    "Локальная модель ИИ",
+                    "Настройки → AI → AI мост → «Установить локальный ИИ»",
+                )
+            } else {
+                (
+                    "Local AI model",
+                    "Settings → AI → AI bridge → Install local AI",
+                )
+            }
+        }
+        ComponentKind::Stt => {
+            if ru {
+                ("Распознавание речи (STT)", "Настройки → AI → STT")
+            } else {
+                ("Speech recognition (STT)", "Settings → AI → STT")
+            }
+        }
+        ComponentKind::Voices => {
+            if ru {
+                ("Голоса (TTS)", "Настройки → AI → TTS → «Установить голоса»")
+            } else {
+                ("Voices (TTS)", "Settings → AI → TTS → Install voices")
+            }
+        }
+        ComponentKind::Ocr => {
+            if ru {
+                (
+                    "Распознавание текста (OCR)",
+                    "Настройки → AI → AI мост → Vision → «Установить OCR»",
+                )
+            } else {
+                (
+                    "Text recognition (OCR)",
+                    "Settings → AI → AI bridge → Vision → Install OCR",
+                )
+            }
+        }
+    }
+}
+
 /// Push the onboarding «Компоненты» readiness rows (engine / model / STT /
 /// voices / OCR) into the Settings UI, built from the backend's single source of
 /// truth so the hub can never disagree with the real install state. Called on
 /// EVERY Settings open — both the fresh-window seed AND the reused-window
 /// refresh path — so the status reflects reality after the user installs a
-/// component (mirrors populate_token_status / refresh_profiles). RU names + a
-/// where-to-install hint are dynamic content, like the archive labels.
+/// component (mirrors populate_token_status / refresh_profiles). Names + hints
+/// are language-dependent (`cfg.ui_language`) — also rebuilt on a live language
+/// switch, like populate_tile_monitors.
 pub(crate) fn populate_component_rows(
     win: &SettingsWindow,
     snap: &overlay_backend::config::Config,
 ) {
     use overlay_backend::components::{status, ComponentKind};
-    // Clear any stuck inline-install busy state so a reopened window never shows
-    // a stale "Устанавливается…"/error from a previous open.
-    win.set_component_busy_index(-1);
+    let ru = snap.ui_is_ru();
     let rows: Vec<ComponentRow> = status(snap)
         .into_iter()
         .map(|c| {
@@ -1189,24 +1313,7 @@ pub(crate) fn populate_component_rows(
                 ComponentKind::Stt => 12,                                // STT
                 ComponentKind::Voices | ComponentKind::Ocr => -1,
             };
-            let (name, hint) = match c.kind {
-                ComponentKind::Engine => (
-                    "Движок (llama.cpp)",
-                    "Настройки → AI → AI мост → «Обновить движок»",
-                ),
-                ComponentKind::LocalModel => (
-                    "Локальная модель ИИ",
-                    "Настройки → AI → AI мост → «Установить локальный ИИ»",
-                ),
-                ComponentKind::Stt => ("Распознавание речи (STT)", "Настройки → AI → STT"),
-                ComponentKind::Voices => {
-                    ("Голоса (TTS)", "Настройки → AI → TTS → «Установить голоса»")
-                }
-                ComponentKind::Ocr => (
-                    "Распознавание текста (OCR)",
-                    "Настройки → AI → AI мост → Vision → «Установить OCR»",
-                ),
-            };
+            let (name, hint) = component_row_copy(c.kind, ru);
             ComponentRow {
                 name: SharedString::from(name),
                 detail: SharedString::from(c.detail.as_str()),
@@ -1218,6 +1325,12 @@ pub(crate) fn populate_component_rows(
         })
         .collect();
     win.set_component_rows(ModelRc::new(VecModel::from(rows)));
+}
+
+fn reset_component_install_state(win: &SettingsWindow) {
+    win.set_component_busy_index(-1);
+    win.set_component_busy_phase(0);
+    win.set_component_busy_label(SharedString::from(""));
 }
 
 /// Push the multi-profile state into the Settings UI: the profile-name list, the
@@ -1282,6 +1395,28 @@ pub(crate) fn populate_tile_monitors(win: &SettingsWindow, c: &overlay_backend::
     }
     win.set_tile_monitors(ModelRc::new(VecModel::from(labels)));
     win.set_tile_monitor_index(sel);
+}
+
+/// Seed the Read-aloud tab's voice dropdown from the installed voices, with
+/// labels in the CURRENT UI language. Called on Settings open AND on a live
+/// language switch (Rust-built labels don't auto-refresh like @tr bindings).
+pub(crate) fn populate_tts_voices(win: &SettingsWindow, c: &overlay_backend::config::Config) {
+    let voices = overlay_backend::tts::voices(c.ui_is_ru());
+    let names: Vec<SharedString> = voices
+        .iter()
+        .map(|v| SharedString::from(v.name.as_str()))
+        .collect();
+    // Show the voice the ENGINE actually resolves to, not blindly voices[0]:
+    // for an empty/uninstalled `tts_voice`, `pick_voice_id` mirrors the
+    // sidecar's preference (Irina → any Piper → any RU → first), so the
+    // dropdown label matches the voice that Test / read-aloud will play.
+    let vidx = overlay_backend::tts::pick_voice_id(&voices, &c.tts_voice)
+        .and_then(|id| voices.iter().position(|v| v.id == id))
+        .unwrap_or(0) as i32;
+    win.set_tts_available(!voices.is_empty());
+    win.set_tts_voice_names(ModelRc::new(VecModel::from(names)));
+    win.set_tts_voice_index(vidx);
+    win.set_tts_rate_index(preset_for_tts_rate(c.tts_rate));
 }
 
 /// Populate the Settings window's token-status display properties
@@ -1474,23 +1609,8 @@ pub(crate) fn populate_token_status(
     // saved voice/speed. The neural voices live in `%APPDATA%\suflyor\tts`;
     // `tts::voices()` scans them (empty until the user installs one → the panel
     // shows a "no voices" hint and disables the Test button).
+    populate_tts_voices(win, &c);
     {
-        let voices = overlay_backend::tts::voices();
-        let names: Vec<SharedString> = voices
-            .iter()
-            .map(|v| SharedString::from(v.name.as_str()))
-            .collect();
-        // Show the voice the ENGINE actually resolves to, not blindly voices[0]:
-        // for an empty/uninstalled `tts_voice`, `pick_voice_id` mirrors the
-        // sidecar's preference (Irina → any Piper → any RU → first), so the
-        // dropdown label matches the voice that Test / read-aloud will play.
-        let vidx = overlay_backend::tts::pick_voice_id(&voices, &c.tts_voice)
-            .and_then(|id| voices.iter().position(|v| v.id == id))
-            .unwrap_or(0) as i32;
-        win.set_tts_available(!voices.is_empty());
-        win.set_tts_voice_names(ModelRc::new(VecModel::from(names)));
-        win.set_tts_voice_index(vidx);
-        win.set_tts_rate_index(preset_for_tts_rate(c.tts_rate));
         // Reset the transient install state on (re)open — the Settings window is
         // reused, so a leftover "Готово…" / progress string must not survive.
         win.set_tts_installing(false);
@@ -1553,5 +1673,50 @@ pub(crate) fn populate_token_status(
     fetch_models(win.as_weak(), cfg.clone(), ModelTarget::Cloud);
     if is_local {
         fetch_models(win.as_weak(), cfg.clone(), ModelTarget::Local);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+    use super::component_row_copy;
+    use overlay_backend::components::ComponentKind;
+
+    /// The Components hub rows follow the interface language in BOTH
+    /// directions — the old rows were unconditionally Cyrillic, so an English
+    /// UI showed Russian names/hints until the window was reopened.
+    #[test]
+    fn component_row_copy_follows_ui_language() {
+        for kind in [
+            ComponentKind::Engine,
+            ComponentKind::LocalModel,
+            ComponentKind::Stt,
+            ComponentKind::Voices,
+            ComponentKind::Ocr,
+        ] {
+            let (name_ru, hint_ru) = component_row_copy(kind, true);
+            let (name_en, hint_en) = component_row_copy(kind, false);
+            assert!(!name_ru.is_empty() && !hint_ru.is_empty());
+            assert!(!name_en.is_empty() && !hint_en.is_empty());
+            assert_ne!(name_ru, name_en, "kind {kind:?} name must be localized");
+            assert_ne!(hint_ru, hint_en, "kind {kind:?} hint must be localized");
+        }
+        // Spot-check the wording the tester sees.
+        assert_eq!(
+            component_row_copy(ComponentKind::Engine, false).0,
+            "Engine (llama.cpp)"
+        );
+        assert_eq!(
+            component_row_copy(ComponentKind::Voices, false).0,
+            "Voices (TTS)"
+        );
+        assert_eq!(
+            component_row_copy(ComponentKind::Ocr, false).0,
+            "Text recognition (OCR)"
+        );
+        assert_eq!(
+            component_row_copy(ComponentKind::Engine, true).0,
+            "Движок (llama.cpp)"
+        );
     }
 }

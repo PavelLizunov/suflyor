@@ -323,14 +323,24 @@ impl RuntimeEvents for PttStreamSink {
                 // into the screen-shared tile. classify_ai_error maps it to a
                 // generic &'static str (no URL/IP). Same sanitiser the non-
                 // streaming path uses; this streaming path is reached by 🔄
-                // regenerate + push-to-talk asks.
-                let safe = classify_ai_error(&message);
+                // regenerate + push-to-talk asks. A deep-locked managed server
+                // gets the specific localized notice.
+                let blocked = overlay_backend::deep_lock::is_blocked_error(&message);
+                let safe = if blocked {
+                    let ru = self.bridge.cfg.read().ui_is_ru();
+                    overlay_backend::deep_lock::blocked_notice(ru)
+                } else {
+                    classify_ai_error(&message)
+                };
+                let body = if blocked {
+                    safe.to_string()
+                } else {
+                    format!("AI error: {safe}")
+                };
                 let weak = self.tile.clone();
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(t) = weak.upgrade() {
-                        t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&format!(
-                            "AI error: {safe}"
-                        )))));
+                        t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&body))));
                         t.set_source_label(SharedString::from("error"));
                         t.set_followup_busy(false);
                     }
@@ -359,6 +369,9 @@ impl RuntimeEvents for PttStreamSink {
 // and creates real TileWindows.
 pub(crate) struct OverlayBarBridge {
     pub(crate) overlay_weak: slint::Weak<OverlayBarWindow>,
+    /// Live config — lets the streaming error render localize the deep-lock
+    /// notice without plumbing a language flag through every ask path.
+    pub(crate) cfg: overlay_backend::config::SharedConfig,
     pub(crate) spawn_tx: tokio_mpsc::UnboundedSender<SpawnTileRequest>,
     pub(crate) tile_seq: AtomicU64,
     /// Phase E6 v18 — last time we pushed a transcript:line update
@@ -653,14 +666,26 @@ impl OverlayBarBridge {
                     // SECURITY (review C1) — sanitise: the raw error chain embeds
                     // the LOCAL AI server's LAN IP:port, which would leak into the
                     // screen-shared tile. This streaming path is reached by F9 +
-                    // voice follow-up (🎤). classify_ai_error → generic message.
-                    let safe = classify_ai_error(&message);
+                    // voice follow-up (🎤). classify_ai_error → generic message;
+                    // a deep-locked managed server gets the localized notice.
+                    let blocked = overlay_backend::deep_lock::is_blocked_error(&message);
+                    let safe = if blocked {
+                        let ru = self.cfg.read().ui_is_ru();
+                        overlay_backend::deep_lock::blocked_notice(ru)
+                    } else {
+                        classify_ai_error(&message)
+                    };
                     // Keep any prior thread; append the error below it so a
                     // follow-up failure doesn't wipe the conversation.
-                    let body = if stream.prefix.is_empty() {
-                        format!("AI error: {safe}")
+                    let err_line = if blocked {
+                        safe.to_string()
                     } else {
-                        format!("{}\n\nAI error: {safe}", stream.prefix)
+                        format!("AI error: {safe}")
+                    };
+                    let body = if stream.prefix.is_empty() {
+                        err_line
+                    } else {
+                        format!("{}\n\n{err_line}", stream.prefix)
                     };
                     let _ = slint::invoke_from_event_loop(move || {
                         if let Some(tile) = weak.upgrade() {

@@ -43,7 +43,8 @@
 //! `diag!` macro / `populate_token_status` / the `overlay_backend` config + ai
 //! helpers). That is intentional for the move; imports narrow in a later pass.
 use super::{
-    populate_token_status, ComponentHandle, ModelRc, SettingsWindow, SharedString, VecModel,
+    populate_token_status, refresh_lock_chip, ComponentHandle, ModelRc, OverlayBarWindow,
+    SettingsWindow, SharedString, VecModel,
 };
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -156,7 +157,11 @@ pub(crate) fn refresh_local_model_resource_warning(
 /// the AI blocks touch `state` / `overlay_weak` / `slint_rt` / `rt_handle` (the
 /// bar's active-stack readout is refreshed by the Settings close handler, which
 /// stays in `open_settings`), so no extra params are threaded through.
-pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::config::SharedConfig) {
+pub(crate) fn wire_ai_settings(
+    win: &SettingsWindow,
+    cfg: &overlay_backend::config::SharedConfig,
+    overlay_weak: &slint::Weak<OverlayBarWindow>,
+) {
     // Phase E6 — token + AI bridge config save wires.
     {
         let cfg_c = cfg.clone();
@@ -270,6 +275,7 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
+        let overlay = overlay_weak.clone();
         win.on_ai_provider_changed(move |idx| {
             let provider = if idx == 1 { "local" } else { "cloud" };
             let mut c = cfg_c.write();
@@ -280,6 +286,9 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
                 );
             } else {
                 c.ai_provider = provider.to_string();
+            }
+            if overlay_backend::deep_lock::cfg_is_managed_local(&c) && c.deep_lock {
+                c.suppress_tiles = true;
             }
             let local_state = (provider == "local").then(|| {
                 let root = overlay_backend::local_ai::default_root();
@@ -298,6 +307,9 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
             }
             overlay_backend::ai::set_local_no_think(provider == "local" && !c.ai_local_thinking);
             drop(c);
+            if let Some(o) = overlay.upgrade() {
+                refresh_lock_chip(&o, &cfg_c);
+            }
             diag!("ai_provider -> {provider}");
             // #E10.1 — switching to Local auto-populates the model dropdown.
             if let Some((
@@ -342,6 +354,7 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
+        let overlay = overlay_weak.clone();
         win.on_ai_local_base_url_save(move |v| {
             let base_url = v.trim().to_string();
             let root = overlay_backend::local_ai::default_root();
@@ -359,6 +372,9 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
                 let managed = overlay_backend::local_ai::is_managed_llama_endpoint(&base_url);
                 if managed {
                     overlay_backend::local_ai::repair_managed_model_state(&mut c, &root);
+                    if c.ai_provider == "local" && c.deep_lock {
+                        c.suppress_tiles = true;
+                    }
                 }
                 if let Err(e) = overlay_backend::config::save(&c) {
                     eprintln!("[overlay-host] ai_local_base_url save failed: {e:#}");
@@ -374,6 +390,9 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
                     overlay_backend::local_ai::local_vision_available(&c, &root),
                 )
             };
+            if let Some(o) = overlay.upgrade() {
+                refresh_lock_chip(&o, &cfg_c);
+            }
             if let Some(w) = weak.upgrade() {
                 w.set_managed_local_server(managed);
                 w.set_ai_local_quality(quality);
@@ -483,12 +502,13 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
                 return;
             };
             w.set_ai_local_test_result(SharedString::from("Проверка…"));
-            let (base_url, bearer, model) = {
+            let (base_url, bearer, model, ui_is_ru) = {
                 let c = cfg_c.read();
                 (
                     c.ai_local_base_url.clone(),
                     c.ai_local_bearer.clone(),
                     c.ai_local_model.clone(),
+                    c.ui_is_ru(),
                 )
             };
             let weak_res = w.as_weak();
@@ -502,6 +522,17 @@ pub(crate) fn wire_ai_settings(win: &SettingsWindow, cfg: &overlay_backend::conf
                             base_url, bearer, model,
                         )) {
                             Ok(s) => format!("[ok] {s}"),
+                            // A deep-locked managed server: the specific
+                            // localized notice instead of a misleading "server
+                            // not answering".
+                            Err(e)
+                                if overlay_backend::deep_lock::is_blocked_error(&e.to_string()) =>
+                            {
+                                format!(
+                                    "[--] {}",
+                                    overlay_backend::deep_lock::blocked_notice(ui_is_ru)
+                                )
+                            }
                             // UI-audit 2026-06-13: do NOT echo the raw error body
                             // into the panel. A starting llama-server returns the
                             // full `HTTP 503 — {"error":{"message":"Loading
