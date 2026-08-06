@@ -3743,7 +3743,8 @@ fn main() -> Result<(), slint::PlatformError> {
                                 Vec::new(),
                             ),
                         };
-                        let success = outcome == overlay_backend::local_ai::ModelSwitch::Switched;
+                        let success =
+                            overlay_backend::local_ai::switch_has_ready_server(outcome);
                         // ONLY a confirmed-ready server releases deep lock +
                         // suppression. Persist that release before exposing it;
                         // if the save fails, stop the just-started server and

@@ -1976,6 +1976,15 @@ pub const fn switch_commits_choice(outcome: ModelSwitch) -> bool {
     matches!(outcome, ModelSwitch::Switched)
 }
 
+/// Whether a switch outcome leaves a confirmed-ready managed server running.
+#[must_use]
+pub const fn switch_has_ready_server(outcome: ModelSwitch) -> bool {
+    matches!(
+        outcome,
+        ModelSwitch::Switched | ModelSwitch::RolledBack | ModelSwitch::FallbackStarted
+    )
+}
+
 /// Transactionally switch between the managed 4B, 12B, and 26B models. A target is
 /// accepted only after `/models` advertises its exact alias and a minimal chat
 /// completion succeeds. On failure the previous model is relaunched.
