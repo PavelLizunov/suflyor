@@ -1,0 +1,54 @@
+import { Theme } from "theme.slint";
+import { Metrics } from "metrics.slint";
+import { LockModeMenuRow } from "overlay_bar.slint";
+
+// A real top-level window: unlike PopupWindow inside OverlayBarWindow it is
+// not clipped by the bar's deliberately small 64px client rectangle.
+export component LockModeMenuWindow inherits Window {
+    no-frame: true;
+    always-on-top: true;
+    title: @tr("Lock mode");
+    background: transparent;
+    preferred-width: 210px;
+    preferred-height: root.managed ? 106px : 74px;
+    in property <bool> managed: false;
+    in property <int> mode: 0;
+    callback mode-selected(int);
+    callback dismissed();
+    forward-focus: scope;
+
+    scope := FocusScope {
+        key-pressed(e) => {
+            if (e.text == Key.Escape) {
+                root.dismissed();
+                return accept;
+            }
+            return reject;
+        }
+        Rectangle {
+            background: Theme.bg-elevated;
+            border-color: Theme.border-strong;
+            border-width: Metrics.border-thin;
+            border-radius: Metrics.radius-control;
+            VerticalLayout {
+                padding: Metrics.space-xs;
+                spacing: 2px;
+                LockModeMenuRow {
+                    label: @tr("Normal");
+                    current: root.mode == 0;
+                    clicked => { root.mode-selected(0); }
+                }
+                LockModeMenuRow {
+                    label: @tr("Listening");
+                    current: root.mode == 1;
+                    clicked => { root.mode-selected(1); }
+                }
+                if root.managed : LockModeMenuRow {
+                    label: @tr("Unload local AI");
+                    current: root.mode == 2;
+                    clicked => { root.mode-selected(2); }
+                }
+            }
+        }
+    }
+}

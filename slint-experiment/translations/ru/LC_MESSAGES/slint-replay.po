@@ -1878,3 +1878,6 @@ msgstr "Прослушивание"
 
 msgid "Unload local AI"
 msgstr "Выгрузить локальный ИИ"
+
+msgid "Lock mode"
+msgstr "Режим блокировки"

@@ -18,9 +18,9 @@
 use super::{
     enum_monitors, get_mic_active, get_sys_active, get_window_rect, grab_hwnd,
     move_window_pos_only, pick_monitor, refresh_status, set_stealth, ui, ArchiveWindow,
-    ComponentHandle, Duration, HelpWindow, OverlayBarWindow, PaletteWindow, Rc, RecoverOfferWindow,
-    RefCell, SettingsWindow, TextAskWindow, TileWindow, TileWindows, Timer, TranscriptWindow,
-    WizardWindow, HWND_GRAB_DELAY_MS, HWND_REVEAL_FAST_MS,
+    ComponentHandle, Duration, HelpWindow, LockModeMenuWindow, OverlayBarWindow, PaletteWindow, Rc,
+    RecoverOfferWindow, RefCell, SettingsWindow, TextAskWindow, TileWindow, TileWindows, Timer,
+    TranscriptWindow, WizardWindow, HWND_GRAB_DELAY_MS, HWND_REVEAL_FAST_MS,
 };
 
 /// Phase E6 v36 — process-global tile body opacity (raw f32 bits in an
@@ -428,6 +428,9 @@ pub(crate) fn refresh_open_tiles(weak: &slint::Weak<OverlayBarWindow>, tiles: &T
 pub(crate) fn apply_scheme_bar(w: &OverlayBarWindow, scheme: i32) {
     w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
 }
+pub(crate) fn apply_scheme_lock_menu(w: &LockModeMenuWindow, scheme: i32) {
+    w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
+}
 pub(crate) fn apply_scheme_tile(w: &TileWindow, scheme: i32) {
     w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
 }
@@ -484,6 +487,9 @@ pub(crate) struct WindowRegistry {
     /// viewer — it MUST re-stealth on an OFF→ON toggle; otherwise an archive
     /// opened while stealth was off stays captured after stealth is turned on.
     pub archive: Rc<RefCell<Option<ArchiveWindow>>>,
+    /// Transient lock-mode menu. Although short-lived, it can reveal the local
+    /// AI state, so a live stealth/theme switch must reach it too.
+    pub lock_menu: Rc<RefCell<Option<Rc<LockModeMenuWindow>>>>,
 }
 
 impl WindowRegistry {
@@ -572,6 +578,11 @@ impl WindowRegistry {
                 apply_stealth_one(hwnd, on);
             }
         }
+        if let Some(menu) = self.lock_menu.borrow().as_ref() {
+            if let Ok(hwnd) = grab_hwnd(menu.window()) {
+                apply_stealth_one(hwnd, on);
+            }
+        }
     }
 
     /// Re-skin EVERY open registry window to `scheme` (Theme is a per-window
@@ -605,6 +616,9 @@ impl WindowRegistry {
         }
         if let Some(a) = self.archive.borrow().as_ref() {
             apply_scheme_archive(a, scheme);
+        }
+        if let Some(menu) = self.lock_menu.borrow().as_ref() {
+            apply_scheme_lock_menu(menu, scheme);
         }
     }
 

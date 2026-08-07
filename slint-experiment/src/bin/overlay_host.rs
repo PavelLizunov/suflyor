@@ -27,7 +27,7 @@ use slint_replay::slint_session;
 use slint_replay::win32::{
     drag_begin, drag_update, enum_monitors, focus_window, get_window_rect, grab_hwnd,
     make_transparent_overlay, make_transparent_tile, move_window_pos_only, pick_monitor,
-    set_always_on_top, set_skip_taskbar, set_stealth, work_area_for_window,
+    set_always_on_top, set_skip_taskbar, set_stealth, set_window_owner, work_area_for_window,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -60,9 +60,10 @@ mod ui {
 }
 
 use ui::{
-    ArchiveRow, ArchiveWindow, CaptureOverlay, ComponentRow, HelpWindow, MarkdownBlock, MemoryRow,
-    OverlayBarWindow, PaletteResult, PaletteWindow, RecoverOfferWindow, SettingsWindow, SpeakerRow,
-    TextAskWindow, TileWindow, TranscriptLine, TranscriptWindow, WizardWindow,
+    ArchiveRow, ArchiveWindow, CaptureOverlay, ComponentRow, HelpWindow, LockModeMenuWindow,
+    MarkdownBlock, MemoryRow, OverlayBarWindow, PaletteResult, PaletteWindow, RecoverOfferWindow,
+    SettingsWindow, SpeakerRow, TextAskWindow, TileWindow, TranscriptLine, TranscriptWindow,
+    WizardWindow,
 };
 
 // Phase 1 of the modularization (docs/overlay-host-modularization-plan.md §5.1):
@@ -2303,6 +2304,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // (a) survives the archive closing, like session tiles, and (b) sits in the
     // registry below, so a live stealth toggle re-applies WDA to it too.
     let transcript: Rc<RefCell<Option<TranscriptWindow>>> = Rc::new(RefCell::new(None));
+    let lock_menu: Rc<RefCell<Option<Rc<LockModeMenuWindow>>>> = Rc::new(RefCell::new(None));
     // Memory Phase 1 — crash-recovery offer, shown once a beat after startup if
     // the newest journal looks unfinished (see the delayed-open below).
     let recover_offer: Rc<RefCell<Option<RecoverOfferWindow>>> = Rc::new(RefCell::new(None));
@@ -2323,6 +2325,7 @@ fn main() -> Result<(), slint::PlatformError> {
         recover_offer: recover_offer.clone(),
         transcript: transcript.clone(),
         archive: archive.clone(),
+        lock_menu: lock_menu.clone(),
     };
     // V3 — the Lightshot capture overlay. PERSISTENT + pre-stealthed so F8 shows
     // it flash-free: WDA_EXCLUDEFROMCAPTURE keeps it off any screen-share from the
@@ -3533,6 +3536,120 @@ fn main() -> Result<(), slint::PlatformError> {
     // the lock. Cloud / external Ollama keep the legacy two-state toggle —
     // external processes are never stopped.
     {
+        // The menu must be its own native window: PopupWindow is clipped by the
+        // intentionally 64px-high overlay bar on winit/Win32.
+        let menu = match LockModeMenuWindow::new() {
+            Ok(menu) => Rc::new(menu),
+            Err(e) => {
+                eprintln!("[overlay-host] LockModeMenuWindow::new failed: {e}");
+                return Err(e);
+            }
+        };
+        *lock_menu.borrow_mut() = Some(menu.clone());
+        {
+            let menu = menu.clone();
+            let menu_for_callback = menu.clone();
+            let weak = overlay.as_weak();
+            menu.on_mode_selected(move |mode| {
+                menu_for_callback.hide().ok();
+                if let Some(bar) = weak.upgrade() {
+                    bar.invoke_lock_mode_selected(mode);
+                }
+            });
+        }
+        {
+            let menu = menu.clone();
+            let menu_for_callback = menu.clone();
+            menu.on_dismissed(move || {
+                menu_for_callback.hide().ok();
+            });
+        }
+        {
+            let menu = menu.clone();
+            let weak = overlay.as_weak();
+            let cfg_for_menu = cfg.clone();
+            overlay.on_lock_menu_opened(move |anchor_x, anchor_y| {
+                if menu.window().is_visible() {
+                    menu.hide().ok();
+                    return;
+                }
+                let Some(bar) = weak.upgrade() else {
+                    return;
+                };
+                let snap = cfg_for_menu.read();
+                let managed = overlay_backend::deep_lock::cfg_is_managed_local(&snap);
+                menu.set_managed(managed);
+                menu.set_mode(if managed && snap.deep_lock {
+                    2
+                } else if snap.suppress_tiles {
+                    1
+                } else {
+                    0
+                });
+                menu.global::<ui::Theme>()
+                    .set_scheme(clamp_scheme(snap.color_scheme));
+                drop(snap);
+
+                let Ok(bar_hwnd) = grab_hwnd(bar.window()) else {
+                    return;
+                };
+                let Ok((bar_left, bar_top, _, _)) = get_window_rect(bar_hwnd) else {
+                    return;
+                };
+                let scale = bar.window().scale_factor().max(0.1);
+                let menu_width = (210.0 * scale).round() as i32;
+                let menu_height = ((if managed { 106.0 } else { 74.0 }) * scale).round() as i32;
+                let anchor_x = bar_left + (anchor_x * scale) as i32;
+                let anchor_y = bar_top + (anchor_y * scale) as i32;
+                let monitor = enum_monitors()
+                    .into_iter()
+                    .find(|m| {
+                        anchor_x >= m.left
+                            && anchor_x < m.right
+                            && anchor_y >= m.top
+                            && anchor_y < m.bottom
+                    })
+                    .or_else(|| enum_monitors().into_iter().find(|m| m.is_primary));
+                let Some(monitor) = monitor else {
+                    return;
+                };
+                let x = (anchor_x - menu_width).clamp(monitor.left, monitor.right - menu_width);
+                let below = anchor_y + (4.0 * scale) as i32;
+                let y = if below + menu_height <= monitor.bottom {
+                    below
+                } else {
+                    (bar_top - menu_height - (4.0 * scale) as i32).max(monitor.top)
+                };
+                // Realize off-screen, then add owner/taskbar/stealth styles
+                // before the first visible frame. A fresh Slint HWND is not
+                // always available immediately after show(), hence the shared
+                // retry helper rather than a best-effort one-shot grab.
+                menu.window()
+                    .set_position(slint::PhysicalPosition::new(-32000, -32000));
+                if menu.show().is_err() {
+                    return;
+                }
+                let reveal = Rc::new(move |window: &LockModeMenuWindow| {
+                    let Ok(hwnd) = grab_hwnd(window.window()) else {
+                        return false;
+                    };
+                    set_window_owner(hwnd, bar_hwnd);
+                    if set_skip_taskbar(hwnd, true).is_err()
+                        || set_always_on_top(hwnd, true).is_err()
+                        || (global_stealth() && set_stealth(hwnd, true).is_err())
+                    {
+                        return false;
+                    }
+                    move_window_pos_only(hwnd, x, y).is_ok()
+                });
+                let fallback = Rc::new(|window: &LockModeMenuWindow| {
+                    window.hide().ok();
+                    diag!("[overlay-host] lock menu: native window did not realize; kept hidden");
+                });
+                realize_with_retries(menu.as_ref(), reveal, fallback);
+            });
+        }
+
         let cfg_for_lock = cfg.clone();
         let state_for_lock = state.clone();
         let events_for_lock = events.clone();
