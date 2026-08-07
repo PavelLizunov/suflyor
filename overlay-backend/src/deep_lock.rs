@@ -70,6 +70,8 @@ pub fn cfg_is_managed_local(cfg: &crate::config::Config) -> bool {
 /// without UI/process state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LockAction {
+    /// The requested mode is already active.
+    Noop,
     /// Cloud / external (e.g. Ollama) endpoint: the legacy two-state toggle of
     /// `suppress_tiles` only. External processes are never stopped.
     ToggleSuppress,
@@ -81,6 +83,47 @@ pub enum LockAction {
     /// Managed local, deep-locked → start the selected managed model back up;
     /// clear deep lock + `suppress_tiles` only on confirmed readiness.
     Unlock,
+}
+
+/// Explicit mode choices shown by the lock-chip menu.
+///
+/// `Deep` is offered only for an app-managed local server.  Keeping the
+/// choice separate from [`LockAction`] lets the host preserve Listening when
+/// it has to reload a deep-locked model first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LockMode {
+    Normal,
+    Listening,
+    Deep,
+}
+
+/// Select the smallest state transition for a menu choice.  This is pure so
+/// cloud and external endpoints can be proved never to reach deep-lock
+/// lifecycle work.
+#[must_use]
+pub fn lock_mode_action(
+    is_managed_local: bool,
+    suppress_tiles: bool,
+    deep_lock: bool,
+    requested: LockMode,
+) -> LockAction {
+    match requested {
+        LockMode::Normal if deep_lock => LockAction::Unlock,
+        LockMode::Normal if suppress_tiles => LockAction::ToggleSuppress,
+        LockMode::Normal => LockAction::Noop,
+        LockMode::Listening if deep_lock => LockAction::Unlock,
+        LockMode::Listening if suppress_tiles => LockAction::Noop,
+        LockMode::Listening => LockAction::EnableListening,
+        LockMode::Deep if !is_managed_local => {
+            if suppress_tiles {
+                LockAction::Noop
+            } else {
+                LockAction::EnableListening
+            }
+        }
+        LockMode::Deep if deep_lock => LockAction::Noop,
+        LockMode::Deep => LockAction::EnterDeepLock,
+    }
 }
 
 #[must_use]
@@ -274,6 +317,29 @@ mod tests {
         assert_eq!(
             next_lock_action(false, true, true),
             LockAction::ToggleSuppress
+        );
+    }
+
+    #[test]
+    fn explicit_menu_preserves_listening_when_reloading_from_deep_lock() {
+        assert_eq!(
+            lock_mode_action(true, true, true, LockMode::Listening),
+            LockAction::Unlock,
+            "host must reload first, then retain suppression"
+        );
+        assert_eq!(
+            lock_mode_action(true, true, true, LockMode::Normal),
+            LockAction::Unlock
+        );
+        assert_eq!(
+            lock_mode_action(true, false, false, LockMode::Deep),
+            LockAction::EnterDeepLock,
+            "the explicit deep choice can skip the intermediate mode"
+        );
+        assert_eq!(
+            lock_mode_action(false, false, false, LockMode::Deep),
+            LockAction::EnableListening,
+            "an unavailable deep choice never unloads an external process"
         );
     }
 

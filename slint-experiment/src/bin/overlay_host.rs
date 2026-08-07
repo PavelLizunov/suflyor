@@ -3542,21 +3542,32 @@ fn main() -> Result<(), slint::PlatformError> {
         if let Some(o) = weak_for_lock.upgrade() {
             refresh_lock_chip(&o, &cfg_for_lock);
         }
-        overlay.on_suppress_tiles_toggle_clicked(move || {
-            use overlay_backend::deep_lock::{LockAction, LockStatus};
+        overlay.on_lock_mode_selected(move |mode| {
+            use overlay_backend::deep_lock::{LockAction, LockMode, LockStatus};
+            let requested = match mode {
+                1 => LockMode::Listening,
+                2 => LockMode::Deep,
+                _ => LockMode::Normal,
+            };
             let action = {
                 let c = cfg_for_lock.read();
-                overlay_backend::deep_lock::next_lock_action(
+                overlay_backend::deep_lock::lock_mode_action(
                     overlay_backend::deep_lock::cfg_is_managed_local(&c),
                     c.suppress_tiles,
                     c.deep_lock,
+                    requested,
                 )
             };
             match action {
+                LockAction::Noop => {
+                    if let Some(o) = weak_for_lock.upgrade() {
+                        refresh_lock_chip(&o, &cfg_for_lock);
+                    }
+                }
                 LockAction::ToggleSuppress => {
                     let new_state = {
                         let mut c = cfg_for_lock.write();
-                        c.suppress_tiles = !c.suppress_tiles;
+                        c.suppress_tiles = false;
                         let _ = overlay_backend::config::save(&c);
                         c.suppress_tiles
                     };
@@ -3712,6 +3723,8 @@ fn main() -> Result<(), slint::PlatformError> {
                     eprintln!(
                         "[overlay-host] deep lock unlock requested — starting the managed model"
                     );
+                    // Deep -> Listening reloads the model but keeps tile suppression.
+                    let target_listening = requested == LockMode::Listening;
                     let state_unlock = state_for_lock.clone();
                     let cfg_unlock = cfg_for_lock.clone();
                     let weak_unlock = weak_for_lock.clone();
@@ -3768,11 +3781,11 @@ fn main() -> Result<(), slint::PlatformError> {
                                 &mut c, &root,
                             );
                             c.deep_lock = false;
-                            c.suppress_tiles = false;
+                            c.suppress_tiles = target_listening;
                             match overlay_backend::config::save(&c) {
                                 Ok(()) => {
                                     overlay_backend::deep_lock::set_deep_lock_active(false);
-                                    Some((c.ui_is_ru(), active_stack_label(&c)))
+                                    Some((c.ui_is_ru(), active_stack_label(&c), target_listening))
                                 }
                                 Err(e) => {
                                     c.deep_lock = true;
@@ -3804,12 +3817,16 @@ fn main() -> Result<(), slint::PlatformError> {
                             };
                             refresh_lock_chip(&o, &cfg_unlock);
                             match ready {
-                                Some((ru, label)) => {
+                                Some((ru, label, listening)) => {
                                     o.set_active_stack(SharedString::from(label));
                                     o.set_status_text(SharedString::from(
                                         overlay_backend::deep_lock::status_text(
                                             ru,
-                                            LockStatus::UnlockReady,
+                                            if listening {
+                                                LockStatus::ListeningOn
+                                            } else {
+                                                LockStatus::UnlockReady
+                                            },
                                         ),
                                     ));
                                 }
@@ -4480,6 +4497,7 @@ pub(crate) fn refresh_lock_chip(o: &OverlayBarWindow, cfg: &config::SharedConfig
     // Cloud and external/Ollama keep the original two-state visual even when a
     // dormant managed-local deep lock is persisted for a later provider switch.
     o.set_deep_lock(managed && snap.deep_lock);
+    o.set_lock_menu_managed(managed);
     o.set_lock_a11y(SharedString::from(overlay_backend::deep_lock::state_hint(
         snap.ui_is_ru(),
         managed,

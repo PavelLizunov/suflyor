@@ -1866,3 +1866,15 @@ msgstr "Повторить"
 
 msgid "Local AI unloaded"
 msgstr "Локальный ИИ выгружен"
+
+msgid "Current"
+msgstr "Текущий"
+
+msgid "Normal"
+msgstr "Обычный"
+
+msgid "Listening"
+msgstr "Прослушивание"
+
+msgid "Unload local AI"
+msgstr "Выгрузить локальный ИИ"
