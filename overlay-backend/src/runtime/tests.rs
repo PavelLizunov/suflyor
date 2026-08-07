@@ -883,6 +883,69 @@ async fn manual_spawn_empty_notice_follows_ui_not_response_language() {
     }
 }
 
+#[tokio::test]
+async fn manual_spawn_deep_lock_precedes_empty_transcript_for_managed_local_only() {
+    for (ui, expected) in [
+        ("en", crate::deep_lock::blocked_notice(false)),
+        ("ru", crate::deep_lock::blocked_notice(true)),
+    ] {
+        let cfg = hermetic_empty_config();
+        {
+            let mut c = cfg.write();
+            c.ui_language = ui.into();
+            c.ai_provider = "local".into();
+            c.ai_local_base_url = "http://127.0.0.1:8080/v1".into();
+            c.deep_lock = true;
+        }
+        let captured = Arc::new(CapturedTile::default());
+        let sink: Arc<dyn RuntimeEvents> = captured.clone();
+        let inputs = ManualSpawnInputs {
+            recent_transcript_labeled: vec![],
+            last_line: None,
+            cost_cap_reason: None,
+            journal: None,
+            health: Arc::new(HealthSignals::default()),
+        };
+        assert!(manual_spawn_tile(sink, cfg, inputs).await.is_none());
+        let tile = captured.0.lock().unwrap().clone().unwrap();
+        assert_eq!(tile.answer, expected);
+    }
+
+    // A persisted managed-local flag must not change cloud or external-local
+    // behavior. Only Suflyor's app-managed loopback endpoint owns deep lock.
+    for (provider, local_url) in [
+        ("cloud", None),
+        ("local", Some("http://127.0.0.1:11434/v1")),
+    ] {
+        let cfg = hermetic_empty_config();
+        {
+            let mut c = cfg.write();
+            c.ui_language = "en".into();
+            c.ai_provider = provider.into();
+            if let Some(url) = local_url {
+                c.ai_local_base_url = url.into();
+            }
+            c.deep_lock = true;
+        }
+        let captured = Arc::new(CapturedTile::default());
+        let sink: Arc<dyn RuntimeEvents> = captured.clone();
+        let inputs = ManualSpawnInputs {
+            recent_transcript_labeled: vec![],
+            last_line: None,
+            cost_cap_reason: None,
+            journal: None,
+            health: Arc::new(HealthSignals::default()),
+        };
+        assert!(manual_spawn_tile(sink, cfg, inputs).await.is_none());
+        let tile = captured.0.lock().unwrap().clone().unwrap();
+        assert!(
+            tile.answer.starts_with("Transcript is empty"),
+            "provider={provider}, url={local_url:?}: {:?}",
+            tile.answer
+        );
+    }
+}
+
 #[test]
 fn deterministic_summary_and_debrief_chrome_follow_ui_language() {
     assert_eq!(summary_tile_title(false), "Meeting summary");

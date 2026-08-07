@@ -2246,6 +2246,7 @@ pub async fn manual_spawn_tile(
         is_local,
         response_language,
         ui_is_ru,
+        deep_locked,
         meeting_context,
         preferred_monitor,
         stealth,
@@ -2259,6 +2260,7 @@ pub async fn manual_spawn_tile(
             ep.is_local,
             c.response_language.clone(),
             c.ui_is_ru(),
+            c.deep_lock && crate::deep_lock::cfg_is_managed_local(&c),
             c.meeting_context.clone(),
             c.tile_monitor_name.clone(),
             c.stealth_enabled,
@@ -2268,6 +2270,33 @@ pub async fn manual_spawn_tile(
         Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
         _ => MonitorHint::Auto,
     };
+
+    // Deep lock is an explicit user choice to unload the managed local AI.
+    // Surface that state before transcript/config preconditions so F6 never
+    // misdiagnoses an unloaded model as an empty transcript. A dormant flag
+    // on cloud/external providers is deliberately ignored.
+    if deep_locked {
+        log::info!("manual_spawn_tile: managed local AI is deep-locked");
+        let _ = events.spawn_tile_full(
+            TileSpec {
+                question: if ui_is_ru {
+                    "Ручной запрос (F6)"
+                } else {
+                    "Manual ask (F6)"
+                }
+                .into(),
+                answer: crate::deep_lock::blocked_notice(ui_is_ru).into(),
+                source: "manual_spawn".into(),
+                is_translation: false,
+                highlights: vec![],
+                summary_session: None,
+            },
+            monitor_hint.clone(),
+            stealth,
+            TileKind::Manual,
+        );
+        return None;
+    }
 
     let Some(line) = inputs.last_line else {
         log::info!("manual_spawn_tile: no transcript yet");

@@ -3107,6 +3107,13 @@ fn main() -> Result<(), slint::PlatformError> {
             // filled when the resolved AI endpoint answers — so the button
             // always gives instant feedback even if the model is slow/down.
             // User: "+ тайл не прожимается".
+            let (is_ru, deep_locked) = {
+                let c = cfg_ref.read();
+                (
+                    c.ui_language == "ru",
+                    c.deep_lock && overlay_backend::deep_lock::cfg_is_managed_local(&c),
+                )
+            };
             let recent_tx = {
                 let st = slint_replay::runtime_state::lock(&slint_rt_c);
                 select_recent_labeled(&st.transcript, 8).join("\n")
@@ -3117,7 +3124,6 @@ fn main() -> Result<(), slint::PlatformError> {
             } else {
                 String::new()
             };
-            let is_ru = cfg_ref.read().ui_language == "ru";
             // The visible number is owned by the tile UI ALONE (tile.slint
             // prepends #<sequence>); the title carries none — the old
             // "Вопрос по встрече #3" rendered doubled: "#3  Вопрос по встрече #3".
@@ -3134,7 +3140,11 @@ fn main() -> Result<(), slint::PlatformError> {
             // on the skia font fallback (project no-tofu rule).
             let placeholder = vec![MarkdownBlock {
                 kind: markdown::kind::PARAGRAPH,
-                text: SharedString::from(manual_tile_placeholder(has_tx, is_ru)),
+                text: SharedString::from(manual_tile_placeholder(
+                    deep_locked,
+                    has_tx,
+                    is_ru,
+                )),
                 lang: SharedString::from(""),
                 marked: false,
             }];
@@ -3185,8 +3195,11 @@ fn main() -> Result<(), slint::PlatformError> {
             t.borrow_mut().push(tile);
             refresh_open_tiles(&weak, &t);
 
-            // No transcript → the placeholder already shows the hint; done.
-            if !has_tx {
+            // An explicit managed-local deep lock takes precedence over all
+            // transcript/config preconditions; the placeholder already says
+            // that the local AI is unloaded. Empty transcript keeps its prior
+            // hint for cloud and external providers.
+            if deep_locked || !has_tx {
                 if let Some(t) = weak_for_ai.upgrade() {
                     t.set_source_label(SharedString::from(""));
                 }
@@ -4181,14 +4194,14 @@ fn apply_bar_size(overlay: &OverlayBarWindow, compact: bool) {
     let (w, h) = if compact {
         // Narrow SESSION strip (Glacier redesign): status pill + спросить +
         // захватить + timer + expand in one row, over the live-status footer —
-        // two 22px rows like the full bar, just fewer chips. 500×64 fits that
-        // row without crowding; kept in sync with overlay_bar.slint's compact
-        // min-width (480) + preferred-height (64).
-        (500.0_f32, 64.0_f32)
+        // two 22px rows like the full bar, just fewer chips. 680×64 also fits
+        // the explicit deep-lock label without crowding; kept in sync with
+        // overlay_bar.slint's compact min-width (660) + preferred-height (64).
+        (680.0_f32, 64.0_f32)
     } else {
         // 64 (was 86) — matches overlay_bar.slint preferred-height; trims the
         // empty vertical band around the 22px chip row (design review #1).
-        (1200.0_f32, 64.0_f32)
+        (1280.0_f32, 64.0_f32)
     };
     overlay.window().set_size(slint::LogicalSize::new(w, h));
     recenter_when_sized(overlay.as_weak(), w, 0);
@@ -4429,7 +4442,10 @@ fn mic_busy_status(is_ru: bool) -> &'static str {
     }
 }
 
-fn manual_tile_placeholder(has_transcript: bool, is_ru: bool) -> &'static str {
+fn manual_tile_placeholder(deep_locked: bool, has_transcript: bool, is_ru: bool) -> &'static str {
+    if deep_locked {
+        return overlay_backend::deep_lock::blocked_notice(is_ru);
+    }
     match (has_transcript, is_ru) {
         (true, true) => "Спрашиваю AI…",
         (true, false) => "Asking AI…",
@@ -4501,14 +4517,23 @@ mod tile_heading_tests {
     #[test]
     fn manual_tile_copy_follows_ui_language() {
         assert_eq!(manual_tile_heading(false, false), "Tile");
-        assert!(manual_tile_placeholder(false, false).starts_with("The transcript"));
+        assert!(manual_tile_placeholder(false, false, false).starts_with("The transcript"));
         assert!(manual_tile_not_configured(false).contains("not configured"));
         assert!(manual_tile_failure("Tile", "offline", false).contains("could not"));
 
         assert_eq!(manual_tile_heading(false, true), "Тайл");
-        assert!(manual_tile_placeholder(false, true).starts_with("Транскрипт"));
+        assert!(manual_tile_placeholder(false, false, true).starts_with("Транскрипт"));
         assert!(manual_tile_not_configured(true).contains("не настроен"));
         assert!(manual_tile_failure("Тайл", "offline", true).contains("Не удалось"));
+
+        assert_eq!(
+            manual_tile_placeholder(true, false, false),
+            overlay_backend::deep_lock::blocked_notice(false)
+        );
+        assert_eq!(
+            manual_tile_placeholder(true, false, true),
+            overlay_backend::deep_lock::blocked_notice(true)
+        );
     }
 
     #[test]

@@ -167,18 +167,29 @@ component LockChip inherits Rectangle {
             root.phase = !root.phase;
         }
     }
-    Image {
-        source: @image-url("../assets/icons/lock.svg");
-        colorize: root.locked ? root.accent : Theme.text-secondary;
-        width: 14px;
-        height: 14px;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        // transform-rotation pivots around the element centre by default → a clean wobble.
-        transform-rotation: root.locked && !root.deep ? (root.phase ? 7deg : -7deg) : 0deg;
-        animate transform-rotation {
-            duration: 85ms;
-            easing: ease-in-out;
+    HorizontalLayout {
+        padding-left: Metrics.space-sm;
+        padding-right: Metrics.space-sm;
+        spacing: Metrics.space-xs;
+        alignment: center;
+
+        Image {
+            source: @image-url("../assets/icons/lock.svg");
+            colorize: root.locked ? root.accent : Theme.text-secondary;
+            width: 14px;
+            height: 14px;
+            // transform-rotation pivots around the element centre by default → a clean wobble.
+            transform-rotation: root.locked && !root.deep ? (root.phase ? 7deg : -7deg) : 0deg;
+            animate transform-rotation {
+                duration: 85ms;
+                easing: ease-in-out;
+            }
+        }
+        if root.deep : Text {
+            text: @tr("Local AI unloaded");
+            font-size: Metrics.font-label;
+            color: root.accent;
+            vertical-alignment: center;
         }
     }
     ta := TouchArea {
@@ -412,18 +423,20 @@ export component OverlayBarWindow inherits Window {
     // worst-case slack as the verified 1120 baseline (icon-only chip ≈ 30 px).
     // v0.12.0 — 1160 → 1200 to absorb the new 📝 Summary chip (icon-only,
     // ≈ 30 px) with the same RU worst-case slack (review-agent finding).
-    preferred-width: 1200px;
+    // v0.36.1-rc.2 — 1200 → 1280 so the permanent RU deep-lock label still
+    // leaves room for Pause + Close all in the running/open-tile worst case.
+    preferred-width: 1280px;
     // 64px (was 86) — the chip row is only 22px, so 86 left a wide empty band
     // around one status line (design review #1). Kept in sync with apply_bar_size
     // in overlay_host.rs.
     preferred-height: 64px;
     // Relax the min-width in compact "narrow session" mode so the runtime
-    // set_size(500) isn't clamped back up (Slint propagates min-width to the OS
+    // set_size(680) isn't clamped back up (Slint propagates min-width to the OS
     // as a minimum inner size). Compact still needs room for status + спросить +
-    // захватить + timer + expand in one row, so 480 (not the old 300 reader
-    // pill). Full bar keeps 720 so its chip row never collapses. Kept in sync
-    // with apply_bar_size in overlay_host.rs.
-    min-width: root.compact-bar ? 480px : 720px;
+    // захватить + timer + the persistent deep-lock label + expand in one row,
+    // so 660 (not the old 300 reader pill). Full bar keeps 720 so its chip row
+    // never collapses. Kept in sync with apply_bar_size in overlay_host.rs.
+    min-width: root.compact-bar ? 660px : 720px;
 
     // Status pill text (idle / recording / etc).
     in-out property <string> status-text: "idle";
@@ -1061,9 +1074,9 @@ export component OverlayBarWindow inherits Window {
                     // below absorbs the slack and pushes Expand to the right edge.
                     horizontal-stretch: 0;
                     // Cap the pill so an unusually long / error status elides (…)
-                    // instead of growing past the narrow 500px compact window and
+                    // instead of growing past the narrow 680px compact window and
                     // clipping the right-edge chips. Short statuses stay well under
-                    // this, so the normal look is unchanged (full bar has 1200px,
+                    // this, so the normal look is unchanged (full bar has 1280px,
                     // so it never needs the cap).
                     max-width: 150px;
                     // Same accessibility label as the full bar's pill (status +
