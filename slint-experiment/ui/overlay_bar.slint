@@ -178,6 +178,7 @@ component LockChip inherits Rectangle {
             colorize: root.locked ? root.accent : Theme.text-secondary;
             width: 14px;
             height: 14px;
+            y: (parent.height - self.height) / 2;
             // transform-rotation pivots around the element centre by default → a clean wobble.
             transform-rotation: root.locked && !root.deep ? (root.phase ? 7deg : -7deg) : 0deg;
             animate transform-rotation {
