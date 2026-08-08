@@ -24,6 +24,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use wasapi::{DeviceEnumerator, Direction, SampleType, StreamMode, WaveFormat};
 
@@ -160,9 +161,13 @@ pub fn start_capture(
         thread::Builder::new()
             .name("audio-system".into())
             .spawn(move || {
-                if let Err(e) =
-                    capture_thread(AudioSource::System, Direction::Render, sys_device, tx, stop)
-                {
+                if let Err(e) = capture_with_recovery(
+                    AudioSource::System,
+                    Direction::Render,
+                    sys_device,
+                    tx,
+                    stop,
+                ) {
                     log::error!("system audio capture failed: {e:#}");
                 }
             })?;
@@ -175,9 +180,13 @@ pub fn start_capture(
         thread::Builder::new()
             .name("audio-mic".into())
             .spawn(move || {
-                if let Err(e) =
-                    capture_thread(AudioSource::Mic, Direction::Capture, mic_device, tx, stop)
-                {
+                if let Err(e) = capture_with_recovery(
+                    AudioSource::Mic,
+                    Direction::Capture,
+                    mic_device,
+                    tx,
+                    stop,
+                ) {
                     log::error!("microphone capture failed: {e:#}");
                 }
             })?;
@@ -186,12 +195,42 @@ pub fn start_capture(
     Ok((rx, CaptureHandle { stop }))
 }
 
+/// Reopen an endpoint that Windows invalidates during a headset/profile switch.
+fn capture_with_recovery(
+    source: AudioSource,
+    endpoint_dir: Direction,
+    device_name: Option<String>,
+    tx: mpsc::Sender<AudioChunk>,
+    stop: Arc<AtomicBool>,
+) -> Result<()> {
+    let start_ts = Instant::now();
+    while !stop.load(Ordering::Acquire) {
+        match capture_thread(
+            source,
+            endpoint_dir,
+            device_name.clone(),
+            tx.clone(),
+            stop.clone(),
+            start_ts,
+        ) {
+            Ok(()) => break,
+            Err(e) if !stop.load(Ordering::Acquire) => {
+                log::warn!("[{source:?}] capture interrupted ({e:#}); reopening audio device");
+                thread::sleep(Duration::from_secs(1));
+            }
+            Err(_) => break,
+        }
+    }
+    Ok(())
+}
+
 fn capture_thread(
     source: AudioSource,
     endpoint_dir: Direction,
     device_name: Option<String>,
     tx: mpsc::Sender<AudioChunk>,
     stop: Arc<AtomicBool>,
+    start_ts: Instant,
 ) -> Result<()> {
     // Each WASAPI thread needs its own COM apartment.
     // Returns Err if already initialized — safe to ignore.
@@ -273,7 +312,6 @@ fn capture_thread(
 
     // Downsampling state — simple averaging decimator from actual_rate → 16k.
     let ratio = actual_rate as f64 / TARGET_SAMPLE_RATE as f64;
-    let start_ts = std::time::Instant::now();
     let mut dropped_chunks: u64 = 0;
 
     while !stop.load(Ordering::Acquire) {
@@ -284,8 +322,8 @@ fn capture_thread(
 
         byte_q.clear();
         if let Err(e) = cap_client.read_from_device_to_deque(&mut byte_q) {
-            log::warn!("[{source:?}] read failed: {e}");
-            continue;
+            let _ = client.stop_stream();
+            return Err(e).context("read_from_device_to_deque");
         }
         if byte_q.is_empty() {
             continue;
@@ -333,6 +371,7 @@ fn capture_thread(
                     }
                     Err(mpsc::error::TrySendError::Closed(_)) => {
                         log::info!("[{source:?}] receiver dropped, exiting");
+                        stop.store(true, Ordering::Release);
                         break;
                     }
                 }

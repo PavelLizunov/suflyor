@@ -264,15 +264,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
 
 [[package]]
-name = "arc-swap"
-version = "1.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c049c0be4daef0b145cb3555416b3b8ef5b7888a38aea1a3a155801fe7b0810b"
-dependencies = [
- "rustversion",
-]
-
-[[package]]
 name = "arg_enum_proc_macro"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5858,7 +5849,7 @@ dependencies = [
 
 [[package]]
 name = "slint-replay"
-version = "0.36.1-rc.6"
+version = "0.36.1-rc.8"
 dependencies = [
  "anyhow",
  "base64 0.23.0",
@@ -5876,7 +5867,7 @@ dependencies = [
  "serde_json",
  "slint",
  "slint-build",
- "timestretch",
+ "suflyor-wsola",
  "tokio",
  "windows",
  "winresource",
@@ -6134,6 +6125,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
+name = "suflyor-wsola"
+version = "0.1.0"
+dependencies = [
+ "rustfft",
+]
+
+[[package]]
 name = "svgtypes"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6300,18 +6298,6 @@ dependencies = [
  "quick-error",
  "weezl",
  "zune-jpeg",
-]
-
-[[package]]
-name = "timestretch"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29bc0137b834925d73c1e81db0460ca58a33e37d84951d8f582732d4d0af302e"
-dependencies = [
- "arc-swap",
- "rustfft",
- "serde",
- "serde_json",
 ]
 
 [[package]]

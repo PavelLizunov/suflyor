@@ -3547,6 +3547,27 @@ fn main() -> Result<(), slint::PlatformError> {
         };
         *lock_menu.borrow_mut() = Some(menu.clone());
         {
+            // This is a top-level native window, so it needs ordinary drop-down
+            // dismissal semantics instead of the old in-bar popup behaviour.
+            use slint::winit_030::{winit, EventResult, WinitWindowAccessor};
+            use winit::event::WindowEvent;
+            let menu_weak = Rc::downgrade(&menu);
+            let focused_once = Rc::new(std::cell::Cell::new(false));
+            let focused_for_event = focused_once.clone();
+            menu.window().on_winit_window_event(move |_, event| {
+                match event {
+                    WindowEvent::Focused(true) => focused_for_event.set(true),
+                    WindowEvent::Focused(false) if focused_for_event.get() => {
+                        if let Some(menu) = menu_weak.upgrade() {
+                            menu.hide().ok();
+                        }
+                    }
+                    _ => {}
+                }
+                EventResult::Propagate
+            });
+        }
+        {
             let menu = menu.clone();
             let menu_for_callback = menu.clone();
             let weak = overlay.as_weak();
@@ -3640,7 +3661,11 @@ fn main() -> Result<(), slint::PlatformError> {
                     {
                         return false;
                     }
-                    move_window_pos_only(hwnd, x, y).is_ok()
+                    let moved = move_window_pos_only(hwnd, x, y).is_ok();
+                    if moved {
+                        focus_window(hwnd);
+                    }
+                    moved
                 });
                 let fallback = Rc::new(|window: &LockModeMenuWindow| {
                     window.hide().ok();

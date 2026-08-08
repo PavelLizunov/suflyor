@@ -136,6 +136,7 @@ export component LockModeMenuRow inherits Rectangle {
     // listening, red unloaded.  The colour stays on the row icon even before
     // selection so the consequence of each choice is apparent.
     in property <color> mode-color: Theme.text-secondary;
+    in property <bool> unlocked: false;
     callback clicked();
 
     height: 30px;
@@ -152,7 +153,7 @@ export component LockModeMenuRow inherits Rectangle {
         padding-right: Metrics.space-sm;
         spacing: Metrics.space-sm;
         Image {
-            source: @image-url("../assets/icons/lock.svg");
+            source: root.unlocked ? @image-url("../assets/icons/unlock.svg") : @image-url("../assets/icons/lock.svg");
             colorize: root.mode-color;
             width: 14px;
             height: 14px;
@@ -227,7 +228,7 @@ component LockChip inherits Rectangle {
         alignment: center;
 
         Image {
-            source: @image-url("../assets/icons/lock.svg");
+            source: root.locked ? @image-url("../assets/icons/lock.svg") : @image-url("../assets/icons/unlock.svg");
             colorize: root.locked ? root.accent : Theme.text-secondary;
             width: 14px;
             height: 14px;

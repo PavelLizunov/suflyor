@@ -85,6 +85,16 @@ Run-Step "backend test" {
     & $cargoExe test --manifest-path overlay-backend/Cargo.toml --quiet
 }
 
+Run-Step "wsola fmt --check" {
+    & $cargoExe fmt --manifest-path suflyor-wsola/Cargo.toml --all -- --check
+}
+Run-Step "wsola clippy -D warnings" {
+    & $cargoExe clippy --manifest-path suflyor-wsola/Cargo.toml --all-targets -- -D warnings
+}
+Run-Step "wsola test" {
+    & $cargoExe test --manifest-path suflyor-wsola/Cargo.toml --quiet
+}
+
 # --- suflyor-tts (read-aloud sidecar — shipped in the installer) ---
 # Build into the shared slint target dir so the cached sherpa-onnx native lib is
 # reused (a cold suflyor-tts/target build re-downloads it from GitHub).
