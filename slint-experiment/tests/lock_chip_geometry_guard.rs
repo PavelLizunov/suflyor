@@ -15,7 +15,7 @@ fn lock_chip_icon_has_an_explicit_vertical_center() {
         .expect("find LockChip component");
 
     let lock_icon = lock_chip
-        .split("source: root.locked ? @image-url(\"../assets/icons/lock.svg\") : @image-url(\"../assets/icons/unlock.svg\");")
+        .split("source: root.unlocked ? @image-url(\"../assets/icons/unlock.svg\") : @image-url(\"../assets/icons/lock.svg\");")
         .nth(1)
         .and_then(|rest| rest.split('}').next())
         .expect("find LockChip lock/unlock image");

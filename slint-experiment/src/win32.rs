@@ -694,6 +694,12 @@ pub fn focus_window(hwnd: HWND) {
     }
 }
 
+/// Whether `hwnd` is currently the native foreground window.
+pub fn is_foreground_window(hwnd: HWND) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+    unsafe { GetForegroundWindow() == hwnd }
+}
+
 /// Force a window VISIBLE at the Win32 level and bring it to the foreground.
 /// Used when re-opening a REUSED overlay window (Settings) that may have been
 /// hidden OUT FROM UNDER Slint by `hide_own_windows()` — the F8 / capture-chip
