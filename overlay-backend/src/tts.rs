@@ -355,7 +355,7 @@ impl Tts {
     /// the sidecar. `voice_id` empty/unknown → auto-pick a Russian voice.
     #[must_use]
     pub fn spawn(voice_id: Option<String>, rate: i32) -> Self {
-        let voices = scan_installed_voices();
+        let voices = scan_installed_voices(true);
         let voice = pick_voice_id(&voices, &voice_id.unwrap_or_default()).unwrap_or_default();
         SPEAK_RATE.store(rate.clamp(-10, 10), Ordering::Release);
         let sidecar = Sidecar {
@@ -508,12 +508,13 @@ pub fn warm() {
     with(|t| t.warm());
 }
 /// The installed voices (empty if TTS is unavailable / not yet initialized).
+/// `ru` picks the display language of the friendly labels; ids are stable.
 #[must_use]
-pub fn voices() -> Vec<VoiceInfo> {
+pub fn voices(ru: bool) -> Vec<VoiceInfo> {
     // Re-scan the filesystem (not the init-time cache) so a voice installed
     // mid-session via the «Озвучка» install button appears in the chooser
     // without restarting the app.
-    scan_installed_voices()
+    scan_installed_voices(ru)
 }
 /// Whether at least one voice is installed and the sidecar is present. Re-scans
 /// so it flips to true right after the install button finishes.
@@ -523,7 +524,7 @@ pub fn is_available() -> bool {
 }
 
 fn available_on_disk() -> bool {
-    !scan_installed_voices().is_empty() && sidecar_exe_path().is_file()
+    !scan_installed_voices(true).is_empty() && sidecar_exe_path().is_file()
 }
 
 // ===== Helpers (filesystem only — no sherpa/onnxruntime here) =====
@@ -567,7 +568,7 @@ fn tts_root() -> Option<PathBuf> {
 
 /// Scan the installed voices for the chooser (a subdir with `*.onnx` +
 /// `tokens.txt`). Pure filesystem — does not touch the engine.
-fn scan_installed_voices() -> Vec<VoiceInfo> {
+fn scan_installed_voices(ru: bool) -> Vec<VoiceInfo> {
     let Some(tts_dir) = tts_root() else {
         return Vec::new();
     };
@@ -586,7 +587,7 @@ fn scan_installed_voices() -> Vec<VoiceInfo> {
         if has_onnx(&path) && path.join("tokens.txt").is_file() {
             out.push(VoiceInfo {
                 id: name.to_string(),
-                name: friendly_name(name),
+                name: friendly_name(name, ru),
             });
         }
     }
@@ -624,21 +625,42 @@ pub fn pick_voice_id(voices: &[VoiceInfo], configured: &str) -> Option<String> {
     voices.first().map(|v| v.id.clone())
 }
 
-fn friendly_name(dir: &str) -> String {
+fn friendly_name(dir: &str, ru: bool) -> String {
     let d = dir.to_lowercase();
-    if d.contains("irina") {
-        "Ирина (ж)".to_string()
-    } else if d.contains("ruslan") {
-        "Руслан (м)".to_string()
-    } else if d.contains("dmitri") {
-        "Дмитрий (м)".to_string()
-    } else if d.contains("denis") {
-        "Денис (м)".to_string()
-    } else if d.contains("mms") {
-        "MMS (рус)".to_string()
+    if ru {
+        if d.contains("irina") {
+            return "Ирина (ж)".to_string();
+        }
+        if d.contains("ruslan") {
+            return "Руслан (м)".to_string();
+        }
+        if d.contains("dmitri") {
+            return "Дмитрий (м)".to_string();
+        }
+        if d.contains("denis") {
+            return "Денис (м)".to_string();
+        }
+        if d.contains("mms") {
+            return "MMS (рус)".to_string();
+        }
     } else {
-        dir.to_string()
+        if d.contains("irina") {
+            return "Irina (F)".to_string();
+        }
+        if d.contains("ruslan") {
+            return "Ruslan (M)".to_string();
+        }
+        if d.contains("dmitri") {
+            return "Dmitri (M)".to_string();
+        }
+        if d.contains("denis") {
+            return "Denis (M)".to_string();
+        }
+        if d.contains("mms") {
+            return "MMS (RU)".to_string();
+        }
     }
+    dir.to_string()
 }
 
 #[cfg(test)]
@@ -663,10 +685,27 @@ mod tests {
 
     #[test]
     fn friendly_name_maps_known_voices() {
-        assert_eq!(friendly_name("vits-piper-ru_RU-irina-medium"), "Ирина (ж)");
-        assert_eq!(friendly_name("vits-piper-ru_RU-denis-medium"), "Денис (м)");
-        assert_eq!(friendly_name("vits-mms-rus"), "MMS (рус)");
-        assert_eq!(friendly_name("custom"), "custom");
+        assert_eq!(
+            friendly_name("vits-piper-ru_RU-irina-medium", true),
+            "Ирина (ж)"
+        );
+        assert_eq!(
+            friendly_name("vits-piper-ru_RU-denis-medium", true),
+            "Денис (м)"
+        );
+        assert_eq!(friendly_name("vits-mms-rus", true), "MMS (рус)");
+        assert_eq!(friendly_name("custom", true), "custom");
+        // English UI: same voices, Latin labels (they used to stay Cyrillic).
+        assert_eq!(
+            friendly_name("vits-piper-ru_RU-irina-medium", false),
+            "Irina (F)"
+        );
+        assert_eq!(
+            friendly_name("vits-piper-ru_RU-ruslan-medium", false),
+            "Ruslan (M)"
+        );
+        assert_eq!(friendly_name("vits-mms-rus", false), "MMS (RU)");
+        assert_eq!(friendly_name("custom", false), "custom");
     }
 
     #[test]

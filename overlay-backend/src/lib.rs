@@ -10,6 +10,7 @@ pub mod bridge;
 pub mod components;
 pub mod config;
 pub mod conspect;
+pub mod deep_lock;
 pub mod diar_install;
 pub mod diarize;
 pub(crate) mod download;

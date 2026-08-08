@@ -32,7 +32,10 @@
 //! a secret value); the result tile keeps its GENERIC messages so no `base_url`
 //! / LAN IP leaks into a screen-shared Settings window. The server export
 //! intentionally includes creds (a PC->PC transfer), exactly as before.
-use super::{msg_refresh_after_import, ComponentHandle, Rc, RefCell, SettingsWindow, SharedString};
+use super::{
+    msg_refresh_after_import, refresh_lock_chip, ComponentHandle, OverlayBarWindow, Rc, RefCell,
+    SettingsWindow, SharedString,
+};
 
 /// Wire the server-settings import/export Settings callbacks onto the Settings
 /// window. Moved VERBATIM out of `open_settings` (P1 domain split) — same
@@ -46,6 +49,7 @@ pub(crate) fn wire_import_export(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::SharedConfig,
     pending: &Rc<RefCell<Option<overlay_backend::config::Config>>>,
+    overlay_weak: &slint::Weak<OverlayBarWindow>,
 ) {
     // P1.7 — server-ONLY EXPORT. Native save dialog; writes ONLY the AI/STT
     // server fields (incl. creds — intentional for a PC->PC transfer) and none
@@ -129,6 +133,7 @@ pub(crate) fn wire_import_export(
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         let pending = pending.clone();
+        let overlay = overlay_weak.clone();
         win.on_apply_server_settings_clicked(move || {
             let Some(w) = weak.upgrade() else { return };
             let Some(imported) = pending.borrow_mut().take() else {
@@ -145,6 +150,9 @@ pub(crate) fn wire_import_export(
                 Ok(()) => {
                     // Apply to the running session + refresh token-status.
                     *cfg_c.write() = merged;
+                    if let Some(o) = overlay.upgrade() {
+                        refresh_lock_chip(&o, &cfg_c);
+                    }
                     let _ = msg_refresh_after_import(&w, &cfg_c);
                     "[ok] server settings applied (AI/STT providers, URLs, models, keys). Local profiles, devices, UI and snippets kept; the local GigaAM model path was kept from this PC. Restart for full effect.".to_string()
                 }

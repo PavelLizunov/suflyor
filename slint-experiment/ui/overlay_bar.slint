@@ -129,15 +129,74 @@ component Chip inherits Rectangle {
 // popping (handy while recording a game — a tile would sit on top of it). When ACTIVE the
 // padlock TREMBLES so the user understands tiles are being held back on purpose — «где тайлы?»
 // → the shaking lock answers. Uses a raw Image (not IconSlot) so it can rotate.
+export component LockModeMenuRow inherits Rectangle {
+    in property <string> label;
+    in property <bool> current: false;
+    // The selector is a compact traffic light: neutral unlocked, amber
+    // listening, red unloaded.  The colour stays on the row icon even before
+    // selection so the consequence of each choice is apparent.
+    in property <color> mode-color: Theme.text-secondary;
+    callback clicked();
+
+    height: 30px;
+    border-radius: Metrics.radius-control;
+    background: root.current ? root.mode-color.with-alpha(0.14) : (row-touch.has-hover ? Theme.bg-surface : transparent);
+    border-width: root.current ? Metrics.border-thin : 0px;
+    border-color: root.current ? root.mode-color.with-alpha(0.65) : transparent;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-checkable: true;
+    accessible-checked: root.current;
+    HorizontalLayout {
+        padding-left: Metrics.space-sm;
+        padding-right: Metrics.space-sm;
+        spacing: Metrics.space-sm;
+        Image {
+            source: @image-url("../assets/icons/lock.svg");
+            colorize: root.mode-color;
+            width: 14px;
+            height: 14px;
+            y: (parent.height - self.height) / 2;
+        }
+        Text {
+            text: root.label;
+            color: root.current ? root.mode-color : Theme.text-secondary;
+            font-size: Metrics.font-label;
+            vertical-alignment: center;
+        }
+        Rectangle { horizontal-stretch: 1; }
+        if root.current : Text {
+            text: @tr("Current");
+            color: root.mode-color;
+            font-size: Metrics.font-label;
+            vertical-alignment: center;
+        }
+    }
+    row-touch := TouchArea {
+        mouse-cursor: OverlayCursorPolicy.force-arrow ? default : pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
 component LockChip inherits Rectangle {
     in property <bool> locked: false;
+    // Deep lock (managed-local third state, v0.37): implies `locked`, turns
+    // the chip red and STOPS the tremble — an unloaded server is a firm,
+    // static state, distinct from the shaking "tiles held back" listening mode.
+    in property <bool> deep: false;
     in property <string> a11y;
-    in property <color> accent: #f59e0b;
-    callback clicked();
+    in property <bool> managed: false;
+    // 0 = normal, 1 = listening, 2 = deep. Rust owns the durable transition.
+    in property <int> mode: 0;
+    in property <color> accent: root.deep ? Theme.danger : #f59e0b;
+    callback mode-selected(int);
+    callback menu-opened(length, length);
     property <bool> phase: false;
 
     accessible-role: button;
     accessible-label: a11y;
+    accessible-checkable: true;
+    accessible-checked: locked;
     background: locked
         ? accent.with-alpha(0.18)
         : (ta.pressed
@@ -151,34 +210,47 @@ component LockChip inherits Rectangle {
     horizontal-stretch: 0;
     animate background { duration: 80ms; }
 
-    // Trembles only while locked: flip `phase` every 90ms and let `animate` swing the padlock
-    // between +7° and -7°, so it visibly shakes; at rest (unlocked) it sits flat.
+    // Trembles only while locked in LISTENING mode: flip `phase` every 90ms and
+    // let `animate` swing the padlock between +7° and -7°, so it visibly shakes;
+    // at rest (unlocked) it sits flat, and a DEEP lock holds it still.
     Timer {
         interval: 90ms;
-        running: root.locked;
+        running: root.locked && !root.deep;
         triggered => {
             root.phase = !root.phase;
         }
     }
-    Image {
-        source: @image-url("../assets/icons/lock.svg");
-        colorize: root.locked ? root.accent : Theme.text-secondary;
-        width: 14px;
-        height: 14px;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        // transform-rotation pivots around the element centre by default → a clean wobble.
-        transform-rotation: root.locked ? (root.phase ? 7deg : -7deg) : 0deg;
-        animate transform-rotation {
-            duration: 85ms;
-            easing: ease-in-out;
+    HorizontalLayout {
+        padding-left: Metrics.space-sm;
+        padding-right: Metrics.space-sm;
+        spacing: Metrics.space-xs;
+        alignment: center;
+
+        Image {
+            source: @image-url("../assets/icons/lock.svg");
+            colorize: root.locked ? root.accent : Theme.text-secondary;
+            width: 14px;
+            height: 14px;
+            y: (parent.height - self.height) / 2;
+            // transform-rotation pivots around the element centre by default → a clean wobble.
+            transform-rotation: root.locked && !root.deep ? (root.phase ? 7deg : -7deg) : 0deg;
+            animate transform-rotation {
+                duration: 85ms;
+                easing: ease-in-out;
+            }
+        }
+        if root.deep : Text {
+            text: @tr("Local AI unloaded");
+            font-size: Metrics.font-label;
+            color: root.accent;
+            vertical-alignment: center;
         }
     }
     ta := TouchArea {
         mouse-cursor: OverlayCursorPolicy.force-arrow ? default : pointer;
-        clicked => {
-            root.clicked();
-        }
+        // The old popup was clipped to the bar's 64px native client area. Rust
+        // opens the separate LockModeMenuWindow at this chip's screen anchor.
+        clicked => { root.menu-opened(root.absolute-position.x + root.width, root.absolute-position.y + root.height); }
     }
 }
 
@@ -405,18 +477,20 @@ export component OverlayBarWindow inherits Window {
     // worst-case slack as the verified 1120 baseline (icon-only chip ≈ 30 px).
     // v0.12.0 — 1160 → 1200 to absorb the new 📝 Summary chip (icon-only,
     // ≈ 30 px) with the same RU worst-case slack (review-agent finding).
-    preferred-width: 1200px;
+    // v0.36.1-rc.2 — 1200 → 1280 so the permanent RU deep-lock label still
+    // leaves room for Pause + Close all in the running/open-tile worst case.
+    preferred-width: 1280px;
     // 64px (was 86) — the chip row is only 22px, so 86 left a wide empty band
     // around one status line (design review #1). Kept in sync with apply_bar_size
     // in overlay_host.rs.
     preferred-height: 64px;
     // Relax the min-width in compact "narrow session" mode so the runtime
-    // set_size(500) isn't clamped back up (Slint propagates min-width to the OS
+    // set_size(680) isn't clamped back up (Slint propagates min-width to the OS
     // as a minimum inner size). Compact still needs room for status + спросить +
-    // захватить + timer + expand in one row, so 480 (not the old 300 reader
-    // pill). Full bar keeps 720 so its chip row never collapses. Kept in sync
-    // with apply_bar_size in overlay_host.rs.
-    min-width: root.compact-bar ? 480px : 720px;
+    // захватить + timer + the persistent deep-lock label + expand in one row,
+    // so 660 (not the old 300 reader pill). Full bar keeps 720 so its chip row
+    // never collapses. Kept in sync with apply_bar_size in overlay_host.rs.
+    min-width: root.compact-bar ? 660px : 720px;
 
     // Status pill text (idle / recording / etc).
     in-out property <string> status-text: "idle";
@@ -532,9 +606,18 @@ export component OverlayBarWindow inherits Window {
     // v0.28 — "listening mode" (config.suppress_tiles): the bar lock chip toggles this; when
     // true, auto AI tiles are suppressed (slint_session::maybe_spawn_auto_tile early-returns).
     in-out property <bool> suppress-tiles: false;
+    // v0.37 — deep lock (managed-local only): the lock chip's third state —
+    // the app-owned llama-server is unloaded and managed requests are refused.
+    // Implies suppress-tiles (Rust keeps the two consistent).
+    in-out property <bool> deep-lock: false;
+    // Localized per-state lock-chip description (a11y label; there is no
+    // hover-tooltip surface). Rust rebuilds it on transitions + language switch.
+    in property <string> lock-a11y: "";
+    in property <bool> lock-menu-managed: false;
 
     // ===== Callbacks =====
     callback mic-toggle-clicked();
+    callback lock-menu-opened(length, length);
     callback sys-toggle-clicked();
     // Phase E6 v42 — push-to-record hold callbacks (down = start, up = stop).
     callback ptt-mic-pressed();
@@ -551,7 +634,7 @@ export component OverlayBarWindow inherits Window {
     callback capture-clicked(); // 📷 screenshot -> vision (same as F8)
     callback stealth-toggle-clicked();
     callback aggressive-toggle-clicked();
-    callback suppress-tiles-toggle-clicked(); // 🔒 bar lock chip → toggle listening mode
+    callback lock-mode-selected(int); // 0=normal, 1=listening, 2=unload local AI
     callback open-settings-clicked();
     callback help-clicked();   // 🆘 chip / F1 → open the help window
     callback archive-clicked(); // 🗄 chip / F7 → open the session archive
@@ -755,12 +838,17 @@ export component OverlayBarWindow inherits Window {
                 clicked => { root.aggressive-toggle-clicked(); }
             }
             // 🔒 Lock tiles (listening mode) — stop auto AI tiles popping (e.g. over a game).
-            // Trembles while active so their absence is obviously ON PURPOSE.
+            // Trembles while active so their absence is obviously ON PURPOSE. For the
+            // app-managed local server the SAME chip runs a third state (deep lock,
+            // v0.37): red + still, the managed server unloaded until the next click.
             LockChip {
                 locked: root.suppress-tiles;
-                a11y: "Lock tiles — stop pop-ups (listening mode)";
-                accent: #f59e0b;
-                clicked => { root.suppress-tiles-toggle-clicked(); }
+                deep: root.deep-lock;
+                a11y: root.lock-a11y;
+                managed: root.lock-menu-managed;
+                mode: root.deep-lock ? 2 : (root.suppress-tiles ? 1 : 0);
+                mode-selected(mode) => { root.lock-mode-selected(mode); }
+                menu-opened(x, y) => { root.lock-menu-opened(x, y); }
             }
             // 🗄 Session archive (also F7) — browse + search past sessions.
             // Icon-only + left of the spring so it consumes slack, not the
@@ -1045,9 +1133,9 @@ export component OverlayBarWindow inherits Window {
                     // below absorbs the slack and pushes Expand to the right edge.
                     horizontal-stretch: 0;
                     // Cap the pill so an unusually long / error status elides (…)
-                    // instead of growing past the narrow 500px compact window and
+                    // instead of growing past the narrow 680px compact window and
                     // clipping the right-edge chips. Short statuses stay well under
-                    // this, so the normal look is unchanged (full bar has 1200px,
+                    // this, so the normal look is unchanged (full bar has 1280px,
                     // so it never needs the cap).
                     max-width: 150px;
                     // Same accessibility label as the full bar's pill (status +
@@ -1153,12 +1241,16 @@ export component OverlayBarWindow inherits Window {
                     accent: #fbbf24;
                     clicked => { root.pause-toggle-clicked(); }
                 }
-                // 🔒 Lock tiles (listening mode) — same toggle as the full bar; trembles while active.
+                // 🔒 Lock tiles (listening mode) — same toggle as the full bar; trembles
+                // while active, turns red + still in the deep-lock state (v0.37).
                 LockChip {
                     locked: root.suppress-tiles;
-                    a11y: "Lock tiles — stop pop-ups (listening mode)";
-                    accent: #f59e0b;
-                    clicked => { root.suppress-tiles-toggle-clicked(); }
+                    deep: root.deep-lock;
+                    a11y: root.lock-a11y;
+                managed: root.lock-menu-managed;
+                mode: root.deep-lock ? 2 : (root.suppress-tiles ? 1 : 0);
+                mode-selected(mode) => { root.lock-mode-selected(mode); }
+                menu-opened(x, y) => { root.lock-menu-opened(x, y); }
                 }
                 // Spring — absorbs the slack so the status pill stays natural-
                 // width (identical to the full bar) and Expand sits at the right

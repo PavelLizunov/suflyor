@@ -1276,3 +1276,98 @@ fn mask_host_keeps_real_ports_and_dns_ipv4() {
     );
     assert_eq!(mask_host("http://example.com/v1"), "http://***/v1");
 }
+
+// ===== Deep lock (bar lock chip, managed-local only) =====
+
+/// Default OFF, and the persisted flag survives a save/load-style serde
+/// round-trip (the restart-persistence half of the feature).
+#[test]
+fn deep_lock_defaults_false_and_survives_serde_roundtrip() {
+    let defaults = Config::defaults();
+    assert!(!defaults.deep_lock);
+
+    let mut c = Config::defaults();
+    c.deep_lock = true;
+    c.suppress_tiles = true;
+    let raw = serde_json::to_vec(&c).unwrap();
+    let back: Config = serde_json::from_slice(&raw).unwrap();
+    assert!(back.deep_lock, "deep lock must persist across restart");
+    assert!(back.suppress_tiles);
+
+    // A config written before the field existed deserializes to OFF.
+    let mut legacy = serde_json::json!({ "ui_language": "ru" });
+    legacy["suppress_tiles"] = serde_json::json!(true);
+    let parsed: Config = serde_json::from_value(legacy).unwrap();
+    assert!(!parsed.deep_lock, "absent field must default to false");
+}
+
+/// Portable exports and server-settings transfers must not contain or merge
+/// the machine-local deep-lock field.
+#[test]
+fn server_settings_transfer_never_carries_deep_lock() {
+    // Full-profile export omits the field entirely.
+    let dir = tempfile::tempdir().unwrap();
+    let profile_path = dir.path().join("profile.json");
+    let mut locked = imported_with_secret_tokens();
+    locked.deep_lock = true;
+    locked.suppress_tiles = true;
+    export_to(&profile_path, &locked).unwrap();
+    let profile: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&profile_path).unwrap()).unwrap();
+    assert!(profile.get("deep_lock").is_none());
+
+    // Server-settings export omits it too.
+    let path = dir.path().join("server-settings.json");
+    export_server_settings_to(&path, &locked).unwrap();
+    let server: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert!(server.get("deep_lock").is_none());
+
+    // IMPORT side: merge keeps THIS PC's flag, whatever the file says.
+    let mut current = Config::defaults();
+    current.deep_lock = true;
+    let mut imported = Config::defaults();
+    imported.ai_provider = "local".into();
+    imported.deep_lock = false;
+    assert!(
+        merge_server_settings(&current, imported).deep_lock,
+        "import must not release this PC's deep lock"
+    );
+
+    let current2 = Config::defaults(); // deep_lock=false
+    let mut imported2 = Config::defaults();
+    imported2.ai_provider = "local".into();
+    imported2.deep_lock = true;
+    assert!(
+        !merge_server_settings(&current2, imported2).deep_lock,
+        "import must not deep-lock this PC"
+    );
+}
+
+/// apply_server_settings (the Settings "Apply" button) keeps the local flag.
+#[test]
+fn apply_server_settings_keeps_local_deep_lock() {
+    let mut current = Config::defaults();
+    current.deep_lock = true;
+    let mut imported = Config::defaults();
+    imported.ai_provider = "local".into();
+    imported.deep_lock = false;
+    let applied = apply_server_settings(&current, imported);
+    assert!(applied.deep_lock);
+}
+
+#[test]
+fn full_profile_import_preserves_local_deep_lock() {
+    let mut incoming = Config::defaults();
+    incoming.ai_provider = "local".into();
+    incoming.ai_local_base_url = crate::local_ai::LLAMA_BASE_URL.into();
+    incoming.deep_lock = false;
+    incoming.suppress_tiles = false;
+    let kept = preserve_local_import_state(incoming, true);
+    assert!(kept.deep_lock);
+    assert!(kept.suppress_tiles, "deep lock must imply suppression");
+
+    let mut incoming_locked = Config::defaults();
+    incoming_locked.deep_lock = true;
+    let unlocked = preserve_local_import_state(incoming_locked, false);
+    assert!(!unlocked.deep_lock, "profile must not lock this machine");
+}

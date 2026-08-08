@@ -165,7 +165,11 @@ pub(crate) fn wire_vision_settings(
         win.on_vision_test_clicked(move || {
             let Some(w) = weak.upgrade() else { return };
             w.set_vision_test_result(SharedString::from("testing…"));
-            let Some(ep) = cfg_c.read().vision_endpoint() else {
+            let (ep, ui_is_ru) = {
+                let c = cfg_c.read();
+                (c.vision_endpoint(), c.ui_is_ru())
+            };
+            let Some(ep) = ep else {
                 w.set_vision_test_result(SharedString::from("[--] vision is off"));
                 return;
             };
@@ -181,7 +185,13 @@ pub(crate) fn wire_vision_settings(
                         ep.model,
                     )) {
                         Ok(s) => format!("[ok] {s}"),
-                        Err(e) => format!("[err] {e:#}").chars().take(90).collect(),
+                        Err(e) => {
+                            let chain = format!("{e:#}");
+                            overlay_backend::deep_lock::blocked_test_result(ui_is_ru, &chain)
+                                .unwrap_or_else(|| {
+                                    format!("[err] {chain}").chars().take(90).collect()
+                                })
+                        }
                     },
                     Err(e) => format!("[err] runtime: {e}"),
                 };

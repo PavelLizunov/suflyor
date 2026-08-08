@@ -469,7 +469,16 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
             w.set_diag_sys_level(-1);
             w.set_diag_vision_level(-1);
             w.set_diag_vision_detail(SharedString::from(""));
-            let (ai_base, ai_bearer, ai_model, stt_backend, mic_device, sys_device, vision_ep) = {
+            let (
+                ai_base,
+                ai_bearer,
+                ai_model,
+                stt_backend,
+                mic_device,
+                sys_device,
+                vision_ep,
+                ui_is_ru,
+            ) = {
                 let c = cfg_c.read();
                 let ep = c.ai_endpoint(false);
                 (
@@ -480,6 +489,7 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                     c.mic_device.clone(),
                     c.system_audio_device.clone(),
                     c.vision_endpoint(),
+                    c.ui_is_ru(),
                 )
             };
             let weak_res = w.as_weak();
@@ -501,7 +511,16 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                             overlay_backend::ai::test_connection(ai_base, ai_bearer, ai_model),
                         ) {
                             Ok(s) => (0, format!("[ok] {s}")),
-                            Err(e) => (4, format!("[err] {e:#}").chars().take(80).collect()),
+                            Err(e) => {
+                                let chain = format!("{e:#}");
+                                let msg = overlay_backend::deep_lock::blocked_test_result(
+                                    ui_is_ru, &chain,
+                                )
+                                .unwrap_or_else(|| {
+                                    format!("[err] {chain}").chars().take(80).collect()
+                                });
+                                (4, msg)
+                            }
                         };
                         let (sl, sm): (i32, String) = match rt
                             .block_on(overlay_backend::stt::test_connection_backend(&stt_backend))
@@ -522,7 +541,16 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                                 ep.model,
                             )) {
                                 Ok(s) => (0, format!("[ok] {s}")),
-                                Err(e) => (4, format!("[err] {e:#}").chars().take(80).collect()),
+                                Err(e) => {
+                                    let chain = format!("{e:#}");
+                                    let msg = overlay_backend::deep_lock::blocked_test_result(
+                                        ui_is_ru, &chain,
+                                    )
+                                    .unwrap_or_else(|| {
+                                        format!("[err] {chain}").chars().take(80).collect()
+                                    });
+                                    (4, msg)
+                                }
                             },
                         };
                         (al, am, sl, sm, vl, vm)

@@ -53,19 +53,35 @@ if (-not (Test-Path $sidecar)) {
 }
 Write-Host "  sidecar: $sidecar" -ForegroundColor Green
 
-# DirectML EP (GigaAM GPU): ort drops a DirectML.dll SYMLINK to a 0-byte
-# placeholder into target\release. We must NOT ship a DirectML.dll next to the
-# exe at all: verified on this box that ANY local DirectML.dll (the empty stub
-# OR a byte-for-byte copy of the real System32 one) fails DirectML graph fusion
-# at model load (0x80070715 ERROR_RESOURCE_TYPE_NOT_FOUND), while letting the
-# loader resolve C:\Windows\System32\DirectML.dll (Windows 10 1903+) works and
-# GPU-accelerates GigaAM (~280x real-time). So just delete the placeholder; the
-# app falls back to CPU automatically if the system DirectML.dll is unavailable.
+# DirectML EP (GigaAM GPU): ort links DMLCreateDevice1 at process startup, so
+# Windows builds must ship the matching DirectML redistributable. Older Windows
+# 10 releases have a system DirectML.dll without that export and otherwise fail
+# before the app can fall back to CPU. ort records the exact downloaded binary
+# in its build output and may leave a 0-byte symlink beside the exe; materialize
+# that target as a regular file for NSIS.
 $dmlDst = Join-Path $crate "target\release\DirectML.dll"
-if (Test-Path $dmlDst) {
-    Remove-Item $dmlDst -Force
-    Write-Host "  DirectML.dll: removed ort placeholder (GigaAM GPU uses System32 DirectML.dll)" -ForegroundColor Cyan
+$ortBuildDir = Join-Path $crate "target\release\build"
+$dmlSource = Get-ChildItem -Path (Join-Path $ortBuildDir "ort-sys-*\output") -File -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending |
+    ForEach-Object {
+        foreach ($line in Get-Content -LiteralPath $_.FullName) {
+            if ($line -match '^cargo:rustc-link-search=native=(.+)$') {
+                $candidate = Join-Path $Matches[1] "DirectML.dll"
+                if ((Test-Path -LiteralPath $candidate) -and (Get-Item -LiteralPath $candidate).Length -gt 0) {
+                    $candidate
+                }
+            }
+        }
+    } |
+    Select-Object -First 1
+if (-not $dmlSource) {
+    Write-Host "ERROR: matching DirectML.dll not found in ort build output" -ForegroundColor Red
+    exit 13
 }
+Remove-Item -LiteralPath $dmlDst -Force -ErrorAction SilentlyContinue
+Copy-Item -LiteralPath $dmlSource -Destination $dmlDst
+$dmlInfo = Get-Item -LiteralPath $dmlDst
+Write-Host "  DirectML.dll: $([math]::Round($dmlInfo.Length / 1MB, 2)) MB ($($dmlInfo.VersionInfo.FileVersion))" -ForegroundColor Green
 $info = Get-Item $exe
 $sizeMb = [math]::Round($info.Length / 1MB, 2)
 Write-Host ""
