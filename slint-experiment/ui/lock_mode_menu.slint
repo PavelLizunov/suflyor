@@ -37,6 +37,7 @@ export component LockModeMenuWindow inherits Window {
                     label: @tr("Unlocked");
                     current: root.mode == 0;
                     mode-color: Theme.text-secondary;
+                    unlocked: true;
                     clicked => { root.mode-selected(0); }
                 }
                 LockModeMenuRow {
