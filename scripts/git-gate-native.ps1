@@ -4,8 +4,8 @@
 # EVERY committer: Codex, other agents, humans. Enable once per clone:
 #   git config core.hooksPath .githooks
 #
-# commit -> cargo fmt --check (3 crates)            (~seconds)
-# push   -> clippy -D warnings + tests (3 crates)   (~minutes)
+# commit -> cargo fmt --check (4 crates)            (~seconds)
+# push   -> clippy -D warnings + tests (4 crates)   (~minutes)
 #
 # Exit non-zero blocks the git operation.
 param([string]$Stage = "commit")
@@ -15,7 +15,7 @@ $env:CARGO_INCREMENTAL = '0'
 $root = Split-Path -Parent $PSScriptRoot
 $cargo = Join-Path $env:USERPROFILE '.cargo\bin\cargo.exe'
 if (-not (Test-Path $cargo)) { $cargo = 'cargo' }
-$crates = @('overlay-backend', 'slint-experiment', 'suflyor-tts')
+$crates = @('overlay-backend', 'slint-experiment', 'suflyor-tts', 'suflyor-wsola')
 
 function Run($label, $argv) {
     Write-Host "[gate:$Stage] $label"

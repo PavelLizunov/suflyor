@@ -83,7 +83,7 @@ const XFADE_OUT: usize = 256;
 /// normal playback stays bit-exact and zero-latency.
 struct StretchSource {
     cursor: PcmCursor,
-    wsola: timestretch::stretch::Wsola,
+    wsola: suflyor_wsola::Wsola,
     /// Input samples re-fed into the next chunk so the boundary region is rendered
     /// twice and can be crossfaded without shortening the timeline.
     overlap_in: usize,
@@ -108,7 +108,7 @@ impl StretchSource {
                 pos: from,
                 sample_rate,
             },
-            wsola: timestretch::stretch::Wsola::new(seg, search, ratio),
+            wsola: suflyor_wsola::Wsola::new(seg, search, ratio),
             overlap_in: (XFADE_OUT as f64 / ratio).ceil() as usize,
             prev_in_tail: Vec::new(),
             held_tail: Vec::new(),

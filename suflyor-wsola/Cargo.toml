@@ -1,0 +1,11 @@
+[package]
+name = "suflyor-wsola"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "MIT"
+description = "Minimal WSOLA time stretching used by suflyor speech playback"
+repository = "https://github.com/PavelLizunov/suflyor"
+
+[dependencies]
+rustfft = "6"
