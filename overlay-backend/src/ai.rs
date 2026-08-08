@@ -181,6 +181,16 @@ pub fn stream_chat(
     let (tx, rx) = mpsc::channel::<AiEvent>(64);
 
     tokio::spawn(async move {
+        // Refuse before waiting behind existing GPU work. Keep the same guard
+        // in `stream_inner` as a race check if the lock flips after this point.
+        if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), &base_url) {
+            let _ = tx
+                .send(AiEvent::Error {
+                    message: crate::deep_lock::BLOCKED_ERROR.to_string(),
+                })
+                .await;
+            return;
+        }
         // Wait for a concurrency permit before touching the model so a spam burst
         // can't flood the GPU. Held for the whole stream; dropped (freeing the
         // slot) when the producer ends or is torn down by a closed receiver.
@@ -212,6 +222,11 @@ pub fn stream_chat(
 /// so a dead endpoint doesn't hang the UI thread (caller runs this
 /// off-thread anyway). Does NOT log the URL or bearer (secrets).
 pub async fn test_connection(base_url: String, bearer: String, model: String) -> Result<String> {
+    // Deep-lock guard (see crate::deep_lock): refuse managed-local traffic
+    // while the bar's lock chip holds the deep lock. Cloud/external pass.
+    if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), &base_url) {
+        return Err(anyhow!(crate::deep_lock::BLOCKED_ERROR));
+    }
     let client = http_client();
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
     let body = json!({
@@ -262,6 +277,9 @@ pub async fn test_connection(base_url: String, bearer: String, model: String) ->
 /// OpenAI-shaped `{ "data": [ { "id": ... } ] }` response (empty vec if the
 /// field is missing). Does NOT log the URL or bearer (secrets).
 pub async fn list_models(base_url: &str, bearer: &str) -> Result<Vec<String>> {
+    if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), base_url) {
+        return Err(anyhow!(crate::deep_lock::BLOCKED_ERROR));
+    }
     let client = http_client();
     let url = format!("{}/models", base_url.trim_end_matches('/'));
     let mut req = client.get(&url).timeout(std::time::Duration::from_secs(8));
@@ -300,6 +318,9 @@ async fn stream_inner(
     max_tokens: u32,
     tx: mpsc::Sender<AiEvent>,
 ) -> Result<()> {
+    if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), &base_url) {
+        return Err(anyhow!(crate::deep_lock::BLOCKED_ERROR));
+    }
     let client = http_client();
 
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
@@ -634,6 +655,11 @@ async fn complete_with_usage_inner(
     max_tokens: u32,
     force_no_think: bool,
 ) -> Result<(String, TokenUsage)> {
+    // Fail fast before waiting behind active GPU work. The unlocked helper
+    // repeats the check to close the race where the lock flips while queued.
+    if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), base_url) {
+        return Err(anyhow!(crate::deep_lock::BLOCKED_ERROR));
+    }
     // Hold a concurrency permit for the whole request (incl. retries) so a spam
     // burst of "+ tile" / auto requests can't flood the GPU and self-amplify via
     // the retry loop. Covers the live-answer AND structuring (summary) paths.
@@ -657,6 +683,11 @@ async fn complete_with_usage_unlocked(
     max_tokens: u32,
     force_no_think: bool,
 ) -> Result<(String, TokenUsage)> {
+    // Deep-lock guard BEFORE the retry loop: a blocked managed-local request
+    // fails fast and permanently (retrying an intentional lock is pointless).
+    if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), base_url) {
+        return Err(anyhow!(crate::deep_lock::BLOCKED_ERROR));
+    }
     const MAX_ATTEMPTS: u32 = 3;
     let mut last_err: Option<anyhow::Error> = None;
     for attempt in 1..=MAX_ATTEMPTS {
@@ -877,6 +908,9 @@ pub async fn count_chat_tokens(
     model: &str,
     messages: &[ChatMessage],
 ) -> Result<u64> {
+    if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), base_url) {
+        return Err(anyhow!(crate::deep_lock::BLOCKED_ERROR));
+    }
     let url = format!(
         "{}/chat/completions/input_tokens",
         base_url.trim_end_matches('/')
@@ -1427,5 +1461,66 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(usage.finish_reason, "stop");
+    }
+
+    /// Deep lock (v0.37): while active, EVERY managed-local sender refuses
+    /// instantly with the marker error — no network, no retry, no hang. The
+    /// guard fires BEFORE any transport, so these never touch the wire. A
+    /// NON-managed URL must bypass the guard entirely. One test on purpose:
+    /// the process-wide flag would race across parallel #[tokio::test]s.
+    #[tokio::test]
+    async fn deep_lock_guard_refuses_every_managed_sender() {
+        crate::deep_lock::set_deep_lock_active(true);
+        let managed = crate::local_ai::LLAMA_BASE_URL.to_string();
+
+        let err = test_connection(managed.clone(), String::new(), "m".to_string())
+            .await
+            .unwrap_err();
+        assert!(crate::deep_lock::is_blocked_error(&err.to_string()));
+
+        let err = list_models(&managed, "").await.unwrap_err();
+        assert!(crate::deep_lock::is_blocked_error(&err.to_string()));
+
+        let err = complete(&managed, "", "m", Vec::new(), 8)
+            .await
+            .unwrap_err();
+        assert!(crate::deep_lock::is_blocked_error(&err.to_string()));
+
+        let err = complete_with_usage(&managed, "", "m", Vec::new(), 8)
+            .await
+            .unwrap_err();
+        assert!(crate::deep_lock::is_blocked_error(&err.to_string()));
+
+        let err = count_chat_tokens(&managed, "", "m", &[]).await.unwrap_err();
+        assert!(crate::deep_lock::is_blocked_error(&err.to_string()));
+
+        // Streaming surfaces the guard as an Error event (never a hang).
+        let mut rx = stream_chat(
+            managed.clone(),
+            String::new(),
+            "m".to_string(),
+            Vec::new(),
+            8,
+        );
+        match rx.recv().await {
+            Some(AiEvent::Error { message }) => {
+                assert!(crate::deep_lock::is_blocked_error(&message));
+            }
+            other => panic!("expected a blocked Error event, got {other:?}"),
+        }
+
+        // Scoped guard: a non-managed URL bypasses it even while locked. It
+        // fails on TRANSPORT here (bound-then-dropped loopback listener),
+        // which is the proof the guard let the request through.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let foreign = format!("http://{}/v1", listener.local_addr().unwrap());
+        drop(listener);
+        let err = list_models(&foreign, "").await.unwrap_err();
+        assert!(
+            !crate::deep_lock::is_blocked_error(&err.to_string()),
+            "non-managed endpoints must bypass the deep-lock guard"
+        );
+
+        crate::deep_lock::set_deep_lock_active(false);
     }
 }

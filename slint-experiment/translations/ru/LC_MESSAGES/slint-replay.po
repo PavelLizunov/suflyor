@@ -1863,3 +1863,21 @@ msgstr "Текстовый вопрос suflyor (Slint)"
 
 msgid "Retry"
 msgstr "Повторить"
+
+msgid "Local AI unloaded"
+msgstr "Локальный ИИ выгружен"
+
+msgid "Current"
+msgstr "Текущий"
+
+msgid "Unlocked"
+msgstr "Разблокировано"
+
+msgid "Listening"
+msgstr "Прослушивание"
+
+msgid "Unload local AI"
+msgstr "Выгрузить локальный ИИ"
+
+msgid "Lock mode"
+msgstr "Режим блокировки"

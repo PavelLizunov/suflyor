@@ -18,6 +18,21 @@ fn asset(name: &str) -> GhAsset {
     }
 }
 
+#[test]
+fn ready_switch_outcomes_include_fallback_and_rollback() {
+    assert!(switch_has_ready_server(ModelSwitch::Switched));
+    assert!(switch_has_ready_server(ModelSwitch::FallbackStarted));
+    assert!(switch_has_ready_server(ModelSwitch::RolledBack));
+    for outcome in [
+        ModelSwitch::PortBusy,
+        ModelSwitch::TargetUnavailable,
+        ModelSwitch::HardwareUnsupported,
+        ModelSwitch::FailedToStart,
+    ] {
+        assert!(!switch_has_ready_server(outcome));
+    }
+}
+
 fn long_running_child() -> Child {
     #[cfg(windows)]
     {

@@ -361,6 +361,17 @@ pub struct Config {
     #[serde(default)]
     pub suppress_tiles: bool,
 
+    /// Deep lock — the bar lock chip's third state, ONLY for the app-managed
+    /// local server (loopback llama-server on :8080). Persisted half of the
+    /// state machine in [`crate::deep_lock`]: while true the managed server is
+    /// deliberately UNLOADED to free RAM/VRAM and every managed-local request
+    /// is refused until the user clicks the chip to start the model back up.
+    /// Machine-local runtime state — deliberately NOT carried by server-settings
+    /// import/export (see [`merge_server_settings`]), like `tts_voice`.
+    /// Default OFF.
+    #[serde(default)]
+    pub deep_lock: bool,
+
     /// Collapse the wide (~1200px) overlay bar to a compact read-aloud pill
     /// (read-aloud status + Stop + Expand). For using the app purely as a
     /// text-to-speech reader. Persisted so the bar reopens in the chosen size.
@@ -635,6 +646,7 @@ impl Config {
             detector_skip_mic: default_detector_skip_mic(),
             auto_tile_every_line: false,
             suppress_tiles: false,
+            deep_lock: false,
             compact_bar: false,
             tile_body_opacity: default_tile_body_opacity(),
         }
@@ -1318,25 +1330,47 @@ fn secret_redacted(cfg: &Config) -> Config {
     c
 }
 
-/// Phase E6 v28 — export the full config (INCLUDING ai_bearer +
-/// groq_api_key) to an arbitrary path the user picks. Pretty JSON so
-/// it's human-editable. The caller is responsible for warning that
-/// the file contains secrets.
+/// Phase E6 v28 — export the full portable config (INCLUDING ai_bearer +
+/// groq_api_key) to an arbitrary path the user picks. Machine-local runtime
+/// state such as `deep_lock` is omitted. Pretty JSON so it's human-editable.
+/// The caller is responsible for warning that the file contains secrets.
 pub fn export_to(path: &std::path::Path, cfg: &Config) -> Result<()> {
-    let bytes = serde_json::to_vec_pretty(cfg).context("serialize config")?;
+    let bytes = portable_config_bytes(cfg).context("serialize config")?;
     std::fs::write(path, bytes).context("write export")?;
     Ok(())
+}
+
+fn portable_config_bytes(cfg: &Config) -> Result<Vec<u8>> {
+    let mut value = serde_json::to_value(cfg).context("serialize config value")?;
+    if let Some(fields) = value.as_object_mut() {
+        fields.remove("deep_lock");
+    }
+    serde_json::to_vec_pretty(&value).context("serialize portable config")
 }
 
 /// Phase E6 v28 — import a config from an arbitrary path, validate by
 /// deserializing into `Config` (unknown fields ignored, missing fields
 /// filled by serde defaults), then persist to the canonical location.
 /// Returns the imported Config so the caller can re-apply live state.
-pub fn import_from(path: &std::path::Path) -> Result<Config> {
+/// `local_deep_lock` is the current machine's state and is preserved rather
+/// than read from the portable profile.
+pub fn import_from(path: &std::path::Path, local_deep_lock: bool) -> Result<Config> {
     let bytes = std::fs::read(path).context("read import file")?;
     let cfg: Config = parse_config_bytes(&bytes).context("parse import JSON")?;
+    let cfg = preserve_local_import_state(cfg, local_deep_lock);
     save(&cfg).context("persist imported config")?;
     Ok(cfg)
+}
+
+fn preserve_local_import_state(mut cfg: Config, local_deep_lock: bool) -> Config {
+    // Deep lock is machine-local runtime state (the managed server on THIS PC
+    // being unloaded) — a transferred profile must neither lock nor unlock
+    // this machine. Local persistence (load/save) still carries it.
+    cfg.deep_lock = local_deep_lock;
+    if cfg.deep_lock && crate::deep_lock::cfg_is_managed_local(&cfg) {
+        cfg.suppress_tiles = true;
+    }
+    cfg
 }
 
 /// Server-only settings merge (#125): copy ONLY the AI/STT server fields
@@ -1375,6 +1409,9 @@ pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
     // OUTPUT preference (append IPA to a translation), not a server endpoint, so it
     // stays machine-local like response_language / stt_language / ui_language. Do not
     // add it here: an import would then overwrite the local user's phonetics choice.
+    // NOTE: deep_lock is deliberately NOT transferred — it is machine-local runtime
+    // state (the managed server on THIS PC is unloaded), not a server endpoint. An
+    // import must neither deep-lock this PC nor release its lock.
     // STT provider + per-backend server settings.
     next.stt_provider = imported.stt_provider;
     next.groq_api_key = imported.groq_api_key;
@@ -1385,6 +1422,9 @@ pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
     next.stt_whisper_url = imported.stt_whisper_url;
     next.stt_whisper_bearer = imported.stt_whisper_bearer;
     next.stt_whisper_model = imported.stt_whisper_model;
+    if next.deep_lock && crate::deep_lock::cfg_is_managed_local(&next) {
+        next.suppress_tiles = true;
+    }
     next
 }
 
@@ -1425,7 +1465,7 @@ pub fn export_server_settings_to(path: &std::path::Path, cfg: &Config) -> Result
     // live config as `imported` → a Config whose ONLY non-default fields are the
     // server ones. Single source of truth for "what is a server field".
     let server_only = merge_server_settings(&Config::defaults(), cfg.clone());
-    let bytes = serde_json::to_vec_pretty(&server_only).context("serialize server settings")?;
+    let bytes = portable_config_bytes(&server_only).context("serialize server settings")?;
     std::fs::write(path, bytes).context("write server-settings export")?;
     Ok(())
 }

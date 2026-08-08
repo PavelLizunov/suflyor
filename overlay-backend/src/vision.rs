@@ -228,6 +228,11 @@ pub const SYNTHETIC_TEST_IMAGE_DATA_URL: &str = "data:image/png;base64,iVBORw0KG
 /// paint into the screen-shareable Settings / Diagnostics result. An HTTP-status
 /// error returns the server's own response snippet (capped by the caller).
 pub async fn test_connection(base_url: String, bearer: String, model: String) -> Result<String> {
+    // Deep-lock guard: a "local"/"same" vision channel can resolve to the
+    // managed :8080 endpoint — refuse it like every other managed request.
+    if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), &base_url) {
+        return Err(anyhow!(crate::deep_lock::BLOCKED_ERROR));
+    }
     let client = crate::ai::http_client();
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
     let body = serde_json::json!({

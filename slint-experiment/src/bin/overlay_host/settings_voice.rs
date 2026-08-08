@@ -39,7 +39,7 @@ pub(crate) fn wire_voice_settings(
     {
         let cfg_c = cfg.clone();
         win.on_tts_voice_changed(move |idx| {
-            let voices = overlay_backend::tts::voices();
+            let voices = overlay_backend::tts::voices(cfg_c.read().ui_is_ru());
             let Some(v) = voices.get(idx.max(0) as usize) else {
                 return;
             };
@@ -95,6 +95,9 @@ pub(crate) fn wire_voice_settings(
             w.set_tts_installing(true);
             w.set_tts_install_phase(1); // preparing
             w.set_tts_install_label(SharedString::from(""));
+            // Language for the pack labels interpolated into the @tr phase
+            // templates (English UI must not show Cyrillic voice names).
+            let ru = cfg_install.read().ui_is_ru();
             let weak_done = w.as_weak();
             let cfg_t = cfg_install.clone();
             std::thread::spawn(move || {
@@ -122,7 +125,7 @@ pub(crate) fn wire_voice_settings(
                         }
                     });
                 };
-                let result = overlay_backend::tts_install::install_voices(&cancel, &on);
+                let result = overlay_backend::tts_install::install_voices(&cancel, &on, ru);
                 if let Err(e) = &result {
                     // Detail to the local log only; the Settings field stays
                     // generic (it is screen-shareable — no path/url leak).
@@ -140,7 +143,7 @@ pub(crate) fn wire_voice_settings(
                     // Success — refresh the chooser from the freshly-installed
                     // voices, select the first, and warm the sidecar so 🔊 is
                     // prompt without restarting.
-                    let voices = overlay_backend::tts::voices();
+                    let voices = overlay_backend::tts::voices(ru);
                     let names: Vec<SharedString> = voices
                         .iter()
                         .map(|v| SharedString::from(v.name.as_str()))

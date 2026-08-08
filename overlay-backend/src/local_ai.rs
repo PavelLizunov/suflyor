@@ -1070,6 +1070,9 @@ pub fn install(
     cancel: &AtomicBool,
     on: &dyn Fn(Progress),
 ) -> Result<LocalAiResult> {
+    if !opts.skip_llama && crate::deep_lock::deep_lock_active() {
+        bail!(crate::deep_lock::BLOCKED_ERROR);
+    }
     preflight().context("environment preflight failed")?;
     std::fs::create_dir_all(&opts.root)
         .with_context(|| format!("create install root {}", opts.root.display()))?;
@@ -1314,6 +1317,11 @@ pub fn install(
     // ---- launch servers ----------------------------------------------------
     let mut servers = InstallServerCleanup::default();
     if !opts.skip_llama {
+        // The lock may have been recorded while a long model download was in
+        // progress. Recheck at the actual launch boundary.
+        if crate::deep_lock::deep_lock_active() {
+            bail!(crate::deep_lock::BLOCKED_ERROR);
+        }
         on(Progress::Step("Starting llama-server :8080".to_string()));
         let exe = find_exe(&llama_dir, "llama-server.exe")
             .context("llama-server.exe not found after install")?;
@@ -1968,6 +1976,15 @@ pub const fn switch_commits_choice(outcome: ModelSwitch) -> bool {
     matches!(outcome, ModelSwitch::Switched)
 }
 
+/// Whether a switch outcome leaves a confirmed-ready managed server running.
+#[must_use]
+pub const fn switch_has_ready_server(outcome: ModelSwitch) -> bool {
+    matches!(
+        outcome,
+        ModelSwitch::Switched | ModelSwitch::RolledBack | ModelSwitch::FallbackStarted
+    )
+}
+
 /// Transactionally switch between the managed 4B, 12B, and 26B models. A target is
 /// accepted only after `/models` advertises its exact alias and a minimal chat
 /// completion succeeds. On failure the previous model is relaunched.
@@ -1978,6 +1995,10 @@ pub fn switch_local_model(
     target: ManagedLlamaChoice,
     want_whisper: bool,
 ) -> (ModelSwitch, Vec<Child>) {
+    if !crate::deep_lock::lifecycle_launch_allowed(crate::deep_lock::deep_lock_active(), false) {
+        log::info!("local AI: model switch skipped while deep-locked");
+        return (ModelSwitch::FailedToStart, Vec::new());
+    }
     // This is a worker-only launch boundary. A UI presence query is deliberately
     // stat-only, but loading the primary always performs (or reuses) an exact
     // SHA-256 review before we stop the currently serving fallback.
@@ -2058,6 +2079,9 @@ pub fn llama_reachable() -> bool {
 /// thread (blocks up to ~21 s on the relaunch+poll path).
 #[must_use]
 pub fn ensure_llama_serving(root: &Path, choice: ManagedLlamaChoice) -> (ModelSwitch, Vec<Child>) {
+    if !crate::deep_lock::lifecycle_launch_allowed(crate::deep_lock::deep_lock_active(), false) {
+        return (ModelSwitch::FailedToStart, Vec::new());
+    }
     if llama_reachable() {
         // Alive (serving or cold-loading) — do not disturb.
         return (ModelSwitch::Switched, Vec::new());
@@ -2069,7 +2093,19 @@ pub fn ensure_llama_serving(root: &Path, choice: ManagedLlamaChoice) -> (ModelSw
 /// the effective persisted choice, and require exact-model readiness.
 #[must_use]
 pub fn restart_llama_server(root: &Path, choice: ManagedLlamaChoice) -> (ModelSwitch, Vec<Child>) {
-    restart_llama_server_for_route(root, choice, false)
+    restart_llama_server_for_route_inner(root, choice, false, false)
+}
+
+/// Explicit deep-lock release path. The caller must keep the persisted/runtime
+/// lock set until this returns a strictly-ready server, then clear it only after
+/// saving the unlocked state. All ordinary lifecycle paths use the guarded
+/// wrappers above and cannot bypass the lock.
+#[must_use]
+pub fn restart_llama_server_for_unlock(
+    root: &Path,
+    choice: ManagedLlamaChoice,
+) -> (ModelSwitch, Vec<Child>) {
+    restart_llama_server_for_route_inner(root, choice, false, true)
 }
 
 /// Restart the managed server with the measured live/prep context profile.
@@ -2080,6 +2116,21 @@ pub fn restart_llama_server_for_route(
     choice: ManagedLlamaChoice,
     prep: bool,
 ) -> (ModelSwitch, Vec<Child>) {
+    restart_llama_server_for_route_inner(root, choice, prep, false)
+}
+
+fn restart_llama_server_for_route_inner(
+    root: &Path,
+    choice: ManagedLlamaChoice,
+    prep: bool,
+    allow_deep_locked_launch: bool,
+) -> (ModelSwitch, Vec<Child>) {
+    if !crate::deep_lock::lifecycle_launch_allowed(
+        crate::deep_lock::deep_lock_active(),
+        allow_deep_locked_launch,
+    ) {
+        return (ModelSwitch::FailedToStart, Vec::new());
+    }
     let had_llama = llama_reachable();
     let used_vram = had_llama
         .then(detect_nvidia_memory_mib)
@@ -2096,7 +2147,14 @@ pub fn restart_llama_server_for_route(
     std::thread::sleep(Duration::from_millis(800));
     let effective_choice = effective_llama_choice(root, &choice);
     let expected = llama_choice_name(root, &effective_choice);
-    let mut started = ensure_servers_for_route(root, true, false, effective_choice.clone(), prep);
+    let mut started = ensure_servers_for_route(
+        root,
+        true,
+        false,
+        effective_choice.clone(),
+        prep,
+        allow_deep_locked_launch,
+    );
     if started
         .first_mut()
         .is_some_and(|llama| wait_for_expected_llama(&expected, STRICT_LLAMA_READY_BUDGET, llama))
@@ -2124,7 +2182,14 @@ pub fn restart_llama_server_for_route(
     let fallback_model = effective_verified_managed_model(root, ManagedModel::Fallback12B);
     let fallback_expected = active_local_model_name(root, fallback_model);
     let fallback_choice = ManagedLlamaChoice::for_model(fallback_model, choice.context);
-    let mut fallback = ensure_servers_for_route(root, true, false, fallback_choice, prep);
+    let mut fallback = ensure_servers_for_route(
+        root,
+        true,
+        false,
+        fallback_choice,
+        prep,
+        allow_deep_locked_launch,
+    );
     if fallback.first_mut().is_some_and(|llama| {
         wait_for_expected_llama(&fallback_expected, STRICT_LLAMA_READY_BUDGET, llama)
     }) {
@@ -2775,6 +2840,9 @@ pub fn update_llama_engine(
     cancel: &AtomicBool,
     on: &dyn Fn(Progress),
 ) -> Result<EngineUpdate> {
+    if crate::deep_lock::deep_lock_active() {
+        bail!(crate::deep_lock::BLOCKED_ERROR);
+    }
     let llama_dir = root.join("llama.cpp");
     if find_exe(&llama_dir, "llama-server.exe").is_none() {
         return Ok(EngineUpdate::Skipped {
@@ -3103,7 +3171,7 @@ pub fn ensure_servers(
     want_whisper: bool,
     choice: ManagedLlamaChoice,
 ) -> Vec<Child> {
-    ensure_servers_for_route(root, want_llama, want_whisper, choice, false)
+    ensure_servers_for_route(root, want_llama, want_whisper, choice, false, false)
 }
 
 fn ensure_servers_for_route(
@@ -3112,8 +3180,14 @@ fn ensure_servers_for_route(
     want_whisper: bool,
     choice: ManagedLlamaChoice,
     prep: bool,
+    allow_deep_locked_launch: bool,
 ) -> Vec<Child> {
     let mut started = Vec::new();
+    let want_llama = want_llama
+        && crate::deep_lock::lifecycle_launch_allowed(
+            crate::deep_lock::deep_lock_active(),
+            allow_deep_locked_launch,
+        );
     // Any GPU (NVIDIA CUDA or AMD/Intel Vulkan build) → let current llama.cpp
     // auto-fit layers; CPU-only explicitly disables offload.
     let use_gpu = detect_gpu() != GpuKind::None;
