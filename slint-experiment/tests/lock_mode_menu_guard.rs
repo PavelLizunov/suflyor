@@ -15,9 +15,13 @@ fn lock_menu_is_a_top_level_window_and_hides_deep_for_external_ai() {
         .and_then(|rest| rest.split("// Active-indicator chip").next())
         .expect("find LockChip component");
 
-    for label in ["Normal", "Listening", "Unload local AI"] {
+    for label in ["Unlocked", "Listening", "Unload local AI"] {
         assert!(menu.contains(&format!("@tr(\"{label}\")")));
     }
+    assert!(menu.contains("mode-color: Theme.warning;"));
+    assert!(menu.contains("mode-color: Theme.danger;"));
+    assert!(source.contains("in property <color> mode-color: Theme.text-secondary;"));
+    assert!(source.contains("background: root.current ? root.mode-color.with-alpha(0.14)"));
     assert!(menu.contains("inherits Window"));
     assert!(menu.contains("if root.managed : LockModeMenuRow"));
     assert!(source.contains("callback menu-opened(length, length);"));

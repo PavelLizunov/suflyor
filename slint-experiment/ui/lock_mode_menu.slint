@@ -34,18 +34,21 @@ export component LockModeMenuWindow inherits Window {
                 padding: Metrics.space-xs;
                 spacing: 2px;
                 LockModeMenuRow {
-                    label: @tr("Normal");
+                    label: @tr("Unlocked");
                     current: root.mode == 0;
+                    mode-color: Theme.text-secondary;
                     clicked => { root.mode-selected(0); }
                 }
                 LockModeMenuRow {
                     label: @tr("Listening");
                     current: root.mode == 1;
+                    mode-color: Theme.warning;
                     clicked => { root.mode-selected(1); }
                 }
                 if root.managed : LockModeMenuRow {
                     label: @tr("Unload local AI");
                     current: root.mode == 2;
+                    mode-color: Theme.danger;
                     clicked => { root.mode-selected(2); }
                 }
             }

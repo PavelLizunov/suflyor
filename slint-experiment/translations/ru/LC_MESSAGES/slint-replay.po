@@ -1870,8 +1870,8 @@ msgstr "Локальный ИИ выгружен"
 msgid "Current"
 msgstr "Текущий"
 
-msgid "Normal"
-msgstr "Обычный"
+msgid "Unlocked"
+msgstr "Разблокировано"
 
 msgid "Listening"
 msgstr "Прослушивание"

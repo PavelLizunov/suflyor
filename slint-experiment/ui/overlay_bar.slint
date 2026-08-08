@@ -132,13 +132,17 @@ component Chip inherits Rectangle {
 export component LockModeMenuRow inherits Rectangle {
     in property <string> label;
     in property <bool> current: false;
+    // The selector is a compact traffic light: neutral unlocked, amber
+    // listening, red unloaded.  The colour stays on the row icon even before
+    // selection so the consequence of each choice is apparent.
+    in property <color> mode-color: Theme.text-secondary;
     callback clicked();
 
     height: 30px;
     border-radius: Metrics.radius-control;
-    background: root.current ? Theme.accent-subtle : (row-touch.has-hover ? Theme.bg-surface : transparent);
+    background: root.current ? root.mode-color.with-alpha(0.14) : (row-touch.has-hover ? Theme.bg-surface : transparent);
     border-width: root.current ? Metrics.border-thin : 0px;
-    border-color: root.current ? Theme.accent.with-alpha(0.65) : transparent;
+    border-color: root.current ? root.mode-color.with-alpha(0.65) : transparent;
     accessible-role: button;
     accessible-label: root.label;
     accessible-checkable: true;
@@ -149,21 +153,21 @@ export component LockModeMenuRow inherits Rectangle {
         spacing: Metrics.space-sm;
         Image {
             source: @image-url("../assets/icons/lock.svg");
-            colorize: root.current ? Theme.accent : Theme.text-secondary;
+            colorize: root.mode-color;
             width: 14px;
             height: 14px;
             y: (parent.height - self.height) / 2;
         }
         Text {
             text: root.label;
-            color: root.current ? Theme.text-primary : Theme.text-secondary;
+            color: root.current ? root.mode-color : Theme.text-secondary;
             font-size: Metrics.font-label;
             vertical-alignment: center;
         }
         Rectangle { horizontal-stretch: 1; }
         if root.current : Text {
             text: @tr("Current");
-            color: Theme.accent;
+            color: root.mode-color;
             font-size: Metrics.font-label;
             vertical-alignment: center;
         }
