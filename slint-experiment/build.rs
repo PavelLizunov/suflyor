@@ -20,9 +20,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // by bare msgid, matching the context-free .po. (If we ever switch to
     // slint-tr-extractor it must be run with --no-default-translation-
     // context to stay consistent.)
+    // Headless interaction tests use Slint's official ElementHandle API. Keep
+    // element metadata in dev/test builds, but do not carry it into the release
+    // installer unless SLINT_EMIT_DEBUG_INFO explicitly requests it (MCP QA).
+    let dev_debug_info = std::env::var("PROFILE").is_ok_and(|profile| profile != "release")
+        || std::env::var("SLINT_EMIT_DEBUG_INFO").is_ok_and(|value| value == "1");
     let config = slint_build::CompilerConfiguration::new()
         .with_bundled_translations("translations")
-        .with_default_translation_context(slint_build::DefaultTranslationContext::None);
+        .with_default_translation_context(slint_build::DefaultTranslationContext::None)
+        .with_debug_info(dev_debug_info);
     slint_build::compile_with_config("ui/index.slint", config)?;
 
     // Embed the app icon into the .exe so Explorer / the taskbar / a

@@ -20,14 +20,16 @@ use overlay_backend::events::{MonitorHint, RuntimeEvents, TileKind, TileSpec};
 use overlay_backend::{ai, audio, config, journal, kb, stt, vision};
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
 use slint_replay::app_state::{format_timer, new_shared_state};
+use slint_replay::lock_menu::{FocusState as LockMenuFocusState, FocusTransition};
 use slint_replay::markdown;
 use slint_replay::runtime_state::{shared_runtime, SharedSlintRuntime};
 use slint_replay::slint_events::{SlintEvents, SlintUiBridge};
 use slint_replay::slint_session;
 use slint_replay::win32::{
     drag_begin, drag_update, enum_monitors, focus_window, get_window_rect, grab_hwnd,
-    make_transparent_overlay, make_transparent_tile, move_window_pos_only, pick_monitor,
-    set_always_on_top, set_skip_taskbar, set_stealth, set_window_owner, work_area_for_window,
+    is_foreground_window, make_transparent_overlay, make_transparent_tile, move_window_pos_only,
+    pick_monitor, set_always_on_top, set_skip_taskbar, set_stealth, set_window_owner,
+    work_area_for_window,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -3546,23 +3548,62 @@ fn main() -> Result<(), slint::PlatformError> {
             }
         };
         *lock_menu.borrow_mut() = Some(menu.clone());
+        let menu_focus = Rc::new(RefCell::new(LockMenuFocusState::default()));
         {
             // This is a top-level native window, so it needs ordinary drop-down
             // dismissal semantics instead of the old in-bar popup behaviour.
             use slint::winit_030::{winit, EventResult, WinitWindowAccessor};
             use winit::event::WindowEvent;
             let menu_weak = Rc::downgrade(&menu);
-            let focused_once = Rc::new(std::cell::Cell::new(false));
-            let focused_for_event = focused_once.clone();
+            let focus_for_event = menu_focus.clone();
+            let bar_weak_for_focus = overlay.as_weak();
             menu.window().on_winit_window_event(move |_, event| {
-                match event {
-                    WindowEvent::Focused(true) => focused_for_event.set(true),
-                    WindowEvent::Focused(false) if focused_for_event.get() => {
+                let WindowEvent::Focused(focused) = event else {
+                    return EventResult::Propagate;
+                };
+                let (phase, generation) = focus_for_event.borrow().diagnostic_snapshot();
+                diag!(
+                    "[overlay-host] lock-menu event=focus-native focused={focused} phase={phase} generation={generation}"
+                );
+                let transition = focus_for_event.borrow_mut().focus_changed(*focused);
+                match transition {
+                    FocusTransition::Acquired => {
+                        diag!(
+                            "[overlay-host] lock-menu event=focus-acquired generation={generation}"
+                        );
+                    }
+                    FocusTransition::IgnoreInitialLoss => {
+                        diag!(
+                            "[overlay-host] lock-menu event=focus-loss-ignored reason=initial-open"
+                        );
+                    }
+                    FocusTransition::DismissOutside => {
+                        let owner_focused = bar_weak_for_focus
+                            .upgrade()
+                            .and_then(|bar| grab_hwnd(bar.window()).ok())
+                            .is_some_and(is_foreground_window);
+                        if owner_focused {
+                            focus_for_event.borrow_mut().suppress_next_open();
+                            let focus_for_clear = focus_for_event.clone();
+                            Timer::single_shot(Duration::from_millis(150), move || {
+                                focus_for_clear.borrow_mut().clear_suppressed_open();
+                            });
+                        }
+                        let reason = if owner_focused {
+                            "focus-outside-owner-bar"
+                        } else {
+                            "focus-outside"
+                        };
+                        diag!(
+                            "[overlay-host] lock-menu event=dismiss reason={reason} generation={generation}"
+                        );
                         if let Some(menu) = menu_weak.upgrade() {
-                            menu.hide().ok();
+                            if let Err(e) = menu.hide() {
+                                diag!("[overlay-host] lock-menu event=error stage=hide-focus-outside error={e}");
+                            }
                         }
                     }
-                    _ => {}
+                    FocusTransition::None => {}
                 }
                 EventResult::Propagate
             });
@@ -3570,52 +3611,92 @@ fn main() -> Result<(), slint::PlatformError> {
         {
             let menu = menu.clone();
             let menu_for_callback = menu.clone();
+            let focus_for_callback = menu_focus.clone();
             let weak = overlay.as_weak();
             menu.on_mode_selected(move |mode| {
-                menu_for_callback.hide().ok();
+                focus_for_callback.borrow_mut().close();
+                diag!("[overlay-host] lock-menu event=select mode={mode}");
+                if let Err(e) = menu_for_callback.hide() {
+                    diag!("[overlay-host] lock-menu event=error stage=hide-selection error={e}");
+                }
                 if let Some(bar) = weak.upgrade() {
                     bar.invoke_lock_mode_selected(mode);
+                } else {
+                    diag!("[overlay-host] lock-menu event=error stage=select reason=bar-dropped");
                 }
             });
         }
         {
             let menu = menu.clone();
             let menu_for_callback = menu.clone();
+            let focus_for_callback = menu_focus.clone();
             menu.on_dismissed(move || {
-                menu_for_callback.hide().ok();
+                focus_for_callback.borrow_mut().close();
+                diag!("[overlay-host] lock-menu event=dismiss reason=escape");
+                if let Err(e) = menu_for_callback.hide() {
+                    diag!("[overlay-host] lock-menu event=error stage=hide-escape error={e}");
+                }
             });
         }
         {
             let menu = menu.clone();
             let weak = overlay.as_weak();
             let cfg_for_menu = cfg.clone();
+            let focus_for_open = menu_focus.clone();
             overlay.on_lock_menu_opened(move |anchor_x, anchor_y| {
+                if focus_for_open.borrow_mut().consume_suppressed_open() {
+                    diag!(
+                        "[overlay-host] lock-menu event=dismiss reason=chip-toggle-after-owner-focus"
+                    );
+                    return;
+                }
+                diag!(
+                    "[overlay-host] lock-menu event=open-request visible={}",
+                    menu.window().is_visible()
+                );
                 if menu.window().is_visible() {
-                    menu.hide().ok();
+                    focus_for_open.borrow_mut().close();
+                    diag!("[overlay-host] lock-menu event=dismiss reason=chip-toggle");
+                    if let Err(e) = menu.hide() {
+                        diag!("[overlay-host] lock-menu event=error stage=hide-chip-toggle error={e}");
+                    }
                     return;
                 }
                 let Some(bar) = weak.upgrade() else {
+                    diag!("[overlay-host] lock-menu event=error stage=open reason=bar-dropped");
                     return;
                 };
                 let snap = cfg_for_menu.read();
                 let managed = overlay_backend::deep_lock::cfg_is_managed_local(&snap);
-                menu.set_managed(managed);
-                menu.set_mode(if managed && snap.deep_lock {
+                let mode = if managed && snap.deep_lock {
                     2
                 } else if snap.suppress_tiles {
                     1
                 } else {
                     0
-                });
+                };
+                menu.set_managed(managed);
+                menu.set_mode(mode);
                 menu.global::<ui::Theme>()
                     .set_scheme(clamp_scheme(snap.color_scheme));
                 drop(snap);
+                diag!(
+                    "[overlay-host] lock-menu event=prepared mode={mode} managed={managed}"
+                );
 
-                let Ok(bar_hwnd) = grab_hwnd(bar.window()) else {
-                    return;
+                let bar_hwnd = match grab_hwnd(bar.window()) {
+                    Ok(hwnd) => hwnd,
+                    Err(e) => {
+                        diag!("[overlay-host] lock-menu event=error stage=bar-hwnd error={e}");
+                        return;
+                    }
                 };
-                let Ok((bar_left, bar_top, _, _)) = get_window_rect(bar_hwnd) else {
-                    return;
+                let (bar_left, bar_top, _, _) = match get_window_rect(bar_hwnd) {
+                    Ok(rect) => rect,
+                    Err(e) => {
+                        diag!("[overlay-host] lock-menu event=error stage=bar-rect error={e}");
+                        return;
+                    }
                 };
                 let scale = bar.window().scale_factor().max(0.1);
                 let menu_width = (210.0 * scale).round() as i32;
@@ -3632,6 +3713,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     })
                     .or_else(|| enum_monitors().into_iter().find(|m| m.is_primary));
                 let Some(monitor) = monitor else {
+                    diag!("[overlay-host] lock-menu event=error stage=monitor reason=none");
                     return;
                 };
                 let x = (anchor_x - menu_width).clamp(monitor.left, monitor.right - menu_width);
@@ -3647,29 +3729,78 @@ fn main() -> Result<(), slint::PlatformError> {
                 // retry helper rather than a best-effort one-shot grab.
                 menu.window()
                     .set_position(slint::PhysicalPosition::new(-32000, -32000));
-                if menu.show().is_err() {
+                let generation = focus_for_open.borrow_mut().begin_open();
+                if let Err(e) = menu.show() {
+                    focus_for_open.borrow_mut().close();
+                    diag!("[overlay-host] lock-menu event=error stage=show error={e}");
                     return;
                 }
+                diag!("[overlay-host] lock-menu event=show-request generation={generation}");
+                let last_reveal_error = Rc::new(RefCell::new(None::<String>));
+                let focus_for_reveal = focus_for_open.clone();
+                let error_for_reveal = last_reveal_error.clone();
                 let reveal = Rc::new(move |window: &LockModeMenuWindow| {
-                    let Ok(hwnd) = grab_hwnd(window.window()) else {
-                        return false;
+                    if !focus_for_reveal.borrow().is_current_open(generation) {
+                        return true;
+                    }
+                    let hwnd = match grab_hwnd(window.window()) {
+                        Ok(hwnd) => hwnd,
+                        Err(e) => {
+                            *error_for_reveal.borrow_mut() = Some(format!("hwnd: {e}"));
+                            return false;
+                        }
                     };
                     set_window_owner(hwnd, bar_hwnd);
-                    if set_skip_taskbar(hwnd, true).is_err()
-                        || set_always_on_top(hwnd, true).is_err()
-                        || (global_stealth() && set_stealth(hwnd, true).is_err())
-                    {
+                    if let Err(e) = set_skip_taskbar(hwnd, true) {
+                        *error_for_reveal.borrow_mut() = Some(format!("skip-taskbar: {e}"));
                         return false;
                     }
-                    let moved = move_window_pos_only(hwnd, x, y).is_ok();
-                    if moved {
-                        focus_window(hwnd);
+                    if let Err(e) = set_always_on_top(hwnd, true) {
+                        *error_for_reveal.borrow_mut() = Some(format!("always-on-top: {e}"));
+                        return false;
                     }
-                    moved
+                    if global_stealth() {
+                        if let Err(e) = set_stealth(hwnd, true) {
+                            *error_for_reveal.borrow_mut() = Some(format!("stealth: {e}"));
+                            return false;
+                        }
+                    }
+                    if let Err(e) = move_window_pos_only(hwnd, x, y) {
+                        *error_for_reveal.borrow_mut() = Some(format!("move: {e}"));
+                        return false;
+                    }
+                    if !focus_for_reveal.borrow_mut().mark_revealed(generation) {
+                        return true;
+                    }
+                    *error_for_reveal.borrow_mut() = None;
+                    focus_window(hwnd);
+                    diag!(
+                        "[overlay-host] lock-menu event=revealed generation={generation} x={x} y={y} mode={mode} managed={managed} focus=requested"
+                    );
+                    let focus_for_arm = focus_for_reveal.clone();
+                    Timer::single_shot(Duration::ZERO, move || {
+                        if focus_for_arm.borrow_mut().arm(generation) {
+                            diag!(
+                                "[overlay-host] lock-menu event=armed generation={generation}"
+                            );
+                        }
+                    });
+                    true
                 });
-                let fallback = Rc::new(|window: &LockModeMenuWindow| {
-                    window.hide().ok();
-                    diag!("[overlay-host] lock menu: native window did not realize; kept hidden");
+                let focus_for_fallback = focus_for_open.clone();
+                let fallback = Rc::new(move |window: &LockModeMenuWindow| {
+                    if !focus_for_fallback.borrow().is_current_open(generation) {
+                        return;
+                    }
+                    focus_for_fallback.borrow_mut().close();
+                    if let Err(e) = window.hide() {
+                        diag!("[overlay-host] lock-menu event=error stage=hide-reveal-fallback error={e}");
+                    }
+                    let detail = last_reveal_error
+                        .borrow()
+                        .clone()
+                        .unwrap_or_else(|| "native-window-not-realized".to_string());
+                    diag!("[overlay-host] lock-menu event=error stage=reveal error={detail}");
                 });
                 realize_with_retries(menu.as_ref(), reveal, fallback);
             });

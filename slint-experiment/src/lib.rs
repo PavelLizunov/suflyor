@@ -9,6 +9,7 @@
 
 pub mod app_state;
 pub mod capture;
+pub mod lock_menu;
 pub mod logging;
 pub mod markdown;
 pub mod runtime_state;

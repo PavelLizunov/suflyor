@@ -139,6 +139,8 @@ export component LockModeMenuRow inherits Rectangle {
     in property <bool> unlocked: false;
     callback clicked();
 
+    accessible-action-default => { root.clicked(); }
+
     height: 30px;
     border-radius: Metrics.radius-control;
     background: root.current ? root.mode-color.with-alpha(0.14) : (row-touch.has-hover ? Theme.bg-surface : transparent);
@@ -181,6 +183,7 @@ export component LockModeMenuRow inherits Rectangle {
 
 component LockChip inherits Rectangle {
     in property <bool> locked: false;
+    in property <bool> unlocked: !root.locked;
     // Deep lock (managed-local third state, v0.37): implies `locked`, turns
     // the chip red and STOPS the tremble — an unloaded server is a firm,
     // static state, distinct from the shaking "tiles held back" listening mode.
@@ -198,6 +201,7 @@ component LockChip inherits Rectangle {
     accessible-label: a11y;
     accessible-checkable: true;
     accessible-checked: locked;
+    accessible-action-default => { root.menu-opened(root.absolute-position.x + root.width, root.absolute-position.y + root.height); }
     background: locked
         ? accent.with-alpha(0.18)
         : (ta.pressed
@@ -228,7 +232,7 @@ component LockChip inherits Rectangle {
         alignment: center;
 
         Image {
-            source: root.locked ? @image-url("../assets/icons/lock.svg") : @image-url("../assets/icons/unlock.svg");
+            source: root.unlocked ? @image-url("../assets/icons/unlock.svg") : @image-url("../assets/icons/lock.svg");
             colorize: root.locked ? root.accent : Theme.text-secondary;
             width: 14px;
             height: 14px;
@@ -611,6 +615,8 @@ export component OverlayBarWindow inherits Window {
     // the app-owned llama-server is unloaded and managed requests are refused.
     // Implies suppress-tiles (Rust keeps the two consistent).
     in-out property <bool> deep-lock: false;
+    // Runtime-testable state that directly drives the lock chip's rendered icon.
+    out property <bool> lock-icon-unlocked: !root.suppress-tiles && !root.deep-lock;
     // Localized per-state lock-chip description (a11y label; there is no
     // hover-tooltip surface). Rust rebuilds it on transitions + language switch.
     in property <string> lock-a11y: "";
@@ -844,6 +850,7 @@ export component OverlayBarWindow inherits Window {
             // v0.37): red + still, the managed server unloaded until the next click.
             LockChip {
                 locked: root.suppress-tiles;
+                unlocked: root.lock-icon-unlocked;
                 deep: root.deep-lock;
                 a11y: root.lock-a11y;
                 managed: root.lock-menu-managed;
@@ -1246,6 +1253,7 @@ export component OverlayBarWindow inherits Window {
                 // while active, turns red + still in the deep-lock state (v0.37).
                 LockChip {
                     locked: root.suppress-tiles;
+                    unlocked: root.lock-icon-unlocked;
                     deep: root.deep-lock;
                     a11y: root.lock-a11y;
                 managed: root.lock-menu-managed;
