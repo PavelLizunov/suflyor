@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>suflyor v0.36.1-rc.10 retest</title></head>
+<body><h1>suflyor v0.36.1-rc.10 retest</h1><ol>
+<li>Start a session with system audio following the Windows default. Play speech through A50 Voice, switch the physical A50/Windows output profile to another default endpoint, then play speech again. Confirm transcript and system WAV continue after one automatic reopen.</li>
+<li>Pin A50 Voice explicitly, start another session, and change only the Windows default output. Confirm the log says <code>mode=pinned action=ignore_default_change</code> and capture remains pinned instead of following the new default.</li>
+<li>While A50 Voice is pinned, disable/re-enable that endpoint or switch the A50 profile so Windows reports its state/format change. Confirm the same named endpoint is reopened and speech resumes after it returns.</li>
+<li>Leave the meeting silent for at least 65 seconds. Confirm a rate-limited <code>audio_no_frame ... action=wait</code> heartbeat appears and no recovery/reopen occurs merely because the audio is quiet.</li>
+<li>Confirm recovery logs contain <code>audio_route notification</code>, <code>audio_recovery begin</code>, <code>attempt</code>, and either <code>success</code> or <code>failure</code>, without raw endpoint IDs, URLs, keys, or transcript text.</li>
+</ol></body></html>

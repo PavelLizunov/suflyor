@@ -6,6 +6,7 @@
 
 pub mod ai;
 pub mod audio;
+pub(crate) mod audio_route;
 pub mod bridge;
 pub mod components;
 pub mod config;

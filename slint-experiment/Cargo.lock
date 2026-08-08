@@ -4363,6 +4363,7 @@ dependencies = [
  "transcribe-rs",
  "wasapi",
  "windows",
+ "windows-core",
 ]
 
 [[package]]
@@ -5849,7 +5850,7 @@ dependencies = [
 
 [[package]]
 name = "slint-replay"
-version = "0.36.1-rc.9"
+version = "0.36.1-rc.10"
 dependencies = [
  "anyhow",
  "base64 0.23.0",
