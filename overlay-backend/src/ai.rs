@@ -17,6 +17,10 @@ pub enum AiProtocol {
     OpenAiCompatible,
     OpenAiResponses,
     AnthropicMessages,
+    /// Official Codex app-server account integration. RC14 deliberately keeps
+    /// this connect-only until the stable protocol can enforce no tools and no
+    /// filesystem reads for inference turns.
+    CodexSubscriptionConnectOnly,
 }
 
 impl AiProtocol {
@@ -26,6 +30,7 @@ impl AiProtocol {
             Self::OpenAiCompatible => "openai-compatible",
             Self::OpenAiResponses => "openai-responses",
             Self::AnthropicMessages => "anthropic-messages",
+            Self::CodexSubscriptionConnectOnly => "codex-subscription-connect-only",
         }
     }
 
@@ -37,6 +42,11 @@ impl AiProtocol {
     #[must_use]
     pub const fn supports_prompt_cache_control(self) -> bool {
         matches!(self, Self::OpenAiCompatible | Self::AnthropicMessages)
+    }
+
+    #[must_use]
+    pub const fn supports_live_answers(self) -> bool {
+        !matches!(self, Self::CodexSubscriptionConnectOnly)
     }
 }
 

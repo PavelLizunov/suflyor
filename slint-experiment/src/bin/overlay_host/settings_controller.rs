@@ -49,13 +49,13 @@ use super::{
     clamp_scheme, cloud_model_index, config, drag_begin, drag_update, fetch_models,
     global_stealth_effective, grab_hwnd, make_transparent_tile, open_wizard,
     parse_tile_monitor_pin, populate_diagnostics, present_window_stealth_aware,
-    preset_for_tts_rate, refresh_local_context_controls, refresh_local_model_resource_warning,
-    set_always_on_top, set_global_scheme, set_global_stealth, set_global_tile_monitor,
-    set_global_tile_opacity, spawn_ptt_watchdog, stt, try_acquire_mic, wire_ai_settings,
-    wire_diagnostics, wire_import_export, wire_local_ai, wire_memory, wire_stt_settings,
-    wire_updates, wire_vision_settings, wire_voice_settings, Arc, AtomicBool, ComponentHandle,
-    ComponentRow, ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell, SettingsWindow,
-    SharedString, TileWindows, VecModel, WindowRegistry,
+    preset_for_tts_rate, refresh_codex_account_status, refresh_local_context_controls,
+    refresh_local_model_resource_warning, set_always_on_top, set_global_scheme, set_global_stealth,
+    set_global_tile_monitor, set_global_tile_opacity, spawn_ptt_watchdog, stt, try_acquire_mic,
+    wire_ai_settings, wire_diagnostics, wire_import_export, wire_local_ai, wire_memory,
+    wire_stt_settings, wire_updates, wire_vision_settings, wire_voice_settings, Arc, AtomicBool,
+    ComponentHandle, ComponentRow, ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell,
+    SettingsWindow, SharedString, TileWindows, VecModel, WindowRegistry,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -82,6 +82,12 @@ pub(crate) fn open_settings(
         // Refresh token status + profiles — config might have changed since last open.
         reset_component_install_state(existing);
         populate_token_status(existing, cfg);
+        {
+            let snap = cfg.read();
+            if snap.ai_provider == "codex" {
+                refresh_codex_account_status(existing.as_weak(), snap.ui_is_ru());
+            }
+        }
         populate_diagnostics(existing, cfg);
         {
             let snap = cfg.read();
@@ -116,6 +122,12 @@ pub(crate) fn open_settings(
         }
     }
     populate_token_status(&win, cfg);
+    {
+        let snap = cfg.read();
+        if snap.ai_provider == "codex" {
+            refresh_codex_account_status(win.as_weak(), snap.ui_is_ru());
+        }
+    }
     populate_diagnostics(&win, cfg);
     // Phase E8 — show the running version in the Updates tab.
     win.set_app_version(SharedString::from(env!("CARGO_PKG_VERSION")));
@@ -1460,6 +1472,14 @@ pub(crate) fn populate_token_status(
     win.set_anthropic_key_status(SharedString::from(protected_status(
         overlay_backend::credentials::SecretSlot::Anthropic,
     )));
+    win.set_codex_auth_status(SharedString::from(if c.ui_is_ru() {
+        "Проверка официального Codex app-server..."
+    } else {
+        "Checking official Codex app-server..."
+    }));
+    win.set_codex_auth_busy(false);
+    win.set_codex_login_url(SharedString::default());
+    win.set_codex_user_code(SharedString::default());
     win.set_openai_key_input(SharedString::default());
     win.set_anthropic_key_input(SharedString::default());
     // ТЗ 2026-07-09 — Hermes tab transient status props on every (re)open: clear
@@ -1568,6 +1588,7 @@ pub(crate) fn populate_token_status(
         "local" => 1,
         "openai" => 2,
         "anthropic" => 3,
+        "codex" => 4,
         _ => 0,
     });
     win.set_ai_local_base_url_input(SharedString::from(c.ai_local_base_url.clone()));

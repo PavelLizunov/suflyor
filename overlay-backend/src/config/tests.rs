@@ -709,6 +709,37 @@ fn direct_provider_profiles_are_additive_and_use_native_protocols() {
 }
 
 #[test]
+fn codex_subscription_profile_round_trips_but_is_connect_only() {
+    let mut cfg = Config::defaults();
+    cfg.ai_provider = "codex".into();
+    let endpoint = cfg.ai_endpoint(false);
+    assert_eq!(
+        endpoint.protocol,
+        crate::ai::AiProtocol::CodexSubscriptionConnectOnly
+    );
+    assert!(!endpoint.protocol.supports_live_answers());
+    assert!(endpoint.base_url.is_empty());
+    assert!(endpoint.bearer.is_empty());
+
+    let cloud_endpoint = cfg.ai_endpoint_cloud();
+    assert_eq!(
+        cloud_endpoint.protocol,
+        crate::ai::AiProtocol::CodexSubscriptionConnectOnly
+    );
+    assert!(cloud_endpoint.base_url.is_empty());
+    assert!(cloud_endpoint.bearer.is_empty());
+
+    let json = serde_json::to_string(&cfg).expect("serialize");
+    assert!(!json.contains("auth.json"));
+    assert!(!json.contains("refresh_token"));
+    let restored: Config = serde_json::from_str(&json).expect("round trip");
+    assert_eq!(restored.ai_provider, "codex");
+
+    let legacy: Config = serde_json::from_str("{}").expect("legacy config");
+    assert_eq!(legacy.ai_provider, "cloud");
+}
+
+#[test]
 fn cloud_escalation_preserves_legacy_bridge_but_keeps_direct_protocol() {
     let mut cfg = Config::defaults();
     cfg.ai_provider = "local".into();

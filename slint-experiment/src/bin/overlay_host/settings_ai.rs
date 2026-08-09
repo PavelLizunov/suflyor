@@ -52,6 +52,47 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// window. Hardware discovery for a 26B note can outlast a later model choice.
 static LOCAL_MODEL_RESOURCE_WARNING_GENERATION: AtomicU64 = AtomicU64::new(0);
 
+fn codex_account_label(
+    state: &overlay_backend::codex_subscription::AccountState,
+    is_ru: bool,
+) -> String {
+    use overlay_backend::codex_subscription::AccountState;
+    match state {
+        AccountState::NotInstalled if is_ru => {
+            "[--] Codex app-server не найден — установите официальный Codex".into()
+        }
+        AccountState::NotInstalled => {
+            "[--] Codex app-server not found — install official Codex".into()
+        }
+        AccountState::SignedOut if is_ru => "[--] выход выполнен".into(),
+        AccountState::SignedOut => "[--] signed out".into(),
+        AccountState::SignInRequired if is_ru => "[--] требуется вход".into(),
+        AccountState::SignInRequired => "[--] sign-in required".into(),
+        AccountState::SignedIn { plan } if is_ru => plan.as_ref().map_or_else(
+            || "[ok] вход через ChatGPT выполнен".into(),
+            |plan| format!("[ok] вход через ChatGPT выполнен ({plan})"),
+        ),
+        AccountState::SignedIn { plan } => plan.as_ref().map_or_else(
+            || "[ok] signed in with ChatGPT".into(),
+            |plan| format!("[ok] signed in with ChatGPT ({plan})"),
+        ),
+        AccountState::Error if is_ru => "[err] не удалось проверить аккаунт Codex".into(),
+        AccountState::Error => "[err] could not query the Codex account".into(),
+    }
+}
+
+pub(crate) fn refresh_codex_account_status(weak: slint::Weak<SettingsWindow>, is_ru: bool) {
+    std::thread::spawn(move || {
+        let state = overlay_backend::codex_subscription::account_state();
+        let label = codex_account_label(&state, is_ru);
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(window) = weak.upgrade() {
+                window.set_codex_auth_status(SharedString::from(label));
+            }
+        });
+    });
+}
+
 /// Which model dropdown a fetch populates — the cloud bridge or the local server.
 #[derive(Clone, Copy)]
 pub(crate) enum ModelTarget {
@@ -369,6 +410,7 @@ pub(crate) fn wire_ai_settings(
                 1 => "local",
                 2 => "openai",
                 3 => "anthropic",
+                4 => "codex",
                 _ => "cloud",
             };
             let mut c = cfg_c.write();
@@ -404,6 +446,9 @@ pub(crate) fn wire_ai_settings(
                 refresh_lock_chip(&o, &cfg_c);
             }
             diag!("ai_provider -> {provider}");
+            if provider == "codex" {
+                refresh_codex_account_status(weak.clone(), cfg_c.read().ui_is_ru());
+            }
             // #E10.1 — switching to Local auto-populates the model dropdown.
             if let Some((
                 base_url,
@@ -444,6 +489,121 @@ pub(crate) fn wire_ai_settings(
             }
         });
     }
+
+    // RC14 — ChatGPT subscription sign-in is delegated to the official Codex
+    // app-server. Suflyor receives only account state and device-code display
+    // fields; it never receives or stores OAuth tokens.
+    {
+        let weak = win.as_weak();
+        let cfg_c = cfg.clone();
+        win.on_codex_connect_clicked(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let is_ru = cfg_c.read().ui_is_ru();
+            window.set_codex_auth_busy(true);
+            window.set_codex_login_url(SharedString::default());
+            window.set_codex_user_code(SharedString::default());
+            window.set_codex_auth_status(SharedString::from(if is_ru {
+                "Запуск официального входа Codex..."
+            } else {
+                "Starting official Codex sign-in..."
+            }));
+            let worker_weak = window.as_weak();
+            std::thread::spawn(move || {
+                overlay_backend::codex_subscription::device_login(move |event| {
+                    use overlay_backend::codex_subscription::LoginEvent;
+                    let event_weak = worker_weak.clone();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        let Some(window) = event_weak.upgrade() else {
+                            return;
+                        };
+                        match event {
+                            LoginEvent::AwaitingUser {
+                                verification_url,
+                                user_code,
+                            } => {
+                                window.set_codex_login_url(SharedString::from(verification_url));
+                                window.set_codex_user_code(SharedString::from(user_code));
+                                window.set_codex_auth_status(SharedString::from(if is_ru {
+                                    "Откройте страницу входа и введите показанный код"
+                                } else {
+                                    "Open the sign-in page and enter the shown code"
+                                }));
+                            }
+                            LoginEvent::SignedIn { plan } => {
+                                let state =
+                                    overlay_backend::codex_subscription::AccountState::SignedIn {
+                                        plan,
+                                    };
+                                window.set_codex_auth_busy(false);
+                                window.set_codex_login_url(SharedString::default());
+                                window.set_codex_user_code(SharedString::default());
+                                window.set_codex_auth_status(SharedString::from(
+                                    codex_account_label(&state, is_ru),
+                                ));
+                            }
+                            LoginEvent::SignInRequired => {
+                                window.set_codex_auth_busy(false);
+                                window.set_codex_login_url(SharedString::default());
+                                window.set_codex_user_code(SharedString::default());
+                                window.set_codex_auth_status(SharedString::from(if is_ru {
+                                    "[--] вход не завершён — повторите подключение"
+                                } else {
+                                    "[--] sign-in not completed — connect again"
+                                }));
+                            }
+                            LoginEvent::Error => {
+                                window.set_codex_auth_busy(false);
+                                window.set_codex_login_url(SharedString::default());
+                                window.set_codex_user_code(SharedString::default());
+                                window.set_codex_auth_status(SharedString::from(if is_ru {
+                                    "[err] вход Codex недоступен"
+                                } else {
+                                    "[err] Codex sign-in unavailable"
+                                }));
+                            }
+                        }
+                    });
+                });
+            });
+        });
+    }
+    {
+        let weak = win.as_weak();
+        let cfg_c = cfg.clone();
+        win.on_codex_disconnect_clicked(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let is_ru = cfg_c.read().ui_is_ru();
+            window.set_codex_auth_busy(true);
+            window.set_codex_login_url(SharedString::default());
+            window.set_codex_user_code(SharedString::default());
+            let worker_weak = window.as_weak();
+            std::thread::spawn(move || {
+                let state = overlay_backend::codex_subscription::disconnect();
+                let label = codex_account_label(&state, is_ru);
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(window) = worker_weak.upgrade() {
+                        window.set_codex_auth_busy(false);
+                        window.set_codex_auth_status(SharedString::from(label));
+                    }
+                });
+            });
+        });
+    }
+    win.on_codex_open_signin_clicked(move |url| {
+        if !overlay_backend::codex_subscription::allowed_signin_url(url.as_str()) {
+            return;
+        }
+        if let Err(error) = std::process::Command::new("explorer.exe")
+            .arg(url.as_str())
+            .spawn()
+        {
+            eprintln!("[overlay-host] Codex sign-in page launch failed: {error}");
+        }
+    });
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();

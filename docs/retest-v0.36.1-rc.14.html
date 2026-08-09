@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>suflyor v0.36.1-rc.14 retest</title></head>
+<body><h1>suflyor v0.36.1-rc.14 retest</h1><ol>
+<li>Open Settings → AI providers. Confirm the five choices are Custom OpenAI-compatible bridge, Local OpenAI-compatible, OpenAI API, Anthropic API, and experimental Codex (ChatGPT subscription).</li>
+<li>Select Codex. With no official Codex executable, confirm the status says it is not installed. With a supported executable and the isolated mock app-server, confirm signed-out, sign-in-required, signed-in, malformed-response, and timeout states stay generic.</li>
+<li>Press Connect. Confirm the official device-code flow starts only after this click, the verification URL is restricted to an official HTTPS host, and the short user code is visible. Do not perform a real owner-account login during automated verification.</li>
+<li>Press Open sign-in page. Confirm no browser is opened before this explicit click. Cancel/expire the mock login and confirm Connect becomes available again without exposing RPC errors or credentials.</li>
+<li>Press Disconnect against the mock sidecar. Confirm pending login UI is cleared and the status becomes signed out. Confirm suflyor never reads, logs, imports, or exports Codex token files.</li>
+<li>Confirm the panel clearly states RC14 is connect-only: live answers through Codex are disabled until the stable official protocol can enforce no tools and no filesystem access. Selecting Codex then asking must fail generically, never silently route through another provider.</li>
+<li>Switch back through bridge, local, OpenAI, and Anthropic. Confirm their fields, protected-key behavior, Hermes compatibility, and existing live-answer routes are unchanged.</li>
+<li>At 1280×768 in English and Russian, verify the renamed AI providers navigation/title, fifth provider card, buttons, warning, code row, scrolling, and no clipping. Reopen Settings and confirm transient login URL/code/busy state is cleared and account state is refreshed.</li>
+</ol></body></html>

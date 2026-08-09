@@ -14,6 +14,7 @@ pub(super) fn endpoint_path(protocol: AiProtocol) -> &'static str {
         AiProtocol::OpenAiCompatible => "chat/completions",
         AiProtocol::OpenAiResponses => "responses",
         AiProtocol::AnthropicMessages => "messages",
+        AiProtocol::CodexSubscriptionConnectOnly => "",
     }
 }
 
@@ -29,6 +30,7 @@ pub(super) fn authorize(
         AiProtocol::AnthropicMessages => request
             .header("x-api-key", credential)
             .header("anthropic-version", "2023-06-01"),
+        AiProtocol::CodexSubscriptionConnectOnly => request,
     }
 }
 
@@ -116,6 +118,9 @@ pub(super) fn request_body(
                 };
             }
             Ok(body)
+        }
+        AiProtocol::CodexSubscriptionConnectOnly => {
+            Err(anyhow!("Codex subscription live answers are unavailable"))
         }
     }
 }
@@ -265,6 +270,12 @@ pub(super) fn parse_stream(protocol: AiProtocol, value: &Value) -> ParsedStreamE
                 failed: kind == "error",
             }
         }
+        AiProtocol::CodexSubscriptionConnectOnly => ParsedStreamEvent {
+            id: None,
+            delta: None,
+            done: None,
+            failed: true,
+        },
     }
 }
 
@@ -351,6 +362,9 @@ pub(super) fn parse_completion(
                 .to_string(),
             None,
         ),
+        AiProtocol::CodexSubscriptionConnectOnly => {
+            (String::new(), 0, 0, "unavailable".to_string(), None)
+        }
     };
     let tok_per_sec = server_tps
         .filter(|value| value.is_finite() && *value > 0.0)

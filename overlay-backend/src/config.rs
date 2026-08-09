@@ -741,6 +741,13 @@ impl Config {
                 model: self.anthropic_model.clone(),
                 is_local: false,
             },
+            "codex" => AiEndpoint {
+                protocol: AiProtocol::CodexSubscriptionConnectOnly,
+                base_url: String::new(),
+                bearer: String::new(),
+                model: String::new(),
+                is_local: false,
+            },
             _ => AiEndpoint {
                 protocol: AiProtocol::OpenAiCompatible,
                 base_url: self.ai_base_url.clone(),
@@ -771,7 +778,7 @@ impl Config {
     /// routing, including Hermes as an OpenAI-compatible bridge.
     #[must_use]
     pub fn ai_endpoint_cloud(&self) -> AiEndpoint {
-        if matches!(self.ai_provider.as_str(), "openai" | "anthropic") {
+        if matches!(self.ai_provider.as_str(), "openai" | "anthropic" | "codex") {
             self.ai_endpoint(true)
         } else {
             AiEndpoint {
@@ -825,7 +832,8 @@ impl Config {
     pub fn readiness(&self) -> ReadinessReport {
         // AI — resolve the ACTIVE provider (local vs cloud) via the resolver.
         let ep = self.ai_endpoint(false);
-        let ai_configured = !ep.base_url.trim().is_empty()
+        let ai_configured = ep.protocol != AiProtocol::CodexSubscriptionConnectOnly
+            && !ep.base_url.trim().is_empty()
             && !ep.model.trim().is_empty()
             && (ep.is_local || !ep.bearer.trim().is_empty());
         let ai_detail = if ai_configured {
@@ -834,6 +842,7 @@ impl Config {
                 AiProtocol::OpenAiCompatible => "cloud",
                 AiProtocol::OpenAiResponses => "openai",
                 AiProtocol::AnthropicMessages => "anthropic",
+                AiProtocol::CodexSubscriptionConnectOnly => "codex-connect-only",
             };
             format!("{} · {} · {}", provider, ep.base_url, ep.model)
         } else {
@@ -1665,6 +1674,7 @@ pub fn preview_server_settings(current: &Config, imported: &Config) -> ServerSet
             false,
             false,
         ),
+        "codex" => (String::new(), String::new(), false, false),
         _ => (
             cfg.ai_base_url.clone(),
             cfg.ai_model.clone(),

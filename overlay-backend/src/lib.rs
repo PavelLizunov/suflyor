@@ -8,6 +8,7 @@ pub mod ai;
 pub mod audio;
 pub(crate) mod audio_route;
 pub mod bridge;
+pub mod codex_subscription;
 pub mod components;
 pub mod config;
 pub mod conspect;

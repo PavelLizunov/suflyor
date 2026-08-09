@@ -363,6 +363,10 @@ export component SettingsWindow inherits Window {
     in-out property <string> anthropic-key-input: "";
     in-out property <string> anthropic-base-url-input: "";
     in-out property <string> anthropic-model-input: "";
+    in-out property <string> codex-auth-status: "";
+    in-out property <bool> codex-auth-busy: false;
+    in-out property <string> codex-login-url: "";
+    in-out property <string> codex-user-code: "";
 
     // ТЗ 2026-07-09 — Hermes integration tab (settings_hermes.rs).
     // Bridge (Hermes → suflyor): loopback server the local agent reads from.
@@ -541,6 +545,9 @@ export component SettingsWindow inherits Window {
     callback anthropic-key-save(string);
     callback anthropic-base-url-save(string);
     callback anthropic-model-save(string);
+    callback codex-connect-clicked();
+    callback codex-disconnect-clicked();
+    callback codex-open-signin-clicked(string);
     callback ai-model-selected(string);
     callback ai-models-refresh();
     callback ai-prompt-cache-changed(bool);
@@ -832,7 +839,7 @@ export component SettingsWindow inherits Window {
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
-                    label: @tr("AI bridge"); icon: @image-url("../assets/icons/ai.svg"); tab-index: 11;
+                    label: @tr("AI providers"); icon: @image-url("../assets/icons/ai.svg"); tab-index: 11;
                     active: root.active-tab == 11;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
@@ -2056,7 +2063,7 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 11 : VerticalLayout {
                         spacing: 10px;
                         SettingsCard {
-                            title: @tr("AI bridge");
+                            title: @tr("AI providers");
                         Text {
                             text: @tr("Where do live answers come from? Pick a type, then configure it.");
                             font-size: 11px;
@@ -2070,6 +2077,7 @@ export component SettingsWindow inherits Window {
                                 @tr("Local OpenAI-compatible"),
                                 @tr("OpenAI API (Responses)"),
                                 @tr("Anthropic API (Messages)"),
+                                @tr("Codex (ChatGPT subscription, experimental)"),
                             ];
                             current-index: root.ai-provider-index;
                             selected => {
@@ -2246,6 +2254,59 @@ export component SettingsWindow inherits Window {
                                 text: @tr("Prompt caching");
                                 checked <=> root.ai-prompt-cache;
                                 toggled(v) => { root.ai-prompt-cache-changed(v); }
+                            }
+                        }
+
+                        // ============================ CODEX SUBSCRIPTION ============================
+                        if root.ai-provider-index == 4 : VerticalLayout {
+                            spacing: 8px;
+                            vertical-stretch: 0;
+                            Text { text: @tr("Codex (ChatGPT subscription)"); font-size: 12px; font-weight: 700; color: Theme.text-primary; }
+                            Text {
+                                text: @tr("Uses the official local Codex app-server. Codex owns the ChatGPT login and stores tokens; suflyor never reads them.");
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            Text { text: root.codex-auth-status; font-size: 11px; color: Theme.text-secondary; wrap: word-wrap; }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: root.codex-auth-busy ? @tr("Connecting...") : @tr("Connect ChatGPT");
+                                    enabled: !root.codex-auth-busy;
+                                    clicked => { root.codex-connect-clicked(); }
+                                }
+                                Button {
+                                    text: @tr("Disconnect");
+                                    enabled: !root.codex-auth-busy;
+                                    clicked => { root.codex-disconnect-clicked(); }
+                                }
+                            }
+                            if root.codex-login-url != "" : HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: @tr("Open sign-in page");
+                                    clicked => { root.codex-open-signin-clicked(root.codex-login-url); }
+                                }
+                                Text {
+                                    text: @tr("Code:") + " " + root.codex-user-code;
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    color: Theme.accent;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            Text {
+                                text: @tr("RC14 connection only: live answers are disabled because the stable app-server protocol cannot yet guarantee a no-tools, no-filesystem mode.");
+                                font-size: 10px;
+                                color: Theme.warning;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: @tr("OpenCode or Qwen belong under Custom OpenAI-compatible bridge only when they expose a compatible inference endpoint.");
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
                             }
                         }
 
@@ -3598,7 +3659,7 @@ export component SettingsWindow inherits Window {
                idx == 7 ? @tr("Auto-tiles") :
                idx == 9 ? @tr("Knowledge base") :
                idx == 10 ? @tr("Profile + context") :
-               idx == 11 ? @tr("AI bridge") :
+               idx == 11 ? @tr("AI providers") :
                idx == 12 ? @tr("STT") :
                idx == 13 ? @tr("Diagnostics") :
                idx == 14 ? @tr("Memory") :
