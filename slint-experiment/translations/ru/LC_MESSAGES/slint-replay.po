@@ -44,10 +44,6 @@ msgstr "🧠 {}"
 msgid "+ tile ({})"
 msgstr "+ тайл ({})"
 
-# Compact live-tile count; the tiles icon provides the noun.
-msgid "{}"
-msgstr "{}"
-
 # #110 — bulk-close all open tiles.
 msgid "close all"
 msgstr "закрыть все"

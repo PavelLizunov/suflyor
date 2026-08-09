@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>suflyor v0.36.1-rc.12 retest</title></head>
+<body><h1>suflyor v0.36.1-rc.12 retest</h1><ol>
+<li>At exactly 1280 px screen width, open one tile in the full bar. Confirm the red deep-lock state reads <code>AI off</code>/<code>ИИ выкл.</code>, while the tile actions remain the text buttons <code>Close all</code>/<code>закрыть все</code> and <code>+ tile (1)</code>/<code>+ тайл (1)</code>.</li>
+<li>Repeat with 2 and 99 open tiles in English and Russian. Confirm the live count is correct and no trash or tile-grid replacement icon appears.</li>
+<li>Exercise the running-session worst case: timer, Pause, stealth warning, deep lock, and open tiles. Confirm every action remains above the status row and the rightmost Quit control remains fully visible.</li>
+<li>Collapse and expand the bar with tiles open. Confirm the collapsed lock state uses the short <code>AI off</code>/<code>ИИ выкл.</code> label without clipping; expanding restores the same text tile controls.</li>
+<li>Close all tiles. Confirm the full <code>Local AI unloaded</code>/<code>Локальный ИИ выгружен</code> label returns and the regular <code>+ tile (0)</code>/<code>+ тайл (0)</code> control remains unchanged.</li>
+</ol></body></html>
