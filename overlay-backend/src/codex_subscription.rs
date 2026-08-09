@@ -23,6 +23,9 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 static LOGIN_GENERATION: AtomicU64 = AtomicU64::new(0);
 
+#[derive(Debug, Clone, Copy)]
+pub struct LoginAttempt(u64);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AccountState {
     NotInstalled,
@@ -156,11 +159,22 @@ fn account_state_inner() -> Result<AccountState, RpcFailure> {
     parse_account_state(&result)
 }
 
+/// Reserve a device-login attempt before its worker thread starts. Starting a
+/// new attempt invalidates any older one, including workers not scheduled yet.
+#[must_use]
+pub fn begin_device_login() -> LoginAttempt {
+    LoginAttempt(LOGIN_GENERATION.fetch_add(1, Ordering::SeqCst) + 1)
+}
+
+/// Cancel a pending device login without changing the stored account.
+pub fn cancel_pending_login() {
+    LOGIN_GENERATION.fetch_add(1, Ordering::SeqCst);
+}
+
 /// Run the official device-code flow. The caller decides how to present and
 /// open the verification URL; this function never launches a browser.
-pub fn device_login(mut notify: impl FnMut(LoginEvent)) {
-    let generation = LOGIN_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
-    let result = device_login_inner(generation, &mut notify);
+pub fn device_login(attempt: LoginAttempt, mut notify: impl FnMut(LoginEvent)) {
+    let result = device_login_inner(attempt.0, &mut notify);
     match result {
         Ok(()) | Err(RpcFailure::Cancelled) => {}
         Err(RpcFailure::NotInstalled) => notify(LoginEvent::Error),
@@ -172,10 +186,13 @@ fn device_login_inner(
     generation: u64,
     notify: &mut impl FnMut(LoginEvent),
 ) -> Result<(), RpcFailure> {
+    ensure_current_login(generation)?;
     let mut server = AppServer::start()?;
     server.initialize()?;
+    ensure_current_login(generation)?;
 
     let current = server.request(2, "account/read", json!({"refreshToken":false}))?;
+    ensure_current_login(generation)?;
     if let AccountState::SignedIn { plan } = parse_account_state(&current)? {
         notify(LoginEvent::SignedIn { plan });
         return Ok(());
@@ -186,6 +203,7 @@ fn device_login_inner(
         "account/login/start",
         json!({"type":"chatgptDeviceCode"}),
     )?;
+    ensure_current_login(generation)?;
     let login_id = started
         .get("loginId")
         .and_then(Value::as_str)
@@ -204,6 +222,7 @@ fn device_login_inner(
         .filter(|value| valid_user_code(value))
         .ok_or(RpcFailure::Protocol)?
         .to_string();
+    ensure_current_login(generation)?;
     notify(LoginEvent::AwaitingUser {
         verification_url,
         user_code,
@@ -211,9 +230,7 @@ fn device_login_inner(
 
     let deadline = Instant::now() + LOGIN_TIMEOUT;
     loop {
-        if LOGIN_GENERATION.load(Ordering::SeqCst) != generation {
-            return Err(RpcFailure::Cancelled);
-        }
+        ensure_current_login(generation)?;
         let slice_deadline = deadline.min(Instant::now() + Duration::from_secs(1));
         let message = match recv_until(&server.messages, slice_deadline) {
             Ok(message) => message,
@@ -238,11 +255,17 @@ fn device_login_inner(
     }
 }
 
+fn ensure_current_login(generation: u64) -> Result<(), RpcFailure> {
+    (LOGIN_GENERATION.load(Ordering::SeqCst) == generation)
+        .then_some(())
+        .ok_or(RpcFailure::Cancelled)
+}
+
 /// Cancel a pending login and ask the official app-server to clear its stored
 /// subscription credential. No credential bytes enter Suflyor memory.
 #[must_use]
 pub fn disconnect() -> AccountState {
-    LOGIN_GENERATION.fetch_add(1, Ordering::SeqCst);
+    cancel_pending_login();
     match disconnect_inner() {
         Ok(()) => AccountState::SignedOut,
         Err(RpcFailure::NotInstalled) => AccountState::NotInstalled,

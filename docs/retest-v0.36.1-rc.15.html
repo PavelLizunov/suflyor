@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>suflyor v0.36.1-rc.15 retest</title></head>
+<body><h1>suflyor v0.36.1-rc.15 retest</h1><ol>
+<li>Open Settings -&gt; AI providers and select Codex connection. Confirm the panel says this is connection-only and does not offer a model or live answers.</li>
+<li>Start the isolated mock app-server device-code flow. Confirm no browser process starts automatically and no real account login is performed.</li>
+<li>When the one-time code appears, confirm Copy code is visible beside it, has the accessible one-time-code label, and is absent while the code is blank.</li>
+<li>Click Copy code. Verify the Windows clipboard equals the mock code without printing it. Confirm the short success message contains no code, URL, token, or raw clipboard error.</li>
+<li>Confirm Open sign-in page remains a separate explicit action and is the only action that can launch the browser.</li>
+<li>Cancel and disconnect the mock flow. Reopen Settings, switch EN/RU, and switch providers. Confirm code, URL, copy feedback, and busy state never return stale.</li>
+<li>At 1280x768 in English and Russian, verify the code row, Copy code, Open sign-in page, feedback, warning, scrolling, and no clipping.</li>
+<li>Confirm suflyor never reads auth.json or tokens, uses no direct ChatGPT endpoint/client ID, and Codex live-answer requests still fail closed.</li>
+</ol></body></html>

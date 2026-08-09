@@ -47,8 +47,8 @@
 use super::{
     active_stack_label, ai, apply_bar_stealth, apply_scheme_bar, apply_scheme_settings, audio,
     clamp_scheme, cloud_model_index, config, drag_begin, drag_update, fetch_models,
-    global_stealth_effective, grab_hwnd, make_transparent_tile, open_wizard,
-    parse_tile_monitor_pin, populate_diagnostics, present_window_stealth_aware,
+    global_stealth_effective, grab_hwnd, invalidate_codex_login_ui, make_transparent_tile,
+    open_wizard, parse_tile_monitor_pin, populate_diagnostics, present_window_stealth_aware,
     preset_for_tts_rate, refresh_codex_account_status, refresh_local_context_controls,
     refresh_local_model_resource_warning, set_always_on_top, set_global_scheme, set_global_stealth,
     set_global_tile_monitor, set_global_tile_opacity, spawn_ptt_watchdog, stt, try_acquire_mic,
@@ -534,6 +534,11 @@ pub(crate) fn open_settings(
             // and the bar lock chip's per-state description.
             let snap = cfg_lang.read();
             if let Some(w) = win_lang.upgrade() {
+                invalidate_codex_login_ui();
+                w.set_codex_auth_busy(false);
+                w.set_codex_login_url(SharedString::default());
+                w.set_codex_user_code(SharedString::default());
+                w.set_codex_copy_status(SharedString::default());
                 populate_tile_monitors(&w, &snap);
                 populate_component_rows(&w, &snap);
                 populate_tts_voices(&w, &snap);
@@ -1444,6 +1449,7 @@ pub(crate) fn populate_token_status(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::SharedConfig,
 ) {
+    invalidate_codex_login_ui();
     // Phase E6 v18 — ASCII status prefixes ("[ok]" / "[--]") instead of
     // Unicode ✓ / ❌ which Slint+skia rendered as missing-glyph boxes
     // on the user's font fallback. Same root cause as the Close button
@@ -1483,6 +1489,7 @@ pub(crate) fn populate_token_status(
     win.set_codex_auth_busy(false);
     win.set_codex_login_url(SharedString::default());
     win.set_codex_user_code(SharedString::default());
+    win.set_codex_copy_status(SharedString::default());
     win.set_openai_key_input(SharedString::default());
     win.set_anthropic_key_input(SharedString::default());
     // ТЗ 2026-07-09 — Hermes tab transient status props on every (re)open: clear

@@ -1942,11 +1942,11 @@ msgstr "Кэширование промпта"
 msgid "AI providers"
 msgstr "AI-провайдеры"
 
-msgid "Codex (ChatGPT subscription, experimental)"
-msgstr "Codex (подписка ChatGPT, экспериментально)"
+msgid "Codex connection (ChatGPT subscription, experimental)"
+msgstr "Подключение Codex (подписка ChatGPT, экспериментально)"
 
-msgid "Codex (ChatGPT subscription)"
-msgstr "Codex (подписка ChatGPT)"
+msgid "Codex connection (ChatGPT subscription)"
+msgstr "Подключение Codex (подписка ChatGPT)"
 
 msgid "Uses the official local Codex app-server. Codex owns the ChatGPT login and stores tokens; suflyor never reads them."
 msgstr "Использует официальный локальный Codex app-server. Codex выполняет вход в ChatGPT и хранит токены; suflyor никогда их не читает."
@@ -1966,8 +1966,14 @@ msgstr "Открыть страницу входа"
 msgid "Code:"
 msgstr "Код:"
 
-msgid "RC14 connection only: live answers are disabled because the stable app-server protocol cannot yet guarantee a no-tools, no-filesystem mode."
-msgstr "В RC14 доступно только подключение: ответы отключены, потому что стабильный протокол app-server пока не гарантирует режим без инструментов и доступа к файлам."
+msgid "Copy code"
+msgstr "Копировать код"
+
+msgid "Copy one-time code"
+msgstr "Копировать одноразовый код"
+
+msgid "RC15 connection only: live answers are disabled because the stable app-server protocol cannot yet guarantee a no-tools, no-filesystem mode."
+msgstr "В RC15 доступно только подключение: ответы отключены, потому что стабильный протокол app-server пока не гарантирует режим без инструментов и доступа к файлам."
 
 msgid "OpenCode or Qwen belong under Custom OpenAI-compatible bridge only when they expose a compatible inference endpoint."
 msgstr "OpenCode или Qwen настраиваются как пользовательский OpenAI-совместимый мост, только если они предоставляют совместимый endpoint для ответов."

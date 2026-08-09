@@ -1,6 +1,6 @@
-# Codex subscription provider (RC14)
+# Codex subscription connection (RC15)
 
-RC14 integrates ChatGPT subscription sign-in through the official local
+RC15 integrates ChatGPT subscription sign-in through the official local
 [`codex app-server`](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md)
 stdio JSON-RPC protocol. Suflyor initializes one short-lived child process per
 account action and uses only these stable methods:
@@ -15,7 +15,7 @@ and is forced to `cli_auth_credentials_store="keyring"`. The official Codex
 process owns token persistence and refresh. Suflyor never reads, imports,
 exports, logs, or parses Codex credentials or `auth.json`.
 
-## Why RC14 is connect-only
+## Why RC15 is connect-only
 
 The stable app-server `thread/start` / `turn/start` surface exposes an agent and
 documents shell, file-edit, MCP, app, web-search, and other tool events. A

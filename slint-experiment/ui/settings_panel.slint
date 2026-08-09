@@ -367,6 +367,7 @@ export component SettingsWindow inherits Window {
     in-out property <bool> codex-auth-busy: false;
     in-out property <string> codex-login-url: "";
     in-out property <string> codex-user-code: "";
+    in-out property <string> codex-copy-status: "";
 
     // ТЗ 2026-07-09 — Hermes integration tab (settings_hermes.rs).
     // Bridge (Hermes → suflyor): loopback server the local agent reads from.
@@ -548,6 +549,7 @@ export component SettingsWindow inherits Window {
     callback codex-connect-clicked();
     callback codex-disconnect-clicked();
     callback codex-open-signin-clicked(string);
+    callback codex-copy-code-clicked(string);
     callback ai-model-selected(string);
     callback ai-models-refresh();
     callback ai-prompt-cache-changed(bool);
@@ -2077,7 +2079,7 @@ export component SettingsWindow inherits Window {
                                 @tr("Local OpenAI-compatible"),
                                 @tr("OpenAI API (Responses)"),
                                 @tr("Anthropic API (Messages)"),
-                                @tr("Codex (ChatGPT subscription, experimental)"),
+                                @tr("Codex connection (ChatGPT subscription, experimental)"),
                             ];
                             current-index: root.ai-provider-index;
                             selected => {
@@ -2261,7 +2263,7 @@ export component SettingsWindow inherits Window {
                         if root.ai-provider-index == 4 : VerticalLayout {
                             spacing: 8px;
                             vertical-stretch: 0;
-                            Text { text: @tr("Codex (ChatGPT subscription)"); font-size: 12px; font-weight: 700; color: Theme.text-primary; }
+                            Text { text: @tr("Codex connection (ChatGPT subscription)"); font-size: 12px; font-weight: 700; color: Theme.text-primary; }
                             Text {
                                 text: @tr("Uses the official local Codex app-server. Codex owns the ChatGPT login and stores tokens; suflyor never reads them.");
                                 font-size: 10px;
@@ -2281,7 +2283,7 @@ export component SettingsWindow inherits Window {
                                     clicked => { root.codex-disconnect-clicked(); }
                                 }
                             }
-                            if root.codex-login-url != "" : HorizontalLayout {
+                            if root.codex-login-url != "" && root.codex-user-code != "" : HorizontalLayout {
                                 spacing: 6px;
                                 Button {
                                     text: @tr("Open sign-in page");
@@ -2294,9 +2296,21 @@ export component SettingsWindow inherits Window {
                                     color: Theme.accent;
                                     vertical-alignment: center;
                                 }
+                                Button {
+                                    text: @tr("Copy code");
+                                    accessible-label: @tr("Copy one-time code");
+                                    enabled: root.codex-user-code != "";
+                                    clicked => { root.codex-copy-code-clicked(root.codex-user-code); }
+                                }
+                                if root.codex-copy-status != "" : Text {
+                                    text: root.codex-copy-status;
+                                    font-size: 11px;
+                                    color: Theme.text-secondary;
+                                    vertical-alignment: center;
+                                }
                             }
                             Text {
-                                text: @tr("RC14 connection only: live answers are disabled because the stable app-server protocol cannot yet guarantee a no-tools, no-filesystem mode.");
+                                text: @tr("RC15 connection only: live answers are disabled because the stable app-server protocol cannot yet guarantee a no-tools, no-filesystem mode.");
                                 font-size: 10px;
                                 color: Theme.warning;
                                 wrap: word-wrap;

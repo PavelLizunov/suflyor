@@ -51,6 +51,47 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// Monotonically invalidates older worker results for the reused Settings
 /// window. Hardware discovery for a 26B note can outlast a later model choice.
 static LOCAL_MODEL_RESOURCE_WARNING_GENERATION: AtomicU64 = AtomicU64::new(0);
+static CODEX_UI_GENERATION: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CodexCopyResult {
+    Empty,
+    Copied,
+    Failed,
+}
+
+fn copy_codex_user_code<E>(
+    code: &str,
+    write: impl FnOnce(&str) -> Result<(), E>,
+) -> CodexCopyResult {
+    if code.is_empty() {
+        return CodexCopyResult::Empty;
+    }
+    if write(code).is_ok() {
+        CodexCopyResult::Copied
+    } else {
+        CodexCopyResult::Failed
+    }
+}
+
+fn codex_copy_status(result: CodexCopyResult, is_ru: bool) -> &'static str {
+    match (result, is_ru) {
+        (CodexCopyResult::Empty, _) => "",
+        (CodexCopyResult::Copied, true) => "[ok] Код скопирован",
+        (CodexCopyResult::Copied, false) => "[ok] Code copied",
+        (CodexCopyResult::Failed, true) => "[err] Не удалось скопировать",
+        (CodexCopyResult::Failed, false) => "[err] Copy failed",
+    }
+}
+
+pub(crate) fn invalidate_codex_login_ui() -> u64 {
+    overlay_backend::codex_subscription::cancel_pending_login();
+    CODEX_UI_GENERATION.fetch_add(1, Ordering::SeqCst) + 1
+}
+
+fn codex_ui_is_current(generation: u64) -> bool {
+    CODEX_UI_GENERATION.load(Ordering::SeqCst) == generation
+}
 
 fn codex_account_label(
     state: &overlay_backend::codex_subscription::AccountState,
@@ -82,12 +123,15 @@ fn codex_account_label(
 }
 
 pub(crate) fn refresh_codex_account_status(weak: slint::Weak<SettingsWindow>, is_ru: bool) {
+    let generation = invalidate_codex_login_ui();
     std::thread::spawn(move || {
         let state = overlay_backend::codex_subscription::account_state();
         let label = codex_account_label(&state, is_ru);
         let _ = slint::invoke_from_event_loop(move || {
-            if let Some(window) = weak.upgrade() {
-                window.set_codex_auth_status(SharedString::from(label));
+            if codex_ui_is_current(generation) {
+                if let Some(window) = weak.upgrade() {
+                    window.set_codex_auth_status(SharedString::from(label));
+                }
             }
         });
     });
@@ -448,6 +492,14 @@ pub(crate) fn wire_ai_settings(
             diag!("ai_provider -> {provider}");
             if provider == "codex" {
                 refresh_codex_account_status(weak.clone(), cfg_c.read().ui_is_ru());
+            } else {
+                invalidate_codex_login_ui();
+                if let Some(window) = weak.upgrade() {
+                    window.set_codex_auth_busy(false);
+                    window.set_codex_login_url(SharedString::default());
+                    window.set_codex_user_code(SharedString::default());
+                    window.set_codex_copy_status(SharedString::default());
+                }
             }
             // #E10.1 — switching to Local auto-populates the model dropdown.
             if let Some((
@@ -501,9 +553,12 @@ pub(crate) fn wire_ai_settings(
                 return;
             };
             let is_ru = cfg_c.read().ui_is_ru();
+            let generation = invalidate_codex_login_ui();
+            let attempt = overlay_backend::codex_subscription::begin_device_login();
             window.set_codex_auth_busy(true);
             window.set_codex_login_url(SharedString::default());
             window.set_codex_user_code(SharedString::default());
+            window.set_codex_copy_status(SharedString::default());
             window.set_codex_auth_status(SharedString::from(if is_ru {
                 "Запуск официального входа Codex..."
             } else {
@@ -511,13 +566,16 @@ pub(crate) fn wire_ai_settings(
             }));
             let worker_weak = window.as_weak();
             std::thread::spawn(move || {
-                overlay_backend::codex_subscription::device_login(move |event| {
+                overlay_backend::codex_subscription::device_login(attempt, move |event| {
                     use overlay_backend::codex_subscription::LoginEvent;
                     let event_weak = worker_weak.clone();
                     let _ = slint::invoke_from_event_loop(move || {
                         let Some(window) = event_weak.upgrade() else {
                             return;
                         };
+                        if !codex_ui_is_current(generation) {
+                            return;
+                        }
                         match event {
                             LoginEvent::AwaitingUser {
                                 verification_url,
@@ -525,6 +583,7 @@ pub(crate) fn wire_ai_settings(
                             } => {
                                 window.set_codex_login_url(SharedString::from(verification_url));
                                 window.set_codex_user_code(SharedString::from(user_code));
+                                window.set_codex_copy_status(SharedString::default());
                                 window.set_codex_auth_status(SharedString::from(if is_ru {
                                     "Откройте страницу входа и введите показанный код"
                                 } else {
@@ -539,6 +598,7 @@ pub(crate) fn wire_ai_settings(
                                 window.set_codex_auth_busy(false);
                                 window.set_codex_login_url(SharedString::default());
                                 window.set_codex_user_code(SharedString::default());
+                                window.set_codex_copy_status(SharedString::default());
                                 window.set_codex_auth_status(SharedString::from(
                                     codex_account_label(&state, is_ru),
                                 ));
@@ -547,6 +607,7 @@ pub(crate) fn wire_ai_settings(
                                 window.set_codex_auth_busy(false);
                                 window.set_codex_login_url(SharedString::default());
                                 window.set_codex_user_code(SharedString::default());
+                                window.set_codex_copy_status(SharedString::default());
                                 window.set_codex_auth_status(SharedString::from(if is_ru {
                                     "[--] вход не завершён — повторите подключение"
                                 } else {
@@ -557,6 +618,7 @@ pub(crate) fn wire_ai_settings(
                                 window.set_codex_auth_busy(false);
                                 window.set_codex_login_url(SharedString::default());
                                 window.set_codex_user_code(SharedString::default());
+                                window.set_codex_copy_status(SharedString::default());
                                 window.set_codex_auth_status(SharedString::from(if is_ru {
                                     "[err] вход Codex недоступен"
                                 } else {
@@ -577,17 +639,21 @@ pub(crate) fn wire_ai_settings(
                 return;
             };
             let is_ru = cfg_c.read().ui_is_ru();
+            let generation = invalidate_codex_login_ui();
             window.set_codex_auth_busy(true);
             window.set_codex_login_url(SharedString::default());
             window.set_codex_user_code(SharedString::default());
+            window.set_codex_copy_status(SharedString::default());
             let worker_weak = window.as_weak();
             std::thread::spawn(move || {
                 let state = overlay_backend::codex_subscription::disconnect();
                 let label = codex_account_label(&state, is_ru);
                 let _ = slint::invoke_from_event_loop(move || {
-                    if let Some(window) = worker_weak.upgrade() {
-                        window.set_codex_auth_busy(false);
-                        window.set_codex_auth_status(SharedString::from(label));
+                    if codex_ui_is_current(generation) {
+                        if let Some(window) = worker_weak.upgrade() {
+                            window.set_codex_auth_busy(false);
+                            window.set_codex_auth_status(SharedString::from(label));
+                        }
                     }
                 });
             });
@@ -604,6 +670,29 @@ pub(crate) fn wire_ai_settings(
             eprintln!("[overlay-host] Codex sign-in page launch failed: {error}");
         }
     });
+    {
+        let weak = win.as_weak();
+        let cfg_c = cfg.clone();
+        win.on_codex_copy_code_clicked(move |code| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            if code != window.get_codex_user_code() || code.is_empty() {
+                window.set_codex_copy_status(SharedString::default());
+                return;
+            }
+            let result = copy_codex_user_code(code.as_str(), |value| {
+                clipboard_win::set_clipboard_string(value).map_err(|_| ())
+            });
+            if result == CodexCopyResult::Failed {
+                eprintln!("[overlay-host] Codex code copy failed");
+            }
+            window.set_codex_copy_status(SharedString::from(codex_copy_status(
+                result,
+                cfg_c.read().ui_is_ru(),
+            )));
+        });
+    }
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
@@ -849,5 +938,54 @@ pub(crate) fn wire_ai_settings(
                 });
             });
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
+
+    use super::*;
+    use std::cell::RefCell;
+
+    #[test]
+    fn codex_copy_writes_exact_displayed_code_and_skips_blank() {
+        let written = RefCell::new(Vec::new());
+        let result = copy_codex_user_code("ABCD-1234", |value| {
+            written.borrow_mut().push(value.to_string());
+            Ok::<(), ()>(())
+        });
+        assert_eq!(result, CodexCopyResult::Copied);
+        assert_eq!(written.into_inner(), ["ABCD-1234"]);
+
+        let called = RefCell::new(false);
+        assert_eq!(
+            copy_codex_user_code("", |_| {
+                *called.borrow_mut() = true;
+                Ok::<(), ()>(())
+            }),
+            CodexCopyResult::Empty
+        );
+        assert!(!called.into_inner());
+    }
+
+    #[test]
+    fn codex_copy_feedback_is_short_generic_and_localized() {
+        assert_eq!(
+            codex_copy_status(CodexCopyResult::Copied, false),
+            "[ok] Code copied"
+        );
+        assert_eq!(
+            codex_copy_status(CodexCopyResult::Copied, true),
+            "[ok] Код скопирован"
+        );
+        assert_eq!(
+            codex_copy_status(CodexCopyResult::Failed, false),
+            "[err] Copy failed"
+        );
+        assert_eq!(
+            codex_copy_status(CodexCopyResult::Failed, true),
+            "[err] Не удалось скопировать"
+        );
     }
 }
