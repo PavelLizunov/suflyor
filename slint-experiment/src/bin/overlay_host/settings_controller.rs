@@ -549,6 +549,9 @@ pub(crate) fn open_settings(
                         snap.ui_is_ru(),
                     ),
                 ));
+                if snap.ai_provider == "codex" {
+                    refresh_codex_account_status(w.as_weak(), snap.ui_is_ru());
+                }
             }
             drop(snap);
             if let Some(o) = overlay_lang.upgrade() {
