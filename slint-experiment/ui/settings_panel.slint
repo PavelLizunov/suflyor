@@ -2302,12 +2302,11 @@ export component SettingsWindow inherits Window {
                                     enabled: root.codex-user-code != "";
                                     clicked => { root.codex-copy-code-clicked(root.codex-user-code); }
                                 }
-                                if root.codex-copy-status != "" : Text {
-                                    text: root.codex-copy-status;
-                                    font-size: 11px;
-                                    color: Theme.text-secondary;
-                                    vertical-alignment: center;
-                                }
+                            }
+                            if root.codex-copy-status != "" : Text {
+                                text: root.codex-copy-status;
+                                font-size: 11px;
+                                color: Theme.text-secondary;
                             }
                             Text {
                                 text: @tr("RC15 connection only: live answers are disabled because the stable app-server protocol cannot yet guarantee a no-tools, no-filesystem mode.");
