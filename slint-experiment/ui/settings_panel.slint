@@ -2301,12 +2301,17 @@ export component SettingsWindow inherits Window {
                                 font-size: 10px;
                                 color: Theme.warning;
                                 wrap: word-wrap;
+                                // Conditional wrapped rows can under-report their
+                                // preferred height to this long SettingsCard.
+                                // Reserve three lines for EN/RU at 720 px.
+                                height: 36px;
                             }
                             Text {
                                 text: @tr("OpenCode or Qwen belong under Custom OpenAI-compatible bridge only when they expose a compatible inference endpoint.");
                                 font-size: 10px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
+                                height: 36px;
                             }
                         }
 
