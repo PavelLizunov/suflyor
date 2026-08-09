@@ -44,6 +44,10 @@ msgstr "🧠 {}"
 msgid "+ tile ({})"
 msgstr "+ тайл ({})"
 
+# Compact live-tile count; the tiles icon provides the noun.
+msgid "{}"
+msgstr "{}"
+
 # #110 — bulk-close all open tiles.
 msgid "close all"
 msgstr "закрыть все"
@@ -1866,6 +1870,10 @@ msgstr "Повторить"
 
 msgid "Local AI unloaded"
 msgstr "Локальный ИИ выгружен"
+
+# Tight 1280px bar state while tile actions are visible.
+msgid "AI off"
+msgstr "ИИ выкл."
 
 msgid "Current"
 msgstr "Текущий"

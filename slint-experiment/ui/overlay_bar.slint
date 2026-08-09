@@ -80,7 +80,7 @@ component Chip inherits Rectangle {
     callback clicked();
 
     accessible-role: button;
-    accessible-label: label != "" ? label : a11y;
+    accessible-label: a11y != "" ? a11y : label;
 
     // Hover + press feedback so a click is visibly registered. Action chips
     // (Stop / Expand / X …) had NO feedback at all — only the persistent
@@ -190,6 +190,11 @@ component LockChip inherits Rectangle {
     in property <bool> deep: false;
     in property <string> a11y;
     in property <bool> managed: false;
+    // The full 1280px bar has no spare width once live tiles add their
+    // controls. Keep the state explicit, but use the short label in that
+    // deterministic tight layout instead of letting Slint clip this text
+    // under the following action chips.
+    in property <bool> tight: false;
     // 0 = normal, 1 = listening, 2 = deep. Rust owns the durable transition.
     in property <int> mode: 0;
     in property <color> accent: root.deep ? Theme.danger : #f59e0b;
@@ -245,7 +250,7 @@ component LockChip inherits Rectangle {
             }
         }
         if root.deep : Text {
-            text: @tr("Local AI unloaded");
+            text: root.tight ? @tr("AI off") : @tr("Local AI unloaded");
             font-size: Metrics.font-label;
             color: root.accent;
             vertical-alignment: center;
@@ -597,6 +602,11 @@ export component OverlayBarWindow inherits Window {
     // the restart-while-AI-down flow the feature exists for. The un-armed bar
     // is pixel-identical to before (chips only hide during the ≤4s confirm).
     property <bool> confirming: root.quit-armed || root.restart-armed;
+    // A live tile adds both close-all and tile-count controls to an already
+    // full fixed-width action row. Slint layouts do not wrap, so explicitly
+    // switch only those width-heavy controls to their compact representations
+    // instead of allowing labels to overlap or clip each other.
+    property <bool> tight-open-tiles: root.open-tiles > 0;
 
     // v0.12.0 — true while a Summary request is in flight. Lights the 📝
     // chip AND doubles as the Rust-side re-click guard (a slow model must
@@ -854,6 +864,7 @@ export component OverlayBarWindow inherits Window {
                 deep: root.deep-lock;
                 a11y: root.lock-a11y;
                 managed: root.lock-menu-managed;
+                tight: root.tight-open-tiles;
                 mode: root.deep-lock ? 2 : (root.suppress-tiles ? 1 : 0);
                 mode-selected(mode) => { root.lock-mode-selected(mode); }
                 menu-opened(x, y) => { root.lock-menu-opened(x, y); }
@@ -890,7 +901,10 @@ export component OverlayBarWindow inherits Window {
             // dismiss a screenful in one click (#110); resets the counter,
             // which also hides this chip again.
             if root.open-tiles > 0 && !root.confirming : Chip {
-                label: @tr("close all");
+                label: "";
+                icon: @image-url("../assets/icons/trash.svg");
+                has-icon: true;
+                a11y: @tr("close all");
                 accent: #fb7185;
                 clicked => { root.close-all-tiles-clicked(); }
             }
@@ -904,7 +918,12 @@ export component OverlayBarWindow inherits Window {
                 clicked => { root.text-ask-clicked(); }
             }
             if !root.confirming : Chip {
-                label: @tr("+ tile ({})", root.open-tiles);
+                label: root.tight-open-tiles
+                    ? @tr("{}", root.open-tiles)
+                    : @tr("+ tile ({})", root.open-tiles);
+                icon: @image-url("../assets/icons/tiles.svg");
+                has-icon: root.tight-open-tiles;
+                a11y: @tr("+ tile ({})", root.open-tiles);
                 accent: #f472b6;
                 clicked => { root.spawn-tile-clicked(); }
             }
