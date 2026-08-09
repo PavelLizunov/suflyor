@@ -956,13 +956,15 @@ pub(crate) fn open_settings(
                 ));
                 return;
             }
-            let (base_url, bearer, model, is_local) = {
+            let endpoint = {
                 let c = cfg_c.read();
                 // Structuring uses the smarter "prep" model.
-                let ep = c.ai_endpoint(true);
-                (ep.base_url, ep.bearer, ep.model, ep.is_local)
+                c.ai_endpoint(true)
             };
-            if base_url.is_empty() || model.is_empty() || (!is_local && bearer.is_empty()) {
+            if endpoint.base_url.is_empty()
+                || endpoint.model.is_empty()
+                || (!endpoint.is_local && endpoint.bearer.is_empty())
+            {
                 w.set_meeting_context_result(SharedString::from(
                     "[--] AI мост не настроен (вкладка AI мост)",
                 ));
@@ -999,7 +1001,7 @@ pub(crate) fn open_settings(
                     .enable_all()
                     .build()
                 {
-                    Ok(rt) => rt.block_on(ai::complete(&base_url, &bearer, &model, messages, 1024)),
+                    Ok(rt) => rt.block_on(ai::complete_endpoint(&endpoint, messages, 1024)),
                     Err(e) => Err(anyhow::anyhow!("runtime: {e}")),
                 };
                 let _ = slint::invoke_from_event_loop(move || {
@@ -1448,6 +1450,18 @@ pub(crate) fn populate_token_status(
     };
     win.set_ai_bearer_status(SharedString::from(ai_status));
     win.set_groq_api_key_status(SharedString::from(groq_status));
+    let protected_status = |slot| match overlay_backend::credentials::read(slot) {
+        Ok(Some(secret)) if !secret.is_empty() => "[ok] stored securely",
+        _ => "[--] not set",
+    };
+    win.set_openai_key_status(SharedString::from(protected_status(
+        overlay_backend::credentials::SecretSlot::OpenAi,
+    )));
+    win.set_anthropic_key_status(SharedString::from(protected_status(
+        overlay_backend::credentials::SecretSlot::Anthropic,
+    )));
+    win.set_openai_key_input(SharedString::default());
+    win.set_anthropic_key_input(SharedString::default());
     // ТЗ 2026-07-09 — Hermes tab transient status props on every (re)open: clear
     // the action results (stale «готово…» must not linger) and refresh the LIVE
     // bridge status (the reused window keeps its old text otherwise).
@@ -1476,6 +1490,10 @@ pub(crate) fn populate_token_status(
     // switch (Rust-built labels don't auto-refresh like @tr bindings do).
     populate_tile_monitors(win, &c);
     win.set_ai_base_url_input(SharedString::from(c.ai_base_url.clone()));
+    win.set_openai_base_url_input(SharedString::from(c.openai_base_url.clone()));
+    win.set_openai_model_input(SharedString::from(c.openai_model.clone()));
+    win.set_anthropic_base_url_input(SharedString::from(c.anthropic_base_url.clone()));
+    win.set_anthropic_model_input(SharedString::from(c.anthropic_model.clone()));
     // V4 — vision section: provider index + non-secret fields (bearers stay blank
     // on screen; saving a blank field is a no-op the user controls).
     win.set_vision_provider_index(match c.vision_provider.as_str() {
@@ -1546,7 +1564,12 @@ pub(crate) fn populate_token_status(
     win.set_component_busy_label(blank());
     win.set_component_busy_index(-1);
     win.set_ai_prompt_cache(c.ai_prompt_cache);
-    win.set_ai_provider_index(i32::from(c.ai_provider == "local"));
+    win.set_ai_provider_index(match c.ai_provider.as_str() {
+        "local" => 1,
+        "openai" => 2,
+        "anthropic" => 3,
+        _ => 0,
+    });
     win.set_ai_local_base_url_input(SharedString::from(c.ai_local_base_url.clone()));
     let managed_local_server =
         overlay_backend::local_ai::is_managed_llama_endpoint(&c.ai_local_base_url);

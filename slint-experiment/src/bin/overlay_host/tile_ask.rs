@@ -413,6 +413,7 @@ pub(crate) fn fire_f9_ask(
 
     // ===== 3. Snapshot cfg + cost-cap + transcript + screenshot =====
     let (
+        protocol,
         base_url,
         bearer,
         model,
@@ -427,6 +428,7 @@ pub(crate) fn fire_f9_ask(
         // or cloud per provider), Shift+F9 = Cloud (smart model, one-shot).
         let ep = route.endpoint(&c);
         (
+            ep.protocol,
             ep.base_url,
             ep.bearer,
             ep.model,
@@ -577,10 +579,14 @@ pub(crate) fn fire_f9_ask(
             // panics with "there is no reactor running" off a tokio thread; the
             // rt_handle.spawn future provides the runtime context.
             let task = rt_handle_for_work.spawn(async move {
-                let ai_rx = ai::stream_chat(
-                    base_url,
-                    bearer,
-                    model.clone(),
+                let ai_rx = ai::stream_chat_endpoint(
+                    ai::AiEndpoint {
+                        protocol,
+                        base_url,
+                        bearer,
+                        model: model.clone(),
+                        is_local,
+                    },
                     messages,
                     AI_STREAM_MAX_TOKENS,
                 );

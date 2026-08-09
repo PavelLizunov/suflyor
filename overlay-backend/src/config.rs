@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+pub use crate::ai::AiEndpoint;
+use crate::ai::AiProtocol;
+use crate::credentials::SecretSlot;
+
 /// The curated `/key` snippet pack (the ~1000-line default data literal) lives
 /// in its own file to keep this module navigable; `default_snippets` is the
 /// only item it exposes. Unit tests live in `config/tests.rs` (declared at the
@@ -66,6 +70,18 @@ pub struct Config {
     /// phase.) `#[serde(default)]` → old configs default to "cloud".
     #[serde(default = "default_ai_provider")]
     pub ai_provider: String,
+    /// Direct OpenAI Responses API profile. The API key is intentionally not
+    /// serialized; it lives in Windows Credential Manager.
+    #[serde(default = "default_openai_base_url")]
+    pub openai_base_url: String,
+    #[serde(default = "default_openai_model")]
+    pub openai_model: String,
+    /// Direct Anthropic Messages API profile. The API key is intentionally not
+    /// serialized; it lives in Windows Credential Manager.
+    #[serde(default = "default_anthropic_base_url")]
+    pub anthropic_base_url: String,
+    #[serde(default = "default_anthropic_model")]
+    pub anthropic_model: String,
     /// Local server base URL (OpenAI-compatible). Default is llama.cpp's
     /// "http://127.0.0.1:8080/v1" (the shipped setup pipeline); Ollama uses
     /// "http://127.0.0.1:11434/v1".
@@ -587,6 +603,10 @@ impl Config {
             prep_model: "claude-sonnet-4-6".into(),
             ai_prompt_cache: false,
             ai_provider: default_ai_provider(),
+            openai_base_url: default_openai_base_url(),
+            openai_model: default_openai_model(),
+            anthropic_base_url: default_anthropic_base_url(),
+            anthropic_model: default_anthropic_model(),
             ai_local_base_url: default_ai_local_base_url(),
             ai_local_bearer: String::new(),
             ai_local_model: String::new(),
@@ -653,17 +673,6 @@ impl Config {
     }
 }
 
-/// Resolved AI endpoint for a single call (live answer or prep/structuring).
-#[derive(Debug, Clone)]
-pub struct AiEndpoint {
-    pub base_url: String,
-    pub bearer: String,
-    pub model: String,
-    /// True when the LOCAL provider is active. Callers zero out cost and
-    /// gate screenshots (text-only local models) on this flag.
-    pub is_local: bool,
-}
-
 /// Default cloud vision model when `vision_model` is unset — Sonnet (strong
 /// vision + present in the ai.rs pricing table).
 pub const DEFAULT_VISION_MODEL: &str = "claude-sonnet-4-6";
@@ -703,36 +712,52 @@ impl Config {
     /// existing configs behave exactly as before.
     #[must_use]
     pub fn ai_endpoint(&self, prep: bool) -> AiEndpoint {
-        if self.ai_provider == "local" {
-            let model = if prep && !self.ai_local_prep_model.trim().is_empty() {
-                self.ai_local_prep_model.clone()
-            } else {
-                self.ai_local_model.clone()
-            };
-            AiEndpoint {
-                base_url: self.ai_local_base_url.clone(),
-                bearer: self.ai_local_bearer.clone(),
-                model,
-                is_local: true,
+        match self.ai_provider.as_str() {
+            "local" => {
+                let model = if prep && !self.ai_local_prep_model.trim().is_empty() {
+                    self.ai_local_prep_model.clone()
+                } else {
+                    self.ai_local_model.clone()
+                };
+                AiEndpoint {
+                    protocol: AiProtocol::OpenAiCompatible,
+                    base_url: self.ai_local_base_url.clone(),
+                    bearer: self.ai_local_bearer.clone(),
+                    model,
+                    is_local: true,
+                }
             }
-        } else {
-            let model = if prep {
-                self.prep_model.clone()
-            } else {
-                self.ai_model.clone()
-            };
-            AiEndpoint {
+            "openai" => AiEndpoint {
+                protocol: AiProtocol::OpenAiResponses,
+                base_url: self.openai_base_url.clone(),
+                bearer: protected_provider_secret(SecretSlot::OpenAi),
+                model: self.openai_model.clone(),
+                is_local: false,
+            },
+            "anthropic" => AiEndpoint {
+                protocol: AiProtocol::AnthropicMessages,
+                base_url: self.anthropic_base_url.clone(),
+                bearer: protected_provider_secret(SecretSlot::Anthropic),
+                model: self.anthropic_model.clone(),
+                is_local: false,
+            },
+            _ => AiEndpoint {
+                protocol: AiProtocol::OpenAiCompatible,
                 base_url: self.ai_base_url.clone(),
                 bearer: self.ai_bearer.clone(),
-                model,
+                model: if prep {
+                    self.prep_model.clone()
+                } else {
+                    self.ai_model.clone()
+                },
                 is_local: false,
-            }
+            },
         }
     }
 
-    /// V0.8.0 (Поток D) — one-shot CLOUD escalation endpoint. Always the cloud
-    /// bridge with the SMART model (`prep_model`, default Sonnet), IGNORING
-    /// `ai_provider`. Used when the user escalates a single hard question (a
+    /// V0.8.0 (Поток D) — one-shot CLOUD escalation endpoint. A local provider
+    /// escalates through the legacy cloud bridge; a direct cloud provider stays
+    /// on its native API. Used when the user escalates a single hard question (a
     /// Shift+F9 ask, a per-tile "↑ ask the smart model", or a 🧠 follow-up)
     /// without flipping the persistent provider — so the default stays local
     /// (free, private) and there is no "forgot to switch back" trap.
@@ -742,15 +767,20 @@ impl Config {
     /// a separate web-search / tool-use feature (out of scope here).
     ///
     /// `is_local` is forced false so callers bill it + allow screenshots as for
-    /// any cloud call. The bridge fields are always present in config (even when
-    /// the active provider is local), so this is safe regardless of provider.
+    /// any cloud call. Existing local + bridge configurations retain their exact
+    /// routing, including Hermes as an OpenAI-compatible bridge.
     #[must_use]
     pub fn ai_endpoint_cloud(&self) -> AiEndpoint {
-        AiEndpoint {
-            base_url: self.ai_base_url.clone(),
-            bearer: self.ai_bearer.clone(),
-            model: self.prep_model.clone(),
-            is_local: false,
+        if matches!(self.ai_provider.as_str(), "openai" | "anthropic") {
+            self.ai_endpoint(true)
+        } else {
+            AiEndpoint {
+                protocol: AiProtocol::OpenAiCompatible,
+                base_url: self.ai_base_url.clone(),
+                bearer: self.ai_bearer.clone(),
+                model: self.prep_model.clone(),
+                is_local: false,
+            }
         }
     }
 
@@ -771,12 +801,14 @@ impl Config {
         match self.vision_provider.as_str() {
             "same" => Some(self.ai_endpoint(false)),
             "cloud" => Some(AiEndpoint {
+                protocol: AiProtocol::OpenAiCompatible,
                 base_url: pick(&self.vision_base_url, &self.ai_base_url),
                 bearer: pick(&self.vision_bearer, &self.ai_bearer),
                 model: pick(&self.vision_model, DEFAULT_VISION_MODEL),
                 is_local: false,
             }),
             "local" => Some(AiEndpoint {
+                protocol: AiProtocol::OpenAiCompatible,
                 base_url: pick(&self.vision_local_base_url, &self.ai_local_base_url),
                 bearer: pick(&self.vision_local_bearer, &self.ai_local_bearer),
                 model: pick(&self.vision_local_model, &self.ai_local_model),
@@ -786,9 +818,9 @@ impl Config {
         }
     }
 
-    /// Config-only readiness snapshot for the diagnostics panel (#131). Pure
-    /// (no network, no audio) so it's instant + testable; the UI layers live
-    /// AI/STT pings on top. `detail` strings carry NO secrets.
+    /// Readiness snapshot for the diagnostics panel (#131). It performs no
+    /// network or audio work; direct providers may read their protected key
+    /// from Windows Credential Manager. `detail` strings carry NO secrets.
     #[must_use]
     pub fn readiness(&self) -> ReadinessReport {
         // AI — resolve the ACTIVE provider (local vs cloud) via the resolver.
@@ -797,12 +829,13 @@ impl Config {
             && !ep.model.trim().is_empty()
             && (ep.is_local || !ep.bearer.trim().is_empty());
         let ai_detail = if ai_configured {
-            format!(
-                "{} · {} · {}",
-                if ep.is_local { "local" } else { "cloud" },
-                ep.base_url,
-                ep.model
-            )
+            let provider = match ep.protocol {
+                AiProtocol::OpenAiCompatible if ep.is_local => "local",
+                AiProtocol::OpenAiCompatible => "cloud",
+                AiProtocol::OpenAiResponses => "openai",
+                AiProtocol::AnthropicMessages => "anthropic",
+            };
+            format!("{} · {} · {}", provider, ep.base_url, ep.model)
         } else {
             String::new()
         };
@@ -936,6 +969,30 @@ impl Config {
 
 fn default_ai_provider() -> String {
     "cloud".into()
+}
+
+fn default_openai_base_url() -> String {
+    "https://api.openai.com/v1".into()
+}
+
+fn default_openai_model() -> String {
+    "gpt-5.2".into()
+}
+
+fn default_anthropic_base_url() -> String {
+    "https://api.anthropic.com/v1".into()
+}
+
+fn default_anthropic_model() -> String {
+    "claude-sonnet-4-6".into()
+}
+
+fn protected_provider_secret(slot: SecretSlot) -> String {
+    match crate::credentials::read(slot) {
+        Ok(Some(secret)) => secret,
+        Ok(None) => String::new(),
+        Err(_) => String::new(),
+    }
 }
 
 fn default_vision_provider() -> String {
@@ -1390,6 +1447,10 @@ pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
     next.ai_model = imported.ai_model;
     next.prep_model = imported.prep_model;
     next.ai_prompt_cache = imported.ai_prompt_cache;
+    next.openai_base_url = imported.openai_base_url;
+    next.openai_model = imported.openai_model;
+    next.anthropic_base_url = imported.anthropic_base_url;
+    next.anthropic_model = imported.anthropic_model;
     // Local AI provider/endpoint.
     next.ai_local_base_url = imported.ai_local_base_url;
     next.ai_local_bearer = imported.ai_local_bearer;
@@ -1591,18 +1652,40 @@ pub fn mask_host(url: &str) -> String {
 #[must_use]
 pub fn preview_server_settings(current: &Config, imported: &Config) -> ServerSettingsPreview {
     let present = |s: &str| !s.trim().is_empty();
+    let ai_profile = |cfg: &Config| match cfg.ai_provider.as_str() {
+        "openai" => (
+            cfg.openai_base_url.clone(),
+            cfg.openai_model.clone(),
+            false,
+            false,
+        ),
+        "anthropic" => (
+            cfg.anthropic_base_url.clone(),
+            cfg.anthropic_model.clone(),
+            false,
+            false,
+        ),
+        _ => (
+            cfg.ai_base_url.clone(),
+            cfg.ai_model.clone(),
+            present(&cfg.ai_bearer),
+            true,
+        ),
+    };
+    let (ai_url_old, ai_model_old, ai_key_old, ai_has_key_old) = ai_profile(current);
+    let (ai_url_new, ai_model_new, ai_key_new, ai_has_key_new) = ai_profile(imported);
     ServerSettingsPreview {
         cloud_ai: PreviewGroup {
             label: "Cloud AI".into(),
             provider_old: current.ai_provider.clone(),
             provider_new: imported.ai_provider.clone(),
-            base_url_old: current.ai_base_url.clone(),
-            base_url_new: imported.ai_base_url.clone(),
-            model_old: current.ai_model.clone(),
-            model_new: imported.ai_model.clone(),
-            key_present_old: present(&current.ai_bearer),
-            key_present_new: present(&imported.ai_bearer),
-            has_key_field: true,
+            base_url_old: ai_url_old,
+            base_url_new: ai_url_new,
+            model_old: ai_model_old,
+            model_new: ai_model_new,
+            key_present_old: ai_key_old,
+            key_present_new: ai_key_new,
+            has_key_field: ai_has_key_old || ai_has_key_new,
         },
         local_ai: PreviewGroup {
             label: "Local AI".into(),

@@ -469,8 +469,8 @@ msgstr "Импорт настроек…"
 
 # === #125 / P1.7 server-only settings transfer (export + import preview) ===
 
-msgid "Server transfer copies ONLY AI/STT providers, URLs, models and keys — local UI, profiles, devices and snippets stay unchanged. Use it to carry your server setup to another PC. Export writes those server fields (INCLUDING keys) to a .json; import shows a preview and asks you to confirm before applying."
-msgstr "Перенос сервера копирует ТОЛЬКО AI/STT-провайдеров, URL, модели и ключи — локальные UI, профили, устройства и сниппеты не меняются. Используйте, чтобы перенести серверную настройку на другой ПК. Экспорт пишет эти серверные поля (ВКЛЮЧАЯ ключи) в .json; импорт показывает предпросмотр и просит подтвердить перед применением."
+msgid "Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in Windows Credential Manager on this PC. Local UI, profiles, devices and snippets stay unchanged."
+msgstr "Перенос сервера копирует AI/STT-провайдеров, URL, модели и старые ключи мостов. Защищённые ключи OpenAI и Anthropic остаются в Диспетчере учётных данных Windows на этом ПК. Локальные UI, профили, устройства и сниппеты не меняются."
 
 msgid "Export server settings…"
 msgstr "Экспортировать серверные настройки…"
@@ -1885,3 +1885,55 @@ msgstr "Выгрузить локальный ИИ"
 
 msgid "Lock mode"
 msgstr "Режим блокировки"
+
+# RC13 — direct AI providers.
+msgid "Custom OpenAI-compatible bridge"
+msgstr "Настраиваемый OpenAI-совместимый мост"
+
+msgid "Local OpenAI-compatible"
+msgstr "Локальный OpenAI-совместимый"
+
+msgid "OpenAI API (Responses)"
+msgstr "OpenAI API (Responses)"
+
+msgid "Anthropic API (Messages)"
+msgstr "Anthropic API (Messages)"
+
+msgid "OpenAI Responses API"
+msgstr "OpenAI Responses API"
+
+msgid "Anthropic Messages API"
+msgstr "Anthropic Messages API"
+
+msgid "API key:"
+msgstr "API-ключ:"
+
+msgid "paste OpenAI API key"
+msgstr "вставьте API-ключ OpenAI"
+
+msgid "paste Anthropic API key"
+msgstr "вставьте API-ключ Anthropic"
+
+msgid "Stored in Windows Credential Manager and excluded from configuration exports."
+msgstr "Хранится в Диспетчере учётных данных Windows и не попадает в экспорт настроек."
+
+msgid "Save URL"
+msgstr "Сохранить URL"
+
+msgid "OpenAI model ID"
+msgstr "ID модели OpenAI"
+
+msgid "Anthropic model ID"
+msgstr "ID модели Anthropic"
+
+msgid "Save model"
+msgstr "Сохранить модель"
+
+msgid "Test OpenAI connection"
+msgstr "Проверить подключение OpenAI"
+
+msgid "Test Anthropic connection"
+msgstr "Проверить подключение Anthropic"
+
+msgid "Prompt caching"
+msgstr "Кэширование промпта"

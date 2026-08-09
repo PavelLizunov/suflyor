@@ -801,15 +801,17 @@ fn main() -> Result<(), slint::PlatformError> {
         // Log key PRESENCE only (never the values) so a tester can confirm
         // from the log file whether their AI/STT keys are configured.
         let c = cfg.read();
+        let active_ai = c.ai_endpoint(false);
         diag!(
-            "config loaded: ai_model={} base_url={} ai_bearer={} groq_key={}",
-            c.ai_model,
-            if c.ai_base_url.is_empty() {
+            "config loaded: ai_provider={} model={} endpoint={} credential={} groq_key={}",
+            c.ai_provider,
+            active_ai.model,
+            if active_ai.base_url.is_empty() {
                 "unset"
             } else {
                 "set"
             },
-            if c.ai_bearer.is_empty() {
+            if !active_ai.is_local && active_ai.bearer.is_empty() {
                 "MISSING"
             } else {
                 "set"
@@ -823,19 +825,7 @@ fn main() -> Result<(), slint::PlatformError> {
         // E10.3 — log the resolved AI + STT stack (which engine + which
         // endpoint) so the log shows what is actually used. The tester could
         // not tell from logs whether AI was local/cloud or on which port.
-        let ai_desc = if c.ai_provider == "local" {
-            format!(
-                "local {} model={}",
-                c.ai_local_base_url,
-                if c.ai_local_model.is_empty() {
-                    "(unset)"
-                } else {
-                    c.ai_local_model.as_str()
-                }
-            )
-        } else {
-            format!("cloud {}", c.ai_model)
-        };
+        let ai_desc = format!("{} model={}", c.ai_provider, active_ai.model);
         let stt_desc = match c.stt_provider.as_str() {
             "gigaam" => format!(
                 "GigaAM in-process/{} dir={}",
@@ -3215,7 +3205,8 @@ fn main() -> Result<(), slint::PlatformError> {
             // local-provider user (the cloud bridge wasn't even running).
             let ep = cfg_ref.read().ai_endpoint(false);
             let is_local = ep.is_local;
-            let (base_url, bearer, model) = (ep.base_url, ep.bearer, ep.model);
+            let (base_url, bearer, model) =
+                (ep.base_url.clone(), ep.bearer.clone(), ep.model.clone());
             // Cloud needs a bearer; a LOCAL server (llama.cpp / Ollama) usually
             // doesn't — so an empty LOCAL bearer must NOT block the ask. This is
             // why "+ tile" wrongly said "AI не настроен" for a working local model.
@@ -3248,14 +3239,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     role: "user".to_string(),
                     content: ai::MessageContent::Text(question_for_task.clone()),
                 }];
-                let result = ai::complete_with_usage(
-                    &base_url,
-                    &bearer,
-                    &model,
-                    messages,
-                    AI_MAX_TOKENS,
-                )
-                .await;
+                let result = ai::complete_with_usage_endpoint(&ep, messages, AI_MAX_TOKENS).await;
 
                 // Post result back to UI thread.
                 let _ = slint::invoke_from_event_loop(move || {

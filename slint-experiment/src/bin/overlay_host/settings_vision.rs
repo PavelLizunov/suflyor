@@ -179,20 +179,18 @@ pub(crate) fn wire_vision_settings(
                     .enable_all()
                     .build()
                 {
-                    Ok(rt) => match rt.block_on(overlay_backend::vision::test_connection(
-                        ep.base_url,
-                        ep.bearer,
-                        ep.model,
-                    )) {
-                        Ok(s) => format!("[ok] {s}"),
-                        Err(e) => {
-                            let chain = format!("{e:#}");
-                            overlay_backend::deep_lock::blocked_test_result(ui_is_ru, &chain)
-                                .unwrap_or_else(|| {
-                                    format!("[err] {chain}").chars().take(90).collect()
-                                })
+                    Ok(rt) => {
+                        match rt.block_on(overlay_backend::vision::test_connection_endpoint(ep)) {
+                            Ok(s) => format!("[ok] {s}"),
+                            Err(e) => {
+                                let chain = format!("{e:#}");
+                                overlay_backend::deep_lock::blocked_test_result(ui_is_ru, &chain)
+                                    .unwrap_or_else(|| {
+                                        format!("[err] {chain}").chars().take(90).collect()
+                                    })
+                            }
                         }
-                    },
+                    }
                     Err(e) => format!("[err] runtime: {e}"),
                 };
                 let _ = slint::invoke_from_event_loop(move || {

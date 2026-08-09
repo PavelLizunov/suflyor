@@ -355,6 +355,14 @@ export component SettingsWindow inherits Window {
     in-out property <string> groq-api-key-status: "(loading...)";
     in-out property <string> groq-api-key-input: "";
     in-out property <string> ai-base-url-input: "";
+    in-out property <string> openai-key-status: "(loading...)";
+    in-out property <string> openai-key-input: "";
+    in-out property <string> openai-base-url-input: "";
+    in-out property <string> openai-model-input: "";
+    in-out property <string> anthropic-key-status: "(loading...)";
+    in-out property <string> anthropic-key-input: "";
+    in-out property <string> anthropic-base-url-input: "";
+    in-out property <string> anthropic-model-input: "";
 
     // ТЗ 2026-07-09 — Hermes integration tab (settings_hermes.rs).
     // Bridge (Hermes → suflyor): loopback server the local agent reads from.
@@ -527,6 +535,12 @@ export component SettingsWindow inherits Window {
     callback ai-bearer-save(string);
     callback groq-api-key-save(string);
     callback ai-base-url-save(string);
+    callback openai-key-save(string);
+    callback openai-base-url-save(string);
+    callback openai-model-save(string);
+    callback anthropic-key-save(string);
+    callback anthropic-base-url-save(string);
+    callback anthropic-model-save(string);
     callback ai-model-selected(string);
     callback ai-models-refresh();
     callback ai-prompt-cache-changed(bool);
@@ -1519,7 +1533,7 @@ export component SettingsWindow inherits Window {
                         // servers, keeps local profiles/devices/UI/snippets.
                         // Import shows a redacted preview before applying.
                         Text {
-                            text: @tr("Server transfer copies ONLY AI/STT providers, URLs, models and keys — local UI, profiles, devices and snippets stay unchanged. Use it to carry your server setup to another PC. Export writes those server fields (INCLUDING keys) to a .json; import shows a preview and asks you to confirm before applying.");
+                            text: @tr("Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in Windows Credential Manager on this PC. Local UI, profiles, devices and snippets stay unchanged.");
                             font-size: 10px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -2051,7 +2065,12 @@ export component SettingsWindow inherits Window {
                         }
                         // ===== TYPE selector — gates everything below =====
                         SettingsComboBox {
-                            model: [@tr("Cloud (Claude bridge)"), @tr("Local (llama.cpp / Ollama)")];
+                            model: [
+                                @tr("Custom OpenAI-compatible bridge"),
+                                @tr("Local OpenAI-compatible"),
+                                @tr("OpenAI API (Responses)"),
+                                @tr("Anthropic API (Messages)"),
+                            ];
                             current-index: root.ai-provider-index;
                             selected => {
                                 root.ai-provider-index = self.current-index;
@@ -2164,6 +2183,69 @@ export component SettingsWindow inherits Window {
                                 font-size: 10px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
+                            }
+                        }
+
+                        // ============================ OPENAI ============================
+                        if root.ai-provider-index == 2 : VerticalLayout {
+                            spacing: 8px;
+                            vertical-stretch: 0;
+                            Text { text: @tr("OpenAI Responses API"); font-size: 12px; font-weight: 700; color: Theme.text-primary; }
+                            Text { text: @tr("API key:") + " " + root.openai-key-status; font-size: 11px; color: Theme.text-secondary; }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                SettingsLineEdit { placeholder-text: @tr("paste OpenAI API key"); text <=> root.openai-key-input; input-type: password; horizontal-stretch: 1; }
+                                Button { text: @tr("Save"); clicked => { root.openai-key-save(root.openai-key-input); root.openai-key-input = ""; } }
+                            }
+                            Text { text: @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: 10px; color: Theme.text-muted; wrap: word-wrap; }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                SettingsLineEdit { placeholder-text: "https://api.openai.com/v1"; text <=> root.openai-base-url-input; horizontal-stretch: 1; }
+                                Button { text: @tr("Save URL"); clicked => { root.openai-base-url-save(root.openai-base-url-input); } }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                SettingsLineEdit { placeholder-text: @tr("OpenAI model ID"); text <=> root.openai-model-input; horizontal-stretch: 1; }
+                                Button { text: @tr("Save model"); clicked => { root.openai-model-save(root.openai-model-input); } }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button { text: @tr("Test OpenAI connection"); clicked => { root.ai-bridge-test-clicked(); } }
+                                if root.ai-bridge-test-result != "" : Text { text: root.ai-bridge-test-result; font-size: 11px; color: Theme.accent; vertical-alignment: center; }
+                            }
+                        }
+
+                        // ============================ ANTHROPIC ============================
+                        if root.ai-provider-index == 3 : VerticalLayout {
+                            spacing: 8px;
+                            vertical-stretch: 0;
+                            Text { text: @tr("Anthropic Messages API"); font-size: 12px; font-weight: 700; color: Theme.text-primary; }
+                            Text { text: @tr("API key:") + " " + root.anthropic-key-status; font-size: 11px; color: Theme.text-secondary; }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                SettingsLineEdit { placeholder-text: @tr("paste Anthropic API key"); text <=> root.anthropic-key-input; input-type: password; horizontal-stretch: 1; }
+                                Button { text: @tr("Save"); clicked => { root.anthropic-key-save(root.anthropic-key-input); root.anthropic-key-input = ""; } }
+                            }
+                            Text { text: @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: 10px; color: Theme.text-muted; wrap: word-wrap; }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                SettingsLineEdit { placeholder-text: "https://api.anthropic.com/v1"; text <=> root.anthropic-base-url-input; horizontal-stretch: 1; }
+                                Button { text: @tr("Save URL"); clicked => { root.anthropic-base-url-save(root.anthropic-base-url-input); } }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                SettingsLineEdit { placeholder-text: @tr("Anthropic model ID"); text <=> root.anthropic-model-input; horizontal-stretch: 1; }
+                                Button { text: @tr("Save model"); clicked => { root.anthropic-model-save(root.anthropic-model-input); } }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button { text: @tr("Test Anthropic connection"); clicked => { root.ai-bridge-test-clicked(); } }
+                                if root.ai-bridge-test-result != "" : Text { text: root.ai-bridge-test-result; font-size: 11px; color: Theme.accent; vertical-alignment: center; }
+                            }
+                            DarkCheck {
+                                text: @tr("Prompt caching");
+                                checked <=> root.ai-prompt-cache;
+                                toggled(v) => { root.ai-prompt-cache-changed(v); }
                             }
                         }
 

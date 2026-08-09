@@ -189,6 +189,54 @@ pub(crate) fn wire_ai_settings(
     {
         let cfg_c = cfg.clone();
         let weak_for_refresh = win.as_weak();
+        win.on_openai_key_save(move |new_value| {
+            if let Err(error) = overlay_backend::credentials::write(
+                overlay_backend::credentials::SecretSlot::OpenAi,
+                new_value.as_str(),
+            ) {
+                eprintln!("[overlay-host] OpenAI credential save failed: {error:#}");
+                if let Some(w) = weak_for_refresh.upgrade() {
+                    let is_ru = cfg_c.read().ui_language != "en";
+                    w.set_openai_key_status(if is_ru {
+                        "[ошибка] защищённое хранилище недоступно".into()
+                    } else {
+                        "[err] secure storage unavailable".into()
+                    });
+                }
+                return;
+            }
+            if let Some(w) = weak_for_refresh.upgrade() {
+                populate_token_status(&w, &cfg_c);
+            }
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        let weak_for_refresh = win.as_weak();
+        win.on_anthropic_key_save(move |new_value| {
+            if let Err(error) = overlay_backend::credentials::write(
+                overlay_backend::credentials::SecretSlot::Anthropic,
+                new_value.as_str(),
+            ) {
+                eprintln!("[overlay-host] Anthropic credential save failed: {error:#}");
+                if let Some(w) = weak_for_refresh.upgrade() {
+                    let is_ru = cfg_c.read().ui_language != "en";
+                    w.set_anthropic_key_status(if is_ru {
+                        "[ошибка] защищённое хранилище недоступно".into()
+                    } else {
+                        "[err] secure storage unavailable".into()
+                    });
+                }
+                return;
+            }
+            if let Some(w) = weak_for_refresh.upgrade() {
+                populate_token_status(&w, &cfg_c);
+            }
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        let weak_for_refresh = win.as_weak();
         win.on_groq_api_key_save(move |new_value| {
             let trimmed = new_value.trim().to_string();
             if trimmed.is_empty() {
@@ -227,6 +275,46 @@ pub(crate) fn wire_ai_settings(
             eprintln!("[overlay-host] ai_base_url saved ({} chars)", trimmed.len());
             // #E10.1 — re-query the cloud model list against the new URL.
             fetch_models(weak.clone(), cfg_c.clone(), ModelTarget::Cloud);
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_openai_base_url_save(move |value| {
+            let mut c = cfg_c.write();
+            c.openai_base_url = value.trim().to_string();
+            if let Err(error) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] OpenAI URL save failed: {error:#}");
+            }
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_openai_model_save(move |value| {
+            let mut c = cfg_c.write();
+            c.openai_model = value.trim().to_string();
+            if let Err(error) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] OpenAI model save failed: {error:#}");
+            }
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_anthropic_base_url_save(move |value| {
+            let mut c = cfg_c.write();
+            c.anthropic_base_url = value.trim().to_string();
+            if let Err(error) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] Anthropic URL save failed: {error:#}");
+            }
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_anthropic_model_save(move |value| {
+            let mut c = cfg_c.write();
+            c.anthropic_model = value.trim().to_string();
+            if let Err(error) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] Anthropic model save failed: {error:#}");
+            }
         });
     }
     {
@@ -277,7 +365,12 @@ pub(crate) fn wire_ai_settings(
         let weak = win.as_weak();
         let overlay = overlay_weak.clone();
         win.on_ai_provider_changed(move |idx| {
-            let provider = if idx == 1 { "local" } else { "cloud" };
+            let provider = match idx {
+                1 => "local",
+                2 => "openai",
+                3 => "anthropic",
+                _ => "cloud",
+            };
             let mut c = cfg_c.write();
             if provider == "local" {
                 overlay_backend::local_ai::select_local_provider(
@@ -574,26 +667,19 @@ pub(crate) fn wire_ai_settings(
         win.on_ai_bridge_test_clicked(move || {
             let Some(w) = weak.upgrade() else { return };
             w.set_ai_bridge_test_result(SharedString::from("testing…"));
-            let (base_url, bearer, model) = {
-                let c = cfg_c.read();
-                (
-                    c.ai_base_url.clone(),
-                    c.ai_bearer.clone(),
-                    c.ai_model.clone(),
-                )
-            };
+            let endpoint = cfg_c.read().ai_endpoint(false);
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
                 let msg = match tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
                 {
-                    Ok(rt) => match rt.block_on(overlay_backend::ai::test_connection(
-                        base_url, bearer, model,
-                    )) {
-                        Ok(s) => format!("[ok] {s}"),
-                        Err(e) => format!("[err] {e:#}").chars().take(90).collect(),
-                    },
+                    Ok(rt) => {
+                        match rt.block_on(overlay_backend::ai::test_connection_endpoint(endpoint)) {
+                            Ok(s) => format!("[ok] {s}"),
+                            Err(e) => format!("[err] {e:#}").chars().take(90).collect(),
+                        }
+                    }
                     Err(e) => format!("[err] runtime: {e}"),
                 };
                 let _ = slint::invoke_from_event_loop(move || {

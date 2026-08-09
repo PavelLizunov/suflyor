@@ -669,10 +669,96 @@ fn ai_endpoint_defaults_to_cloud() {
     d.prep_model = "claude-sonnet-4-6".into();
     let live = d.ai_endpoint(false);
     assert!(!live.is_local);
+    assert_eq!(live.protocol, crate::ai::AiProtocol::OpenAiCompatible);
     assert_eq!(live.base_url, "http://bridge/v1");
     assert_eq!(live.bearer, "secret");
     assert_eq!(live.model, "claude-haiku-4-5");
     assert_eq!(d.ai_endpoint(true).model, "claude-sonnet-4-6");
+}
+
+#[test]
+fn direct_provider_profiles_are_additive_and_use_native_protocols() {
+    let legacy: Config = serde_json::from_str(r#"{"ai_provider":"cloud"}"#).expect("legacy config");
+    assert_eq!(legacy.openai_base_url, "https://api.openai.com/v1");
+    assert_eq!(legacy.anthropic_base_url, "https://api.anthropic.com/v1");
+    assert_eq!(
+        legacy.ai_endpoint(false).protocol,
+        crate::ai::AiProtocol::OpenAiCompatible
+    );
+
+    let mut cfg = Config::defaults();
+    cfg.ai_provider = "openai".into();
+    cfg.openai_base_url = "https://openai.example/v1".into();
+    cfg.openai_model = "gpt-test".into();
+    let openai = cfg.ai_endpoint(false);
+    assert_eq!(openai.protocol, crate::ai::AiProtocol::OpenAiResponses);
+    assert_eq!(openai.base_url, "https://openai.example/v1");
+    assert_eq!(openai.model, "gpt-test");
+
+    cfg.ai_provider = "anthropic".into();
+    cfg.anthropic_base_url = "https://anthropic.example/v1".into();
+    cfg.anthropic_model = "claude-test".into();
+    let anthropic = cfg.ai_endpoint(false);
+    assert_eq!(anthropic.protocol, crate::ai::AiProtocol::AnthropicMessages);
+    assert_eq!(anthropic.base_url, "https://anthropic.example/v1");
+    assert_eq!(anthropic.model, "claude-test");
+
+    let json = serde_json::to_string(&cfg).expect("serialize");
+    assert!(!json.contains("openai_api_key"));
+    assert!(!json.contains("anthropic_api_key"));
+}
+
+#[test]
+fn cloud_escalation_preserves_legacy_bridge_but_keeps_direct_protocol() {
+    let mut cfg = Config::defaults();
+    cfg.ai_provider = "local".into();
+    cfg.ai_base_url = "https://bridge.example/v1".into();
+    cfg.ai_bearer = "bridge-secret".into();
+    cfg.prep_model = "smart-bridge-model".into();
+    let legacy = cfg.ai_endpoint_cloud();
+    assert_eq!(legacy.protocol, crate::ai::AiProtocol::OpenAiCompatible);
+    assert_eq!(legacy.model, "smart-bridge-model");
+
+    cfg.ai_provider = "openai".into();
+    cfg.openai_model = "gpt-test".into();
+    let direct = cfg.ai_endpoint_cloud();
+    assert_eq!(direct.protocol, crate::ai::AiProtocol::OpenAiResponses);
+    assert_eq!(direct.model, "gpt-test");
+}
+
+#[test]
+fn direct_profile_preview_exposes_no_protected_key_field() {
+    let mut current = Config::defaults();
+    current.ai_provider = "openai".into();
+    let mut imported = Config::defaults();
+    imported.ai_provider = "anthropic".into();
+    imported.anthropic_base_url = "https://anthropic.example/v1".into();
+    imported.anthropic_model = "claude-test".into();
+
+    let preview = preview_server_settings(&current, &imported);
+    assert_eq!(preview.cloud_ai.provider_new, "anthropic");
+    assert_eq!(
+        preview.cloud_ai.base_url_new,
+        "https://anthropic.example/v1"
+    );
+    assert_eq!(preview.cloud_ai.model_new, "claude-test");
+    assert!(!preview.cloud_ai.has_key_field);
+    assert!(!preview.cloud_ai.key_present_new);
+}
+
+#[test]
+fn server_settings_merge_preserves_direct_provider_profile_without_secrets() {
+    let current = Config::defaults();
+    let mut imported = Config::defaults();
+    imported.ai_provider = "anthropic".into();
+    imported.openai_base_url = "https://openai.example/v1".into();
+    imported.openai_model = "gpt-test".into();
+    imported.anthropic_base_url = "https://anthropic.example/v1".into();
+    imported.anthropic_model = "claude-test".into();
+    let merged = merge_server_settings(&current, imported);
+    assert_eq!(merged.ai_provider, "anthropic");
+    assert_eq!(merged.openai_model, "gpt-test");
+    assert_eq!(merged.anthropic_model, "claude-test");
 }
 
 #[test]

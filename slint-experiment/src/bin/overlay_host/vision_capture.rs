@@ -730,13 +730,7 @@ pub(crate) fn launch_vision_for_bgra(
             });
         }
         let t0 = std::time::Instant::now();
-        let ai_rx = ai::stream_chat(
-            ep.base_url,
-            ep.bearer,
-            model.clone(),
-            messages,
-            vision::VISION_MAX_TOKENS,
-        );
+        let ai_rx = ai::stream_chat_endpoint(ep, messages, vision::VISION_MAX_TOKENS);
         overlay_backend::runtime::ask_stream_loop(
             sink,
             ai_rx,

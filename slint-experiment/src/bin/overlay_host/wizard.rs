@@ -156,10 +156,9 @@ pub(crate) fn wire_wizard_steps(
             let Some(w) = weak.upgrade() else { return };
             w.set_ai_level(-1);
             w.set_ai_detail(SharedString::from(""));
-            let (base, bearer, model, ui_is_ru) = {
+            let (endpoint, ui_is_ru) = {
                 let c = cfg_c.read();
-                let e = c.ai_endpoint(false);
-                (e.base_url, e.bearer, e.model, c.ui_is_ru())
+                (c.ai_endpoint(false), c.ui_is_ru())
             };
             let wr = w.as_weak();
             std::thread::spawn(move || {
@@ -168,8 +167,7 @@ pub(crate) fn wire_wizard_steps(
                     .build()
                 {
                     Ok(rt) => {
-                        match rt.block_on(overlay_backend::ai::test_connection(base, bearer, model))
-                        {
+                        match rt.block_on(overlay_backend::ai::test_connection_endpoint(endpoint)) {
                             Ok(s) => (0, format!("[ok] {s}")),
                             Err(e) => {
                                 let chain = format!("{e:#}");

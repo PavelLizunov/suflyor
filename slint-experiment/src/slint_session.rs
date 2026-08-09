@@ -671,6 +671,7 @@ async fn maybe_spawn_auto_tile(
         enabled,
         every_line,
         trigger_keywords,
+        protocol,
         base_url,
         bearer,
         model,
@@ -687,6 +688,7 @@ async fn maybe_spawn_auto_tile(
             c.auto_tiles_enabled,
             c.auto_tile_every_line,
             c.trigger_keywords.clone(),
+            ep.protocol,
             ep.base_url,
             ep.bearer,
             ep.model,
@@ -947,9 +949,14 @@ async fn maybe_spawn_auto_tile(
     });
 
     let t0 = Instant::now();
-    let (answer, usage) = match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512)
-        .await
-    {
+    let endpoint = ai::AiEndpoint {
+        protocol,
+        base_url,
+        bearer,
+        model: model.clone(),
+        is_local,
+    };
+    let (answer, usage) = match ai::complete_with_usage_endpoint(&endpoint, messages, 512).await {
         Ok((t, u)) => {
             lock(&rt)
                 .health

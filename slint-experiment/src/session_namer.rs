@@ -199,15 +199,9 @@ pub async fn generate_name(ep: &AiEndpoint, lines: &[String]) -> Option<String> 
             content: MessageContent::Text(transcript),
         },
     ];
-    let raw = ai::complete(
-        &ep.base_url,
-        &ep.bearer,
-        &ep.model,
-        messages,
-        NAME_MAX_TOKENS,
-    )
-    .await
-    .ok()?;
+    let raw = ai::complete_endpoint(ep, messages, NAME_MAX_TOKENS)
+        .await
+        .ok()?;
     let name = clean_name(&raw);
     if name.is_empty() {
         None

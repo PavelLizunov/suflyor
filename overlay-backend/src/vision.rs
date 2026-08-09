@@ -8,7 +8,7 @@
 //! all HTTP / SSE / retry / cost / secret-safe error handling.
 
 use crate::ai::{ChatMessage, ContentPart, ImageUrl, MessageContent};
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 
 /// Max tokens for a vision answer. A capture usually asks a single question
 /// (read / solve / explain), so a moderate budget keeps latency + cost down.
@@ -228,46 +228,22 @@ pub const SYNTHETIC_TEST_IMAGE_DATA_URL: &str = "data:image/png;base64,iVBORw0KG
 /// paint into the screen-shareable Settings / Diagnostics result. An HTTP-status
 /// error returns the server's own response snippet (capped by the caller).
 pub async fn test_connection(base_url: String, bearer: String, model: String) -> Result<String> {
-    // Deep-lock guard: a "local"/"same" vision channel can resolve to the
-    // managed :8080 endpoint — refuse it like every other managed request.
-    if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), &base_url) {
-        return Err(anyhow!(crate::deep_lock::BLOCKED_ERROR));
-    }
-    let client = crate::ai::http_client();
-    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
-    let body = serde_json::json!({
-        "model": model,
-        "messages": build_vision_request(SYNTHETIC_TEST_IMAGE_DATA_URL, "Reply with: ok"),
-        "max_tokens": 1,
-    });
-    let resp = match client
-        .post(&url)
-        .timeout(std::time::Duration::from_secs(15))
-        .bearer_auth(&bearer)
-        .json(&body)
-        .send()
-        .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            log::warn!("vision endpoint test transport error: {e:#}");
-            return Err(anyhow!("connection failed"));
-        }
-    };
-    let status = resp.status();
-    if status.is_success() {
-        Ok(format!("HTTP {}", status.as_u16()))
-    } else {
-        // Status only (no body): the body can carry the local vision base_url /
-        // internals into the screen-shared Settings/Diagnostics field (audit Q7)
-        // AND the shareable "Собрать логи" export (P0-1). Log status + size only.
-        let txt = resp.text().await.unwrap_or_default();
-        log::warn!(
-            "{}",
-            crate::http_log::http_error_line("vision endpoint test", status.as_u16(), txt.len())
-        );
-        Err(anyhow!("HTTP {}", status.as_u16()))
-    }
+    test_connection_endpoint(crate::ai::AiEndpoint {
+        protocol: crate::ai::AiProtocol::OpenAiCompatible,
+        base_url,
+        bearer,
+        model,
+        is_local: false,
+    })
+    .await
+}
+
+pub async fn test_connection_endpoint(endpoint: crate::ai::AiEndpoint) -> Result<String> {
+    crate::ai::test_connection_messages(
+        endpoint,
+        build_vision_request(SYNTHETIC_TEST_IMAGE_DATA_URL, "Reply with: ok"),
+    )
+    .await
 }
 
 #[cfg(test)]

@@ -28,9 +28,11 @@ pub(crate) enum AskRoute {
 }
 
 impl AskRoute {
-    /// Explicit cloud escalation needs the cloud bearer; other routes do not.
+    /// Every remote endpoint needs its resolved credential. Local endpoints may
+    /// intentionally run without one.
     pub(crate) fn has_required_auth(self, c: &overlay_backend::config::Config) -> bool {
-        self != AskRoute::Cloud || !c.ai_bearer.trim().is_empty()
+        let endpoint = self.endpoint(c);
+        endpoint.is_local || !endpoint.bearer.trim().is_empty()
     }
 
     /// Resolve the endpoint for this route from config.
@@ -75,16 +77,21 @@ mod tests {
     use super::AskRoute;
 
     #[test]
-    fn cloud_route_requires_bearer() {
+    fn remote_routes_require_bearer_and_local_does_not() {
         let mut config = overlay_backend::config::Config {
             ai_bearer: " \t".into(),
             ..Default::default()
         };
 
         assert!(!AskRoute::Cloud.has_required_auth(&config));
-        assert!(AskRoute::Text.has_required_auth(&config));
+        assert!(!AskRoute::Text.has_required_auth(&config));
 
         config.ai_bearer = "token".into();
         assert!(AskRoute::Cloud.has_required_auth(&config));
+        assert!(AskRoute::Text.has_required_auth(&config));
+
+        config.ai_provider = "local".into();
+        config.ai_local_bearer.clear();
+        assert!(AskRoute::Text.has_required_auth(&config));
     }
 }

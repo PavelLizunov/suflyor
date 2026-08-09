@@ -67,6 +67,7 @@ windows = { version = "0.62", features = [
     "Win32_System_JobObjects",
     "Win32_System_Threading",
     "Win32_Security",
+    "Win32_Security_Credentials",
 ] }
 # The `#[implement(IMMNotificationClient)]` macro expands against the direct
 # crate name even though `windows` re-exports its public types.

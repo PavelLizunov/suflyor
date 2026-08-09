@@ -463,10 +463,20 @@ pub(crate) fn fire_followup_ask(
     // Snapshot config + journal/health and abort any in-flight task on the UI
     // thread; the blocking approved-memory read + reframe then run on a worker
     // (mirrors fire_f9_ask's tail — audit C2/G2).
-    let (base_url, bearer, model, is_local, max_tokens, response_language, meeting_context) = {
+    let (
+        protocol,
+        base_url,
+        bearer,
+        model,
+        is_local,
+        max_tokens,
+        response_language,
+        meeting_context,
+    ) = {
         let c = cfg.read();
         let ep = route.endpoint(&c);
         (
+            ep.protocol,
             ep.base_url,
             ep.bearer,
             ep.model,
@@ -547,8 +557,17 @@ pub(crate) fn fire_followup_ask(
             let events_for_task =
                 gated_events(&bridge_for_work, events_for_work.clone(), generation);
             let task = rt_handle_for_work.spawn(async move {
-                let ai_rx =
-                    ai::stream_chat(base_url, bearer, model.clone(), send_messages, max_tokens);
+                let ai_rx = ai::stream_chat_endpoint(
+                    ai::AiEndpoint {
+                        protocol,
+                        base_url,
+                        bearer,
+                        model: model.clone(),
+                        is_local,
+                    },
+                    send_messages,
+                    max_tokens,
+                );
                 overlay_backend::runtime::ask_stream_loop(
                     events_for_task,
                     ai_rx,
@@ -619,10 +638,20 @@ pub(crate) fn fire_regenerate(
         let n = messages.len() - 1;
         strip_followup_directives(&mut messages[..n]);
     }
-    let (base_url, bearer, model, is_local, max_tokens, response_language, meeting_context) = {
+    let (
+        protocol,
+        base_url,
+        bearer,
+        model,
+        is_local,
+        max_tokens,
+        response_language,
+        meeting_context,
+    ) = {
         let c = cfg.read();
         let ep = route.endpoint(&c);
         (
+            ep.protocol,
             ep.base_url,
             ep.bearer,
             ep.model,
@@ -743,8 +772,17 @@ pub(crate) fn fire_regenerate(
             let events_for_task =
                 gated_events(&bridge_for_work, events_for_work.clone(), generation);
             let task = rt_handle_for_work.spawn(async move {
-                let ai_rx =
-                    ai::stream_chat(base_url, bearer, model.clone(), send_messages, max_tokens);
+                let ai_rx = ai::stream_chat_endpoint(
+                    ai::AiEndpoint {
+                        protocol,
+                        base_url,
+                        bearer,
+                        model: model.clone(),
+                        is_local,
+                    },
+                    send_messages,
+                    max_tokens,
+                );
                 overlay_backend::runtime::ask_stream_loop(
                     events_for_task,
                     ai_rx,
