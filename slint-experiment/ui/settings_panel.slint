@@ -2278,7 +2278,6 @@ export component SettingsWindow inherits Window {
                                 }
                                 Button {
                                     text: @tr("Disconnect");
-                                    enabled: !root.codex-auth-busy;
                                     clicked => { root.codex-disconnect-clicked(); }
                                 }
                             }
