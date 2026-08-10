@@ -5862,7 +5862,7 @@ dependencies = [
 
 [[package]]
 name = "slint-replay"
-version = "0.36.1-rc.17"
+version = "0.37.0-rc.1"
 dependencies = [
  "anyhow",
  "base64 0.23.0",

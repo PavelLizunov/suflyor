@@ -1,7 +1,7 @@
 # RC17: experimental TeraTTSv2 read-aloud sidecar (first releasable integration)
 
 Status: branch `codex/teratts-sidecar-rc17`, based on `v0.36.1-rc.16`
-(`cae818f`). Version bump: `0.36.1-rc.17` in `slint-experiment/Cargo.toml`
+(`cae818f`). Version bump: `0.37.0-rc.1` in `slint-experiment/Cargo.toml`
 and `scripts/slint-installer.nsi` (guarded by `version_guard`).
 
 ## Outcome
@@ -134,7 +134,7 @@ user's machine solely by the user's own on-demand download from upstream.
 2. Full `scripts/ci.ps1` green with `CARGO_INCREMENTAL=0`,
    `CARGO_BUILD_JOBS=2`.
 3. Owner visual acceptance of the Settings → Read aloud surface using
-   `docs/retest-v0.36.1-rc.17.html`; Winbrat quality benchmarks decide when
+   `docs/retest-v0.37.0-rc.1.html`; Winbrat quality benchmarks decide when
    Tera may leave experimental/fallback status (out of scope here).
 
 ## Explicitly out of scope
