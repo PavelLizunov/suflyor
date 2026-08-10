@@ -16,11 +16,21 @@
 //! poll `cancel` between files, write the `manifest.json` publish marker, then
 //! ONE `fs::rename` publishes the whole directory. Any failure or cancel wipes
 //! the staging dir, so a half-written model can never masquerade as installed.
+//!
+//! Self-heal: on Windows `fs::rename` cannot replace an existing directory,
+//! so a broken release (missing marker, corrupt/short files, junk left by an
+//! interrupted external tool) would make every re-install fail at publish
+//! forever. A release that fails validation is first moved to a uniquely
+//! named `<release>.broken-<ms>-<pid>-<n>` quarantine dir WITHIN the same
+//! managed root, then staging publishes atomically. A VALID install is never
+//! touched (it early-returns). Quarantine leftovers are swept best-effort
+//! after a successful publish.
+//!
 //! See `suflyor-teratts/NOTICE.md` for the licensing release gate.
 
 use std::io::Read;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
@@ -239,6 +249,16 @@ pub fn install_with(
         bail!("отменено");
     }
 
+    // Self-heal: a release dir still present here FAILED validation at the
+    // top (valid installs early-return). On Windows the publish rename cannot
+    // replace it, so move it to a quarantine within the same parent first.
+    if release.exists() {
+        if let Err(e) = quarantine_broken_release(tts_root, &release, &manifest.revision) {
+            wipe_staging(&staging);
+            return Err(e).context("quarantine broken release");
+        }
+    }
+
     // Publish marker LAST inside staging, then one atomic rename. The marker
     // is the only thing that makes a dir look installed, and it only exists
     // after every file verified.
@@ -253,6 +273,7 @@ pub fn install_with(
         wipe_staging(&staging);
         return Err(e).context("publish release dir");
     }
+    sweep_quarantined(tts_root);
     log::info!(
         "teratts: published revision {} ({} files)",
         manifest.revision,
@@ -264,6 +285,98 @@ pub fn install_with(
 
 fn wipe_staging(staging: &Path) {
     let _ = std::fs::remove_dir_all(staging);
+}
+
+/// Unique-suffix counter for quarantine dir names (survives same-ms retries).
+static QUARANTINE_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+/// Containment check used before moving/removing anything: `child` is `parent`
+/// itself or a path strictly below it. Compares components pairwise
+/// (ASCII-case-insensitively on Windows, where the filesystem is) and refuses
+/// `.`/`..` segments in the child, so neither a drive-prefix neighbour
+/// (`C:\a\b` vs `C:\a\bc`) nor a traversal (`C:\a\b\..\x`) ever passes.
+fn is_within(parent: &Path, child: &Path) -> bool {
+    let mut child_components = child.components();
+    for parent_component in parent.components() {
+        match child_components.next() {
+            Some(c) if component_eq(&parent_component, &c) => continue,
+            _ => return false,
+        }
+    }
+    // Parent exhausted: child == parent or below it. Whatever follows the
+    // matched prefix must be plain path segments — `..` (or anything else
+    // non-Normal) never counts as containment.
+    child_components.all(|c| matches!(c, Component::Normal(_)))
+}
+
+fn component_eq(a: &Component<'_>, b: &Component<'_>) -> bool {
+    if cfg!(windows) {
+        a.as_os_str().eq_ignore_ascii_case(b.as_os_str())
+    } else {
+        a.as_os_str() == b.as_os_str()
+    }
+}
+
+/// Move an INVALID release dir aside so the atomic publish rename can proceed
+/// (on Windows `fs::rename` never replaces an existing directory). The
+/// quarantine lives in the same parent under a unique name, so a valid
+/// install — which early-returned before we get here — is never touched, and
+/// nothing outside the managed root is ever moved or deleted. If the rename
+/// is refused (e.g. a broken file is locked), falls back to deleting exactly
+/// the one release dir.
+fn quarantine_broken_release(tts_root: &Path, release: &Path, revision: &str) -> Result<()> {
+    if !is_within(tts_root, release) {
+        bail!("release dir escapes the managed tts root");
+    }
+    let Some(name) = release.file_name().and_then(|n| n.to_str()) else {
+        bail!("release dir has no usable name");
+    };
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let pid = std::process::id();
+    for _ in 0..8u32 {
+        let attempt = QUARANTINE_COUNTER.fetch_add(1, Ordering::AcqRel);
+        let quarantine = tts_root.join(format!("{name}.broken-{now_ms}-{pid}-{attempt}"));
+        if std::fs::rename(release, &quarantine).is_ok() {
+            log::warn!(
+                "teratts: quarantined broken revision {revision} release at {}",
+                quarantine.display()
+            );
+            return Ok(());
+        }
+    }
+    log::warn!(
+        "teratts: quarantine rename refused; removing broken revision {revision} release in place"
+    );
+    std::fs::remove_dir_all(release)
+        .with_context(|| format!("remove broken release for revision {revision}"))
+}
+
+/// Best-effort sweep of quarantine leftovers (`teratts-v2-*.broken-*`) after a
+/// successful publish, so a self-healed install does not keep ~370 MiB of
+/// broken data around forever.
+fn sweep_quarantined(tts_root: &Path) {
+    let Ok(entries) = std::fs::read_dir(tts_root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let Some(name) = entry.file_name().to_str().map(str::to_string) else {
+            continue;
+        };
+        if !name.starts_with("teratts-v2-") || !name.contains(".broken-") {
+            continue;
+        }
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        match std::fs::remove_dir_all(&path) {
+            Ok(()) => log::info!("teratts: removed quarantined release {name}"),
+            Err(e) => log::warn!("teratts: quarantine cleanup failed for {name}: {e}"),
+        }
+    }
 }
 
 /// Verify one staged file: exact size, then SHA-256 (LFS files) or the git
@@ -606,5 +719,216 @@ mod tests {
         }
         let _ = check_dir(&manifest, dir.path());
         TeraInstalled::Missing
+    }
+
+    // ===== Self-heal (broken release quarantine) =====
+
+    fn ok_downloader(_url: &str, dest: &Path) -> Result<()> {
+        std::fs::write(dest, b"abc")?;
+        Ok(())
+    }
+
+    fn release_path(root: &Path, manifest: &Manifest) -> PathBuf {
+        root.join(format!("teratts-v2-{}", manifest.revision))
+    }
+
+    fn quarantine_dirs(root: &Path) -> Vec<String> {
+        std::fs::read_dir(root)
+            .map(|entries| {
+                entries
+                    .flatten()
+                    .filter_map(|e| e.file_name().to_str().map(str::to_string))
+                    .filter(|n| n.starts_with("teratts-v2-") && n.contains(".broken-"))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn is_within_rejects_prefix_neighbours_traversal_and_drives() {
+        assert!(is_within(
+            Path::new("root/tts"),
+            Path::new("root/tts/teratts")
+        ));
+        assert!(is_within(Path::new("root/tts"), Path::new("root/tts")));
+        // A sibling whose name merely starts with the same letters is OUT.
+        assert!(!is_within(Path::new("root/tts"), Path::new("root/ttsx")));
+        assert!(!is_within(Path::new("root/tts"), Path::new("root/other")));
+        // Traversal never counts as containment (`.` normalizes away and is
+        // genuinely inside; `..` escapes).
+        assert!(!is_within(
+            Path::new("root/tts"),
+            Path::new("root/tts/../x")
+        ));
+        assert!(is_within(Path::new("root/tts"), Path::new("root/tts/./x")));
+        assert!(!is_within(Path::new("root/tts"), Path::new("tts")));
+        assert!(!is_within(Path::new("root/tts"), Path::new("root")));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn is_within_understands_drive_prefixes_and_case() {
+        assert!(is_within(Path::new(r"C:\a\b"), Path::new(r"C:\a\b\c")));
+        // Drive-prefix neighbour: C:\a\bc is NOT below C:\a\b.
+        assert!(!is_within(Path::new(r"C:\a\b"), Path::new(r"C:\a\bc")));
+        assert!(!is_within(Path::new(r"C:\a\b"), Path::new(r"D:\a\b")));
+        // Windows paths compare case-insensitively.
+        assert!(is_within(Path::new(r"C:\A\b"), Path::new(r"c:\a\B\c")));
+    }
+
+    #[test]
+    fn quarantine_moves_the_broken_dir_within_the_same_root() {
+        let root = tempfile::tempdir().unwrap();
+        let manifest = tiny_manifest();
+        let release = release_path(root.path(), &manifest);
+        std::fs::create_dir_all(release.join("models")).unwrap();
+        std::fs::write(release.join("models/a.onnx"), b"junk").unwrap();
+
+        quarantine_broken_release(root.path(), &release, &manifest.revision).unwrap();
+        assert!(!release.exists());
+        let quarantined = quarantine_dirs(root.path());
+        assert_eq!(quarantined.len(), 1, "{quarantined:?}");
+        let moved = root.path().join(&quarantined[0]);
+        assert!(moved.join("models/a.onnx").is_file(), "content preserved");
+    }
+
+    #[test]
+    fn quarantine_names_are_unique_and_refuse_foreign_paths() {
+        let root = tempfile::tempdir().unwrap();
+        let manifest = tiny_manifest();
+        let release = release_path(root.path(), &manifest);
+        std::fs::create_dir_all(&release).unwrap();
+        quarantine_broken_release(root.path(), &release, &manifest.revision).unwrap();
+        std::fs::create_dir_all(&release).unwrap();
+        quarantine_broken_release(root.path(), &release, &manifest.revision).unwrap();
+        let quarantined = quarantine_dirs(root.path());
+        assert_eq!(quarantined.len(), 2, "{quarantined:?}");
+        let unique: std::collections::BTreeSet<_> = quarantined.iter().collect();
+        assert_eq!(unique.len(), 2, "quarantine names must not collide");
+
+        // A release path outside the managed root must never be touched.
+        let outside_root = tempfile::tempdir().unwrap();
+        let outside = outside_root.path().join("teratts-v2-elsewhere");
+        std::fs::create_dir_all(&outside).unwrap();
+        let err = quarantine_broken_release(root.path(), &outside, &manifest.revision).unwrap_err();
+        assert!(err.to_string().contains("escapes"), "{err:#}");
+        assert!(outside.exists(), "foreign dir must stay untouched");
+    }
+
+    #[test]
+    fn install_with_self_heals_release_missing_its_marker() {
+        let manifest = tiny_manifest();
+        let root = tempfile::tempdir().unwrap();
+        let release = release_path(root.path(), &manifest);
+        // Broken release: files but no publish marker.
+        write_test_files(&release);
+        std::fs::remove_file(release.join(MARKER)).ok();
+
+        let cancel = AtomicBool::new(false);
+        install_with(&manifest, root.path(), &cancel, &|_| {}, &ok_downloader).unwrap();
+
+        assert!(release.join(MARKER).is_file());
+        assert!(check_dir(&manifest, &release).is_ok());
+        // The quarantine was swept after the successful publish.
+        assert!(quarantine_dirs(root.path()).is_empty());
+    }
+
+    #[test]
+    fn install_with_self_heals_release_with_corrupt_file() {
+        let manifest = tiny_manifest();
+        let root = tempfile::tempdir().unwrap();
+        let release = release_path(root.path(), &manifest);
+        // Broken release: marker present, one file truncated (size mismatch).
+        write_test_files(&release);
+        std::fs::write(release.join(MARKER), "{}").unwrap();
+        std::fs::write(release.join("models/a.onnx"), b"a").unwrap();
+
+        let cancel = AtomicBool::new(false);
+        install_with(&manifest, root.path(), &cancel, &|_| {}, &ok_downloader).unwrap();
+
+        assert!(release.join(MARKER).is_file());
+        assert!(check_dir(&manifest, &release).is_ok());
+        assert!(quarantine_dirs(root.path()).is_empty());
+    }
+
+    #[test]
+    fn install_with_self_heals_nonempty_junk_release_dir() {
+        let manifest = tiny_manifest();
+        let root = tempfile::tempdir().unwrap();
+        let release = release_path(root.path(), &manifest);
+        // Nonempty dir of unrelated junk (e.g. an interrupted external tool).
+        std::fs::create_dir_all(release.join("random")).unwrap();
+        std::fs::write(release.join("random/junk.bin"), b"xxxxx").unwrap();
+
+        let cancel = AtomicBool::new(false);
+        install_with(&manifest, root.path(), &cancel, &|_| {}, &ok_downloader).unwrap();
+
+        assert!(check_dir(&manifest, &release).is_ok());
+        assert!(!release.join("random").exists());
+        assert!(quarantine_dirs(root.path()).is_empty());
+    }
+
+    #[test]
+    fn install_with_preserves_a_valid_release_and_makes_no_quarantine() {
+        let manifest = tiny_manifest();
+        let root = tempfile::tempdir().unwrap();
+        let release = release_path(root.path(), &manifest);
+        write_test_files(&release);
+        std::fs::write(release.join(MARKER), "{}").unwrap();
+        // Canary file: a valid release must be preserved byte-for-byte.
+        std::fs::write(release.join("canary.txt"), b"keep me").unwrap();
+
+        let cancel = AtomicBool::new(false);
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        let counting = |_url: &str, dest: &Path| -> Result<()> {
+            calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            std::fs::write(dest, b"abc")?;
+            Ok(())
+        };
+        install_with(&manifest, root.path(), &cancel, &|_| {}, &counting).unwrap();
+
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert_eq!(
+            std::fs::read(release.join("canary.txt")).unwrap(),
+            b"keep me"
+        );
+        assert!(quarantine_dirs(root.path()).is_empty());
+    }
+
+    #[test]
+    fn install_with_cancel_leaves_broken_release_for_the_next_run() {
+        let manifest = tiny_manifest();
+        let root = tempfile::tempdir().unwrap();
+        let release = release_path(root.path(), &manifest);
+        write_test_files(&release);
+        std::fs::remove_file(release.join(MARKER)).ok();
+
+        let cancel = AtomicBool::new(true);
+        let err =
+            install_with(&manifest, root.path(), &cancel, &|_| {}, &ok_downloader).unwrap_err();
+        assert!(format!("{err:#}").contains("отменено"));
+        // Cancel happens before quarantine: the broken dir waits for the next
+        // run, and nothing else is left behind.
+        assert!(release.join("models/a.onnx").is_file());
+        assert!(quarantine_dirs(root.path()).is_empty());
+        assert!(!root
+            .path()
+            .join(format!("teratts-v2-{}.staging", manifest.revision))
+            .exists());
+    }
+
+    #[test]
+    fn sweep_quarantined_removes_only_quarantine_dirs() {
+        let root = tempfile::tempdir().unwrap();
+        let quarantine = root.path().join("teratts-v2-deadbeef.broken-1-2-3");
+        let keeper = root.path().join("teratts-v2-keeper");
+        let unrelated = root.path().join("other-model.broken-9");
+        for dir in [&quarantine, &keeper, &unrelated] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        sweep_quarantined(root.path());
+        assert!(!quarantine.exists());
+        assert!(keeper.exists());
+        assert!(unrelated.exists(), "only teratts quarantines are swept");
     }
 }

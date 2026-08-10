@@ -137,6 +137,51 @@ user's machine solely by the user's own on-demand download from upstream.
    `docs/retest-v0.37.0-rc.1.html`; Winbrat quality benchmarks decide when
    Tera may leave experimental/fallback status (out of scope here).
 
+## P1 hardening (post-audit; version stays 0.37.0-rc.1)
+
+Four independently-audited P1 findings were closed on the same branch, with
+no protocol/format break and no release action:
+
+1. **Self-healing install** (`overlay-backend/src/teratts_install.rs`): on
+   Windows `fs::rename` cannot replace an existing directory, so a broken
+   release (missing marker, corrupt/short files, nonempty junk) made every
+   re-install fail at publish forever. `install_with` now validates the
+   existing release; an invalid one is moved to a uniquely named
+   `teratts-v2-<rev>.broken-<ms>-<pid>-<n>` quarantine INSIDE the managed
+   tts root (guarded by a component-wise containment check that rejects
+   drive-prefix neighbours and `..` traversal) before the atomic publish.
+   Valid installs early-return untouched; quarantines are swept best-effort
+   after a successful publish; cancel before quarantine leaves the broken
+   dir for the next run.
+2. **Strict ONNX schema** (`suflyor-teratts/src/tera.rs`): each pinned graph
+   must declare EXACTLY ONE output (checked at load), and runtime outputs
+   are selected by that exact declared name — never positional iteration.
+   Every output shape/data length is validated BEFORE slicing (encoder/
+   duration products, exact `[1,144,L]` sampler latent, `[1,S]` vocoder
+   waveform with the overlap-save minimum), so a mismatched model yields a
+   generic `synth` FAILED token — never a panic, never user text (reason
+   tokens are additionally sanitized to protocol-safe ASCII).
+3. **Cancellation generations** (`suflyor-teratts/src/main.rs`): synthesis
+   moved to a dedicated worker thread; the active utterance id is the
+   generation. STOP stops playback immediately (never waits for CPU
+   synthesis) and a newer SPEAK supersedes in-flight synthesis; stale
+   results are dropped before playback. The worker loop is fully
+   event-driven (stdin commands, synth results, and playback-exit
+   notifications on one channel — no polling sleeps). Deterministic unit
+   tests drive a fake player/dispatcher: stop-during-synthesis, newer-speak
+   supersession, exactly-one-terminal-event-per-STARTED, stale-result drop.
+4. **Host fallback hygiene** (`overlay-backend/src/tts.rs`): the STT
+   suppression window is marked ONLY after the SPEAK line is actually
+   accepted by the sidecar stdin; a Tera write failure falls back to Piper
+   within the same `speak()` call; PAUSE/RESUME/STOP deliver only to a live
+   child (a dead sidecar is never respawned just to receive a control line).
+   Piper fallback and the independent diarization path
+   (`diarize::diarization_exe_path` → `suflyor-tts.exe`) are unchanged.
+
+`docs/retest-v0.37.0-rc.1.html` gained three matching checklist items
+(self-healing install, STOP/interrupt during synthesis, dead-engine
+suppression hygiene).
+
 ## Explicitly out of scope
 
 - RUAccent neural stress orchestration + its 525 MB asset subtree.

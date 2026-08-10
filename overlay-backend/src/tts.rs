@@ -500,19 +500,39 @@ impl Sidecar {
     }
 
     /// Write a line without (re)spawning — used internally right after spawn.
-    fn write_raw(&mut self, line: &str) {
+    /// Reports whether the line actually reached the child's stdin: a broken
+    /// pipe (dead/crashed sidecar) drops the handles and reports false so the
+    /// caller can fall back instead of believing playback started.
+    fn write_raw(&mut self, line: &str) -> bool {
         if let Some(si) = self.stdin.as_mut() {
-            if writeln!(si, "{line}").and_then(|_| si.flush()).is_err() {
-                self.stdin = None;
-                self.proc = None;
+            if writeln!(si, "{line}").and_then(|_| si.flush()).is_ok() {
+                return true;
             }
         }
+        self.stdin = None;
+        self.proc = None;
+        false
     }
 
-    /// Ensure the child is up, then send `line`.
-    fn send(&mut self, line: &str) {
+    /// Ensure the child is up, then send `line`. Reports delivery.
+    fn send(&mut self, line: &str) -> bool {
         self.ensure();
-        self.write_raw(line);
+        self.write_raw(line)
+    }
+
+    /// Deliver `line` only if the child is ALIVE — never respawns. Control
+    /// commands (PAUSE/RESUME/STOP) use this: respawning a dead sidecar just
+    /// to deliver a control line would boot the whole engine for nothing (a
+    /// Tera cold load is hundreds of MB of graphs), and a dead sidecar is not
+    /// playing anything anyway. The dead child stays in `proc` so the next
+    /// `ensure` still counts the crash.
+    fn send_if_alive(&mut self, line: &str) -> bool {
+        let alive = self
+            .proc
+            .as_mut()
+            .map(|p| matches!(p.try_wait(), Ok(None)))
+            .unwrap_or(false);
+        alive && self.write_raw(line)
     }
 }
 
@@ -678,14 +698,27 @@ impl Tts {
             .unwrap_or_default()
     }
 
-    fn send_to(&self, target: u8, line: &str) {
+    /// Send `line` to the target sidecar (respawning it if needed — used for
+    /// commands that START work). Reports whether the line was delivered.
+    fn send_to(&self, target: u8, line: &str) -> bool {
         let sidecar = match target {
             TARGET_TERA => &self.tera,
             _ => &self.piper,
         };
-        if let Ok(mut s) = sidecar.lock() {
-            s.send(line);
-        }
+        sidecar.lock().map(|mut s| s.send(line)).unwrap_or(false)
+    }
+
+    /// Deliver a CONTROL line (PAUSE/RESUME/STOP) without ever respawning a
+    /// dead sidecar. Reports delivery.
+    fn control_to(&self, target: u8, line: &str) -> bool {
+        let sidecar = match target {
+            TARGET_TERA => &self.tera,
+            _ => &self.piper,
+        };
+        sidecar
+            .lock()
+            .map(|mut s| s.send_if_alive(line))
+            .unwrap_or(false)
     }
 
     /// Speak `text` now, interrupting any current speech. `text` may be
@@ -693,32 +726,37 @@ impl Tts {
     /// synthesizer voices words, not `**` / backticks / `#`.
     ///
     /// Engine selection + fallback: with `tts_engine = "tera"` the Tera
-    /// sidecar speaks when usable; otherwise (not installed, not ready,
-    /// crashed-out, or Piper selected) the Piper sidecar speaks. Returns
-    /// whether playback was ACCEPTED — the STT suppression window is marked
-    /// ONLY then, so a missing engine neither plays nor falsely silences the
-    /// mic. Callers gate their "this tile is speaking" state on this result.
+    /// sidecar speaks when usable AND its stdin accepts the SPEAK line; a
+    /// missing engine OR a write failure (sidecar died mid-utterance) falls
+    /// back to Piper within the same call. Returns whether playback was
+    /// ACCEPTED — the STT suppression window is marked ONLY after a
+    /// successful write, so a dead engine neither plays nor falsely silences
+    /// the mic. Callers gate their "this tile is speaking" state on this.
     pub fn speak(&self, text: &str) -> bool {
         let spoken = crate::tts_normalize::normalize_for_speech(&speech_text::to_speech(text));
         if spoken.trim().is_empty() {
             return false;
         }
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&spoken);
         if self.engine_kind() == EngineKind::Tera {
             if self.tera_usable() {
-                mark_speaking_for(spoken.chars().count());
-                let b64 = base64::engine::general_purpose::STANDARD.encode(&spoken);
-                self.send_to(TARGET_TERA, &format!("SPEAK {b64}"));
-                self.last_target.store(TARGET_TERA, Ordering::Release);
-                return true;
+                if self.send_to(TARGET_TERA, &format!("SPEAK {b64}")) {
+                    mark_speaking_for(spoken.chars().count());
+                    self.last_target.store(TARGET_TERA, Ordering::Release);
+                    return true;
+                }
+                log::warn!("tts: Tera sidecar did not accept SPEAK — falling back to Piper");
+            } else {
+                log::warn!("tts: Tera engine unavailable — falling back to Piper");
             }
-            log::warn!("tts: Tera engine unavailable — falling back to Piper");
         }
         if !available_on_disk() {
             return false;
         }
+        if !self.send_to(TARGET_PIPER, &format!("SPEAK {b64}")) {
+            return false;
+        }
         mark_speaking_for(spoken.chars().count());
-        let b64 = base64::engine::general_purpose::STANDARD.encode(&spoken);
-        self.send_to(TARGET_PIPER, &format!("SPEAK {b64}"));
         self.last_target.store(TARGET_PIPER, Ordering::Release);
         true
     }
@@ -728,21 +766,23 @@ impl Tts {
         pause_speaking();
         let target = self.last_target.load(Ordering::Acquire);
         if target != TARGET_NONE {
-            self.send_to(target, "PAUSE");
+            self.control_to(target, "PAUSE");
         }
     }
     pub fn resume(&self) {
         resume_speaking();
         let target = self.last_target.load(Ordering::Acquire);
         if target != TARGET_NONE {
-            self.send_to(target, "RESUME");
+            self.control_to(target, "RESUME");
         }
     }
     pub fn stop(&self) {
         clear_speaking();
         let target = self.last_target.load(Ordering::Acquire);
-        if target != TARGET_NONE {
-            self.send_to(target, "STOP");
+        if target != TARGET_NONE && !self.control_to(target, "STOP") {
+            // The sidecar is already gone — playback died with it. Never
+            // respawn an engine just to deliver STOP to nothing.
+            log::debug!("tts: STOP not delivered — target sidecar not running");
         }
     }
     /// Set the read rate (−10…+10, 0 = normal). Applies to the next utterance.
@@ -1215,12 +1255,70 @@ mod tests {
         // Test binaries have no suflyor-teratts.exe next to them, so Tera is
         // unusable and a Tera-selected client must NOT report itself usable —
         // the Piper fallback path decides availability.
+        let _lock = SPEAKING_GLOBAL_LOCK.lock().unwrap();
+        clear_speaking();
         let tts = Tts::spawn(EngineKind::Tera, Some("tera:ru_f1".into()), 0, "ru");
         assert_eq!(tts.engine_kind(), EngineKind::Tera);
         assert!(!tts.tera_usable());
         assert!(!tts.speak("Привет"));
+        // A rejected speak must NOT mark the STT suppression window — errors
+        // never falsely mark playback as active.
+        assert!(!is_speaking());
         tts.set_engine(EngineKind::Piper);
         assert_eq!(tts.engine_kind(), EngineKind::Piper);
+    }
+
+    fn missing_exe_sidecar(kind: EngineKind) -> Sidecar {
+        Sidecar {
+            kind,
+            exe: PathBuf::from("definitely-missing-sidecar.exe"),
+            voice: String::new(),
+            rate: 0,
+            lang: "ru".into(),
+            proc: None,
+            stdin: None,
+            crashes: 0,
+            ready: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// The speaking-window statics are process-global; tests that touch them
+    /// serialize here so parallel test threads cannot interleave.
+    static SPEAKING_GLOBAL_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn send_reports_failure_when_the_sidecar_cannot_run() {
+        // Write-failure P2: a SPEAK into an un-runnable sidecar must report
+        // false (the caller falls back / skips the suppression window)
+        // instead of silently pretending the line was delivered.
+        let mut sidecar = missing_exe_sidecar(EngineKind::Tera);
+        assert!(!sidecar.send("SPEAK aaa"));
+        assert!(sidecar.proc.is_none());
+        assert!(sidecar.stdin.is_none());
+    }
+
+    #[test]
+    fn control_commands_never_respawn_a_dead_sidecar() {
+        // STOP-dead-sidecar P2: PAUSE/RESUME/STOP deliver only to a LIVE
+        // child — a dead/never-spawned sidecar gets no respawn (no pointless
+        // engine boot), and the failure is reported so callers can log it.
+        let mut sidecar = missing_exe_sidecar(EngineKind::Tera);
+        assert!(!sidecar.send_if_alive("STOP"));
+        assert!(!sidecar.send_if_alive("PAUSE"));
+        assert!(!sidecar.send_if_alive("RESUME"));
+        assert!(sidecar.proc.is_none(), "control lines must not spawn");
+    }
+
+    #[test]
+    fn stop_clears_speaking_even_when_no_sidecar_runs() {
+        // The suppression estimate is cleared regardless of delivery, so a
+        // dead sidecar cannot leave the mic suppressed.
+        let _lock = SPEAKING_GLOBAL_LOCK.lock().unwrap();
+        mark_speaking_for(100);
+        assert!(is_speaking());
+        let tts = Tts::spawn(EngineKind::Piper, None, 0, "ru");
+        tts.stop();
+        assert!(!is_speaking());
     }
 
     #[test]

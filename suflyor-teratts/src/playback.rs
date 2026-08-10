@@ -2,8 +2,10 @@
 //!
 //! Adapted from the suflyor-tts sidecar: one render thread plays a growing
 //! stream of mono f32 samples (fed chunk by chunk) to the default output
-//! device, with live pause/resume/stop. Adds an `is_finished` flag so the
-//! worker can emit the protocol's DONE event exactly once per utterance.
+//! device, with live pause/resume/stop. The optional exit notifier keeps the
+//! worker loop fully event-driven (no polling): it fires exactly once when
+//! the render loop ends for ANY reason (natural EOS drain, stop request, or
+//! device error), after which the handle is finished.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -28,25 +30,26 @@ pub struct Playback {
     eos: Arc<AtomicBool>,
     stop: Arc<AtomicBool>,
     paused: Arc<AtomicBool>,
-    finished: Arc<AtomicBool>,
     handle: Option<JoinHandle<()>>,
 }
 
 impl Playback {
-    pub fn start(sample_rate: u32) -> Result<Self> {
+    /// `on_exit`, when given, runs exactly once on the render thread after
+    /// the loop has ended — the worker uses it as its playback-done event.
+    pub fn start(sample_rate: u32, on_exit: Option<Box<dyn FnOnce() + Send>>) -> Result<Self> {
         let (feed_tx, feed_rx) = std::sync::mpsc::channel::<Vec<f32>>();
         let eos = Arc::new(AtomicBool::new(false));
         let stop = Arc::new(AtomicBool::new(false));
         let paused = Arc::new(AtomicBool::new(false));
-        let finished = Arc::new(AtomicBool::new(false));
 
-        let (eos2, stop2, paused2, finished2) =
-            (eos.clone(), stop.clone(), paused.clone(), finished.clone());
+        let (eos2, stop2, paused2) = (eos.clone(), stop.clone(), paused.clone());
         let handle = std::thread::Builder::new()
             .name("teratts-playback".into())
             .spawn(move || {
                 let result = render_loop(sample_rate, feed_rx, eos2, stop2, paused2);
-                finished2.store(true, Ordering::Release);
+                if let Some(notify) = on_exit {
+                    notify();
+                }
                 if let Err(e) = result {
                     eprintln!("[suflyor-teratts] playback render loop ended: {e:#}");
                 }
@@ -58,7 +61,6 @@ impl Playback {
             eos,
             stop,
             paused,
-            finished,
             handle: Some(handle),
         })
     }
@@ -82,17 +84,11 @@ impl Playback {
         self.paused.store(false, Ordering::Release);
     }
 
-    /// True once the render loop has drained and exited (or errored/stopped).
-    pub fn is_finished(&self) -> bool {
-        self.finished.load(Ordering::Acquire)
-    }
-
     pub fn stop(mut self) {
         self.stop.store(true, Ordering::Release);
         if let Some(h) = self.handle.take() {
             let _ = h.join();
         }
-        self.finished.store(true, Ordering::Release);
     }
 }
 

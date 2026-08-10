@@ -45,6 +45,25 @@ without clipping or missing glyphs.</li>
 <li>Logs: %APPDATA%\suflyor\suflyor-teratts.log exists after Tera speaks and
 contains ids/counts only — never the spoken text; overlay-host log shows the
 Tera READY handshake line and no URLs with credentials.</li>
+<li>P1 hardening — self-healing install: with the model installed, damage the
+release dir (truncate one file under models\ or delete its manifest.json),
+then press Install model again. The run must NOT fail forever at Publishing:
+the broken dir is moved aside (teratts-v2-&lt;revision&gt;.broken-*), the
+fresh copy publishes, status flips to installed+ready, and Tera speaks. A
+valid install must never be re-downloaded or touched.</li>
+<li>P1 hardening — STOP/interrupt during synthesis: with Tera selected, read
+a LONG tile answer aloud and press stop while speech has not started yet or
+is mid-first-chunk (synthesis still running). Audio must stop IMMEDIATELY —
+no waiting for CPU synthesis. Likewise start a NEW read-aloud while the
+previous one is still synthesizing: the old utterance is replaced and none of
+its audio ever plays. Every interruption still shows exactly one terminal
+state on the tile.</li>
+<li>P1 hardening — dead engine never falsely suppresses the mic: with Tera
+selected, make the engine unusable (rename the model dir AND
+suflyor-teratts.exe) and read aloud. Speech must fall back to Piper; when
+Piper is unavailable too, read-aloud is refused and STT does NOT enter the
+speaking-suppression window (the next dictation is transcribed immediately).
+STOP with a dead sidecar must not spawn a new engine process.</li>
 </ol>
 </body>
 </html>
