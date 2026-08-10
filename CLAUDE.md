@@ -51,11 +51,19 @@ TypeScript. **THREE** standalone crates, NO root workspace:
   local_ai, memory, ocr, ocr_install, paths, persistence, re_transcribe,
   recorder, runtime, session_names, stt, tts, tts_install, update, vision.
   `slint-experiment` depends on it via a path dep.
-- **`suflyor-tts/`** — the neural read-aloud SIDECAR (`suflyor-tts.exe`, shipped
-  beside overlay-host in the installer). Links sherpa-onnx (TTS) ONLY and MUST
-  stay a separate process: two onnxruntimes in one binary crash on the 2nd model
-  load (the app keeps `ort`/GigaAM STT). DO NOT merge it back into
-  overlay-backend. Takes stdin line-commands (SPEAK/PAUSE/RESUME/STOP/VOICE/RATE).
+- **`suflyor-tts/`** — the Piper neural read-aloud + diarization SIDECAR
+  (`suflyor-tts.exe`, shipped beside overlay-host in the installer). Links
+  sherpa-onnx (TTS) ONLY and MUST stay a separate process: two onnxruntimes in
+  one binary crash on the 2nd model load (the app keeps `ort`/GigaAM STT). DO
+  NOT merge it back into overlay-backend. Takes stdin line-commands
+  (SPEAK/PAUSE/RESUME/STOP/VOICE/RATE). Diarization ALWAYS stays here.
+- **`suflyor-teratts/`** — experimental TeraTTSv2 read-aloud SIDECAR (RC17,
+  `suflyor-teratts.exe`). Links ONNX Runtime through `ort` ONLY; the same
+  process-isolation rule applies. Never add a second ONNX Runtime to
+  suflyor-tts instead. The ~370 MB model is pinned in
+  `suflyor-teratts/manifest/teratts-v2.json` and downloads on demand — never
+  bundle weights in the installer; `suflyor-teratts/NOTICE.md` carries the
+  upstream licensing release gate (upstream has NO LICENSE file).
 
 Run/build from `slint-experiment/`:
 ```pwsh

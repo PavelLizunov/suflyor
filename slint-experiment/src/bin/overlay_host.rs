@@ -766,9 +766,11 @@ fn main() -> Result<(), slint::PlatformError> {
         eprintln!("[overlay-host] hermes bridge: {status}");
     }
 
-    // Read-aloud — initialize the process-global SAPI TTS engine once (voice +
-    // rate from config; empty voice = auto-pick a Russian voice). The COM init +
-    // voice enumeration run on the engine's own worker thread.
+    // Read-aloud — initialize the process-global TTS client once (engine +
+    // voice + rate from config; empty voice = auto-pick within the engine).
+    // RC17: `tts_engine` selects Piper (default) or the experimental Tera
+    // sidecar; Piper remains the automatic fallback. The Tera sidecar speaks
+    // `response_language`-tagged text.
     {
         let c = cfg.read();
         let voice = if c.tts_voice.trim().is_empty() {
@@ -776,7 +778,12 @@ fn main() -> Result<(), slint::PlatformError> {
         } else {
             Some(c.tts_voice.clone())
         };
-        overlay_backend::tts::init(voice, c.tts_rate);
+        let lang = if c.response_language.trim().is_empty() {
+            "ru"
+        } else {
+            c.response_language.trim()
+        };
+        overlay_backend::tts::init(Some(c.tts_engine.clone()), voice, c.tts_rate, lang);
     }
 
     // P2 — build the local session archive (SQLite catalog) OFF the hot path:

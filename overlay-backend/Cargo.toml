@@ -88,8 +88,13 @@ log = "0.4"
 anyhow = "1"
 
 # SHA-256 — verify the downloaded updater installer against the GitHub release
-# API digest before executing it (update.rs).
+# API digest before executing it (update.rs), and TeraTTSv2 model files
+# (teratts_install.rs).
 sha2 = "0.11"
+# SHA-1 — verify small non-LFS TeraTTSv2 files against their pinned git blob
+# hash (`sha1("blob <size>\0" ++ content)`), the only immutable digest the Hub
+# API exposes for regular files (teratts_install.rs).
+sha1 = "0.11"
 rusqlite = { version = "0.40.0", features = ["bundled"] }
 
 # WAV encode/decode (recorder.rs — session audio recording, v0.13.0). Was a

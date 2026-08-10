@@ -1419,25 +1419,71 @@ pub(crate) fn populate_tile_monitors(win: &SettingsWindow, c: &overlay_backend::
     win.set_tile_monitor_index(sel);
 }
 
-/// Seed the Read-aloud tab's voice dropdown from the installed voices, with
-/// labels in the CURRENT UI language. Called on Settings open AND on a live
-/// language switch (Rust-built labels don't auto-refresh like @tr bindings).
+/// Seed the Read-aloud tab's engine chooser + voice dropdown for the SELECTED
+/// engine, with labels in the CURRENT UI language. Called on Settings open AND
+/// on a live language switch (Rust-built labels don't auto-refresh like @tr
+/// bindings). RC17: `tts_engine` picks Piper (default) or the experimental
+/// Tera sidecar; the voice list follows the engine, and `tts-available`
+/// reflects the engine's own installed state.
 pub(crate) fn populate_tts_voices(win: &SettingsWindow, c: &overlay_backend::config::Config) {
-    let voices = overlay_backend::tts::voices(c.ui_is_ru());
-    let names: Vec<SharedString> = voices
-        .iter()
-        .map(|v| SharedString::from(v.name.as_str()))
-        .collect();
-    // Show the voice the ENGINE actually resolves to, not blindly voices[0]:
-    // for an empty/uninstalled `tts_voice`, `pick_voice_id` mirrors the
-    // sidecar's preference (Irina → any Piper → any RU → first), so the
-    // dropdown label matches the voice that Test / read-aloud will play.
-    let vidx = overlay_backend::tts::pick_voice_id(&voices, &c.tts_voice)
-        .and_then(|id| voices.iter().position(|v| v.id == id))
-        .unwrap_or(0) as i32;
-    win.set_tts_available(!voices.is_empty());
-    win.set_tts_voice_names(ModelRc::new(VecModel::from(names)));
-    win.set_tts_voice_index(vidx);
+    let ru = c.ui_is_ru();
+    win.set_tts_engine_names(ModelRc::new(VecModel::from(vec![
+        SharedString::from("Piper"),
+        SharedString::from(super::settings_voice::tera_engine_label(ru)),
+    ])));
+    let engine = overlay_backend::tts::parse_engine(&c.tts_engine);
+    win.set_tts_engine_index(match engine {
+        overlay_backend::tts::EngineKind::Piper => 0,
+        overlay_backend::tts::EngineKind::Tera => 1,
+    });
+    match engine {
+        overlay_backend::tts::EngineKind::Piper => {
+            let voices = overlay_backend::tts::voices(ru);
+            let names: Vec<SharedString> = voices
+                .iter()
+                .map(|v| SharedString::from(v.name.as_str()))
+                .collect();
+            // Show the voice the ENGINE actually resolves to, not blindly
+            // voices[0]: for an empty/uninstalled `tts_voice`, `pick_voice_id`
+            // mirrors the sidecar's preference (Irina → any Piper → any RU →
+            // first), so the dropdown label matches the voice that Test /
+            // read-aloud will play.
+            let vref = overlay_backend::tts::parse_voice_ref(&c.tts_voice);
+            let configured = if vref.engine == overlay_backend::tts::EngineKind::Piper {
+                vref.id.as_str()
+            } else {
+                ""
+            };
+            let vidx = overlay_backend::tts::pick_voice_id(&voices, configured)
+                .and_then(|id| voices.iter().position(|v| v.id == id))
+                .unwrap_or(0) as i32;
+            win.set_tts_available(!voices.is_empty());
+            win.set_tts_voice_names(ModelRc::new(VecModel::from(names)));
+            win.set_tts_voice_index(vidx);
+        }
+        overlay_backend::tts::EngineKind::Tera => {
+            let ids = overlay_backend::tts::tera_voice_ids();
+            let names: Vec<SharedString> = ids
+                .iter()
+                .map(|id| SharedString::from(super::settings_voice::tera_voice_label(id)))
+                .collect();
+            let vref = overlay_backend::tts::parse_voice_ref(&c.tts_voice);
+            let vidx = if vref.engine == overlay_backend::tts::EngineKind::Tera {
+                ids.iter().position(|id| *id == vref.id).unwrap_or(0)
+            } else {
+                0
+            } as i32;
+            let installed = overlay_backend::teratts_install::installed_state()
+                == overlay_backend::teratts_install::TeraInstalled::Ready;
+            win.set_tts_available(installed && !ids.is_empty());
+            win.set_tts_voice_names(ModelRc::new(VecModel::from(names)));
+            win.set_tts_voice_index(vidx);
+            win.set_tera_model_status(SharedString::from(super::settings_voice::tera_status_line(
+                overlay_backend::teratts_install::installed_state(),
+                ru,
+            )));
+        }
+    }
     win.set_tts_rate_index(preset_for_tts_rate(c.tts_rate));
 }
 
@@ -1676,7 +1722,9 @@ pub(crate) fn populate_token_status(
     // Read-aloud (Озвучка): build the installed-voice dropdown + reflect the
     // saved voice/speed. The neural voices live in `%APPDATA%\suflyor\tts`;
     // `tts::voices()` scans them (empty until the user installs one → the panel
-    // shows a "no voices" hint and disables the Test button).
+    // shows a "no voices" hint and disables the Test button). RC17: the Tera
+    // status is blanked first (reused window), then re-seeded per engine.
+    win.set_tera_model_status(blank());
     populate_tts_voices(win, &c);
     {
         // Reset the transient install state on (re)open — the Settings window is
@@ -1684,6 +1732,9 @@ pub(crate) fn populate_token_status(
         win.set_tts_installing(false);
         win.set_tts_install_phase(0);
         win.set_tts_install_label(SharedString::from(""));
+        win.set_tera_installing(false);
+        win.set_tera_install_phase(0);
+        win.set_tera_install_label(SharedString::from(""));
     }
     win.set_ai_local_thinking(c.ai_local_thinking);
     // Local model choice + whether the optional 26B-A4B is downloaded.

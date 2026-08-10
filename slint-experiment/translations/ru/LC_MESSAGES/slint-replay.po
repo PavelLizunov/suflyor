@@ -1989,3 +1989,24 @@ msgstr "Загрузка моделей аккаунта..."
 
 msgid "OpenCode or Qwen belong under Custom OpenAI-compatible bridge only when they expose a compatible inference endpoint."
 msgstr "OpenCode или Qwen настраиваются как пользовательский OpenAI-совместимый мост, только если они предоставляют совместимый endpoint для ответов."
+
+msgid "Engine:"
+msgstr "Движок:"
+
+msgid "EXPERIMENTAL: TeraTTSv2 neural engine (44.1 kHz, RU+EN). Downloads ~370 MB of ONNX graphs on demand. Read-aloud falls back to Piper while Tera is not installed or unavailable; speaker separation always uses Piper."
+msgstr "ЭКСПЕРИМЕНТАЛЬНО: нейродвижок TeraTTSv2 (44,1 кГц, RU+EN). По запросу скачивает ~370 МБ ONNX-графов. Пока Tera не установлена или недоступна, озвучка автоматически работает через Piper; определение говорящих всегда использует Piper."
+
+msgid "Install model"
+msgstr "Установить модель"
+
+msgid "Publishing…"
+msgstr "Публикация…"
+
+msgid "Model installed"
+msgstr "Модель установлена"
+
+msgid "Install cancelled"
+msgstr "Установка отменена"
+
+msgid "Couldn't install the model — check the connection and retry."
+msgstr "Не удалось установить модель — проверьте соединение и повторите."

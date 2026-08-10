@@ -1,9 +1,10 @@
-# suflyor local CI runner — fmt + clippy + tests for all three crates.
+# suflyor local CI runner — fmt + clippy + tests for all five crates.
 # Run BEFORE every commit (the .claude/hooks/git-gate.ps1 hook runs the
 # same checks automatically on commit/push).
 #
 # Covered: cargo fmt --check, clippy --all-targets -D warnings, test
-#   for slint-experiment, overlay-backend, AND suflyor-tts.
+#   for slint-experiment, overlay-backend, suflyor-wsola, suflyor-tts,
+#   AND suflyor-teratts.
 #
 # Not covered here (do manually): review-agent pass
 # (docs/REVIEW_AGENT_PROMPT.md) + a live smoke run of the overlay.
@@ -107,6 +108,19 @@ Run-Step "tts clippy -D warnings" {
 }
 Run-Step "tts test" {
     & $cargoExe test --manifest-path suflyor-tts/Cargo.toml --quiet
+}
+
+# --- suflyor-teratts (experimental TeraTTSv2 read-aloud sidecar, RC17) ---
+# Same shared target dir: its ort prebuilt download is reused by the host's
+# ort/GigaAM artifacts instead of re-downloading.
+Run-Step "teratts fmt --check" {
+    & $cargoExe fmt --manifest-path suflyor-teratts/Cargo.toml --all -- --check
+}
+Run-Step "teratts clippy -D warnings" {
+    & $cargoExe clippy --manifest-path suflyor-teratts/Cargo.toml --all-targets -- -D warnings
+}
+Run-Step "teratts test" {
+    & $cargoExe test --manifest-path suflyor-teratts/Cargo.toml --quiet
 }
 Remove-Item Env:\CARGO_TARGET_DIR -ErrorAction SilentlyContinue
 

@@ -13,10 +13,127 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child as Proc, ChildStdin, Command, Stdio};
-use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicU64, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 
 use base64::Engine as _;
+
+// ===== Engine selection (RC17) =====
+
+/// Read-aloud engine selection (config `tts_engine`). Diarization is NOT
+/// affected — it always runs in the Piper sidecar (`suflyor-tts.exe`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EngineKind {
+    /// sherpa-onnx Piper voices in `suflyor-tts.exe` (the default).
+    Piper,
+    /// Experimental TeraTTSv2 ONNX graphs in `suflyor-teratts.exe`.
+    Tera,
+}
+
+/// Parse config `tts_engine`: only the exact (case-insensitive) "tera"
+/// selects the experimental engine; anything else stays on Piper.
+#[must_use]
+pub fn parse_engine(raw: &str) -> EngineKind {
+    if raw.trim().eq_ignore_ascii_case("tera") {
+        EngineKind::Tera
+    } else {
+        EngineKind::Piper
+    }
+}
+
+/// Namespaced voice reference stored in config `tts_voice`: `piper:<dir>` or
+/// `tera:<style>`. Legacy bare ids (pre-RC17 configs) resolve to Piper, so an
+/// existing install keeps speaking with its saved voice.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VoiceRef {
+    pub engine: EngineKind,
+    pub id: String,
+}
+
+#[must_use]
+pub fn parse_voice_ref(raw: &str) -> VoiceRef {
+    let raw = raw.trim();
+    if let Some(rest) = raw.strip_prefix("tera:") {
+        VoiceRef {
+            engine: EngineKind::Tera,
+            id: rest.trim().to_string(),
+        }
+    } else if let Some(rest) = raw.strip_prefix("piper:") {
+        VoiceRef {
+            engine: EngineKind::Piper,
+            id: rest.trim().to_string(),
+        }
+    } else {
+        VoiceRef {
+            engine: EngineKind::Piper,
+            id: raw.to_string(),
+        }
+    }
+}
+
+#[must_use]
+pub fn format_voice_ref(voice: &VoiceRef) -> String {
+    let prefix = match voice.engine {
+        EngineKind::Piper => "piper:",
+        EngineKind::Tera => "tera:",
+    };
+    format!("{prefix}{}", voice.id)
+}
+
+/// Parsed READY handshake of the Tera sidecar stdout:
+/// `READY engine=tera revision=<hex> voices=<a,b> sample_rate=44100 state=<s>`.
+/// Old-style parsers that only prefix-match `READY` keep working.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TeraReady {
+    pub revision: String,
+    pub voices: Vec<String>,
+    pub sample_rate: u32,
+    /// `ready` | `not-installed` | `error`.
+    pub state: String,
+}
+
+/// Parse one stdout line of the Tera sidecar; None for anything that is not a
+/// well-formed READY handshake.
+#[must_use]
+pub fn parse_ready_line(line: &str) -> Option<TeraReady> {
+    let line = line.trim_end_matches(['\r', '\n']);
+    if !line.starts_with("READY ") {
+        return None;
+    }
+    let mut engine_ok = false;
+    let mut revision = String::new();
+    let mut voices = Vec::new();
+    let mut sample_rate = 0u32;
+    let mut state = String::new();
+    for field in line.split_whitespace().skip(1) {
+        let (key, value) = field.split_once('=')?;
+        match key {
+            "engine" => {
+                if value != "tera" {
+                    return None;
+                }
+                engine_ok = true;
+            }
+            "revision" => revision = value.to_string(),
+            "voices" => {
+                voices = value
+                    .split(',')
+                    .filter(|v| !v.is_empty())
+                    .map(str::to_string)
+                    .collect();
+            }
+            "sample_rate" => sample_rate = value.parse().ok()?,
+            "state" => state = value.to_string(),
+            _ => {}
+        }
+    }
+    engine_ok.then_some(TeraReady {
+        revision,
+        voices,
+        sample_rate,
+        state,
+    })
+}
 
 /// Absolute unix-ms deadline for suppressing STT while read-aloud plays.
 /// `u64::MAX` means playback is paused and may resume later.
@@ -283,19 +400,36 @@ pub struct VoiceInfo {
     pub name: String,
 }
 
-/// The sidecar process + its stdin, plus the config to re-apply on respawn.
+/// A Tera sidecar that crashes this many times in one session is declared
+/// unusable; read-aloud falls back to Piper until the app restarts.
+const TERA_CRASH_LIMIT: u32 = 3;
+
+/// One engine's sidecar process + its stdin, plus the config to re-apply on
+/// respawn. Piper and Tera share the line protocol, so one struct drives both.
 struct Sidecar {
+    kind: EngineKind,
     exe: PathBuf,
+    /// Bare voice id inside this engine's namespace (Piper model dir name or
+    /// Tera style id) — re-applied after every respawn.
     voice: String,
     rate: i32,
+    /// Language tag for the Tera sidecar (ignored by Piper).
+    lang: String,
     proc: Option<Proc>,
     stdin: Option<ChildStdin>,
+    /// Respawns after a detected crash. Past [`TERA_CRASH_LIMIT`] the engine
+    /// is bypassed for the rest of the session (fallback stays usable).
+    crashes: u32,
+    /// Latest READY handshake (Tera only; Piper stdout stays null).
+    ready: Arc<Mutex<Option<TeraReady>>>,
 }
 
 impl Sidecar {
-    /// Ensure a live child exists; (re)spawn if missing/dead and re-apply the
-    /// selected voice + rate. Lazy: the first command spawns it, so an idle app
-    /// that never reads anything aloud never starts the process.
+    /// Ensure a live child exists; (re)spawn if missing/dead and re-apply
+    /// LANG/VOICE/RATE. Lazy: the first command spawns it, so an idle app that
+    /// never reads anything aloud never starts the process. A child found DEAD
+    /// here crashed since the last spawn (the only other exit is app shutdown,
+    /// which never re-enters `ensure`).
     fn ensure(&mut self) {
         let alive = self
             .proc
@@ -305,16 +439,50 @@ impl Sidecar {
         if alive {
             return;
         }
+        if self.proc.is_some() {
+            self.crashes += 1;
+            log::warn!("tts: {:?} sidecar died (crash {})", self.kind, self.crashes);
+        }
         self.proc = None;
         self.stdin = None;
         if !self.exe.is_file() {
-            log::warn!("tts: sidecar exe not found at {:?}", self.exe);
+            log::warn!(
+                "tts: {:?} sidecar exe not found at {:?}",
+                self.kind,
+                self.exe
+            );
             return;
         }
-        match spawn_sidecar(&self.exe) {
+        match spawn_engine_sidecar(&self.exe, self.kind) {
             Ok(mut child) => {
+                if self.kind == EngineKind::Tera {
+                    if let Some(stdout) = child.stdout.take() {
+                        let slot = self.ready.clone();
+                        let _ = std::thread::Builder::new()
+                            .name("teratts-handshake".into())
+                            .spawn(move || {
+                                use std::io::BufRead as _;
+                                let mut lines = std::io::BufReader::new(stdout).lines();
+                                if let Some(Ok(first)) = lines.next() {
+                                    if let Some(parsed) = parse_ready_line(&first) {
+                                        if let Ok(mut guard) = slot.lock() {
+                                            *guard = Some(parsed);
+                                        }
+                                    }
+                                }
+                                // STARTED/DONE/FAILED/REJECTED lines are drained
+                                // and dropped: the host keeps its own speaking
+                                // estimate and the protocol never carries text.
+                                for _ in lines.by_ref() {}
+                            });
+                    }
+                }
                 self.stdin = child.stdin.take();
                 self.proc = Some(child);
+                if self.kind == EngineKind::Tera && !self.lang.is_empty() {
+                    let lang = self.lang.clone();
+                    self.write_raw(&format!("LANG {lang}"));
+                }
                 if !self.voice.is_empty() {
                     let v = self.voice.clone();
                     self.write_raw(&format!("VOICE {v}"));
@@ -322,8 +490,13 @@ impl Sidecar {
                 let r = self.rate;
                 self.write_raw(&format!("RATE {r}"));
             }
-            Err(e) => log::warn!("tts: failed to spawn sidecar: {e}"),
+            Err(e) => log::warn!("tts: failed to spawn {:?} sidecar: {e}", self.kind),
         }
+    }
+
+    /// Too many crashes — bypass this engine for the rest of the session.
+    fn crashed_out(&self) -> bool {
+        self.crashes >= TERA_CRASH_LIMIT
     }
 
     /// Write a line without (re)spawning — used internally right after spawn.
@@ -343,122 +516,285 @@ impl Sidecar {
     }
 }
 
-/// Handle to the TTS sidecar client. Cheap to clone.
+const TARGET_NONE: u8 = 0;
+const TARGET_PIPER: u8 = 1;
+const TARGET_TERA: u8 = 2;
+
+fn engine_code(kind: EngineKind) -> u8 {
+    match kind {
+        EngineKind::Piper => 0,
+        EngineKind::Tera => 1,
+    }
+}
+
+fn engine_from_code(code: u8) -> EngineKind {
+    if code == 1 {
+        EngineKind::Tera
+    } else {
+        EngineKind::Piper
+    }
+}
+
+/// Handle to the TTS sidecar client. Cheap to clone. Holds BOTH engine
+/// sidecars: the selected one speaks, and Piper stays the automatic fallback
+/// whenever Tera is not installed, not ready, or crashes.
 #[derive(Clone)]
 pub struct Tts {
-    sidecar: Arc<Mutex<Sidecar>>,
+    /// Selected engine (config `tts_engine`).
+    engine: Arc<AtomicU8>,
+    /// Which sidecar accepted the last SPEAK — pause/resume/stop route there.
+    last_target: Arc<AtomicU8>,
+    piper: Arc<Mutex<Sidecar>>,
+    tera: Arc<Mutex<Sidecar>>,
+    /// Installed Piper voices (the Settings chooser lists the active engine's
+    /// voices — see `voices`/`tera_voices`).
     voices: Arc<Vec<VoiceInfo>>,
 }
 
 impl Tts {
-    /// Build the client: scan installed voices and prepare (but don't yet spawn)
-    /// the sidecar. `voice_id` empty/unknown → auto-pick a Russian voice.
+    /// Build the client: scan installed Piper voices and prepare (but don't
+    /// yet spawn) both sidecars. `voice_raw` is the namespaced config value
+    /// (`piper:<dir>` / `tera:<style>`; empty/unknown → engine default).
     #[must_use]
-    pub fn spawn(voice_id: Option<String>, rate: i32) -> Self {
+    pub fn spawn(engine: EngineKind, voice_raw: Option<String>, rate: i32, lang: &str) -> Self {
         let voices = scan_installed_voices(true);
-        let voice = pick_voice_id(&voices, &voice_id.unwrap_or_default()).unwrap_or_default();
-        SPEAK_RATE.store(rate.clamp(-10, 10), Ordering::Release);
-        let sidecar = Sidecar {
+        let vref = parse_voice_ref(&voice_raw.unwrap_or_default());
+        let piper_configured = if vref.engine == EngineKind::Piper {
+            vref.id.as_str()
+        } else {
+            ""
+        };
+        let piper_voice = pick_voice_id(&voices, piper_configured).unwrap_or_default();
+        let tera_voice = if vref.engine == EngineKind::Tera {
+            vref.id.clone()
+        } else {
+            String::new()
+        };
+        let rate = rate.clamp(-10, 10);
+        SPEAK_RATE.store(rate, Ordering::Release);
+        let piper = Sidecar {
+            kind: EngineKind::Piper,
             exe: sidecar_exe_path(),
-            voice,
-            rate: rate.clamp(-10, 10),
+            voice: piper_voice,
+            rate,
+            lang: String::new(),
             proc: None,
             stdin: None,
+            crashes: 0,
+            ready: Arc::new(Mutex::new(None)),
+        };
+        let tera = Sidecar {
+            kind: EngineKind::Tera,
+            exe: tera_sidecar_exe_path(),
+            voice: tera_voice,
+            rate,
+            lang: lang.to_string(),
+            proc: None,
+            stdin: None,
+            crashes: 0,
+            ready: Arc::new(Mutex::new(None)),
         };
         Self {
-            sidecar: Arc::new(Mutex::new(sidecar)),
+            engine: Arc::new(AtomicU8::new(engine_code(engine))),
+            last_target: Arc::new(AtomicU8::new(TARGET_NONE)),
+            piper: Arc::new(Mutex::new(piper)),
+            tera: Arc::new(Mutex::new(tera)),
             voices: Arc::new(voices),
         }
     }
 
-    /// True when at least one voice model is installed AND the sidecar exe is
-    /// present (TTS usable).
+    /// The selected engine.
     #[must_use]
-    pub fn is_available(&self) -> bool {
-        if self.voices.is_empty() {
-            return false;
-        }
-        self.sidecar
-            .lock()
-            .map(|s| s.exe.is_file())
-            .unwrap_or(false)
+    pub fn engine_kind(&self) -> EngineKind {
+        engine_from_code(self.engine.load(Ordering::Acquire))
     }
 
-    /// The installed voices, for the Settings chooser.
+    /// Switch the selected engine at runtime (Settings). Warms the new target
+    /// if it is usable.
+    pub fn set_engine(&self, kind: EngineKind) {
+        self.engine.store(engine_code(kind), Ordering::Release);
+        self.warm();
+    }
+
+    /// Tera can speak right now: sidecar exe present, model fully installed,
+    /// and not crashed-out this session.
+    #[must_use]
+    pub fn tera_usable(&self) -> bool {
+        let process_ok = self
+            .tera
+            .lock()
+            .map(|s| s.exe.is_file() && !s.crashed_out())
+            .unwrap_or(false);
+        process_ok
+            && crate::teratts_install::installed_state()
+                == crate::teratts_install::TeraInstalled::Ready
+    }
+
+    /// Latest READY handshake of the Tera sidecar (None until it spawned and
+    /// answered). For the Settings status line + host tests.
+    #[must_use]
+    pub fn tera_ready(&self) -> Option<TeraReady> {
+        self.tera
+            .lock()
+            .ok()
+            .and_then(|s| s.ready.lock().ok().and_then(|g| g.clone()))
+    }
+
+    /// True when read-aloud can speak: the selected engine is usable, or the
+    /// Piper fallback is (Tera selected but broken still leaves Piper).
+    #[must_use]
+    pub fn is_available(&self) -> bool {
+        if self.engine_kind() == EngineKind::Tera && self.tera_usable() {
+            return true;
+        }
+        available_on_disk()
+    }
+
+    /// The installed Piper voices, for the Settings chooser.
     #[must_use]
     pub fn voices(&self) -> &[VoiceInfo] {
         &self.voices
     }
 
-    fn send(&self, line: String) {
-        if let Ok(mut s) = self.sidecar.lock() {
-            s.send(&line);
+    /// The pinned Tera voice styles, for the Settings chooser (installed or
+    /// not — the install button appears when the model is missing).
+    #[must_use]
+    pub fn tera_voices() -> Vec<String> {
+        crate::teratts_install::manifest()
+            .map(|m| {
+                let mut voices: Vec<String> = m
+                    .files
+                    .iter()
+                    .filter_map(|f| {
+                        let path = f.path.strip_prefix("styles/")?;
+                        Some(path.split('/').next()?.to_string())
+                    })
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .into_iter()
+                    .collect();
+                voices.sort();
+                voices
+            })
+            .unwrap_or_default()
+    }
+
+    fn send_to(&self, target: u8, line: &str) {
+        let sidecar = match target {
+            TARGET_TERA => &self.tera,
+            _ => &self.piper,
+        };
+        if let Ok(mut s) = sidecar.lock() {
+            s.send(line);
         }
     }
 
-    /// Speak `text` now, interrupting any current speech. `text` may be markdown
-    /// (a tile answer) — it is cleaned to spoken text first so the synthesizer
-    /// voices words, not `**` / backticks / `#`.
+    /// Speak `text` now, interrupting any current speech. `text` may be
+    /// markdown (a tile answer) — it is cleaned to spoken text first so the
+    /// synthesizer voices words, not `**` / backticks / `#`.
     ///
-    /// Returns whether playback was ACCEPTED — a voice is installed, the sidecar
-    /// exe is present (re-scanned like the free [`is_available`]), and the cleaned
-    /// text is non-empty. The STT suppression window is marked ONLY then, so a
-    /// missing sidecar/voice neither plays nor falsely silences the mic. Callers
-    /// gate their "this tile is speaking" state on this result.
+    /// Engine selection + fallback: with `tts_engine = "tera"` the Tera
+    /// sidecar speaks when usable; otherwise (not installed, not ready,
+    /// crashed-out, or Piper selected) the Piper sidecar speaks. Returns
+    /// whether playback was ACCEPTED — the STT suppression window is marked
+    /// ONLY then, so a missing engine neither plays nor falsely silences the
+    /// mic. Callers gate their "this tile is speaking" state on this result.
     pub fn speak(&self, text: &str) -> bool {
         let spoken = crate::tts_normalize::normalize_for_speech(&speech_text::to_speech(text));
         if spoken.trim().is_empty() {
             return false;
+        }
+        if self.engine_kind() == EngineKind::Tera {
+            if self.tera_usable() {
+                mark_speaking_for(spoken.chars().count());
+                let b64 = base64::engine::general_purpose::STANDARD.encode(&spoken);
+                self.send_to(TARGET_TERA, &format!("SPEAK {b64}"));
+                self.last_target.store(TARGET_TERA, Ordering::Release);
+                return true;
+            }
+            log::warn!("tts: Tera engine unavailable — falling back to Piper");
         }
         if !available_on_disk() {
             return false;
         }
         mark_speaking_for(spoken.chars().count());
         let b64 = base64::engine::general_purpose::STANDARD.encode(&spoken);
-        self.send(format!("SPEAK {b64}"));
+        self.send_to(TARGET_PIPER, &format!("SPEAK {b64}"));
+        self.last_target.store(TARGET_PIPER, Ordering::Release);
         true
     }
     pub fn pause(&self) {
-        // Preserve the remaining suppression before telling the sidecar to pause,
-        // so a long pause can't let the deadline expire.
+        // Preserve the remaining suppression before telling the sidecar to
+        // pause, so a long pause can't let the deadline expire.
         pause_speaking();
-        self.send("PAUSE".to_string());
+        let target = self.last_target.load(Ordering::Acquire);
+        if target != TARGET_NONE {
+            self.send_to(target, "PAUSE");
+        }
     }
     pub fn resume(&self) {
         resume_speaking();
-        self.send("RESUME".to_string());
+        let target = self.last_target.load(Ordering::Acquire);
+        if target != TARGET_NONE {
+            self.send_to(target, "RESUME");
+        }
     }
     pub fn stop(&self) {
         clear_speaking();
-        self.send("STOP".to_string());
+        let target = self.last_target.load(Ordering::Acquire);
+        if target != TARGET_NONE {
+            self.send_to(target, "STOP");
+        }
     }
     /// Set the read rate (−10…+10, 0 = normal). Applies to the next utterance.
+    /// Stored on both sidecars (survives respawn/fallback); sent live to the
+    /// one that last spoke.
     pub fn set_rate(&self, rate: i32) {
         let r = rate.clamp(-10, 10);
         SPEAK_RATE.store(r, Ordering::Release);
-        if let Ok(mut s) = self.sidecar.lock() {
-            s.rate = r;
-            s.send(&format!("RATE {r}"));
+        for sidecar in [&self.piper, &self.tera] {
+            if let Ok(mut s) = sidecar.lock() {
+                s.rate = r;
+            }
+        }
+        let target = self.last_target.load(Ordering::Acquire);
+        if target != TARGET_NONE {
+            self.send_to(target, &format!("RATE {r}"));
         }
     }
-    /// Switch the active voice by its [`VoiceInfo::id`] (the model dir name).
+    /// Switch the active voice by its NAMESPACED id (`piper:<dir>` or
+    /// `tera:<style>`; a bare legacy id targets Piper).
     pub fn set_voice(&self, id: &str) {
-        if let Ok(mut s) = self.sidecar.lock() {
-            s.voice = id.to_string();
-            s.send(&format!("VOICE {id}"));
+        let vref = parse_voice_ref(id);
+        let sidecar = match vref.engine {
+            EngineKind::Piper => &self.piper,
+            EngineKind::Tera => &self.tera,
+        };
+        if let Ok(mut s) = sidecar.lock() {
+            s.voice = vref.id.clone();
+            s.send(&format!("VOICE {}", vref.id));
         }
     }
 
-    /// Spawn the sidecar and preload the selected voice in the background, so the
-    /// first `speak` doesn't pay the model-load latency. No-op if no voice is
-    /// installed. The actual load happens inside the sidecar's own thread, so
-    /// this returns immediately.
+    /// Spawn the SELECTED engine's sidecar and preload its voice in the
+    /// background, so the first `speak` doesn't pay the model-load latency.
+    /// Tera only warms when actually usable (a not-installed model must not
+    /// spawn a failing sidecar); Piper needs an installed voice.
     pub fn warm(&self) {
-        if self.voices.is_empty() {
-            return;
-        }
-        if let Ok(mut s) = self.sidecar.lock() {
-            s.ensure();
+        match self.engine_kind() {
+            EngineKind::Tera => {
+                if self.tera_usable() {
+                    if let Ok(mut s) = self.tera.lock() {
+                        s.ensure();
+                    }
+                }
+            }
+            EngineKind::Piper => {
+                if !self.voices.is_empty() {
+                    if let Ok(mut s) = self.piper.lock() {
+                        s.ensure();
+                    }
+                }
+            }
         }
     }
 }
@@ -467,12 +803,19 @@ impl Tts {
 
 static GLOBAL: std::sync::OnceLock<std::sync::Mutex<Tts>> = std::sync::OnceLock::new();
 
-/// Initialize the global TTS client ONCE at startup (idempotent). `voice_id` /
-/// `rate` come from config. Warms the sidecar (spawns it + preloads the voice in
-/// the background) so the first 🔊 is prompt rather than paying a cold model load.
-/// Safe to do eagerly: the sidecar has no `ort`, so there's no STT conflict.
-pub fn init(voice_id: Option<String>, rate: i32) {
-    let tts = Tts::spawn(voice_id, rate);
+/// Initialize the global TTS client ONCE at startup (idempotent). `engine` /
+/// `voice_id` / `rate` come from config; `lang` ("ru"/"en") tags Tera speech.
+/// Warms the selected sidecar (spawns it + preloads the voice in the
+/// background) so the first speak is prompt rather than paying a cold model
+/// load. Safe to do eagerly: the sidecars carry their own onnxruntimes, never
+/// sharing the host's `ort`/GigaAM binary.
+pub fn init(engine: Option<String>, voice_id: Option<String>, rate: i32, lang: &str) {
+    let tts = Tts::spawn(
+        parse_engine(&engine.unwrap_or_default()),
+        voice_id,
+        rate,
+        lang,
+    );
     tts.warm();
     let _ = GLOBAL.set(std::sync::Mutex::new(tts));
 }
@@ -503,6 +846,32 @@ pub fn set_rate(rate: i32) {
 pub fn set_voice(id: &str) {
     with(|t| t.set_voice(id));
 }
+/// Switch the selected read-aloud engine at runtime (Settings changes).
+pub fn set_engine(engine_raw: &str) {
+    let kind = parse_engine(engine_raw);
+    with(|t| t.set_engine(kind));
+}
+/// The engine currently selected for read-aloud.
+#[must_use]
+pub fn active_engine() -> EngineKind {
+    with(|t| t.engine_kind()).unwrap_or(EngineKind::Piper)
+}
+/// Latest READY handshake of the Tera sidecar (Settings status + tests).
+#[must_use]
+pub fn tera_ready() -> Option<TeraReady> {
+    with(|t| t.tera_ready()).flatten()
+}
+/// True when the Tera engine can speak right now (exe + installed model +
+/// not crashed-out).
+#[must_use]
+pub fn tera_usable() -> bool {
+    with(|t| t.tera_usable()).unwrap_or(false)
+}
+/// The pinned Tera voice style ids for the Settings chooser.
+#[must_use]
+pub fn tera_voice_ids() -> Vec<String> {
+    Tts::tera_voices()
+}
 /// Preload the sidecar + voice in the background (called at startup by `init`).
 pub fn warm() {
     with(|t| t.warm());
@@ -529,8 +898,11 @@ fn available_on_disk() -> bool {
 
 // ===== Helpers (filesystem only — no sherpa/onnxruntime here) =====
 
-/// Resolve `suflyor-tts.exe` next to the running executable. `pub(crate)` so the
-/// diarization client (`crate::diarize`) spawns the SAME sidecar exe.
+/// Resolve `suflyor-tts.exe` next to the running executable — the PIPER
+/// read-aloud path. The diarization client deliberately resolves the same exe
+/// through its OWN helper (`crate::diarize::diarization_exe_path`) so the
+/// read-aloud and diarization sidecar paths stay independent even when
+/// read-aloud moves to the Tera sidecar.
 pub(crate) fn sidecar_exe_path() -> PathBuf {
     std::env::current_exe()
         .ok()
@@ -538,10 +910,24 @@ pub(crate) fn sidecar_exe_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("suflyor-tts.exe"))
 }
 
-/// Capture the sidecar's stderr (voice-load + synth + first-audio-latency
-/// diagnostics) to `%APPDATA%\suflyor\suflyor-tts.log`, falling back to null.
-fn sidecar_stderr() -> Stdio {
-    if let Some(p) = crate::paths::data_root().map(|d| d.join("suflyor-tts.log")) {
+/// Resolve `suflyor-teratts.exe` (experimental TeraTTSv2 read-aloud sidecar).
+/// Never used by diarization.
+pub(crate) fn tera_sidecar_exe_path() -> PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("suflyor-teratts.exe")))
+        .unwrap_or_else(|| PathBuf::from("suflyor-teratts.exe"))
+}
+
+/// Capture a sidecar's stderr (voice-load + synth + first-audio-latency
+/// diagnostics) to its own log under `%APPDATA%\suflyor\`, falling back to
+/// null. Logs never contain spoken text — the sidecars only print counts/ids.
+fn sidecar_stderr(kind: EngineKind) -> Stdio {
+    let name = match kind {
+        EngineKind::Piper => "suflyor-tts.log",
+        EngineKind::Tera => "suflyor-teratts.log",
+    };
+    if let Some(p) = crate::paths::data_root().map(|d| d.join(name)) {
         if let Ok(f) = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -553,11 +939,18 @@ fn sidecar_stderr() -> Stdio {
     Stdio::null()
 }
 
-fn spawn_sidecar(exe: &Path) -> std::io::Result<Proc> {
+fn spawn_engine_sidecar(exe: &Path, kind: EngineKind) -> std::io::Result<Proc> {
     let mut cmd = Command::new(exe);
+    // Tera's stdout carries the status handshake (READY/STARTED/DONE/FAILED);
+    // Piper keeps the legacy null stdout.
+    let stdout = if kind == EngineKind::Tera {
+        Stdio::piped()
+    } else {
+        Stdio::null()
+    };
     cmd.stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(sidecar_stderr());
+        .stdout(stdout)
+        .stderr(sidecar_stderr(kind));
     crate::download::no_window(&mut cmd).spawn()
 }
 
@@ -741,5 +1134,110 @@ mod tests {
             .ok()
             .and_then(|b| String::from_utf8(b).ok());
         assert_eq!(decoded.as_deref(), Some(text));
+    }
+
+    // ===== RC17: engine selection, namespaces, handshake, fallback =====
+
+    #[test]
+    fn engine_selection_defaults_to_piper() {
+        assert_eq!(parse_engine("tera"), EngineKind::Tera);
+        assert_eq!(parse_engine("TERA "), EngineKind::Tera);
+        assert_eq!(parse_engine("piper"), EngineKind::Piper);
+        assert_eq!(parse_engine(""), EngineKind::Piper);
+        assert_eq!(parse_engine("garbage"), EngineKind::Piper);
+    }
+
+    #[test]
+    fn voice_refs_namespace_and_legacy_compat() {
+        assert_eq!(
+            parse_voice_ref("tera:ru_f1"),
+            VoiceRef {
+                engine: EngineKind::Tera,
+                id: "ru_f1".into()
+            }
+        );
+        assert_eq!(
+            parse_voice_ref("piper:vits-piper-ru_RU-irina-medium"),
+            VoiceRef {
+                engine: EngineKind::Piper,
+                id: "vits-piper-ru_RU-irina-medium".into()
+            }
+        );
+        // Legacy bare id (pre-RC17 config) resolves to Piper.
+        assert_eq!(
+            parse_voice_ref("vits-piper-ru_RU-irina-medium").engine,
+            EngineKind::Piper
+        );
+        assert_eq!(
+            format_voice_ref(&parse_voice_ref("tera:ru_f1")),
+            "tera:ru_f1"
+        );
+        assert_eq!(
+            format_voice_ref(&parse_voice_ref("piper:irina")),
+            "piper:irina"
+        );
+    }
+
+    #[test]
+    fn ready_handshake_parses_capabilities() {
+        let line = "READY engine=tera revision=f05ea799 voices=ru_f1,ru_m5 \
+                    sample_rate=44100 state=ready";
+        let ready = parse_ready_line(line).unwrap();
+        assert_eq!(ready.revision, "f05ea799");
+        assert_eq!(ready.voices, vec!["ru_f1".to_string(), "ru_m5".to_string()]);
+        assert_eq!(ready.sample_rate, 44100);
+        assert_eq!(ready.state, "ready");
+        // Not-installed state with no voices still parses.
+        let empty = parse_ready_line(
+            "READY engine=tera revision=abc voices= sample_rate=44100 state=not-installed",
+        )
+        .unwrap();
+        assert!(empty.voices.is_empty());
+        assert_eq!(empty.state, "not-installed");
+    }
+
+    #[test]
+    fn ready_handshake_rejects_foreign_lines() {
+        // Legacy suflyor-tts handshake: still just "READY" — must NOT parse
+        // as a Tera handshake.
+        assert!(parse_ready_line("READY").is_none());
+        assert!(parse_ready_line("READY engine=piper").is_none());
+        assert!(parse_ready_line("STARTED id=1").is_none());
+        assert!(parse_ready_line("").is_none());
+        // Missing a required key=value field → malformed.
+        assert!(
+            parse_ready_line("READY engine=tera revision=x sample_rate=oops state=ready").is_none()
+        );
+    }
+
+    #[test]
+    fn tera_engine_falls_back_when_sidecar_missing() {
+        // Test binaries have no suflyor-teratts.exe next to them, so Tera is
+        // unusable and a Tera-selected client must NOT report itself usable —
+        // the Piper fallback path decides availability.
+        let tts = Tts::spawn(EngineKind::Tera, Some("tera:ru_f1".into()), 0, "ru");
+        assert_eq!(tts.engine_kind(), EngineKind::Tera);
+        assert!(!tts.tera_usable());
+        assert!(!tts.speak("Привет"));
+        tts.set_engine(EngineKind::Piper);
+        assert_eq!(tts.engine_kind(), EngineKind::Piper);
+    }
+
+    #[test]
+    fn crash_limit_bypasses_the_engine() {
+        let mut sidecar = Sidecar {
+            kind: EngineKind::Tera,
+            exe: PathBuf::from("missing.exe"),
+            voice: String::new(),
+            rate: 0,
+            lang: "ru".into(),
+            proc: None,
+            stdin: None,
+            crashes: 0,
+            ready: Arc::new(Mutex::new(None)),
+        };
+        assert!(!sidecar.crashed_out());
+        sidecar.crashes = TERA_CRASH_LIMIT;
+        assert!(sidecar.crashed_out());
     }
 }

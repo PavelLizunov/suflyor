@@ -1,11 +1,60 @@
-//! Read-aloud (Озвучка) Settings tab: voice chooser + speed preset + a test.
+//! Read-aloud (Озвучка) Settings tab: engine choice + voice chooser + speed
+//! preset + a test.
 //!
 //! Mirrors `settings_vision.rs`'s style — a `wire_voice_settings(&win, cfg)` that
 //! connects the panel callbacks. The voice list + the initial dropdown indices
 //! are seeded in `open_settings` (settings_controller.rs). The neural TTS itself
 //! runs in the `suflyor-tts.exe` sidecar; this module only saves config and
 //! nudges the running sidecar live through the `overlay_backend::tts` client.
+//!
+//! RC17 adds the experimental Tera engine: an engine chooser, a Tera model
+//! installer (on-demand download with SHA-verify + cancel), and namespaced
+//! voice ids (`piper:<dir>` / `tera:<style>`).
+
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+
 use super::{ComponentHandle, ModelRc, SettingsWindow, SharedString, VecModel};
+
+/// Engine chooser label for the Tera option (always marked experimental).
+pub(crate) fn tera_engine_label(ru: bool) -> &'static str {
+    if ru {
+        "Tera (экспериментально)"
+    } else {
+        "Tera (experimental)"
+    }
+}
+
+/// Dropdown label for a Tera voice style id — the upstream style ids are the
+/// stable names (`ru_f1`…), prefixed so the engine is obvious.
+pub(crate) fn tera_voice_label(id: &str) -> String {
+    format!("Tera {id}")
+}
+
+/// Localized one-line model status for the Tera section (ASCII markers only —
+/// no tofu glyphs).
+pub(crate) fn tera_status_line(
+    state: overlay_backend::teratts_install::TeraInstalled,
+    ru: bool,
+) -> String {
+    use overlay_backend::teratts_install::TeraInstalled;
+    match (state, ru) {
+        (TeraInstalled::Ready, true) => "[ок] Модель TeraTTSv2 установлена и готова".into(),
+        (TeraInstalled::Ready, false) => "[ok] TeraTTSv2 model installed and ready".into(),
+        (TeraInstalled::Missing, true) => {
+            "[--] Модель не установлена — нажмите «Установить модель» (~370 МБ)".into()
+        }
+        (TeraInstalled::Missing, false) => {
+            "[--] Model not installed — use Install model (~370 MB)".into()
+        }
+        (TeraInstalled::Broken, true) => {
+            "[!] Установка повреждена — отмените и установите заново".into()
+        }
+        (TeraInstalled::Broken, false) => {
+            "[!] Installation broken — cancel and install again".into()
+        }
+    }
+}
 
 /// Map a speed-preset index (the «0.75× … 2.0×» ComboBox) to the engine's
 /// integer rate (-10..10, where 0 = 1.0×). Matches `tts::rate_to_speed`:
@@ -35,15 +84,35 @@ pub(crate) fn wire_voice_settings(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::SharedConfig,
 ) {
-    // Voice chooser: index → the installed voice's id; save + apply live.
+    // Voice chooser: index → the CURRENT engine's voice id, saved as a
+    // namespaced reference (`piper:<dir>` / `tera:<style>`); apply live.
     {
         let cfg_c = cfg.clone();
         win.on_tts_voice_changed(move |idx| {
-            let voices = overlay_backend::tts::voices(cfg_c.read().ui_is_ru());
-            let Some(v) = voices.get(idx.max(0) as usize) else {
-                return;
+            let engine = overlay_backend::tts::parse_engine(&cfg_c.read().tts_engine);
+            let id = match engine {
+                overlay_backend::tts::EngineKind::Piper => {
+                    let ru = cfg_c.read().ui_is_ru();
+                    let voices = overlay_backend::tts::voices(ru);
+                    let Some(v) = voices.get(idx.max(0) as usize) else {
+                        return;
+                    };
+                    overlay_backend::tts::format_voice_ref(&overlay_backend::tts::VoiceRef {
+                        engine,
+                        id: v.id.clone(),
+                    })
+                }
+                overlay_backend::tts::EngineKind::Tera => {
+                    let ids = overlay_backend::tts::tera_voice_ids();
+                    let Some(id) = ids.get(idx.max(0) as usize) else {
+                        return;
+                    };
+                    overlay_backend::tts::format_voice_ref(&overlay_backend::tts::VoiceRef {
+                        engine,
+                        id: id.clone(),
+                    })
+                }
             };
-            let id = v.id.clone();
             {
                 let mut c = cfg_c.write();
                 c.tts_voice = id.clone();
@@ -54,6 +123,29 @@ pub(crate) fn wire_voice_settings(
             }
             overlay_backend::tts::set_voice(&id);
             diag!("tts_voice -> {id}");
+        });
+    }
+    // Engine chooser: save `tts_engine`, switch the live client, and reseed the
+    // tab so the voice list + install surface follow the new engine.
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_tts_engine_changed(move |idx| {
+            let engine_raw = if idx == 1 { "tera" } else { "piper" };
+            {
+                let mut c = cfg_c.write();
+                c.tts_engine = engine_raw.to_string();
+                if let Err(e) = overlay_backend::config::save(&c) {
+                    eprintln!("[overlay-host] tts_engine save failed: {e:#}");
+                    return;
+                }
+            }
+            overlay_backend::tts::set_engine(engine_raw);
+            if let Some(w) = weak.upgrade() {
+                let c = cfg_c.read();
+                super::settings_controller::populate_tts_voices(&w, &c);
+            }
+            diag!("tts_engine -> {engine_raw}");
         });
     }
     // Speed preset: index → integer rate; save + apply live.
@@ -157,19 +249,135 @@ pub(crate) fn wire_voice_settings(
                     if let Some(first) = voices.first() {
                         // Persist the selection so a restart resolves to the SAME
                         // voice the live session is now playing (not just whatever
-                        // pick_voice_id would prefer).
+                        // pick_voice_id would prefer). RC17: store the
+                        // namespaced reference (`piper:<dir>`).
+                        let namespaced = overlay_backend::tts::format_voice_ref(
+                            &overlay_backend::tts::VoiceRef {
+                                engine: overlay_backend::tts::EngineKind::Piper,
+                                id: first.id.clone(),
+                            },
+                        );
                         {
                             let mut c = cfg_t.write();
-                            c.tts_voice = first.id.clone();
+                            c.tts_voice = namespaced.clone();
                             if let Err(e) = overlay_backend::config::save(&c) {
                                 diag!("[overlay-host] tts_voice save after install failed: {e:#}");
                             }
                         }
-                        overlay_backend::tts::set_voice(&first.id);
+                        overlay_backend::tts::set_voice(&namespaced);
                     }
                     overlay_backend::tts::warm();
                 });
             });
+        });
+    }
+
+    // RC17 — Tera model installer: download the pinned TeraTTSv2 revision with
+    // SHA-verify into a staging dir + one atomic publish, on a worker thread.
+    // Cancel is generation-based: each start bumps a generation and stores a
+    // fresh flag; callbacks from stale generations are dropped.
+    let tera_state: Arc<Mutex<(u64, Option<Arc<AtomicBool>>)>> = Arc::new(Mutex::new((0, None)));
+    {
+        let weak = win.as_weak();
+        let cfg_install = cfg.clone();
+        let state = tera_state.clone();
+        win.on_tera_install_clicked(move || {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            if w.get_tera_installing() {
+                return; // already running
+            }
+            let (generation, cancel) = {
+                let mut guard = match state.lock() {
+                    Ok(g) => g,
+                    Err(_) => return,
+                };
+                guard.0 += 1;
+                let flag = Arc::new(AtomicBool::new(false));
+                guard.1 = Some(flag.clone());
+                (guard.0, flag)
+            };
+            w.set_tera_installing(true);
+            w.set_tera_install_phase(1); // preparing
+            w.set_tera_install_label(SharedString::from(""));
+            let weak_done = w.as_weak();
+            let cfg_t = cfg_install.clone();
+            let state_done = state.clone();
+            std::thread::spawn(move || {
+                let weak_cb = weak_done.clone();
+                let state_cb = state_done.clone();
+                let on = move |p: overlay_backend::teratts_install::TeraProgress| {
+                    use overlay_backend::teratts_install::TeraProgress;
+                    let (phase, label): (i32, String) = match p {
+                        TeraProgress::Preparing => (1, String::new()),
+                        TeraProgress::Downloading { file, index, total } => {
+                            (2, format!("{file} ({index}/{total})"))
+                        }
+                        TeraProgress::Verifying { file } => (3, file),
+                        TeraProgress::Publishing => (4, String::new()),
+                        TeraProgress::Installed => (6, String::new()),
+                    };
+                    let weak_in = weak_cb.clone();
+                    let state_in = state_cb.clone();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        // Drop stale-generation callbacks (a cancelled run that
+                        // reports after a newer one started).
+                        let current = state_in.lock().map(|g| g.0).unwrap_or(u64::MAX);
+                        if current != generation {
+                            return;
+                        }
+                        if let Some(w) = weak_in.upgrade() {
+                            w.set_tera_install_phase(phase);
+                            w.set_tera_install_label(SharedString::from(label));
+                        }
+                    });
+                };
+                let result = overlay_backend::teratts_install::install(&cancel, &on);
+                if let Err(e) = &result {
+                    // Detail to the local log only; the Settings field stays
+                    // generic (screen-shareable — no path/url leak).
+                    diag!("[overlay-host] tera model install failed: {e:#}");
+                }
+                let cancelled = cancel.load(Ordering::Acquire);
+                let _ = slint::invoke_from_event_loop(move || {
+                    let current = state_done.lock().map(|g| g.0).unwrap_or(u64::MAX);
+                    if current != generation {
+                        return;
+                    }
+                    if let Ok(mut guard) = state_done.lock() {
+                        guard.1 = None;
+                    }
+                    let Some(w) = weak_done.upgrade() else {
+                        return;
+                    };
+                    w.set_tera_installing(false);
+                    match &result {
+                        Ok(()) => {
+                            // Success — reseed the tab (status flips to ready,
+                            // voice list becomes usable) and warm the sidecar if
+                            // Tera is the selected engine.
+                            let c = cfg_t.read();
+                            super::settings_controller::populate_tts_voices(&w, &c);
+                            overlay_backend::tts::warm();
+                        }
+                        Err(_) => {
+                            w.set_tera_install_phase(if cancelled { 8 } else { 9 });
+                        }
+                    }
+                });
+            });
+        });
+    }
+    {
+        let state = tera_state.clone();
+        win.on_tera_install_cancel_clicked(move || {
+            if let Ok(guard) = state.lock() {
+                if let Some(flag) = &guard.1 {
+                    flag.store(true, Ordering::Release);
+                    diag!("[overlay-host] tera model install cancel requested");
+                }
+            }
         });
     }
 }
@@ -196,5 +404,29 @@ mod tests {
                                                  // An exact tie (rate 4 is equidistant from idx2 and idx3) picks the
                                                  // first/lower preset — pinned so the behaviour is intentional.
         assert_eq!(preset_for_tts_rate(4), 2);
+    }
+
+    #[test]
+    fn tera_labels_are_localized_and_ascii_safe() {
+        assert_eq!(tera_engine_label(true), "Tera (экспериментально)");
+        assert_eq!(tera_engine_label(false), "Tera (experimental)");
+        assert_eq!(tera_voice_label("ru_f1"), "Tera ru_f1");
+        // Status lines: localized, ASCII markers only (no tofu glyphs), no
+        // paths/urls (screen-shareable).
+        use overlay_backend::teratts_install::TeraInstalled;
+        for state in [
+            TeraInstalled::Ready,
+            TeraInstalled::Missing,
+            TeraInstalled::Broken,
+        ] {
+            for ru in [true, false] {
+                let line = tera_status_line(state, ru);
+                assert!(!line.is_empty());
+                assert!(!line.contains("http"), "{line}");
+                assert!(line.starts_with('['), "{line}");
+            }
+        }
+        assert!(tera_status_line(TeraInstalled::Ready, true).contains("установлена"));
+        assert!(tera_status_line(TeraInstalled::Ready, false).contains("installed"));
     }
 }

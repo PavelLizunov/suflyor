@@ -446,6 +446,17 @@ export component SettingsWindow inherits Window {
     callback tts-rate-changed(int);
     callback tts-test-clicked();
     callback tts-install-clicked();
+    // RC17 — read-aloud ENGINE choice (Piper default / Tera experimental) and
+    // the Tera model's install lifecycle (status string is Rust-built + localized).
+    in-out property <[string]> tts-engine-names;
+    in-out property <int> tts-engine-index: 0;
+    callback tts-engine-changed(int);
+    in-out property <string> tera-model-status;
+    in-out property <bool> tera-installing: false;
+    in-out property <int> tera-install-phase: 0;
+    in-out property <string> tera-install-label;
+    callback tera-install-clicked();
+    callback tera-install-cancel-clicked();
 
     // Text recognition (OCR) engine — local Tesseract for Shift+Alt+2 / Ctrl+F8,
     // installed on demand (not bundled).
@@ -1397,6 +1408,26 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
+                        // RC17 — engine choice: Piper (default) or the
+                        // experimental Tera sidecar. Piper stays the automatic
+                        // fallback whenever Tera is unavailable.
+                        HorizontalLayout {
+                            spacing: 8px;
+                            height: 32px;
+                            Text {
+                                text: @tr("Engine:");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                vertical-alignment: center;
+                            }
+                            SettingsComboBox {
+                                model: root.tts-engine-names;
+                                current-index: root.tts-engine-index;
+                                selected => { root.tts-engine-changed(self.current-index); }
+                            }
+                        }
+                        if root.tts-engine-index == 0 : VerticalLayout {
+                            spacing: 6px;
                         // Voice chooser — only when at least one voice is installed.
                         if root.tts-available : HorizontalLayout {
                             spacing: 8px;
@@ -1448,6 +1479,64 @@ export component SettingsWindow inherits Window {
                             font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
+                        }
+                        }
+                        if root.tts-engine-index == 1 : VerticalLayout {
+                            spacing: 6px;
+                        Text {
+                            text: @tr("EXPERIMENTAL: TeraTTSv2 neural engine (44.1 kHz, RU+EN). Downloads ~370 MB of ONNX graphs on demand. Read-aloud falls back to Piper while Tera is not installed or unavailable; speaker separation always uses Piper.");
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: root.tera-model-status;
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
+                        if root.tts-available : HorizontalLayout {
+                            spacing: 8px;
+                            height: 32px;
+                            Text {
+                                text: @tr("Voice:");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                vertical-alignment: center;
+                            }
+                            SettingsComboBox {
+                                model: root.tts-voice-names;
+                                current-index: root.tts-voice-index;
+                                selected => { root.tts-voice-changed(self.current-index); }
+                            }
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            height: 32px;
+                            spacing: 8px;
+                            Button {
+                                text: root.tera-installing ? @tr("Installing…") : @tr("Install model");
+                                enabled: !root.tera-installing && !root.tts-available;
+                                clicked => { root.tera-install-clicked(); }
+                            }
+                            Button {
+                                text: @tr("Cancel");
+                                visible: root.tera-installing;
+                                clicked => { root.tera-install-cancel-clicked(); }
+                            }
+                        }
+                        if root.tera-install-phase != 0 : Text {
+                            text: root.tera-install-phase == 1 ? @tr("Preparing…")
+                                : root.tera-install-phase == 2 ? @tr("Downloading: {}…", root.tera-install-label)
+                                : root.tera-install-phase == 3 ? @tr("Verifying: {}…", root.tera-install-label)
+                                : root.tera-install-phase == 4 ? @tr("Publishing…")
+                                : root.tera-install-phase == 6 ? @tr("Model installed")
+                                : root.tera-install-phase == 8 ? @tr("Install cancelled")
+                                : @tr("Couldn't install the model — check the connection and retry.");
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
                         }
                         // Speed preset (multipliers are language-neutral, untranslated).
                         HorizontalLayout {

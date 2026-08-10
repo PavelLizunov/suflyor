@@ -10,7 +10,7 @@
 ;   slint-experiment/target/release/bundle/suflyor-slint-setup.exe
 
 !define PRODUCT_NAME "suflyor"
-!define PRODUCT_VERSION "0.36.1-rc.16"
+!define PRODUCT_VERSION "0.36.1-rc.17"
 !define PRODUCT_PUBLISHER "x3d_mutant"
 !define PRODUCT_EXE "overlay-host.exe"
 !define PRODUCT_INSTALL_DIR "$LOCALAPPDATA\suflyor-slint"
@@ -38,6 +38,12 @@ Section "Main" SEC_MAIN
   ; crash). overlay-host spawns it from beside itself. The voices themselves are
   ; NOT bundled (too large) — installed on demand from Settings -> "Озвучка".
   File "..\slint-experiment\target\release\suflyor-tts.exe"
+  ; RC17 — experimental TeraTTSv2 read-aloud sidecar (ort ONNX graphs). Its
+  ; ~370 MB model is NEVER bundled here — downloaded on demand from the pinned
+  ; upstream revision via Settings -> Read aloud -> Tera -> Install model.
+  ; See suflyor-teratts/NOTICE.md: upstream ships no LICENSE, so redistribution
+  ; of the weights is gated until an archived author grant is on file.
+  File "..\slint-experiment\target\release\suflyor-teratts.exe"
   ; onnxruntime (GigaAM STT) is STATICALLY linked into the exe (ort 2.0
   ; download-binaries, no load-dynamic) -> no onnxruntime.dll to ship.
   ; The statically linked DirectML provider imports DMLCreateDevice1 at process
@@ -77,6 +83,7 @@ SectionEnd
 Section "Uninstall"
   Delete "$INSTDIR\${PRODUCT_EXE}"
   Delete "$INSTDIR\suflyor-tts.exe"
+  Delete "$INSTDIR\suflyor-teratts.exe"
   Delete "$INSTDIR\DirectML.dll"
   Delete "$INSTDIR\icon.ico"
   Delete "$INSTDIR\uninstall.exe"
