@@ -258,6 +258,7 @@ pub(crate) fn fire_ptt_ask(
     let (protocol, base_url, bearer, model, meeting_context, response_language, is_local) = {
         let c = cfg.read();
         let ep = c.ai_endpoint(false);
+        let is_unmetered = ep.is_unmetered();
         (
             ep.protocol,
             ep.base_url,
@@ -265,7 +266,7 @@ pub(crate) fn fire_ptt_ask(
             ep.model,
             c.meeting_context.clone(),
             c.response_language.clone(),
-            ep.is_local,
+            is_unmetered,
         )
     };
     let (stt_backend, stt_is_local, groq_key, stt_language, trigger_keywords) = {

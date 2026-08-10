@@ -427,6 +427,7 @@ pub(crate) fn fire_f9_ask(
         // V0.8.0 (Поток D) — route picks the endpoint: normal F9 = Text (local
         // or cloud per provider), Shift+F9 = Cloud (smart model, one-shot).
         let ep = route.endpoint(&c);
+        let is_unmetered = ep.is_unmetered();
         (
             ep.protocol,
             ep.base_url,
@@ -435,7 +436,7 @@ pub(crate) fn fire_f9_ask(
             c.meeting_context.clone(),
             c.response_language.clone(),
             c.max_session_cost_usd,
-            ep.is_local,
+            is_unmetered,
             overlay_backend::local_ai::local_vision_enabled(
                 &c,
                 &overlay_backend::local_ai::default_root(),
@@ -466,11 +467,12 @@ pub(crate) fn fire_f9_ask(
     };
     // A local TEXT model can't accept an image_url part — drop the
     // screenshot unless the user flagged the local model as vision-capable.
-    let screenshot = if is_local && !local_vision {
-        None
-    } else {
-        screenshot
-    };
+    let screenshot =
+        if matches!(protocol, ai::AiProtocol::CodexSubscription) || (is_local && !local_vision) {
+            None
+        } else {
+            screenshot
+        };
     let attached_screenshot = screenshot.is_some();
 
     let (journal_for_loop, health_for_stream) = {

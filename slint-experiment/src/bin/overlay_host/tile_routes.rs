@@ -32,7 +32,11 @@ impl AskRoute {
     /// intentionally run without one.
     pub(crate) fn has_required_auth(self, c: &overlay_backend::config::Config) -> bool {
         let endpoint = self.endpoint(c);
-        endpoint.is_local || !endpoint.bearer.trim().is_empty()
+        (!endpoint.requires_bearer() || !endpoint.bearer.trim().is_empty())
+            && (!matches!(
+                endpoint.protocol,
+                overlay_backend::ai::AiProtocol::CodexSubscription
+            ) || !endpoint.model.trim().is_empty())
     }
 
     /// Resolve the endpoint for this route from config.
@@ -93,5 +97,23 @@ mod tests {
         config.ai_provider = "local".into();
         config.ai_local_bearer.clear();
         assert!(AskRoute::Text.has_required_auth(&config));
+
+        config.ai_provider = "codex".into();
+        config.codex_model.clear();
+        assert!(!AskRoute::Text.has_required_auth(&config));
+        assert!(!AskRoute::Cloud.has_required_auth(&config));
+        config.codex_model = "gpt-safe".into();
+        assert!(AskRoute::Text.has_required_auth(&config));
+        assert!(AskRoute::Cloud.has_required_auth(&config));
+        for route in [AskRoute::Text, AskRoute::Cloud] {
+            let endpoint = route.endpoint(&config);
+            assert_eq!(
+                endpoint.protocol,
+                overlay_backend::ai::AiProtocol::CodexSubscription
+            );
+            assert_eq!(endpoint.model, "gpt-safe");
+            assert!(endpoint.base_url.is_empty());
+            assert!(endpoint.bearer.is_empty());
+        }
     }
 }

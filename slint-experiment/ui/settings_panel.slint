@@ -365,9 +365,14 @@ export component SettingsWindow inherits Window {
     in-out property <string> anthropic-model-input: "";
     in-out property <string> codex-auth-status: "";
     in-out property <bool> codex-auth-busy: false;
+    in-out property <bool> codex-models-busy: false;
     in-out property <string> codex-login-url: "";
     in-out property <string> codex-user-code: "";
     in-out property <string> codex-copy-status: "";
+    in-out property <[string]> codex-model-labels: [];
+    in-out property <[string]> codex-model-ids: [];
+    in-out property <int> codex-model-index: -1;
+    in-out property <string> codex-rate-status: "";
 
     // ТЗ 2026-07-09 — Hermes integration tab (settings_hermes.rs).
     // Bridge (Hermes → suflyor): loopback server the local agent reads from.
@@ -550,6 +555,8 @@ export component SettingsWindow inherits Window {
     callback codex-disconnect-clicked();
     callback codex-open-signin-clicked(string);
     callback codex-copy-code-clicked(string);
+    callback codex-model-selected(int);
+    callback codex-models-refresh();
     callback ai-model-selected(string);
     callback ai-models-refresh();
     callback ai-prompt-cache-changed(bool);
@@ -2079,7 +2086,7 @@ export component SettingsWindow inherits Window {
                                 @tr("Local OpenAI-compatible"),
                                 @tr("OpenAI API (Responses)"),
                                 @tr("Anthropic API (Messages)"),
-                                @tr("Codex connection (ChatGPT subscription, experimental)"),
+                                @tr("Codex safe models (ChatGPT, experimental)"),
                             ];
                             current-index: root.ai-provider-index;
                             selected => {
@@ -2263,7 +2270,7 @@ export component SettingsWindow inherits Window {
                         if root.ai-provider-index == 4 : VerticalLayout {
                             spacing: 8px;
                             vertical-stretch: 0;
-                            Text { text: @tr("Codex connection (ChatGPT subscription)"); font-size: 12px; font-weight: 700; color: Theme.text-primary; }
+                            Text { text: @tr("Codex safe models (ChatGPT subscription)"); font-size: 12px; font-weight: 700; color: Theme.text-primary; }
                             Text {
                                 text: @tr("Uses the official local Codex app-server. Codex owns the ChatGPT login and stores tokens; suflyor never reads them.");
                                 font-size: 10px;
@@ -2275,13 +2282,53 @@ export component SettingsWindow inherits Window {
                                 spacing: 6px;
                                 Button {
                                     text: root.codex-auth-busy ? @tr("Connecting...") : @tr("Connect ChatGPT");
-                                    enabled: !root.codex-auth-busy;
+                                    enabled: !root.codex-auth-busy && !root.codex-models-busy;
                                     clicked => { root.codex-connect-clicked(); }
                                 }
                                 Button {
                                     text: @tr("Disconnect");
                                     clicked => { root.codex-disconnect-clicked(); }
                                 }
+                            }
+                            Text {
+                                text: @tr("Account model:");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                SettingsComboBox {
+                                    model: root.codex-model-labels;
+                                    current-index: root.codex-model-index;
+                                    enabled: !root.codex-auth-busy && !root.codex-models-busy;
+                                    horizontal-stretch: 1;
+                                    selected => {
+                                        root.codex-model-index = self.current-index;
+                                        root.codex-model-selected(self.current-index);
+                                    }
+                                }
+                                Button {
+                                    text: root.codex-models-busy ? @tr("loading...") : @tr("refresh");
+                                    enabled: !root.codex-auth-busy && !root.codex-models-busy;
+                                    clicked => { root.codex-models-refresh(); }
+                                }
+                            }
+                            if root.codex-models-busy : Text {
+                                text: @tr("Loading account models...");
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                            }
+                            if !root.codex-models-busy && root.codex-model-labels.length == 0 : Text {
+                                text: @tr("No account models are available. Sign in or refresh.");
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            if root.codex-rate-status != "" : Text {
+                                text: root.codex-rate-status;
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
                             }
                             if root.codex-login-url != "" && root.codex-user-code != "" : HorizontalLayout {
                                 spacing: 6px;
@@ -2309,7 +2356,7 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-secondary;
                             }
                             Text {
-                                text: @tr("RC15 connection only: live answers are disabled because the stable app-server protocol cannot yet guarantee a no-tools, no-filesystem mode.");
+                                text: @tr("Experimental safe mode: the model is pinned; model-command file and network access are denied, and unexpected tools are stopped.");
                                 font-size: 10px;
                                 color: Theme.warning;
                                 wrap: word-wrap;

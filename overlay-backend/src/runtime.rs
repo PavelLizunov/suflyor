@@ -2140,7 +2140,7 @@ pub async fn reask_last(
     };
     // Local inference is free — don't bill it at the cloud fallback rate
     // (cost_microcents maps an unknown local model id to Sonnet pricing).
-    let micro = if is_local {
+    let micro = if is_local || protocol == ai::AiProtocol::CodexSubscription {
         0
     } else {
         ai::cost_microcents(&model, usage.input, usage.output)
@@ -2452,7 +2452,7 @@ pub async fn manual_spawn_tile(
     };
     // Local inference is free (see reask_last) — zero it so F6 on a local
     // model doesn't inflate the session cost meter / trip the cap.
-    let micro = if is_local {
+    let micro = if is_local || protocol == ai::AiProtocol::CodexSubscription {
         0
     } else {
         ai::cost_microcents(&model, usage.input, usage.output)

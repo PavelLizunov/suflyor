@@ -82,6 +82,10 @@ pub struct Config {
     pub anthropic_base_url: String,
     #[serde(default = "default_anthropic_model")]
     pub anthropic_model: String,
+    /// Exact account-managed model id selected from the official Codex
+    /// app-server catalog. No credential or endpoint is persisted alongside it.
+    #[serde(default)]
+    pub codex_model: String,
     /// Local server base URL (OpenAI-compatible). Default is llama.cpp's
     /// "http://127.0.0.1:8080/v1" (the shipped setup pipeline); Ollama uses
     /// "http://127.0.0.1:11434/v1".
@@ -607,6 +611,7 @@ impl Config {
             openai_model: default_openai_model(),
             anthropic_base_url: default_anthropic_base_url(),
             anthropic_model: default_anthropic_model(),
+            codex_model: String::new(),
             ai_local_base_url: default_ai_local_base_url(),
             ai_local_bearer: String::new(),
             ai_local_model: String::new(),
@@ -742,10 +747,10 @@ impl Config {
                 is_local: false,
             },
             "codex" => AiEndpoint {
-                protocol: AiProtocol::CodexSubscriptionConnectOnly,
+                protocol: AiProtocol::CodexSubscription,
                 base_url: String::new(),
                 bearer: String::new(),
-                model: String::new(),
+                model: self.codex_model.clone(),
                 is_local: false,
             },
             _ => AiEndpoint {
@@ -832,19 +837,26 @@ impl Config {
     pub fn readiness(&self) -> ReadinessReport {
         // AI — resolve the ACTIVE provider (local vs cloud) via the resolver.
         let ep = self.ai_endpoint(false);
-        let ai_configured = ep.protocol != AiProtocol::CodexSubscriptionConnectOnly
-            && !ep.base_url.trim().is_empty()
-            && !ep.model.trim().is_empty()
-            && (ep.is_local || !ep.bearer.trim().is_empty());
+        let ai_configured = if ep.protocol == AiProtocol::CodexSubscription {
+            !ep.model.trim().is_empty()
+        } else {
+            !ep.base_url.trim().is_empty()
+                && !ep.model.trim().is_empty()
+                && (ep.is_local || !ep.bearer.trim().is_empty())
+        };
         let ai_detail = if ai_configured {
             let provider = match ep.protocol {
                 AiProtocol::OpenAiCompatible if ep.is_local => "local",
                 AiProtocol::OpenAiCompatible => "cloud",
                 AiProtocol::OpenAiResponses => "openai",
                 AiProtocol::AnthropicMessages => "anthropic",
-                AiProtocol::CodexSubscriptionConnectOnly => "codex-connect-only",
+                AiProtocol::CodexSubscription => "codex-subscription",
             };
-            format!("{} · {} · {}", provider, ep.base_url, ep.model)
+            if ep.protocol == AiProtocol::CodexSubscription {
+                format!("{} · {}", provider, ep.model)
+            } else {
+                format!("{} · {} · {}", provider, ep.base_url, ep.model)
+            }
         } else {
             String::new()
         };
@@ -1460,6 +1472,7 @@ pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
     next.openai_model = imported.openai_model;
     next.anthropic_base_url = imported.anthropic_base_url;
     next.anthropic_model = imported.anthropic_model;
+    next.codex_model = imported.codex_model;
     // Local AI provider/endpoint.
     next.ai_local_base_url = imported.ai_local_base_url;
     next.ai_local_bearer = imported.ai_local_bearer;
@@ -1674,7 +1687,7 @@ pub fn preview_server_settings(current: &Config, imported: &Config) -> ServerSet
             false,
             false,
         ),
-        "codex" => (String::new(), String::new(), false, false),
+        "codex" => (String::new(), cfg.codex_model.clone(), false, false),
         _ => (
             cfg.ai_base_url.clone(),
             cfg.ai_model.clone(),

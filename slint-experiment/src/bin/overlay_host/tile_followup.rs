@@ -475,12 +475,13 @@ pub(crate) fn fire_followup_ask(
     ) = {
         let c = cfg.read();
         let ep = route.endpoint(&c);
+        let is_unmetered = ep.is_unmetered();
         (
             ep.protocol,
             ep.base_url,
             ep.bearer,
             ep.model,
-            ep.is_local,
+            is_unmetered,
             route.max_tokens(),
             c.response_language.clone(),
             c.meeting_context.clone(),
@@ -650,12 +651,13 @@ pub(crate) fn fire_regenerate(
     ) = {
         let c = cfg.read();
         let ep = route.endpoint(&c);
+        let is_unmetered = ep.is_unmetered();
         (
             ep.protocol,
             ep.base_url,
             ep.bearer,
             ep.model,
-            ep.is_local,
+            is_unmetered,
             route.max_tokens(),
             c.response_language.clone(),
             c.meeting_context.clone(),

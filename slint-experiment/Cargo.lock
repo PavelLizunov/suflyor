@@ -5850,7 +5850,7 @@ dependencies = [
 
 [[package]]
 name = "slint-replay"
-version = "0.36.1-rc.15"
+version = "0.36.1-rc.16"
 dependencies = [
  "anyhow",
  "base64 0.23.0",

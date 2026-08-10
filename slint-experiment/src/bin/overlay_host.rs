@@ -811,7 +811,7 @@ fn main() -> Result<(), slint::PlatformError> {
             } else {
                 "set"
             },
-            if !active_ai.is_local && active_ai.bearer.is_empty() {
+            if active_ai.requires_bearer() && active_ai.bearer.is_empty() {
                 "MISSING"
             } else {
                 "set"
@@ -3204,13 +3204,17 @@ fn main() -> Result<(), slint::PlatformError> {
             // the cloud fields unconditionally, which silently failed for a
             // local-provider user (the cloud bridge wasn't even running).
             let ep = cfg_ref.read().ai_endpoint(false);
-            let is_local = ep.is_local;
+            let is_local = ep.is_unmetered();
             let (base_url, bearer, model) =
                 (ep.base_url.clone(), ep.bearer.clone(), ep.model.clone());
             // Cloud needs a bearer; a LOCAL server (llama.cpp / Ollama) usually
             // doesn't — so an empty LOCAL bearer must NOT block the ask. This is
             // why "+ tile" wrongly said "AI не настроен" for a working local model.
-            if base_url.is_empty() || (!is_local && bearer.is_empty()) {
+            if (!matches!(ep.protocol, ai::AiProtocol::CodexSubscription)
+                && base_url.is_empty())
+                || (!is_local && bearer.is_empty())
+                || model.is_empty()
+            {
                 if let Some(t) = weak_for_ai.upgrade() {
                     let blocks: Vec<MarkdownBlock> = markdown::parse(manual_tile_not_configured(is_ru))
                     .into_iter()

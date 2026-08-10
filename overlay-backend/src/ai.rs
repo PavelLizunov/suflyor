@@ -17,10 +17,9 @@ pub enum AiProtocol {
     OpenAiCompatible,
     OpenAiResponses,
     AnthropicMessages,
-    /// Official Codex app-server account integration. RC14 deliberately keeps
-    /// this connect-only until the stable protocol can enforce no tools and no
-    /// filesystem reads for inference turns.
-    CodexSubscriptionConnectOnly,
+    /// Official Codex app-server account integration using the experimental,
+    /// fail-closed no-tools permission contract.
+    CodexSubscription,
 }
 
 impl AiProtocol {
@@ -30,13 +29,16 @@ impl AiProtocol {
             Self::OpenAiCompatible => "openai-compatible",
             Self::OpenAiResponses => "openai-responses",
             Self::AnthropicMessages => "anthropic-messages",
-            Self::CodexSubscriptionConnectOnly => "codex-subscription-connect-only",
+            Self::CodexSubscription => "codex-subscription",
         }
     }
 
     #[must_use]
     pub const fn supports_model_listing(self) -> bool {
-        matches!(self, Self::OpenAiCompatible | Self::OpenAiResponses)
+        matches!(
+            self,
+            Self::OpenAiCompatible | Self::OpenAiResponses | Self::CodexSubscription
+        )
     }
 
     #[must_use]
@@ -46,7 +48,7 @@ impl AiProtocol {
 
     #[must_use]
     pub const fn supports_live_answers(self) -> bool {
-        !matches!(self, Self::CodexSubscriptionConnectOnly)
+        true
     }
 }
 
@@ -59,6 +61,23 @@ pub struct AiEndpoint {
     pub bearer: String,
     pub model: String,
     pub is_local: bool,
+}
+
+impl AiEndpoint {
+    #[must_use]
+    pub const fn requires_bearer(&self) -> bool {
+        !self.is_local && !matches!(self.protocol, AiProtocol::CodexSubscription)
+    }
+
+    #[must_use]
+    pub const fn is_unmetered(&self) -> bool {
+        self.is_local || matches!(self.protocol, AiProtocol::CodexSubscription)
+    }
+
+    #[must_use]
+    pub const fn accepts_images(&self) -> bool {
+        !matches!(self.protocol, AiProtocol::CodexSubscription)
+    }
 }
 
 impl std::fmt::Debug for AiEndpoint {
@@ -278,6 +297,43 @@ pub fn stream_chat_endpoint(
     let (tx, rx) = mpsc::channel::<AiEvent>(64);
 
     tokio::spawn(async move {
+        if endpoint.protocol == AiProtocol::CodexSubscription {
+            let model = endpoint.model.clone();
+            let worker_tx = tx.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                crate::codex_subscription::run_turn(&model, &messages, |event| {
+                    let mapped = match event {
+                        crate::codex_subscription::TurnEvent::Start { id } => AiEvent::Start { id },
+                        crate::codex_subscription::TurnEvent::Delta { text } => {
+                            AiEvent::Delta { text }
+                        }
+                        crate::codex_subscription::TurnEvent::Done => AiEvent::Done {
+                            reason: "stop".into(),
+                        },
+                    };
+                    worker_tx.blocking_send(mapped).is_ok()
+                })
+            })
+            .await;
+            match result {
+                Ok(Ok(_)) | Ok(Err(crate::codex_subscription::TurnFailure::Cancelled)) => {}
+                Ok(Err(failure)) => {
+                    let _ = tx
+                        .send(AiEvent::Error {
+                            message: codex_failure_message(failure).to_string(),
+                        })
+                        .await;
+                }
+                Err(_) => {
+                    let _ = tx
+                        .send(AiEvent::Error {
+                            message: "Codex answer unavailable".into(),
+                        })
+                        .await;
+                }
+            }
+            return;
+        }
         // Refuse before waiting behind existing GPU work. Keep the same guard
         // in `stream_inner` as a race check if the lock flips after this point.
         if crate::deep_lock::endpoint_blocked(
@@ -345,6 +401,25 @@ pub async fn test_connection_messages(
     endpoint: AiEndpoint,
     messages: Vec<ChatMessage>,
 ) -> Result<String> {
+    if endpoint.protocol == AiProtocol::CodexSubscription {
+        let selected_model = endpoint.model.clone();
+        let snapshot = tokio::task::spawn_blocking(crate::codex_subscription::provider_snapshot)
+            .await
+            .map_err(|_| anyhow!("Codex account unavailable"))?;
+        let signed_in = matches!(
+            snapshot.account,
+            crate::codex_subscription::AccountState::SignedIn { .. }
+        );
+        if signed_in
+            && snapshot
+                .models
+                .iter()
+                .any(|model| model.id == selected_model)
+        {
+            return Ok("Codex account ready".into());
+        }
+        return Err(anyhow!("Codex account unavailable"));
+    }
     // Deep-lock guard (see crate::deep_lock): refuse managed-local traffic
     // while the bar's lock chip holds the deep lock. Cloud/external pass.
     if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), &endpoint.base_url)
@@ -422,6 +497,12 @@ pub async fn list_models(base_url: &str, bearer: &str) -> Result<Vec<String>> {
 }
 
 pub async fn list_models_endpoint(endpoint: &AiEndpoint) -> Result<Vec<String>> {
+    if endpoint.protocol == AiProtocol::CodexSubscription {
+        let snapshot = tokio::task::spawn_blocking(crate::codex_subscription::provider_snapshot)
+            .await
+            .map_err(|_| anyhow!("Codex model catalog unavailable"))?;
+        return Ok(snapshot.models.into_iter().map(|model| model.id).collect());
+    }
     if !endpoint.protocol.supports_model_listing() {
         return Ok(Vec::new());
     }
@@ -827,6 +908,22 @@ pub async fn complete_with_usage_endpoint(
     messages: Vec<ChatMessage>,
     max_tokens: u32,
 ) -> Result<(String, TokenUsage)> {
+    if endpoint.protocol == AiProtocol::CodexSubscription {
+        let model = endpoint.model.clone();
+        return tokio::task::spawn_blocking(move || {
+            let mut text = String::new();
+            let usage = crate::codex_subscription::run_turn(&model, &messages, |event| {
+                if let crate::codex_subscription::TurnEvent::Delta { text: delta } = event {
+                    text.push_str(&delta);
+                }
+                true
+            })
+            .map_err(|failure| anyhow!(codex_failure_message(failure)))?;
+            Ok((text, usage))
+        })
+        .await
+        .map_err(|_| anyhow!("Codex answer unavailable"))?;
+    }
     complete_with_usage_inner(
         endpoint.protocol,
         &endpoint.base_url,
@@ -837,6 +934,22 @@ pub async fn complete_with_usage_endpoint(
         false,
     )
     .await
+}
+
+fn codex_failure_message(failure: crate::codex_subscription::TurnFailure) -> &'static str {
+    use crate::codex_subscription::TurnFailure;
+    match failure {
+        TurnFailure::NotInstalled => "Official Codex app-server is unavailable",
+        TurnFailure::SignedOut => "ChatGPT sign-in is required",
+        TurnFailure::InvalidModel => "Select an available Codex model",
+        TurnFailure::UnsupportedSecurityProfile => {
+            "This Codex version cannot provide the required safe mode"
+        }
+        TurnFailure::SecurityViolation => "Codex security policy stopped this answer",
+        TurnFailure::ModelMismatch => "Codex did not honor the selected model",
+        TurnFailure::Cancelled => "Codex answer cancelled",
+        TurnFailure::Unavailable => "Codex answer unavailable",
+    }
 }
 
 /// Shared retry wrapper. `force_no_think` is threaded down to `complete_once`:
@@ -1058,6 +1171,11 @@ pub async fn complete_endpoint(
     messages: Vec<ChatMessage>,
     max_tokens: u32,
 ) -> Result<String> {
+    if endpoint.protocol == AiProtocol::CodexSubscription {
+        return complete_with_usage_endpoint(endpoint, messages, max_tokens)
+            .await
+            .map(|(text, _)| text);
+    }
     let (text, _usage) = complete_with_usage_inner(
         endpoint.protocol,
         &endpoint.base_url,
@@ -1505,6 +1623,17 @@ mod tests {
         assert!(!debug.contains("private.example"));
         assert!(!debug.contains("super-secret-token"));
         assert!(debug.contains("has_credential: true"));
+
+        let codex = AiEndpoint {
+            protocol: AiProtocol::CodexSubscription,
+            base_url: String::new(),
+            bearer: String::new(),
+            model: "gpt-safe".into(),
+            is_local: false,
+        };
+        assert!(!codex.requires_bearer());
+        assert!(codex.is_unmetered());
+        assert!(!codex.accepts_images());
     }
 
     #[test]

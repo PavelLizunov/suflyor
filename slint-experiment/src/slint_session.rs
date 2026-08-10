@@ -684,6 +684,7 @@ async fn maybe_spawn_auto_tile(
     ) = {
         let c = cfg.read();
         let ep = c.ai_endpoint(false);
+        let is_unmetered = ep.is_unmetered();
         (
             c.auto_tiles_enabled,
             c.auto_tile_every_line,
@@ -697,7 +698,7 @@ async fn maybe_spawn_auto_tile(
             c.max_session_cost_usd,
             c.tile_monitor_name.clone(),
             c.stealth_enabled,
-            ep.is_local,
+            is_unmetered,
         )
     };
     // A bearer is required only for the CLOUD bridge; local servers

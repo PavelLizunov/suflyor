@@ -46,12 +46,14 @@ use super::{
     populate_token_status, refresh_lock_chip, ComponentHandle, ModelRc, OverlayBarWindow,
     SettingsWindow, SharedString, VecModel,
 };
+use slint::Model;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Monotonically invalidates older worker results for the reused Settings
 /// window. Hardware discovery for a 26B note can outlast a later model choice.
 static LOCAL_MODEL_RESOURCE_WARNING_GENERATION: AtomicU64 = AtomicU64::new(0);
-static CODEX_UI_GENERATION: AtomicU64 = AtomicU64::new(0);
+static CODEX_LOGIN_UI_GENERATION: AtomicU64 = AtomicU64::new(0);
+static CODEX_SNAPSHOT_UI_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CodexCopyResult {
@@ -86,11 +88,20 @@ fn codex_copy_status(result: CodexCopyResult, is_ru: bool) -> &'static str {
 
 pub(crate) fn invalidate_codex_login_ui() -> u64 {
     overlay_backend::codex_subscription::cancel_pending_login();
-    CODEX_UI_GENERATION.fetch_add(1, Ordering::SeqCst) + 1
+    CODEX_SNAPSHOT_UI_GENERATION.fetch_add(1, Ordering::SeqCst);
+    CODEX_LOGIN_UI_GENERATION.fetch_add(1, Ordering::SeqCst) + 1
 }
 
 fn codex_ui_is_current(generation: u64) -> bool {
-    CODEX_UI_GENERATION.load(Ordering::SeqCst) == generation
+    CODEX_LOGIN_UI_GENERATION.load(Ordering::SeqCst) == generation
+}
+
+pub(crate) fn invalidate_codex_snapshot_ui() -> u64 {
+    CODEX_SNAPSHOT_UI_GENERATION.fetch_add(1, Ordering::SeqCst) + 1
+}
+
+fn codex_snapshot_ui_is_current(generation: u64) -> bool {
+    CODEX_SNAPSHOT_UI_GENERATION.load(Ordering::SeqCst) == generation
 }
 
 fn codex_account_label(
@@ -122,15 +133,82 @@ fn codex_account_label(
     }
 }
 
-pub(crate) fn refresh_codex_account_status(weak: slint::Weak<SettingsWindow>, is_ru: bool) {
-    let generation = invalidate_codex_login_ui();
+pub(crate) fn refresh_codex_account_status(
+    weak: slint::Weak<SettingsWindow>,
+    cfg: overlay_backend::config::SharedConfig,
+) {
+    let generation = invalidate_codex_snapshot_ui();
+    if let Some(window) = weak.upgrade() {
+        window.set_codex_models_busy(true);
+    }
     std::thread::spawn(move || {
-        let state = overlay_backend::codex_subscription::account_state();
-        let label = codex_account_label(&state, is_ru);
+        let (is_ru, saved) = {
+            let c = cfg.read();
+            (c.ui_is_ru(), c.codex_model.clone())
+        };
+        let snapshot = overlay_backend::codex_subscription::provider_snapshot();
+        let label = codex_account_label(&snapshot.account, is_ru);
+        let ids: Vec<String> = snapshot
+            .models
+            .iter()
+            .map(|model| model.id.clone())
+            .collect();
+        let labels: Vec<SharedString> = snapshot
+            .models
+            .iter()
+            .map(|model| SharedString::from(model.picker_label()))
+            .collect();
+        let selected = ids
+            .iter()
+            .position(|id| id == &saved)
+            .or_else(|| snapshot.models.iter().position(|model| model.is_default))
+            .or_else(|| (!ids.is_empty()).then_some(0));
+        let selected_id = selected.and_then(|index| ids.get(index)).cloned();
+        let fell_back = !saved.is_empty()
+            && selected_id.is_some()
+            && selected_id.as_deref() != Some(saved.as_str());
+        if let Some(id) = selected_id {
+            if id != saved && codex_snapshot_ui_is_current(generation) {
+                let mut c = cfg.write();
+                if codex_snapshot_ui_is_current(generation) && c.codex_model == saved {
+                    c.codex_model = id;
+                    if overlay_backend::config::save(&c).is_err() {
+                        eprintln!("[overlay-host] Codex model save failed");
+                    }
+                }
+            }
+        }
+        let mut secondary_status = Vec::new();
+        if fell_back {
+            secondary_status.push(if is_ru {
+                "Сохранённая модель недоступна; выбрана модель аккаунта.".to_string()
+            } else {
+                "The saved model is unavailable; the account model was selected.".to_string()
+            });
+        }
+        if let Some(status) = snapshot.rate_limits {
+            secondary_status.push(if is_ru {
+                format!(
+                    "Лимит аккаунта: {}",
+                    status
+                        .replace("% used", "% использовано")
+                        .replace(" min", " мин")
+                )
+            } else {
+                format!("Account limit: {status}")
+            });
+        }
+        let model_ids: Vec<SharedString> = ids.into_iter().map(SharedString::from).collect();
         let _ = slint::invoke_from_event_loop(move || {
-            if codex_ui_is_current(generation) {
+            if codex_snapshot_ui_is_current(generation) {
                 if let Some(window) = weak.upgrade() {
                     window.set_codex_auth_status(SharedString::from(label));
+                    window.set_codex_auth_busy(false);
+                    window.set_codex_models_busy(false);
+                    window.set_codex_model_ids(ModelRc::new(VecModel::from(model_ids)));
+                    window.set_codex_model_labels(ModelRc::new(VecModel::from(labels)));
+                    window.set_codex_model_index(selected.map_or(-1, |index| index as i32));
+                    window.set_codex_rate_status(SharedString::from(secondary_status.join("\n")));
                 }
             }
         });
@@ -491,11 +569,12 @@ pub(crate) fn wire_ai_settings(
             }
             diag!("ai_provider -> {provider}");
             if provider == "codex" {
-                refresh_codex_account_status(weak.clone(), cfg_c.read().ui_is_ru());
+                refresh_codex_account_status(weak.clone(), cfg_c.clone());
             } else {
                 invalidate_codex_login_ui();
                 if let Some(window) = weak.upgrade() {
                     window.set_codex_auth_busy(false);
+                    window.set_codex_models_busy(false);
                     window.set_codex_login_url(SharedString::default());
                     window.set_codex_user_code(SharedString::default());
                     window.set_codex_copy_status(SharedString::default());
@@ -565,10 +644,12 @@ pub(crate) fn wire_ai_settings(
                 "Starting official Codex sign-in..."
             }));
             let worker_weak = window.as_weak();
+            let worker_cfg = cfg_c.clone();
             std::thread::spawn(move || {
                 overlay_backend::codex_subscription::device_login(attempt, move |event| {
                     use overlay_backend::codex_subscription::LoginEvent;
                     let event_weak = worker_weak.clone();
+                    let event_cfg = worker_cfg.clone();
                     let _ = slint::invoke_from_event_loop(move || {
                         let Some(window) = event_weak.upgrade() else {
                             return;
@@ -576,6 +657,7 @@ pub(crate) fn wire_ai_settings(
                         if !codex_ui_is_current(generation) {
                             return;
                         }
+                        let is_ru = event_cfg.read().ui_is_ru();
                         match event {
                             LoginEvent::AwaitingUser {
                                 verification_url,
@@ -602,6 +684,7 @@ pub(crate) fn wire_ai_settings(
                                 window.set_codex_auth_status(SharedString::from(
                                     codex_account_label(&state, is_ru),
                                 ));
+                                refresh_codex_account_status(window.as_weak(), event_cfg);
                             }
                             LoginEvent::SignInRequired => {
                                 window.set_codex_auth_busy(false);
@@ -634,6 +717,34 @@ pub(crate) fn wire_ai_settings(
     {
         let weak = win.as_weak();
         let cfg_c = cfg.clone();
+        win.on_codex_model_selected(move |index| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            if index < 0 {
+                return;
+            }
+            let Some(model) = window.get_codex_model_ids().row_data(index as usize) else {
+                return;
+            };
+            invalidate_codex_snapshot_ui();
+            let mut c = cfg_c.write();
+            c.codex_model = model.to_string();
+            if overlay_backend::config::save(&c).is_err() {
+                eprintln!("[overlay-host] Codex model save failed");
+            }
+        });
+    }
+    {
+        let weak = win.as_weak();
+        let cfg_c = cfg.clone();
+        win.on_codex_models_refresh(move || {
+            refresh_codex_account_status(weak.clone(), cfg_c.clone());
+        });
+    }
+    {
+        let weak = win.as_weak();
+        let cfg_c = cfg.clone();
         win.on_codex_disconnect_clicked(move || {
             let Some(window) = weak.upgrade() else {
                 return;
@@ -641,6 +752,7 @@ pub(crate) fn wire_ai_settings(
             let is_ru = cfg_c.read().ui_is_ru();
             let generation = invalidate_codex_login_ui();
             window.set_codex_auth_busy(true);
+            window.set_codex_models_busy(false);
             window.set_codex_login_url(SharedString::default());
             window.set_codex_user_code(SharedString::default());
             window.set_codex_copy_status(SharedString::default());
@@ -653,6 +765,16 @@ pub(crate) fn wire_ai_settings(
                         if let Some(window) = worker_weak.upgrade() {
                             window.set_codex_auth_busy(false);
                             window.set_codex_auth_status(SharedString::from(label));
+                            window.set_codex_model_ids(ModelRc::new(VecModel::from(Vec::<
+                                SharedString,
+                            >::new(
+                            ))));
+                            window.set_codex_model_labels(ModelRc::new(VecModel::from(Vec::<
+                                SharedString,
+                            >::new(
+                            ))));
+                            window.set_codex_model_index(-1);
+                            window.set_codex_rate_status(SharedString::default());
                         }
                     }
                 });

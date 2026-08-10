@@ -709,22 +709,21 @@ fn direct_provider_profiles_are_additive_and_use_native_protocols() {
 }
 
 #[test]
-fn codex_subscription_profile_round_trips_but_is_connect_only() {
+fn codex_subscription_profile_round_trips_selected_model_without_secrets() {
     let mut cfg = Config::defaults();
     cfg.ai_provider = "codex".into();
+    cfg.codex_model = "gpt-5.4-codex".into();
     let endpoint = cfg.ai_endpoint(false);
-    assert_eq!(
-        endpoint.protocol,
-        crate::ai::AiProtocol::CodexSubscriptionConnectOnly
-    );
-    assert!(!endpoint.protocol.supports_live_answers());
+    assert_eq!(endpoint.protocol, crate::ai::AiProtocol::CodexSubscription);
+    assert!(endpoint.protocol.supports_live_answers());
+    assert_eq!(endpoint.model, "gpt-5.4-codex");
     assert!(endpoint.base_url.is_empty());
     assert!(endpoint.bearer.is_empty());
 
     let cloud_endpoint = cfg.ai_endpoint_cloud();
     assert_eq!(
         cloud_endpoint.protocol,
-        crate::ai::AiProtocol::CodexSubscriptionConnectOnly
+        crate::ai::AiProtocol::CodexSubscription
     );
     assert!(cloud_endpoint.base_url.is_empty());
     assert!(cloud_endpoint.bearer.is_empty());
@@ -734,6 +733,7 @@ fn codex_subscription_profile_round_trips_but_is_connect_only() {
     assert!(!json.contains("refresh_token"));
     let restored: Config = serde_json::from_str(&json).expect("round trip");
     assert_eq!(restored.ai_provider, "codex");
+    assert_eq!(restored.codex_model, "gpt-5.4-codex");
 
     let legacy: Config = serde_json::from_str("{}").expect("legacy config");
     assert_eq!(legacy.ai_provider, "cloud");
@@ -790,6 +790,26 @@ fn server_settings_merge_preserves_direct_provider_profile_without_secrets() {
     assert_eq!(merged.ai_provider, "anthropic");
     assert_eq!(merged.openai_model, "gpt-test");
     assert_eq!(merged.anthropic_model, "claude-test");
+}
+
+#[test]
+fn codex_model_is_in_redacted_preview_and_server_settings_merge() {
+    let mut current = Config::defaults();
+    current.ai_provider = "codex".into();
+    let mut imported = Config::defaults();
+    imported.ai_provider = "codex".into();
+    imported.codex_model = "gpt-account-model".into();
+
+    let preview = preview_server_settings(&current, &imported);
+    assert_eq!(preview.cloud_ai.provider_new, "codex");
+    assert_eq!(preview.cloud_ai.model_new, "gpt-account-model");
+    assert!(preview.cloud_ai.base_url_new.is_empty());
+    assert!(!preview.cloud_ai.has_key_field);
+    assert!(!preview.cloud_ai.key_present_new);
+
+    let merged = merge_server_settings(&current, imported);
+    assert_eq!(merged.ai_provider, "codex");
+    assert_eq!(merged.codex_model, "gpt-account-model");
 }
 
 #[test]

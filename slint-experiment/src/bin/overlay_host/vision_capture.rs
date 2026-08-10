@@ -600,10 +600,22 @@ pub(crate) fn launch_vision_for_bgra(
         );
         return;
     };
+    if !ep.accepts_images() {
+        ptt_tile_error(
+            weak_for_title.clone(),
+            if ui_is_ru {
+                "Выбранный AI-провайдер не принимает снимки экрана."
+            } else {
+                "The selected AI provider does not accept screenshots."
+            },
+            ui_is_ru,
+        );
+        return;
+    }
 
     // ===== 4. Snapshot what the streaming task needs =====
     let model = ep.model.clone();
-    let is_local = ep.is_local;
+    let is_local = ep.is_unmetered();
     // Feature #3/#4 — describe vs translate prompt (translate appends the IPA
     // phonetics suffix when the user enabled it). Computed sync (UI thread) so the
     // async task below just sends the finished string.
