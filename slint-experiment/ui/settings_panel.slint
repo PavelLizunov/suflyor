@@ -1483,6 +1483,10 @@ export component SettingsWindow inherits Window {
                         }
                         if root.tts-engine-index == 1 : VerticalLayout {
                             spacing: 6px;
+                            // The Tera install status grows to multiple lines. Keep this
+                            // section at its natural height so the following speed picker
+                            // cannot overlap the Install model / Cancel controls.
+                            vertical-stretch: 0;
                         Text {
                             text: @tr("EXPERIMENTAL: TeraTTSv2 neural engine (44.1 kHz, RU+EN). Downloads ~370 MB of ONNX graphs on demand. Read-aloud falls back to Piper while Tera is not installed or unavailable; speaker separation always uses Piper.");
                             font-size: 11px;
