@@ -172,6 +172,20 @@ mod tests {
     }
 
     #[test]
+    fn eng_m4_duration_style_keeps_the_verified_digest() {
+        let manifest = Manifest::pinned().unwrap();
+        let style = manifest
+            .files
+            .iter()
+            .find(|file| file.path == "styles/eng_m4/style_dp.npy")
+            .unwrap();
+        assert_eq!(
+            style.sha256.as_deref(),
+            Some("526724e17a6d0d917c18db0bac6ac97af15ae63312375129ef294462fbbfc0a2")
+        );
+    }
+
+    #[test]
     fn release_dir_names_the_revision() {
         let manifest = Manifest::pinned().unwrap();
         let dir = manifest.release_dir(Path::new("C:/appdata/suflyor/tts"));
