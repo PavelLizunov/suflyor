@@ -395,8 +395,9 @@ fn readiness_reflects_active_providers() {
     c3.stt_gigaam_dir = r"C:\m\gigaam".into();
     assert!(c3.readiness().stt.detail.contains("gigaam"));
 
-    // Vision (F8): "off" → unconfigured; "same" → reuses the text endpoint;
-    // detail carries provider + url + model but never a secret.
+    // Vision (F8): "off" → unconfigured; "same" only reuses a text endpoint
+    // whose image support is explicitly declared. Detail carries provider +
+    // url + model but never a secret.
     let mut cv = Config::defaults();
     cv.vision_provider = "off".into();
     assert!(
@@ -404,14 +405,15 @@ fn readiness_reflects_active_providers() {
         "vision=off must be unconfigured"
     );
     cv.vision_provider = "same".into();
-    cv.ai_provider = "cloud".into();
-    cv.ai_base_url = "http://bridge/v1".into();
-    cv.ai_bearer = "SECRET-bearer".into();
-    cv.ai_model = "claude-haiku".into();
+    cv.ai_provider = "local".into();
+    cv.ai_local_base_url = "http://127.0.0.1:8080/v1".into();
+    cv.ai_local_bearer = "SECRET-bearer".into();
+    cv.ai_local_model = "gemma-vision".into();
+    cv.ai_local_vision = true;
     let rv = cv.readiness();
     assert!(rv.vision.configured, "vision=same reuses the text endpoint");
     assert!(
-        rv.vision.detail.contains("same") && rv.vision.detail.contains("http://bridge/v1"),
+        rv.vision.detail.contains("same") && rv.vision.detail.contains("http://127.0.0.1:8080/v1"),
         "vision detail shows provider + url"
     );
     assert!(
@@ -714,6 +716,7 @@ fn codex_subscription_profile_round_trips_selected_model_without_secrets() {
     cfg.ai_provider = "codex".into();
     cfg.codex_model = "gpt-5.4-codex".into();
     cfg.codex_reasoning_effort = "xhigh".into();
+    cfg.codex_vision_model = "gpt-vision".into();
     let endpoint = cfg.ai_endpoint(false);
     assert_eq!(endpoint.protocol, crate::ai::AiProtocol::CodexSubscription);
     assert!(endpoint.protocol.supports_live_answers());
@@ -737,9 +740,11 @@ fn codex_subscription_profile_round_trips_selected_model_without_secrets() {
     assert_eq!(restored.ai_provider, "codex");
     assert_eq!(restored.codex_model, "gpt-5.4-codex");
     assert_eq!(restored.codex_reasoning_effort, "xhigh");
+    assert_eq!(restored.codex_vision_model, "gpt-vision");
 
     let legacy: Config = serde_json::from_str("{}").expect("legacy config");
     assert_eq!(legacy.ai_provider, "cloud");
+    assert!(legacy.codex_vision_model.is_empty());
 }
 
 #[test]
@@ -803,6 +808,7 @@ fn codex_model_is_in_redacted_preview_and_server_settings_merge() {
     imported.ai_provider = "codex".into();
     imported.codex_model = "gpt-account-model".into();
     imported.codex_reasoning_effort = "high".into();
+    imported.codex_vision_model = "gpt-account-vision".into();
 
     let preview = preview_server_settings(&current, &imported);
     assert_eq!(preview.cloud_ai.provider_new, "codex");
@@ -815,6 +821,21 @@ fn codex_model_is_in_redacted_preview_and_server_settings_merge() {
     assert_eq!(merged.ai_provider, "codex");
     assert_eq!(merged.codex_model, "gpt-account-model");
     assert_eq!(merged.codex_reasoning_effort, "high");
+    assert_eq!(merged.codex_vision_model, "gpt-account-vision");
+}
+
+#[test]
+fn legacy_server_import_does_not_erase_explicit_codex_models() {
+    let mut current = Config::defaults();
+    current.codex_model = "gpt-explicit".into();
+    current.codex_reasoning_effort = "low".into();
+    current.codex_vision_model = "gpt-explicit-vision".into();
+
+    let imported = Config::defaults();
+    let merged = merge_server_settings(&current, imported);
+    assert_eq!(merged.codex_model, "gpt-explicit");
+    assert_eq!(merged.codex_reasoning_effort, "low");
+    assert_eq!(merged.codex_vision_model, "gpt-explicit-vision");
 }
 
 #[test]
@@ -851,6 +872,7 @@ fn vision_endpoint_same_reuses_text_endpoint() {
     d.ai_provider = "local".into();
     d.ai_local_base_url = "http://127.0.0.1:8080/v1".into();
     d.ai_local_model = "gemma".into();
+    d.ai_local_vision = true;
     let v = d.vision_endpoint();
     assert_eq!(v.as_ref().map(|e| e.is_local), Some(true));
     assert_eq!(
@@ -858,6 +880,86 @@ fn vision_endpoint_same_reuses_text_endpoint() {
         Some("http://127.0.0.1:8080/v1".to_string())
     );
     assert_eq!(v.map(|e| e.model), Some("gemma".to_string()));
+}
+
+#[test]
+fn vision_endpoint_same_does_not_claim_implicit_codex_vision() {
+    let mut d = Config::defaults();
+    d.vision_provider = "same".into();
+    d.ai_provider = "codex".into();
+    d.codex_model = "text-only".into();
+    assert!(d.vision_endpoint().is_none());
+}
+
+#[test]
+fn vision_endpoint_same_uses_only_catalog_confirmed_codex_model() {
+    let mut d = Config::defaults();
+    d.vision_provider = "same".into();
+    d.ai_provider = "codex".into();
+    d.codex_model = "gpt-image".into();
+    d.codex_vision_model = "gpt-image".into();
+    let endpoint = d.vision_endpoint().expect("confirmed same Codex model");
+    assert_eq!(endpoint.protocol, crate::ai::AiProtocol::CodexSubscription);
+    assert_eq!(endpoint.model, "gpt-image");
+
+    d.codex_vision_model = "other-image-model".into();
+    assert!(d.vision_endpoint().is_none());
+}
+
+#[test]
+fn legacy_same_provider_migrates_without_unverified_image_claims() {
+    let mut cloud = Config::defaults();
+    cloud.vision_provider = "same".into();
+    cloud.ai_provider = "cloud".into();
+    assert!(migrate_legacy_vision_same(&mut cloud));
+    assert_eq!(cloud.vision_provider, "cloud");
+
+    let mut local = Config::defaults();
+    local.vision_provider = "same".into();
+    local.ai_provider = "local".into();
+    assert!(migrate_legacy_vision_same(&mut local));
+    assert_eq!(local.vision_provider, "off");
+
+    local.vision_provider = "same".into();
+    local.ai_local_vision = true;
+    assert!(!migrate_legacy_vision_same(&mut local));
+    assert_eq!(local.vision_provider, "same");
+}
+
+#[test]
+fn vision_endpoint_direct_providers_reuse_their_provider_profiles() {
+    let mut d = Config::defaults();
+    d.openai_base_url = "https://openai.example/v1".into();
+    d.openai_model = "gpt-vision".into();
+    d.vision_provider = "openai".into();
+    let openai = d.vision_endpoint().expect("openai vision endpoint");
+    assert_eq!(openai.protocol, crate::ai::AiProtocol::OpenAiResponses);
+    assert_eq!(openai.model, "gpt-vision");
+
+    d.anthropic_base_url = "https://anthropic.example/v1".into();
+    d.anthropic_model = "claude-vision".into();
+    d.vision_provider = "anthropic".into();
+    let anthropic = d.vision_endpoint().expect("anthropic vision endpoint");
+    assert_eq!(anthropic.protocol, crate::ai::AiProtocol::AnthropicMessages);
+    assert_eq!(anthropic.model, "claude-vision");
+}
+
+#[test]
+fn vision_endpoint_codex_requires_an_explicit_image_capable_selection() {
+    let mut d = Config::defaults();
+    d.vision_provider = "codex".into();
+    assert!(d.vision_endpoint().is_none());
+    d.codex_vision_model = "gpt-account-vision".into();
+    let endpoint = d.vision_endpoint().expect("codex vision endpoint");
+    assert_eq!(endpoint.protocol, crate::ai::AiProtocol::CodexSubscription);
+    assert_eq!(endpoint.model, "gpt-account-vision");
+    assert!(endpoint.reasoning_effort.is_none());
+    let readiness = d.readiness();
+    assert!(readiness.vision.configured);
+    assert_eq!(
+        readiness.vision.detail,
+        "codex · account · gpt-account-vision"
+    );
 }
 
 #[test]

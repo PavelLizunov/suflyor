@@ -375,6 +375,9 @@ export component SettingsWindow inherits Window {
     in-out property <[string]> codex-reasoning-labels: [];
     in-out property <[string]> codex-reasoning-ids: [];
     in-out property <int> codex-reasoning-index: -1;
+    in-out property <[string]> codex-vision-model-labels: [];
+    in-out property <[string]> codex-vision-model-ids: [];
+    in-out property <int> codex-vision-model-index: -1;
     in-out property <string> codex-rate-status: "";
 
     // ТЗ 2026-07-09 — Hermes integration tab (settings_hermes.rs).
@@ -414,7 +417,8 @@ export component SettingsWindow inherits Window {
     // Local AI provider (Phase 1): 0 = cloud bridge, 1 = local (Ollama/llama.cpp).
     in-out property <int> ai-provider-index: 0;
     // V4 — vision (screenshot · F8) channel, resolved separately from the text model.
-    in-out property <int> vision-provider-index: 2; // 0=off 1=same 2=cloud 3=local
+    in-out property <int> vision-provider-index: 3; // 0=off, 1=same, then the text-provider catalog
+    in-out property <bool> vision-same-available: false;
     // Feature #4 — IPA phonetics in F8 translate-mode output (OFF by default).
     in-out property <bool> vision-phonetics: false;
     // v0.11.0 — Test Practice mode for plain F8 (study / self-check). OFF default.
@@ -571,6 +575,7 @@ export component SettingsWindow inherits Window {
     callback codex-copy-code-clicked(string);
     callback codex-model-selected(int);
     callback codex-reasoning-selected(int);
+    callback codex-vision-model-selected(int);
     callback codex-models-refresh();
     callback ai-model-selected(string);
     callback ai-models-refresh();
@@ -3054,12 +3059,28 @@ export component SettingsWindow inherits Window {
                         }
                         Rectangle { background: Theme.border; height: 1px; }
                         SettingsComboBox {
-                            model: [@tr("Off"), @tr("Same as text model above"), @tr("Cloud (Sonnet via bridge)"), @tr("Local (2nd vision server)")];
+                            model: [
+                                @tr("Off"),
+                                root.vision-same-available
+                                    ? @tr("Same as text model above")
+                                    : @tr("Same as text model above (unavailable)"),
+                                @tr("Custom OpenAI-compatible bridge"),
+                                @tr("Local OpenAI-compatible"),
+                                @tr("OpenAI API (Responses)"),
+                                @tr("Anthropic API (Messages)"),
+                                @tr("Codex safe models (ChatGPT, experimental)"),
+                            ];
                             current-index: root.vision-provider-index;
                             selected => {
                                 root.vision-provider-index = self.current-index;
                                 root.vision-provider-changed(self.current-index);
                             }
+                        }
+                        if !root.vision-same-available : Text {
+                            text: @tr("Same as text model is unavailable because the selected text model does not declare image input. Choose another Vision provider or model.");
+                            font-size: 10px;
+                            color: Theme.warning;
+                            wrap: word-wrap;
                         }
                         if root.vision-provider-index == 2 : VerticalLayout {
                             spacing: 8px;
@@ -3135,7 +3156,90 @@ export component SettingsWindow inherits Window {
                                 Button { text: @tr("Save"); clicked => { root.vision-local-bearer-save(root.vision-local-bearer-input); root.vision-local-bearer-input = ""; } }
                             }
                         }
-                        if root.vision-provider-index >= 2 : HorizontalLayout {
+                        if root.vision-provider-index == 4 : Text {
+                            text: @tr("Vision uses the OpenAI API connection and model configured in AI providers above. Text and vision selections remain independent.");
+                            font-size: 10px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        if root.vision-provider-index == 5 : Text {
+                            text: @tr("Vision uses the Anthropic API connection and model configured in AI providers above. Text and vision selections remain independent.");
+                            font-size: 10px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        if root.vision-provider-index == 6 : VerticalLayout {
+                            spacing: 8px;
+                            Text {
+                                text: @tr("Choose a separate Codex model for screenshots. Only account models that advertise image input are shown.");
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            Text { text: root.codex-auth-status; font-size: 11px; color: Theme.text-secondary; wrap: word-wrap; }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: root.codex-auth-busy ? @tr("Connecting...") : @tr("Connect ChatGPT");
+                                    enabled: !root.codex-auth-busy && !root.codex-models-busy;
+                                    clicked => { root.codex-connect-clicked(); }
+                                }
+                                Button {
+                                    text: @tr("Disconnect");
+                                    clicked => { root.codex-disconnect-clicked(); }
+                                }
+                            }
+                            if root.codex-login-url != "" && root.codex-user-code != "" : HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: @tr("Open sign-in page");
+                                    clicked => { root.codex-open-signin-clicked(root.codex-login-url); }
+                                }
+                                Text {
+                                    text: @tr("Code:") + " " + root.codex-user-code;
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    color: Theme.accent;
+                                    vertical-alignment: center;
+                                }
+                                Button {
+                                    text: @tr("Copy code");
+                                    accessible-label: @tr("Copy one-time code");
+                                    enabled: root.codex-user-code != "";
+                                    clicked => { root.codex-copy-code-clicked(root.codex-user-code); }
+                                }
+                            }
+                            if root.codex-copy-status != "" : Text {
+                                text: root.codex-copy-status;
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                SettingsComboBox {
+                                    model: root.codex-vision-model-labels;
+                                    current-index: root.codex-vision-model-index;
+                                    enabled: !root.codex-auth-busy && !root.codex-models-busy && root.codex-vision-model-labels.length > 0;
+                                    horizontal-stretch: 1;
+                                    selected => {
+                                        root.codex-vision-model-index = self.current-index;
+                                        root.codex-vision-model-selected(self.current-index);
+                                    }
+                                }
+                                Button {
+                                    text: root.codex-models-busy ? @tr("loading...") : @tr("refresh");
+                                    enabled: !root.codex-auth-busy && !root.codex-models-busy;
+                                    clicked => { root.codex-models-refresh(); }
+                                }
+                            }
+                            if !root.codex-models-busy && root.codex-vision-model-labels.length == 0 : Text {
+                                text: @tr("No image-capable Codex account models are available. Sign in or refresh.");
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                        }
+                        if root.vision-provider-index >= 1 : HorizontalLayout {
                             spacing: 6px;
                             Button { text: @tr("Test vision connection"); clicked => { root.vision-test-clicked(); } }
                             if root.vision-test-result != "" : Text {

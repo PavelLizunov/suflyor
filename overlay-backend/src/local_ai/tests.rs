@@ -348,6 +348,7 @@ fn local_vision_toggle_enables_f8_route_for_ready_12b() {
     )
     .unwrap();
     let mut cfg = crate::config::Config {
+        ai_provider: "local".to_string(),
         ai_local_base_url: LLAMA_BASE_URL.to_string(),
         ai_local_model: GEMMA_FILE.to_string(),
         vision_provider: "off".to_string(),

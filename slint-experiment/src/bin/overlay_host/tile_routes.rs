@@ -46,7 +46,18 @@ impl AskRoute {
     ) -> overlay_backend::config::AiEndpoint {
         match self {
             AskRoute::Text => c.ai_endpoint(false),
-            AskRoute::Vision => c.vision_endpoint().unwrap_or_else(|| c.ai_endpoint(false)),
+            AskRoute::Vision => c.vision_endpoint().unwrap_or_else(|| {
+                // A Vision tile must never drift onto a text-only model when
+                // its configured route becomes unavailable between turns.
+                overlay_backend::config::AiEndpoint {
+                    protocol: overlay_backend::ai::AiProtocol::OpenAiCompatible,
+                    base_url: String::new(),
+                    bearer: String::new(),
+                    model: String::new(),
+                    reasoning_effort: None,
+                    is_local: false,
+                }
+            }),
             AskRoute::Cloud => c.ai_endpoint_cloud(),
         }
     }
@@ -115,5 +126,17 @@ mod tests {
             assert!(endpoint.base_url.is_empty());
             assert!(endpoint.bearer.is_empty());
         }
+    }
+
+    #[test]
+    fn missing_vision_route_never_falls_back_to_the_text_model() {
+        let mut config = overlay_backend::config::Config::defaults();
+        config.ai_provider = "codex".into();
+        config.codex_model = "text-only".into();
+        config.vision_provider = "same".into();
+
+        let endpoint = AskRoute::Vision.endpoint(&config);
+        assert!(endpoint.model.is_empty());
+        assert!(!AskRoute::Vision.has_required_auth(&config));
     }
 }

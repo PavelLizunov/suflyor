@@ -89,6 +89,10 @@ pub struct Config {
     /// Empty means the selected model's app-server default.
     #[serde(default)]
     pub codex_reasoning_effort: String,
+    /// Image-capable Codex model selected independently for F8. The Settings
+    /// picker fills this only from catalog entries advertising `image` input.
+    #[serde(default)]
+    pub codex_vision_model: String,
     /// Local server base URL (OpenAI-compatible). Default is llama.cpp's
     /// "http://127.0.0.1:8080/v1" (the shipped setup pipeline); Ollama uses
     /// "http://127.0.0.1:11434/v1".
@@ -133,11 +137,10 @@ pub struct Config {
 
     /// Screenshot/vision channel — resolved INDEPENDENTLY of the text AI (via
     /// [`Config::vision_endpoint`]) so a local text model can keep answering
-    /// while screenshots go to a vision-capable model. Provider: "off"
-    /// (disabled), "same" (reuse the text endpoint), "cloud" (the `vision_*`
-    /// bridge fields), or "local" (a 2nd local vision server). Default "cloud"
-    /// → F8 capture works out of the box through the configured bridge with a
-    /// Sonnet vision model.
+    /// while screenshots go to a vision-capable model. Provider: "off",
+    /// "cloud" (custom OpenAI-compatible bridge), "local", "openai",
+    /// "anthropic", or "codex". Legacy "same" configs remain readable.
+    /// Default "cloud" keeps F8 working through the configured bridge.
     #[serde(default = "default_vision_provider")]
     pub vision_provider: String,
     /// Cloud vision endpoint. Empty `base_url`/`bearer` fall back to the text
@@ -624,6 +627,7 @@ impl Config {
             anthropic_model: default_anthropic_model(),
             codex_model: String::new(),
             codex_reasoning_effort: String::new(),
+            codex_vision_model: String::new(),
             ai_local_base_url: default_ai_local_base_url(),
             ai_local_bearer: String::new(),
             ai_local_model: String::new(),
@@ -817,10 +821,21 @@ impl Config {
     }
 
     /// Resolve the SEPARATE vision endpoint, or `None` when vision is "off".
-    /// "same" reuses the text endpoint; "cloud"/"local" use the `vision_*` /
-    /// `vision_local_*` fields but fall back to the corresponding text fields
-    /// when left empty, so a configured bridge works without re-entering creds.
-    /// Cloud model falls back to Sonnet ([`DEFAULT_VISION_MODEL`]).
+    /// Legacy "same" reuses the text endpoint except for Codex, which requires
+    /// a catalog-verified image model. Bridge/local fields fall back to their
+    /// corresponding text fields; direct providers reuse their protected
+    /// profiles. Cloud model falls back to [`DEFAULT_VISION_MODEL`].
+    #[must_use]
+    pub fn same_text_model_accepts_images_declared(&self) -> bool {
+        match self.ai_provider.as_str() {
+            "local" => self.ai_local_vision,
+            "codex" => {
+                !self.codex_model.trim().is_empty() && self.codex_model == self.codex_vision_model
+            }
+            _ => false,
+        }
+    }
+
     #[must_use]
     pub fn vision_endpoint(&self) -> Option<AiEndpoint> {
         let pick = |specific: &str, fallback: &str| {
@@ -831,6 +846,7 @@ impl Config {
             }
         };
         match self.vision_provider.as_str() {
+            "same" if !self.same_text_model_accepts_images_declared() => None,
             "same" => Some(self.ai_endpoint(false)),
             "cloud" => Some(AiEndpoint {
                 protocol: AiProtocol::OpenAiCompatible,
@@ -847,6 +863,30 @@ impl Config {
                 model: pick(&self.vision_local_model, &self.ai_local_model),
                 reasoning_effort: None,
                 is_local: true,
+            }),
+            "openai" => Some(AiEndpoint {
+                protocol: AiProtocol::OpenAiResponses,
+                base_url: self.openai_base_url.clone(),
+                bearer: protected_provider_secret(SecretSlot::OpenAi),
+                model: self.openai_model.clone(),
+                reasoning_effort: None,
+                is_local: false,
+            }),
+            "anthropic" => Some(AiEndpoint {
+                protocol: AiProtocol::AnthropicMessages,
+                base_url: self.anthropic_base_url.clone(),
+                bearer: protected_provider_secret(SecretSlot::Anthropic),
+                model: self.anthropic_model.clone(),
+                reasoning_effort: None,
+                is_local: false,
+            }),
+            "codex" if !self.codex_vision_model.trim().is_empty() => Some(AiEndpoint {
+                protocol: AiProtocol::CodexSubscription,
+                base_url: String::new(),
+                bearer: String::new(),
+                model: self.codex_vision_model.clone(),
+                reasoning_effort: None,
+                is_local: false,
             }),
             _ => None, // "off" (or unknown) → feature disabled
         }
@@ -927,9 +967,15 @@ impl Config {
         // never a bearer (mirrors the AI line).
         let (vision_configured, vision_detail) = match self.vision_endpoint() {
             Some(ep) => {
-                let ok = !ep.base_url.trim().is_empty() && !ep.model.trim().is_empty();
+                let is_codex = ep.protocol == AiProtocol::CodexSubscription;
+                let ok =
+                    !ep.model.trim().is_empty() && (is_codex || !ep.base_url.trim().is_empty());
                 let d = if ok {
-                    format!("{} · {} · {}", self.vision_provider, ep.base_url, ep.model)
+                    if is_codex {
+                        format!("codex · account · {}", ep.model)
+                    } else {
+                        format!("{} · {} · {}", self.vision_provider, ep.base_url, ep.model)
+                    }
                 } else {
                     String::new()
                 };
@@ -1350,6 +1396,7 @@ pub fn load() -> Config {
     // an explicit choice already has at least one of these fields populated,
     // so migrate only the untouched legacy state.
     dirty |= migrate_legacy_tts_default(&mut cfg);
+    dirty |= migrate_legacy_vision_same(&mut cfg);
     // P1.3 — schema-versioning anchor. Stamp the file with the current schema
     // version so a FUTURE release can detect an older layout (config_version <
     // CURRENT) and run a one-time, number-keyed migration right here. Every
@@ -1379,6 +1426,21 @@ fn migrate_legacy_tts_default(cfg: &mut Config) -> bool {
     } else {
         false
     }
+}
+
+fn migrate_legacy_vision_same(cfg: &mut Config) -> bool {
+    if cfg.vision_provider != "same" {
+        return false;
+    }
+    let replacement = match cfg.ai_provider.as_str() {
+        "cloud" => "cloud",
+        "openai" => "openai",
+        "anthropic" => "anthropic",
+        "local" | "codex" if cfg.same_text_model_accepts_images_declared() => return false,
+        _ => "off",
+    };
+    cfg.vision_provider = replacement.to_string();
+    true
 }
 
 pub fn save(cfg: &Config) -> Result<()> {
@@ -1508,8 +1570,15 @@ pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
     next.openai_model = imported.openai_model;
     next.anthropic_base_url = imported.anthropic_base_url;
     next.anthropic_model = imported.anthropic_model;
-    next.codex_model = imported.codex_model;
-    next.codex_reasoning_effort = imported.codex_reasoning_effort;
+    // Empty remains the legacy/fresh "unset" marker. Importing an older
+    // profile must not erase an explicit account model chosen on this PC.
+    if !imported.codex_model.trim().is_empty() {
+        next.codex_model = imported.codex_model;
+        next.codex_reasoning_effort = imported.codex_reasoning_effort;
+    }
+    if !imported.codex_vision_model.trim().is_empty() {
+        next.codex_vision_model = imported.codex_vision_model;
+    }
     // Local AI provider/endpoint.
     next.ai_local_base_url = imported.ai_local_base_url;
     next.ai_local_bearer = imported.ai_local_bearer;

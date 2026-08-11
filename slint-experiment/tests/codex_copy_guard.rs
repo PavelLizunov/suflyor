@@ -93,8 +93,15 @@ fn account_catalog_picker_saves_exact_hidden_model_id() {
     assert!(rust.contains("window.set_codex_models_busy(false)"));
     assert!(rust.contains("c.codex_model == saved"));
     assert!(rust.contains("get_codex_model_ids().row_data(index as usize)"));
-    assert!(rust.contains("c.codex_model = model.to_string()"));
+    assert!(rust.contains("c.codex_model.clone_from(&model)"));
     assert!(rust.contains("c.codex_reasoning_effort = effort.to_string()"));
+    let refresh = between(
+        &rust,
+        "pub(crate) fn refresh_codex_account_status",
+        "pub(crate) enum ModelTarget",
+    );
+    assert!(refresh.contains(".map(codex_model_label)"));
+    assert!(!refresh.contains("picker_label()"));
     assert!(!rust.contains("auth.json"));
 }
 
@@ -114,6 +121,41 @@ fn active_login_rechecks_language_for_each_event() {
     let controller = fs::read_to_string(root.join("src/bin/overlay_host/settings_controller.rs"))
         .expect("read settings_controller.rs");
     assert!(controller.contains("win.set_codex_models_busy(false)"));
+}
+
+#[test]
+fn same_as_text_vision_is_visible_but_catalog_gated() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let ui = fs::read_to_string(root.join("ui/settings_panel.slint")).expect("read UI");
+    assert!(ui.contains("in-out property <bool> vision-same-available: false"));
+    assert!(ui.contains("Same as text model above (unavailable)"));
+    assert!(ui.contains("selected text model does not declare image input"));
+
+    let ai = fs::read_to_string(root.join("src/bin/overlay_host/settings_ai.rs"))
+        .expect("read settings_ai.rs");
+    assert!(ai.contains("selected_text_accepts_images"));
+    assert!(ai.contains("model.input_modalities.iter().any"));
+    assert!(ai.contains("window.set_vision_same_available(same_available)"));
+    let model_selected = between(
+        &ai,
+        "win.on_codex_model_selected",
+        "win.on_codex_reasoning_selected",
+    );
+    assert!(model_selected.contains("get_codex_vision_model_ids()"));
+    assert!(model_selected.contains("c.codex_vision_model.clone_from(&model)"));
+    assert!(model_selected.contains("c.vision_provider = \"off\".into()"));
+    assert!(model_selected.contains("c.codex_vision_model.clear()"));
+    assert!(ai.matches("c.codex_vision_model.clear()").count() >= 2);
+
+    let vision = fs::read_to_string(root.join("src/bin/overlay_host/settings_vision.rs"))
+        .expect("read settings_vision.rs");
+    let changed = between(
+        &vision,
+        "win.on_vision_provider_changed",
+        "win.on_vision_phonetics_changed",
+    );
+    assert!(changed.contains("!window.get_vision_same_available()"));
+    assert!(changed.contains("1 => \"same\""));
 }
 
 #[test]

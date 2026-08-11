@@ -54,6 +54,73 @@ use std::sync::atomic::{AtomicU64, Ordering};
 static LOCAL_MODEL_RESOURCE_WARNING_GENERATION: AtomicU64 = AtomicU64::new(0);
 static CODEX_LOGIN_UI_GENERATION: AtomicU64 = AtomicU64::new(0);
 static CODEX_SNAPSHOT_UI_GENERATION: AtomicU64 = AtomicU64::new(0);
+const PREFERRED_CODEX_MODEL: &str = "gpt-5.6-luna";
+
+fn codex_model_label(model: &overlay_backend::codex_subscription::CodexModel) -> SharedString {
+    SharedString::from(model.display_name.clone())
+}
+
+fn preferred_codex_model_index(
+    models: &[overlay_backend::codex_subscription::CodexModel],
+    saved: &str,
+    image_only: bool,
+) -> Option<usize> {
+    let allowed = |model: &overlay_backend::codex_subscription::CodexModel| {
+        !image_only || model.input_modalities.iter().any(|value| value == "image")
+    };
+    if !saved.is_empty() {
+        return models
+            .iter()
+            .position(|model| allowed(model) && model.id == saved);
+    }
+    models
+        .iter()
+        .position(|model| allowed(model) && model.id == PREFERRED_CODEX_MODEL)
+        .or_else(|| {
+            models
+                .iter()
+                .position(|model| allowed(model) && model.is_default)
+        })
+        .or_else(|| models.iter().position(allowed))
+}
+
+fn reasoning_label(effort: &str, is_ru: bool) -> String {
+    let title = effort.chars().next().map_or_else(String::new, |first| {
+        first.to_uppercase().collect::<String>() + &effort[first.len_utf8()..]
+    });
+    match (effort, is_ru) {
+        ("none" | "minimal", true) => format!("{title} (без reasoning, быстрее всего)"),
+        ("none" | "minimal", false) => format!("{title} (no reasoning, fastest)"),
+        ("low", true) => format!("{title} (самый быстрый доступный)"),
+        ("low", false) => format!("{title} (fastest available)"),
+        _ => title,
+    }
+}
+
+fn catalog_is_authoritative(state: &overlay_backend::codex_subscription::AccountState) -> bool {
+    matches!(
+        state,
+        overlay_backend::codex_subscription::AccountState::SignedIn { .. }
+    )
+}
+
+fn reasoning_normalization_notice(
+    saved: &str,
+    normalized: &str,
+    is_ru: bool,
+) -> Option<&'static str> {
+    if saved.is_empty() || saved == normalized {
+        None
+    } else if is_ru {
+        Some(
+            "Сохранённый уровень рассуждений больше не поддерживается; выбран режим по умолчанию модели.",
+        )
+    } else {
+        Some(
+            "The saved reasoning effort is no longer supported; the model default is now selected.",
+        )
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CodexCopyResult {
@@ -142,51 +209,86 @@ pub(crate) fn refresh_codex_account_status(
         window.set_codex_models_busy(true);
     }
     std::thread::spawn(move || {
-        let (is_ru, saved, saved_effort) = {
+        let (
+            is_ru,
+            saved,
+            saved_effort,
+            saved_vision,
+            saved_ai_provider,
+            saved_vision_provider,
+            baseline_same_available,
+        ) = {
             let c = cfg.read();
             (
                 c.ui_is_ru(),
                 c.codex_model.clone(),
                 c.codex_reasoning_effort.clone(),
+                c.codex_vision_model.clone(),
+                c.ai_provider.clone(),
+                c.vision_provider.clone(),
+                c.same_text_model_accepts_images_declared(),
             )
         };
         let snapshot = overlay_backend::codex_subscription::provider_snapshot();
+        let authoritative_catalog = catalog_is_authoritative(&snapshot.account);
         let label = codex_account_label(&snapshot.account, is_ru);
         let ids: Vec<String> = snapshot
             .models
             .iter()
             .map(|model| model.id.clone())
             .collect();
-        let labels: Vec<SharedString> = snapshot
-            .models
-            .iter()
-            .map(|model| SharedString::from(model.picker_label()))
-            .collect();
-        let selected = ids
-            .iter()
-            .position(|id| id == &saved)
-            .or_else(|| snapshot.models.iter().position(|model| model.is_default))
-            .or_else(|| (!ids.is_empty()).then_some(0));
+        let labels: Vec<SharedString> = snapshot.models.iter().map(codex_model_label).collect();
+        let selected = preferred_codex_model_index(&snapshot.models, &saved, false);
         let selected_id = selected.and_then(|index| ids.get(index)).cloned();
         let selected_model = selected.and_then(|index| snapshot.models.get(index));
+        let selected_text_accepts_images = selected_model
+            .is_some_and(|model| model.input_modalities.iter().any(|value| value == "image"));
+        let same_available = if saved_ai_provider == "codex" {
+            selected_text_accepts_images
+        } else {
+            baseline_same_available
+        };
+        let vision_models: Vec<_> = snapshot
+            .models
+            .iter()
+            .filter(|model| model.input_modalities.iter().any(|value| value == "image"))
+            .collect();
+        let vision_selected = preferred_codex_model_index(&snapshot.models, &saved_vision, true)
+            .and_then(|selected| {
+                let id = &snapshot.models[selected].id;
+                vision_models.iter().position(|model| model.id == *id)
+            });
+        let vision_selected_id = vision_selected.map(|index| vision_models[index].id.clone());
+        let vision_ids: Vec<SharedString> = vision_models
+            .iter()
+            .map(|model| SharedString::from(model.id.clone()))
+            .collect();
+        let vision_labels: Vec<SharedString> = vision_models
+            .iter()
+            .map(|model| codex_model_label(model))
+            .collect();
         let mut reasoning_ids = vec![String::new()];
         if let Some(model) = selected_model {
             reasoning_ids.extend(model.reasoning_efforts.iter().cloned());
         }
         let default_effort = selected_model
             .and_then(|model| model.default_reasoning_effort.as_deref())
-            .unwrap_or("model default");
+            .unwrap_or(if is_ru {
+                "по настройке модели"
+            } else {
+                "model default"
+            });
         let mut reasoning_labels = vec![if is_ru {
             format!("По умолчанию ({default_effort})")
         } else {
             format!("Default ({default_effort})")
         }];
-        reasoning_labels.extend(reasoning_ids.iter().skip(1).map(|effort| {
-            let mut chars = effort.chars();
-            chars.next().map_or_else(String::new, |first| {
-                first.to_uppercase().collect::<String>() + chars.as_str()
-            })
-        }));
+        reasoning_labels.extend(
+            reasoning_ids
+                .iter()
+                .skip(1)
+                .map(|effort| reasoning_label(effort, is_ru)),
+        );
         let reasoning_selected = reasoning_ids
             .iter()
             .position(|effort| effort == &saved_effort)
@@ -195,11 +297,10 @@ pub(crate) fn refresh_codex_account_status(
             .get(reasoning_selected)
             .cloned()
             .unwrap_or_default();
-        let fell_back = !saved.is_empty()
-            && selected_id.is_some()
-            && selected_id.as_deref() != Some(saved.as_str());
-        if let Some(id) = selected_id {
-            if (id != saved || normalized_effort != saved_effort)
+        let saved_missing = !saved.is_empty() && selected_id.is_none();
+        let vision_saved_missing = !saved_vision.is_empty() && vision_selected_id.is_none();
+        if let Some(id) = selected_id.clone() {
+            if (saved.is_empty() || normalized_effort != saved_effort)
                 && codex_snapshot_ui_is_current(generation)
             {
                 let mut c = cfg.write();
@@ -215,12 +316,69 @@ pub(crate) fn refresh_codex_account_status(
                 }
             }
         }
+        if saved_vision.is_empty() {
+            if let Some(id) = vision_selected_id.clone() {
+                if codex_snapshot_ui_is_current(generation) {
+                    let mut c = cfg.write();
+                    if codex_snapshot_ui_is_current(generation) && c.codex_vision_model.is_empty() {
+                        c.codex_vision_model = id;
+                        if overlay_backend::config::save(&c).is_err() {
+                            eprintln!("[overlay-host] Codex vision model save failed");
+                        }
+                    }
+                }
+            }
+        }
+        let mut same_forced_off = false;
+        if authoritative_catalog
+            && saved_ai_provider == "codex"
+            && saved_vision_provider == "same"
+            && codex_snapshot_ui_is_current(generation)
+        {
+            let mut c = cfg.write();
+            if codex_snapshot_ui_is_current(generation)
+                && c.ai_provider == "codex"
+                && c.vision_provider == "same"
+            {
+                if selected_text_accepts_images {
+                    if let Some(id) = selected_id.as_ref() {
+                        if c.codex_vision_model != *id {
+                            c.codex_vision_model.clone_from(id);
+                            if overlay_backend::config::save(&c).is_err() {
+                                eprintln!("[overlay-host] Codex same-model vision save failed");
+                            }
+                        }
+                    }
+                } else {
+                    c.vision_provider = "off".into();
+                    c.codex_vision_model.clear();
+                    same_forced_off = true;
+                    if overlay_backend::config::save(&c).is_err() {
+                        eprintln!("[overlay-host] invalid same-model vision repair failed");
+                    }
+                }
+            }
+        }
         let mut secondary_status = Vec::new();
-        if fell_back {
+        if let Some(notice) =
+            reasoning_normalization_notice(&saved_effort, &normalized_effort, is_ru)
+        {
+            secondary_status.push(notice.to_string());
+        }
+        if saved_missing {
             secondary_status.push(if is_ru {
-                "Сохранённая модель недоступна; выбрана модель аккаунта.".to_string()
+                "Сохранённая модель недоступна; выбор сохранён без замены.".to_string()
             } else {
-                "The saved model is unavailable; the account model was selected.".to_string()
+                "The saved model is unavailable; the selection was preserved.".to_string()
+            });
+        }
+        if vision_saved_missing {
+            secondary_status.push(if is_ru {
+                "Сохранённая модель зрения недоступна или не принимает изображения; выбор сохранён без замены."
+                    .to_string()
+            } else {
+                "The saved vision model is unavailable or cannot accept images; the selection was preserved."
+                    .to_string()
             });
         }
         if let Some(status) = snapshot.rate_limits {
@@ -251,10 +409,20 @@ pub(crate) fn refresh_codex_account_status(
                     window.set_codex_model_ids(ModelRc::new(VecModel::from(model_ids)));
                     window.set_codex_model_labels(ModelRc::new(VecModel::from(labels)));
                     window.set_codex_model_index(selected.map_or(-1, |index| index as i32));
+                    window.set_codex_vision_model_ids(ModelRc::new(VecModel::from(vision_ids)));
+                    window
+                        .set_codex_vision_model_labels(ModelRc::new(VecModel::from(vision_labels)));
+                    window.set_codex_vision_model_index(
+                        vision_selected.map_or(-1, |index| index as i32),
+                    );
                     window.set_codex_reasoning_ids(ModelRc::new(VecModel::from(reasoning_ids)));
                     window
                         .set_codex_reasoning_labels(ModelRc::new(VecModel::from(reasoning_labels)));
                     window.set_codex_reasoning_index(reasoning_selected as i32);
+                    window.set_vision_same_available(same_available);
+                    if same_forced_off {
+                        window.set_vision_provider_index(0);
+                    }
                     window.set_codex_rate_status(SharedString::from(secondary_status.join("\n")));
                 }
             }
@@ -594,6 +762,13 @@ pub(crate) fn wire_ai_settings(
             if overlay_backend::deep_lock::cfg_is_managed_local(&c) && c.deep_lock {
                 c.suppress_tiles = true;
             }
+            if c.vision_provider == "same" && !c.same_text_model_accepts_images_declared() {
+                c.vision_provider = "off".into();
+            }
+            let vision_state = (
+                c.vision_provider.clone(),
+                c.same_text_model_accepts_images_declared(),
+            );
             let local_state = (provider == "local").then(|| {
                 let root = overlay_backend::local_ai::default_root();
                 (
@@ -609,13 +784,20 @@ pub(crate) fn wire_ai_settings(
                 eprintln!("[overlay-host] ai_provider save failed: {e:#}");
                 return;
             }
+            let codex_needed = provider == "codex" || c.vision_provider == "codex";
             overlay_backend::ai::set_local_no_think(provider == "local" && !c.ai_local_thinking);
             drop(c);
             if let Some(o) = overlay.upgrade() {
                 refresh_lock_chip(&o, &cfg_c);
             }
+            if let Some(window) = weak.upgrade() {
+                window.set_vision_provider_index(
+                    super::settings_vision::vision_provider_index_from_id(&vision_state.0),
+                );
+                window.set_vision_same_available(vision_state.1);
+            }
             diag!("ai_provider -> {provider}");
-            if provider == "codex" {
+            if codex_needed {
                 refresh_codex_account_status(weak.clone(), cfg_c.clone());
             } else {
                 invalidate_codex_login_ui();
@@ -649,13 +831,11 @@ pub(crate) fn wire_ai_settings(
                     )])));
                     w.set_ai_local_model_index(0);
                     w.set_ai_local_vision(local_vision);
+                    w.set_vision_same_available(local_vision);
                     w.set_ai_local_vision_available(vision_available);
-                    w.set_vision_provider_index(match vision_provider.as_str() {
-                        "off" => 0,
-                        "same" => 1,
-                        "local" => 3,
-                        _ => 2,
-                    });
+                    w.set_vision_provider_index(
+                        super::settings_vision::vision_provider_index_from_id(&vision_provider),
+                    );
                     refresh_local_model_resource_warning(
                         &w,
                         overlay_backend::local_ai::default_root(),
@@ -775,15 +955,38 @@ pub(crate) fn wire_ai_settings(
             let Some(model) = window.get_codex_model_ids().row_data(index as usize) else {
                 return;
             };
+            let model = model.to_string();
+            let vision_ids = window.get_codex_vision_model_ids();
+            let accepts_images = (0..vision_ids.row_count()).any(|row| {
+                vision_ids
+                    .row_data(row)
+                    .is_some_and(|candidate| candidate.as_str() == model.as_str())
+            });
             invalidate_codex_snapshot_ui();
             let mut c = cfg_c.write();
-            c.codex_model = model.to_string();
+            c.codex_model.clone_from(&model);
             c.codex_reasoning_effort.clear();
+            let same_forced_off = if c.vision_provider == "same" {
+                if accepts_images {
+                    c.codex_vision_model.clone_from(&model);
+                    false
+                } else {
+                    c.vision_provider = "off".into();
+                    c.codex_vision_model.clear();
+                    true
+                }
+            } else {
+                false
+            };
             let active_stack = active_stack_label(&c);
             if overlay_backend::config::save(&c).is_err() {
                 eprintln!("[overlay-host] Codex model save failed");
             }
             drop(c);
+            window.set_vision_same_available(accepts_images);
+            if same_forced_off {
+                window.set_vision_provider_index(0);
+            }
             if let Some(bar) = overlay.upgrade() {
                 bar.set_active_stack(SharedString::from(active_stack));
             }
@@ -813,6 +1016,26 @@ pub(crate) fn wire_ai_settings(
     {
         let weak = win.as_weak();
         let cfg_c = cfg.clone();
+        win.on_codex_vision_model_selected(move |index| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            if index < 0 {
+                return;
+            }
+            let Some(model) = window.get_codex_vision_model_ids().row_data(index as usize) else {
+                return;
+            };
+            let mut c = cfg_c.write();
+            c.codex_vision_model = model.to_string();
+            if overlay_backend::config::save(&c).is_err() {
+                eprintln!("[overlay-host] Codex vision model save failed");
+            }
+        });
+    }
+    {
+        let weak = win.as_weak();
+        let cfg_c = cfg.clone();
         win.on_codex_models_refresh(move || {
             refresh_codex_account_status(weak.clone(), cfg_c.clone());
         });
@@ -824,7 +1047,18 @@ pub(crate) fn wire_ai_settings(
             let Some(window) = weak.upgrade() else {
                 return;
             };
-            let is_ru = cfg_c.read().ui_is_ru();
+            let is_ru = {
+                let mut c = cfg_c.write();
+                if c.ai_provider == "codex" && c.vision_provider == "same" {
+                    c.vision_provider = "off".into();
+                    window.set_vision_provider_index(0);
+                    if overlay_backend::config::save(&c).is_err() {
+                        eprintln!("[overlay-host] Codex disconnect vision repair failed");
+                    }
+                }
+                c.ui_is_ru()
+            };
+            window.set_vision_same_available(false);
             let generation = invalidate_codex_login_ui();
             window.set_codex_auth_busy(true);
             window.set_codex_models_busy(false);
@@ -857,6 +1091,13 @@ pub(crate) fn wire_ai_settings(
                                     Vec::<SharedString>::new(),
                                 )));
                                 window.set_codex_reasoning_index(-1);
+                                window.set_codex_vision_model_ids(ModelRc::new(VecModel::from(
+                                    Vec::<SharedString>::new(),
+                                )));
+                                window.set_codex_vision_model_labels(ModelRc::new(VecModel::from(
+                                    Vec::<SharedString>::new(),
+                                )));
+                                window.set_codex_vision_model_index(-1);
                                 window.set_codex_rate_status(SharedString::default());
                             }
                         }
@@ -948,13 +1189,11 @@ pub(crate) fn wire_ai_settings(
                 );
                 w.set_ai_local_base_url_input(SharedString::from(saved_base_url.clone()));
                 w.set_ai_local_vision(local_vision);
+                w.set_vision_same_available(local_vision);
                 w.set_ai_local_vision_available(vision_available);
-                w.set_vision_provider_index(match vision_provider.as_str() {
-                    "off" => 0,
-                    "same" => 1,
-                    "local" => 3,
-                    _ => 2,
-                });
+                w.set_vision_provider_index(super::settings_vision::vision_provider_index_from_id(
+                    &vision_provider,
+                ));
                 refresh_local_model_resource_warning(&w, root, saved_base_url, model);
             }
             // #E10.1 — re-query models against the new URL.
@@ -1021,12 +1260,10 @@ pub(crate) fn wire_ai_settings(
             };
             if let Some(w) = weak.upgrade() {
                 w.set_ai_local_vision(local_vision);
-                w.set_vision_provider_index(match vision_provider.as_str() {
-                    "off" => 0,
-                    "same" => 1,
-                    "local" => 3,
-                    _ => 2,
-                });
+                w.set_vision_same_available(local_vision);
+                w.set_vision_provider_index(super::settings_vision::vision_provider_index_from_id(
+                    &vision_provider,
+                ));
             }
         });
     }
@@ -1152,6 +1389,98 @@ mod tests {
 
     use super::*;
     use std::cell::RefCell;
+
+    fn model(
+        id: &str,
+        is_default: bool,
+        image: bool,
+    ) -> overlay_backend::codex_subscription::CodexModel {
+        overlay_backend::codex_subscription::CodexModel {
+            id: id.to_string(),
+            display_name: id.to_string(),
+            is_default,
+            default_reasoning_effort: Some("medium".to_string()),
+            reasoning_efforts: vec!["low".to_string(), "medium".to_string()],
+            input_modalities: if image {
+                vec!["text".to_string(), "image".to_string()]
+            } else {
+                vec!["text".to_string()]
+            },
+        }
+    }
+
+    #[test]
+    fn fresh_codex_selection_prefers_luna_but_preserves_explicit_choice() {
+        let models = vec![
+            model("gpt-default", true, true),
+            model(PREFERRED_CODEX_MODEL, false, true),
+            model("gpt-explicit", false, false),
+        ];
+        assert_eq!(preferred_codex_model_index(&models, "", false), Some(1));
+        assert_eq!(
+            preferred_codex_model_index(&models, "gpt-explicit", false),
+            Some(2)
+        );
+        assert_eq!(
+            preferred_codex_model_index(&models, "retired-model", false),
+            None
+        );
+    }
+
+    #[test]
+    fn codex_vision_selection_filters_text_only_models() {
+        let models = vec![
+            model("text-default", true, false),
+            model(PREFERRED_CODEX_MODEL, false, false),
+            model("vision-model", false, true),
+        ];
+        assert_eq!(preferred_codex_model_index(&models, "", true), Some(2));
+        assert_eq!(
+            preferred_codex_model_index(&models, PREFERRED_CODEX_MODEL, true),
+            None
+        );
+    }
+
+    #[test]
+    fn reasoning_labels_do_not_invent_unsupported_off_value() {
+        assert_eq!(reasoning_label("low", false), "Low (fastest available)");
+        assert_eq!(
+            reasoning_label("minimal", false),
+            "Minimal (no reasoning, fastest)"
+        );
+        assert_eq!(reasoning_label("high", false), "High");
+    }
+
+    #[test]
+    fn catalog_repairs_require_a_signed_in_account() {
+        use overlay_backend::codex_subscription::AccountState;
+
+        assert!(catalog_is_authoritative(&AccountState::SignedIn {
+            plan: Some("pro".into())
+        }));
+        assert!(!catalog_is_authoritative(&AccountState::SignedOut));
+        assert!(!catalog_is_authoritative(&AccountState::Error));
+        assert!(!catalog_is_authoritative(&AccountState::NotInstalled));
+    }
+
+    #[test]
+    fn effort_normalization_is_explained_in_the_current_language() {
+        assert_eq!(
+            reasoning_normalization_notice("high", "", false),
+            Some(
+                "The saved reasoning effort is no longer supported; the model default is now selected."
+            )
+        );
+        assert!(reasoning_normalization_notice("low", "low", false).is_none());
+        assert!(reasoning_normalization_notice("", "", true).is_none());
+    }
+
+    #[test]
+    fn model_picker_label_contains_no_reasoning_metadata() {
+        let model = model("gpt-clean", true, true);
+        assert_eq!(codex_model_label(&model), "gpt-clean");
+        assert!(!codex_model_label(&model).contains("reasoning"));
+    }
 
     #[test]
     fn codex_copy_writes_exact_displayed_code_and_skips_blank() {

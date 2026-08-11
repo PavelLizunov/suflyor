@@ -79,7 +79,7 @@ impl AiEndpoint {
 
     #[must_use]
     pub const fn accepts_images(&self) -> bool {
-        !matches!(self.protocol, AiProtocol::CodexSubscription)
+        true
     }
 }
 
@@ -423,13 +423,42 @@ pub async fn test_connection_messages(
             snapshot.account,
             crate::codex_subscription::AccountState::SignedIn { .. }
         );
-        if signed_in
-            && snapshot
-                .models
-                .iter()
-                .any(|model| model.id == selected_model)
-        {
-            return Ok("Codex account ready".into());
+        let selected = snapshot
+            .models
+            .iter()
+            .find(|model| model.id == selected_model);
+        let has_image = messages.iter().any(|message| {
+            matches!(&message.content, MessageContent::Parts(parts)
+                if parts.iter().any(|part| matches!(part, ContentPart::ImageUrl { .. })))
+        });
+        if signed_in && selected.is_none() {
+            return Err(anyhow!("Selected Codex model unavailable"));
+        }
+        if signed_in {
+            if !has_image {
+                return Ok("Codex account ready".into());
+            }
+            if !selected.is_some_and(|model| {
+                model
+                    .input_modalities
+                    .iter()
+                    .any(|modality| modality == "image")
+            }) {
+                return Err(anyhow!("Selected Codex model does not accept images"));
+            }
+            let effort = endpoint.reasoning_effort.clone();
+            tokio::task::spawn_blocking(move || {
+                crate::codex_subscription::run_turn(
+                    &selected_model,
+                    effort.as_deref(),
+                    &messages,
+                    |_| true,
+                )
+                .map_err(|failure| anyhow!(codex_failure_message(failure)))
+            })
+            .await
+            .map_err(|_| anyhow!("Codex vision unavailable"))??;
+            return Ok("Codex vision ready".into());
         }
         return Err(anyhow!("Codex account unavailable"));
     }
@@ -1655,7 +1684,7 @@ mod tests {
         };
         assert!(!codex.requires_bearer());
         assert!(codex.is_unmetered());
-        assert!(!codex.accepts_images());
+        assert!(codex.accepts_images());
     }
 
     #[test]

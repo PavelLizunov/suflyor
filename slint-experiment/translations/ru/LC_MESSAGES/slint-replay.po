@@ -2013,3 +2013,21 @@ msgstr "Не удалось установить модель — проверь
 
 msgid "Reasoning effort:"
 msgstr "Уровень рассуждений:"
+
+msgid "Vision uses the OpenAI API connection and model configured in AI providers above. Text and vision selections remain independent."
+msgstr "Для зрения используются подключение и модель OpenAI API, настроенные выше в разделе AI-провайдеров. Модели текста и зрения выбираются независимо."
+
+msgid "Vision uses the Anthropic API connection and model configured in AI providers above. Text and vision selections remain independent."
+msgstr "Для зрения используются подключение и модель Anthropic API, настроенные выше в разделе AI-провайдеров. Модели текста и зрения выбираются независимо."
+
+msgid "Choose a separate Codex model for screenshots. Only account models that advertise image input are shown."
+msgstr "Выберите отдельную модель Codex для скриншотов. Показаны только модели аккаунта с заявленной поддержкой изображений."
+
+msgid "No image-capable Codex account models are available. Sign in or refresh."
+msgstr "Нет доступных моделей Codex аккаунта с поддержкой изображений. Войдите или обновите список."
+
+msgid "Same as text model above (unavailable)"
+msgstr "Как у текстовой модели выше (недоступно)"
+
+msgid "Same as text model is unavailable because the selected text model does not declare image input. Choose another Vision provider or model."
+msgstr "Режим «как у текстовой модели» недоступен: выбранная текстовая модель не заявляет поддержку изображений. Выберите другого провайдера или модель для зрения."

@@ -31,6 +31,8 @@ const MAX_MODELS_TOTAL: usize = 1_000;
 const MAX_CURSOR_BYTES: usize = 4_096;
 const MAX_DELTA_BYTES: usize = 1024 * 1024;
 const MAX_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
+const MAX_IMAGE_DATA_URL_BYTES: usize = 16 * 1024 * 1024;
+const MAX_IMAGES_PER_TURN: usize = 4;
 const APP_SERVER_ARGS: &[&str] = &[
     "app-server",
     "--stdio",
@@ -82,33 +84,6 @@ pub struct CodexModel {
     pub default_reasoning_effort: Option<String>,
     pub reasoning_efforts: Vec<String>,
     pub input_modalities: Vec<String>,
-}
-
-impl CodexModel {
-    #[must_use]
-    pub fn picker_label(&self) -> String {
-        let mut details = Vec::new();
-        if self.is_default {
-            details.push("default".to_string());
-        }
-        if !self.reasoning_efforts.is_empty() {
-            let efforts = self.reasoning_efforts.join("/");
-            details.push(self.default_reasoning_effort.as_ref().map_or_else(
-                || format!("reasoning: {efforts}"),
-                |default| format!("reasoning: {efforts}; default {default}"),
-            ));
-        } else if let Some(effort) = &self.default_reasoning_effort {
-            details.push(format!("reasoning: {effort}"));
-        }
-        if !self.input_modalities.is_empty() {
-            details.push(self.input_modalities.join("+"));
-        }
-        if details.is_empty() {
-            self.display_name.clone()
-        } else {
-            format!("{} ({})", self.display_name, details.join(", "))
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -670,7 +645,7 @@ fn run_turn_inner(
         .map(safe_reasoning_effort)
         .transpose()?
         .flatten();
-    let prompt = text_only_prompt(messages)?;
+    let input = secure_turn_input(messages)?;
     let (_, workspace) = isolated_paths()?;
     fs::create_dir_all(&workspace).map_err(|_| RpcFailure::Io)?;
     ensure_workspace_empty(&workspace)?;
@@ -706,15 +681,23 @@ fn run_turn_inner(
         &selected_model,
         selected_effort.as_deref(),
         &workspace_text,
-        &prompt,
+        input,
     );
     server
         .write(rpc_request(21, "turn/start", turn_request))
         .map_err(|failure| turn_stage_failure("turn-start", failure))?;
 
     let mut turn_id: Option<String> = None;
-    let result = receive_turn(&mut server, &thread_id, &mut turn_id, notify)
-        .map_err(|failure| turn_stage_failure("turn-events", failure));
+    let result = receive_turn(
+        &mut server,
+        &thread_id,
+        &selected_model,
+        selected_effort.as_deref(),
+        &workspace,
+        &mut turn_id,
+        notify,
+    )
+    .map_err(|failure| turn_stage_failure("turn-events", failure));
     if result.is_err() {
         interrupt_turn(&mut server, &thread_id, turn_id.as_deref());
     }
@@ -729,6 +712,9 @@ fn turn_stage_failure(stage: &'static str, failure: RpcFailure) -> RpcFailure {
 fn receive_turn(
     server: &mut AppServer,
     thread_id: &str,
+    model: &str,
+    reasoning_effort: Option<&str>,
+    workspace: &Path,
     turn_id: &mut Option<String>,
     notify: &mut impl FnMut(TurnEvent) -> bool,
 ) -> Result<TokenUsage, RpcFailure> {
@@ -770,6 +756,16 @@ fn receive_turn(
                 .to_string();
             *turn_id = Some(id.clone());
             emit_turn_event(notify, TurnEvent::Start { id })?;
+            continue;
+        }
+        if message.get("method").and_then(Value::as_str) == Some("thread/settings/updated") {
+            validate_thread_settings_update(
+                &message,
+                thread_id,
+                model,
+                reasoning_effort,
+                workspace,
+            )?;
             continue;
         }
         if turn_id.is_none()
@@ -959,11 +955,12 @@ fn validate_safe_items(items: Option<&Value>) -> Result<(), RpcFailure> {
         .ok_or(RpcFailure::Security)
 }
 
-fn text_only_prompt(messages: &[ChatMessage]) -> Result<String, RpcFailure> {
+fn secure_turn_input(messages: &[ChatMessage]) -> Result<Vec<Value>, RpcFailure> {
     if messages.is_empty() {
         return Err(RpcFailure::Protocol);
     }
     let mut prompt = String::new();
+    let mut image_urls = Vec::new();
     for message in messages {
         let role = match message.role.as_str() {
             "system" | "user" | "assistant" => message.role.as_str(),
@@ -972,20 +969,22 @@ fn text_only_prompt(messages: &[ChatMessage]) -> Result<String, RpcFailure> {
         let text = match &message.content {
             MessageContent::Text(text) => text.clone(),
             MessageContent::Parts(parts) => {
-                if parts
-                    .iter()
-                    .any(|part| !matches!(part, ContentPart::Text { .. }))
-                {
-                    return Err(RpcFailure::Security);
+                let mut texts = Vec::new();
+                for part in parts {
+                    match part {
+                        ContentPart::Text { text } => texts.push(text.as_str()),
+                        ContentPart::ImageUrl { image_url }
+                            if role == "user" && safe_image_data_url(&image_url.url) =>
+                        {
+                            image_urls.push(image_url.url.clone());
+                            if image_urls.len() > MAX_IMAGES_PER_TURN {
+                                return Err(RpcFailure::Protocol);
+                            }
+                        }
+                        ContentPart::ImageUrl { .. } => return Err(RpcFailure::Security),
+                    }
                 }
-                parts
-                    .iter()
-                    .filter_map(|part| match part {
-                        ContentPart::Text { text } => Some(text.as_str()),
-                        ContentPart::ImageUrl { .. } => None,
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n")
+                texts.join("\n")
             }
         };
         if prompt.len().saturating_add(text.len()) > 2 * 1024 * 1024 {
@@ -996,7 +995,26 @@ fn text_only_prompt(messages: &[ChatMessage]) -> Result<String, RpcFailure> {
         prompt.push_str(&text);
         prompt.push_str("\n\n");
     }
-    Ok(prompt)
+    let mut input = vec![json!({"type":"text","text":prompt,"text_elements":[]})];
+    input.extend(
+        image_urls
+            .into_iter()
+            .map(|url| json!({"type":"image","url":url})),
+    );
+    Ok(input)
+}
+
+fn safe_image_data_url(value: &str) -> bool {
+    let payload = value
+        .strip_prefix("data:image/jpeg;base64,")
+        .or_else(|| value.strip_prefix("data:image/png;base64,"));
+    payload.is_some_and(|payload| {
+        !payload.is_empty()
+            && value.len() <= MAX_IMAGE_DATA_URL_BYTES
+            && payload
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'='))
+    })
 }
 
 fn secure_thread_params(model: &str, workspace: &str) -> Value {
@@ -1026,7 +1044,7 @@ fn secure_turn_params(
     model: &str,
     reasoning_effort: Option<&str>,
     workspace: &str,
-    prompt: &str,
+    input: Vec<Value>,
 ) -> Value {
     let mut params = json!({
         "threadId": thread_id,
@@ -1036,12 +1054,67 @@ fn secure_turn_params(
         "permissions": SECURE_PROFILE,
         "runtimeWorkspaceRoots": [workspace],
         "environments": [],
-        "input": [{"type":"text","text":prompt,"text_elements":[]}]
+        "input": input
     });
     if let Some(effort) = reasoning_effort {
         params["effort"] = Value::String(effort.to_string());
     }
     params
+}
+
+fn validate_thread_settings_update(
+    message: &Value,
+    thread_id: &str,
+    model: &str,
+    reasoning_effort: Option<&str>,
+    workspace: &Path,
+) -> Result<(), RpcFailure> {
+    let params = message.get("params").ok_or(RpcFailure::Protocol)?;
+    require_contract(
+        params.get("threadId").and_then(Value::as_str) == Some(thread_id),
+        "settings-thread-id",
+    )?;
+    let settings = params.get("threadSettings").ok_or(RpcFailure::Protocol)?;
+    if settings.get("model").and_then(Value::as_str) != Some(model) {
+        return Err(RpcFailure::ModelMismatch);
+    }
+    require_contract(
+        settings.get("approvalPolicy").and_then(Value::as_str) == Some("never"),
+        "settings-approval-policy",
+    )?;
+    let cwd = settings
+        .get("cwd")
+        .and_then(Value::as_str)
+        .ok_or(RpcFailure::Protocol)?;
+    require_contract(paths_match(Path::new(cwd), workspace), "settings-cwd")?;
+    let sandbox = settings.get("sandboxPolicy").ok_or(RpcFailure::Protocol)?;
+    require_contract(
+        sandbox.get("type").and_then(Value::as_str) == Some("readOnly"),
+        "settings-sandbox-type",
+    )?;
+    require_contract(
+        !sandbox
+            .get("networkAccess")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        "settings-sandbox-network",
+    )?;
+    if let Some(profile) = settings
+        .get("activePermissionProfile")
+        .filter(|value| !value.is_null())
+    {
+        require_contract(
+            profile.get("id").and_then(Value::as_str) == Some(SECURE_PROFILE),
+            "settings-permission-profile",
+        )?;
+    }
+    if let Some(expected) = reasoning_effort {
+        require_contract(
+            settings.get("effort").and_then(Value::as_str) == Some(expected),
+            "settings-reasoning-effort",
+        )?;
+    }
+    Ok(())
 }
 
 fn safe_reasoning_effort(value: &str) -> Result<Option<String>, RpcFailure> {
@@ -1593,7 +1666,7 @@ mod tests {
             "gpt-5.4",
             Some("high"),
             r"C:\safe\empty",
-            "hello",
+            vec![json!({"type":"text","text":"hello","text_elements":[]})],
         );
         assert_eq!(turn["model"], "gpt-5.4");
         assert_eq!(turn["approvalPolicy"], "never");
@@ -1628,11 +1701,17 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(model.id, "gpt-5.4-codex");
+        assert_eq!(model.display_name, "GPT-5.4 Codex");
         assert!(model.is_default);
-        assert!(model
-            .picker_label()
-            .contains("reasoning: medium/high; default high"));
-        assert!(model.picker_label().contains("text+image"));
+        assert_eq!(
+            model.reasoning_efforts,
+            ["medium".to_string(), "high".to_string()]
+        );
+        assert_eq!(model.default_reasoning_effort.as_deref(), Some("high"));
+        assert_eq!(
+            model.input_modalities,
+            ["text".to_string(), "image".to_string()]
+        );
         assert_eq!(
             parse_model(&json!({"model":"gpt 5 <token>","displayName":"bad"})),
             Err(RpcFailure::Protocol)
@@ -1885,16 +1964,82 @@ mod tests {
     }
 
     #[test]
-    fn image_input_and_nonempty_workspace_fail_closed() {
+    fn image_input_accepts_only_bounded_inline_user_images() {
         let messages = vec![ChatMessage {
+            role: "user".into(),
+            content: MessageContent::Parts(vec![
+                ContentPart::Text {
+                    text: "read".into(),
+                },
+                ContentPart::ImageUrl {
+                    image_url: crate::ai::ImageUrl {
+                        url: "data:image/png;base64,QUJDRA==".into(),
+                    },
+                },
+            ]),
+        }];
+        let input = secure_turn_input(&messages).unwrap();
+        assert_eq!(input.len(), 2);
+        assert_eq!(input[0]["type"], "text");
+        assert_eq!(input[1]["type"], "image");
+        assert_eq!(input[1]["url"], "data:image/png;base64,QUJDRA==");
+
+        let remote = vec![ChatMessage {
             role: "user".into(),
             content: MessageContent::Parts(vec![ContentPart::ImageUrl {
                 image_url: crate::ai::ImageUrl {
-                    url: "data:image/png;base64,secret".into(),
+                    url: "https://example.test/private.png".into(),
                 },
             }]),
         }];
-        assert_eq!(text_only_prompt(&messages), Err(RpcFailure::Security));
+        assert_eq!(secure_turn_input(&remote), Err(RpcFailure::Security));
+    }
+
+    #[test]
+    fn settings_update_for_explicit_effort_must_preserve_safe_contract() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().to_string_lossy();
+        let update = json!({
+            "method":"thread/settings/updated",
+            "params":{
+                "threadId":"thread-1",
+                "threadSettings":{
+                    "model":"gpt-5.6-luna",
+                    "effort":"low",
+                    "approvalPolicy":"never",
+                    "cwd":path,
+                    "sandboxPolicy":{"type":"readOnly","networkAccess":false},
+                    "activePermissionProfile":{"id":SECURE_PROFILE}
+                }
+            }
+        });
+        assert_eq!(
+            validate_thread_settings_update(
+                &update,
+                "thread-1",
+                "gpt-5.6-luna",
+                Some("low"),
+                temp.path()
+            ),
+            Ok(())
+        );
+        let mut unsafe_update = update;
+        unsafe_update["params"]["threadSettings"]["sandboxPolicy"]["networkAccess"] =
+            Value::Bool(true);
+        assert_eq!(
+            validate_thread_settings_update(
+                &unsafe_update,
+                "thread-1",
+                "gpt-5.6-luna",
+                Some("low"),
+                temp.path()
+            ),
+            Err(RpcFailure::Security)
+        );
+    }
+
+    #[test]
+    fn nonempty_workspace_fails_closed() {
         let temp = TempDir::new().unwrap();
         assert!(ensure_workspace_empty(temp.path()).is_ok());
         fs::write(temp.path().join("unexpected.txt"), b"x").unwrap();

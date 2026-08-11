@@ -84,7 +84,9 @@ pub(crate) fn open_settings(
         populate_token_status(existing, cfg);
         {
             let snap = cfg.read();
-            if snap.ai_provider == "codex" && !existing.get_codex_auth_busy() {
+            if (snap.ai_provider == "codex" || snap.vision_provider == "codex")
+                && !existing.get_codex_auth_busy()
+            {
                 refresh_codex_account_status(existing.as_weak(), cfg.clone());
             }
         }
@@ -124,7 +126,9 @@ pub(crate) fn open_settings(
     populate_token_status(&win, cfg);
     {
         let snap = cfg.read();
-        if snap.ai_provider == "codex" && !win.get_codex_auth_busy() {
+        if (snap.ai_provider == "codex" || snap.vision_provider == "codex")
+            && !win.get_codex_auth_busy()
+        {
             refresh_codex_account_status(win.as_weak(), cfg.clone());
         }
     }
@@ -551,7 +555,9 @@ pub(crate) fn open_settings(
                         snap.ui_is_ru(),
                     ),
                 ));
-                if snap.ai_provider == "codex" && !codex_login_busy {
+                if (snap.ai_provider == "codex" || snap.vision_provider == "codex")
+                    && !codex_login_busy
+                {
                     refresh_codex_account_status(w.as_weak(), cfg_lang.clone());
                 }
             }
@@ -1551,6 +1557,18 @@ pub(crate) fn populate_token_status(
     win.set_codex_reasoning_ids(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     win.set_codex_reasoning_labels(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     win.set_codex_reasoning_index(-1);
+    let codex_vision_ids = if c.codex_vision_model.is_empty() {
+        Vec::new()
+    } else {
+        vec![SharedString::from(c.codex_vision_model.clone())]
+    };
+    win.set_codex_vision_model_ids(ModelRc::new(VecModel::from(codex_vision_ids.clone())));
+    win.set_codex_vision_model_labels(ModelRc::new(VecModel::from(codex_vision_ids)));
+    win.set_codex_vision_model_index(if c.codex_vision_model.is_empty() {
+        -1
+    } else {
+        0
+    });
     win.set_codex_rate_status(SharedString::default());
     win.set_codex_models_busy(false);
     win.set_openai_key_input(SharedString::default());
@@ -1589,12 +1607,10 @@ pub(crate) fn populate_token_status(
     win.set_anthropic_model_input(SharedString::from(c.anthropic_model.clone()));
     // V4 — vision section: provider index + non-secret fields (bearers stay blank
     // on screen; saving a blank field is a no-op the user controls).
-    win.set_vision_provider_index(match c.vision_provider.as_str() {
-        "off" => 0,
-        "same" => 1,
-        "local" => 3,
-        _ => 2,
-    });
+    win.set_vision_provider_index(super::settings_vision::vision_provider_index_from_id(
+        &c.vision_provider,
+    ));
+    win.set_vision_same_available(c.same_text_model_accepts_images_declared());
     win.set_vision_base_url_input(SharedString::from(c.vision_base_url.clone()));
     win.set_vision_model_input(SharedString::from(c.vision_model.clone()));
     win.set_vision_local_base_url_input(SharedString::from(c.vision_local_base_url.clone()));
