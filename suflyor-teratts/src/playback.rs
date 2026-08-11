@@ -24,6 +24,21 @@ fn samples_to_bytes(samples: &[f32]) -> Vec<u8> {
     out
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EmptyQueueAction {
+    Finish,
+    Drain,
+    WriteSilence,
+}
+
+fn empty_queue_action(end_of_stream: bool, padding: usize) -> EmptyQueueAction {
+    match (end_of_stream, padding) {
+        (true, 0) => EmptyQueueAction::Finish,
+        (true, _) => EmptyQueueAction::Drain,
+        (false, _) => EmptyQueueAction::WriteSilence,
+    }
+}
+
 /// Handle to a running render thread. Drop or `stop` joins it.
 pub struct Playback {
     feed_tx: Sender<Vec<f32>>,
@@ -171,11 +186,16 @@ fn render_loop(
         }
 
         if queue.is_empty() {
-            if eos.load(Ordering::Acquire) && padding == 0 {
-                break;
+            match empty_queue_action(eos.load(Ordering::Acquire), padding) {
+                EmptyQueueAction::Finish => break,
+                // Do not refill the device after EOS: doing so keeps padding
+                // non-zero forever and prevents DONE from being emitted.
+                EmptyQueueAction::Drain => continue,
+                EmptyQueueAction::WriteSilence => {
+                    let _ = render_client.write_to_device(avail, &silence[..avail * 8], None);
+                    continue;
+                }
             }
-            let _ = render_client.write_to_device(avail, &silence[..avail * 8], None);
-            continue;
         }
 
         let take = avail.min(queue.len());
@@ -197,5 +217,19 @@ fn render_loop(
 fn drain_feed(feed_rx: &Receiver<Vec<f32>>, queue: &mut VecDeque<f32>) {
     while let Ok(chunk) = feed_rx.try_recv() {
         queue.extend(chunk);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
+
+    use super::*;
+
+    #[test]
+    fn end_of_stream_drains_without_refilling_silence() {
+        assert_eq!(empty_queue_action(false, 0), EmptyQueueAction::WriteSilence);
+        assert_eq!(empty_queue_action(true, 8), EmptyQueueAction::Drain);
+        assert_eq!(empty_queue_action(true, 0), EmptyQueueAction::Finish);
     }
 }

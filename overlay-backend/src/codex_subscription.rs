@@ -42,7 +42,7 @@ const APP_SERVER_ARGS: &[&str] = &[
     "-c",
     "default_permissions=\"suflyor-text-only\"",
     "-c",
-    "permissions.suflyor-text-only.filesystem.\":root\"=\"deny\"",
+    "permissions.suflyor-text-only.filesystem.:root=\"deny\"",
     "-c",
     "permissions.suflyor-text-only.network.enabled=false",
 ];
@@ -187,6 +187,7 @@ impl AppServer {
             .ok_or(RpcFailure::NotInstalled)?;
         let stdin = child.stdin.take().ok_or(RpcFailure::Io)?;
         let stdout = child.stdout.take().ok_or(RpcFailure::Io)?;
+        let stderr = child.stderr.take().ok_or(RpcFailure::Io)?;
         let (sender, messages) = mpsc::channel();
         std::thread::spawn(move || {
             let reader = BufReader::new(stdout);
@@ -196,6 +197,16 @@ impl AppServer {
                     .and_then(|line| serde_json::from_str(&line).map_err(|_| RpcFailure::Protocol));
                 if sender.send(value).is_err() {
                     break;
+                }
+            }
+        });
+        std::thread::spawn(move || {
+            let mut seen = std::collections::HashSet::new();
+            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                if let Some(class) = classify_app_server_stderr(&line) {
+                    if seen.insert(class) {
+                        eprintln!("[suflyor-codex] app-server diagnostic={class}");
+                    }
                 }
             }
         });
@@ -1159,7 +1170,7 @@ fn spawn_app_server(
         .current_dir(workspace)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        .stderr(Stdio::piped());
     for name in [
         "SystemRoot",
         "WINDIR",
@@ -1180,6 +1191,24 @@ fn spawn_app_server(
         command.creation_flags(CREATE_NO_WINDOW);
     }
     command.spawn()
+}
+
+/// Map app-server stderr to bounded, non-secret diagnostics. Raw child text
+/// is never forwarded because it may gain account or endpoint details in a
+/// future Codex version.
+fn classify_app_server_stderr(line: &str) -> Option<&'static str> {
+    let lower = line.to_ascii_lowercase();
+    if lower.contains("filesystem path") || lower.contains("permission profile") {
+        Some("security-config-rejected")
+    } else if lower.contains("unknown configuration") || lower.contains("unrecognized") {
+        Some("config-version-mismatch")
+    } else if lower.contains("access is denied") || lower.contains("permission denied") {
+        Some("executable-access-denied")
+    } else if lower.contains("credential") || lower.contains("keyring") {
+        Some("credential-store-error")
+    } else {
+        None
+    }
 }
 
 fn rpc_request(id: u64, method: &str, params: Value) -> Value {
@@ -1310,6 +1339,19 @@ mod tests {
     }
 
     #[test]
+    fn app_server_stderr_is_classified_without_forwarding_raw_details() {
+        assert_eq!(
+            classify_app_server_stderr("filesystem path x must be absolute"),
+            Some("security-config-rejected")
+        );
+        assert_eq!(
+            classify_app_server_stderr("unknown configuration key private.value"),
+            Some("config-version-mismatch")
+        );
+        assert_eq!(classify_app_server_stderr("token=secret"), None);
+    }
+
+    #[test]
     fn only_official_https_login_hosts_are_accepted() {
         assert!(allowed_signin_url("https://auth.openai.com/codex/device"));
         assert!(allowed_signin_url("https://chatgpt.com/auth"));
@@ -1351,8 +1393,9 @@ mod tests {
         assert!(APP_SERVER_ARGS.contains(&"--strict-config"));
         assert!(APP_SERVER_ARGS.contains(&"windows.sandbox=\"elevated\""));
         assert!(APP_SERVER_ARGS.contains(&"default_permissions=\"suflyor-text-only\""));
-        assert!(APP_SERVER_ARGS
-            .contains(&"permissions.suflyor-text-only.filesystem.\":root\"=\"deny\""));
+        assert!(
+            APP_SERVER_ARGS.contains(&"permissions.suflyor-text-only.filesystem.:root=\"deny\"")
+        );
         assert!(APP_SERVER_ARGS.contains(&"permissions.suflyor-text-only.network.enabled=false"));
         let initialize = initialize_params(true);
         assert_eq!(initialize["capabilities"]["experimentalApi"], true);

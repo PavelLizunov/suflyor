@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>suflyor v0.37.0-rc.2 retest</title>
+</head>
+<body>
+<h1>suflyor v0.37.0-rc.2 retest - Tera audio and Codex login</h1>
+<ol>
+<li>Select Tera (experimental), voice ru_f1, and press Test voice. The fixed
+Russian phrase must be intelligible speech, not burbling or noise.</li>
+<li>Read a short tile and then a long tile through Tera. Each utterance must
+finish, a second utterance must start normally, and stop/pause/resume must not
+leave the app stuck in a speaking state.</li>
+<li>Close the app after Tera finishes. The Tera sidecar started by that app
+must exit instead of remaining as an orphan process.</li>
+<li>Open Settings &rarr; AI bridge and choose the Codex ChatGPT-subscription
+provider. A previously signed-in account must show its plan and model list;
+Refresh must complete without the former unavailable error.</li>
+<li>Press Disconnect. The UI must become signed out and clear model/usage and
+pending-login state. Reopen Settings and confirm the signed-out state remains.</li>
+<li>Press Connect ChatGPT. Complete the official Codex device flow without
+showing a device code in logs. The account state and model list must refresh;
+selecting a model persists after Settings is reopened.</li>
+<li>Inspect only redacted diagnostics: Codex failures may report a bounded
+class such as security-config-rejected or config-version-mismatch, but never
+raw stderr, device codes, tokens, email addresses, endpoints, or config
+contents. Tera timing logs must contain stage names/counts only, never spoken
+text.</li>
+<li>At 1280x768 in English and Russian, both affected Settings panels render
+without clipping. Piper read-aloud and non-Codex AI providers still work as
+before.</li>
+</ol>
+</body>
+</html>

@@ -66,6 +66,7 @@ enum Message {
     Reject(RejectReason),
     Synth(SynthOutcome),
     PlaybackDone(u64),
+    Shutdown,
 }
 
 /// One chunk of synthesis requested from the synth worker thread. The
@@ -437,6 +438,7 @@ fn worker(mut controller: Controller<RealPlayer>, rx: mpsc::Receiver<Message>) {
             Message::Reject(reason) => controller.emit_event(Event::Rejected { reason }),
             Message::Synth(outcome) => controller.on_synth_result(outcome),
             Message::PlaybackDone(id) => controller.on_playback_done(id),
+            Message::Shutdown => break,
         }
     }
     // stdin closed (the app exited): stop speech immediately.
@@ -553,9 +555,10 @@ fn main() {
                 Err(reason) => Message::Reject(reason),
             };
             if events_tx.send(message).is_err() {
-                break;
+                return;
             }
         }
+        let _ = events_tx.send(Message::Shutdown);
     });
     worker(controller, events_rx);
 }

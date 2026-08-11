@@ -24,6 +24,7 @@
 //! never a panic and never user text.
 
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use anyhow::{anyhow, Result};
 use ort::session::Session;
@@ -71,6 +72,7 @@ impl TeraEngine {
     /// Load and verify the pinned release. Fails with `not-installed` reasons
     /// surfaced verbatim on the stdout protocol.
     pub fn load(tts_root: &Path) -> Result<TeraEngine> {
+        let started = Instant::now();
         let manifest = Manifest::pinned()?;
         let release = manifest.release_dir(tts_root);
         manifest::check_installed(&manifest, &release)
@@ -78,9 +80,25 @@ impl TeraEngine {
 
         let models = release.join("models");
         let text_encoder = load_session(&models.join("text_encoder.onnx"))?;
+        eprintln!(
+            "[suflyor-teratts] load stage=text-encoder elapsed_ms={}",
+            started.elapsed().as_millis()
+        );
         let duration_predictor = load_session(&models.join("duration_predictor.onnx"))?;
+        eprintln!(
+            "[suflyor-teratts] load stage=duration elapsed_ms={}",
+            started.elapsed().as_millis()
+        );
         let sampler = load_session(&models.join("sampler_distilled_cfg3_8step.onnx"))?;
+        eprintln!(
+            "[suflyor-teratts] load stage=sampler elapsed_ms={}",
+            started.elapsed().as_millis()
+        );
         let vocoder = load_session(&models.join("vocoder.onnx"))?;
+        eprintln!(
+            "[suflyor-teratts] load stage=vocoder elapsed_ms={}",
+            started.elapsed().as_millis()
+        );
         let text_encoder_out = sole_declared_output(
             "text_encoder",
             text_encoder.outputs().iter().map(|o| o.name()),
@@ -119,6 +137,7 @@ impl TeraEngine {
         duration_scale: f32,
         seed: u64,
     ) -> Result<SynthOutput> {
+        let started = Instant::now();
         if !duration_scale.is_finite() || duration_scale <= 0.0 {
             return Err(anyhow!("invalid-rate"));
         }
@@ -153,6 +172,10 @@ impl TeraEngine {
                 "text_mask" => &text_mask_t,
             ])
             .map_err(|e| anyhow!("synth: text encoder failed: {e}"))?;
+        eprintln!(
+            "[suflyor-teratts] synth stage=text-encoder elapsed_ms={}",
+            started.elapsed().as_millis()
+        );
         let (emb_shape, emb_data) = named_output_f32(&encoder_outputs, &self.text_encoder_out)?;
         validate_tensor_shape(&emb_shape, emb_data.len(), "text_emb")?;
 
@@ -173,6 +196,10 @@ impl TeraEngine {
                 "text_mask" => &duration_mask_t,
             ])
             .map_err(|e| anyhow!("synth: duration predictor failed: {e}"))?;
+        eprintln!(
+            "[suflyor-teratts] synth stage=duration elapsed_ms={}",
+            started.elapsed().as_millis()
+        );
         let (dur_shape, dur_data) =
             named_output_f32(&duration_outputs, &self.duration_predictor_out)?;
         validate_tensor_shape(&dur_shape, dur_data.len(), "duration")?;
@@ -217,6 +244,11 @@ impl TeraEngine {
                 "guidance" => &guidance_t,
             ])
             .map_err(|e| anyhow!("synth: sampler failed: {e}"))?;
+        eprintln!(
+            "[suflyor-teratts] synth stage=sampler frames={} elapsed_ms={}",
+            latent_length,
+            started.elapsed().as_millis()
+        );
         let (latent_shape, latent_out) = named_output_f32(&sampler_outputs, &self.sampler_out)?;
         // Validate the exact [1, 144, L] contract BEFORE the vocoder loop
         // slices `LATENT_CHANNELS * frame` windows out of this buffer.
@@ -229,10 +261,16 @@ impl TeraEngine {
         while start < latent_length {
             let end = (start + STREAM_CHUNK_FRAMES).min(latent_length);
             let input_start = start.saturating_sub(VOCODER_CONTEXT_FRAMES);
-            let slice = &latent_out[LATENT_CHANNELS * input_start..LATENT_CHANNELS * end];
+            let latent_window = slice_latent_frames(
+                &latent_out,
+                LATENT_CHANNELS,
+                latent_length,
+                input_start,
+                end,
+            )?;
             let latent_chunk_t = Tensor::from_array((
                 [1, LATENT_CHANNELS, end - input_start],
-                slice.to_vec().into_boxed_slice(),
+                latent_window.into_boxed_slice(),
             ))
             .map_err(|e| anyhow!("synth: {e}"))?;
             let vocoder_outputs = self
@@ -257,6 +295,13 @@ impl TeraEngine {
             start = end;
         }
 
+        eprintln!(
+            "[suflyor-teratts] synth stage=vocoder chunks={} samples={} elapsed_ms={}",
+            chunks.len(),
+            emitted,
+            started.elapsed().as_millis()
+        );
+
         Ok(SynthOutput { chunks })
     }
 
@@ -271,6 +316,34 @@ impl TeraEngine {
         }
         Ok(array)
     }
+}
+
+/// Copy a `[1, channels, frames]` tensor window while preserving its
+/// row-major channel-first layout. A flat contiguous range would treat the
+/// tensor as frame-major and feed the vocoder interleaved channel fragments.
+fn slice_latent_frames(
+    latent: &[f32],
+    channels: usize,
+    total_frames: usize,
+    start: usize,
+    end: usize,
+) -> Result<Vec<f32>> {
+    if channels == 0 || total_frames == 0 || start >= end || end > total_frames {
+        return Err(anyhow!("synth: invalid latent frame window"));
+    }
+    let expected = channels
+        .checked_mul(total_frames)
+        .ok_or_else(|| anyhow!("synth: latent shape overflow"))?;
+    if latent.len() != expected {
+        return Err(anyhow!("synth: latent shape/data length mismatch"));
+    }
+    let window_frames = end - start;
+    let mut window = Vec::with_capacity(channels * window_frames);
+    for channel in 0..channels {
+        let channel_start = channel * total_frames;
+        window.extend_from_slice(&latent[channel_start + start..channel_start + end]);
+    }
+    Ok(window)
 }
 
 fn load_session(path: &Path) -> Result<Session> {
@@ -453,5 +526,21 @@ mod tests {
         assert!(validate_vocoder_output(&[1, 3072], 100, 1).is_err()); // shape!=data
         assert!(validate_vocoder_output(&[2, 3072], 3072, 1).is_err()); // batch
         assert!(validate_vocoder_output(&[3072], 3072, 1).is_err()); // rank
+    }
+
+    #[test]
+    fn latent_frame_window_preserves_channel_first_layout() {
+        // [1, 3, 4] flattened as three channel rows.
+        let latent = vec![
+            10.0, 11.0, 12.0, 13.0, // channel 0
+            20.0, 21.0, 22.0, 23.0, // channel 1
+            30.0, 31.0, 32.0, 33.0, // channel 2
+        ];
+        assert_eq!(
+            slice_latent_frames(&latent, 3, 4, 1, 3).unwrap(),
+            vec![11.0, 12.0, 21.0, 22.0, 31.0, 32.0]
+        );
+        assert!(slice_latent_frames(&latent, 3, 4, 3, 3).is_err());
+        assert!(slice_latent_frames(&latent[..11], 3, 4, 1, 3).is_err());
     }
 }
