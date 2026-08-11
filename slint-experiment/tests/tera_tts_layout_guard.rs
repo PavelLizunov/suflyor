@@ -31,6 +31,10 @@ fn tera_install_controls_keep_natural_height_before_speed_picker() {
         tera.contains("vertical-stretch: 0;"),
         "Tera section must not be compressed into the speed picker"
     );
+    assert!(
+        tera.contains("min-height: root.tera-install-phase != 0 ? 128px : 108px;"),
+        "Tera status and install controls need their own reserved vertical space"
+    );
     let install = tera
         .find("@tr(\"Install model\")")
         .expect("install button must exist");

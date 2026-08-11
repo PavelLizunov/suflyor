@@ -1487,6 +1487,12 @@ export component SettingsWindow inherits Window {
                             // section at its natural height so the following speed picker
                             // cannot overlap the Install model / Cancel controls.
                             vertical-stretch: 0;
+                            // `SettingsCard` derives its preferred height before this
+                            // conditional block's wrapped status text has a final width.
+                            // Reserve the complete controls/status stack explicitly;
+                            // the parent ScrollView can grow, but Speed must never enter
+                            // this rectangle.
+                            min-height: root.tera-install-phase != 0 ? 128px : 108px;
                         Text {
                             text: @tr("EXPERIMENTAL: TeraTTSv2 neural engine (44.1 kHz, RU+EN). Downloads ~370 MB of ONNX graphs on demand. Read-aloud falls back to Piper while Tera is not installed or unavailable; speaker separation always uses Piper.");
                             font-size: 11px;
