@@ -32,8 +32,13 @@ fn tera_install_controls_keep_natural_height_before_speed_picker() {
         "Tera section must not be compressed into the speed picker"
     );
     assert!(
-        tera.contains("min-height: root.tera-install-phase != 0 ? 128px : 108px;"),
-        "Tera status and install controls need their own reserved vertical space"
+        tera.contains("min-height: root.tts-available"),
+        "installed-state height must follow the predicate that shows the voice row"
+    );
+    assert!(
+        tera.contains("? (root.tera-install-phase != 0 ? 164px : 145px)")
+            && tera.contains(": (root.tera-install-phase != 0 ? 128px : 108px);"),
+        "Tera status and install controls need their own reserved vertical space, including the installed voice row"
     );
     let install = tera
         .find("@tr(\"Install model\")")

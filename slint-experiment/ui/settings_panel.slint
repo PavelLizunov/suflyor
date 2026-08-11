@@ -1492,7 +1492,9 @@ export component SettingsWindow inherits Window {
                             // Reserve the complete controls/status stack explicitly;
                             // the parent ScrollView can grow, but Speed must never enter
                             // this rectangle.
-                            min-height: root.tera-install-phase != 0 ? 128px : 108px;
+                            min-height: root.tts-available
+                                ? (root.tera-install-phase != 0 ? 164px : 145px)
+                                : (root.tera-install-phase != 0 ? 128px : 108px);
                         Text {
                             text: @tr("EXPERIMENTAL: TeraTTSv2 neural engine (44.1 kHz, RU+EN). Downloads ~370 MB of ONNX graphs on demand. Read-aloud falls back to Piper while Tera is not installed or unavailable; speaker separation always uses Piper.");
                             font-size: 11px;
