@@ -675,6 +675,7 @@ async fn maybe_spawn_auto_tile(
         base_url,
         bearer,
         model,
+        reasoning_effort,
         response_language,
         meeting_context,
         cap_usd,
@@ -693,6 +694,7 @@ async fn maybe_spawn_auto_tile(
             ep.base_url,
             ep.bearer,
             ep.model,
+            ep.reasoning_effort,
             c.response_language.clone(),
             c.meeting_context.clone(),
             c.max_session_cost_usd,
@@ -955,6 +957,7 @@ async fn maybe_spawn_auto_tile(
         base_url,
         bearer,
         model: model.clone(),
+        reasoning_effort,
         is_local,
     };
     let (answer, usage) = match ai::complete_with_usage_endpoint(&endpoint, messages, 512).await {

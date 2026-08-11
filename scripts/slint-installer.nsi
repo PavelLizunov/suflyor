@@ -10,7 +10,7 @@
 ;   slint-experiment/target/release/bundle/suflyor-slint-setup.exe
 
 !define PRODUCT_NAME "suflyor"
-!define PRODUCT_VERSION "0.37.0-rc.2"
+!define PRODUCT_VERSION "0.37.0-rc.3"
 !define PRODUCT_PUBLISHER "x3d_mutant"
 !define PRODUCT_EXE "overlay-host.exe"
 !define PRODUCT_INSTALL_DIR "$LOCALAPPDATA\suflyor-slint"
@@ -31,6 +31,27 @@ UninstPage uninstConfirm
 UninstPage instfiles
 
 Section "Main" SEC_MAIN
+  ; Upgrades may race the Tera sidecar draining its last utterance after the
+  ; host exits. Detect only processes whose executable path is exactly inside
+  ; this install directory, ask once, then stop that installed copy. Other
+  ; development/test copies with the same image names are never touched.
+  InitPluginsDir
+  SetOutPath "$PLUGINSDIR"
+  File /oname=stop-installed-suflyor.ps1 "stop-installed-suflyor.ps1"
+  nsExec::ExecToStack 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\stop-installed-suflyor.ps1" -InstallDir "$INSTDIR" -CheckOnly'
+  Pop $0
+  Pop $1
+  StrCmp $0 10 0 install_processes_clear
+    MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "Suflyor is running. Setup must close this installed copy before updating it; the current session and speech will stop. Other copies will not be touched." IDOK install_stop_processes IDCANCEL install_cancelled
+  install_stop_processes:
+    nsExec::ExecToStack 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\stop-installed-suflyor.ps1" -InstallDir "$INSTDIR"'
+    Pop $0
+    Pop $1
+    StrCmp $0 0 install_processes_clear
+    MessageBox MB_RETRYCANCEL|MB_ICONSTOP "Setup could not close the installed Suflyor processes. Close Suflyor manually, then click Retry." IDRETRY install_stop_processes IDCANCEL install_cancelled
+  install_cancelled:
+    Abort
+  install_processes_clear:
   SetOutPath "$INSTDIR"
   File "..\slint-experiment\target\release\${PRODUCT_EXE}"
   ; Read-aloud (TTS) sidecar — a separate process so its neural-TTS onnxruntime

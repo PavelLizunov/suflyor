@@ -458,6 +458,18 @@ fn spawn_text_tile(
     }
 }
 
+fn after_read_aloud_hotkey_release(attempts_left: u8, action: Rc<dyn Fn()>) {
+    if slint_replay::win32::read_aloud_hotkey_modifiers_released() {
+        action();
+    } else if attempts_left > 0 {
+        Timer::single_shot(std::time::Duration::from_millis(25), move || {
+            after_read_aloud_hotkey_release(attempts_left - 1, action);
+        });
+    } else {
+        diag!("[overlay-host] sa1: modifier release timed out");
+    }
+}
+
 /// Fill an already-spawned OCR placeholder tile with the recognized text and
 /// read it aloud — the Ctrl+F8 / Shift+Alt+2 Tesseract path. The capture flow
 /// (`launch_vision_for_bgra`) creates the tile with a "Распознаю текст…"
@@ -2606,12 +2618,15 @@ fn main() -> Result<(), slint::PlatformError> {
                         "Selected text"
                     }
                     .to_string();
-                    // The callback fires on key-down. Let Shift+Alt come up before
-                    // synthesising Ctrl+C, otherwise Windows receives
-                    // Ctrl+Shift+Alt+C and the foreground selection is not copied.
-                    Timer::single_shot(std::time::Duration::from_millis(80), move || {
+                    let saved = Rc::new(saved);
+                    let copy_selection = Rc::new(move || {
                         slint_replay::win32::clipboard_clear();
                         slint_replay::win32::send_ctrl_c();
+                        let saved = saved.clone();
+                        let bridge_sa1 = bridge_sa1.clone();
+                        let tiles_sa1 = tiles_sa1.clone();
+                        let overlay_sa1 = overlay_sa1.clone();
+                        let title = title.clone();
                         // Ctrl+C is async — the foreground app writes the clipboard
                         // on its own message loop; read after a short second delay.
                         Timer::single_shot(std::time::Duration::from_millis(140), move || {
@@ -2620,7 +2635,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                 "[overlay-host] sa1: copied {} chars from selection",
                                 copied.as_ref().map(|s| s.chars().count()).unwrap_or(0)
                             );
-                            match &saved {
+                            match saved.as_ref() {
                                 Some(s) => slint_replay::win32::clipboard_write_text(s),
                                 None => slint_replay::win32::clipboard_clear(),
                             }
@@ -2638,6 +2653,9 @@ fn main() -> Result<(), slint::PlatformError> {
                             }
                         });
                     });
+                    // Poll the actual key state instead of guessing a fixed
+                    // release delay. At 25 ms x 40 this remains bounded.
+                    after_read_aloud_hotkey_release(40, copy_selection);
                 } else if event.id == sa2_id {
                     // Shift+Alt+2 — OCR a screen region and read it. Reuses the
                     // region capture; the OCR engine swaps to Tesseract next.
@@ -4663,16 +4681,20 @@ pub(crate) fn active_stack_label(c: &overlay_backend::config::Config) -> String 
         _ => ("Groq".to_string(), false),
     };
     let ai_local = c.ai_provider == "local";
-    let model_full = if ai_local {
-        c.ai_local_model.as_str()
-    } else {
-        c.ai_model.as_str()
+    let model_full = match c.ai_provider.as_str() {
+        "local" => c.ai_local_model.as_str(),
+        "openai" => c.openai_model.as_str(),
+        "anthropic" => c.anthropic_model.as_str(),
+        "codex" => c.codex_model.as_str(),
+        _ => c.ai_model.as_str(),
     };
     // For a LOCAL model show the friendly "Gemma 12B" / "Gemma 26B-A4B" so the user
     // can tell the fallback vs primary model apart at a glance (the user asked to see
     // the selected model more explicitly); cloud models keep the short id.
     let model = if ai_local {
         overlay_backend::local_ai::local_model_label(model_full)
+    } else if c.ai_provider == "codex" {
+        model_full.to_string()
     } else {
         short_model_name(model_full)
     };
@@ -4778,9 +4800,21 @@ pub(crate) fn refresh_lock_chip(o: &OverlayBarWindow, cfg: &config::SharedConfig
 mod tile_heading_tests {
     #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)] // test asserts
     use super::{
-        manual_tile_failure, manual_tile_heading, manual_tile_not_configured,
+        active_stack_label, manual_tile_failure, manual_tile_heading, manual_tile_not_configured,
         manual_tile_placeholder, mic_busy_status, summary_empty_copy,
     };
+
+    #[test]
+    fn active_stack_uses_the_selected_direct_provider_model() {
+        let mut cfg = overlay_backend::config::Config::defaults();
+        cfg.stt_provider = "gigaam".into();
+        cfg.ai_model = "claude-haiku-4-5".into();
+        cfg.ai_provider = "codex".into();
+        cfg.codex_model = "gpt-5.6-terra".into();
+        let label = active_stack_label(&cfg);
+        assert!(label.contains("gpt-5.6-terra"));
+        assert!(!label.contains("haiku"));
+    }
 
     /// Double-numbering guard: `tile.slint` prepends `#<sequence>`, so a title
     /// carrying its own number (or digit) renders doubled in the tile header.

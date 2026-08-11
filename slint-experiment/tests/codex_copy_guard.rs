@@ -75,6 +75,8 @@ fn account_catalog_picker_saves_exact_hidden_model_id() {
     let ui = fs::read_to_string(root.join("ui/settings_panel.slint")).expect("read UI");
     assert!(ui.contains("model: root.codex-model-labels"));
     assert!(ui.contains("root.codex-model-selected(self.current-index)"));
+    assert!(ui.contains("model: root.codex-reasoning-labels"));
+    assert!(ui.contains("root.codex-reasoning-selected(self.current-index)"));
     assert!(ui.contains("root.codex-models-refresh()"));
     assert!(ui.contains("root.codex-rate-status"));
     assert!(ui.contains("in-out property <bool> codex-models-busy: false"));
@@ -89,9 +91,10 @@ fn account_catalog_picker_saves_exact_hidden_model_id() {
     assert!(rust.contains("provider_snapshot()"));
     assert!(rust.contains("window.set_codex_models_busy(true)"));
     assert!(rust.contains("window.set_codex_models_busy(false)"));
-    assert!(rust.contains("codex_snapshot_ui_is_current(generation) && c.codex_model == saved"));
+    assert!(rust.contains("c.codex_model == saved"));
     assert!(rust.contains("get_codex_model_ids().row_data(index as usize)"));
     assert!(rust.contains("c.codex_model = model.to_string()"));
+    assert!(rust.contains("c.codex_reasoning_effort = effort.to_string()"));
     assert!(!rust.contains("auth.json"));
 }
 
@@ -127,6 +130,7 @@ fn safe_model_provider_copy_is_translated_in_english_and_russian() {
         "Copy one-time code",
         "Codex safe models (ChatGPT subscription)",
         "Account model:",
+        "Reasoning effort:",
         "Experimental safe mode: the model is pinned; model-command file and network access are denied, and unexpected tools are stopped.",
         "Loading account models...",
         "No account models are available. Sign in or refresh.",

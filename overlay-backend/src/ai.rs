@@ -60,6 +60,9 @@ pub struct AiEndpoint {
     pub base_url: String,
     pub bearer: String,
     pub model: String,
+    /// Optional reasoning effort for the official Codex app-server. Other
+    /// protocols ignore it.
+    pub reasoning_effort: Option<String>,
     pub is_local: bool,
 }
 
@@ -86,6 +89,7 @@ impl std::fmt::Debug for AiEndpoint {
             .debug_struct("AiEndpoint")
             .field("protocol", &self.protocol)
             .field("model", &self.model)
+            .field("has_reasoning_effort", &self.reasoning_effort.is_some())
             .field("is_local", &self.is_local)
             .field("has_base_url", &!self.base_url.trim().is_empty())
             .field("has_credential", &!self.bearer.trim().is_empty())
@@ -282,6 +286,7 @@ pub fn stream_chat(
             base_url,
             bearer,
             model,
+            reasoning_effort: None,
             is_local: false,
         },
         messages,
@@ -301,18 +306,25 @@ pub fn stream_chat_endpoint(
             let model = endpoint.model.clone();
             let worker_tx = tx.clone();
             let result = tokio::task::spawn_blocking(move || {
-                crate::codex_subscription::run_turn(&model, &messages, |event| {
-                    let mapped = match event {
-                        crate::codex_subscription::TurnEvent::Start { id } => AiEvent::Start { id },
-                        crate::codex_subscription::TurnEvent::Delta { text } => {
-                            AiEvent::Delta { text }
-                        }
-                        crate::codex_subscription::TurnEvent::Done => AiEvent::Done {
-                            reason: "stop".into(),
-                        },
-                    };
-                    worker_tx.blocking_send(mapped).is_ok()
-                })
+                crate::codex_subscription::run_turn(
+                    &model,
+                    endpoint.reasoning_effort.as_deref(),
+                    &messages,
+                    |event| {
+                        let mapped = match event {
+                            crate::codex_subscription::TurnEvent::Start { id } => {
+                                AiEvent::Start { id }
+                            }
+                            crate::codex_subscription::TurnEvent::Delta { text } => {
+                                AiEvent::Delta { text }
+                            }
+                            crate::codex_subscription::TurnEvent::Done => AiEvent::Done {
+                                reason: "stop".into(),
+                            },
+                        };
+                        worker_tx.blocking_send(mapped).is_ok()
+                    },
+                )
             })
             .await;
             match result {
@@ -381,6 +393,7 @@ pub async fn test_connection(base_url: String, bearer: String, model: String) ->
         base_url,
         bearer,
         model,
+        reasoning_effort: None,
         is_local: false,
     })
     .await
@@ -491,6 +504,7 @@ pub async fn list_models(base_url: &str, bearer: &str) -> Result<Vec<String>> {
         base_url: base_url.to_string(),
         bearer: bearer.to_string(),
         model: String::new(),
+        reasoning_effort: None,
         is_local: false,
     })
     .await
@@ -910,14 +924,20 @@ pub async fn complete_with_usage_endpoint(
 ) -> Result<(String, TokenUsage)> {
     if endpoint.protocol == AiProtocol::CodexSubscription {
         let model = endpoint.model.clone();
+        let reasoning_effort = endpoint.reasoning_effort.clone();
         return tokio::task::spawn_blocking(move || {
             let mut text = String::new();
-            let usage = crate::codex_subscription::run_turn(&model, &messages, |event| {
-                if let crate::codex_subscription::TurnEvent::Delta { text: delta } = event {
-                    text.push_str(&delta);
-                }
-                true
-            })
+            let usage = crate::codex_subscription::run_turn(
+                &model,
+                reasoning_effort.as_deref(),
+                &messages,
+                |event| {
+                    if let crate::codex_subscription::TurnEvent::Delta { text: delta } = event {
+                        text.push_str(&delta);
+                    }
+                    true
+                },
+            )
             .map_err(|failure| anyhow!(codex_failure_message(failure)))?;
             Ok((text, usage))
         })
@@ -1617,6 +1637,7 @@ mod tests {
             base_url: "https://private.example/v1".into(),
             bearer: "super-secret-token".into(),
             model: "gpt-5.2".into(),
+            reasoning_effort: None,
             is_local: false,
         };
         let debug = format!("{endpoint:?}");
@@ -1629,6 +1650,7 @@ mod tests {
             base_url: String::new(),
             bearer: String::new(),
             model: "gpt-safe".into(),
+            reasoning_effort: Some("high".into()),
             is_local: false,
         };
         assert!(!codex.requires_bearer());
@@ -1836,6 +1858,7 @@ mod tests {
             base_url: url,
             bearer: "openai-secret".into(),
             model: "gpt-test".into(),
+            reasoning_effort: None,
             is_local: false,
         };
         let (text, usage) = complete_with_usage_endpoint(
@@ -1872,6 +1895,7 @@ mod tests {
             base_url: url,
             bearer: "anthropic-secret".into(),
             model: "claude-test".into(),
+            reasoning_effort: None,
             is_local: false,
         };
         let (text, usage) = complete_with_usage_endpoint(
@@ -1914,6 +1938,7 @@ mod tests {
                     base_url: url,
                     bearer: "secret".into(),
                     model: "model".into(),
+                    reasoning_effort: None,
                     is_local: false,
                 },
                 vec![ChatMessage {

@@ -1548,6 +1548,9 @@ pub(crate) fn populate_token_status(
     win.set_codex_model_ids(ModelRc::new(VecModel::from(codex_ids.clone())));
     win.set_codex_model_labels(ModelRc::new(VecModel::from(codex_ids)));
     win.set_codex_model_index(if c.codex_model.is_empty() { -1 } else { 0 });
+    win.set_codex_reasoning_ids(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+    win.set_codex_reasoning_labels(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+    win.set_codex_reasoning_index(-1);
     win.set_codex_rate_status(SharedString::default());
     win.set_codex_models_busy(false);
     win.set_openai_key_input(SharedString::default());

@@ -1045,6 +1045,18 @@ pub fn send_ctrl_c() {
     }
 }
 
+/// Global hotkeys arrive on key-down. Synthetic Ctrl+C must wait until the
+/// physical Shift+Alt chord is released, otherwise foreground applications
+/// receive Ctrl+Shift+Alt+C and do not copy the selection.
+#[must_use]
+pub fn read_aloud_hotkey_modifiers_released() -> bool {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        GetAsyncKeyState, VIRTUAL_KEY, VK_CONTROL, VK_MENU, VK_SHIFT,
+    };
+    let down = |key: VIRTUAL_KEY| unsafe { GetAsyncKeyState(i32::from(key.0)) < 0 };
+    !down(VK_SHIFT) && !down(VK_MENU) && !down(VK_CONTROL)
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

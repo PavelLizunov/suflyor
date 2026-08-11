@@ -86,6 +86,9 @@ pub struct Config {
     /// app-server catalog. No credential or endpoint is persisted alongside it.
     #[serde(default)]
     pub codex_model: String,
+    /// Empty means the selected model's app-server default.
+    #[serde(default)]
+    pub codex_reasoning_effort: String,
     /// Local server base URL (OpenAI-compatible). Default is llama.cpp's
     /// "http://127.0.0.1:8080/v1" (the shipped setup pipeline); Ollama uses
     /// "http://127.0.0.1:11434/v1".
@@ -620,6 +623,7 @@ impl Config {
             anthropic_base_url: default_anthropic_base_url(),
             anthropic_model: default_anthropic_model(),
             codex_model: String::new(),
+            codex_reasoning_effort: String::new(),
             ai_local_base_url: default_ai_local_base_url(),
             ai_local_bearer: String::new(),
             ai_local_model: String::new(),
@@ -638,8 +642,8 @@ impl Config {
             vision_local_model: String::new(),
             vision_phonetics: false,
             vision_test_practice: false,
-            tts_voice: String::new(),
-            tts_engine: String::new(),
+            tts_voice: "tera:ru_f1".into(),
+            tts_engine: "tera".into(),
             tts_rate: 0,
             response_language: "ru".into(),
             groq_api_key: String::new(),
@@ -738,6 +742,7 @@ impl Config {
                     base_url: self.ai_local_base_url.clone(),
                     bearer: self.ai_local_bearer.clone(),
                     model,
+                    reasoning_effort: None,
                     is_local: true,
                 }
             }
@@ -746,6 +751,7 @@ impl Config {
                 base_url: self.openai_base_url.clone(),
                 bearer: protected_provider_secret(SecretSlot::OpenAi),
                 model: self.openai_model.clone(),
+                reasoning_effort: None,
                 is_local: false,
             },
             "anthropic" => AiEndpoint {
@@ -753,6 +759,7 @@ impl Config {
                 base_url: self.anthropic_base_url.clone(),
                 bearer: protected_provider_secret(SecretSlot::Anthropic),
                 model: self.anthropic_model.clone(),
+                reasoning_effort: None,
                 is_local: false,
             },
             "codex" => AiEndpoint {
@@ -760,6 +767,8 @@ impl Config {
                 base_url: String::new(),
                 bearer: String::new(),
                 model: self.codex_model.clone(),
+                reasoning_effort: (!self.codex_reasoning_effort.trim().is_empty())
+                    .then(|| self.codex_reasoning_effort.clone()),
                 is_local: false,
             },
             _ => AiEndpoint {
@@ -771,6 +780,7 @@ impl Config {
                 } else {
                     self.ai_model.clone()
                 },
+                reasoning_effort: None,
                 is_local: false,
             },
         }
@@ -800,6 +810,7 @@ impl Config {
                 base_url: self.ai_base_url.clone(),
                 bearer: self.ai_bearer.clone(),
                 model: self.prep_model.clone(),
+                reasoning_effort: None,
                 is_local: false,
             }
         }
@@ -826,6 +837,7 @@ impl Config {
                 base_url: pick(&self.vision_base_url, &self.ai_base_url),
                 bearer: pick(&self.vision_bearer, &self.ai_bearer),
                 model: pick(&self.vision_model, DEFAULT_VISION_MODEL),
+                reasoning_effort: None,
                 is_local: false,
             }),
             "local" => Some(AiEndpoint {
@@ -833,6 +845,7 @@ impl Config {
                 base_url: pick(&self.vision_local_base_url, &self.ai_local_base_url),
                 bearer: pick(&self.vision_local_bearer, &self.ai_local_bearer),
                 model: pick(&self.vision_local_model, &self.ai_local_model),
+                reasoning_effort: None,
                 is_local: true,
             }),
             _ => None, // "off" (or unknown) → feature disabled
@@ -1333,6 +1346,10 @@ pub fn load() -> Config {
         log::info!("migrated meeting_context into a default profile");
         dirty = true;
     }
+    // RC3: the former implicit empty selection meant Piper. A user who made
+    // an explicit choice already has at least one of these fields populated,
+    // so migrate only the untouched legacy state.
+    dirty |= migrate_legacy_tts_default(&mut cfg);
     // P1.3 — schema-versioning anchor. Stamp the file with the current schema
     // version so a FUTURE release can detect an older layout (config_version <
     // CURRENT) and run a one-time, number-keyed migration right here. Every
@@ -1352,6 +1369,16 @@ pub fn load() -> Config {
         }
     }
     cfg
+}
+
+fn migrate_legacy_tts_default(cfg: &mut Config) -> bool {
+    if cfg.tts_engine.trim().is_empty() && cfg.tts_voice.trim().is_empty() {
+        cfg.tts_engine = "tera".into();
+        cfg.tts_voice = "tera:ru_f1".into();
+        true
+    } else {
+        false
+    }
 }
 
 pub fn save(cfg: &Config) -> Result<()> {
@@ -1482,6 +1509,7 @@ pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
     next.anthropic_base_url = imported.anthropic_base_url;
     next.anthropic_model = imported.anthropic_model;
     next.codex_model = imported.codex_model;
+    next.codex_reasoning_effort = imported.codex_reasoning_effort;
     // Local AI provider/endpoint.
     next.ai_local_base_url = imported.ai_local_base_url;
     next.ai_local_bearer = imported.ai_local_bearer;

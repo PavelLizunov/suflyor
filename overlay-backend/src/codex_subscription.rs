@@ -147,6 +147,9 @@ enum TurnNotification {
     SafeItemLifecycle,
     SafeReasoningUpdate,
     RateLimitsUpdated,
+    SafeStartupStatus,
+    SafeThreadStatus,
+    SafeWarning,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -634,10 +637,11 @@ fn disconnect_inner() -> Result<(), RpcFailure> {
 /// cancels the turn and tears down the short-lived app-server child.
 pub fn run_turn(
     model: &str,
+    reasoning_effort: Option<&str>,
     messages: &[ChatMessage],
     mut notify: impl FnMut(TurnEvent) -> bool,
 ) -> Result<TokenUsage, TurnFailure> {
-    run_turn_inner(model, messages, &mut notify).map_err(map_turn_failure)
+    run_turn_inner(model, reasoning_effort, messages, &mut notify).map_err(map_turn_failure)
 }
 
 fn map_turn_failure(failure: RpcFailure) -> TurnFailure {
@@ -655,42 +659,71 @@ fn map_turn_failure(failure: RpcFailure) -> TurnFailure {
 
 fn run_turn_inner(
     model: &str,
+    reasoning_effort: Option<&str>,
     messages: &[ChatMessage],
     notify: &mut impl FnMut(TurnEvent) -> bool,
 ) -> Result<TokenUsage, RpcFailure> {
     let selected_model = safe_model_id(model).ok_or(RpcFailure::InvalidModel)?;
+    let selected_effort = reasoning_effort
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(safe_reasoning_effort)
+        .transpose()?
+        .flatten();
     let prompt = text_only_prompt(messages)?;
     let (_, workspace) = isolated_paths()?;
     fs::create_dir_all(&workspace).map_err(|_| RpcFailure::Io)?;
     ensure_workspace_empty(&workspace)?;
     let workspace_text = workspace.to_string_lossy().to_string();
 
-    let mut server = AppServer::start()?;
-    server.initialize_experimental()?;
-    let account = server.request(2, "account/read", json!({"refreshToken":false}))?;
+    let mut server = AppServer::start().map_err(|failure| turn_stage_failure("start", failure))?;
+    server
+        .initialize_experimental()
+        .map_err(|failure| turn_stage_failure("initialize", failure))?;
+    let account = server
+        .request(2, "account/read", json!({"refreshToken":false}))
+        .map_err(|failure| turn_stage_failure("account", failure))?;
     if !matches!(
         parse_account_state(&account)?,
         AccountState::SignedIn { .. }
     ) {
         return Err(RpcFailure::SignedOut);
     }
-    require_secure_profile(&mut server, &workspace_text)?;
+    require_secure_profile(&mut server, &workspace_text)
+        .map_err(|failure| turn_stage_failure("profile", failure))?;
 
-    let thread_result = server.request_secure(
-        20,
-        "thread/start",
-        secure_thread_params(&selected_model, &workspace_text),
-    )?;
-    let thread_id = validate_thread_contract(&thread_result, &selected_model, &workspace)?;
-    let turn_request = secure_turn_params(&thread_id, &selected_model, &workspace_text, &prompt);
-    server.write(rpc_request(21, "turn/start", turn_request))?;
+    let thread_result = server
+        .request_secure(
+            20,
+            "thread/start",
+            secure_thread_params(&selected_model, &workspace_text),
+        )
+        .map_err(|failure| turn_stage_failure("thread-start", failure))?;
+    let thread_id = validate_thread_contract(&thread_result, &selected_model, &workspace)
+        .map_err(|failure| turn_stage_failure("thread-contract", failure))?;
+    let turn_request = secure_turn_params(
+        &thread_id,
+        &selected_model,
+        selected_effort.as_deref(),
+        &workspace_text,
+        &prompt,
+    );
+    server
+        .write(rpc_request(21, "turn/start", turn_request))
+        .map_err(|failure| turn_stage_failure("turn-start", failure))?;
 
     let mut turn_id: Option<String> = None;
-    let result = receive_turn(&mut server, &thread_id, &mut turn_id, notify);
+    let result = receive_turn(&mut server, &thread_id, &mut turn_id, notify)
+        .map_err(|failure| turn_stage_failure("turn-events", failure));
     if result.is_err() {
         interrupt_turn(&mut server, &thread_id, turn_id.as_deref());
     }
     result
+}
+
+fn turn_stage_failure(stage: &'static str, failure: RpcFailure) -> RpcFailure {
+    eprintln!("[suflyor-codex] turn stage={stage} failure={failure:?}");
+    failure
 }
 
 fn receive_turn(
@@ -708,17 +741,26 @@ fn receive_turn(
     loop {
         let message = recv_until(&server.messages, deadline)?;
         if message.get("method").is_some() && message.get("id").is_some() {
+            eprintln!("[suflyor-codex] unexpected server request during turn");
             return Err(RpcFailure::Security);
         }
         if message.get("id").and_then(Value::as_u64) == Some(21) {
             if turn_id.is_some() {
+                eprintln!("[suflyor-codex] duplicate turn/start response");
                 return Err(RpcFailure::Protocol);
             }
             if message.get("error").is_some() {
+                eprintln!("[suflyor-codex] turn/start returned error");
                 return Err(RpcFailure::Protocol);
             }
-            let result = message.get("result").ok_or(RpcFailure::Protocol)?;
-            let turn = result.get("turn").ok_or(RpcFailure::Protocol)?;
+            let result = message.get("result").ok_or_else(|| {
+                eprintln!("[suflyor-codex] turn/start missing result");
+                RpcFailure::Protocol
+            })?;
+            let turn = result.get("turn").ok_or_else(|| {
+                eprintln!("[suflyor-codex] turn/start missing turn");
+                RpcFailure::Protocol
+            })?;
             validate_safe_items(turn.get("items"))?;
             let id = turn
                 .get("id")
@@ -730,7 +772,21 @@ fn receive_turn(
             emit_turn_event(notify, TurnEvent::Start { id })?;
             continue;
         }
-        let active_turn = turn_id.as_deref().ok_or(RpcFailure::Protocol)?;
+        if turn_id.is_none()
+            && message.get("method").and_then(Value::as_str)
+                == Some("mcpServer/startupStatus/updated")
+        {
+            continue;
+        }
+        let active_turn = turn_id.as_deref().ok_or_else(|| {
+            let method = message
+                .get("method")
+                .and_then(Value::as_str)
+                .filter(|value| value.len() <= 96 && value.is_ascii())
+                .unwrap_or("missing");
+            eprintln!("[suflyor-codex] notification before turn response method={method}");
+            RpcFailure::Protocol
+        })?;
         let parsed = parse_turn_notification(&message, thread_id, active_turn)?;
         match parsed {
             TurnNotification::Delta(text) => {
@@ -750,7 +806,10 @@ fn receive_turn(
             }
             TurnNotification::SafeItemLifecycle
             | TurnNotification::SafeReasoningUpdate
-            | TurnNotification::RateLimitsUpdated => {}
+            | TurnNotification::RateLimitsUpdated
+            | TurnNotification::SafeStartupStatus
+            | TurnNotification::SafeThreadStatus
+            | TurnNotification::SafeWarning => {}
         }
     }
 }
@@ -803,17 +862,60 @@ fn parse_turn_notification(
             .filter(|rate_limits| rate_limits.is_object())
             .map(|_| TurnNotification::RateLimitsUpdated)
             .ok_or(RpcFailure::Protocol),
+        Some("mcpServer/startupStatus/updated") => Ok(TurnNotification::SafeStartupStatus),
+        Some("thread/status/changed") => {
+            let params = matching_turn_params(message, thread_id, None)?;
+            let status = params.get("status").ok_or(RpcFailure::Protocol)?;
+            match status.get("type").and_then(Value::as_str) {
+                Some("idle") => Ok(TurnNotification::SafeThreadStatus),
+                Some("active")
+                    if status
+                        .get("activeFlags")
+                        .and_then(Value::as_array)
+                        .is_some_and(Vec::is_empty) =>
+                {
+                    Ok(TurnNotification::SafeThreadStatus)
+                }
+                Some("active") => {
+                    eprintln!("[suflyor-codex] thread waiting on approval or user input");
+                    Err(RpcFailure::Security)
+                }
+                _ => Err(RpcFailure::Protocol),
+            }
+        }
+        Some("warning") => {
+            let params = message.get("params").ok_or(RpcFailure::Protocol)?;
+            if params
+                .get("threadId")
+                .is_some_and(|value| !value.is_null() && value.as_str() != Some(thread_id))
+            {
+                return Err(RpcFailure::Security);
+            }
+            params
+                .get("message")
+                .and_then(Value::as_str)
+                .filter(|value| value.len() <= 4_096)
+                .map(|_| TurnNotification::SafeWarning)
+                .ok_or(RpcFailure::Protocol)
+        }
         Some("item/started") | Some("item/completed") => {
             let params = matching_turn_params(message, thread_id, Some(turn_id))?;
-            matches!(
-                params
-                    .get("item")
-                    .and_then(|value| value.get("type"))
-                    .and_then(Value::as_str),
-                Some("agentMessage" | "reasoning")
-            )
-            .then_some(TurnNotification::SafeItemLifecycle)
-            .ok_or(RpcFailure::Security)
+            let item_type = params
+                .get("item")
+                .and_then(|value| value.get("type"))
+                .and_then(Value::as_str);
+            if matches!(
+                item_type,
+                Some("userMessage" | "agentMessage" | "reasoning")
+            ) {
+                Ok(TurnNotification::SafeItemLifecycle)
+            } else {
+                let item_type = item_type
+                    .filter(|value| value.len() <= 64 && value.is_ascii())
+                    .unwrap_or("missing");
+                eprintln!("[suflyor-codex] denied non-text turn item={item_type}");
+                Err(RpcFailure::Security)
+            }
         }
         Some(
             "item/reasoning/summaryTextDelta"
@@ -823,7 +925,18 @@ fn parse_turn_notification(
             let _ = matching_turn_params(message, thread_id, Some(turn_id))?;
             Ok(TurnNotification::SafeReasoningUpdate)
         }
-        _ => Err(RpcFailure::Security),
+        method => {
+            if let Some(method) = method.filter(|value| {
+                !value.is_empty()
+                    && value.len() <= 96
+                    && value.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'_' | b'-')
+                    })
+            }) {
+                eprintln!("[suflyor-codex] unexpected turn method={method}");
+            }
+            Err(RpcFailure::Security)
+        }
     }
 }
 
@@ -839,7 +952,7 @@ fn validate_safe_items(items: Option<&Value>) -> Result<(), RpcFailure> {
         .all(|item| {
             matches!(
                 item.get("type").and_then(Value::as_str),
-                Some("agentMessage" | "reasoning")
+                Some("userMessage" | "agentMessage" | "reasoning")
             )
         })
         .then_some(())
@@ -908,8 +1021,14 @@ fn secure_thread_params(model: &str, workspace: &str) -> Value {
     })
 }
 
-fn secure_turn_params(thread_id: &str, model: &str, workspace: &str, prompt: &str) -> Value {
-    json!({
+fn secure_turn_params(
+    thread_id: &str,
+    model: &str,
+    reasoning_effort: Option<&str>,
+    workspace: &str,
+    prompt: &str,
+) -> Value {
+    let mut params = json!({
         "threadId": thread_id,
         "model": model,
         "cwd": workspace,
@@ -918,7 +1037,21 @@ fn secure_turn_params(thread_id: &str, model: &str, workspace: &str, prompt: &st
         "runtimeWorkspaceRoots": [workspace],
         "environments": [],
         "input": [{"type":"text","text":prompt,"text_elements":[]}]
-    })
+    });
+    if let Some(effort) = reasoning_effort {
+        params["effort"] = Value::String(effort.to_string());
+    }
+    params
+}
+
+fn safe_reasoning_effort(value: &str) -> Result<Option<String>, RpcFailure> {
+    const ALLOWED: &[&str] = &[
+        "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra",
+    ];
+    ALLOWED
+        .contains(&value)
+        .then(|| Some(value.to_string()))
+        .ok_or(RpcFailure::InvalidModel)
 }
 
 fn require_secure_profile(server: &mut AppServer, workspace: &str) -> Result<(), RpcFailure> {
@@ -948,45 +1081,62 @@ fn validate_thread_contract(
     if result.get("model").and_then(Value::as_str) != Some(model) {
         return Err(RpcFailure::ModelMismatch);
     }
-    if result.get("approvalPolicy").and_then(Value::as_str) != Some("never")
-        || result
+    require_contract(
+        result.get("approvalPolicy").and_then(Value::as_str) == Some("never"),
+        "approval-policy",
+    )?;
+    require_contract(
+        result
             .get("activePermissionProfile")
             .and_then(|value| value.get("id"))
             .and_then(Value::as_str)
-            != Some(SECURE_PROFILE)
-        || result
+            == Some(SECURE_PROFILE),
+        "permission-profile",
+    )?;
+    require_contract(
+        result
             .get("sandbox")
             .and_then(|value| value.get("type"))
             .and_then(Value::as_str)
-            != Some("readOnly")
-        || result
+            == Some("readOnly"),
+        "sandbox-type",
+    )?;
+    require_contract(
+        result
             .get("sandbox")
             .and_then(|value| value.get("networkAccess"))
             .and_then(Value::as_bool)
-            != Some(false)
-        || result
+            == Some(false),
+        "sandbox-network",
+    )?;
+    require_contract(
+        result
             .get("instructionSources")
             .and_then(Value::as_array)
-            .is_none_or(|sources| !sources.is_empty())
-    {
-        return Err(RpcFailure::Security);
-    }
+            .is_some_and(Vec::is_empty),
+        "instruction-sources",
+    )?;
     let cwd = result
         .get("cwd")
         .and_then(Value::as_str)
         .ok_or(RpcFailure::Protocol)?;
-    if !paths_match(Path::new(cwd), workspace) {
-        return Err(RpcFailure::Security);
-    }
+    require_contract(paths_match(Path::new(cwd), workspace), "cwd")?;
     let roots = result
         .get("runtimeWorkspaceRoots")
         .and_then(Value::as_array)
-        .ok_or(RpcFailure::Security)?;
-    if roots.len() != 1
-        || !roots[0]
-            .as_str()
+        .ok_or_else(|| {
+            let _ = require_contract(false, "workspace-roots-present");
+            RpcFailure::Security
+        })?;
+    let roots_match = roots.iter().all(|root| {
+        root.as_str()
             .is_some_and(|root| paths_match(Path::new(root), workspace))
-    {
+    });
+    if !roots_match {
+        eprintln!(
+            "[suflyor-codex] workspace roots count={} all_match={roots_match}",
+            roots.len()
+        );
         return Err(RpcFailure::Security);
     }
     result
@@ -996,6 +1146,15 @@ fn validate_thread_contract(
         .filter(|value| !value.is_empty())
         .map(str::to_string)
         .ok_or(RpcFailure::Protocol)
+}
+
+fn require_contract(valid: bool, field: &'static str) -> Result<(), RpcFailure> {
+    if valid {
+        Ok(())
+    } else {
+        eprintln!("[suflyor-codex] security contract mismatch={field}");
+        Err(RpcFailure::Security)
+    }
 }
 
 fn paths_match(actual: &Path, expected: &Path) -> bool {
@@ -1012,10 +1171,12 @@ fn matching_turn_params<'a>(
 ) -> Result<&'a Value, RpcFailure> {
     let params = message.get("params").ok_or(RpcFailure::Protocol)?;
     if params.get("threadId").and_then(Value::as_str) != Some(thread_id) {
+        eprintln!("[suflyor-codex] notification thread id mismatch");
         return Err(RpcFailure::Security);
     }
     if let Some(expected) = turn_id {
         if params.get("turnId").and_then(Value::as_str) != Some(expected) {
+            eprintln!("[suflyor-codex] notification turn id mismatch");
             return Err(RpcFailure::Security);
         }
     }
@@ -1427,10 +1588,17 @@ mod tests {
             "none"
         );
 
-        let turn = secure_turn_params("thread-1", "gpt-5.4", r"C:\safe\empty", "hello");
+        let turn = secure_turn_params(
+            "thread-1",
+            "gpt-5.4",
+            Some("high"),
+            r"C:\safe\empty",
+            "hello",
+        );
         assert_eq!(turn["model"], "gpt-5.4");
         assert_eq!(turn["approvalPolicy"], "never");
         assert_eq!(turn["permissions"], SECURE_PROFILE);
+        assert_eq!(turn["effort"], "high");
         assert_eq!(turn["environments"], json!([]));
         assert_eq!(turn["input"].as_array().unwrap().len(), 1);
         assert_eq!(turn["input"][0]["type"], "text");
@@ -1438,6 +1606,11 @@ mod tests {
         assert!(!wire.contains("shellCommand"));
         assert!(!wire.contains("dynamicToolCall"));
         assert!(!wire.contains("process/"));
+        assert_eq!(safe_reasoning_effort("xhigh"), Ok(Some("xhigh".into())));
+        assert_eq!(
+            safe_reasoning_effort("high\nmalicious"),
+            Err(RpcFailure::InvalidModel)
+        );
     }
 
     #[test]
@@ -1531,6 +1704,18 @@ mod tests {
         assert_eq!(
             validate_thread_contract(&response, "gpt-5.4", workspace).unwrap(),
             "thread-1"
+        );
+        let mut stricter = response.clone();
+        stricter["runtimeWorkspaceRoots"] = json!([]);
+        assert_eq!(
+            validate_thread_contract(&stricter, "gpt-5.4", workspace).unwrap(),
+            "thread-1"
+        );
+        let mut escaped = response.clone();
+        escaped["runtimeWorkspaceRoots"] = json!([r"C:\outside"]);
+        assert_eq!(
+            validate_thread_contract(&escaped, "gpt-5.4", workspace),
+            Err(RpcFailure::Security)
         );
         let mut rerouted = response.clone();
         rerouted["model"] = json!("gpt-other");
@@ -1629,6 +1814,34 @@ mod tests {
         assert_eq!(
             parse_turn_notification(&lifecycle, "thread-1", "turn-1"),
             Ok(TurnNotification::SafeItemLifecycle)
+        );
+        let user_lifecycle = json!({"method":"item/started","params":{
+            "threadId":"thread-1","turnId":"turn-1","item":{"type":"userMessage"}
+        }});
+        assert_eq!(
+            parse_turn_notification(&user_lifecycle, "thread-1", "turn-1"),
+            Ok(TurnNotification::SafeItemLifecycle)
+        );
+        let active = json!({"method":"thread/status/changed","params":{
+            "threadId":"thread-1","status":{"type":"active","activeFlags":[]}
+        }});
+        assert_eq!(
+            parse_turn_notification(&active, "thread-1", "turn-1"),
+            Ok(TurnNotification::SafeThreadStatus)
+        );
+        let approval = json!({"method":"thread/status/changed","params":{
+            "threadId":"thread-1","status":{"type":"active","activeFlags":["waitingForApproval"]}
+        }});
+        assert_eq!(
+            parse_turn_notification(&approval, "thread-1", "turn-1"),
+            Err(RpcFailure::Security)
+        );
+        let warning = json!({"method":"warning","params":{
+            "threadId":"thread-1","message":"safe account notice"
+        }});
+        assert_eq!(
+            parse_turn_notification(&warning, "thread-1", "turn-1"),
+            Ok(TurnNotification::SafeWarning)
         );
         let reasoning = json!({"method":"item/reasoning/summaryTextDelta","params":{
             "threadId":"thread-1","turnId":"turn-1","delta":"private reasoning"

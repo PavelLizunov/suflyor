@@ -713,10 +713,12 @@ fn codex_subscription_profile_round_trips_selected_model_without_secrets() {
     let mut cfg = Config::defaults();
     cfg.ai_provider = "codex".into();
     cfg.codex_model = "gpt-5.4-codex".into();
+    cfg.codex_reasoning_effort = "xhigh".into();
     let endpoint = cfg.ai_endpoint(false);
     assert_eq!(endpoint.protocol, crate::ai::AiProtocol::CodexSubscription);
     assert!(endpoint.protocol.supports_live_answers());
     assert_eq!(endpoint.model, "gpt-5.4-codex");
+    assert_eq!(endpoint.reasoning_effort.as_deref(), Some("xhigh"));
     assert!(endpoint.base_url.is_empty());
     assert!(endpoint.bearer.is_empty());
 
@@ -734,6 +736,7 @@ fn codex_subscription_profile_round_trips_selected_model_without_secrets() {
     let restored: Config = serde_json::from_str(&json).expect("round trip");
     assert_eq!(restored.ai_provider, "codex");
     assert_eq!(restored.codex_model, "gpt-5.4-codex");
+    assert_eq!(restored.codex_reasoning_effort, "xhigh");
 
     let legacy: Config = serde_json::from_str("{}").expect("legacy config");
     assert_eq!(legacy.ai_provider, "cloud");
@@ -799,6 +802,7 @@ fn codex_model_is_in_redacted_preview_and_server_settings_merge() {
     let mut imported = Config::defaults();
     imported.ai_provider = "codex".into();
     imported.codex_model = "gpt-account-model".into();
+    imported.codex_reasoning_effort = "high".into();
 
     let preview = preview_server_settings(&current, &imported);
     assert_eq!(preview.cloud_ai.provider_new, "codex");
@@ -810,6 +814,27 @@ fn codex_model_is_in_redacted_preview_and_server_settings_merge() {
     let merged = merge_server_settings(&current, imported);
     assert_eq!(merged.ai_provider, "codex");
     assert_eq!(merged.codex_model, "gpt-account-model");
+    assert_eq!(merged.codex_reasoning_effort, "high");
+}
+
+#[test]
+fn fresh_and_untouched_legacy_tts_select_tera_ru_f1_only() {
+    let fresh = Config::defaults();
+    assert_eq!(fresh.tts_engine, "tera");
+    assert_eq!(fresh.tts_voice, "tera:ru_f1");
+
+    let mut legacy: Config = serde_json::from_str("{}").expect("legacy config");
+    assert!(migrate_legacy_tts_default(&mut legacy));
+    assert_eq!(legacy.tts_engine, "tera");
+    assert_eq!(legacy.tts_voice, "tera:ru_f1");
+
+    let mut explicit_piper = Config {
+        tts_engine: "piper".into(),
+        tts_voice: "piper:irina".into(),
+        ..Config::default()
+    };
+    assert!(!migrate_legacy_tts_default(&mut explicit_piper));
+    assert_eq!(explicit_piper.tts_engine, "piper");
 }
 
 #[test]

@@ -43,8 +43,8 @@
 //! `diag!` macro / `populate_token_status` / the `overlay_backend` config + ai
 //! helpers). That is intentional for the move; imports narrow in a later pass.
 use super::{
-    populate_token_status, refresh_lock_chip, ComponentHandle, ModelRc, OverlayBarWindow,
-    SettingsWindow, SharedString, VecModel,
+    active_stack_label, populate_token_status, refresh_lock_chip, ComponentHandle, ModelRc,
+    OverlayBarWindow, SettingsWindow, SharedString, VecModel,
 };
 use slint::Model;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -142,9 +142,13 @@ pub(crate) fn refresh_codex_account_status(
         window.set_codex_models_busy(true);
     }
     std::thread::spawn(move || {
-        let (is_ru, saved) = {
+        let (is_ru, saved, saved_effort) = {
             let c = cfg.read();
-            (c.ui_is_ru(), c.codex_model.clone())
+            (
+                c.ui_is_ru(),
+                c.codex_model.clone(),
+                c.codex_reasoning_effort.clone(),
+            )
         };
         let snapshot = overlay_backend::codex_subscription::provider_snapshot();
         let label = codex_account_label(&snapshot.account, is_ru);
@@ -164,14 +168,47 @@ pub(crate) fn refresh_codex_account_status(
             .or_else(|| snapshot.models.iter().position(|model| model.is_default))
             .or_else(|| (!ids.is_empty()).then_some(0));
         let selected_id = selected.and_then(|index| ids.get(index)).cloned();
+        let selected_model = selected.and_then(|index| snapshot.models.get(index));
+        let mut reasoning_ids = vec![String::new()];
+        if let Some(model) = selected_model {
+            reasoning_ids.extend(model.reasoning_efforts.iter().cloned());
+        }
+        let default_effort = selected_model
+            .and_then(|model| model.default_reasoning_effort.as_deref())
+            .unwrap_or("model default");
+        let mut reasoning_labels = vec![if is_ru {
+            format!("По умолчанию ({default_effort})")
+        } else {
+            format!("Default ({default_effort})")
+        }];
+        reasoning_labels.extend(reasoning_ids.iter().skip(1).map(|effort| {
+            let mut chars = effort.chars();
+            chars.next().map_or_else(String::new, |first| {
+                first.to_uppercase().collect::<String>() + chars.as_str()
+            })
+        }));
+        let reasoning_selected = reasoning_ids
+            .iter()
+            .position(|effort| effort == &saved_effort)
+            .unwrap_or(0);
+        let normalized_effort = reasoning_ids
+            .get(reasoning_selected)
+            .cloned()
+            .unwrap_or_default();
         let fell_back = !saved.is_empty()
             && selected_id.is_some()
             && selected_id.as_deref() != Some(saved.as_str());
         if let Some(id) = selected_id {
-            if id != saved && codex_snapshot_ui_is_current(generation) {
+            if (id != saved || normalized_effort != saved_effort)
+                && codex_snapshot_ui_is_current(generation)
+            {
                 let mut c = cfg.write();
-                if codex_snapshot_ui_is_current(generation) && c.codex_model == saved {
+                if codex_snapshot_ui_is_current(generation)
+                    && c.codex_model == saved
+                    && c.codex_reasoning_effort == saved_effort
+                {
                     c.codex_model = id;
+                    c.codex_reasoning_effort = normalized_effort.clone();
                     if overlay_backend::config::save(&c).is_err() {
                         eprintln!("[overlay-host] Codex model save failed");
                     }
@@ -199,6 +236,12 @@ pub(crate) fn refresh_codex_account_status(
             });
         }
         let model_ids: Vec<SharedString> = ids.into_iter().map(SharedString::from).collect();
+        let reasoning_ids: Vec<SharedString> =
+            reasoning_ids.into_iter().map(SharedString::from).collect();
+        let reasoning_labels: Vec<SharedString> = reasoning_labels
+            .into_iter()
+            .map(SharedString::from)
+            .collect();
         let _ = slint::invoke_from_event_loop(move || {
             if codex_snapshot_ui_is_current(generation) {
                 if let Some(window) = weak.upgrade() {
@@ -208,6 +251,10 @@ pub(crate) fn refresh_codex_account_status(
                     window.set_codex_model_ids(ModelRc::new(VecModel::from(model_ids)));
                     window.set_codex_model_labels(ModelRc::new(VecModel::from(labels)));
                     window.set_codex_model_index(selected.map_or(-1, |index| index as i32));
+                    window.set_codex_reasoning_ids(ModelRc::new(VecModel::from(reasoning_ids)));
+                    window
+                        .set_codex_reasoning_labels(ModelRc::new(VecModel::from(reasoning_labels)));
+                    window.set_codex_reasoning_index(reasoning_selected as i32);
                     window.set_codex_rate_status(SharedString::from(secondary_status.join("\n")));
                 }
             }
@@ -717,6 +764,7 @@ pub(crate) fn wire_ai_settings(
     {
         let weak = win.as_weak();
         let cfg_c = cfg.clone();
+        let overlay = overlay_weak.clone();
         win.on_codex_model_selected(move |index| {
             let Some(window) = weak.upgrade() else {
                 return;
@@ -730,8 +778,35 @@ pub(crate) fn wire_ai_settings(
             invalidate_codex_snapshot_ui();
             let mut c = cfg_c.write();
             c.codex_model = model.to_string();
+            c.codex_reasoning_effort.clear();
+            let active_stack = active_stack_label(&c);
             if overlay_backend::config::save(&c).is_err() {
                 eprintln!("[overlay-host] Codex model save failed");
+            }
+            drop(c);
+            if let Some(bar) = overlay.upgrade() {
+                bar.set_active_stack(SharedString::from(active_stack));
+            }
+            refresh_codex_account_status(window.as_weak(), cfg_c.clone());
+        });
+    }
+    {
+        let weak = win.as_weak();
+        let cfg_c = cfg.clone();
+        win.on_codex_reasoning_selected(move |index| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            if index < 0 {
+                return;
+            }
+            let Some(effort) = window.get_codex_reasoning_ids().row_data(index as usize) else {
+                return;
+            };
+            let mut c = cfg_c.write();
+            c.codex_reasoning_effort = effort.to_string();
+            if overlay_backend::config::save(&c).is_err() {
+                eprintln!("[overlay-host] Codex reasoning save failed");
             }
         });
     }
@@ -760,24 +835,32 @@ pub(crate) fn wire_ai_settings(
             std::thread::spawn(move || {
                 let state = overlay_backend::codex_subscription::disconnect();
                 let label = codex_account_label(&state, is_ru);
-                let _ = slint::invoke_from_event_loop(move || {
-                    if codex_ui_is_current(generation) {
-                        if let Some(window) = worker_weak.upgrade() {
-                            window.set_codex_auth_busy(false);
-                            window.set_codex_auth_status(SharedString::from(label));
-                            window.set_codex_model_ids(ModelRc::new(VecModel::from(Vec::<
-                                SharedString,
-                            >::new(
-                            ))));
-                            window.set_codex_model_labels(ModelRc::new(VecModel::from(Vec::<
-                                SharedString,
-                            >::new(
-                            ))));
-                            window.set_codex_model_index(-1);
-                            window.set_codex_rate_status(SharedString::default());
+                let _ =
+                    slint::invoke_from_event_loop(move || {
+                        if codex_ui_is_current(generation) {
+                            if let Some(window) = worker_weak.upgrade() {
+                                window.set_codex_auth_busy(false);
+                                window.set_codex_auth_status(SharedString::from(label));
+                                window.set_codex_model_ids(ModelRc::new(VecModel::from(Vec::<
+                                    SharedString,
+                                >::new(
+                                ))));
+                                window.set_codex_model_labels(ModelRc::new(VecModel::from(Vec::<
+                                    SharedString,
+                                >::new(
+                                ))));
+                                window.set_codex_model_index(-1);
+                                window.set_codex_reasoning_ids(ModelRc::new(VecModel::from(
+                                    Vec::<SharedString>::new(),
+                                )));
+                                window.set_codex_reasoning_labels(ModelRc::new(VecModel::from(
+                                    Vec::<SharedString>::new(),
+                                )));
+                                window.set_codex_reasoning_index(-1);
+                                window.set_codex_rate_status(SharedString::default());
+                            }
                         }
-                    }
-                });
+                    });
             });
         });
     }

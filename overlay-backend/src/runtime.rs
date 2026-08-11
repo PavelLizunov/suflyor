@@ -1031,6 +1031,7 @@ async fn summary_complete(
                 base_url: base_url.to_string(),
                 bearer: bearer.to_string(),
                 model: model.to_string(),
+                reasoning_effort: None,
                 is_local: false,
             },
             messages,
@@ -1997,6 +1998,7 @@ pub async fn reask_last(
         base_url,
         bearer,
         model,
+        reasoning_effort,
         is_local,
         response_language,
         ui_is_ru,
@@ -2011,6 +2013,7 @@ pub async fn reask_last(
             ep.base_url,
             ep.bearer,
             ep.model,
+            ep.reasoning_effort,
             ep.is_local,
             c.response_language.clone(),
             c.ui_is_ru(),
@@ -2081,6 +2084,7 @@ pub async fn reask_last(
         base_url,
         bearer,
         model: model.clone(),
+        reasoning_effort,
         is_local,
     };
     let (answer, usage) = match ai::complete_with_usage_endpoint(&endpoint, messages, 512).await {
@@ -2268,6 +2272,7 @@ pub async fn manual_spawn_tile(
         base_url,
         bearer,
         model,
+        reasoning_effort,
         is_local,
         response_language,
         ui_is_ru,
@@ -2283,6 +2288,7 @@ pub async fn manual_spawn_tile(
             ep.base_url,
             ep.bearer,
             ep.model,
+            ep.reasoning_effort,
             ep.is_local,
             c.response_language.clone(),
             c.ui_is_ru(),
@@ -2404,6 +2410,7 @@ pub async fn manual_spawn_tile(
         base_url,
         bearer,
         model: model.clone(),
+        reasoning_effort,
         is_local,
     };
     let (answer, usage) = match ai::complete_with_usage_endpoint(&endpoint, messages, 512).await {

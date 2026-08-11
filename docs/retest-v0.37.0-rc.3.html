@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>suflyor v0.37.0-rc.3 retest</title>
+</head>
+<body>
+<h1>suflyor v0.37.0-rc.3 retest - Tera, Codex, installer and hotkeys</h1>
+<ol>
+<li>With an installed Suflyor running, run the installer. It must explain that
+only the installed copy will close; accepting updates successfully, cancelling
+leaves the running copy untouched. A separately built/development copy must
+not be closed.</li>
+<li>Open Settings &rarr; AI providers &rarr; Codex. Pick a model and then an
+explicit reasoning effort. The list must show the model default and only
+efforts supported by that model. Reopen Settings: both selections persist.</li>
+<li>Ask a harmless text-only question through Codex. It must return an answer,
+not the former security-policy error. A tool, filesystem, network, or external
+workspace request must still be rejected safely.</li>
+<li>After choosing a Codex model, confirm the top bar immediately displays
+that model rather than an old provider label.</li>
+<li>On a fresh/default TTS configuration, Tera voice <code>ru_f1</code> is
+selected. Test a Russian phrase: it must be intelligible. If Tera cannot
+start, Piper remains available as the fallback.</li>
+<li>Use Shift+Alt+1, Shift+Alt+2 and Shift+Alt+3 once each. The first shortcut
+must work, and the first Shift+Alt+2 capture must not create an empty/zero-size
+selection.</li>
+<li>At 1280x768 in English and Russian, inspect the changed Codex Settings
+controls and the top bar for clipping or stale labels.</li>
+</ol>
+</body>
+</html>

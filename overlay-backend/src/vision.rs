@@ -233,6 +233,7 @@ pub async fn test_connection(base_url: String, bearer: String, model: String) ->
         base_url,
         bearer,
         model,
+        reasoning_effort: None,
         is_local: false,
     })
     .await

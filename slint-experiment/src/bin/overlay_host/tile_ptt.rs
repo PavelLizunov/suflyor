@@ -255,7 +255,16 @@ pub(crate) fn fire_ptt_ask(
     // slot. No supersede, no abort — rapid PTTs no longer clobber each other.
 
     // ===== 3. Snapshot config + rolling transcript (context) =====
-    let (protocol, base_url, bearer, model, meeting_context, response_language, is_local) = {
+    let (
+        protocol,
+        base_url,
+        bearer,
+        model,
+        reasoning_effort,
+        meeting_context,
+        response_language,
+        is_local,
+    ) = {
         let c = cfg.read();
         let ep = c.ai_endpoint(false);
         let is_unmetered = ep.is_unmetered();
@@ -264,6 +273,7 @@ pub(crate) fn fire_ptt_ask(
             ep.base_url,
             ep.bearer,
             ep.model,
+            ep.reasoning_effort,
             c.meeting_context.clone(),
             c.response_language.clone(),
             is_unmetered,
@@ -441,6 +451,7 @@ pub(crate) fn fire_ptt_ask(
                 base_url,
                 bearer,
                 model: model.clone(),
+                reasoning_effort,
                 is_local,
             },
             messages,

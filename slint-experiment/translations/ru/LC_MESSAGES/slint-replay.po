@@ -2010,3 +2010,6 @@ msgstr "Установка отменена"
 
 msgid "Couldn't install the model — check the connection and retry."
 msgstr "Не удалось установить модель — проверьте соединение и повторите."
+
+msgid "Reasoning effort:"
+msgstr "Уровень рассуждений:"

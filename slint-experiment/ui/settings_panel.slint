@@ -372,6 +372,9 @@ export component SettingsWindow inherits Window {
     in-out property <[string]> codex-model-labels: [];
     in-out property <[string]> codex-model-ids: [];
     in-out property <int> codex-model-index: -1;
+    in-out property <[string]> codex-reasoning-labels: [];
+    in-out property <[string]> codex-reasoning-ids: [];
+    in-out property <int> codex-reasoning-index: -1;
     in-out property <string> codex-rate-status: "";
 
     // ТЗ 2026-07-09 — Hermes integration tab (settings_hermes.rs).
@@ -567,6 +570,7 @@ export component SettingsWindow inherits Window {
     callback codex-open-signin-clicked(string);
     callback codex-copy-code-clicked(string);
     callback codex-model-selected(int);
+    callback codex-reasoning-selected(int);
     callback codex-models-refresh();
     callback ai-model-selected(string);
     callback ai-models-refresh();
@@ -2412,6 +2416,20 @@ export component SettingsWindow inherits Window {
                                     text: root.codex-models-busy ? @tr("loading...") : @tr("refresh");
                                     enabled: !root.codex-auth-busy && !root.codex-models-busy;
                                     clicked => { root.codex-models-refresh(); }
+                                }
+                            }
+                            Text {
+                                text: @tr("Reasoning effort:");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                            }
+                            SettingsComboBox {
+                                model: root.codex-reasoning-labels;
+                                current-index: root.codex-reasoning-index;
+                                enabled: !root.codex-auth-busy && !root.codex-models-busy && root.codex-reasoning-labels.length > 0;
+                                selected => {
+                                    root.codex-reasoning-index = self.current-index;
+                                    root.codex-reasoning-selected(self.current-index);
                                 }
                             }
                             if root.codex-models-busy : Text {

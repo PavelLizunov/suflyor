@@ -170,7 +170,13 @@ export component CaptureOverlay inherits Window {
                     // plain click, or a tiny accidental drag cancels — never a
                     // spurious 1×1 capture. (4px was far too low: normal click
                     // jitter exceeded it and fired a vision request on noise.)
-                    if (root.dragging && root.rw >= 16px && root.rh >= 16px) {
+                    if (!root.dragging) {
+                        // A newly shown native window can receive the release
+                        // that completed the hotkey chord. It did not start a
+                        // selection, so keep the overlay open and ignore it.
+                        return;
+                    }
+                    if (root.rw >= 16px && root.rh >= 16px) {
                         root.dragging = false;
                         root.region-selected(root.rx, root.ry, root.rx + root.rw, root.ry + root.rh);
                     } else {
