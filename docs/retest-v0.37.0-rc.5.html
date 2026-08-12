@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>suflyor v0.37.0-rc.5 retest</title>
+</head>
+<body>
+<h1>suflyor v0.37.0-rc.5 retest - STT resumes after Tera read-aloud</h1>
+<ol>
+<li>Start a recorded session with Tera <code>ru_f1</code> selected and confirm
+normal mic/system transcription before read-aloud.</li>
+<li>Read a long answer tile aloud. While Tera is playing, its speech must not
+appear in either mic or system transcript.</li>
+<li>Let Tera finish naturally. Speak a fresh phrase immediately afterwards.
+The phrase must appear in the transcript without waiting for the old
+character-count estimate to expire.</li>
+<li>Repeat while interrupting Tera with a second tile. A delayed terminal event
+from the first tile must not resume STT while the second tile is speaking.</li>
+<li>Repeat with Pause/Resume and Stop. Pause keeps STT suppressed, Resume keeps
+the same utterance active, and Stop resumes STT with a fresh buffer.</li>
+<li>Terminate the Tera sidecar during playback. STT must recover on protocol
+EOF; the log may contain event ids/reason tokens but no spoken text.</li>
+<li>Switch to Piper and confirm its conservative estimate fallback still
+suppresses read-aloud feedback.</li>
+</ol>
+</body>
+</html>

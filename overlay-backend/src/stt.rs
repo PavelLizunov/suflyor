@@ -9,7 +9,7 @@ use crate::audio::{AudioChunk, AudioSource, TARGET_SAMPLE_RATE};
 use crate::config::SttBackendCfg;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -277,6 +277,7 @@ pub fn spawn(
 
         // Per-source rolling buffer + silence tracking
         let mut buffers: HashMap<AudioSource, Utterance> = HashMap::new();
+        let mut tts_suppressed_sources: HashSet<AudioSource> = HashSet::new();
 
         let mut max_rms_log: HashMap<AudioSource, (f32, u64)> = HashMap::new();
         while let Some(chunk) = audio_rx.recv().await {
@@ -286,6 +287,25 @@ pub fn spawn(
                 crate::journal::now_unix_ms() as u64,
                 std::sync::atomic::Ordering::Relaxed,
             );
+            // Drop read-aloud audio at ingestion, not only when a VAD buffer
+            // eventually flushes. Exact Tera DONE can then unmute immediately
+            // without submitting the buffered tail of the spoken tile.
+            if crate::tts::should_suppress_stt() {
+                buffers.remove(&chunk.source);
+                if tts_suppressed_sources.insert(chunk.source) {
+                    log::info!(
+                        "STT suppression entered for {:?} — read-aloud playback active",
+                        chunk.source
+                    );
+                }
+                continue;
+            }
+            if tts_suppressed_sources.remove(&chunk.source) {
+                log::info!(
+                    "STT suppression cleared for {:?} — starting a fresh buffer",
+                    chunk.source
+                );
+            }
             let utt = buffers.entry(chunk.source).or_default();
             let rms = rms_i16(&chunk.pcm_i16);
             // Every ~5s log the max RMS we saw — helps diagnose silent/missing capture.
@@ -369,7 +389,7 @@ pub fn spawn(
                 // transcribed (shown on the bar / answered by the AI). The user is
                 // listening to the read-aloud, not talking, so suppressing both is
                 // correct; `is_speaking` clears shortly after playback ends.
-                let tts_feedback = crate::tts::is_speaking();
+                let tts_feedback = crate::tts::should_suppress_stt();
                 if tts_feedback {
                     log::info!(
                         "dropped {:?} buffer ({dur_sec:.1}s) — read-aloud is playing",
