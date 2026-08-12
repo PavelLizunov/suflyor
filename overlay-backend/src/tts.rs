@@ -160,24 +160,24 @@ static SPEAKING_STATE: Mutex<SpeakingState> = Mutex::new(SpeakingState {
 static SPEAK_RATE: AtomicI32 = AtomicI32::new(0);
 
 /// True while a read-aloud is (estimated to be) playing through the speakers,
-/// OR is paused mid-utterance (playback will resume — keep suppressing STT).
+/// or is paused mid-utterance (so the tile can remain in its active state).
 #[must_use]
 pub fn is_speaking() -> bool {
     let state = SPEAKING_STATE
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    (crate::journal::now_unix_ms() as u64) < state.until_ms
+    state.paused_remaining_ms > 0 || (crate::journal::now_unix_ms() as u64) < state.until_ms
 }
 
 /// Capture arrives in ~200 ms chunks. Keep only STT muted for two final
 /// chunks after playback drains; the public speaking state still ends exactly
 /// on DONE, while queued loopback audio cannot seed a fresh transcript buffer.
-pub(crate) fn should_suppress_stt() -> bool {
+pub fn should_suppress_stt() -> bool {
     let state = SPEAKING_STATE
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let now = crate::journal::now_unix_ms() as u64;
-    now < state.until_ms || now < state.stt_tail_until_ms
+    (state.paused_remaining_ms == 0 && now < state.until_ms) || now < state.stt_tail_until_ms
 }
 
 /// Map a read rate (−10..+10) to a speed multiplier (−10→0.5×, 0→1×, +10→2×) —
@@ -215,6 +215,7 @@ fn mark_speaking_for(chars: usize) -> u64 {
     generation
 }
 
+#[cfg(test)]
 fn clear_speaking() {
     let mut state = SPEAKING_STATE
         .lock()
@@ -243,6 +244,13 @@ fn clear_speaking_generation(generation: u64) -> bool {
     true
 }
 
+fn active_speaking_generation() -> Option<u64> {
+    let state = SPEAKING_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    (state.active_generation != 0).then_some(state.active_generation)
+}
+
 const STT_TAIL_DRAIN_MS: u64 = 400;
 
 fn paused_remaining(until_ms: u64, now_ms: u64) -> Option<u64> {
@@ -260,7 +268,8 @@ fn pause_speaking() {
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     if let Some(remaining) = paused_remaining(state.until_ms, now) {
         state.paused_remaining_ms = remaining;
-        state.until_ms = u64::MAX;
+        state.until_ms = 0;
+        state.stt_tail_until_ms = now.saturating_add(STT_TAIL_DRAIN_MS);
     }
 }
 
@@ -271,6 +280,7 @@ fn resume_speaking() {
     let remaining = std::mem::take(&mut state.paused_remaining_ms);
     if let Some(until) = resumed_until(remaining, crate::journal::now_unix_ms() as u64) {
         state.until_ms = until;
+        state.stt_tail_until_ms = 0;
     }
 }
 
@@ -365,6 +375,21 @@ impl TeraPlaybackTracker {
 
     fn terminal(&mut self, id: u64) -> Option<u64> {
         self.utterances.remove(&id)
+    }
+
+    /// Forget a host generation stopped explicitly before the sidecar's DONE
+    /// arrives. The delayed terminal line then cannot affect newer playback.
+    fn stop_generation(&mut self, generation: u64) -> bool {
+        if self.cancel_speak(generation) {
+            return true;
+        }
+        let sidecar_id = self
+            .utterances
+            .iter()
+            .find_map(|(id, tracked)| (*tracked == generation).then_some(*id));
+        sidecar_id
+            .and_then(|id| self.utterances.remove(&id))
+            .is_some()
     }
 
     /// SPEAK payload parse failures are the only REJECTED events that can
@@ -1084,9 +1109,45 @@ impl Tts {
         }
     }
     pub fn stop(&self) {
-        clear_speaking();
-        let target = self.last_target.load(Ordering::Acquire);
-        if target != TARGET_NONE && !self.control_to(target, "STOP") {
+        let target = self.last_target.swap(TARGET_NONE, Ordering::AcqRel);
+        // Serialize the generation snapshot with the target's SPEAK/STOP wire
+        // order. Otherwise a concurrent newer SPEAK could slip between two
+        // sidecar locks and receive this older utterance's STOP.
+        let (generation, tracked, delivered) = match target {
+            TARGET_TERA => self
+                .tera
+                .lock()
+                .map(|mut sidecar| {
+                    let generation = active_speaking_generation();
+                    let tracked = generation
+                        .map(|generation| {
+                            sidecar
+                                .playback
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                                .stop_generation(generation)
+                        })
+                        .unwrap_or(false);
+                    let delivered = sidecar.send_if_alive("STOP");
+                    (generation, tracked, delivered)
+                })
+                .unwrap_or((None, false, false)),
+            TARGET_PIPER => self
+                .piper
+                .lock()
+                .map(|mut sidecar| {
+                    let generation = active_speaking_generation();
+                    let delivered = sidecar.send_if_alive("STOP");
+                    (generation, false, delivered)
+                })
+                .unwrap_or((None, false, false)),
+            _ => (active_speaking_generation(), false, false),
+        };
+        let cleared = generation.map(clear_speaking_generation).unwrap_or(false);
+        log::info!(
+            "tts: STOP target={target} generation={generation:?} tracked={tracked} delivered={delivered} cleared={cleared}"
+        );
+        if target != TARGET_NONE && !delivered {
             // The sidecar is already gone — playback died with it. Never
             // respawn an engine just to deliver STOP to nothing.
             log::debug!("tts: STOP not delivered — target sidecar not running");
@@ -1168,6 +1229,8 @@ pub fn init(engine: Option<String>, voice_id: Option<String>, rate: i32, lang: &
 }
 
 fn with<R>(f: impl FnOnce(&Tts) -> R) -> Option<R> {
+    // This process-global mutex serializes public speak/stop calls; the
+    // per-sidecar locking in `Tts::stop` additionally pins wire order.
     GLOBAL.get().and_then(|m| m.lock().ok()).map(|t| f(&t))
 }
 
@@ -1236,7 +1299,7 @@ pub fn voices(ru: bool) -> Vec<VoiceInfo> {
 /// so it flips to true right after the install button finishes.
 #[must_use]
 pub fn is_available() -> bool {
-    available_on_disk()
+    with(Tts::is_available).unwrap_or_else(available_on_disk)
 }
 
 fn available_on_disk() -> bool {
@@ -1627,6 +1690,96 @@ mod tests {
         assert!(is_speaking());
         assert!(clear_speaking_generation(tracker.terminal(2).unwrap()));
         assert!(!is_speaking());
+    }
+
+    #[test]
+    fn explicit_tera_stop_forgets_only_its_generation() {
+        let _lock = SPEAKING_GLOBAL_LOCK.lock().unwrap();
+        clear_speaking();
+        let stopped_generation = mark_speaking_for(10_000);
+        let tts = Tts::spawn(EngineKind::Tera, Some("tera:ru_f1".into()), 0, "ru");
+        {
+            let sidecar = tts.tera.lock().unwrap();
+            let mut tracker = sidecar.playback.lock().unwrap();
+            tracker.register_speak(stopped_generation);
+            assert_eq!(tracker.started(7), Some(stopped_generation));
+        }
+        tts.last_target.store(TARGET_TERA, Ordering::Release);
+
+        tts.stop();
+        assert!(!is_speaking());
+        assert!(should_suppress_stt(), "STOP keeps the bounded drain tail");
+        assert_eq!(
+            tts.tera
+                .lock()
+                .unwrap()
+                .playback
+                .lock()
+                .unwrap()
+                .terminal(7),
+            None,
+            "late DONE must be detached from the stopped generation"
+        );
+        assert!(
+            tts.tera
+                .lock()
+                .unwrap()
+                .playback
+                .lock()
+                .unwrap()
+                .drain_generations()
+                .is_empty(),
+            "status EOF after STOP must not rediscover the detached generation"
+        );
+
+        let newer = mark_speaking_for(10_000);
+        assert_ne!(newer, stopped_generation);
+        assert!(is_speaking());
+        assert!(!clear_speaking_generation(stopped_generation));
+        assert!(
+            is_speaking(),
+            "a stopped generation cannot clear newer speech"
+        );
+        assert!(clear_speaking_generation(newer));
+    }
+
+    #[test]
+    fn pause_keeps_ui_active_but_suppresses_only_the_drain_tail() {
+        let _lock = SPEAKING_GLOBAL_LOCK.lock().unwrap();
+        clear_speaking();
+        let generation = mark_speaking_for(10_000);
+
+        pause_speaking();
+        assert!(is_speaking(), "a paused tile remains resumable");
+        assert!(
+            should_suppress_stt(),
+            "PAUSE initially drains queued loopback chunks"
+        );
+        {
+            let mut state = SPEAKING_STATE.lock().unwrap();
+            assert!(state.paused_remaining_ms > 0);
+            assert_eq!(state.until_ms, 0);
+            state.stt_tail_until_ms = 0;
+        }
+        assert!(is_speaking(), "tail expiry must not deactivate the tile");
+        assert!(
+            !should_suppress_stt(),
+            "real meeting audio must flow during a long pause"
+        );
+        SPEAKING_STATE.lock().unwrap().stt_tail_until_ms = u64::MAX;
+
+        resume_speaking();
+        assert!(is_speaking());
+        assert!(
+            should_suppress_stt(),
+            "RESUME restores playback suppression"
+        );
+        assert_eq!(
+            SPEAKING_STATE.lock().unwrap().stt_tail_until_ms,
+            0,
+            "RESUME discards a stale PAUSE tail"
+        );
+        assert!(clear_speaking_generation(generation));
     }
 
     #[test]

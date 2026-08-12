@@ -433,7 +433,14 @@ fn forward_audio_chunks(
                 continue;
             }
             if let Some(recorder) = recorder.as_ref() {
-                recorder.feed(&chunk);
+                // Raw PCM is always recorded. Only direct system-loopback
+                // chunks get text-free app-TTS mask metadata; real microphone
+                // speech remains available during simultaneous read-aloud.
+                recorder.feed_with_tts_mask(
+                    &chunk,
+                    matches!(chunk.source, AudioSource::System)
+                        && overlay_backend::tts::should_suppress_stt(),
+                );
             }
             let permit = match stt_tx.reserve().await {
                 Ok(permit) => permit,

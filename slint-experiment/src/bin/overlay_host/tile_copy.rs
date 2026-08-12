@@ -35,9 +35,10 @@
 //! pass.
 use super::{
     ai, vision, Arc, ComponentHandle, Duration, MarkdownBlock, OverlayBarBridge, SharedString,
-    TileWindow, Timer, VecModel,
+    TileWindow, Timer, TimerMode, VecModel,
 };
 use slint::Model;
+use std::cell::RefCell;
 // `conversations_evict_keys` lives in `tile_controller.rs`; only this module's
 // eviction unit test (`copy_tests`) exercises it, so import it TEST-ONLY — a
 // plain module-level import would be unused in the normal build (clippy -D).
@@ -677,9 +678,49 @@ pub(crate) fn speak_answer_text(messages: &[ai::ChatMessage], rendered: &str) ->
 // speech: closing THAT tile (or the app) stops it; a new speak re-points it.
 static SPEAKING_CONVO: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(i64::MIN);
 
+thread_local! {
+    static SPEAK_TILES: RefCell<Vec<(i32, slint::Weak<TileWindow>)>> = const { RefCell::new(Vec::new()) };
+    static SPEAK_STATE_TIMER: Timer = Timer::default();
+}
+
+fn sync_speaking_tiles(active: Option<i32>) {
+    SPEAK_TILES.with(|tiles| {
+        tiles.borrow_mut().retain(|(id, weak)| {
+            let Some(tile) = weak.upgrade() else {
+                return false;
+            };
+            let is_active = active == Some(*id);
+            tile.set_speak_active(is_active);
+            if !is_active {
+                tile.set_speak_paused(false);
+            }
+            true
+        });
+    });
+}
+
+fn clear_speaking_tile() {
+    SPEAKING_CONVO.store(i64::MIN, std::sync::atomic::Ordering::Release);
+    reset_pause();
+    sync_speaking_tiles(None);
+    SPEAK_STATE_TIMER.with(Timer::stop);
+}
+
+fn start_speaking_state_timer() {
+    SPEAK_STATE_TIMER.with(|timer| {
+        timer.start(TimerMode::Repeated, Duration::from_millis(100), || {
+            if !overlay_backend::tts::is_speaking() {
+                clear_speaking_tile();
+            }
+        });
+    });
+}
+
 /// Record that `convo_id` started the current read-aloud.
 pub(crate) fn mark_speaking(convo_id: i32) {
     SPEAKING_CONVO.store(convo_id as i64, std::sync::atomic::Ordering::Release);
+    sync_speaking_tiles(Some(convo_id));
+    start_speaking_state_timer();
 }
 
 /// Stop the read-aloud iff `convo_id` is the tile currently being spoken — called
@@ -687,7 +728,7 @@ pub(crate) fn mark_speaking(convo_id: i32) {
 pub(crate) fn stop_if_speaking(convo_id: i32) {
     if SPEAKING_CONVO.load(std::sync::atomic::Ordering::Acquire) == convo_id as i64 {
         overlay_backend::tts::stop();
-        SPEAKING_CONVO.store(i64::MIN, std::sync::atomic::Ordering::Release);
+        clear_speaking_tile();
     }
 }
 
@@ -729,10 +770,20 @@ pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayB
     // Only advertise a working 🔊 when a voice + the sidecar are actually
     // installed; a missing engine must not show a usable action (F2).
     tile.set_can_speak(overlay_backend::tts::is_available());
+    SPEAK_TILES.with(|tiles| {
+        let mut tiles = tiles.borrow_mut();
+        tiles.retain(|(id, weak)| *id != convo_id && weak.upgrade().is_some());
+        tiles.push((convo_id, tile.as_weak()));
+    });
     let bridge_speak = bridge.clone();
     {
         let weak = tile.as_weak();
         tile.on_speak_clicked(move || {
+            if current_speaking_convo() == convo_id && overlay_backend::tts::is_speaking() {
+                overlay_backend::tts::stop();
+                clear_speaking_tile();
+                return;
+            }
             let text = convo_speak_text(&bridge_speak, convo_id);
             if text.trim().is_empty() {
                 return;
@@ -754,6 +805,9 @@ pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayB
     }
     let weak_p = tile.as_weak();
     tile.on_speak_pause_clicked(move || {
+        if current_speaking_convo() != convo_id || !overlay_backend::tts::is_speaking() {
+            return;
+        }
         // Shared global latch so this ⏯ button and the Shift+Alt+3 hotkey stay
         // coherent (one TTS engine, one utterance at a time).
         let now_paused = toggle_pause();

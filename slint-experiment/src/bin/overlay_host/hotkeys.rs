@@ -77,7 +77,7 @@ pub(crate) struct RegisteredHotkeys {
     pub cf8_id: u32,
     pub f9_id: u32,
     pub sf9_id: u32,
-    /// Shift+Alt+1/2/3 — read selection / OCR region / pause-stop (read-aloud).
+    /// Shift+Alt+1/2/3 — read selection / OCR region / pause-resume (read-aloud).
     pub sa1_id: u32,
     pub sa2_id: u32,
     pub sa3_id: u32,

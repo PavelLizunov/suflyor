@@ -1473,6 +1473,9 @@ msgstr "Настройка"
 msgid "Read aloud"
 msgstr "Озвучка"
 
+msgid "Stop reading aloud"
+msgstr "Остановить озвучку"
+
 msgid "Recording"
 msgstr "Запись"
 
@@ -1521,9 +1524,6 @@ msgstr "Озвучить выделенный текст"
 
 msgid "OCR a screen region and read it aloud"
 msgstr "OCR области экрана и озвучить"
-
-msgid "Pause / stop reading aloud"
-msgstr "Пауза / стоп озвучки"
 
 msgid "Help (open / close)"
 msgstr "Справка (открыть / закрыть)"

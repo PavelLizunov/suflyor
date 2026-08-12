@@ -208,6 +208,7 @@ export component TileWindow inherits Window {
     // text can be spoken (OCR / answer / summary). `speak-paused` flips the
     // second button's icon between pause (playing) and play (paused).
     in-out property <bool> can-speak: false;
+    in-out property <bool> speak-active: false;
     in-out property <bool> speak-paused: false;
     // Bound to the follow-up LineEdit so do-submit() can read + clear it.
     in-out property <string> followup-text;
@@ -492,13 +493,15 @@ export component TileWindow inherits Window {
                     border-width: 1px;
                     border-color: Theme.border-strong;
                     accessible-role: button;
-                    accessible-label: @tr("Read aloud");
+                    accessible-label: root.speak-active ? @tr("Stop reading aloud") : @tr("Read aloud");
                     speak-touch := TouchArea {
                         clicked => { root.speak-clicked(); }
                     }
                     Image {
-                        source: @image-url("../assets/icons/voice.svg");
-                        colorize: Theme.text-secondary;
+                        source: root.speak-active
+                            ? @image-url("../assets/icons/stop.svg")
+                            : @image-url("../assets/icons/voice.svg");
+                        colorize: root.speak-active ? Theme.danger : Theme.text-secondary;
                         width: 16px;
                         height: 16px;
                         image-fit: contain;
