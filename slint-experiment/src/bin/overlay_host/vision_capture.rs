@@ -410,6 +410,7 @@ pub(crate) fn launch_vision_for_bgra(
     tile.set_blocks(ModelRc::new(VecModel::from(vec![MarkdownBlock {
         kind: markdown::kind::PARAGRAPH,
         text: SharedString::from(placeholder_s),
+        display_text: SharedString::from(placeholder_s),
         lang: SharedString::from(""),
         marked: false,
     }])));

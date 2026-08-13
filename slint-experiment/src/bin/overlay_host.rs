@@ -531,6 +531,7 @@ pub(crate) fn to_md_blocks(md: &str) -> Vec<MarkdownBlock> {
         .map(|b| MarkdownBlock {
             kind: b.kind,
             text: SharedString::from(b.text),
+            display_text: SharedString::from(b.display_text),
             lang: SharedString::from(b.lang),
             marked: false,
         })
@@ -1892,6 +1893,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 .map(|b| MarkdownBlock {
                     kind: b.kind,
                     text: SharedString::from(b.text),
+                    display_text: SharedString::from(b.display_text),
                     lang: SharedString::from(b.lang),
                     marked: false,
                 })
@@ -3158,13 +3160,15 @@ fn main() -> Result<(), slint::PlatformError> {
             // plain, ACTIONABLE empty-state hint when there's nothing to ask
             // yet. No hourglass glyph — rare Unicode renders as a tofu square
             // on the skia font fallback (project no-tofu rule).
+            let placeholder_text = SharedString::from(manual_tile_placeholder(
+                deep_locked,
+                has_tx,
+                is_ru,
+            ));
             let placeholder = vec![MarkdownBlock {
                 kind: markdown::kind::PARAGRAPH,
-                text: SharedString::from(manual_tile_placeholder(
-                    deep_locked,
-                    has_tx,
-                    is_ru,
-                )),
+                text: placeholder_text.clone(),
+                display_text: placeholder_text,
                 lang: SharedString::from(""),
                 marked: false,
             }];
@@ -3246,6 +3250,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     .map(|b| MarkdownBlock {
                         kind: b.kind,
                         text: SharedString::from(b.text),
+                        display_text: SharedString::from(b.display_text),
                         lang: SharedString::from(b.lang),
                         marked: false,
                     })
@@ -3292,6 +3297,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                 .map(|b| MarkdownBlock {
                                     kind: b.kind,
                                     text: SharedString::from(b.text),
+                                    display_text: SharedString::from(b.display_text),
                                     lang: SharedString::from(b.lang),
                                     marked: false,
                                 })
@@ -3340,6 +3346,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                 .map(|b| MarkdownBlock {
                                     kind: b.kind,
                                     text: SharedString::from(b.text),
+                                    display_text: SharedString::from(b.display_text),
                                     lang: SharedString::from(b.lang),
                                     marked: false,
                                 })

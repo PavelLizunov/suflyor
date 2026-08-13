@@ -52,6 +52,7 @@ mod kind {
 fn block(kind: i32, text: String, lang: String) -> MarkdownBlock {
     MarkdownBlock {
         kind,
+        display_text: SharedString::from(text.clone()),
         text: SharedString::from(text),
         lang: SharedString::from(lang),
         marked: false,

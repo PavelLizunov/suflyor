@@ -116,6 +116,9 @@ export component DragGrip inherits Rectangle {
 export component SelectableText inherits Rectangle {
     height: ti.preferred-height;
     in property <string> text;
+    // When display text differs from source text, show it without a selectable
+    // TextInput so clipboard/memory can never receive the display-only rewrite.
+    in property <string> source-text: root.text;
     in property <length> font-size: 12px;
     in property <int> font-weight: 400;
     in property <brush> text-color;
@@ -124,6 +127,7 @@ export component SelectableText inherits Rectangle {
     // (anchor-byte-offset, cursor-byte-offset) of the current selection.
     callback capture(int, int);
     ContextMenuArea {
+        visible: root.text == root.source-text;
         Menu {
             MenuItem {
                 title: @tr("Copy selection");
@@ -156,5 +160,16 @@ export component SelectableText inherits Rectangle {
                 return reject;
             }
         }
+    }
+    Text {
+        visible: root.text != root.source-text;
+        width: parent.width;
+        text: root.text;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+        font-family: root.mono-family;
+        color: root.text-color;
+        wrap: root.wrap;
+        vertical-alignment: top;
     }
 }

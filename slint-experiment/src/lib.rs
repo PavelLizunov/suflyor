@@ -12,6 +12,7 @@ pub mod capture;
 pub mod lock_menu;
 pub mod logging;
 pub mod markdown;
+pub mod math_display;
 pub mod runtime_state;
 pub mod session_namer;
 pub mod slint_events;

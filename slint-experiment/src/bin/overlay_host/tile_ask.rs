@@ -285,6 +285,7 @@ pub(crate) fn fire_f9_ask(
     let placeholder = vec![MarkdownBlock {
         kind: markdown::kind::PARAGRAPH,
         text: SharedString::from("Asking AI…"),
+        display_text: SharedString::from("Asking AI…"),
         lang: SharedString::from(""),
         marked: false,
     }];

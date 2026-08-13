@@ -908,6 +908,7 @@ mod copy_tests {
         let mk = |kind: i32, text: &str| MarkdownBlock {
             kind,
             text: text.into(),
+            display_text: text.into(),
             lang: "".into(),
             marked: false,
         };
@@ -930,6 +931,7 @@ mod copy_tests {
         let mk = |text: &str| MarkdownBlock {
             kind: 0,
             text: text.into(),
+            display_text: text.into(),
             lang: "".into(),
             marked: false,
         };
@@ -955,6 +957,7 @@ mod copy_tests {
         let mk = |text: &str, marked: bool| MarkdownBlock {
             kind: 0,
             text: text.into(),
+            display_text: text.into(),
             lang: "".into(),
             marked,
         };

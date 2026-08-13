@@ -61,7 +61,8 @@ pub(crate) fn ptt_tile_error(weak: slint::Weak<TileWindow>, msg: &str, is_ru: bo
             }));
             t.set_blocks(ModelRc::new(VecModel::from(vec![MarkdownBlock {
                 kind: markdown::kind::PARAGRAPH,
-                text: SharedString::from(msg),
+                text: SharedString::from(msg.clone()),
+                display_text: SharedString::from(msg),
                 lang: SharedString::from(""),
                 marked: false,
             }])));
@@ -145,6 +146,7 @@ pub(crate) fn fire_ptt_ask(
     tile.set_blocks(ModelRc::new(VecModel::from(vec![MarkdownBlock {
         kind: markdown::kind::PARAGRAPH,
         text: SharedString::from(placeholder),
+        display_text: SharedString::from(placeholder),
         lang: SharedString::from(""),
         marked: false,
     }])));

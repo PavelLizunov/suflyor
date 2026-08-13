@@ -12,6 +12,7 @@
 //! stripped, see Event::Code). GFM tables render as an aligned monospace block (#109);
 //! links, images, footnotes, HTML are silently dropped — Phase 4.x.
 
+use crate::math_display::{looks_like_math, normalize_math_fragment};
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 /// Block discriminant values — keep in sync with
@@ -34,18 +35,36 @@ pub mod kind {
 pub struct Block {
     pub kind: i32,
     pub text: String,
+    pub display_text: String,
     pub lang: String,
 }
 
 impl Block {
     fn new(kind: i32, text: String, lang: String) -> Self {
-        Self { kind, text, lang }
+        let display_text = text.clone();
+        Self {
+            kind,
+            text,
+            display_text,
+            lang,
+        }
     }
 }
 
 /// Parse a CommonMark source string into a `Vec<Block>`.
 #[must_use]
 pub fn parse(source: &str) -> Vec<Block> {
+    let mut raw = parse_variant(source, false);
+    let display = parse_variant(source, true);
+    for (block, shown) in raw.iter_mut().zip(display) {
+        if block.kind == shown.kind {
+            block.display_text = shown.text;
+        }
+    }
+    raw
+}
+
+fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
     let mut out: Vec<Block> = Vec::new();
     let mut current_text = String::new();
     let mut current_kind: Option<i32> = None;
@@ -66,7 +85,9 @@ pub fn parse(source: &str) -> Vec<Block> {
     // append " (url)" on End(Link).
     let mut link_url: Option<String> = None;
 
-    for event in Parser::new_ext(source, Options::ENABLE_TABLES) {
+    let mut options = Options::ENABLE_TABLES;
+    options.insert(Options::ENABLE_MATH);
+    for event in Parser::new_ext(source, options) {
         match event {
             Event::Start(Tag::Heading { level, .. }) => {
                 flush(
@@ -146,6 +167,34 @@ pub fn parse(source: &str) -> Vec<Block> {
                     &mut current_text
                 };
                 buf.push_str(&t);
+            }
+            Event::InlineMath(t) => {
+                let buf = if in_cell {
+                    &mut current_cell
+                } else {
+                    &mut current_text
+                };
+                if normalize_math && looks_like_math(&t) {
+                    buf.push_str(&normalize_math_fragment(&t));
+                } else {
+                    buf.push('$');
+                    buf.push_str(&t);
+                    buf.push('$');
+                }
+            }
+            Event::DisplayMath(t) => {
+                let buf = if in_cell {
+                    &mut current_cell
+                } else {
+                    &mut current_text
+                };
+                if normalize_math && looks_like_math(&t) {
+                    buf.push_str(&normalize_math_fragment(&t));
+                } else {
+                    buf.push_str("$$");
+                    buf.push_str(&t);
+                    buf.push_str("$$");
+                }
             }
             Event::SoftBreak | Event::HardBreak => {
                 if in_cell {
@@ -436,6 +485,36 @@ mod tests {
             t.lines().all(|l| l.chars().count() <= 40),
             "line exceeded width cap: {t:?}"
         );
+    }
+
+    #[test]
+    fn math_display_handles_display_math_but_preserves_code_urls_and_currency() {
+        let blocks = parse(
+            "Math $$c_{ij} = \\sum_{k=1}^{n} a_{ik}b_{kj}$$. `c_{ij}`. \
+             https://example.test/c_{ij}?q=sum_k=1 costs $100 = 90$.\n\n\
+             ```text\nc_{ij} = \\sum_{k=1}^{n}\n```",
+        );
+        let math = blocks
+            .iter()
+            .find(|block| block.display_text.contains("cᵢⱼ = ∑ₖ₌₁ⁿ aᵢₖbₖⱼ"))
+            .expect("math paragraph");
+        assert!(math
+            .text
+            .contains("$$c_{ij} = \\sum_{k=1}^{n} a_{ik}b_{kj}$$"));
+        assert!(blocks
+            .iter()
+            .any(|block| block.text.contains(". c_{ij}. https://")));
+        assert!(blocks.iter().any(|block| {
+            block
+                .display_text
+                .contains("https://example.test/c_{ij}?q=sum_k=1")
+                && block.display_text.contains("$100 = 90$")
+        }));
+        assert!(blocks.iter().any(|block| {
+            block.kind == kind::CODE
+                && block.text.trim_end_matches('\n') == "c_{ij} = \\sum_{k=1}^{n}"
+                && block.display_text == block.text
+        }));
     }
 
     /// Micro-bench for audit P1: the tile re-`parse`s the WHOLE accumulated answer

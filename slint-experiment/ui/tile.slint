@@ -15,6 +15,7 @@ import { CloseButton, DragGrip, SelectableText } from "controls.slint";
 export struct MarkdownBlock {
     kind: int,
     text: string,
+    display-text: string,
     lang: string,
     // A2 (ТЗ 2026-07-02) — quiet per-block mark for «⭐ В память»; toggled via Rust
     // (toggle-block-marked), reset with the model on each stream re-render.
@@ -650,7 +651,8 @@ export component TileWindow inherits Window {
 
                         // H1
                         if block.kind == 1 : SelectableText {
-                            text: block.text;
+                            text: block.display-text;
+                            source-text: block.text;
                             font-size: Metrics.font-heading;
                             font-weight: 700;
                             text-color: Theme.text-primary;
@@ -659,7 +661,8 @@ export component TileWindow inherits Window {
                         }
                         // H2
                         if block.kind == 2 : SelectableText {
-                            text: block.text;
+                            text: block.display-text;
+                            source-text: block.text;
                             font-size: 15px;
                             font-weight: 700;
                             text-color: Theme.text-secondary;
@@ -668,7 +671,8 @@ export component TileWindow inherits Window {
                         }
                         // H3
                         if block.kind == 3 : SelectableText {
-                            text: block.text;
+                            text: block.display-text;
+                            source-text: block.text;
                             font-size: 13px;
                             font-weight: 700;
                             text-color: Theme.text-secondary;
@@ -679,7 +683,8 @@ export component TileWindow inherits Window {
                         if block.kind == 0 : HorizontalLayout {
                             spacing: 4px;
                             SelectableText {
-                                text: block.text;
+                                text: block.display-text;
+                                source-text: block.text;
                                 font-size: Metrics.font-body;
                                 text-color: Theme.text-secondary;
                                 wrap: word-wrap;
@@ -702,7 +707,8 @@ export component TileWindow inherits Window {
                                 width: 10px;
                             }
                             SelectableText {
-                                text: block.text;
+                                text: block.display-text;
+                                source-text: block.text;
                                 font-size: Metrics.font-body;
                                 text-color: Theme.text-secondary;
                                 wrap: word-wrap;
@@ -767,7 +773,8 @@ export component TileWindow inherits Window {
                                 // clip at the box edge (clip:true) — maximize
                                 // the tile (maximize button) to read them in full.
                                 SelectableText {
-                                    text: block.text;
+                                    text: block.display-text;
+                                    source-text: block.text;
                                     font-size: 11px;
                                     text-color: Theme.code-text;
                                     mono-family: Theme.font-mono;
@@ -793,7 +800,8 @@ export component TileWindow inherits Window {
                             VerticalLayout {
                                 padding: Metrics.space-sm;
                                 SelectableText {
-                                    text: block.text;
+                                    text: block.display-text;
+                                    source-text: block.text;
                                     font-size: 11px;
                                     text-color: Theme.code-text;
                                     mono-family: Theme.font-mono;

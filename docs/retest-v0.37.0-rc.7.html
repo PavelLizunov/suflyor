@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>suflyor v0.37.0-rc.7 retest</title>
+<h1>suflyor v0.37.0-rc.7 - display-only math normalization</h1>
+<ol>
+  <li>Open an answer tile containing <code>$c_{ij} = \\sum_{k=1}^{n} a_{ik}b_{kj}$</code>. It must display as readable flat math with subscripts and a sum symbol, without raw TeX commands.</li>
+  <li>Verify the displayed glyphs <code>i-subscript, j-subscript, k-subscript, sum</code> are legible and no square/tofu glyph appears.</li>
+  <li>Verify inline <code>$...$</code>, display <code>$$...$$</code>, and bare formula fragments render consistently.</li>
+  <li>Open a transcript containing <code>\\(...\\)</code> and <code>\\[...\\]</code>. Only its on-screen text is normalized.</li>
+  <li>Copy the whole answer, use Select text, mark a block, and add a marked block to memory. Every result must preserve the original TeX source and delimiters.</li>
+  <li>Copy/check a transcript row and search its raw formula. Clipboard, search, prompt, journal, and persisted transcript remain unchanged.</li>
+  <li>Verify fenced code, inline code, URLs, malformed delimiters, and currency such as <code>$100 = 90$</code> stay literal.</li>
+  <li>Stream an answer while a math delimiter is incomplete. The unfinished fragment remains literal until it becomes a complete formula.</li>
+</ol>
