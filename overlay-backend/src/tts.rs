@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child as Proc, ChildStdin, Command, Stdio};
-use std::sync::atomic::{AtomicI32, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicU16, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 
 use base64::Engine as _;
@@ -159,6 +159,62 @@ static SPEAKING_STATE: Mutex<SpeakingState> = Mutex::new(SpeakingState {
 /// speed (a slower rate = longer audio = longer suppression window).
 static SPEAK_RATE: AtomicI32 = AtomicI32::new(0);
 
+/// Playback-time speed is independent of synthesis rate. It is stored on each
+/// sidecar so a later SPEAK or a respawn preserves the tile player's setting.
+const DEFAULT_PLAYBACK_SPEED_PERCENT: u16 = 100;
+static PLAYBACK_SPEED_PERCENT: AtomicU16 = AtomicU16::new(DEFAULT_PLAYBACK_SPEED_PERCENT);
+
+fn playback_speed_percent(speed: f32) -> u16 {
+    (speed.clamp(0.5, 3.0) * 100.0).round() as u16
+}
+
+fn extend_speaking_for_slower_playback(old_percent: u16, new_percent: u16) {
+    if new_percent >= old_percent || new_percent == 0 {
+        return;
+    }
+    let now = crate::journal::now_unix_ms() as u64;
+    let mut state = SPEAKING_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let scale = u64::from(old_percent);
+    let divisor = u64::from(new_percent);
+    if state.until_ms > now {
+        let remaining = state.until_ms.saturating_sub(now);
+        state.until_ms = now.saturating_add(remaining.saturating_mul(scale) / divisor);
+    }
+    if state.paused_remaining_ms > 0 {
+        state.paused_remaining_ms = state
+            .paused_remaining_ms
+            .saturating_mul(scale)
+            .saturating_div(divisor);
+    }
+}
+
+fn rewind_extension_ms(seconds: i32, speed_percent: u16) -> u64 {
+    if seconds >= 0 || speed_percent == 0 {
+        return 0;
+    }
+    u64::from(seconds.unsigned_abs())
+        .saturating_mul(100_000)
+        .saturating_div(u64::from(speed_percent))
+}
+
+fn extend_speaking_for_rewind(seconds: i32, speed_percent: u16) {
+    let extra_ms = rewind_extension_ms(seconds, speed_percent);
+    if extra_ms == 0 {
+        return;
+    }
+    let now = crate::journal::now_unix_ms() as u64;
+    let mut state = SPEAKING_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if state.paused_remaining_ms > 0 {
+        state.paused_remaining_ms = state.paused_remaining_ms.saturating_add(extra_ms);
+    } else if state.until_ms > now {
+        state.until_ms = state.until_ms.saturating_add(extra_ms);
+    }
+}
+
 /// True while a read-aloud is (estimated to be) playing through the speakers,
 /// or is paused mid-utterance (so the tile can remain in its active state).
 #[must_use]
@@ -199,8 +255,9 @@ fn mark_speaking_for(chars: usize) -> u64 {
     const BASE_CPS: f64 = 12.0;
     const SYNTH_LATENCY_S: f64 = 1.5;
     const TAIL_COOLDOWN_S: f64 = 2.0;
-    let speed = rate_to_speed(SPEAK_RATE.load(Ordering::Acquire));
-    let play_s = (chars as f64) / (BASE_CPS * speed).max(1.0);
+    let synthesis_speed = rate_to_speed(SPEAK_RATE.load(Ordering::Acquire));
+    let playback_speed = f64::from(PLAYBACK_SPEED_PERCENT.load(Ordering::Acquire)) / 100.0;
+    let play_s = (chars as f64) / (BASE_CPS * synthesis_speed * playback_speed).max(1.0);
     let secs = SYNTH_LATENCY_S + play_s + TAIL_COOLDOWN_S;
     let until = (crate::journal::now_unix_ms() as u64).saturating_add((secs * 1000.0) as u64);
     let mut state = SPEAKING_STATE
@@ -688,6 +745,8 @@ struct Sidecar {
     /// Tera style id) — re-applied after every respawn.
     voice: String,
     rate: i32,
+    /// Pitch-preserving playback speed as the wire protocol's integer percent.
+    playback_speed_percent: u16,
     /// Language tag for the Tera sidecar (ignored by Piper).
     lang: String,
     proc: Option<Proc>,
@@ -703,7 +762,7 @@ struct Sidecar {
 
 impl Sidecar {
     /// Ensure a live child exists; (re)spawn if missing/dead and re-apply
-    /// LANG/VOICE/RATE. Lazy: the first command spawns it, so an idle app that
+    /// LANG/VOICE/RATE/SPEED. Lazy: the first command spawns it, so an idle app that
     /// never reads anything aloud never starts the process. A child found DEAD
     /// here crashed since the last spawn (the only other exit is app shutdown,
     /// which never re-enters `ensure`).
@@ -767,6 +826,8 @@ impl Sidecar {
                 }
                 let r = self.rate;
                 self.write_raw(&format!("RATE {r}"));
+                let speed = self.playback_speed_percent;
+                self.write_raw(&format!("SPEED {speed}"));
             }
             Err(e) => log::warn!("tts: failed to spawn {:?} sidecar: {e}", self.kind),
         }
@@ -913,6 +974,7 @@ impl Tts {
             exe: sidecar_exe_path(),
             voice: piper_voice,
             rate,
+            playback_speed_percent: DEFAULT_PLAYBACK_SPEED_PERCENT,
             lang: String::new(),
             proc: None,
             stdin: None,
@@ -925,6 +987,7 @@ impl Tts {
             exe: tera_sidecar_exe_path(),
             voice: tera_voice,
             rate,
+            playback_speed_percent: DEFAULT_PLAYBACK_SPEED_PERCENT,
             lang: lang.to_string(),
             proc: None,
             stdin: None,
@@ -1169,6 +1232,32 @@ impl Tts {
             self.send_to(target, &format!("RATE {r}"));
         }
     }
+    /// Set pitch-preserving playback speed (0.5–3.0×). The client preserves a
+    /// conservative STT suppression deadline when slowing an active read; a
+    /// faster speed may remain muted slightly longer but can never leak TTS.
+    pub fn set_playback_speed(&self, speed: f32) {
+        let next = playback_speed_percent(speed);
+        let previous = PLAYBACK_SPEED_PERCENT.swap(next, Ordering::AcqRel);
+        for sidecar in [&self.piper, &self.tera] {
+            if let Ok(mut sidecar) = sidecar.lock() {
+                sidecar.playback_speed_percent = next;
+            }
+        }
+        extend_speaking_for_slower_playback(previous, next);
+        let target = self.last_target.load(Ordering::Acquire);
+        if target != TARGET_NONE {
+            self.control_to(target, &format!("SPEED {next}"));
+        }
+    }
+    /// Seek the active read-aloud relative to its current audible cursor.
+    /// Sidecars clamp the request to their retained PCM timeline.
+    pub fn seek_seconds(&self, seconds: i32) {
+        let seconds = seconds.clamp(-30, 30);
+        let target = self.last_target.load(Ordering::Acquire);
+        if target != TARGET_NONE && self.control_to(target, &format!("SEEK {seconds}")) {
+            extend_speaking_for_rewind(seconds, PLAYBACK_SPEED_PERCENT.load(Ordering::Acquire));
+        }
+    }
     /// Switch the active voice by its NAMESPACED id (`piper:<dir>` or
     /// `tera:<style>`; a bare legacy id targets Piper).
     pub fn set_voice(&self, id: &str) {
@@ -1252,6 +1341,14 @@ pub fn stop() {
 }
 pub fn set_rate(rate: i32) {
     with(|t| t.set_rate(rate));
+}
+/// Set pitch-preserving speed for the currently active (or next) read-aloud.
+pub fn set_playback_speed(speed: f32) {
+    with(|t| t.set_playback_speed(speed));
+}
+/// Seek the active read-aloud by a relative number of seconds (clamped ±30).
+pub fn seek_seconds(seconds: i32) {
+    with(|t| t.seek_seconds(seconds));
 }
 pub fn set_voice(id: &str) {
     with(|t| t.set_voice(id));
@@ -1544,6 +1641,18 @@ mod tests {
             .ok()
             .and_then(|b| String::from_utf8(b).ok());
         assert_eq!(decoded.as_deref(), Some(text));
+    }
+
+    #[test]
+    fn playback_speed_is_protocol_bounded() {
+        assert_eq!(playback_speed_percent(0.1), 50);
+        assert_eq!(playback_speed_percent(1.0), 100);
+        assert_eq!(playback_speed_percent(1.25), 125);
+        assert_eq!(playback_speed_percent(9.0), 300);
+        assert_eq!(rewind_extension_ms(-10, 100), 10_000);
+        assert_eq!(rewind_extension_ms(-10, 200), 5_000);
+        assert_eq!(rewind_extension_ms(-10, 50), 20_000);
+        assert_eq!(rewind_extension_ms(15, 100), 0);
     }
 
     // ===== RC17: engine selection, namespaces, handshake, fallback =====
@@ -1846,6 +1955,7 @@ mod tests {
             exe: PathBuf::from("definitely-missing-sidecar.exe"),
             voice: String::new(),
             rate: 0,
+            playback_speed_percent: DEFAULT_PLAYBACK_SPEED_PERCENT,
             lang: "ru".into(),
             proc: None,
             stdin: None,
@@ -1901,6 +2011,7 @@ mod tests {
             exe: PathBuf::from("missing.exe"),
             voice: String::new(),
             rate: 0,
+            playback_speed_percent: DEFAULT_PLAYBACK_SPEED_PERCENT,
             lang: "ru".into(),
             proc: None,
             stdin: None,

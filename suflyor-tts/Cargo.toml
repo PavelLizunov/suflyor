@@ -22,6 +22,7 @@ sherpa-onnx = "1.13"          # static (default) — safe here: no ort in this c
 wasapi = "0.23"
 anyhow = "1"
 base64 = "0.23"
+suflyor-wsola = { path = "../suflyor-wsola" }
 
 [lints.clippy]
 unwrap_used = "deny"

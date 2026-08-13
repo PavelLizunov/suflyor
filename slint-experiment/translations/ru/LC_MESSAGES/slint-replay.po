@@ -1574,6 +1574,15 @@ msgstr "Озвучить выделенный текст (TTS)"
 msgid "Pause / resume reading aloud"
 msgstr "Пауза / продолжение озвучки"
 
+msgid "Back 10 seconds"
+msgstr "Назад на 10 секунд"
+
+msgid "Forward 15 seconds"
+msgstr "Вперёд на 15 секунд"
+
+msgid "Reading speed"
+msgstr "Скорость чтения"
+
 msgid "Local model and vision"
 msgstr "Локальная модель и зрение"
 

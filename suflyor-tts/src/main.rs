@@ -9,7 +9,7 @@
 //!   VOICE <dir>          select voice by model-dir name (loads on next SPEAK)
 //!   RATE <-10..10>       set read rate
 //!   SPEAK <base64-utf8>  synthesize + play, interrupting any current speech
-//!   PAUSE / RESUME / STOP
+//!   PAUSE / RESUME / STOP / SEEK <-30..30> / SPEED <50..300>
 //! EOF on stdin (parent exits) → this process exits.
 
 mod diar;
@@ -30,6 +30,8 @@ enum Cmd {
     Pause,
     Resume,
     Stop,
+    Seek(i32),
+    SetPlaybackSpeed(i32),
     SetRate(i32),
     SetVoice(String),
 }
@@ -44,6 +46,22 @@ fn parse_cmd(line: &str) -> Option<Cmd> {
     }
     if let Some(rest) = line.strip_prefix("RATE ") {
         return rest.trim().parse::<i32>().ok().map(Cmd::SetRate);
+    }
+    if let Some(rest) = line.strip_prefix("SEEK ") {
+        return rest
+            .trim()
+            .parse::<i32>()
+            .ok()
+            .filter(|seconds| (-30..=30).contains(seconds))
+            .map(Cmd::Seek);
+    }
+    if let Some(rest) = line.strip_prefix("SPEED ") {
+        return rest
+            .trim()
+            .parse::<i32>()
+            .ok()
+            .filter(|percent| (50..=300).contains(percent))
+            .map(Cmd::SetPlaybackSpeed);
     }
     if let Some(rest) = line.strip_prefix("VOICE ") {
         return Some(Cmd::SetVoice(rest.trim().to_string()));
@@ -171,6 +189,16 @@ fn worker(rx: mpsc::Receiver<Cmd>) {
                     pb.resume();
                 }
             }
+            Some(Cmd::Seek(seconds)) => {
+                if let Some(pb) = &current {
+                    pb.seek_seconds(seconds);
+                }
+            }
+            Some(Cmd::SetPlaybackSpeed(percent)) => {
+                if let Some(pb) = &current {
+                    pb.set_speed(percent as f32 / 100.0);
+                }
+            }
             Some(Cmd::Stop) => {
                 pending.clear();
                 if let Some(pb) = current.take() {
@@ -237,5 +265,24 @@ fn worker(rx: mpsc::Receiver<Cmd>) {
     // continuing after closing the app).
     if let Some(pb) = current.take() {
         pb.stop();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
+
+    use super::*;
+
+    #[test]
+    fn parses_bounded_seek_and_playback_speed() {
+        assert!(matches!(parse_cmd("SEEK -10"), Some(Cmd::Seek(-10))));
+        assert!(matches!(parse_cmd("SEEK 15"), Some(Cmd::Seek(15))));
+        assert!(matches!(
+            parse_cmd("SPEED 150"),
+            Some(Cmd::SetPlaybackSpeed(150))
+        ));
+        assert!(parse_cmd("SEEK 31").is_none());
+        assert!(parse_cmd("SPEED 301").is_none());
     }
 }

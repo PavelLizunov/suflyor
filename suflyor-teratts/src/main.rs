@@ -11,7 +11,7 @@
 //!   RATE <-10..10>       read rate (maps to duration_scale)
 //!   LANG <ru|en>         language tag for untagged SPEAK text (default ru)
 //!   SPEAK <base64-utf8>  synthesize + play, interrupting current speech
-//!   PAUSE / RESUME / STOP
+//!   PAUSE / RESUME / STOP / SEEK <-30..30> / SPEED <50..300>
 //!   EOF on stdin (parent exits) -> this process exits.
 //!
 //! Stdout handshake (one ASCII line per event, no text/credentials):
@@ -98,6 +98,8 @@ trait Player {
     fn end_of_stream(&mut self);
     fn pause(&mut self);
     fn resume(&mut self);
+    fn seek_seconds(&mut self, seconds: i32);
+    fn set_speed(&mut self, speed: f32);
     fn stop(self);
 }
 
@@ -318,6 +320,16 @@ impl<P: Player> Controller<P> {
                     player.resume();
                 }
             }
+            Cmd::Seek(seconds) => {
+                if let Some(player) = self.player.as_mut() {
+                    player.seek_seconds(seconds);
+                }
+            }
+            Cmd::SetPlaybackSpeed(percent) => {
+                if let Some(player) = self.player.as_mut() {
+                    player.set_speed(percent as f32 / 100.0);
+                }
+            }
             Cmd::Stop => self.close_active(),
             Cmd::SetRate(rate) => self.rate = rate.clamp(-10, 10),
             Cmd::SetVoice(id) => {
@@ -350,6 +362,12 @@ impl Player for RealPlayer {
     }
     fn resume(&mut self) {
         self.0.resume();
+    }
+    fn seek_seconds(&mut self, seconds: i32) {
+        self.0.seek_seconds(seconds);
+    }
+    fn set_speed(&mut self, speed: f32) {
+        self.0.set_speed(speed);
     }
     fn stop(self) {
         self.0.stop();
@@ -597,6 +615,16 @@ mod tests {
             self.log
                 .borrow_mut()
                 .push(format!("resume:{}", self.utterance));
+        }
+        fn seek_seconds(&mut self, seconds: i32) {
+            self.log
+                .borrow_mut()
+                .push(format!("seek:{}:{seconds}", self.utterance));
+        }
+        fn set_speed(&mut self, speed: f32) {
+            self.log
+                .borrow_mut()
+                .push(format!("speed:{}:{speed:.2}", self.utterance));
         }
         fn stop(self) {
             self.log
@@ -859,6 +887,21 @@ mod tests {
         let log = h.player_log.borrow();
         assert!(log.iter().any(|e| e == "pause:1"));
         assert!(log.iter().any(|e| e == "resume:1"));
+    }
+
+    #[test]
+    fn seek_and_speed_forward_only_to_an_active_generation() {
+        let mut h = harness();
+        h.controller.on_cmd(Cmd::Seek(-10));
+        h.controller.on_cmd(Cmd::SetPlaybackSpeed(150));
+        assert!(h.player_log.borrow().is_empty());
+
+        h.controller.on_cmd(Cmd::Speak("Text.".into()));
+        h.controller.on_cmd(Cmd::Seek(-10));
+        h.controller.on_cmd(Cmd::SetPlaybackSpeed(150));
+        let log = h.player_log.borrow();
+        assert!(log.iter().any(|e| e == "seek:1:-10"));
+        assert!(log.iter().any(|e| e == "speed:1:1.50"));
     }
 
     #[test]

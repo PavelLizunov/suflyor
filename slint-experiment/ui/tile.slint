@@ -210,6 +210,8 @@ export component TileWindow inherits Window {
     in-out property <bool> can-speak: false;
     in-out property <bool> speak-active: false;
     in-out property <bool> speak-paused: false;
+    // Tile-player speed is transient and resets to 1.0x for every new read.
+    in-out property <string> speak-speed-label: "1.0x";
     // Bound to the follow-up LineEdit so do-submit() can read + clear it.
     in-out property <string> followup-text;
 
@@ -229,6 +231,8 @@ export component TileWindow inherits Window {
     // Read-aloud — speak the tile's text aloud / toggle pause-resume.
     callback speak-clicked();
     callback speak-pause-clicked();
+    callback speak-seek-clicked(int);
+    callback speak-speed-next-clicked();
     // Phase E6 v22 — manual cursor-delta drag. drag-start-requested
     // fires on pointer-down (records anchor), drag-moved fires on
     // each move while pressed (moves window by delta). Replaces the
@@ -430,6 +434,24 @@ export component TileWindow inherits Window {
                                         root.toggle-select-mode();
                                         overflow-popup.close();
                                     }
+                                }
+                                // The player stays in the existing overflow menu so a long
+                                // answer never loses its close/maximize controls. It is shown
+                                // only while this exact tile owns read-aloud.
+                                if root.speak-active: TileMenuRow {
+                                    icon: @image-url("../assets/icons/seek-back.svg");
+                                    label: @tr("Back 10 seconds");
+                                    clicked => { root.speak-seek-clicked(-10); }
+                                }
+                                if root.speak-active: TileMenuRow {
+                                    icon: @image-url("../assets/icons/seek-forward.svg");
+                                    label: @tr("Forward 15 seconds");
+                                    clicked => { root.speak-seek-clicked(15); }
+                                }
+                                if root.speak-active: TileMenuRow {
+                                    icon: @image-url("../assets/icons/speed.svg");
+                                    label: @tr("Reading speed") + ": " + root.speak-speed-label;
+                                    clicked => { root.speak-speed-next-clicked(); }
                                 }
                                 if root.can-regenerate: TileMenuRow {
                                     icon: @image-url("../assets/icons/refresh.svg");

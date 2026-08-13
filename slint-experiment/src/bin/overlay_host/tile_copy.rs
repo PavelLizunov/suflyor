@@ -691,6 +691,11 @@ fn sync_speaking_tiles(active: Option<i32>) {
             };
             let is_active = active == Some(*id);
             tile.set_speak_active(is_active);
+            tile.set_speak_speed_label(SharedString::from(speak_speed_label(if is_active {
+                SPEAK_SPEED_PERCENT.load(std::sync::atomic::Ordering::Acquire)
+            } else {
+                100
+            })));
             if !is_active {
                 tile.set_speak_paused(false);
             }
@@ -746,6 +751,34 @@ pub(crate) fn current_speaking_convo() -> i32 {
 // hotkey so they stay coherent (TTS is global + one-at-a-time). false = playing.
 static SPEAK_PAUSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// Per-read speed shown by the active tile player. It intentionally is not a
+/// persisted Settings value: every new read starts at a predictable 1.0x.
+static SPEAK_SPEED_PERCENT: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(100);
+
+fn speak_speed_label(percent: u16) -> String {
+    let compact = format!("{:.2}", f32::from(percent) / 100.0);
+    format!("{}x", compact.trim_end_matches('0').trim_end_matches('.'))
+}
+
+fn next_speak_speed_percent(current: u16) -> u16 {
+    match current {
+        100 => 125,
+        125 => 150,
+        150 => 200,
+        _ => 100,
+    }
+}
+
+fn set_speak_speed_percent(percent: u16) {
+    let percent = percent.clamp(50, 300);
+    SPEAK_SPEED_PERCENT.store(percent, std::sync::atomic::Ordering::Release);
+    overlay_backend::tts::set_playback_speed(f32::from(percent) / 100.0);
+}
+
+fn reset_speak_speed() {
+    set_speak_speed_percent(100);
+}
+
 /// Toggle pause/resume of the current read-aloud; returns the NEW paused state.
 pub(crate) fn toggle_pause() -> bool {
     let now_paused = !SPEAK_PAUSED.fetch_xor(true, std::sync::atomic::Ordering::SeqCst);
@@ -793,6 +826,9 @@ pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayB
             // window ONLY when playback is accepted. Gate the tile's speaking
             // state on that result so a missing engine neither shows as speaking
             // nor falsely silences the mic (F2).
+            // Reset before SPEAK so a new tile cannot inherit the previous
+            // tile's fast-forward rate even when the sidecar stays warm.
+            reset_speak_speed();
             if !overlay_backend::tts::speak(&text) {
                 return;
             }
@@ -815,6 +851,24 @@ pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayB
             t.set_speak_paused(now_paused);
         }
     });
+    tile.on_speak_seek_clicked(move |seconds| {
+        if current_speaking_convo() == convo_id && overlay_backend::tts::is_speaking() {
+            overlay_backend::tts::seek_seconds(seconds);
+        }
+    });
+    let weak_speed = tile.as_weak();
+    tile.on_speak_speed_next_clicked(move || {
+        if current_speaking_convo() != convo_id || !overlay_backend::tts::is_speaking() {
+            return;
+        }
+        let next = next_speak_speed_percent(
+            SPEAK_SPEED_PERCENT.load(std::sync::atomic::Ordering::Acquire),
+        );
+        set_speak_speed_percent(next);
+        if let Some(t) = weak_speed.upgrade() {
+            t.set_speak_speed_label(SharedString::from(speak_speed_label(next)));
+        }
+    });
 }
 
 #[cfg(test)]
@@ -823,6 +877,16 @@ mod copy_tests {
     //! copy pulling in the raw Mic/System transcript, and follow-ups being
     //! re-answered as the original question. Pure: no bridge, no UI, no network.
     use super::*;
+
+    #[test]
+    fn tile_player_speed_cycle_returns_to_normal() {
+        assert_eq!(next_speak_speed_percent(100), 125);
+        assert_eq!(next_speak_speed_percent(125), 150);
+        assert_eq!(next_speak_speed_percent(150), 200);
+        assert_eq!(next_speak_speed_percent(200), 100);
+        assert_eq!(speak_speed_label(100), "1x");
+        assert_eq!(speak_speed_label(125), "1.25x");
+    }
 
     #[test]
     fn char_boundary_clamps_into_multibyte() {

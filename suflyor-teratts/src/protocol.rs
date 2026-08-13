@@ -1,7 +1,7 @@
 //! Stdin/stdout line protocol shared with the host.
 //!
 //! Stdin commands mirror suflyor-tts byte-for-byte (VOICE/RATE/SPEAK/PAUSE/
-//! RESUME/STOP) so one host driver can talk to either sidecar. `LANG` is an
+//! RESUME/STOP/SEEK/SPEED) so one host driver can talk to either sidecar. `LANG` is an
 //! additive extension: old hosts never send it, and the default stays `ru`.
 //! Unknown or malformed lines are never silently dropped — the sidecar answers
 //! with a `REJECTED` status line so host tests can observe the refusal.
@@ -23,6 +23,10 @@ pub enum Cmd {
     Pause,
     Resume,
     Stop,
+    /// Relative seek in seconds. The player clamps to retained/buffered PCM.
+    Seek(i32),
+    /// Pitch-preserving playback speed as an integer percent (50..=300).
+    SetPlaybackSpeed(i32),
     /// Read rate −10..=10, mapped onto Tera `duration_scale` (higher rate →
     /// shorter durations).
     SetRate(i32),
@@ -41,6 +45,8 @@ pub enum RejectReason {
     InvalidBase64,
     InvalidUtf8,
     InvalidRate,
+    InvalidSeek,
+    InvalidSpeed,
     InvalidLang,
     EmptyVoice,
     UnknownVoice,
@@ -53,6 +59,8 @@ impl RejectReason {
             RejectReason::InvalidBase64 => "invalid-base64",
             RejectReason::InvalidUtf8 => "invalid-utf8",
             RejectReason::InvalidRate => "invalid-rate",
+            RejectReason::InvalidSeek => "invalid-seek",
+            RejectReason::InvalidSpeed => "invalid-speed",
             RejectReason::InvalidLang => "invalid-lang",
             RejectReason::EmptyVoice => "empty-voice",
             RejectReason::UnknownVoice => "unknown-voice",
@@ -83,6 +91,26 @@ pub fn parse_cmd(line: &str) -> Result<Option<Cmd>, RejectReason> {
             return Err(RejectReason::InvalidRate);
         }
         return Ok(Some(Cmd::SetRate(rate)));
+    }
+    if let Some(rest) = line.strip_prefix("SEEK ") {
+        let seconds = rest
+            .trim()
+            .parse::<i32>()
+            .map_err(|_| RejectReason::InvalidSeek)?;
+        if !(-30..=30).contains(&seconds) {
+            return Err(RejectReason::InvalidSeek);
+        }
+        return Ok(Some(Cmd::Seek(seconds)));
+    }
+    if let Some(rest) = line.strip_prefix("SPEED ") {
+        let percent = rest
+            .trim()
+            .parse::<i32>()
+            .map_err(|_| RejectReason::InvalidSpeed)?;
+        if !(50..=300).contains(&percent) {
+            return Err(RejectReason::InvalidSpeed);
+        }
+        return Ok(Some(Cmd::SetPlaybackSpeed(percent)));
     }
     if let Some(rest) = line.strip_prefix("VOICE ") {
         let id = rest.trim();
@@ -214,6 +242,21 @@ mod tests {
         assert_eq!(
             parse_cmd("RATE abc").unwrap_err(),
             RejectReason::InvalidRate
+        );
+    }
+
+    #[test]
+    fn parses_seek_and_playback_speed_with_strict_bounds() {
+        assert_eq!(parse_cmd("SEEK -10").unwrap(), Some(Cmd::Seek(-10)));
+        assert_eq!(parse_cmd("SEEK 15").unwrap(), Some(Cmd::Seek(15)));
+        assert_eq!(
+            parse_cmd("SPEED 150").unwrap(),
+            Some(Cmd::SetPlaybackSpeed(150))
+        );
+        assert_eq!(parse_cmd("SEEK 31").unwrap_err(), RejectReason::InvalidSeek);
+        assert_eq!(
+            parse_cmd("SPEED 301").unwrap_err(),
+            RejectReason::InvalidSpeed
         );
     }
 

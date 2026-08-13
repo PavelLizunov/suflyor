@@ -1,0 +1,13 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>suflyor v0.37.0-rc.6 retest</title>
+<h1>suflyor v0.37.0-rc.6 - tile read-aloud player</h1>
+<ol>
+  <li>Open a long answer tile and start read-aloud. The speaker control turns into Stop; the tile's More menu exposes Back 10 seconds, Forward 15 seconds, and Reading speed.</li>
+  <li>Use Back and Forward while Tera is reading. Position stays inside the synthesized/readable text; repeated Forward near the end does not crash or invent future audio.</li>
+  <li>Cycle Reading speed: 1x → 1.25x → 1.5x → 2x → 1x. Speech stays pitch-preserved and a new tile always starts at 1x.</li>
+  <li>Pause then resume at a non-1x speed, and Stop while speed is changed. The tile resets to idle and a later read is normal speed.</li>
+  <li>Repeat start/pause/stop on Piper. Its controls may react after the current synthesis chunk, but EOS must drain and the sidecar must become idle without continuing to write silence.</li>
+  <li>During a recorded session, slow playback to 0.5x through the protocol-level smoke test. STT remains suppressed while TTS plays and resumes after the bounded drain tail when paused or stopped.</li>
+  <li>Before committing/releasing on Winbrat, regenerate and stage both tracked sidecar lockfiles: <code>suflyor-tts/Cargo.lock</code> and <code>suflyor-teratts/Cargo.lock</code>. This checkout deliberately does not run Cargo on the owner PC.</li>
+</ol>
