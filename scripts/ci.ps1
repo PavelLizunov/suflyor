@@ -65,6 +65,17 @@ Run-Step "slint fmt --check" {
 Run-Step "slint clippy -D warnings" {
     & $cargoExe clippy --manifest-path slint-experiment/Cargo.toml --all-targets -- -D warnings
 }
+# Rust test executables live under target/debug/deps. The statically linked
+# DirectML provider imports DMLCreateDevice1 before main; older Windows builds
+# have a system DirectML.dll without that export, so stage ort's matching
+# redistributable beside the test executables just like the release build does.
+Run-Step "stage DirectML for slint tests" {
+    $dmlSource = Join-Path $projectRoot "slint-experiment\target\debug\DirectML.dll"
+    if (-not (Test-Path $dmlSource)) {
+        throw "matching DirectML.dll not found after the Slint build"
+    }
+    Copy-Item -LiteralPath $dmlSource -Destination (Join-Path $projectRoot "slint-experiment\target\debug\deps\DirectML.dll") -Force
+}
 # NOT --lib: it skips tests/ (i18n_guard + any guard test). Run the full suite.
 Run-Step "slint test" {
     & $cargoExe test --manifest-path slint-experiment/Cargo.toml --quiet

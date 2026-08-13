@@ -616,6 +616,9 @@ export component OverlayBarWindow inherits Window {
     // захватить + timer + Expand). Persisted via config.compact_bar; Rust resizes
     // the bar window on toggle.
     in-out property <bool> compact-bar: false;
+    // The hide action is exposed only after Windows accepted the tray icon;
+    // otherwise hiding the bar would remove the only restore surface.
+    in property <bool> tray-available: false;
     // v0.28 — "listening mode" (config.suppress_tiles): the bar lock chip toggles this; when
     // true, auto AI tiles are suppressed (slint_session::maybe_spawn_auto_tile early-returns).
     in-out property <bool> suppress-tiles: false;
@@ -668,6 +671,9 @@ export component OverlayBarWindow inherits Window {
     callback drag-moved();
     // Compact mode: collapse/expand the bar.
     callback compact-toggle-clicked();
+    // RC4 — hide the bar to the system tray (explicit only; startup is always
+    // visible). Recording/hotkeys/TTS keep running; the tray restores the bar.
+    callback hide-to-tray-clicked();
 
     Rectangle {
         background: Theme.bg-surface.with-alpha(0.92);
@@ -990,6 +996,17 @@ export component OverlayBarWindow inherits Window {
                 accent: #38bdf8;
                 clicked => { root.compact-toggle-clicked(); }
             }
+            // RC4 — hide the bar to the system tray, immediately beside the
+            // compact control. Explicit only — startup is always visible; the
+            // tray icon restores the bar (same compact mode). Recording,
+            // hotkeys, TTS and session tasks keep running while hidden.
+            if root.tray-available && !root.confirming : Chip {
+                icon: @image-url("../assets/icons/tray.svg");
+                has-icon: true;
+                a11y: @tr("Hide to tray");
+                accent: #38bdf8;
+                clicked => { root.hide-to-tray-clicked(); }
+            }
             // Quit — two-step. Idle: a single ASCII "X" (Unicode ✕ renders
             // as a missing-glyph box on the Slint+skia fallback). Armed:
             // inline "Quit? [Yes] [No]" so a stray click can't kill the app.
@@ -1277,6 +1294,15 @@ export component OverlayBarWindow inherits Window {
                 // width (identical to the full bar) and Expand sits at the right
                 // edge, mirroring the full bar's window-control placement.
                 Rectangle { horizontal-stretch: 1; min-width: 8px; }
+                // RC4 — hide to tray, beside the Expand control (same action +
+                // same icon as the full bar's hide chip).
+                if root.tray-available : Chip {
+                    icon: @image-url("../assets/icons/tray.svg");
+                    has-icon: true;
+                    a11y: @tr("Hide to tray");
+                    accent: #38bdf8;
+                    clicked => { root.hide-to-tray-clicked(); }
+                }
                 // Expand — restore the full bar (full action set).
                 Chip {
                     icon: @image-url("../assets/icons/maximize.svg");

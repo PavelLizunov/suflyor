@@ -17,4 +17,5 @@ pub mod runtime_state;
 pub mod session_namer;
 pub mod slint_events;
 pub mod slint_session;
+pub mod tray;
 pub mod win32;

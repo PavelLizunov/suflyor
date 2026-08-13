@@ -62,6 +62,11 @@ msgstr "Нет"
 msgid "Restart?"
 msgstr "Перезапустить?"
 
+# RC4 — hide-to-tray bar action (accessible label of the icon-only chip that
+# sits beside the compact control). Tray MENU labels are Rust-side (tray.rs).
+msgid "Hide to tray"
+msgstr "Скрыть в трей"
+
 # === tile.slint ===
 
 msgid "#{}  {}"

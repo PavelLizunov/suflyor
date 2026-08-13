@@ -280,7 +280,7 @@ use settings_stt::*;
 
 // Phase 3b.3 — the 💭 Memory Settings tab (curated-memory review). `use
 // settings_memory::*;` re-exports `wire_memory`, which `open_settings` calls to
-// bind the candidate/item lists + approve/reject/delete/extract over the SQLite
+// bind the/item lists + approve/reject/delete/extract over the SQLite
 // memory tables (3b.1) + the heuristic extractor (3b.2a).
 #[path = "overlay_host/settings_memory.rs"]
 mod settings_memory;
@@ -553,6 +553,16 @@ pub(crate) fn to_md_blocks(md: &str) -> Vec<MarkdownBlock> {
 /// touches the device) frees it for the next recorder immediately. One acquire
 /// pairs with exactly one release.
 static MIC_BUSY: AtomicBool = AtomicBool::new(false);
+
+/// hidden-to-tray — the bar is hidden ONLY by an explicit action (bar chip
+/// or tray menu) and restored from the tray; the flag is process-local and
+/// NEVER persisted, so every startup is visible. While hidden, everything else
+/// keeps running: recording, hotkeys, TTS, session tasks, tiles, F6/F9.
+static BAR_TRAY_HIDDEN: AtomicBool = AtomicBool::new(false);
+
+/// The hide chip is deliberately a no-op if Windows rejected the tray icon:
+/// without an icon, hiding the only restore surface would strand the user.
+static TRAY_AVAILABLE: AtomicBool = AtomicBool::new(false);
 
 /// RAII release for the single-mic lock. Dropping this — on ANY exit path,
 /// including a panic unwinding the record thread (WASAPI/COM fault, USB mic
@@ -4191,6 +4201,22 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // ===== Hide to tray =====
+    // Separate action beside the compact control: hides ONLY the bar window.
+    // Explicit-only — startup is always visible and nothing is persisted; the
+    // tray icon (installed below) is the restore path. Compact mode is not
+    // touched, so a restore returns the bar exactly as it was.
+    {
+        let weak_for_hide = overlay.as_weak();
+        overlay.on_hide_to_tray_clicked(move || {
+            if TRAY_AVAILABLE.load(Ordering::Relaxed) {
+                hide_bar_to_tray(&weak_for_hide);
+            } else {
+                diag!("hide-to-tray ignored: tray icon unavailable");
+            }
+        });
+    }
+
     // ===== Bar drag-to-move (Phase E6 v22 — manual cursor-delta) =====
     // drag-start-requested (pointer-down on status pill) records the
     // anchor; drag-moved (move while pressed) moves the window by the
@@ -4395,7 +4421,59 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // ===== Tray icon (hidden-to-tray) =====
+    // Installed on the UI thread right before the event loop; its hidden
+    // message window is pumped by the same loop. The menu is state-pulled
+    // (built fresh on every right click) and every action routes through the
+    // EXISTING bar callbacks below — no duplicated session lifecycle. A failed
+    // install is logged and non-fatal. The bar stays usable, while its hide
+    // callback refuses to strand the user without a restore surface.
+    let tray_handle = {
+        let weak_for_tray = overlay.as_weak();
+        let state_for_snapshot = state.clone();
+        let state_for_dispatch = state.clone();
+        let cfg_for_tray = cfg.clone();
+        let weak_for_availability = overlay.as_weak();
+        match slint_replay::tray::install(
+            move || {
+                let (paused, running) = state_for_snapshot
+                    .lock()
+                    .map(|s| (s.paused, s.timer_active))
+                    .unwrap_or((false, false));
+                slint_replay::tray::TraySnapshot {
+                    bar_visible: !BAR_TRAY_HIDDEN.load(Ordering::Relaxed),
+                    paused,
+                    session_running: running,
+                }
+            },
+            move || cfg_for_tray.read().ui_language == "ru",
+            move |action| tray_action_dispatch(action, &weak_for_tray, &state_for_dispatch),
+            move |available| {
+                TRAY_AVAILABLE.store(available, Ordering::Relaxed);
+                if let Some(o) = weak_for_availability.upgrade() {
+                    o.set_tray_available(available);
+                    if !available && BAR_TRAY_HIDDEN.load(Ordering::Relaxed) {
+                        restore_bar_from_tray(&weak_for_availability);
+                    }
+                }
+            },
+        ) {
+            Ok(handle) => {
+                diag!("tray icon installed");
+                Some(handle)
+            }
+            Err(e) => {
+                diag!("tray icon unavailable: {e}");
+                None
+            }
+        }
+    };
+
     let result = overlay.run();
+    // — remove the tray icon on the clean shutdown path (icon gone before
+    // the process exits; a relaunch child adds its own, never a duplicate).
+    drop(tray_handle);
+    TRAY_AVAILABLE.store(false, Ordering::Relaxed);
     // All event-loop exits share the normal session stop path.
     let _ = slint_session::stop_session(slint_rt.clone(), &cfg);
     // E10.4 — kill any local-AI servers the in-app installer launched so they
@@ -4545,6 +4623,78 @@ fn recenter_when_sized(weak: slint::Weak<OverlayBarWindow>, target_w_logical: f3
         };
         let _ = move_window_pos_only(hwnd, x, y);
     });
+}
+
+/// — hide ONLY the bar window (hide-to-tray). Same hide recipe as the
+/// tile close path (`hide()` + Win32 `force_hide`, which also clears
+/// secondary-monitor pixels). Nothing else stops: recording, hotkeys, TTS,
+/// session tasks and tiles keep running. Never touches compact state.
+fn hide_bar_to_tray(weak: &slint::Weak<OverlayBarWindow>) {
+    let Some(o) = weak.upgrade() else { return };
+    let _ = o.hide();
+    slint_replay::win32::force_hide(o.window());
+    BAR_TRAY_HIDDEN.store(true, Ordering::Relaxed);
+    diag!("bar hidden to tray (recording/hotkeys/TTS keep running)");
+}
+
+/// — restore the bar from the tray EXACTLY as it was: no resize, no
+/// compact-mode change, no config write. `show_windows` re-shows without
+/// stealing focus AND re-asserts the always-on-top band that hide/show drops
+/// (the bar is always topmost — `always-on-top: true` in overlay_bar.slint).
+fn restore_bar_from_tray(weak: &slint::Weak<OverlayBarWindow>) {
+    let Some(o) = weak.upgrade() else { return };
+    BAR_TRAY_HIDDEN.store(false, Ordering::Relaxed);
+    // Slint-side show first; the bar was SW_HIDE'd out from under Slint, so
+    // the Win32 re-show below is what actually makes it visible again (same
+    // stale-state reasoning as `win32::reveal_window`).
+    let _ = o.show();
+    if let Ok(hwnd) = grab_hwnd(o.window()) {
+        slint_replay::win32::show_windows(&[(hwnd.0 as isize, true)]);
+    }
+    diag!("bar restored from tray (compact mode unchanged)");
+}
+
+/// — tray menu / icon actions, all routed through the EXISTING session
+/// machinery: Pause/Resume invokes the bar's pause callback, Stop invokes the
+/// timer-toggle callback (guarded to STOP-only — it must never START a
+/// session), Quit uses the same clean `quit_event_loop` path as the bar's ✕.
+fn tray_action_dispatch(
+    action: slint_replay::tray::TrayAction,
+    weak: &slint::Weak<OverlayBarWindow>,
+    state: &slint_replay::app_state::SharedState,
+) {
+    use slint_replay::tray::TrayAction;
+    match action {
+        TrayAction::ShowHide => {
+            if BAR_TRAY_HIDDEN.load(Ordering::Relaxed) {
+                restore_bar_from_tray(weak);
+            } else {
+                hide_bar_to_tray(weak);
+            }
+        }
+        TrayAction::PauseResume => {
+            let running = state.lock().map(|s| s.timer_active).unwrap_or(false);
+            if running {
+                if let Some(o) = weak.upgrade() {
+                    diag!("session pause/resume requested from tray");
+                    o.invoke_pause_toggle_clicked();
+                }
+            }
+        }
+        TrayAction::Stop => {
+            let running = state.lock().map(|s| s.timer_active).unwrap_or(false);
+            if running {
+                if let Some(o) = weak.upgrade() {
+                    diag!("session stop requested from tray");
+                    o.invoke_timer_toggle_clicked();
+                }
+            }
+        }
+        TrayAction::Quit => {
+            diag!("quit confirmed (tray)");
+            let _ = slint::quit_event_loop();
+        }
+    }
 }
 
 fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_replay::app_state::SharedState) {

@@ -1635,3 +1635,46 @@ fn full_profile_import_preserves_local_deep_lock() {
     let unlocked = preserve_local_import_state(incoming_locked, false);
     assert!(!unlocked.deep_lock, "profile must not lock this machine");
 }
+
+/// hidden-to-tray — the hidden state must NEVER become persisted config.
+/// Startup is always visible; if this fails, someone added a tray/hidden
+/// field to `Config` and the explicit-only visibility contract is broken.
+#[test]
+fn config_persists_no_tray_hidden_state() {
+    // Unknown legacy/experimental visibility keys must be ignored rather than
+    // becoming sticky startup state. Checking JSON object keys avoids the old
+    // substring assertion accidentally matching an unrelated value.
+    let parsed: Config = serde_json::from_str(
+        r#"{"bar_tray_hidden":true,"hidden_to_tray":true,"start_hidden":true}"#,
+    )
+    .unwrap();
+    let json = serde_json::to_value(parsed).unwrap();
+    let fields = json.as_object().expect("Config serializes as an object");
+    for forbidden in ["bar_tray_hidden", "hidden_to_tray", "start_hidden"] {
+        assert!(
+            !fields.contains_key(forbidden),
+            "Config must not persist runtime visibility key {forbidden}"
+        );
+    }
+}
+
+/// hidden-to-tray — a legacy (pre-tray, e.g. v0.36) config.json loads
+/// unchanged and the app still starts VISIBLE: unknown keys are ignored,
+/// defaults apply, and there is no flag to flip startup hidden.
+#[test]
+fn legacy_config_loads_and_startup_stays_visible() {
+    let legacy = r#"{
+        "compact_bar": true,
+        "ui_language": "ru",
+        "suppress_tiles": true
+    }"#;
+    let parsed: Config = serde_json::from_str(legacy).unwrap();
+    assert!(parsed.compact_bar, "legacy compact mode must survive");
+    assert_eq!(parsed.ui_language, "ru");
+    assert!(parsed.suppress_tiles);
+    // The bar visibility contract lives in slint_replay::tray::TraySnapshot
+    // (startup() == visible); nothing in Config can override it — assert the
+    // config side has no opt-out by checking the default shape stays clean.
+    let fresh: Config = serde_json::from_str("{}").unwrap();
+    assert!(!fresh.compact_bar);
+}

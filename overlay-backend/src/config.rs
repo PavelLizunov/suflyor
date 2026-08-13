@@ -425,8 +425,10 @@ pub struct Config {
     /// falls back to "ru" at the t() lookup level.
     ///
     /// Stored in config.json. Loaded once per window mount; switching
-    /// re-renders via React state. Tray menu remains Russian (Rust-side
-    /// menu builder doesn't observe this field — separate concern).
+    /// re-renders via React state. The tray context menu (RC4, Rust-side
+    /// `slint_replay::tray`) reads this field for its RU/EN labels.
+    /// NOTE: the hidden-to-tray STATE is deliberately NOT a config field —
+    /// it is explicit-only, process-local, and never persisted.
     #[serde(default = "default_ui_language")]
     pub ui_language: String,
 
