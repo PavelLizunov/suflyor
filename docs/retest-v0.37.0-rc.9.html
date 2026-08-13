@@ -1,0 +1,13 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>suflyor v0.37.0-rc.9 retest</title>
+<h1>suflyor v0.37.0-rc.9 - base64 maintenance update</h1>
+<ol>
+  <li>Install over RC8. Settings, provider configuration, Tera/Piper models, and journal data must remain unchanged.</li>
+  <li>Start suflyor and verify the bar opens at 1280x64 with no unexpected UI changes.</li>
+  <li>Open an AI tile that includes image context. Sending the request must still succeed; image encoding must not fail.</li>
+  <li>Use Tera read-aloud on a tile, then Stop. Playback control and STT recovery must behave as in RC8.</li>
+  <li>Switch to Piper read-aloud and play one short tile. The sidecar command protocol must still accept and decode text.</li>
+  <li>Hide the bar to the tray and restore it once. The app must stay alive throughout.</li>
+  <li>Quit normally and confirm no overlay-host, suflyor-tts, or suflyor-teratts process remains.</li>
+</ol>
