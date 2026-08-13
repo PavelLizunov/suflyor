@@ -146,17 +146,31 @@ fn restore_keeps_compact_mode_and_icon_lifecycle_is_clean() {
         "restore must not persist anything"
     );
 
-    // Tray icon lifecycle: installed once before run(), dropped right after
-    // run() returns so the icon is removed on the clean shutdown path.
+    // Tray icon lifecycle: installed once before the event loop, dropped right
+    // after it returns so the icon is removed on the clean shutdown path.
     let install_pos = host
         .find("slint_replay::tray::install(")
         .expect("tray install");
-    let run_pos = host.find("overlay.run()").expect("event loop run");
+    let show_pos = host.find("overlay.show()?").expect("initial bar show");
+    let run_pos = host
+        .find("slint::run_event_loop_until_quit()")
+        .expect("tray-safe event loop run");
     let drop_pos = host.find("drop(tray_handle)").expect("tray drop");
-    assert!(install_pos < run_pos, "the tray installs before run()");
+    assert!(
+        install_pos < show_pos,
+        "the tray installs before the bar shows"
+    );
+    assert!(
+        show_pos < run_pos,
+        "the bar is shown before entering the tray-safe event loop"
+    );
     assert!(
         drop_pos > run_pos,
         "the icon is removed after the loop exits"
+    );
+    assert!(
+        !host.contains("let result = overlay.run();"),
+        "ordinary ComponentHandle::run exits when hide-to-tray hides the last window"
     );
 }
 

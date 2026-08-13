@@ -4469,7 +4469,12 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     };
 
-    let result = overlay.run();
+    // `ComponentHandle::run()` exits as soon as the last Slint window is
+    // hidden. Hidden-to-tray deliberately has no visible Slint window, so keep
+    // the UI thread pumping our native tray message window until an explicit
+    // Quit action calls `slint::quit_event_loop()`.
+    overlay.show()?;
+    let result = slint::run_event_loop_until_quit();
     // — remove the tray icon on the clean shutdown path (icon gone before
     // the process exits; a relaunch child adds its own, never a duplicate).
     drop(tray_handle);
