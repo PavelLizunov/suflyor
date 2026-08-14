@@ -33,11 +33,24 @@ Claude-Code twin of this file — same rules, different tooling notes.
 
 ## Build / test / lint (Windows; cargo at `~/.cargo/bin/cargo.exe`)
 
-- Full gate (REQUIRED green before any commit is considered done):
-  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci.ps1`
-  = fmt --check + clippy -D warnings + tests for all 5 crates + i18n_guard +
-  the `ui-mcp` QA-feature compile check.
-  Takes ~9 min. Run it yourself; do not declare success without it.
+Use the smallest gate that matches the diff. The agent-agnostic classifier is:
+`powershell -NoProfile -ExecutionPolicy Bypass -File
+scripts/git-gate-native.ps1 manual`. Git hooks call the same script.
+
+- **Docs gate:** documentation, plans, and other non-executable text files. Run
+  diff/whitespace validation; do not build Rust.
+- **Targeted gate:** one crate or one isolated UI surface. Run fmt, clippy, and
+  tests only for the affected crate. A `.slint`/asset/translation-only change
+  instead gets the overlay compile plus the static Slint/i18n guard tests and
+  the mandatory live visual gate below.
+- **Full gate:** changes spanning multiple crates; dependencies/lockfiles;
+  build, installer, CI, or gate infrastructure; audio routing/recording, data
+  persistence/recovery, credentials/security, networking/update paths, or
+  similarly cross-cutting runtime work. Stable releases always require it.
+  Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci.ps1`.
+- A version-only prerelease bump does not by itself upgrade an otherwise
+  targeted change to the full gate. Agents may force it with
+  `scripts/git-gate-native.ps1 manual -Full` when risk is uncertain.
 - Quick compile check: `cargo check --bin overlay-host --manifest-path
   slint-experiment/Cargo.toml`
 - Single-crate tests: `cargo test --manifest-path overlay-backend/Cargo.toml`
@@ -80,16 +93,18 @@ Suflyor there as a fallback.
   hotkey smoke once against the same binary. Registration logs alone do not
   prove dispatch; check the distinct result/log for every shortcut.
 
-Git hooks: run `git config core.hooksPath .githooks` once after clone —
-pre-commit runs fmt --check, pre-push runs clippy + tests (all crates).
-Do NOT bypass with --no-verify.
+Git hooks: run `git config core.hooksPath .githooks` once after clone. The
+pre-commit and pre-push hooks enforce the selected docs/targeted/full tier.
+Do not bypass them except when the required cargo gate is deliberately moved
+to Winbrat or required GitHub CI; record that evidence before merging.
 
 ## Hard rules
 
-- **Publish a GitHub release or tag only after the owner explicitly
-  authorizes one specific version after verified build evidence was shown.**
-  Never publish on your own initiative. Direct pushes to `master` are
-  forbidden; use a `codex/<task>` branch + PR.
+- **RC prereleases have standing owner authorization:** after the selected gate,
+  release build, and required UI evidence are green, an agent may publish the
+  next RC without asking again. A stable GitHub release or stable tag still
+  requires explicit owner authorization for that version. Direct pushes to
+  `master` are forbidden; use a `codex/<task>` branch + PR.
 - **Work on a branch `codex/<short-task-name>`**, one task = one branch =
   one coherent deliverable. Claude Code sessions share this checkout —
   branches prevent the commit races we've already been burned by.
@@ -122,12 +137,36 @@ Do NOT bypass with --no-verify.
 
 1. Read the task's `docs/goal-*.md` charter if referenced; keep scope to it.
 2. Implement with unit tests (backend logic must be testable without UI).
-3. Run the full gate (`scripts/ci.ps1`) — all layers green.
+3. Run the gate tier selected by `scripts/git-gate-native.ps1`; run the full
+   gate only for a Full-class diff or stable release.
 4. Commit on your `codex/<task>` branch with a descriptive message; do not
    merge to master yourself unless the task says to.
 5. State in your summary: what changed, gate result, what you did NOT do.
    UI changes additionally get validated visually by the owner/tester —
    note any surface you changed so they know where to look.
+
+## Mandatory post-release hygiene (all agents)
+
+Publishing is not complete until repository and disk hygiene are complete.
+The publishing agent runs a preview and then applies the shared cleanup:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/post-release-cleanup.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/post-release-cleanup.ps1 -Apply
+```
+
+The cleanup keeps the newest published prerelease, removes older
+prereleases/tags, closes only PRs whose exact head is already in `master`,
+merges only unchanged green mergeable PRs, deletes proven-merged remote
+branches, removes clean completed worktrees, and clears rebuildable `target`
+directories from inactive worktrees. GitHub must keep
+`delete_branch_on_merge` enabled.
+
+Never delete a dirty, active, unpushed, or unproven branch/worktree; never
+follow/delete a junction or reparse-point target; never delete stable or draft
+releases. Report what was removed and what was preserved. If a
+running `cargo`/`rustc` process prevents disk cleanup, finish the release but
+keep the cleanup task open until it can be rerun safely.
 
 ## Resuming an in-flight session
 

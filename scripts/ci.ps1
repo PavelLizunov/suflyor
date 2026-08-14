@@ -1,6 +1,6 @@
-# suflyor local CI runner — fmt + clippy + tests for all five crates.
-# Run BEFORE every commit (the .claude/hooks/git-gate.ps1 hook runs the
-# same checks automatically on commit/push).
+# suflyor FULL CI runner — fmt + clippy + tests for all five crates.
+# Required for Full-class diffs and stable releases. Routine docs and isolated
+# single-crate/UI changes use scripts/git-gate-native.ps1 instead.
 #
 # Covered: cargo fmt --check, clippy --all-targets -D warnings, test
 #   for slint-experiment, overlay-backend, suflyor-wsola, suflyor-tts,

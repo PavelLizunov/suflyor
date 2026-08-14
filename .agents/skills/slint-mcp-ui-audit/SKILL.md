@@ -95,7 +95,7 @@ Do not say a UI change is done until:
 - the affected screenshots were inspected;
 - any shared Settings change received the full tab pass;
 - the global-hotkey smoke passed, or every unverified shortcut is named;
-- the normal repository gate passed;
+- the selected repository gate passed;
 - the summary names the windows/tabs checked and any unverified state.
 
-Leave the normal non-MCP release binary running for the user's final visual acceptance. Never publish a release without the user's explicit `релизь`.
+Leave the normal non-MCP release binary running for the user's final visual acceptance. RC prereleases follow the standing authorization in `AGENTS.md`; a stable release still requires the user's explicit `релизь`.

@@ -88,6 +88,26 @@ lives in BOTH `slint-experiment/Cargo.toml` and `scripts/slint-installer.nsi`
 
 ## Methodology — verification before commit (adopted from vpnctl, 2026-05-26)
 
+### Current selective gate policy (2026-08-15)
+
+This section and `AGENTS.md` override older blanket wording below that says to
+run every layer or the full five-crate gate before every commit.
+
+Run `powershell scripts/git-gate-native.ps1 manual`. The shared native script
+and Git hooks classify the diff as:
+
+- **Docs:** diff/whitespace validation, no Rust build.
+- **Targeted:** fmt, clippy, and tests for one affected crate. A UI-only diff
+  gets the overlay compile/static guards plus the live Slint-MCP evidence.
+- **Full:** multiple crates, dependencies/lockfiles, build/installer/CI/gate
+  infrastructure, or high-risk audio, recovery/persistence, credentials,
+  networking, update, and cross-cutting runtime paths. Stable releases always
+  require `scripts/ci.ps1`.
+
+A version-only RC bump does not force Full. Use `-Full` whenever risk is
+uncertain. The selected cargo gate must run on Winbrat or required GitHub CI
+when the owner's workstation is not an authorized build/test host.
+
 **Why this exists:** the v0.0.67 → v0.1.2 attempt was a 33-release marathon
 where static checks (clippy + cargo test) passed every release but the user
 caught regressions live in layout, focus races, multi-monitor geometry, and
@@ -97,7 +117,8 @@ better-verified releases. See memory `[[no-marathon-releases]]`.
 
 ### The layers
 
-Each layer catches a strict subset the others miss. **Do not skip.**
+Each layer catches a strict subset the others miss. Apply the layers required
+by the selected gate and the changed surface; do not skip a required layer.
 
 | # | Layer | Tool | Catches |
 |---|---|---|---|
@@ -107,38 +128,31 @@ Each layer catches a strict subset the others miss. **Do not skip.**
 | 4 | review-agent | `Agent(subagent_type: general-purpose, prompt = docs/REVIEW_AGENT_PROMPT.md)` BEFORE commit | Logic bugs, security, library misuse, codebase duplicates |
 | 5 | Live install + smoke | run the freshly-built `overlay-host.exe`, read the startup log + visually confirm | Runtime crashes, transparency/paint glitches, the bar landing on the wrong monitor, anything static checks can't see |
 
-Logic-only changes (detector regex, kb parser, cost math) need 1-4.
-Anything that touches the Slint UI / window geometry / transparency needs all five.
+Logic-only changes use the affected crate's targeted static checks plus an
+independent review when non-trivial. Anything that changes visible Slint UI,
+window geometry, or transparency also requires the live visual layer. Full CI
+is reserved for Full-class diffs.
 
-### Blocking workflow before every commit
+### Verification workflow
 
 ```
-1. review-agent      (independent — paste full diff + invariants, do NOT
-                      reference "the discussion above")
-2. clippy + test + fmt  (both crates — commands above)
-3. live smoke        (run overlay-host.exe; read its log; confirm the bar +
-                      the changed surface render correctly)
-4. git commit / push (auto-gated by .claude/hooks/git-gate.ps1 — BLOCKS if
-                      fmt/clippy fail on commit, or tests fail on push, for
-                      EITHER crate; --no-verify bypasses)
+1. classify          (powershell scripts/git-gate-native.ps1 manual)
+2. review            (independent diff/invariant review for non-trivial work)
+3. selected gate     (docs, one affected component, or full CI)
+4. live smoke        (only for changed runtime/UI surfaces; use Winbrat)
+5. git commit / push (native hooks enforce the selected tier)
 ```
 
-The `git-gate.ps1` PreToolUse hook is the ONLY piece that genuinely BLOCKS
-bad commits. Setup:
-- `.claude/settings.json` registers the hook against the `Bash` matcher.
-- `.claude/hooks/git-gate.ps1` runs `cargo fmt --check + clippy` (both
-  crates) on every `git commit`, plus `cargo test` (both crates) on every
-  `git push`.
-- **Retest-gate (2026-07-01):** the SAME hook also BLOCKS
-  `gh release create vX.Y.Z` unless `docs/retest-*X.Y.Z*.html` exists — the
-  golden-rule fillable tester checklist (memory `[[always-html-test-report]]`),
-  so a release can't ship without one. Copy `docs/retest-template.html` →
-  `docs/retest-v<version>-fixes.html` and fill the per-change items. (Editing the
-  `.ps1` takes effect immediately; the branch is defensive — any error ALLOWS the
-  release rather than bricking it.)
-- `--no-verify` bypasses with a WARN line (rare; hotfix only per below).
-- After editing the hook OR `settings.json`: RESTART Claude Code (the
-  settings watcher does not pick up changes mid-session).
+The agent-agnostic `.githooks/pre-commit` and `.githooks/pre-push` hooks are the
+source of truth. Enable them once per clone with
+`git config core.hooksPath .githooks`; both invoke
+`scripts/git-gate-native.ps1` and enforce the selected tier.
+- **Retest evidence (2026-07-01):** before publishing, require a matching
+  `docs/retest-*X.Y.Z*.html` golden-rule tester checklist. Copy
+  `docs/retest-template.html` to `docs/retest-v<version>-fixes.html` and fill
+  the per-change items.
+- `--no-verify` is allowed only when the cargo gate is deliberately moved to
+  Winbrat or required GitHub CI; preserve that evidence before merging.
 
 **Hotfix-only short-circuit** (review-agent skippable ONLY if ALL THREE):
 - impl ≤ 5 lines
@@ -174,9 +188,10 @@ the user unverified. And releases were published immediately after the
 self-gate, with no human visual acceptance. See memory `[[release-protocol]]`.
 
 **The rules (mandatory — chosen by the user):**
-1. **NEVER auto-publish a GitHub release.** Build + self-gate → SHOW the user
-   → wait for an explicit "релизь" → only then `gh release`. Release ≠ push;
-   even a master push defaults to "only with a built, verified build".
+1. **RC prereleases have standing owner authorization.** After the selected
+   gate, installer build, and required visual evidence are green, publish the
+   next RC without another approval request. A stable release/tag still waits
+   for explicit owner authorization for that version. Release != push.
 2. **Accumulate** changes into one verified release — release is an event, not
    a per-task default. (hardening of `[[no-marathon-releases]]`.)
 3. **Every UI diff passes THREE checks before the user is shown:**
@@ -195,6 +210,13 @@ self-gate, with no human visual acceptance. See memory `[[release-protocol]]`.
      reliable, unlike computer-use clicks on the floating gear.
 4. Present to the user as EVIDENCE ("here are the screenshots + checklist
    results, look at X"), never "all green, releasing".
+5. Publishing is complete only after
+   `scripts/post-release-cleanup.ps1` preview and `-Apply` both run. Keep the
+   newest published prerelease; remove only proven-merged branches, clean
+   completed worktrees, and rebuildable non-junction targets; never remove
+   dirty/unpushed/unproven work.
+   The script may merge only unchanged, mergeable PRs with a green required
+   `gate`, and may close only PRs already contained in `master`.
 
 ### UI-audit toolkit (obkatano 2026-06-13 — these caught real bugs)
 
