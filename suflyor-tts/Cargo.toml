@@ -18,7 +18,7 @@ name = "suflyor-tts"
 path = "src/main.rs"
 
 [dependencies]
-sherpa-onnx = "1.13"          # static (default) — safe here: no ort in this crate
+sherpa-onnx = "1.13.5"        # static (default) — safe here: no ort in this crate
 wasapi = "0.23"
 anyhow = "1"
 base64 = "0.23"

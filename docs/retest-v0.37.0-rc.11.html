@@ -1,0 +1,12 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>suflyor v0.37.0-rc.11 retest</title>
+<h1>suflyor v0.37.0-rc.11 - sherpa-onnx sidecar patch</h1>
+<ol>
+  <li>Install over RC10. Settings, credentials, models, and journal data must remain unchanged.</li>
+  <li>Start suflyor and verify the bar opens at 1280x64 with no UI changes.</li>
+  <li>Read one answer aloud with the Piper neural voice. Playback must start, stop, and restore STT normally.</li>
+  <li>If diarization is configured, process one short two-speaker sample and verify the sidecar remains alive.</li>
+  <li>Repeat one cloud AI and one STT request. The main app HTTP behavior from RC10 must remain unchanged.</li>
+  <li>Quit normally and confirm no overlay-host, suflyor-tts, or suflyor-teratts process remains.</li>
+</ol>
