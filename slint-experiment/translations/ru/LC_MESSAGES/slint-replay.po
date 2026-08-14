@@ -2057,3 +2057,6 @@ msgstr "Продолжить"
 
 msgid "Pause"
 msgstr "Пауза"
+
+msgid "suflyor"
+msgstr "suflyor"

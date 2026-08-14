@@ -1,0 +1,105 @@
+import { Theme } from "theme.slint";
+import { Metrics } from "metrics.slint";
+
+component TrayMenuRow inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <bool> row-enabled: true;
+    callback selected();
+
+    height: 30px;
+    border-radius: Metrics.radius-control;
+    background: root.row-enabled && row-touch.has-hover ? Theme.bg-surface : transparent;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => {
+        if (root.row-enabled) { root.selected(); }
+    }
+
+    HorizontalLayout {
+        padding-left: Metrics.space-sm;
+        padding-right: Metrics.space-sm;
+        spacing: Metrics.space-sm;
+        Image {
+            source: root.icon;
+            colorize: root.row-enabled ? Theme.text-secondary : Theme.text-muted.with-alpha(0.45);
+            width: 14px;
+            height: 14px;
+            y: (parent.height - self.height) / 2;
+        }
+        Text {
+            text: root.label;
+            color: root.row-enabled ? Theme.text-primary : Theme.text-muted.with-alpha(0.55);
+            font-size: Metrics.font-label;
+            vertical-alignment: center;
+        }
+    }
+    row-touch := TouchArea {
+        enabled: root.row-enabled;
+        mouse-cursor: pointer;
+        clicked => { root.selected(); }
+    }
+}
+
+// A real top-level Slint window so the tray menu uses the app theme while the
+// bar is hidden. Rust places it inside the monitor work area and re-asserts
+// HWND_TOPMOST before revealing it, keeping it clear of the Windows taskbar.
+export component TrayMenuWindow inherits Window {
+    no-frame: true;
+    always-on-top: true;
+    title: @tr("suflyor");
+    background: transparent;
+    preferred-width: 196px;
+    preferred-height: 136px;
+
+    in property <string> show-hide-label;
+    in property <string> pause-resume-label;
+    in property <string> stop-label;
+    in property <string> quit-label;
+    in property <bool> session-running: false;
+    callback action-selected(int);
+    callback dismissed();
+    forward-focus: scope;
+
+    scope := FocusScope {
+        key-pressed(e) => {
+            if (e.text == Key.Escape) {
+                root.dismissed();
+                return accept;
+            }
+            return reject;
+        }
+        Rectangle {
+            background: Theme.bg-elevated;
+            border-color: Theme.border-strong;
+            border-width: Metrics.border-thin;
+            border-radius: Metrics.radius-control;
+            VerticalLayout {
+                padding: Metrics.space-xs;
+                spacing: 2px;
+                TrayMenuRow {
+                    label: root.show-hide-label;
+                    icon: @image-url("../assets/icons/tray.svg");
+                    selected => { root.action-selected(0); }
+                }
+                TrayMenuRow {
+                    label: root.pause-resume-label;
+                    icon: @image-url("../assets/icons/pause.svg");
+                    row-enabled: root.session-running;
+                    selected => { root.action-selected(1); }
+                }
+                TrayMenuRow {
+                    label: root.stop-label;
+                    icon: @image-url("../assets/icons/stop.svg");
+                    row-enabled: root.session-running;
+                    selected => { root.action-selected(2); }
+                }
+                TrayMenuRow {
+                    label: root.quit-label;
+                    icon: @image-url("../assets/icons/x.svg");
+                    selected => { root.action-selected(3); }
+                }
+            }
+        }
+    }
+}

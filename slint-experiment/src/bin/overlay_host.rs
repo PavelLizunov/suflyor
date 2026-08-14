@@ -29,7 +29,7 @@ use slint_replay::win32::{
     drag_begin, drag_update, enum_monitors, focus_window, get_window_rect, grab_hwnd,
     is_foreground_window, make_transparent_overlay, make_transparent_tile, move_window_pos_only,
     pick_monitor, set_always_on_top, set_skip_taskbar, set_stealth, set_window_owner,
-    work_area_for_window,
+    work_area_for_point, work_area_for_window,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -65,7 +65,7 @@ use ui::{
     ArchiveRow, ArchiveWindow, CaptureOverlay, ComponentRow, HelpWindow, LockModeMenuWindow,
     MarkdownBlock, MemoryRow, OverlayBarWindow, PaletteResult, PaletteWindow, RecoverOfferWindow,
     SettingsWindow, SpeakerRow, TextAskWindow, TileWindow, TranscriptLine, TranscriptWindow,
-    WizardWindow,
+    TrayMenuWindow, WizardWindow,
 };
 
 // Phase 1 of the modularization (docs/overlay-host-modularization-plan.md §5.1):
@@ -4439,26 +4439,89 @@ fn main() -> Result<(), slint::PlatformError> {
     // EXISTING bar callbacks below — no duplicated session lifecycle. A failed
     // install is logged and non-fatal. The bar stays usable, while its hide
     // callback refuses to strand the user without a restore surface.
+    let tray_menu = Rc::new(TrayMenuWindow::new()?);
+    let tray_menu_focus = Rc::new(RefCell::new(false));
+    {
+        use slint::winit_030::{winit, EventResult, WinitWindowAccessor};
+        use winit::event::WindowEvent;
+        let menu_weak = Rc::downgrade(&tray_menu);
+        let focus = tray_menu_focus.clone();
+        tray_menu.window().on_winit_window_event(move |_, event| {
+            let WindowEvent::Focused(focused) = event else {
+                return EventResult::Propagate;
+            };
+            if *focused {
+                *focus.borrow_mut() = true;
+            } else {
+                let should_hide = {
+                    let mut armed = focus.borrow_mut();
+                    let was_armed = *armed;
+                    *armed = false;
+                    was_armed
+                };
+                if should_hide {
+                    if let Some(menu) = menu_weak.upgrade() {
+                        let _ = menu.hide();
+                    }
+                }
+            }
+            EventResult::Propagate
+        });
+    }
+    {
+        let menu_weak = Rc::downgrade(&tray_menu);
+        let focus = tray_menu_focus.clone();
+        tray_menu.on_dismissed(move || {
+            *focus.borrow_mut() = false;
+            if let Some(menu) = menu_weak.upgrade() {
+                let _ = menu.hide();
+            }
+        });
+    }
+    {
+        let menu_weak = Rc::downgrade(&tray_menu);
+        let focus = tray_menu_focus.clone();
+        let weak = overlay.as_weak();
+        let state_for_action = state.clone();
+        let cfg_for_action = cfg.clone();
+        tray_menu.on_action_selected(move |index| {
+            let Some(action) = tray_menu_action(index) else {
+                return;
+            };
+            let Some(menu) = menu_weak.upgrade() else {
+                return;
+            };
+            *focus.borrow_mut() = false;
+            let _ = menu.hide();
+            tray_action_dispatch(
+                action,
+                &weak,
+                &state_for_action,
+                &cfg_for_action,
+                &menu,
+                &focus,
+            );
+        });
+    }
+
     let tray_handle = {
         let weak_for_tray = overlay.as_weak();
-        let state_for_snapshot = state.clone();
         let state_for_dispatch = state.clone();
         let cfg_for_tray = cfg.clone();
+        let menu_for_tray = tray_menu.clone();
+        let focus_for_tray = tray_menu_focus.clone();
         let weak_for_availability = overlay.as_weak();
         match slint_replay::tray::install(
-            move || {
-                let (paused, running) = state_for_snapshot
-                    .lock()
-                    .map(|s| (s.paused, s.timer_active))
-                    .unwrap_or((false, false));
-                slint_replay::tray::TraySnapshot {
-                    bar_visible: !BAR_TRAY_HIDDEN.load(Ordering::Relaxed),
-                    paused,
-                    session_running: running,
-                }
+            move |action| {
+                tray_action_dispatch(
+                    action,
+                    &weak_for_tray,
+                    &state_for_dispatch,
+                    &cfg_for_tray,
+                    &menu_for_tray,
+                    &focus_for_tray,
+                );
             },
-            move || cfg_for_tray.read().ui_language == "ru",
-            move |action| tray_action_dispatch(action, &weak_for_tray, &state_for_dispatch),
             move |available| {
                 TRAY_AVAILABLE.store(available, Ordering::Relaxed);
                 if let Some(o) = weak_for_availability.upgrade() {
@@ -4470,7 +4533,7 @@ fn main() -> Result<(), slint::PlatformError> {
             },
         ) {
             Ok(handle) => {
-                diag!("tray icon installed");
+                diag!("tray restore surface installed");
                 Some(handle)
             }
             Err(e) => {
@@ -4641,12 +4704,104 @@ fn recenter_when_sized(weak: slint::Weak<OverlayBarWindow>, target_w_logical: f3
     });
 }
 
+fn tray_menu_action(index: i32) -> Option<slint_replay::tray::TrayAction> {
+    use slint_replay::tray::TrayAction;
+    match index {
+        0 => Some(TrayAction::ShowHide),
+        1 => Some(TrayAction::PauseResume),
+        2 => Some(TrayAction::Stop),
+        3 => Some(TrayAction::Quit),
+        _ => None,
+    }
+}
+
+fn open_tray_menu(
+    menu: &Rc<TrayMenuWindow>,
+    anchor_x: i32,
+    anchor_y: i32,
+    state: &slint_replay::app_state::SharedState,
+    cfg: &config::SharedConfig,
+    focus_armed: &Rc<RefCell<bool>>,
+) {
+    let (paused, running) = state
+        .lock()
+        .map(|s| (s.paused, s.timer_active))
+        .unwrap_or((false, false));
+    let snapshot = slint_replay::tray::TraySnapshot {
+        bar_visible: !BAR_TRAY_HIDDEN.load(Ordering::Relaxed),
+        paused,
+        session_running: running,
+    };
+    let config = cfg.read();
+    let entries = slint_replay::tray::menu_entries(&snapshot, config.ui_language == "ru");
+    menu.set_show_hide_label(entries[0].label.into());
+    menu.set_pause_resume_label(entries[1].label.into());
+    menu.set_stop_label(entries[2].label.into());
+    menu.set_quit_label(entries[3].label.into());
+    menu.set_session_running(running);
+    menu.global::<ui::Theme>()
+        .set_scheme(clamp_scheme(config.color_scheme));
+    drop(config);
+
+    let Some(work) = work_area_for_point(anchor_x, anchor_y) else {
+        diag!("tray menu open failed: no monitor work area");
+        return;
+    };
+    let scale = menu.window().scale_factor().max(0.1);
+    let width = (196.0 * scale).round() as i32;
+    let height = (136.0 * scale).round() as i32;
+    let max_x = (work.right - width).max(work.left);
+    let max_y = (work.bottom - height).max(work.top);
+    let x = (anchor_x - width).clamp(work.left, max_x);
+    let y = (anchor_y - height - (8.0 * scale).round() as i32).clamp(work.top, max_y);
+
+    *focus_armed.borrow_mut() = false;
+    if menu.window().is_visible() {
+        let _ = menu.hide();
+    }
+    menu.window()
+        .set_position(slint::PhysicalPosition::new(-32000, -32000));
+    if let Err(e) = menu.show() {
+        diag!("tray menu show failed: {e}");
+        return;
+    }
+
+    let reveal = Rc::new(move |window: &TrayMenuWindow| {
+        let Ok(hwnd) = grab_hwnd(window.window()) else {
+            return false;
+        };
+        if set_skip_taskbar(hwnd, true).is_err() || set_always_on_top(hwnd, true).is_err() {
+            return false;
+        }
+        if global_stealth() && set_stealth(hwnd, true).is_err() {
+            return false;
+        }
+        if move_window_pos_only(hwnd, x, y).is_err() {
+            return false;
+        }
+        focus_window(hwnd);
+        diag!("tray menu shown x={x} y={y}");
+        true
+    });
+    let armed_for_fallback = focus_armed.clone();
+    let fallback = Rc::new(move |window: &TrayMenuWindow| {
+        *armed_for_fallback.borrow_mut() = false;
+        let _ = window.hide();
+        diag!("tray menu show failed: native window unavailable");
+    });
+    realize_with_retries(menu.as_ref(), reveal, fallback);
+}
+
 /// — hide ONLY the bar window (hide-to-tray). Same hide recipe as the
 /// tile close path (`hide()` + Win32 `force_hide`, which also clears
 /// secondary-monitor pixels). Nothing else stops: recording, hotkeys, TTS,
 /// session tasks and tiles keep running. Never touches compact state.
 fn hide_bar_to_tray(weak: &slint::Weak<OverlayBarWindow>) {
     let Some(o) = weak.upgrade() else { return };
+    if let Err(e) = slint_replay::tray::show_icon() {
+        diag!("hide-to-tray ignored: notification icon failed: {e}");
+        return;
+    }
     let _ = o.hide();
     slint_replay::win32::force_hide(o.window());
     BAR_TRAY_HIDDEN.store(true, Ordering::Relaxed);
@@ -4660,6 +4815,7 @@ fn hide_bar_to_tray(weak: &slint::Weak<OverlayBarWindow>) {
 fn restore_bar_from_tray(weak: &slint::Weak<OverlayBarWindow>) {
     let Some(o) = weak.upgrade() else { return };
     BAR_TRAY_HIDDEN.store(false, Ordering::Relaxed);
+    slint_replay::tray::hide_icon();
     // Slint-side show first; the bar was SW_HIDE'd out from under Slint, so
     // the Win32 re-show below is what actually makes it visible again (same
     // stale-state reasoning as `win32::reveal_window`).
@@ -4678,9 +4834,13 @@ fn tray_action_dispatch(
     action: slint_replay::tray::TrayAction,
     weak: &slint::Weak<OverlayBarWindow>,
     state: &slint_replay::app_state::SharedState,
+    cfg: &config::SharedConfig,
+    menu: &Rc<TrayMenuWindow>,
+    focus_armed: &Rc<RefCell<bool>>,
 ) {
     use slint_replay::tray::TrayAction;
     match action {
+        TrayAction::OpenMenu { x, y } => open_tray_menu(menu, x, y, state, cfg, focus_armed),
         TrayAction::ShowHide => {
             if BAR_TRAY_HIDDEN.load(Ordering::Relaxed) {
                 restore_bar_from_tray(weak);
