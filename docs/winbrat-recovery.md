@@ -1,8 +1,10 @@
 # Winbrat connection and job recovery
 
-Read this before any build, test, installer, or live UI work on Winbrat. The
-owner workstation is for source control, orchestration, and artifact transfer;
-never run Suflyor or its Rust build there as a fallback.
+Read this before any build, test, installer, or live UI work on Winbrat.
+Winbrat is an agent-managed test VM: the agent owns routine recovery and does
+not wait for the owner to operate it. The owner workstation is only for source
+control, orchestration, and artifact transfer; never run Suflyor or its Rust
+build there as a fallback.
 
 ## Before starting a remote job
 
@@ -33,19 +35,21 @@ Interpret the result before acting:
 
 | Evidence | Conclusion | Next action |
 |---|---|---|
-| Peer offline or Tailscale ping fails | Host power, Tailscale, or network path is unavailable | Report the timestamp and wait for the owner to restore the host/Tailscale |
+| Peer offline or Tailscale ping fails | Host power, Tailscale, or network path is unavailable | Use the available Winbrat/Proxmox management path to restore the test VM; involve the owner only after agent-controlled paths fail |
 | Tailscale ping works and port 22 is open | SSH path is healthy | Continue over SSH |
-| Tailscale ping works, port 22 fails, another Windows service responds | Tailscale and Windows are alive; `sshd` or its port-22 firewall rule is broken | Use the SSH recovery below; do not say “Tailscale is down” |
-| Tailscale ping works but all tested TCP services fail | Host firewall, network profile, boot state, or ACL needs owner inspection | Report evidence; do not guess or switch control channels |
+| Tailscale ping works, port 22 fails, WinRM responds | Winbrat is manageable; the failure may be `sshd`, its firewall rule, or only the workstation-to-port-22 path | Continue through WinRM, probe port 22 locally on Winbrat, and repair only the failed layer |
+| Tailscale ping works but all tested TCP services fail | Host firewall, network profile, boot state, or ACL needs inspection | Use the verified Winbrat console/Proxmox path and inspect the VM directly |
 
 A DERP relay is a valid Tailscale path. “Direct connection not established” is
 not by itself a Tailscale outage when ping and other TCP services work.
 
 ## Recover OpenSSH on Winbrat
 
-Use an already provisioned, non-interactive WinRM path only if it works without
-printing or inspecting credentials. Otherwise ask the owner to run the
-following in an administrator PowerShell on **Winbrat**:
+Use the already provisioned encrypted WinRM credential automatically without
+printing or inspecting it. First probe `localhost:22` inside Winbrat: if that
+works while the owner workstation cannot reach port 22, `sshd` is healthy and
+the fault is in the workstation/Tailscale/ACL path. If the local probe fails,
+run the following through WinRM or the verified Winbrat console:
 
 ```powershell
 Get-Service sshd
@@ -91,13 +95,15 @@ Get-Process cargo,rustc,overlay-host,suflyor-tts,suflyor-teratts `
 Restore any temporarily replaced task wrapper after the job completes. Before
 publishing, verify the artifact manifest still names the recorded commit/tree.
 
-## Forbidden fallback
+## Host identity and control channels
 
-Do not open RustDesk, JetKVM, RDP, browser control, Computer Use, or any other
-screen-control channel merely because SSH failed. Use one only when the owner
-explicitly requests that exact channel for the current incident and the target
-is verified as Winbrat. Never assume the machine currently in front of the
-agent is the test machine.
+Recovery priority is SSH, then WinRM, then a verified Winbrat/Proxmox console.
+RustDesk, JetKVM, RDP, browser control, or Computer Use may be used for Winbrat
+when a GUI/console is genuinely required; routine service and file recovery
+stays in the shell. Before any screen-control action, verify that the target is
+Winbrat. Never click, launch Suflyor, build, install, or test on the owner's
+workstation under the assumption that it is the test VM.
 
-When blocked, report: first failure time, last successful check, Tailscale
-result, tested ports, likely failed layer, and the one owner action required.
+When all agent-controlled recovery paths fail, report: first failure time, last
+successful check, Tailscale result, tested ports, failed recovery paths, likely
+failed layer, and the one owner action still required.

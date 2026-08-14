@@ -53,8 +53,9 @@ Before starting or resuming any Winbrat build, test, installer, or live UI
 task, read [`docs/winbrat-recovery.md`](docs/winbrat-recovery.md). A lost SSH
 connection does not mean a scheduled build failed: diagnose Tailscale and port
 22 separately, inspect the recorded task/log/exit marker before restarting,
-and never fall back to RustDesk, JetKVM, RDP, Computer Use, or another screen
-control channel without an explicit owner request for that exact channel.
+and recover the agent-managed Winbrat through SSH, WinRM, or its verified
+console. Never mistake the owner's workstation for the test VM or run/build
+Suflyor there as a fallback.
 
 ## Mandatory Slint MCP visual gate
 

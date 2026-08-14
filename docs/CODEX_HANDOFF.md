@@ -4,7 +4,8 @@ Updated 2026-08-04. Read `AGENTS.md` before acting.
 
 Operational note: all Winbrat jobs and connection incidents follow
 [`docs/winbrat-recovery.md`](winbrat-recovery.md). Read it before remote work;
-SSH loss never authorizes a duplicate build or an unrequested screen-control
+SSH loss never authorizes a duplicate build. Winbrat is recovered autonomously
+through its management paths; the owner's workstation is never a build/test
 fallback.
 
 ## Current state

@@ -23,8 +23,9 @@ starting any autonomous session.
 Before any Winbrat build, test, installer, or live UI action, read
 [`docs/winbrat-recovery.md`](docs/winbrat-recovery.md). Treat SSH loss as a
 connection incident, not proof of build failure. Do not restart the job until
-its recorded task/log/exit marker is inspected, and do not switch to screen
-control unless the owner explicitly requests that exact channel.
+its recorded task/log/exit marker is inspected. Winbrat is agent-managed: use
+SSH, WinRM, or its verified console to recover it autonomously, but never act
+on the owner's workstation as though it were the test VM.
 
 ## State files (single source of truth)
 
