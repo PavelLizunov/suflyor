@@ -17,7 +17,7 @@
 //! `windows` crate (Win32_UI_Shell + Win32_UI_WindowsAndMessaging).
 
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, Ordering};
 
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{
@@ -29,10 +29,8 @@ use windows::Win32::UI::Shell::{
     NIM_SETFOCUS, NIM_SETVERSION, NIN_SELECT, NOTIFYICONDATAW, NOTIFYICON_VERSION_4,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow,
-    GetCursorPos, LoadIconW, PostMessageW, RegisterClassExW, RegisterWindowMessageW,
-    SetForegroundWindow, TrackPopupMenu, HICON, IDI_APPLICATION, MF_CHECKED, MF_DISABLED,
-    MF_GRAYED, MF_STRING, TPM_RIGHTBUTTON, WM_APP, WM_COMMAND, WM_CONTEXTMENU, WM_DESTROY, WM_NULL,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, GetCursorPos, LoadIconW, RegisterClassExW,
+    RegisterWindowMessageW, HICON, IDI_APPLICATION, WM_APP, WM_CONTEXTMENU, WM_DESTROY,
     WM_RBUTTONUP, WNDCLASSEXW,
 };
 
@@ -50,6 +48,8 @@ pub const IDM_QUIT: u32 = 0x0204;
 /// Actions the host can dispatch from the tray.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TrayAction {
+    /// Open the themed menu at a physical screen coordinate.
+    OpenMenu { x: i32, y: i32 },
     /// Restore the bar (when hidden) or hide it (when visible).
     ShowHide,
     /// Pause/Resume the RUNNING session (no-op unless one runs).
@@ -169,6 +169,12 @@ static INSTALL_SLOT: AtomicBool = AtomicBool::new(false);
 /// Re-adding the icon is essential if the bar happened to be hidden then.
 static TASKBAR_CREATED_MESSAGE: AtomicU32 = AtomicU32::new(0);
 
+/// The hidden message window outlives the notification icon. The icon itself
+/// exists only while the bar is hidden, so restoring the bar removes it from
+/// the notification area immediately.
+static TRAY_HWND: AtomicIsize = AtomicIsize::new(0);
+static TRAY_ICON_VISIBLE: AtomicBool = AtomicBool::new(false);
+
 fn claim_install_slot(slot: &AtomicBool) -> Result<(), String> {
     slot.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
         .map(|_| ())
@@ -182,8 +188,6 @@ thread_local! {
 }
 
 struct TrayCtx {
-    snapshot: Box<dyn Fn() -> TraySnapshot>,
-    is_ru: Box<dyn Fn() -> bool>,
     dispatch: Box<dyn Fn(TrayAction)>,
     availability: Box<dyn Fn(bool)>,
 }
@@ -209,28 +213,24 @@ impl Drop for TrayHandle {
             let _ = Shell_NotifyIconW(NIM_DELETE, &data);
             let _ = DestroyWindow(self.hwnd);
         }
+        TRAY_ICON_VISIBLE.store(false, Ordering::SeqCst);
+        TRAY_HWND.store(0, Ordering::SeqCst);
         INSTALL_SLOT.store(false, Ordering::SeqCst);
         TRAY_CTX.with(|c| *c.borrow_mut() = None);
     }
 }
 
-/// Install the tray icon on the CURRENT (UI) thread. All four callbacks run
-/// on that thread: `snapshot`/`is_ru` when the menu opens, `dispatch` when the
-/// user picks an action (or activates the icon), and `availability` after every
-/// initial add or Explorer re-add attempt.
+/// Install the tray message window on the CURRENT (UI) thread. The notification
+/// icon is added only when the bar hides and removed again on restore.
 ///
 /// Errors are non-fatal for the host — the app keeps running without a tray.
 pub fn install(
-    snapshot: impl Fn() -> TraySnapshot + 'static,
-    is_ru: impl Fn() -> bool + 'static,
     dispatch: impl Fn(TrayAction) + 'static,
     availability: impl Fn(bool) + 'static,
 ) -> Result<TrayHandle, String> {
     claim_install_slot(&INSTALL_SLOT)?;
     TRAY_CTX.with(|c| {
         *c.borrow_mut() = Some(TrayCtx {
-            snapshot: Box::new(snapshot),
-            is_ru: Box::new(is_ru),
             dispatch: Box::new(dispatch),
             availability: Box::new(availability),
         });
@@ -295,11 +295,58 @@ fn install_win32() -> Result<TrayHandle, String> {
         }
         TASKBAR_CREATED_MESSAGE.store(taskbar_created, Ordering::Relaxed);
 
-        if let Err(e) = add_notify_icon(hwnd, module) {
-            let _ = DestroyWindow(hwnd);
-            return Err(e);
-        }
+        TRAY_HWND.store(hwnd.0 as isize, Ordering::SeqCst);
+        TRAY_ICON_VISIBLE.store(false, Ordering::SeqCst);
         Ok(TrayHandle { hwnd })
+    }
+}
+
+/// Add the notification icon before hiding the bar. The bar must stay visible
+/// when this fails, otherwise there would be no restore surface.
+pub fn show_icon() -> Result<(), String> {
+    if TRAY_ICON_VISIBLE.load(Ordering::SeqCst) {
+        return Ok(());
+    }
+    let raw = TRAY_HWND.load(Ordering::SeqCst);
+    if raw == 0 {
+        return Err("tray message window is unavailable".to_string());
+    }
+    let hwnd = HWND(raw as *mut std::ffi::c_void);
+    // SAFETY: the stored HWND belongs to the current process and remains alive
+    // until TrayHandle::drop clears TRAY_HWND.
+    let module = unsafe { GetModuleHandleW(None) }.map_err(|e| format!("GetModuleHandleW: {e}"))?;
+    match unsafe { add_notify_icon(hwnd, module) } {
+        Ok(()) => {
+            TRAY_ICON_VISIBLE.store(true, Ordering::SeqCst);
+            publish_availability(true);
+            Ok(())
+        }
+        Err(e) => {
+            publish_availability(false);
+            Err(e)
+        }
+    }
+}
+
+/// Remove the notification icon once the bar is visible again. The hidden
+/// message window stays alive so a later explicit hide can add the icon anew.
+pub fn hide_icon() {
+    if !TRAY_ICON_VISIBLE.swap(false, Ordering::SeqCst) {
+        return;
+    }
+    let raw = TRAY_HWND.load(Ordering::SeqCst);
+    if raw == 0 {
+        return;
+    }
+    let data = NOTIFYICONDATAW {
+        cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
+        hWnd: HWND(raw as *mut std::ffi::c_void),
+        uID: TRAY_ICON_ID,
+        ..Default::default()
+    };
+    // SAFETY: data identifies only this process' notification icon.
+    unsafe {
+        let _ = Shell_NotifyIconW(NIM_DELETE, &data);
     }
 }
 
@@ -366,19 +413,25 @@ unsafe extern "system" fn tray_wndproc(
     let taskbar_created = TASKBAR_CREATED_MESSAGE.load(Ordering::Relaxed);
     if taskbar_created != 0 && msg == taskbar_created {
         // Explorer restarted and discarded every notification icon. Re-add
-        // ours so a currently hidden bar never loses its restore surface.
-        match unsafe { GetModuleHandleW(None) }
-            .map_err(|e| format!("GetModuleHandleW: {e}"))
-            .and_then(|module| unsafe { add_notify_icon(hwnd, module) })
-        {
-            Ok(()) => {
-                publish_availability(true);
-                eprintln!("[overlay-host] tray icon restored after Explorer restart");
+        // ours only when the bar is hidden; visible mode deliberately has no
+        // persistent tray entry.
+        if TRAY_ICON_VISIBLE.load(Ordering::SeqCst) {
+            match unsafe { GetModuleHandleW(None) }
+                .map_err(|e| format!("GetModuleHandleW: {e}"))
+                .and_then(|module| unsafe { add_notify_icon(hwnd, module) })
+            {
+                Ok(()) => {
+                    publish_availability(true);
+                    eprintln!("[overlay-host] tray icon restored after Explorer restart");
+                }
+                Err(e) => {
+                    TRAY_ICON_VISIBLE.store(false, Ordering::SeqCst);
+                    publish_availability(false);
+                    eprintln!("[overlay-host] tray icon restore failed: {e}");
+                }
             }
-            Err(e) => {
-                publish_availability(false);
-                eprintln!("[overlay-host] tray icon restore failed: {e}");
-            }
+        } else {
+            publish_availability(true);
         }
         return LRESULT(0);
     }
@@ -391,15 +444,8 @@ unsafe extern "system" fn tray_wndproc(
             // v4 emits NIN_SELECT for mouse activation. Handling WM_LBUTTONUP
             // as well toggles twice on affected shells (restore then hide).
             NIN_SELECT | NIN_KEYSELECT => dispatch_from_ctx(TrayAction::ShowHide),
-            WM_RBUTTONUP | WM_CONTEXTMENU => show_tray_menu(hwnd),
+            WM_RBUTTONUP | WM_CONTEXTMENU => request_tray_menu(hwnd),
             _ => {}
-        }
-        return LRESULT(0);
-    }
-    if msg == WM_COMMAND {
-        let id = (wparam.0 & 0xFFFF) as u32;
-        if let Some(action) = TrayAction::from_menu_id(id) {
-            dispatch_from_ctx(action);
         }
         return LRESULT(0);
     }
@@ -430,57 +476,25 @@ fn publish_availability(available: bool) {
     });
 }
 
-fn show_tray_menu(hwnd: HWND) {
-    let Some((snapshot, ru)) = TRAY_CTX.with(|c| {
-        c.try_borrow()
-            .ok()
-            .and_then(|ctx| ctx.as_ref().map(|ctx| ((ctx.snapshot)(), (ctx.is_ru)())))
-    }) else {
+fn request_tray_menu(hwnd: HWND) {
+    let mut point = POINT::default();
+    if unsafe { GetCursorPos(&mut point) }.is_err() {
         return;
+    }
+    dispatch_from_ctx(TrayAction::OpenMenu {
+        x: point.x,
+        y: point.y,
+    });
+    let focus_data = NOTIFYICONDATAW {
+        cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
+        hWnd: hwnd,
+        uID: TRAY_ICON_ID,
+        ..Default::default()
     };
-    let entries = menu_entries(&snapshot, ru);
-    // The native popup is the reliability fallback: unlike a second Slint
-    // window it remains interactive while every application window is hidden.
+    // Return keyboard focus bookkeeping to the notification icon after the
+    // host has opened its own styled window.
     unsafe {
-        let Ok(menu) = CreatePopupMenu() else {
-            return;
-        };
-        for entry in &entries {
-            let wide: Vec<u16> = entry
-                .label
-                .encode_utf16()
-                .chain(std::iter::once(0))
-                .collect();
-            let mut flags = MF_STRING;
-            if !entry.enabled {
-                flags |= MF_GRAYED | MF_DISABLED;
-            }
-            if entry.checked {
-                flags |= MF_CHECKED;
-            }
-            let _ = AppendMenuW(
-                menu,
-                flags,
-                usize::try_from(entry.id).unwrap_or(0),
-                PCWSTR(wide.as_ptr()),
-            );
-        }
-        let mut point = POINT::default();
-        if GetCursorPos(&mut point).is_err() {
-            let _ = DestroyMenu(menu);
-            return;
-        }
-        let _ = SetForegroundWindow(hwnd);
-        let _ = TrackPopupMenu(menu, TPM_RIGHTBUTTON, point.x, point.y, None, hwnd, None);
-        let _ = PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0));
-        let focus_data = NOTIFYICONDATAW {
-            cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
-            hWnd: hwnd,
-            uID: TRAY_ICON_ID,
-            ..Default::default()
-        };
         let _ = Shell_NotifyIconW(NIM_SETFOCUS, &focus_data);
-        let _ = DestroyMenu(menu);
     }
 }
 

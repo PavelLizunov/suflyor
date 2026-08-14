@@ -145,9 +145,13 @@ fn restore_keeps_compact_mode_and_icon_lifecycle_is_clean() {
         !restore.contains("config::save"),
         "restore must not persist anything"
     );
+    assert!(
+        restore.contains("slint_replay::tray::hide_icon();"),
+        "restoring the bar must remove its temporary notification icon"
+    );
 
-    // Tray icon lifecycle: installed once before the event loop, dropped right
-    // after it returns so the icon is removed on the clean shutdown path.
+    // Tray restore surface lifecycle: installed before the event loop, dropped
+    // right after it returns so any temporary icon is removed on shutdown.
     let install_pos = host
         .find("slint_replay::tray::install(")
         .expect("tray install");
@@ -166,7 +170,7 @@ fn restore_keeps_compact_mode_and_icon_lifecycle_is_clean() {
     );
     assert!(
         drop_pos > run_pos,
-        "the icon is removed after the loop exits"
+        "the tray restore surface is removed after the loop exits"
     );
     assert!(
         !host.contains("let result = overlay.run();"),
@@ -198,22 +202,20 @@ fn tray_module_never_persists_state() {
         tray.contains("TaskbarCreated"),
         "the restore icon must survive an Explorer/taskbar restart"
     );
-    assert_eq!(
-        tray.matches("publish_availability(true);").count(),
-        2,
-        "initial add and Explorer re-add success both publish availability"
+    assert!(
+        tray.contains("TRAY_ICON_VISIBLE: AtomicBool = AtomicBool::new(false)"),
+        "the icon must start absent while the bar is visible"
     );
-    assert_eq!(
-        tray.matches("publish_availability(false);").count(),
-        2,
-        "initial add and Explorer re-add failure both clear availability"
+    assert!(
+        tray.contains("pub fn show_icon()") && tray.contains("pub fn hide_icon()"),
+        "hide/restore must own the temporary icon lifecycle"
     );
     assert!(
         tray.contains("claim_install_slot"),
         "single-icon guard prevents duplicate icons within one process"
     );
     assert!(
-        tray.contains("WM_RBUTTONUP | WM_CONTEXTMENU => show_tray_menu(hwnd)"),
+        tray.contains("WM_RBUTTONUP | WM_CONTEXTMENU => request_tray_menu(hwnd)"),
         "mouse and keyboard context-menu requests must share one menu path"
     );
     assert!(
@@ -221,8 +223,12 @@ fn tray_module_never_persists_state() {
         "the menu must use a valid cursor position instead of decoding an undefined anchor"
     );
     assert!(
-        tray.contains("TrackPopupMenu"),
-        "a native fallback menu must remain available while every Slint window is hidden"
+        tray.contains("TrayAction::OpenMenu"),
+        "right click must route to the host's themed Slint menu"
+    );
+    assert!(
+        !tray.contains("TrackPopupMenu"),
+        "the unstyled native popup must not return"
     );
     assert!(
         tray.contains("NIN_SELECT | NIN_KEYSELECT => dispatch_from_ctx(TrayAction::ShowHide)"),
@@ -236,6 +242,18 @@ fn tray_module_never_persists_state() {
         !tray.contains("point_from_wparam"),
         "WM_CONTEXTMENU wparam is undefined under notify-icon v4"
     );
+}
+
+#[test]
+fn themed_menu_stays_above_and_clear_of_the_taskbar() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let host = read(root, "src/bin/overlay_host.rs");
+    let menu = read(root, "ui/tray_menu.slint");
+    assert!(menu.contains("export component TrayMenuWindow inherits Window"));
+    assert!(menu.contains("always-on-top: true;"));
+    assert!(host.contains("work_area_for_point(anchor_x, anchor_y)"));
+    assert!(host.contains("set_always_on_top(hwnd, true)"));
+    assert!(host.contains("set_skip_taskbar(hwnd, true)"));
 }
 
 #[test]
