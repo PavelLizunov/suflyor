@@ -1,0 +1,5 @@
+This crate contains a derived WSOLA implementation from timestretch 0.5.0:
+https://github.com/robmorgan/timestretch-rs
+
+Upstream copyright (c) 2026 Rob Morgan. The upstream MIT license is retained
+verbatim in LICENSE.upstream-MIT.
