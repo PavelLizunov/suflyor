@@ -18,6 +18,14 @@ This project ships with hook-enforced autonomous rules. When the file
 Rules R1-R10 live in `.claude/AUTONOMOUS_RULES.md`. Read them before
 starting any autonomous session.
 
+## Winbrat remote work and recovery
+
+Before any Winbrat build, test, installer, or live UI action, read
+[`docs/winbrat-recovery.md`](docs/winbrat-recovery.md). Treat SSH loss as a
+connection incident, not proof of build failure. Do not restart the job until
+its recorded task/log/exit marker is inspected, and do not switch to screen
+control unless the owner explicitly requests that exact channel.
+
 ## State files (single source of truth)
 
 - `NIGHT_RUN_PLAN.md` — current backlog, work log, decision journal.

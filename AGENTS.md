@@ -47,6 +47,15 @@ Claude-Code twin of this file — same rules, different tooling notes.
 - Release build + installer (rarely needed by agents):
   `powershell -File scripts/build-slint-release.ps1 -Installer`.
 
+## Winbrat remote work and recovery
+
+Before starting or resuming any Winbrat build, test, installer, or live UI
+task, read [`docs/winbrat-recovery.md`](docs/winbrat-recovery.md). A lost SSH
+connection does not mean a scheduled build failed: diagnose Tailscale and port
+22 separately, inspect the recorded task/log/exit marker before restarting,
+and never fall back to RustDesk, JetKVM, RDP, Computer Use, or another screen
+control channel without an explicit owner request for that exact channel.
+
 ## Mandatory Slint MCP visual gate
 
 - After any `.slint` edit or Rust change that affects visible UI, use the

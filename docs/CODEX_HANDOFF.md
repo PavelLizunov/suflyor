@@ -2,6 +2,11 @@
 
 Updated 2026-08-04. Read `AGENTS.md` before acting.
 
+Operational note: all Winbrat jobs and connection incidents follow
+[`docs/winbrat-recovery.md`](winbrat-recovery.md). Read it before remote work;
+SSH loss never authorizes a duplicate build or an unrequested screen-control
+fallback.
+
 ## Current state
 
 - Worktree: `C:\Users\x3d_mutant\Natively\suflyor-post-release-0360`
