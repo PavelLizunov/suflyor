@@ -2,7 +2,6 @@
 //! OpenAI Responses and Anthropic Messages APIs. Emits AiEvent chunks downstream.
 
 use anyhow::{anyhow, Context, Result};
-use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
@@ -640,7 +639,7 @@ async fn stream_inner(
     let request = client
         .post(&url)
         .timeout(std::time::Duration::from_secs(120));
-    let resp = match provider::authorize(request, endpoint.protocol, &endpoint.bearer)
+    let mut resp = match provider::authorize(request, endpoint.protocol, &endpoint.bearer)
         .json(&body)
         .send()
         .await
@@ -677,15 +676,13 @@ async fn stream_inner(
 
     let mut byte_buf: Vec<u8> = Vec::with_capacity(8 * 1024);
     let mut buf = String::new();
-    let mut stream = resp.bytes_stream();
     let mut id_sent = false;
     let mut delta_count: u32 = 0;
     // Time of the first content token — tok/s is measured over the GENERATION
     // window (first token -> done), excluding prompt-processing latency.
     let mut first_delta_at: Option<std::time::Instant> = None;
 
-    while let Some(chunk_res) = stream.next().await {
-        let chunk = chunk_res.context("read sse chunk")?;
+    while let Some(chunk) = resp.chunk().await.context("read sse chunk")? {
         byte_buf.extend_from_slice(&chunk);
         let text = drain_complete_frames(&mut byte_buf);
         buf.push_str(&text);
