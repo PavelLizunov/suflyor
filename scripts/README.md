@@ -6,7 +6,9 @@ Workflow tooling for the Slint build + the testing methodology in `../CLAUDE.md`
 
 | File | Purpose |
 |---|---|
-| `ci.ps1` | Local CI — fmt + clippy + tests for slint-experiment + overlay-backend + suflyor-tts |
+| `git-gate-native.ps1` | Selects docs, targeted, or full verification from the diff |
+| `ci.ps1` | Full CI — fmt + clippy + tests for all five crates + UI-MCP compile |
+| `post-release-cleanup.ps1` | Preview/apply safe PR, prerelease, branch, worktree, and target cleanup |
 | `build-slint-release.ps1` | `-Installer` → release `overlay-host.exe` + NSIS `suflyor-slint-setup.exe` |
 | `slint-installer.nsi` | NSIS script (installs to `%LOCALAPPDATA%\suflyor-slint\`) |
 | `slint-experiment/scripts/capture_window.ps1` / `capture_primary.ps1` | DPI-aware screenshots (the Slint windows are layered → PrintWindow fails; these grab the composited pixels) |
@@ -15,20 +17,26 @@ Workflow tooling for the Slint build + the testing methodology in `../CLAUDE.md`
 ## Quick usage
 
 ```powershell
-# Before every commit:
-powershell scripts\ci.ps1                 # fmt + clippy + tests (all three crates)
-# (then in your Claude session)
-# → Agent(subagent_type:"general-purpose", prompt = docs/REVIEW_AGENT_PROMPT.md)
+# Inspect/run the gate selected for the current diff:
+powershell scripts\git-gate-native.ps1 manual
+
+# Force the full five-crate gate when risk warrants it:
+powershell scripts\git-gate-native.ps1 manual -Full
 
 # Cut a tester release:
 powershell scripts\build-slint-release.ps1 -Installer
 # → slint-experiment\target\release\bundle\suflyor-slint-setup.exe
+
+# After publishing: preview, then apply repository/disk hygiene:
+powershell scripts\post-release-cleanup.ps1
+powershell scripts\post-release-cleanup.ps1 -Apply
 ```
 
 ## Why this exists
 
-After the 2026-05-26 marathon (29 releases in 6 h → user cut most by hand),
-we adopted a strict pre-commit gate (fmt + clippy -D warnings + tests, plus
-a review-agent + live smoke). The `.claude/hooks/git-gate.ps1` hook enforces
-the gate on every commit/push. Skipping a layer historically produced a
-user-facing regression.
+After the 2026-05-26 marathon, the project adopted layered verification. Since
+2026-08-15 the native Git hooks select the smallest safe tier: docs validation,
+one affected component, or full CI for cross-cutting/high-risk work. Visual UI
+evidence remains mandatory independently of cargo scope. Releases also finish
+with `post-release-cleanup.ps1`, so merged branches, obsolete prereleases,
+completed worktrees, and rebuildable caches do not accumulate again.

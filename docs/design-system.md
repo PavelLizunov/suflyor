@@ -29,4 +29,4 @@ Existing calibrated geometry outside this scale may stay when it is part of a fi
 
 ## Verification
 
-Any UI change requires a Slint compile, the full gate, and a live CopyFromScreen check of the changed surface. Changes to tile/bar/window dimensions also require checking the paired Rust/Win32 sizing constants.
+Any UI change requires the targeted Slint compile/static guards and a live Slint-MCP check of the changed surface with matching before/after evidence. The full gate is required only when the classifier marks the diff Full. Changes to tile/bar/window dimensions also require checking the paired Rust/Win32 sizing constants.

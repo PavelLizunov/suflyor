@@ -2,9 +2,10 @@
 
 Self-contained tasks for delegated agents (Codex etc.). Rules of engagement:
 AGENTS.md (read it first). One task = one `codex/<name>` branch = one session.
-Definition of done for EVERY task: `scripts/ci.ps1` fully green + the task's
-own acceptance bullets. Do NOT release, do NOT push tags, do NOT merge to
-master unless the task says so.
+Definition of done for EVERY task: the docs/targeted/full tier selected by
+`scripts/git-gate-native.ps1` is green, plus the task's own acceptance bullets.
+Full-class changes still require `scripts/ci.ps1`. Do NOT publish a stable
+release, push a stable tag, or merge to master unless the task says so.
 
 Status legend: [ ] open · [~] claimed (write your agent/branch) · [x] done.
 
