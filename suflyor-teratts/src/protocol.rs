@@ -9,6 +9,7 @@
 //! Stdout is a status handshake, one ASCII line per event:
 //!   READY engine=tera revision=<hex> voices=<a,b,c> sample_rate=44100
 //!   STARTED id=<n>
+//!   PLAYING id=<n>
 //!   DONE id=<n>
 //!   FAILED id=<n> reason=<token>
 //!   REJECTED reason=<token>
@@ -154,6 +155,9 @@ pub enum Event {
     Started {
         id: u64,
     },
+    Playing {
+        id: u64,
+    },
     Done {
         id: u64,
     },
@@ -180,6 +184,7 @@ impl Event {
                 voices.join(",")
             ),
             Event::Started { id } => format!("STARTED id={id}"),
+            Event::Playing { id } => format!("PLAYING id={id}"),
             Event::Done { id } => format!("DONE id={id}"),
             Event::Failed { id, reason } => format!("FAILED id={id} reason={reason}"),
             Event::Rejected { reason } => format!("REJECTED reason={}", reason.token()),
@@ -308,6 +313,7 @@ mod tests {
         assert!(ready.starts_with("READY"));
         assert!(ready.is_ascii());
         assert_eq!(Event::Started { id: 7 }.to_line(), "STARTED id=7");
+        assert_eq!(Event::Playing { id: 7 }.to_line(), "PLAYING id=7");
         assert_eq!(Event::Done { id: 7 }.to_line(), "DONE id=7");
         assert_eq!(
             Event::Failed {

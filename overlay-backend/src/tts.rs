@@ -144,6 +144,7 @@ struct SpeakingState {
     stt_tail_until_ms: u64,
     paused_remaining_ms: u64,
     active_generation: u64,
+    loading_generation: u64,
     next_generation: u64,
 }
 
@@ -152,6 +153,7 @@ static SPEAKING_STATE: Mutex<SpeakingState> = Mutex::new(SpeakingState {
     stt_tail_until_ms: 0,
     paused_remaining_ms: 0,
     active_generation: 0,
+    loading_generation: 0,
     next_generation: 1,
 });
 
@@ -225,6 +227,16 @@ pub fn is_speaking() -> bool {
     state.paused_remaining_ms > 0 || (crate::journal::now_unix_ms() as u64) < state.until_ms
 }
 
+/// True while the active Tera utterance has been accepted but its first PCM
+/// buffer has not reached playback yet.
+#[must_use]
+pub fn is_loading() -> bool {
+    let state = SPEAKING_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    state.active_generation != 0 && state.loading_generation == state.active_generation
+}
+
 /// Capture arrives in ~200 ms chunks. Keep only STT muted for two final
 /// chunks after playback drains; the public speaking state still ends exactly
 /// on DONE, while queued loopback audio cannot seed a fresh transcript buffer.
@@ -269,7 +281,28 @@ fn mark_speaking_for(chars: usize) -> u64 {
     state.stt_tail_until_ms = 0;
     state.paused_remaining_ms = 0;
     state.active_generation = generation;
+    state.loading_generation = 0;
     generation
+}
+
+fn mark_loading_generation(generation: u64) {
+    let mut state = SPEAKING_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if state.active_generation == generation {
+        state.loading_generation = generation;
+    }
+}
+
+fn clear_loading_generation(generation: u64) -> bool {
+    let mut state = SPEAKING_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if state.loading_generation != generation {
+        return false;
+    }
+    state.loading_generation = 0;
+    true
 }
 
 #[cfg(test)]
@@ -282,6 +315,7 @@ fn clear_speaking() {
         (crate::journal::now_unix_ms() as u64).saturating_add(STT_TAIL_DRAIN_MS);
     state.paused_remaining_ms = 0;
     state.active_generation = 0;
+    state.loading_generation = 0;
 }
 
 /// Clear only the utterance that produced the terminal event. A delayed DONE
@@ -298,6 +332,7 @@ fn clear_speaking_generation(generation: u64) -> bool {
         (crate::journal::now_unix_ms() as u64).saturating_add(STT_TAIL_DRAIN_MS);
     state.paused_remaining_ms = 0;
     state.active_generation = 0;
+    state.loading_generation = 0;
     true
 }
 
@@ -344,6 +379,7 @@ fn resume_speaking() {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum TeraPlaybackEvent {
     Started { id: u64 },
+    Playing { id: u64 },
     Done { id: u64 },
     Failed { id: u64, reason: String },
     Rejected { reason: String },
@@ -359,7 +395,7 @@ fn parse_tera_playback_event(line: &str) -> Result<Option<TeraPlaybackEvent>, &'
     if kind == "READY" {
         return Ok(None);
     }
-    if !matches!(kind, "STARTED" | "DONE" | "FAILED" | "REJECTED") {
+    if !matches!(kind, "STARTED" | "PLAYING" | "DONE" | "FAILED" | "REJECTED") {
         return Err("unknown-event");
     }
     let mut id = None;
@@ -389,6 +425,9 @@ fn parse_tera_playback_event(line: &str) -> Result<Option<TeraPlaybackEvent>, &'
     match kind {
         "STARTED" if reason.is_none() => id
             .map(|id| Some(TeraPlaybackEvent::Started { id }))
+            .ok_or("missing-id"),
+        "PLAYING" if reason.is_none() => id
+            .map(|id| Some(TeraPlaybackEvent::Playing { id }))
             .ok_or("missing-id"),
         "DONE" if reason.is_none() => id
             .map(|id| Some(TeraPlaybackEvent::Done { id }))
@@ -432,6 +471,10 @@ impl TeraPlaybackTracker {
 
     fn terminal(&mut self, id: u64) -> Option<u64> {
         self.utterances.remove(&id)
+    }
+
+    fn generation(&self, id: u64) -> Option<u64> {
+        self.utterances.get(&id).copied()
     }
 
     /// Forget a host generation stopped explicitly before the sidecar's DONE
@@ -496,6 +539,20 @@ fn handle_tera_playback_line(playback: &Mutex<TeraPlaybackTracker>, line: &str) 
                 log::info!("tts: Tera STARTED sidecar_id={id} generation={generation}");
             } else {
                 log::warn!("tts: Tera STARTED sidecar_id={id} was not registered");
+            }
+        }
+        TeraPlaybackEvent::Playing { id } => {
+            let generation = playback
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .generation(id);
+            if let Some(generation) = generation {
+                let cleared = clear_loading_generation(generation);
+                log::info!(
+                    "tts: Tera PLAYING sidecar_id={id} generation={generation} loading_cleared={cleared}"
+                );
+            } else {
+                log::warn!("tts: Tera PLAYING sidecar_id={id} was not registered");
             }
         }
         TeraPlaybackEvent::Done { id } => {
@@ -869,6 +926,7 @@ impl Sidecar {
         // The sidecar mutex serialises this mark with the wire order. If two
         // callers race, the newer generation is always the newer SPEAK line.
         let generation = mark_speaking_for(chars);
+        mark_loading_generation(generation);
         self.playback
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -1736,6 +1794,10 @@ mod tests {
             Ok(Some(TeraPlaybackEvent::Started { id: 7 }))
         );
         assert_eq!(
+            parse_tera_playback_event("PLAYING id=7"),
+            Ok(Some(TeraPlaybackEvent::Playing { id: 7 }))
+        );
+        assert_eq!(
             parse_tera_playback_event("DONE id=7"),
             Ok(Some(TeraPlaybackEvent::Done { id: 7 }))
         );
@@ -1773,6 +1835,10 @@ mod tests {
         tracker.lock().unwrap().register_speak(generation);
         handle_tera_playback_line(&tracker, "STARTED id=41");
         assert!(is_speaking());
+        mark_loading_generation(generation);
+        assert!(is_loading());
+        handle_tera_playback_line(&tracker, "PLAYING id=41");
+        assert!(!is_loading());
         handle_tera_playback_line(&tracker, "DONE id=41");
         assert!(!is_speaking());
         assert!(

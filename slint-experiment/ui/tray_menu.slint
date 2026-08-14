@@ -1,0 +1,100 @@
+import { Theme } from "theme.slint";
+import { Metrics } from "metrics.slint";
+
+component TrayMenuRow inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> row-enabled: true;
+    in property <bool> danger: false;
+    callback clicked();
+    height: 34px;
+    border-radius: Metrics.radius-control;
+    background: row-touch.has-hover && root.row-enabled ? Theme.border : transparent;
+    opacity: root.row-enabled ? 1 : 0.42;
+    HorizontalLayout {
+        padding-left: Metrics.space-sm;
+        padding-right: Metrics.space-sm;
+        spacing: Metrics.space-sm;
+        Image {
+            source: root.icon;
+            colorize: root.danger ? Theme.danger : Theme.text-secondary;
+            width: 16px;
+            height: 16px;
+            image-fit: contain;
+            vertical-alignment: center;
+        }
+        Text {
+            text: root.label;
+            color: root.danger ? Theme.danger : Theme.text-primary;
+            font-size: 12px;
+            vertical-alignment: center;
+        }
+    }
+    row-touch := TouchArea {
+        enabled: root.row-enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component TrayMenuWindow inherits Window {
+    no-frame: true;
+    always-on-top: true;
+    title: @tr("suflyor tray menu");
+    background: transparent;
+    preferred-width: 198px;
+    preferred-height: 146px;
+    in property <bool> bar-visible: true;
+    in property <bool> paused: false;
+    in property <bool> session-running: false;
+    callback action-selected(int);
+    callback dismissed();
+    forward-focus: scope;
+
+    scope := FocusScope {
+        key-pressed(e) => {
+            if (e.text == Key.Escape) {
+                root.dismissed();
+                return accept;
+            }
+            return reject;
+        }
+        Rectangle {
+            background: Theme.bg-elevated;
+            border-color: Theme.border-strong;
+            border-width: Metrics.border-thin;
+            border-radius: Metrics.radius-panel;
+            VerticalLayout {
+                padding: Metrics.space-xs;
+                spacing: 1px;
+                TrayMenuRow {
+                    icon: root.bar-visible
+                        ? @image-url("../assets/icons/tray.svg")
+                        : @image-url("../assets/icons/restore.svg");
+                    label: root.bar-visible ? @tr("Hide bar") : @tr("Restore bar");
+                    clicked => { root.action-selected(0); }
+                }
+                TrayMenuRow {
+                    icon: root.paused
+                        ? @image-url("../assets/icons/play.svg")
+                        : @image-url("../assets/icons/pause.svg");
+                    label: root.paused ? @tr("Resume") : @tr("Pause");
+                    row-enabled: root.session-running;
+                    clicked => { root.action-selected(1); }
+                }
+                TrayMenuRow {
+                    icon: @image-url("../assets/icons/stop.svg");
+                    label: @tr("Stop session");
+                    row-enabled: root.session-running;
+                    clicked => { root.action-selected(2); }
+                }
+                TrayMenuRow {
+                    icon: @image-url("../assets/icons/x.svg");
+                    label: @tr("Quit suflyor");
+                    danger: true;
+                    clicked => { root.action-selected(3); }
+                }
+            }
+        }
+    }
+}

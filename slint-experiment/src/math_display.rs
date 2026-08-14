@@ -31,7 +31,7 @@ pub fn normalize_math_display(input: &str) -> String {
             if let Some(relative_end) = input[inner_start..].find(close) {
                 let inner_end = inner_start + relative_end;
                 let inner = &input[inner_start..inner_end];
-                if looks_like_math(inner) {
+                if looks_like_delimited_math(inner) {
                     out.push_str(&input[plain_start..index]);
                     out.push_str(&normalize_math_fragment(inner));
                     index = inner_end + close.len();
@@ -69,6 +69,15 @@ fn looks_like_bare_math(text: &str) -> bool {
         && !text.contains("http://")
         && text.contains('=')
         && looks_like_math(text)
+}
+
+pub(crate) fn looks_like_delimited_math(text: &str) -> bool {
+    looks_like_math(text)
+        || text
+            .trim()
+            .chars()
+            .next()
+            .is_some_and(|ch| ch.is_ascii_alphabetic() && text.trim().chars().count() == 1)
 }
 
 fn starts_url(input: &str, index: usize) -> bool {
@@ -356,5 +365,13 @@ mod tests {
 
         let once = normalize_math_display("$c_{ij} = \\sum_{k=1}^{n}$");
         assert_eq!(normalize_math_display(&once), once);
+    }
+
+    #[test]
+    fn strips_delimiters_from_single_letter_variables() {
+        assert_eq!(
+            normalize_math_display("Элемент из $i$-й строки и $j$-го столбца"),
+            "Элемент из i-й строки и j-го столбца"
+        );
     }
 }

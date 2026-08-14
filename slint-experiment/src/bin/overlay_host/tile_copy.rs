@@ -691,6 +691,7 @@ fn sync_speaking_tiles(active: Option<i32>) {
             };
             let is_active = active == Some(*id);
             tile.set_speak_active(is_active);
+            tile.set_speak_loading(is_active && overlay_backend::tts::is_loading());
             tile.set_speak_speed_label(SharedString::from(speak_speed_label(if is_active {
                 SPEAK_SPEED_PERCENT.load(std::sync::atomic::Ordering::Acquire)
             } else {
@@ -698,6 +699,7 @@ fn sync_speaking_tiles(active: Option<i32>) {
             })));
             if !is_active {
                 tile.set_speak_paused(false);
+                tile.set_speak_loading(false);
             }
             true
         });
@@ -716,6 +718,11 @@ fn start_speaking_state_timer() {
         timer.start(TimerMode::Repeated, Duration::from_millis(100), || {
             if !overlay_backend::tts::is_speaking() {
                 clear_speaking_tile();
+            } else {
+                let active = current_speaking_convo();
+                if active >= 0 {
+                    sync_speaking_tiles(Some(active));
+                }
             }
         });
     });

@@ -2045,3 +2045,30 @@ msgstr "Как у текстовой модели выше (недоступно
 
 msgid "Same as text model is unavailable because the selected text model does not declare image input. Choose another Vision provider or model."
 msgstr "Режим «как у текстовой модели» недоступен: выбранная текстовая модель не заявляет поддержку изображений. Выберите другого провайдера или модель для зрения."
+
+msgid "Preparing voice..."
+msgstr "Подготовка голоса..."
+
+msgid "Reading aloud"
+msgstr "Озвучивание"
+
+msgid "suflyor tray menu"
+msgstr "Меню suflyor в области уведомлений"
+
+msgid "Hide bar"
+msgstr "Скрыть панель"
+
+msgid "Restore bar"
+msgstr "Вернуть панель"
+
+msgid "Resume"
+msgstr "Продолжить"
+
+msgid "Pause"
+msgstr "Пауза"
+
+msgid "Stop session"
+msgstr "Остановить сессию"
+
+msgid "Quit suflyor"
+msgstr "Выйти из suflyor"

@@ -1,7 +1,8 @@
 //! Utterance chunking, ported from suflyor-tts so both sidecars bound their
-//! per-synthesis latency the same way (sentence-aware splits at 350 chars).
+//! per-synthesis latency the same way. Short chunks make first audio arrive
+//! quickly while playback continues to buffer the following chunks.
 
-pub const MAX_CHUNK_CHARS: usize = 350;
+pub const MAX_CHUNK_CHARS: usize = 120;
 
 pub fn sanitize(text: &str) -> String {
     text.chars()

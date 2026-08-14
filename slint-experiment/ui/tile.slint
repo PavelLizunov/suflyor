@@ -92,6 +92,34 @@ component TileMenuRow inherits Rectangle {
     }
 }
 
+component TilePlayerButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> a11y;
+    in property <color> icon-color: Theme.text-secondary;
+    callback clicked();
+    width: 30px;
+    height: 30px;
+    background: player-touch.has-hover ? Theme.border-strong : Theme.border;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: Theme.border-strong;
+    accessible-role: button;
+    accessible-label: root.a11y;
+    player-touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    Image {
+        source: root.icon;
+        colorize: root.icon-color;
+        width: 15px;
+        height: 15px;
+        image-fit: contain;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+}
+
 export component TileWindow inherits Window {
     // Phase 4 — keep std-widgets (follow-up LineEdit, ScrollView) dark with
     // the active scheme instead of Slint's light fluent default.
@@ -211,6 +239,7 @@ export component TileWindow inherits Window {
     in-out property <bool> can-speak: false;
     in-out property <bool> speak-active: false;
     in-out property <bool> speak-paused: false;
+    in-out property <bool> speak-loading: false;
     // Tile-player speed is transient and resets to 1.0x for every new read.
     in-out property <string> speak-speed-label: "1.0x";
     // Bound to the follow-up LineEdit so do-submit() can read + clear it.
@@ -436,24 +465,6 @@ export component TileWindow inherits Window {
                                         overflow-popup.close();
                                     }
                                 }
-                                // The player stays in the existing overflow menu so a long
-                                // answer never loses its close/maximize controls. It is shown
-                                // only while this exact tile owns read-aloud.
-                                if root.speak-active: TileMenuRow {
-                                    icon: @image-url("../assets/icons/seek-back.svg");
-                                    label: @tr("Back 10 seconds");
-                                    clicked => { root.speak-seek-clicked(-10); }
-                                }
-                                if root.speak-active: TileMenuRow {
-                                    icon: @image-url("../assets/icons/seek-forward.svg");
-                                    label: @tr("Forward 15 seconds");
-                                    clicked => { root.speak-seek-clicked(15); }
-                                }
-                                if root.speak-active: TileMenuRow {
-                                    icon: @image-url("../assets/icons/speed.svg");
-                                    label: @tr("Reading speed") + ": " + root.speak-speed-label;
-                                    clicked => { root.speak-speed-next-clicked(); }
-                                }
                                 if root.can-regenerate: TileMenuRow {
                                     icon: @image-url("../assets/icons/refresh.svg");
                                     label: @tr("Regenerate");
@@ -525,30 +536,6 @@ export component TileWindow inherits Window {
                             ? @image-url("../assets/icons/stop.svg")
                             : @image-url("../assets/icons/voice.svg");
                         colorize: root.speak-active ? Theme.danger : Theme.text-secondary;
-                        width: 16px;
-                        height: 16px;
-                        image-fit: contain;
-                        x: (parent.width - self.width) / 2;
-                        y: (parent.height - self.height) / 2;
-                    }
-                }
-                if root.can-speak: Rectangle {
-                    width: 30px;
-                    height: 30px;
-                    background: pausespk-touch.has-hover ? Theme.border-strong : Theme.border;
-                    border-radius: 6px;
-                    border-width: 1px;
-                    border-color: Theme.border-strong;
-                    accessible-role: button;
-                    accessible-label: @tr("Pause / resume reading aloud");
-                    pausespk-touch := TouchArea {
-                        clicked => { root.speak-pause-clicked(); }
-                    }
-                    Image {
-                        source: root.speak-paused
-                            ? @image-url("../assets/icons/play.svg")
-                            : @image-url("../assets/icons/pause.svg");
-                        colorize: Theme.text-secondary;
                         width: 16px;
                         height: 16px;
                         image-fit: contain;
@@ -875,6 +862,76 @@ export component TileWindow inherits Window {
                         clicked => {
                             if (root.capture-pending) { root.cancel-capture(); }
                             else { root.clear-marks(); }
+                        }
+                    }
+                }
+            }
+
+            // The active read-aloud controls stay visible at the bottom instead of
+            // disappearing into the overflow popup. Keeping changing playback state
+            // out of PopupWindow also avoids tearing down popup rows while focus moves
+            // to Settings or another tile.
+            if root.speak-active : Rectangle {
+                height: 38px;
+                background: Theme.bg-elevated;
+                border-color: Theme.border-strong;
+                border-width: 1px;
+                border-radius: 7px;
+                HorizontalLayout {
+                    padding-left: 4px;
+                    padding-right: 4px;
+                    spacing: 5px;
+                    alignment: center;
+                    Text {
+                        text: root.speak-loading ? @tr("Preparing voice...") : @tr("Reading aloud");
+                        color: root.speak-loading ? Theme.accent : Theme.text-muted;
+                        font-size: 10px;
+                        overflow: elide;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    TilePlayerButton {
+                        icon: @image-url("../assets/icons/seek-back.svg");
+                        a11y: @tr("Back 10 seconds");
+                        clicked => { root.speak-seek-clicked(-10); }
+                    }
+                    TilePlayerButton {
+                        icon: root.speak-paused
+                            ? @image-url("../assets/icons/play.svg")
+                            : @image-url("../assets/icons/pause.svg");
+                        a11y: @tr("Pause / resume reading aloud");
+                        clicked => { root.speak-pause-clicked(); }
+                    }
+                    TilePlayerButton {
+                        icon: @image-url("../assets/icons/stop.svg");
+                        icon-color: Theme.danger;
+                        a11y: @tr("Stop reading aloud");
+                        clicked => { root.speak-clicked(); }
+                    }
+                    TilePlayerButton {
+                        icon: @image-url("../assets/icons/seek-forward.svg");
+                        a11y: @tr("Forward 15 seconds");
+                        clicked => { root.speak-seek-clicked(15); }
+                    }
+                    speed-button := Rectangle {
+                        width: 46px;
+                        height: 30px;
+                        background: speed-touch.has-hover ? Theme.border-strong : Theme.border;
+                        border-radius: 6px;
+                        border-width: 1px;
+                        border-color: Theme.border-strong;
+                        accessible-role: button;
+                        accessible-label: @tr("Reading speed") + ": " + root.speak-speed-label;
+                        Text {
+                            text: root.speak-speed-label;
+                            color: Theme.text-secondary;
+                            font-size: 10px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        speed-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.speak-speed-next-clicked(); }
                         }
                     }
                 }

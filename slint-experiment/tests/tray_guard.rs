@@ -213,12 +213,16 @@ fn tray_module_never_persists_state() {
         "single-icon guard prevents duplicate icons within one process"
     );
     assert!(
-        tray.contains("WM_RBUTTONUP | WM_CONTEXTMENU => show_tray_menu(hwnd)"),
+        tray.contains("WM_RBUTTONUP | WM_CONTEXTMENU => open_tray_menu()"),
         "mouse and keyboard context-menu requests must share one menu path"
     );
     assert!(
-        tray.contains("GetCursorPos(&mut pt)"),
+        tray.contains("GetCursorPos(&mut point)"),
         "the menu must use a valid cursor position instead of decoding an undefined anchor"
+    );
+    assert!(
+        !tray.contains("TrackPopupMenu"),
+        "the tray menu must use the themed Slint window, not a native Windows popup"
     );
     assert!(
         !tray.contains("point_from_wparam"),

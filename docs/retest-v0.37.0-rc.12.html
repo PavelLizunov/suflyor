@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>suflyor v0.37.0-rc.12 retest</title>
+<h1>suflyor v0.37.0-rc.12 - manual retest fixes</h1>
+<ol>
+  <li>Install over RC11. Settings, credentials, models, journals, and recordings must remain unchanged.</li>
+  <li>Start a recording session and let system audio create an answer tile. Start and stop that tile's TTS, then open Settings. The app must stay alive and Settings must open normally.</li>
+  <li>Read a long tile aloud with Tera. A compact bottom player must appear immediately with “Preparing voice…”, then change to “Reading aloud” when audio starts. Back, pause/resume, stop, forward, and speed must work.</li>
+  <li>While TTS is playing, meeting audio must remain strongly suppressed in STT exactly as in RC11. After stopping or finishing TTS, normal capture must resume.</li>
+  <li>Check text containing <code>$i$-й строки</code>, <code>$j$-го столбца</code>, and a longer matrix formula. Math delimiters must not remain around valid variables or formulas.</li>
+  <li>Hide the bar to the notification area. A left click on the tray icon must restore it. A right click must open the themed suflyor menu fully above the Windows taskbar; Restore/Hide, Pause/Resume, Stop, and Quit must work.</li>
+  <li>During a recording, terminate overlay-host from Task Manager, then launch suflyor once. The interrupted WAV files must be repaired on that first restart and the session recording must be available without starting another session.</li>
+  <li>Quit normally and confirm no overlay-host, suflyor-tts, or suflyor-teratts process remains.</li>
+</ol>

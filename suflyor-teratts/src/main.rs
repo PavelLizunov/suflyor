@@ -158,6 +158,7 @@ struct Controller<P: Player> {
     player: Option<P>,
     chunks_total: usize,
     chunks_settled: usize,
+    playing_emitted: bool,
     /// Cancellation generation, shared with the synth worker thread.
     generation: Arc<AtomicU64>,
     make_player: Box<dyn FnMut(u32, u64) -> Result<P, String>>,
@@ -194,6 +195,7 @@ impl<P: Player> Controller<P> {
         }
         self.chunks_total = 0;
         self.chunks_settled = 0;
+        self.playing_emitted = false;
         let previous = self.active.take();
         self.generation.store(0, Ordering::Release);
         if let Some(id) = previous {
@@ -234,6 +236,7 @@ impl<P: Player> Controller<P> {
                 self.generation.store(id, Ordering::Release);
                 self.chunks_total = chunks.len();
                 self.chunks_settled = 0;
+                self.playing_emitted = false;
                 let scale = self.duration_scale();
                 for (chunk_index, chunk_text) in chunks.into_iter().enumerate() {
                     self.dispatch.dispatch(SynthJob {
@@ -267,6 +270,11 @@ impl<P: Player> Controller<P> {
         self.chunks_settled += 1;
         match outcome.audio {
             Ok(audio) => {
+                let has_audio = audio.iter().any(|samples| !samples.is_empty());
+                if has_audio && !self.playing_emitted {
+                    self.playing_emitted = true;
+                    self.emit_event(Event::Playing { id: active });
+                }
                 if let Some(player) = self.player.as_mut() {
                     for samples in audio {
                         player.feed(samples);
@@ -284,6 +292,7 @@ impl<P: Player> Controller<P> {
                 self.active = None;
                 self.chunks_total = 0;
                 self.chunks_settled = 0;
+                self.playing_emitted = false;
                 self.generation.store(0, Ordering::Release);
                 self.emit_event(Event::Failed { id: active, reason });
             }
@@ -303,6 +312,7 @@ impl<P: Player> Controller<P> {
         self.active = None;
         self.chunks_total = 0;
         self.chunks_settled = 0;
+        self.playing_emitted = false;
         self.generation.store(0, Ordering::Release);
         self.emit_event(Event::Done { id });
     }
@@ -411,7 +421,16 @@ fn synth_worker(
     jobs: mpsc::Receiver<SynthJob>,
     events: mpsc::Sender<Message>,
 ) {
-    let mut engine: Option<tera::TeraEngine> = None;
+    let mut engine = match tera::TeraEngine::load(&root) {
+        Ok(loaded) => Some(loaded),
+        Err(err) => {
+            eprintln!(
+                "[suflyor-teratts] background warm-up failed ({})",
+                reason_token(&err, "load")
+            );
+            None
+        }
+    };
     while let Ok(job) = jobs.recv() {
         if generation.load(Ordering::Acquire) != job.utterance {
             continue;
@@ -554,6 +573,7 @@ fn main() {
         player: None,
         chunks_total: 0,
         chunks_settled: 0,
+        playing_emitted: false,
         generation,
         make_player: Box::new(make_player),
         dispatch,
@@ -678,6 +698,7 @@ mod tests {
                 player: None,
                 chunks_total: 0,
                 chunks_settled: 0,
+                playing_emitted: false,
                 generation: generation.clone(),
                 make_player: Box::new(make_player),
                 dispatch: Box::new(RecordingDispatch { jobs: jobs.clone() }),
@@ -767,10 +788,23 @@ mod tests {
 
         // The new generation plays and finishes normally.
         h.controller.on_synth_result(ok_audio(2));
+        assert_eq!(take_events(&h), vec![Event::Playing { id: 2 }]);
         assert!(h.player_log.borrow().iter().any(|e| e == "feed:2:4"));
         assert!(h.player_log.borrow().iter().any(|e| e == "eos:2"));
         h.controller.on_playback_done(2);
         assert_eq!(take_events(&h), vec![Event::Done { id: 2 }]);
+    }
+
+    #[test]
+    fn playing_is_emitted_once_when_first_audio_reaches_the_player() {
+        let mut h = harness();
+        h.controller.on_cmd(Cmd::Speak(long_text()));
+        take_events(&h);
+
+        h.controller.on_synth_result(ok_audio(1));
+        h.controller.on_synth_result(ok_audio(1));
+
+        assert_eq!(take_events(&h), vec![Event::Playing { id: 1 }]);
     }
 
     #[test]

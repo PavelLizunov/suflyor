@@ -12,7 +12,7 @@
 //! stripped, see Event::Code). GFM tables render as an aligned monospace block (#109);
 //! links, images, footnotes, HTML are silently dropped — Phase 4.x.
 
-use crate::math_display::{looks_like_math, normalize_math_fragment};
+use crate::math_display::{looks_like_delimited_math, normalize_math_fragment};
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 /// Block discriminant values — keep in sync with
@@ -174,7 +174,7 @@ fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
                 } else {
                     &mut current_text
                 };
-                if normalize_math && looks_like_math(&t) {
+                if normalize_math && looks_like_delimited_math(&t) {
                     buf.push_str(&normalize_math_fragment(&t));
                 } else {
                     buf.push('$');
@@ -188,7 +188,7 @@ fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
                 } else {
                     &mut current_text
                 };
-                if normalize_math && looks_like_math(&t) {
+                if normalize_math && looks_like_delimited_math(&t) {
                     buf.push_str(&normalize_math_fragment(&t));
                 } else {
                     buf.push_str("$$");
@@ -515,6 +515,16 @@ mod tests {
                 && block.text.trim_end_matches('\n') == "c_{ij} = \\sum_{k=1}^{n}"
                 && block.display_text == block.text
         }));
+    }
+
+    #[test]
+    fn math_display_normalizes_single_letter_inline_math() {
+        let blocks = parse("Элемент из $i$-й строки и $j$-го столбца");
+        assert_eq!(
+            blocks[0].display_text,
+            "Элемент из i-й строки и j-го столбца"
+        );
+        assert_eq!(blocks[0].text, "Элемент из $i$-й строки и $j$-го столбца");
     }
 
     /// Micro-bench for audit P1: the tile re-`parse`s the WHOLE accumulated answer
