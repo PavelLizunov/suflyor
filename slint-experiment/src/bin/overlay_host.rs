@@ -31,7 +31,7 @@ use slint_replay::win32::{
     pick_monitor, set_always_on_top, set_skip_taskbar, set_stealth, set_window_owner,
     work_area_for_window,
 };
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -65,7 +65,7 @@ use ui::{
     ArchiveRow, ArchiveWindow, CaptureOverlay, ComponentRow, HelpWindow, LockModeMenuWindow,
     MarkdownBlock, MemoryRow, OverlayBarWindow, PaletteResult, PaletteWindow, RecoverOfferWindow,
     SettingsWindow, SpeakerRow, TextAskWindow, TileWindow, TranscriptLine, TranscriptWindow,
-    TrayMenuWindow, WizardWindow,
+    WizardWindow,
 };
 
 // Phase 1 of the modularization (docs/overlay-host-modularization-plan.md §5.1):
@@ -4440,62 +4440,10 @@ fn main() -> Result<(), slint::PlatformError> {
     // install is logged and non-fatal. The bar stays usable, while its hide
     // callback refuses to strand the user without a restore surface.
     let tray_handle = {
-        let tray_menu = Rc::new(TrayMenuWindow::new()?);
-        let tray_menu_armed = Rc::new(Cell::new(false));
-        {
-            use slint::winit_030::{winit, EventResult, WinitWindowAccessor};
-            use winit::event::WindowEvent;
-            let menu_weak = Rc::downgrade(&tray_menu);
-            let armed = tray_menu_armed.clone();
-            tray_menu.window().on_winit_window_event(move |_, event| {
-                if let WindowEvent::Focused(focused) = event {
-                    if *focused {
-                        armed.set(true);
-                    } else if armed.replace(false) {
-                        if let Some(menu) = menu_weak.upgrade() {
-                            let _ = menu.hide();
-                        }
-                    }
-                }
-                EventResult::Propagate
-            });
-        }
-        {
-            let menu_weak = Rc::downgrade(&tray_menu);
-            let armed = tray_menu_armed.clone();
-            tray_menu.on_dismissed(move || {
-                armed.set(false);
-                if let Some(menu) = menu_weak.upgrade() {
-                    let _ = menu.hide();
-                }
-            });
-        }
-        {
-            let menu_weak = Rc::downgrade(&tray_menu);
-            let armed = tray_menu_armed.clone();
-            let weak = overlay.as_weak();
-            let state_for_action = state.clone();
-            tray_menu.on_action_selected(move |index| {
-                armed.set(false);
-                if let Some(menu) = menu_weak.upgrade() {
-                    let _ = menu.hide();
-                }
-                let action = match index {
-                    0 => slint_replay::tray::TrayAction::ShowHide,
-                    1 => slint_replay::tray::TrayAction::PauseResume,
-                    2 => slint_replay::tray::TrayAction::Stop,
-                    3 => slint_replay::tray::TrayAction::Quit,
-                    _ => return,
-                };
-                tray_action_dispatch(action, &weak, &state_for_action);
-            });
-        }
         let weak_for_tray = overlay.as_weak();
         let state_for_snapshot = state.clone();
         let state_for_dispatch = state.clone();
-        let cfg_for_menu = cfg.clone();
-        let menu_for_open = tray_menu.clone();
-        let armed_for_open = tray_menu_armed.clone();
+        let cfg_for_tray = cfg.clone();
         let weak_for_availability = overlay.as_weak();
         match slint_replay::tray::install(
             move || {
@@ -4509,84 +4457,8 @@ fn main() -> Result<(), slint::PlatformError> {
                     session_running: running,
                 }
             },
+            move || cfg_for_tray.read().ui_language == "ru",
             move |action| tray_action_dispatch(action, &weak_for_tray, &state_for_dispatch),
-            move |cursor_x, cursor_y, snapshot| {
-                if menu_for_open.window().is_visible() {
-                    armed_for_open.set(false);
-                    let _ = menu_for_open.hide();
-                    return;
-                }
-                menu_for_open.set_bar_visible(snapshot.bar_visible);
-                menu_for_open.set_paused(snapshot.paused);
-                menu_for_open.set_session_running(snapshot.session_running);
-                menu_for_open
-                    .global::<ui::Theme>()
-                    .set_scheme(clamp_scheme(cfg_for_menu.read().color_scheme));
-
-                let scale = menu_for_open.window().scale_factor().max(0.1);
-                let menu_width = (198.0 * scale).round() as i32;
-                let menu_height = (146.0 * scale).round() as i32;
-                let monitor = enum_monitors()
-                    .into_iter()
-                    .find(|monitor| {
-                        cursor_x >= monitor.left
-                            && cursor_x < monitor.right
-                            && cursor_y >= monitor.top
-                            && cursor_y < monitor.bottom
-                    })
-                    .or_else(|| {
-                        enum_monitors()
-                            .into_iter()
-                            .find(|monitor| monitor.is_primary)
-                    });
-                let Some(monitor) = monitor else {
-                    return;
-                };
-                let x = (cursor_x - menu_width / 2).clamp(monitor.left, monitor.right - menu_width);
-                let above = cursor_y > monitor.top + monitor.height() / 2;
-                let requested_y = if above {
-                    cursor_y - menu_height - 8
-                } else {
-                    cursor_y + 8
-                };
-                let y = requested_y.clamp(monitor.top, monitor.bottom - menu_height);
-
-                menu_for_open
-                    .window()
-                    .set_position(slint::PhysicalPosition::new(-32000, -32000));
-                armed_for_open.set(false);
-                if let Err(error) = menu_for_open.show() {
-                    diag!("[overlay-host] tray menu show failed: {error}");
-                    return;
-                }
-                let armed_for_reveal = armed_for_open.clone();
-                let reveal = Rc::new(move |window: &TrayMenuWindow| {
-                    let hwnd = match grab_hwnd(window.window()) {
-                        Ok(hwnd) => hwnd,
-                        Err(_) => return false,
-                    };
-                    if set_skip_taskbar(hwnd, true).is_err()
-                        || set_always_on_top(hwnd, true).is_err()
-                        || move_window_pos_only(hwnd, x, y).is_err()
-                    {
-                        return false;
-                    }
-                    if global_stealth() {
-                        let _ = set_stealth(hwnd, true);
-                    }
-                    focus_window(hwnd);
-                    let armed = armed_for_reveal.clone();
-                    Timer::single_shot(Duration::from_millis(100), move || armed.set(true));
-                    true
-                });
-                let armed_for_fallback = armed_for_open.clone();
-                let fallback = Rc::new(move |window: &TrayMenuWindow| {
-                    armed_for_fallback.set(false);
-                    let _ = window.hide();
-                    diag!("[overlay-host] tray menu native window was not realized");
-                });
-                realize_with_retries(menu_for_open.as_ref(), reveal, fallback);
-            },
             move |available| {
                 TRAY_AVAILABLE.store(available, Ordering::Relaxed);
                 if let Some(o) = weak_for_availability.upgrade() {

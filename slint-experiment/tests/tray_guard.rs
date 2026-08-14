@@ -213,7 +213,7 @@ fn tray_module_never_persists_state() {
         "single-icon guard prevents duplicate icons within one process"
     );
     assert!(
-        tray.contains("WM_RBUTTONUP | WM_CONTEXTMENU => open_tray_menu()"),
+        tray.contains("WM_RBUTTONUP | WM_CONTEXTMENU => show_tray_menu(hwnd)"),
         "mouse and keyboard context-menu requests must share one menu path"
     );
     assert!(
@@ -221,8 +221,16 @@ fn tray_module_never_persists_state() {
         "the menu must use a valid cursor position instead of decoding an undefined anchor"
     );
     assert!(
-        !tray.contains("TrackPopupMenu"),
-        "the tray menu must use the themed Slint window, not a native Windows popup"
+        tray.contains("TrackPopupMenu"),
+        "a native fallback menu must remain available while every Slint window is hidden"
+    );
+    assert!(
+        tray.contains("NIN_SELECT | NIN_KEYSELECT => dispatch_from_ctx(TrayAction::ShowHide)"),
+        "notify-icon v4 activation must restore the bar exactly once"
+    );
+    assert!(
+        !tray.contains("WM_LBUTTONUP | NIN_SELECT"),
+        "handling both mouse-up and NIN_SELECT can toggle restore twice"
     );
     assert!(
         !tray.contains("point_from_wparam"),

@@ -74,7 +74,13 @@ Run-Step "stage DirectML for slint tests" {
     if (-not (Test-Path $dmlSource)) {
         throw "matching DirectML.dll not found after the Slint build"
     }
-    Copy-Item -LiteralPath $dmlSource -Destination (Join-Path $projectRoot "slint-experiment\target\debug\deps\DirectML.dll") -Force
+    $dmlDestination = Join-Path $projectRoot "slint-experiment\target\debug\deps\DirectML.dll"
+    $alreadyMatching = (Test-Path $dmlDestination) -and
+        ((Get-FileHash -LiteralPath $dmlSource -Algorithm SHA256).Hash -eq
+         (Get-FileHash -LiteralPath $dmlDestination -Algorithm SHA256).Hash)
+    if (-not $alreadyMatching) {
+        Copy-Item -LiteralPath $dmlSource -Destination $dmlDestination -Force
+    }
 }
 # NOT --lib: it skips tests/ (i18n_guard + any guard test). Run the full suite.
 Run-Step "slint test" {

@@ -69,6 +69,7 @@ fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
     let mut current_text = String::new();
     let mut current_kind: Option<i32> = None;
     let mut current_lang = String::new();
+    let mut in_math_fence = false;
     let mut list_depth: usize = 0;
     // #109 — GFM table accumulation. pulldown-cmark only emits table
     // events when ENABLE_TABLES is set; otherwise `| a | b |` arrives as
@@ -122,11 +123,20 @@ fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
                     &mut current_kind,
                     &mut current_lang,
                 );
-                current_kind = Some(kind::CODE);
-                current_lang = match cb {
+                let lang = match cb {
                     CodeBlockKind::Fenced(lang) => lang.to_string(),
                     CodeBlockKind::Indented => String::new(),
                 };
+                in_math_fence = matches!(
+                    lang.trim().to_ascii_lowercase().as_str(),
+                    "math" | "latex" | "tex"
+                );
+                current_kind = Some(if in_math_fence {
+                    kind::PARAGRAPH
+                } else {
+                    kind::CODE
+                });
+                current_lang = if in_math_fence { String::new() } else { lang };
             }
             Event::Start(Tag::List(_)) => {
                 list_depth += 1;
@@ -149,6 +159,8 @@ fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
             Event::Text(t) => {
                 if in_cell {
                     current_cell.push_str(&t);
+                } else if in_math_fence && normalize_math {
+                    current_text.push_str(&normalize_math_fragment(&t));
                 } else {
                     current_text.push_str(&t);
                 }
@@ -205,14 +217,22 @@ fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
             }
             Event::End(TagEnd::Heading(_))
             | Event::End(TagEnd::Paragraph)
-            | Event::End(TagEnd::Item)
-            | Event::End(TagEnd::CodeBlock) => {
+            | Event::End(TagEnd::Item) => {
                 flush(
                     &mut out,
                     &mut current_text,
                     &mut current_kind,
                     &mut current_lang,
                 );
+            }
+            Event::End(TagEnd::CodeBlock) => {
+                flush(
+                    &mut out,
+                    &mut current_text,
+                    &mut current_kind,
+                    &mut current_lang,
+                );
+                in_math_fence = false;
             }
             Event::Start(Tag::Table(_)) => {
                 flush(
@@ -525,6 +545,20 @@ mod tests {
             "Элемент из i-й строки и j-го столбца"
         );
         assert_eq!(blocks[0].text, "Элемент из $i$-й строки и $j$-го столбца");
+    }
+
+    #[test]
+    fn fenced_math_is_displayed_as_math_instead_of_a_code_box() {
+        let blocks = parse(
+            "```math\nA = \\begin{pmatrix}\na_{11} & a_{12} \\\\\na_{21} & a_{22}\n\\end{pmatrix}\n```",
+        );
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].kind, kind::PARAGRAPH);
+        assert!(blocks[0].text.contains("\\begin{pmatrix}"));
+        assert!(!blocks[0].display_text.contains("\\begin"));
+        assert!(blocks[0].display_text.contains("a₁₁  a₁₂"));
+        assert!(blocks[0].display_text.contains("a₂₁  a₂₂"));
+        assert!(blocks[0].display_text.contains('\n'));
     }
 
     /// Micro-bench for audit P1: the tile re-`parse`s the WHOLE accumulated answer

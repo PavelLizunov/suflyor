@@ -2052,23 +2052,8 @@ msgstr "Подготовка голоса..."
 msgid "Reading aloud"
 msgstr "Озвучивание"
 
-msgid "suflyor tray menu"
-msgstr "Меню suflyor в области уведомлений"
-
-msgid "Hide bar"
-msgstr "Скрыть панель"
-
-msgid "Restore bar"
-msgstr "Вернуть панель"
-
 msgid "Resume"
 msgstr "Продолжить"
 
 msgid "Pause"
 msgstr "Пауза"
-
-msgid "Stop session"
-msgstr "Остановить сессию"
-
-msgid "Quit suflyor"
-msgstr "Выйти из suflyor"

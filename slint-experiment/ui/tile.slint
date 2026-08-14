@@ -624,6 +624,8 @@ export component TileWindow inherits Window {
                 min-height: 0px; // RS2: scroll inside the fixed tile, never grow the window (see below)
                 VerticalLayout {
                     spacing: Metrics.space-xs;
+                    // Keep the final answer block scrollable above the fixed player.
+                    padding-bottom: root.speak-active ? 44px : 0px;
                     // A2 fix (retest r2): right inset so the per-block ⭐ gutter clears the
                     // ScrollView scrollbar on long/scrolling answers (tester: the stars
                     // "compete with the scroll" and get hard to click).

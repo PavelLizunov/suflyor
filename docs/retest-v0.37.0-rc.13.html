@@ -1,0 +1,11 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>suflyor v0.37.0-rc.13 retest</title>
+<h1>suflyor v0.37.0-rc.13 - critical RC12 regressions</h1>
+<ol>
+  <li>Hide the bar. One left click on the notification-area icon must restore it. Right click must always open the reliable Windows fallback menu.</li>
+  <li>Open an answer containing fenced <code>math</code>/<code>latex</code> matrices. Matrices must render as readable rows, without a code box or visible <code>\begin{pmatrix}</code>.</li>
+  <li>Start TTS on a long answer, scroll to the end, and confirm the final text can move fully above the fixed player.</li>
+  <li>Cycle 1x, 1.25x, 1.5x, and 2x. Chunk boundaries must no longer add the short bubbling artifact.</li>
+  <li>Confirm Settings can still open during recording and TTS, and TTS audio ducking remains unchanged.</li>
+</ol>

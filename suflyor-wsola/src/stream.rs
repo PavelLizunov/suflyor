@@ -7,12 +7,14 @@
 
 use crate::{Wsola, WsolaError};
 
-/// Output samples withheld for the next boundary blend (~16 ms at 16 kHz).
-const XFADE_OUT: usize = 256;
+/// Boundary blend duration. Keeping it time-based matters because Tera plays
+/// at 44.1 kHz; the old fixed 256 samples shrank to 5.8 ms and sounded bubbly.
+const XFADE_MS: f64 = 16.0;
 
 pub struct StreamingWsola {
     wsola: Wsola,
     overlap_in: usize,
+    crossfade_out: usize,
     previous_input_tail: Vec<f32>,
     held_output_tail: Vec<f32>,
 }
@@ -25,9 +27,11 @@ impl StreamingWsola {
         let ratio = 1.0 / f64::from(speed);
         let segment = (f64::from(sample_rate) * 0.030).round() as usize;
         let search = (f64::from(sample_rate) * 0.015).round() as usize;
+        let crossfade_out = (f64::from(sample_rate) * XFADE_MS / 1000.0).round() as usize;
         Self {
             wsola: Wsola::new(segment.max(1), search.max(1), ratio),
-            overlap_in: (XFADE_OUT as f64 / ratio).ceil() as usize,
+            overlap_in: (crossfade_out as f64 / ratio).ceil() as usize,
+            crossfade_out: crossfade_out.max(1),
             previous_input_tail: Vec::new(),
             held_output_tail: Vec::new(),
         }
@@ -52,7 +56,7 @@ impl StreamingWsola {
             *sample = self.held_output_tail[index] * (1.0 - mix) + *sample * mix;
         }
 
-        let hold = XFADE_OUT.min(output.len());
+        let hold = self.crossfade_out.min(output.len());
         self.held_output_tail = output.split_off(output.len() - hold);
         let tail_from = input.len().saturating_sub(self.overlap_in);
         self.previous_input_tail.clear();
@@ -91,5 +95,11 @@ mod tests {
         let mut stream = StreamingWsola::new(44_100, 2.0);
         assert!(stream.process(&[]).unwrap().is_empty());
         assert!(stream.finish().is_empty());
+    }
+
+    #[test]
+    fn boundary_crossfade_keeps_the_same_duration_at_tera_sample_rate() {
+        let stream = StreamingWsola::new(44_100, 1.5);
+        assert_eq!(stream.crossfade_out, 706);
     }
 }

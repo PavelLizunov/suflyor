@@ -55,9 +55,39 @@ pub fn normalize_math_display(input: &str) -> String {
 /// Normalize a fragment already known to be math (for pulldown-cmark math events).
 #[must_use]
 pub(crate) fn normalize_math_fragment(input: &str) -> String {
+    if let Some(matrix) = normalize_pmatrix(input) {
+        return matrix;
+    }
     let mut out = String::with_capacity(input.len());
     push_normalized(&mut out, input);
     out
+}
+
+fn normalize_pmatrix(input: &str) -> Option<String> {
+    const BEGIN: &str = "\\begin{pmatrix}";
+    const END: &str = "\\end{pmatrix}";
+    let begin = input.find(BEGIN)?;
+    let body_start = begin + BEGIN.len();
+    let body_end = body_start + input[body_start..].find(END)?;
+
+    let mut out = String::with_capacity(input.len());
+    push_normalized(&mut out, &input[..begin]);
+    out.push('(');
+    for (row_index, row) in input[body_start..body_end].split("\\\\").enumerate() {
+        if row_index > 0 {
+            out.push('\n');
+            out.push_str("  ");
+        }
+        for (cell_index, cell) in row.trim().split('&').enumerate() {
+            if cell_index > 0 {
+                out.push_str("  ");
+            }
+            push_normalized(&mut out, cell.trim());
+        }
+    }
+    out.push(')');
+    push_normalized(&mut out, &input[body_end + END.len()..]);
+    Some(out)
 }
 
 fn has_math_delimiter(input: &str) -> bool {
@@ -373,5 +403,11 @@ mod tests {
             normalize_math_display("Элемент из $i$-й строки и $j$-го столбца"),
             "Элемент из i-й строки и j-го столбца"
         );
+    }
+
+    #[test]
+    fn renders_pmatrix_rows_without_latex_scaffolding() {
+        let raw = "A = \\begin{pmatrix} a_{11} & a_{12} \\\\ a_{21} & a_{22} \\end{pmatrix}";
+        assert_eq!(normalize_math_display(raw), "A = (a₁₁  a₁₂\n  a₂₁  a₂₂)");
     }
 }

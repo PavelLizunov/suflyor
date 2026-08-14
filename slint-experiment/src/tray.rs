@@ -26,12 +26,14 @@ use windows::Win32::Foundation::{
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Shell::{
     Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_SHOWTIP, NIF_TIP, NIM_ADD, NIM_DELETE,
-    NIM_SETVERSION, NIN_SELECT, NOTIFYICONDATAW, NOTIFYICON_VERSION_4,
+    NIM_SETFOCUS, NIM_SETVERSION, NIN_SELECT, NOTIFYICONDATAW, NOTIFYICON_VERSION_4,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, GetCursorPos, LoadIconW, RegisterClassExW,
-    RegisterWindowMessageW, HICON, IDI_APPLICATION, WM_APP, WM_CONTEXTMENU, WM_DESTROY,
-    WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSEXW,
+    AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow,
+    GetCursorPos, LoadIconW, PostMessageW, RegisterClassExW, RegisterWindowMessageW,
+    SetForegroundWindow, TrackPopupMenu, HICON, IDI_APPLICATION, MF_CHECKED, MF_DISABLED,
+    MF_GRAYED, MF_STRING, TPM_RIGHTBUTTON, WM_APP, WM_COMMAND, WM_CONTEXTMENU, WM_DESTROY, WM_NULL,
+    WM_RBUTTONUP, WNDCLASSEXW,
 };
 
 // ===== Pure core (unit-testable without any Win32) =====
@@ -181,8 +183,8 @@ thread_local! {
 
 struct TrayCtx {
     snapshot: Box<dyn Fn() -> TraySnapshot>,
+    is_ru: Box<dyn Fn() -> bool>,
     dispatch: Box<dyn Fn(TrayAction)>,
-    open_menu: Box<dyn Fn(i32, i32, TraySnapshot)>,
     availability: Box<dyn Fn(bool)>,
 }
 
@@ -213,23 +215,23 @@ impl Drop for TrayHandle {
 }
 
 /// Install the tray icon on the CURRENT (UI) thread. All four callbacks run
-/// on that thread: `snapshot` when the menu opens, `dispatch` on a left click,
-/// `open_menu` on a context request, and `availability` after every initial
-/// add or Explorer re-add attempt.
+/// on that thread: `snapshot`/`is_ru` when the menu opens, `dispatch` when the
+/// user picks an action (or activates the icon), and `availability` after every
+/// initial add or Explorer re-add attempt.
 ///
 /// Errors are non-fatal for the host — the app keeps running without a tray.
 pub fn install(
     snapshot: impl Fn() -> TraySnapshot + 'static,
+    is_ru: impl Fn() -> bool + 'static,
     dispatch: impl Fn(TrayAction) + 'static,
-    open_menu: impl Fn(i32, i32, TraySnapshot) + 'static,
     availability: impl Fn(bool) + 'static,
 ) -> Result<TrayHandle, String> {
     claim_install_slot(&INSTALL_SLOT)?;
     TRAY_CTX.with(|c| {
         *c.borrow_mut() = Some(TrayCtx {
             snapshot: Box::new(snapshot),
+            is_ru: Box::new(is_ru),
             dispatch: Box::new(dispatch),
-            open_menu: Box::new(open_menu),
             availability: Box::new(availability),
         });
     });
@@ -386,9 +388,18 @@ unsafe extern "system" fn tray_wndproc(
         // separate Shell events; both use the current cursor position so an
         // undefined WM_CONTEXTMENU wparam can never anchor at (1, 0).
         match (lparam.0 as u32) & 0xFFFF {
-            WM_LBUTTONUP | NIN_SELECT | NIN_KEYSELECT => dispatch_from_ctx(TrayAction::ShowHide),
-            WM_RBUTTONUP | WM_CONTEXTMENU => open_tray_menu(),
+            // v4 emits NIN_SELECT for mouse activation. Handling WM_LBUTTONUP
+            // as well toggles twice on affected shells (restore then hide).
+            NIN_SELECT | NIN_KEYSELECT => dispatch_from_ctx(TrayAction::ShowHide),
+            WM_RBUTTONUP | WM_CONTEXTMENU => show_tray_menu(hwnd),
             _ => {}
+        }
+        return LRESULT(0);
+    }
+    if msg == WM_COMMAND {
+        let id = (wparam.0 & 0xFFFF) as u32;
+        if let Some(action) = TrayAction::from_menu_id(id) {
+            dispatch_from_ctx(action);
         }
         return LRESULT(0);
     }
@@ -419,20 +430,58 @@ fn publish_availability(available: bool) {
     });
 }
 
-fn open_tray_menu() {
-    let mut point = POINT::default();
-    // SAFETY: GetCursorPos only fills the stack-owned POINT.
-    if unsafe { GetCursorPos(&mut point) }.is_err() {
+fn show_tray_menu(hwnd: HWND) {
+    let Some((snapshot, ru)) = TRAY_CTX.with(|c| {
+        c.try_borrow()
+            .ok()
+            .and_then(|ctx| ctx.as_ref().map(|ctx| ((ctx.snapshot)(), (ctx.is_ru)())))
+    }) else {
         return;
-    }
-    TRAY_CTX.with(|c| {
-        if let Ok(ctx) = c.try_borrow() {
-            if let Some(ctx) = ctx.as_ref() {
-                (ctx.open_menu)(point.x, point.y, (ctx.snapshot)());
+    };
+    let entries = menu_entries(&snapshot, ru);
+    // The native popup is the reliability fallback: unlike a second Slint
+    // window it remains interactive while every application window is hidden.
+    unsafe {
+        let Ok(menu) = CreatePopupMenu() else {
+            return;
+        };
+        for entry in &entries {
+            let wide: Vec<u16> = entry
+                .label
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect();
+            let mut flags = MF_STRING;
+            if !entry.enabled {
+                flags |= MF_GRAYED | MF_DISABLED;
             }
+            if entry.checked {
+                flags |= MF_CHECKED;
+            }
+            let _ = AppendMenuW(
+                menu,
+                flags,
+                usize::try_from(entry.id).unwrap_or(0),
+                PCWSTR(wide.as_ptr()),
+            );
         }
-    });
-    // SAFETY: menu lifetime is fully owned here (create → populate → track →
+        let mut point = POINT::default();
+        if GetCursorPos(&mut point).is_err() {
+            let _ = DestroyMenu(menu);
+            return;
+        }
+        let _ = SetForegroundWindow(hwnd);
+        let _ = TrackPopupMenu(menu, TPM_RIGHTBUTTON, point.x, point.y, None, hwnd, None);
+        let _ = PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0));
+        let focus_data = NOTIFYICONDATAW {
+            cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
+            hWnd: hwnd,
+            uID: TRAY_ICON_ID,
+            ..Default::default()
+        };
+        let _ = Shell_NotifyIconW(NIM_SETFOCUS, &focus_data);
+        let _ = DestroyMenu(menu);
+    }
 }
 
 #[cfg(test)]
