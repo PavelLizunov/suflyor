@@ -58,7 +58,7 @@ pub async fn run_post_meeting_debrief(
     transcript: Vec<TranscriptLine>,
     session_id: String,
 ) {
-    let (base_url, bearer, model, response_language, ui_is_ru, preferred_monitor, stealth) = {
+    let (endpoint, response_language, ui_is_ru, preferred_monitor, stealth) = {
         let c = cfg.read();
         // Resolve the ACTIVE endpoint (local vs cloud) like every other ask path
         // (reask / manual / F9). The old code read the cloud fields directly, so
@@ -66,9 +66,7 @@ pub async fn run_post_meeting_debrief(
         // billed a cloud Sonnet call. prep=true picks the structuring model.
         let ep = c.ai_endpoint(true);
         (
-            ep.base_url,
-            ep.bearer,
-            ep.model,
+            ep,
             c.response_language.clone(),
             c.ui_is_ru(),
             c.tile_monitor_name.clone(),
@@ -115,7 +113,7 @@ pub async fn run_post_meeting_debrief(
             content: ai::MessageContent::Text(mic_text),
         },
     ];
-    let answer = match ai::complete(&base_url, &bearer, &model, messages, 1024).await {
+    let answer = match ai::complete_endpoint(&endpoint, messages, 1024).await {
         Ok(text) => text,
         Err(e) => {
             log::warn!("post-meeting debrief AI call failed: {e:#}");
@@ -1016,6 +1014,7 @@ impl Drop for ManagedPrepSession {
 }
 
 async fn summary_complete(
+    protocol: ai::AiProtocol,
     base_url: &str,
     bearer: &str,
     model: &str,
@@ -1026,7 +1025,19 @@ async fn summary_complete(
     if exclusive {
         ai::complete_exclusive(base_url, bearer, model, messages, max_tokens).await
     } else {
-        ai::complete(base_url, bearer, model, messages, max_tokens).await
+        ai::complete_endpoint(
+            &ai::AiEndpoint {
+                protocol,
+                base_url: base_url.to_string(),
+                bearer: bearer.to_string(),
+                model: model.to_string(),
+                reasoning_effort: None,
+                is_local: false,
+            },
+            messages,
+            max_tokens,
+        )
+        .await
     }
 }
 
@@ -1167,6 +1178,7 @@ async fn reduce_summary_full(
     is_ru: bool,
     is_local: bool,
     memory_ref: Option<&str>,
+    protocol: ai::AiProtocol,
     base_url: &str,
     bearer: &str,
     model: &str,
@@ -1186,6 +1198,7 @@ async fn reduce_summary_full(
         .await
         {
             return summary_complete(
+                protocol,
                 base_url,
                 bearer,
                 model,
@@ -1216,6 +1229,7 @@ async fn reduce_summary_full(
             let messages = build_summary_reduce_seed(&batch, is_ru, is_local, None);
             next.push(
                 summary_complete(
+                    protocol,
                     base_url,
                     bearer,
                     model,
@@ -1291,10 +1305,11 @@ async fn finish_summary_from_conspect_inner(
     ui_is_ru: bool,
     exclusive: bool,
 ) {
-    let (base_url, bearer, model, is_local, prefer_quality, local_context) = {
+    let (protocol, base_url, bearer, model, is_local, prefer_quality, local_context) = {
         let c = cfg.read();
         let ep = c.ai_endpoint(true);
         (
+            ep.protocol,
             ep.base_url,
             ep.bearer,
             ep.model,
@@ -1345,6 +1360,7 @@ async fn finish_summary_from_conspect_inner(
                 },
             ];
             match summary_complete(
+                protocol,
                 &base_url,
                 &bearer,
                 &model,
@@ -1409,6 +1425,7 @@ async fn finish_summary_from_conspect_inner(
             ))
         } else {
             summary_complete(
+                protocol,
                 &base_url,
                 &bearer,
                 &model,
@@ -1439,6 +1456,7 @@ async fn finish_summary_from_conspect_inner(
             is_ru,
             is_local,
             memory_ref.as_deref(),
+            protocol,
             &base_url,
             &bearer,
             &model,
@@ -1976,9 +1994,11 @@ pub async fn reask_last(
     // local-provider users (the same bug fixed for F6/manual_spawn in #128 —
     // F3 was missed). is_local also lets us zero the (free) local cost below.
     let (
+        protocol,
         base_url,
         bearer,
         model,
+        reasoning_effort,
         is_local,
         response_language,
         ui_is_ru,
@@ -1989,9 +2009,11 @@ pub async fn reask_last(
         let c = cfg.read();
         let ep = c.ai_endpoint(false);
         (
+            ep.protocol,
             ep.base_url,
             ep.bearer,
             ep.model,
+            ep.reasoning_effort,
             ep.is_local,
             c.response_language.clone(),
             c.ui_is_ru(),
@@ -2057,9 +2079,15 @@ pub async fn reask_last(
         });
     }
     let t0 = std::time::Instant::now();
-    let (answer, usage) = match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512)
-        .await
-    {
+    let endpoint = ai::AiEndpoint {
+        protocol,
+        base_url,
+        bearer,
+        model: model.clone(),
+        reasoning_effort,
+        is_local,
+    };
+    let (answer, usage) = match ai::complete_with_usage_endpoint(&endpoint, messages, 512).await {
         Ok(t) => {
             // Bump health on success — atomic store, no rt lock.
             inputs
@@ -2116,7 +2144,7 @@ pub async fn reask_last(
     };
     // Local inference is free — don't bill it at the cloud fallback rate
     // (cost_microcents maps an unknown local model id to Sonnet pricing).
-    let micro = if is_local {
+    let micro = if is_local || protocol == ai::AiProtocol::CodexSubscription {
         0
     } else {
         ai::cost_microcents(&model, usage.input, usage.output)
@@ -2240,9 +2268,11 @@ pub async fn manual_spawn_tile(
     // everything up-front also lets the empty/error feedback tiles reuse the
     // same monitor + stealth as the answer tile.
     let (
+        protocol,
         base_url,
         bearer,
         model,
+        reasoning_effort,
         is_local,
         response_language,
         ui_is_ru,
@@ -2254,9 +2284,11 @@ pub async fn manual_spawn_tile(
         let c = cfg.read();
         let ep = c.ai_endpoint(false);
         (
+            ep.protocol,
             ep.base_url,
             ep.bearer,
             ep.model,
+            ep.reasoning_effort,
             ep.is_local,
             c.response_language.clone(),
             c.ui_is_ru(),
@@ -2373,9 +2405,15 @@ pub async fn manual_spawn_tile(
         });
     }
     let t0 = std::time::Instant::now();
-    let (answer, usage) = match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512)
-        .await
-    {
+    let endpoint = ai::AiEndpoint {
+        protocol,
+        base_url,
+        bearer,
+        model: model.clone(),
+        reasoning_effort,
+        is_local,
+    };
+    let (answer, usage) = match ai::complete_with_usage_endpoint(&endpoint, messages, 512).await {
         Ok(t) => {
             inputs
                 .health
@@ -2421,7 +2459,7 @@ pub async fn manual_spawn_tile(
     };
     // Local inference is free (see reask_last) — zero it so F6 on a local
     // model doesn't inflate the session cost meter / trip the cap.
-    let micro = if is_local {
+    let micro = if is_local || protocol == ai::AiProtocol::CodexSubscription {
         0
     } else {
         ai::cost_microcents(&model, usage.input, usage.output)

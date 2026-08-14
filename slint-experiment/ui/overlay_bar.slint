@@ -80,7 +80,7 @@ component Chip inherits Rectangle {
     callback clicked();
 
     accessible-role: button;
-    accessible-label: label != "" ? label : a11y;
+    accessible-label: a11y != "" ? a11y : label;
 
     // Hover + press feedback so a click is visibly registered. Action chips
     // (Stop / Expand / X …) had NO feedback at all — only the persistent
@@ -139,6 +139,8 @@ export component LockModeMenuRow inherits Rectangle {
     in property <bool> unlocked: false;
     callback clicked();
 
+    accessible-action-default => { root.clicked(); }
+
     height: 30px;
     border-radius: Metrics.radius-control;
     background: root.current ? root.mode-color.with-alpha(0.14) : (row-touch.has-hover ? Theme.bg-surface : transparent);
@@ -181,12 +183,18 @@ export component LockModeMenuRow inherits Rectangle {
 
 component LockChip inherits Rectangle {
     in property <bool> locked: false;
+    in property <bool> unlocked: !root.locked;
     // Deep lock (managed-local third state, v0.37): implies `locked`, turns
     // the chip red and STOPS the tremble — an unloaded server is a firm,
     // static state, distinct from the shaking "tiles held back" listening mode.
     in property <bool> deep: false;
     in property <string> a11y;
     in property <bool> managed: false;
+    // The full 1280px bar has no spare width once live tiles add their
+    // controls. Keep the state explicit, but use the short label in that
+    // deterministic tight layout instead of letting Slint clip this text
+    // under the following action chips.
+    in property <bool> tight: false;
     // 0 = normal, 1 = listening, 2 = deep. Rust owns the durable transition.
     in property <int> mode: 0;
     in property <color> accent: root.deep ? Theme.danger : #f59e0b;
@@ -198,6 +206,7 @@ component LockChip inherits Rectangle {
     accessible-label: a11y;
     accessible-checkable: true;
     accessible-checked: locked;
+    accessible-action-default => { root.menu-opened(root.absolute-position.x + root.width, root.absolute-position.y + root.height); }
     background: locked
         ? accent.with-alpha(0.18)
         : (ta.pressed
@@ -228,7 +237,7 @@ component LockChip inherits Rectangle {
         alignment: center;
 
         Image {
-            source: root.locked ? @image-url("../assets/icons/lock.svg") : @image-url("../assets/icons/unlock.svg");
+            source: root.unlocked ? @image-url("../assets/icons/unlock.svg") : @image-url("../assets/icons/lock.svg");
             colorize: root.locked ? root.accent : Theme.text-secondary;
             width: 14px;
             height: 14px;
@@ -241,7 +250,7 @@ component LockChip inherits Rectangle {
             }
         }
         if root.deep : Text {
-            text: @tr("Local AI unloaded");
+            text: root.tight ? @tr("AI off") : @tr("Local AI unloaded");
             font-size: Metrics.font-label;
             color: root.accent;
             vertical-alignment: center;
@@ -593,6 +602,9 @@ export component OverlayBarWindow inherits Window {
     // the restart-while-AI-down flow the feature exists for. The un-armed bar
     // is pixel-identical to before (chips only hide during the ≤4s confirm).
     property <bool> confirming: root.quit-armed || root.restart-armed;
+    // A live tile makes the fixed-width action row tight. Keep the established
+    // text actions stable and shorten only the deep-lock state label.
+    property <bool> tight-open-tiles: root.open-tiles > 0;
 
     // v0.12.0 — true while a Summary request is in flight. Lights the 📝
     // chip AND doubles as the Rust-side re-click guard (a slow model must
@@ -604,6 +616,9 @@ export component OverlayBarWindow inherits Window {
     // захватить + timer + Expand). Persisted via config.compact_bar; Rust resizes
     // the bar window on toggle.
     in-out property <bool> compact-bar: false;
+    // The hide action is exposed only after Windows accepted the tray icon;
+    // otherwise hiding the bar would remove the only restore surface.
+    in property <bool> tray-available: false;
     // v0.28 — "listening mode" (config.suppress_tiles): the bar lock chip toggles this; when
     // true, auto AI tiles are suppressed (slint_session::maybe_spawn_auto_tile early-returns).
     in-out property <bool> suppress-tiles: false;
@@ -611,6 +626,8 @@ export component OverlayBarWindow inherits Window {
     // the app-owned llama-server is unloaded and managed requests are refused.
     // Implies suppress-tiles (Rust keeps the two consistent).
     in-out property <bool> deep-lock: false;
+    // Runtime-testable state that directly drives the lock chip's rendered icon.
+    out property <bool> lock-icon-unlocked: !root.suppress-tiles && !root.deep-lock;
     // Localized per-state lock-chip description (a11y label; there is no
     // hover-tooltip surface). Rust rebuilds it on transitions + language switch.
     in property <string> lock-a11y: "";
@@ -654,6 +671,9 @@ export component OverlayBarWindow inherits Window {
     callback drag-moved();
     // Compact mode: collapse/expand the bar.
     callback compact-toggle-clicked();
+    // RC4 — hide the bar to the system tray (explicit only; startup is always
+    // visible). Recording/hotkeys/TTS keep running; the tray restores the bar.
+    callback hide-to-tray-clicked();
 
     Rectangle {
         background: Theme.bg-surface.with-alpha(0.92);
@@ -844,9 +864,11 @@ export component OverlayBarWindow inherits Window {
             // v0.37): red + still, the managed server unloaded until the next click.
             LockChip {
                 locked: root.suppress-tiles;
+                unlocked: root.lock-icon-unlocked;
                 deep: root.deep-lock;
                 a11y: root.lock-a11y;
                 managed: root.lock-menu-managed;
+                tight: root.tight-open-tiles;
                 mode: root.deep-lock ? 2 : (root.suppress-tiles ? 1 : 0);
                 mode-selected(mode) => { root.lock-mode-selected(mode); }
                 menu-opened(x, y) => { root.lock-menu-opened(x, y); }
@@ -884,6 +906,7 @@ export component OverlayBarWindow inherits Window {
             // which also hides this chip again.
             if root.open-tiles > 0 && !root.confirming : Chip {
                 label: @tr("close all");
+                a11y: @tr("close all");
                 accent: #fb7185;
                 clicked => { root.close-all-tiles-clicked(); }
             }
@@ -898,6 +921,7 @@ export component OverlayBarWindow inherits Window {
             }
             if !root.confirming : Chip {
                 label: @tr("+ tile ({})", root.open-tiles);
+                a11y: @tr("+ tile ({})", root.open-tiles);
                 accent: #f472b6;
                 clicked => { root.spawn-tile-clicked(); }
             }
@@ -971,6 +995,17 @@ export component OverlayBarWindow inherits Window {
                 active: root.compact-bar;
                 accent: #38bdf8;
                 clicked => { root.compact-toggle-clicked(); }
+            }
+            // RC4 — hide the bar to the system tray, immediately beside the
+            // compact control. Explicit only — startup is always visible; the
+            // tray icon restores the bar (same compact mode). Recording,
+            // hotkeys, TTS and session tasks keep running while hidden.
+            if root.tray-available && !root.confirming : Chip {
+                icon: @image-url("../assets/icons/tray.svg");
+                has-icon: true;
+                a11y: @tr("Hide to tray");
+                accent: #38bdf8;
+                clicked => { root.hide-to-tray-clicked(); }
             }
             // Quit — two-step. Idle: a single ASCII "X" (Unicode ✕ renders
             // as a missing-glyph box on the Slint+skia fallback). Armed:
@@ -1246,17 +1281,28 @@ export component OverlayBarWindow inherits Window {
                 // while active, turns red + still in the deep-lock state (v0.37).
                 LockChip {
                     locked: root.suppress-tiles;
+                    unlocked: root.lock-icon-unlocked;
                     deep: root.deep-lock;
                     a11y: root.lock-a11y;
-                managed: root.lock-menu-managed;
-                mode: root.deep-lock ? 2 : (root.suppress-tiles ? 1 : 0);
-                mode-selected(mode) => { root.lock-mode-selected(mode); }
-                menu-opened(x, y) => { root.lock-menu-opened(x, y); }
+                    managed: root.lock-menu-managed;
+                    tight: true;
+                    mode: root.deep-lock ? 2 : (root.suppress-tiles ? 1 : 0);
+                    mode-selected(mode) => { root.lock-mode-selected(mode); }
+                    menu-opened(x, y) => { root.lock-menu-opened(x, y); }
                 }
                 // Spring — absorbs the slack so the status pill stays natural-
                 // width (identical to the full bar) and Expand sits at the right
                 // edge, mirroring the full bar's window-control placement.
                 Rectangle { horizontal-stretch: 1; min-width: 8px; }
+                // RC4 — hide to tray, beside the Expand control (same action +
+                // same icon as the full bar's hide chip).
+                if root.tray-available : Chip {
+                    icon: @image-url("../assets/icons/tray.svg");
+                    has-icon: true;
+                    a11y: @tr("Hide to tray");
+                    accent: #38bdf8;
+                    clicked => { root.hide-to-tray-clicked(); }
+                }
                 // Expand — restore the full bar (full action set).
                 Chip {
                     icon: @image-url("../assets/icons/maximize.svg");

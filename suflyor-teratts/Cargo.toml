@@ -1,0 +1,36 @@
+# suflyor-teratts — experimental TeraTTSv2 read-aloud SIDECAR.
+#
+# A standalone process that links ONNX Runtime through `ort` ONLY. It mirrors
+# the suflyor-tts process split: two different onnxruntime builds must never
+# share one binary, so the Tera graph runner lives here and Piper/diarization
+# stay in suflyor-tts. Line commands on stdin match the suflyor-tts protocol
+# (SPEAK/PAUSE/RESUME/STOP/VOICE/RATE) plus a richer stdout status handshake
+# (READY capabilities, STARTED/DONE/FAILED, REJECTED).
+[package]
+name = "suflyor-teratts"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+publish = false
+
+[[bin]]
+name = "suflyor-teratts"
+path = "src/main.rs"
+
+[dependencies]
+ort = "=2.0.0-rc.13"
+wasapi = "0.23"
+anyhow = "1"
+base64 = "0.23"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+unicode-normalization = "0.1"
+suflyor-wsola = { path = "../suflyor-wsola" }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"

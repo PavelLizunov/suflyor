@@ -395,8 +395,9 @@ fn readiness_reflects_active_providers() {
     c3.stt_gigaam_dir = r"C:\m\gigaam".into();
     assert!(c3.readiness().stt.detail.contains("gigaam"));
 
-    // Vision (F8): "off" → unconfigured; "same" → reuses the text endpoint;
-    // detail carries provider + url + model but never a secret.
+    // Vision (F8): "off" → unconfigured; "same" only reuses a text endpoint
+    // whose image support is explicitly declared. Detail carries provider +
+    // url + model but never a secret.
     let mut cv = Config::defaults();
     cv.vision_provider = "off".into();
     assert!(
@@ -404,14 +405,15 @@ fn readiness_reflects_active_providers() {
         "vision=off must be unconfigured"
     );
     cv.vision_provider = "same".into();
-    cv.ai_provider = "cloud".into();
-    cv.ai_base_url = "http://bridge/v1".into();
-    cv.ai_bearer = "SECRET-bearer".into();
-    cv.ai_model = "claude-haiku".into();
+    cv.ai_provider = "local".into();
+    cv.ai_local_base_url = "http://127.0.0.1:8080/v1".into();
+    cv.ai_local_bearer = "SECRET-bearer".into();
+    cv.ai_local_model = "gemma-vision".into();
+    cv.ai_local_vision = true;
     let rv = cv.readiness();
     assert!(rv.vision.configured, "vision=same reuses the text endpoint");
     assert!(
-        rv.vision.detail.contains("same") && rv.vision.detail.contains("http://bridge/v1"),
+        rv.vision.detail.contains("same") && rv.vision.detail.contains("http://127.0.0.1:8080/v1"),
         "vision detail shows provider + url"
     );
     assert!(
@@ -669,10 +671,191 @@ fn ai_endpoint_defaults_to_cloud() {
     d.prep_model = "claude-sonnet-4-6".into();
     let live = d.ai_endpoint(false);
     assert!(!live.is_local);
+    assert_eq!(live.protocol, crate::ai::AiProtocol::OpenAiCompatible);
     assert_eq!(live.base_url, "http://bridge/v1");
     assert_eq!(live.bearer, "secret");
     assert_eq!(live.model, "claude-haiku-4-5");
     assert_eq!(d.ai_endpoint(true).model, "claude-sonnet-4-6");
+}
+
+#[test]
+fn direct_provider_profiles_are_additive_and_use_native_protocols() {
+    let legacy: Config = serde_json::from_str(r#"{"ai_provider":"cloud"}"#).expect("legacy config");
+    assert_eq!(legacy.openai_base_url, "https://api.openai.com/v1");
+    assert_eq!(legacy.anthropic_base_url, "https://api.anthropic.com/v1");
+    assert_eq!(
+        legacy.ai_endpoint(false).protocol,
+        crate::ai::AiProtocol::OpenAiCompatible
+    );
+
+    let mut cfg = Config::defaults();
+    cfg.ai_provider = "openai".into();
+    cfg.openai_base_url = "https://openai.example/v1".into();
+    cfg.openai_model = "gpt-test".into();
+    let openai = cfg.ai_endpoint(false);
+    assert_eq!(openai.protocol, crate::ai::AiProtocol::OpenAiResponses);
+    assert_eq!(openai.base_url, "https://openai.example/v1");
+    assert_eq!(openai.model, "gpt-test");
+
+    cfg.ai_provider = "anthropic".into();
+    cfg.anthropic_base_url = "https://anthropic.example/v1".into();
+    cfg.anthropic_model = "claude-test".into();
+    let anthropic = cfg.ai_endpoint(false);
+    assert_eq!(anthropic.protocol, crate::ai::AiProtocol::AnthropicMessages);
+    assert_eq!(anthropic.base_url, "https://anthropic.example/v1");
+    assert_eq!(anthropic.model, "claude-test");
+
+    let json = serde_json::to_string(&cfg).expect("serialize");
+    assert!(!json.contains("openai_api_key"));
+    assert!(!json.contains("anthropic_api_key"));
+}
+
+#[test]
+fn codex_subscription_profile_round_trips_selected_model_without_secrets() {
+    let mut cfg = Config::defaults();
+    cfg.ai_provider = "codex".into();
+    cfg.codex_model = "gpt-5.4-codex".into();
+    cfg.codex_reasoning_effort = "xhigh".into();
+    cfg.codex_vision_model = "gpt-vision".into();
+    let endpoint = cfg.ai_endpoint(false);
+    assert_eq!(endpoint.protocol, crate::ai::AiProtocol::CodexSubscription);
+    assert!(endpoint.protocol.supports_live_answers());
+    assert_eq!(endpoint.model, "gpt-5.4-codex");
+    assert_eq!(endpoint.reasoning_effort.as_deref(), Some("xhigh"));
+    assert!(endpoint.base_url.is_empty());
+    assert!(endpoint.bearer.is_empty());
+
+    let cloud_endpoint = cfg.ai_endpoint_cloud();
+    assert_eq!(
+        cloud_endpoint.protocol,
+        crate::ai::AiProtocol::CodexSubscription
+    );
+    assert!(cloud_endpoint.base_url.is_empty());
+    assert!(cloud_endpoint.bearer.is_empty());
+
+    let json = serde_json::to_string(&cfg).expect("serialize");
+    assert!(!json.contains("auth.json"));
+    assert!(!json.contains("refresh_token"));
+    let restored: Config = serde_json::from_str(&json).expect("round trip");
+    assert_eq!(restored.ai_provider, "codex");
+    assert_eq!(restored.codex_model, "gpt-5.4-codex");
+    assert_eq!(restored.codex_reasoning_effort, "xhigh");
+    assert_eq!(restored.codex_vision_model, "gpt-vision");
+
+    let legacy: Config = serde_json::from_str("{}").expect("legacy config");
+    assert_eq!(legacy.ai_provider, "cloud");
+    assert!(legacy.codex_vision_model.is_empty());
+}
+
+#[test]
+fn cloud_escalation_preserves_legacy_bridge_but_keeps_direct_protocol() {
+    let mut cfg = Config::defaults();
+    cfg.ai_provider = "local".into();
+    cfg.ai_base_url = "https://bridge.example/v1".into();
+    cfg.ai_bearer = "bridge-secret".into();
+    cfg.prep_model = "smart-bridge-model".into();
+    let legacy = cfg.ai_endpoint_cloud();
+    assert_eq!(legacy.protocol, crate::ai::AiProtocol::OpenAiCompatible);
+    assert_eq!(legacy.model, "smart-bridge-model");
+
+    cfg.ai_provider = "openai".into();
+    cfg.openai_model = "gpt-test".into();
+    let direct = cfg.ai_endpoint_cloud();
+    assert_eq!(direct.protocol, crate::ai::AiProtocol::OpenAiResponses);
+    assert_eq!(direct.model, "gpt-test");
+}
+
+#[test]
+fn direct_profile_preview_exposes_no_protected_key_field() {
+    let mut current = Config::defaults();
+    current.ai_provider = "openai".into();
+    let mut imported = Config::defaults();
+    imported.ai_provider = "anthropic".into();
+    imported.anthropic_base_url = "https://anthropic.example/v1".into();
+    imported.anthropic_model = "claude-test".into();
+
+    let preview = preview_server_settings(&current, &imported);
+    assert_eq!(preview.cloud_ai.provider_new, "anthropic");
+    assert_eq!(
+        preview.cloud_ai.base_url_new,
+        "https://anthropic.example/v1"
+    );
+    assert_eq!(preview.cloud_ai.model_new, "claude-test");
+    assert!(!preview.cloud_ai.has_key_field);
+    assert!(!preview.cloud_ai.key_present_new);
+}
+
+#[test]
+fn server_settings_merge_preserves_direct_provider_profile_without_secrets() {
+    let current = Config::defaults();
+    let mut imported = Config::defaults();
+    imported.ai_provider = "anthropic".into();
+    imported.openai_base_url = "https://openai.example/v1".into();
+    imported.openai_model = "gpt-test".into();
+    imported.anthropic_base_url = "https://anthropic.example/v1".into();
+    imported.anthropic_model = "claude-test".into();
+    let merged = merge_server_settings(&current, imported);
+    assert_eq!(merged.ai_provider, "anthropic");
+    assert_eq!(merged.openai_model, "gpt-test");
+    assert_eq!(merged.anthropic_model, "claude-test");
+}
+
+#[test]
+fn codex_model_is_in_redacted_preview_and_server_settings_merge() {
+    let mut current = Config::defaults();
+    current.ai_provider = "codex".into();
+    let mut imported = Config::defaults();
+    imported.ai_provider = "codex".into();
+    imported.codex_model = "gpt-account-model".into();
+    imported.codex_reasoning_effort = "high".into();
+    imported.codex_vision_model = "gpt-account-vision".into();
+
+    let preview = preview_server_settings(&current, &imported);
+    assert_eq!(preview.cloud_ai.provider_new, "codex");
+    assert_eq!(preview.cloud_ai.model_new, "gpt-account-model");
+    assert!(preview.cloud_ai.base_url_new.is_empty());
+    assert!(!preview.cloud_ai.has_key_field);
+    assert!(!preview.cloud_ai.key_present_new);
+
+    let merged = merge_server_settings(&current, imported);
+    assert_eq!(merged.ai_provider, "codex");
+    assert_eq!(merged.codex_model, "gpt-account-model");
+    assert_eq!(merged.codex_reasoning_effort, "high");
+    assert_eq!(merged.codex_vision_model, "gpt-account-vision");
+}
+
+#[test]
+fn legacy_server_import_does_not_erase_explicit_codex_models() {
+    let mut current = Config::defaults();
+    current.codex_model = "gpt-explicit".into();
+    current.codex_reasoning_effort = "low".into();
+    current.codex_vision_model = "gpt-explicit-vision".into();
+
+    let imported = Config::defaults();
+    let merged = merge_server_settings(&current, imported);
+    assert_eq!(merged.codex_model, "gpt-explicit");
+    assert_eq!(merged.codex_reasoning_effort, "low");
+    assert_eq!(merged.codex_vision_model, "gpt-explicit-vision");
+}
+
+#[test]
+fn fresh_and_untouched_legacy_tts_select_tera_ru_f1_only() {
+    let fresh = Config::defaults();
+    assert_eq!(fresh.tts_engine, "tera");
+    assert_eq!(fresh.tts_voice, "tera:ru_f1");
+
+    let mut legacy: Config = serde_json::from_str("{}").expect("legacy config");
+    assert!(migrate_legacy_tts_default(&mut legacy));
+    assert_eq!(legacy.tts_engine, "tera");
+    assert_eq!(legacy.tts_voice, "tera:ru_f1");
+
+    let mut explicit_piper = Config {
+        tts_engine: "piper".into(),
+        tts_voice: "piper:irina".into(),
+        ..Config::default()
+    };
+    assert!(!migrate_legacy_tts_default(&mut explicit_piper));
+    assert_eq!(explicit_piper.tts_engine, "piper");
 }
 
 #[test]
@@ -689,6 +872,7 @@ fn vision_endpoint_same_reuses_text_endpoint() {
     d.ai_provider = "local".into();
     d.ai_local_base_url = "http://127.0.0.1:8080/v1".into();
     d.ai_local_model = "gemma".into();
+    d.ai_local_vision = true;
     let v = d.vision_endpoint();
     assert_eq!(v.as_ref().map(|e| e.is_local), Some(true));
     assert_eq!(
@@ -696,6 +880,86 @@ fn vision_endpoint_same_reuses_text_endpoint() {
         Some("http://127.0.0.1:8080/v1".to_string())
     );
     assert_eq!(v.map(|e| e.model), Some("gemma".to_string()));
+}
+
+#[test]
+fn vision_endpoint_same_does_not_claim_implicit_codex_vision() {
+    let mut d = Config::defaults();
+    d.vision_provider = "same".into();
+    d.ai_provider = "codex".into();
+    d.codex_model = "text-only".into();
+    assert!(d.vision_endpoint().is_none());
+}
+
+#[test]
+fn vision_endpoint_same_uses_only_catalog_confirmed_codex_model() {
+    let mut d = Config::defaults();
+    d.vision_provider = "same".into();
+    d.ai_provider = "codex".into();
+    d.codex_model = "gpt-image".into();
+    d.codex_vision_model = "gpt-image".into();
+    let endpoint = d.vision_endpoint().expect("confirmed same Codex model");
+    assert_eq!(endpoint.protocol, crate::ai::AiProtocol::CodexSubscription);
+    assert_eq!(endpoint.model, "gpt-image");
+
+    d.codex_vision_model = "other-image-model".into();
+    assert!(d.vision_endpoint().is_none());
+}
+
+#[test]
+fn legacy_same_provider_migrates_without_unverified_image_claims() {
+    let mut cloud = Config::defaults();
+    cloud.vision_provider = "same".into();
+    cloud.ai_provider = "cloud".into();
+    assert!(migrate_legacy_vision_same(&mut cloud));
+    assert_eq!(cloud.vision_provider, "cloud");
+
+    let mut local = Config::defaults();
+    local.vision_provider = "same".into();
+    local.ai_provider = "local".into();
+    assert!(migrate_legacy_vision_same(&mut local));
+    assert_eq!(local.vision_provider, "off");
+
+    local.vision_provider = "same".into();
+    local.ai_local_vision = true;
+    assert!(!migrate_legacy_vision_same(&mut local));
+    assert_eq!(local.vision_provider, "same");
+}
+
+#[test]
+fn vision_endpoint_direct_providers_reuse_their_provider_profiles() {
+    let mut d = Config::defaults();
+    d.openai_base_url = "https://openai.example/v1".into();
+    d.openai_model = "gpt-vision".into();
+    d.vision_provider = "openai".into();
+    let openai = d.vision_endpoint().expect("openai vision endpoint");
+    assert_eq!(openai.protocol, crate::ai::AiProtocol::OpenAiResponses);
+    assert_eq!(openai.model, "gpt-vision");
+
+    d.anthropic_base_url = "https://anthropic.example/v1".into();
+    d.anthropic_model = "claude-vision".into();
+    d.vision_provider = "anthropic".into();
+    let anthropic = d.vision_endpoint().expect("anthropic vision endpoint");
+    assert_eq!(anthropic.protocol, crate::ai::AiProtocol::AnthropicMessages);
+    assert_eq!(anthropic.model, "claude-vision");
+}
+
+#[test]
+fn vision_endpoint_codex_requires_an_explicit_image_capable_selection() {
+    let mut d = Config::defaults();
+    d.vision_provider = "codex".into();
+    assert!(d.vision_endpoint().is_none());
+    d.codex_vision_model = "gpt-account-vision".into();
+    let endpoint = d.vision_endpoint().expect("codex vision endpoint");
+    assert_eq!(endpoint.protocol, crate::ai::AiProtocol::CodexSubscription);
+    assert_eq!(endpoint.model, "gpt-account-vision");
+    assert!(endpoint.reasoning_effort.is_none());
+    let readiness = d.readiness();
+    assert!(readiness.vision.configured);
+    assert_eq!(
+        readiness.vision.detail,
+        "codex · account · gpt-account-vision"
+    );
 }
 
 #[test]
@@ -1370,4 +1634,47 @@ fn full_profile_import_preserves_local_deep_lock() {
     incoming_locked.deep_lock = true;
     let unlocked = preserve_local_import_state(incoming_locked, false);
     assert!(!unlocked.deep_lock, "profile must not lock this machine");
+}
+
+/// hidden-to-tray — the hidden state must NEVER become persisted config.
+/// Startup is always visible; if this fails, someone added a tray/hidden
+/// field to `Config` and the explicit-only visibility contract is broken.
+#[test]
+fn config_persists_no_tray_hidden_state() {
+    // Unknown legacy/experimental visibility keys must be ignored rather than
+    // becoming sticky startup state. Checking JSON object keys avoids the old
+    // substring assertion accidentally matching an unrelated value.
+    let parsed: Config = serde_json::from_str(
+        r#"{"bar_tray_hidden":true,"hidden_to_tray":true,"start_hidden":true}"#,
+    )
+    .unwrap();
+    let json = serde_json::to_value(parsed).unwrap();
+    let fields = json.as_object().expect("Config serializes as an object");
+    for forbidden in ["bar_tray_hidden", "hidden_to_tray", "start_hidden"] {
+        assert!(
+            !fields.contains_key(forbidden),
+            "Config must not persist runtime visibility key {forbidden}"
+        );
+    }
+}
+
+/// hidden-to-tray — a legacy (pre-tray, e.g. v0.36) config.json loads
+/// unchanged and the app still starts VISIBLE: unknown keys are ignored,
+/// defaults apply, and there is no flag to flip startup hidden.
+#[test]
+fn legacy_config_loads_and_startup_stays_visible() {
+    let legacy = r#"{
+        "compact_bar": true,
+        "ui_language": "ru",
+        "suppress_tiles": true
+    }"#;
+    let parsed: Config = serde_json::from_str(legacy).unwrap();
+    assert!(parsed.compact_bar, "legacy compact mode must survive");
+    assert_eq!(parsed.ui_language, "ru");
+    assert!(parsed.suppress_tiles);
+    // The bar visibility contract lives in slint_replay::tray::TraySnapshot
+    // (startup() == visible); nothing in Config can override it — assert the
+    // config side has no opt-out by checking the default shape stays clean.
+    let fresh: Config = serde_json::from_str("{}").unwrap();
+    assert!(!fresh.compact_bar);
 }

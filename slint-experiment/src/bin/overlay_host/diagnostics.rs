@@ -469,22 +469,11 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
             w.set_diag_sys_level(-1);
             w.set_diag_vision_level(-1);
             w.set_diag_vision_detail(SharedString::from(""));
-            let (
-                ai_base,
-                ai_bearer,
-                ai_model,
-                stt_backend,
-                mic_device,
-                sys_device,
-                vision_ep,
-                ui_is_ru,
-            ) = {
+            let (ai_endpoint, stt_backend, mic_device, sys_device, vision_ep, ui_is_ru) = {
                 let c = cfg_c.read();
                 let ep = c.ai_endpoint(false);
                 (
-                    ep.base_url,
-                    ep.bearer,
-                    ep.model,
+                    ep,
                     c.stt_backend(),
                     c.mic_device.clone(),
                     c.system_audio_device.clone(),
@@ -507,9 +496,9 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                     .build()
                 {
                     Ok(rt) => {
-                        let (al, am): (i32, String) = match rt.block_on(
-                            overlay_backend::ai::test_connection(ai_base, ai_bearer, ai_model),
-                        ) {
+                        let (al, am): (i32, String) = match rt
+                            .block_on(overlay_backend::ai::test_connection_endpoint(ai_endpoint))
+                        {
                             Ok(s) => (0, format!("[ok] {s}")),
                             Err(e) => {
                                 let chain = format!("{e:#}");
@@ -535,11 +524,9 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                         // → neutral "off" (3), not an error.
                         let (vl, vm): (i32, String) = match vision_ep {
                             None => (3, "off".to_string()),
-                            Some(ep) => match rt.block_on(overlay_backend::vision::test_connection(
-                                ep.base_url,
-                                ep.bearer,
-                                ep.model,
-                            )) {
+                            Some(ep) => match rt
+                                .block_on(overlay_backend::vision::test_connection_endpoint(ep))
+                            {
                                 Ok(s) => (0, format!("[ok] {s}")),
                                 Err(e) => {
                                     let chain = format!("{e:#}");

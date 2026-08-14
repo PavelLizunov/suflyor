@@ -6,7 +6,9 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod error;
+mod stream;
 mod wsola;
 
 pub use error::WsolaError;
+pub use stream::StreamingWsola;
 pub use wsola::Wsola;

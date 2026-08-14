@@ -24,11 +24,10 @@ serde_json = "1"
 # goes through std::process::Command, and HTTP via reqwest (which pulls its own
 # tokio net/io features at the binary level).
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
-futures-util = "0.3"
 parking_lot = "0.12"
 
 # HTTP (stt + ai)
-reqwest = { version = "0.13", features = ["stream", "json", "multipart", "rustls"], default-features = false }
+reqwest = { version = "0.13", features = ["json", "multipart", "native-tls"], default-features = false }
 
 # Local STT — GigaAM-v3 in-process via ONNX (Russian-specialised). The `ort`
 # crate statically links the onnxruntime binary at build time. We enable
@@ -56,6 +55,7 @@ wasapi = "0.23"
 windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_System_Com",
+    "Win32_Media_Audio",
     "Win32_Media_Speech",
     # Job Object so spawned local-AI servers (llama-server / whisper) are killed
     # when THIS process dies — even via TerminateProcess (Task Manager / an
@@ -66,7 +66,11 @@ windows = { version = "0.62", features = [
     "Win32_System_JobObjects",
     "Win32_System_Threading",
     "Win32_Security",
+    "Win32_Security_Credentials",
 ] }
+# The `#[implement(IMMNotificationClient)]` macro expands against the direct
+# crate name even though `windows` re-exports its public types.
+windows-core = "0.62"
 
 # Neural TTS (read-aloud) runs in the `suflyor-tts` SIDECAR process — sherpa-onnx
 # is deliberately NOT linked here. It bundles its own onnxruntime, which crashes
@@ -83,8 +87,13 @@ log = "0.4"
 anyhow = "1"
 
 # SHA-256 — verify the downloaded updater installer against the GitHub release
-# API digest before executing it (update.rs).
+# API digest before executing it (update.rs), and TeraTTSv2 model files
+# (teratts_install.rs).
 sha2 = "0.11"
+# SHA-1 — verify small non-LFS TeraTTSv2 files against their pinned git blob
+# hash (`sha1("blob <size>\0" ++ content)`), the only immutable digest the Hub
+# API exposes for regular files (teratts_install.rs).
+sha1 = "0.11"
 rusqlite = { version = "0.40.0", features = ["bundled"] }
 
 # WAV encode/decode (recorder.rs — session audio recording, v0.13.0). Was a

@@ -10,7 +10,7 @@
 ;   slint-experiment/target/release/bundle/suflyor-slint-setup.exe
 
 !define PRODUCT_NAME "suflyor"
-!define PRODUCT_VERSION "0.36.1-rc.8"
+!define PRODUCT_VERSION "0.37.0-rc.13"
 !define PRODUCT_PUBLISHER "x3d_mutant"
 !define PRODUCT_EXE "overlay-host.exe"
 !define PRODUCT_INSTALL_DIR "$LOCALAPPDATA\suflyor-slint"
@@ -31,6 +31,27 @@ UninstPage uninstConfirm
 UninstPage instfiles
 
 Section "Main" SEC_MAIN
+  ; Upgrades may race the Tera sidecar draining its last utterance after the
+  ; host exits. Detect only processes whose executable path is exactly inside
+  ; this install directory, ask once, then stop that installed copy. Other
+  ; development/test copies with the same image names are never touched.
+  InitPluginsDir
+  SetOutPath "$PLUGINSDIR"
+  File /oname=stop-installed-suflyor.ps1 "stop-installed-suflyor.ps1"
+  nsExec::ExecToStack 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\stop-installed-suflyor.ps1" -InstallDir "$INSTDIR" -CheckOnly'
+  Pop $0
+  Pop $1
+  StrCmp $0 10 0 install_processes_clear
+    MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "Suflyor is running. Setup must close this installed copy before updating it; the current session and speech will stop. Other copies will not be touched." IDOK install_stop_processes IDCANCEL install_cancelled
+  install_stop_processes:
+    nsExec::ExecToStack 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\stop-installed-suflyor.ps1" -InstallDir "$INSTDIR"'
+    Pop $0
+    Pop $1
+    StrCmp $0 0 install_processes_clear
+    MessageBox MB_RETRYCANCEL|MB_ICONSTOP "Setup could not close the installed Suflyor processes. Close Suflyor manually, then click Retry." IDRETRY install_stop_processes IDCANCEL install_cancelled
+  install_cancelled:
+    Abort
+  install_processes_clear:
   SetOutPath "$INSTDIR"
   File "..\slint-experiment\target\release\${PRODUCT_EXE}"
   ; Read-aloud (TTS) sidecar — a separate process so its neural-TTS onnxruntime
@@ -38,6 +59,12 @@ Section "Main" SEC_MAIN
   ; crash). overlay-host spawns it from beside itself. The voices themselves are
   ; NOT bundled (too large) — installed on demand from Settings -> "Озвучка".
   File "..\slint-experiment\target\release\suflyor-tts.exe"
+  ; RC17 — experimental TeraTTSv2 read-aloud sidecar (ort ONNX graphs). Its
+  ; ~370 MB model is NEVER bundled here — downloaded on demand from the pinned
+  ; upstream revision via Settings -> Read aloud -> Tera -> Install model.
+  ; See suflyor-teratts/NOTICE.md: upstream ships no LICENSE, so redistribution
+  ; of the weights is gated until an archived author grant is on file.
+  File "..\slint-experiment\target\release\suflyor-teratts.exe"
   ; onnxruntime (GigaAM STT) is STATICALLY linked into the exe (ort 2.0
   ; download-binaries, no load-dynamic) -> no onnxruntime.dll to ship.
   ; The statically linked DirectML provider imports DMLCreateDevice1 at process
@@ -77,6 +104,7 @@ SectionEnd
 Section "Uninstall"
   Delete "$INSTDIR\${PRODUCT_EXE}"
   Delete "$INSTDIR\suflyor-tts.exe"
+  Delete "$INSTDIR\suflyor-teratts.exe"
   Delete "$INSTDIR\DirectML.dll"
   Delete "$INSTDIR\icon.ico"
   Delete "$INSTDIR\uninstall.exe"

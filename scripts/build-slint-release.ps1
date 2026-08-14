@@ -53,6 +53,25 @@ if (-not (Test-Path $sidecar)) {
 }
 Write-Host "  sidecar: $sidecar" -ForegroundColor Green
 
+# RC17 — experimental TeraTTSv2 read-aloud sidecar (ort ONNX graphs; separate
+# process, same reason as suflyor-tts). Same shared target dir: the ort
+# prebuilt is already cached by the host build.
+Write-Host "[build-slint-release] cargo build --release suflyor-teratts (Tera sidecar)" -ForegroundColor Cyan
+$env:CARGO_TARGET_DIR = Join-Path $crate "target"
+& cargo build --release --manifest-path (Join-Path $projectRoot "suflyor-teratts\Cargo.toml")
+$teraExit = $LASTEXITCODE
+Remove-Item Env:\CARGO_TARGET_DIR -ErrorAction SilentlyContinue
+if ($teraExit -ne 0) {
+    Write-Host "teratts sidecar build failed: exit $teraExit" -ForegroundColor Red
+    exit $teraExit
+}
+$teraSidecar = Join-Path $crate "target\release\suflyor-teratts.exe"
+if (-not (Test-Path $teraSidecar)) {
+    Write-Host "ERROR: teratts build succeeded but $teraSidecar missing" -ForegroundColor Red
+    exit 14
+}
+Write-Host "  teratts sidecar: $teraSidecar" -ForegroundColor Green
+
 # DirectML EP (GigaAM GPU): ort links DMLCreateDevice1 at process startup, so
 # Windows builds must ship the matching DirectML redistributable. Older Windows
 # 10 releases have a system DirectML.dll without that export and otherwise fail

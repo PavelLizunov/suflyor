@@ -1,9 +1,10 @@
-# suflyor local CI runner — fmt + clippy + tests for all three crates.
+# suflyor local CI runner — fmt + clippy + tests for all five crates.
 # Run BEFORE every commit (the .claude/hooks/git-gate.ps1 hook runs the
 # same checks automatically on commit/push).
 #
 # Covered: cargo fmt --check, clippy --all-targets -D warnings, test
-#   for slint-experiment, overlay-backend, AND suflyor-tts.
+#   for slint-experiment, overlay-backend, suflyor-wsola, suflyor-tts,
+#   AND suflyor-teratts.
 #
 # Not covered here (do manually): review-agent pass
 # (docs/REVIEW_AGENT_PROMPT.md) + a live smoke run of the overlay.
@@ -64,6 +65,23 @@ Run-Step "slint fmt --check" {
 Run-Step "slint clippy -D warnings" {
     & $cargoExe clippy --manifest-path slint-experiment/Cargo.toml --all-targets -- -D warnings
 }
+# Rust test executables live under target/debug/deps. The statically linked
+# DirectML provider imports DMLCreateDevice1 before main; older Windows builds
+# have a system DirectML.dll without that export, so stage ort's matching
+# redistributable beside the test executables just like the release build does.
+Run-Step "stage DirectML for slint tests" {
+    $dmlSource = Join-Path $projectRoot "slint-experiment\target\debug\DirectML.dll"
+    if (-not (Test-Path $dmlSource)) {
+        throw "matching DirectML.dll not found after the Slint build"
+    }
+    $dmlDestination = Join-Path $projectRoot "slint-experiment\target\debug\deps\DirectML.dll"
+    $alreadyMatching = (Test-Path $dmlDestination) -and
+        ((Get-FileHash -LiteralPath $dmlSource -Algorithm SHA256).Hash -eq
+         (Get-FileHash -LiteralPath $dmlDestination -Algorithm SHA256).Hash)
+    if (-not $alreadyMatching) {
+        Copy-Item -LiteralPath $dmlSource -Destination $dmlDestination -Force
+    }
+}
 # NOT --lib: it skips tests/ (i18n_guard + any guard test). Run the full suite.
 Run-Step "slint test" {
     & $cargoExe test --manifest-path slint-experiment/Cargo.toml --quiet
@@ -107,6 +125,19 @@ Run-Step "tts clippy -D warnings" {
 }
 Run-Step "tts test" {
     & $cargoExe test --manifest-path suflyor-tts/Cargo.toml --quiet
+}
+
+# --- suflyor-teratts (experimental TeraTTSv2 read-aloud sidecar, RC17) ---
+# Same shared target dir: its ort prebuilt download is reused by the host's
+# ort/GigaAM artifacts instead of re-downloading.
+Run-Step "teratts fmt --check" {
+    & $cargoExe fmt --manifest-path suflyor-teratts/Cargo.toml --all -- --check
+}
+Run-Step "teratts clippy -D warnings" {
+    & $cargoExe clippy --manifest-path suflyor-teratts/Cargo.toml --all-targets -- -D warnings
+}
+Run-Step "teratts test" {
+    & $cargoExe test --manifest-path suflyor-teratts/Cargo.toml --quiet
 }
 Remove-Item Env:\CARGO_TARGET_DIR -ErrorAction SilentlyContinue
 

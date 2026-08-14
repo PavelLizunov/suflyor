@@ -19,6 +19,7 @@ export struct TranscriptLine {
     speaker: string,      // role label OR one/multiple significant voices («Говорящий 1 + Говорящий 2»)
     speaker-color: color, // D3 — colour of the speaker label (accent in role view; per-speaker in «По голосам»)
     text: string,
+    display-text: string,
     checked: bool,        // ТЗ1 — per-line selection for "Copy selected" (clipboard)
     marked: bool,         // G2b (2026-07-03) — per-line ⭐ multi-mark for «В память (N)»
     start-ms: int,        // ТЗ2b — session-relative ms, for click-to-seek + active line
@@ -751,7 +752,8 @@ export component TranscriptWindow inherits Window {
                                 // seek stays on the timecode/speaker columns + padding
                                 // (plain Texts, clicks fall through to the row TouchArea).
                                 SelectableText {
-                                    text: line.text;
+                                    text: line.display-text;
+                                    source-text: line.text;
                                     font-size: Metrics.font-body;
                                     text-color: Theme.text-secondary;
                                     horizontal-stretch: 1;

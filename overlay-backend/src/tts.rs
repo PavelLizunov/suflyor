@@ -10,28 +10,242 @@
 //! The tile controls and Settings panel use this client API, so they don't care
 //! that the engine moved out of process.
 
+use std::collections::{BTreeMap, VecDeque};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child as Proc, ChildStdin, Command, Stdio};
-use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicU16, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 
 use base64::Engine as _;
 
-/// Absolute unix-ms deadline for suppressing STT while read-aloud plays.
-/// `u64::MAX` means playback is paused and may resume later.
-static SPEAKING_UNTIL_MS: AtomicU64 = AtomicU64::new(0);
-static PAUSED_REMAINING_MS: AtomicU64 = AtomicU64::new(0);
+// ===== Engine selection (RC17) =====
+
+/// Read-aloud engine selection (config `tts_engine`). Diarization is NOT
+/// affected — it always runs in the Piper sidecar (`suflyor-tts.exe`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EngineKind {
+    /// sherpa-onnx Piper voices in `suflyor-tts.exe` (the default).
+    Piper,
+    /// Experimental TeraTTSv2 ONNX graphs in `suflyor-teratts.exe`.
+    Tera,
+}
+
+/// Parse config `tts_engine`: only the exact (case-insensitive) "tera"
+/// selects the experimental engine; anything else stays on Piper.
+#[must_use]
+pub fn parse_engine(raw: &str) -> EngineKind {
+    if raw.trim().eq_ignore_ascii_case("tera") {
+        EngineKind::Tera
+    } else {
+        EngineKind::Piper
+    }
+}
+
+/// Namespaced voice reference stored in config `tts_voice`: `piper:<dir>` or
+/// `tera:<style>`. Legacy bare ids (pre-RC17 configs) resolve to Piper, so an
+/// existing install keeps speaking with its saved voice.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VoiceRef {
+    pub engine: EngineKind,
+    pub id: String,
+}
+
+#[must_use]
+pub fn parse_voice_ref(raw: &str) -> VoiceRef {
+    let raw = raw.trim();
+    if let Some(rest) = raw.strip_prefix("tera:") {
+        VoiceRef {
+            engine: EngineKind::Tera,
+            id: rest.trim().to_string(),
+        }
+    } else if let Some(rest) = raw.strip_prefix("piper:") {
+        VoiceRef {
+            engine: EngineKind::Piper,
+            id: rest.trim().to_string(),
+        }
+    } else {
+        VoiceRef {
+            engine: EngineKind::Piper,
+            id: raw.to_string(),
+        }
+    }
+}
+
+#[must_use]
+pub fn format_voice_ref(voice: &VoiceRef) -> String {
+    let prefix = match voice.engine {
+        EngineKind::Piper => "piper:",
+        EngineKind::Tera => "tera:",
+    };
+    format!("{prefix}{}", voice.id)
+}
+
+/// Parsed READY handshake of the Tera sidecar stdout:
+/// `READY engine=tera revision=<hex> voices=<a,b> sample_rate=44100 state=<s>`.
+/// Old-style parsers that only prefix-match `READY` keep working.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TeraReady {
+    pub revision: String,
+    pub voices: Vec<String>,
+    pub sample_rate: u32,
+    /// `ready` | `not-installed` | `error`.
+    pub state: String,
+}
+
+/// Parse one stdout line of the Tera sidecar; None for anything that is not a
+/// well-formed READY handshake.
+#[must_use]
+pub fn parse_ready_line(line: &str) -> Option<TeraReady> {
+    let line = line.trim_end_matches(['\r', '\n']);
+    if !line.starts_with("READY ") {
+        return None;
+    }
+    let mut engine_ok = false;
+    let mut revision = String::new();
+    let mut voices = Vec::new();
+    let mut sample_rate = 0u32;
+    let mut state = String::new();
+    for field in line.split_whitespace().skip(1) {
+        let (key, value) = field.split_once('=')?;
+        match key {
+            "engine" => {
+                if value != "tera" {
+                    return None;
+                }
+                engine_ok = true;
+            }
+            "revision" => revision = value.to_string(),
+            "voices" => {
+                voices = value
+                    .split(',')
+                    .filter(|v| !v.is_empty())
+                    .map(str::to_string)
+                    .collect();
+            }
+            "sample_rate" => sample_rate = value.parse().ok()?,
+            "state" => state = value.to_string(),
+            _ => {}
+        }
+    }
+    engine_ok.then_some(TeraReady {
+        revision,
+        voices,
+        sample_rate,
+        state,
+    })
+}
+
+/// STT suppression state. Tera clears it from its exact terminal protocol
+/// event; Piper, whose legacy protocol has no terminal event, keeps using the
+/// conservative deadline fallback.
+struct SpeakingState {
+    until_ms: u64,
+    stt_tail_until_ms: u64,
+    paused_remaining_ms: u64,
+    active_generation: u64,
+    loading_generation: u64,
+    next_generation: u64,
+}
+
+static SPEAKING_STATE: Mutex<SpeakingState> = Mutex::new(SpeakingState {
+    until_ms: 0,
+    stt_tail_until_ms: 0,
+    paused_remaining_ms: 0,
+    active_generation: 0,
+    loading_generation: 0,
+    next_generation: 1,
+});
 
 /// Current read rate (−10..+10), so the speaking-duration estimate scales with
 /// speed (a slower rate = longer audio = longer suppression window).
 static SPEAK_RATE: AtomicI32 = AtomicI32::new(0);
 
+/// Playback-time speed is independent of synthesis rate. It is stored on each
+/// sidecar so a later SPEAK or a respawn preserves the tile player's setting.
+const DEFAULT_PLAYBACK_SPEED_PERCENT: u16 = 100;
+static PLAYBACK_SPEED_PERCENT: AtomicU16 = AtomicU16::new(DEFAULT_PLAYBACK_SPEED_PERCENT);
+
+fn playback_speed_percent(speed: f32) -> u16 {
+    (speed.clamp(0.5, 3.0) * 100.0).round() as u16
+}
+
+fn extend_speaking_for_slower_playback(old_percent: u16, new_percent: u16) {
+    if new_percent >= old_percent || new_percent == 0 {
+        return;
+    }
+    let now = crate::journal::now_unix_ms() as u64;
+    let mut state = SPEAKING_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let scale = u64::from(old_percent);
+    let divisor = u64::from(new_percent);
+    if state.until_ms > now {
+        let remaining = state.until_ms.saturating_sub(now);
+        state.until_ms = now.saturating_add(remaining.saturating_mul(scale) / divisor);
+    }
+    if state.paused_remaining_ms > 0 {
+        state.paused_remaining_ms = state
+            .paused_remaining_ms
+            .saturating_mul(scale)
+            .saturating_div(divisor);
+    }
+}
+
+fn rewind_extension_ms(seconds: i32, speed_percent: u16) -> u64 {
+    if seconds >= 0 || speed_percent == 0 {
+        return 0;
+    }
+    u64::from(seconds.unsigned_abs())
+        .saturating_mul(100_000)
+        .saturating_div(u64::from(speed_percent))
+}
+
+fn extend_speaking_for_rewind(seconds: i32, speed_percent: u16) {
+    let extra_ms = rewind_extension_ms(seconds, speed_percent);
+    if extra_ms == 0 {
+        return;
+    }
+    let now = crate::journal::now_unix_ms() as u64;
+    let mut state = SPEAKING_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if state.paused_remaining_ms > 0 {
+        state.paused_remaining_ms = state.paused_remaining_ms.saturating_add(extra_ms);
+    } else if state.until_ms > now {
+        state.until_ms = state.until_ms.saturating_add(extra_ms);
+    }
+}
+
 /// True while a read-aloud is (estimated to be) playing through the speakers,
-/// OR is paused mid-utterance (playback will resume — keep suppressing STT).
+/// or is paused mid-utterance (so the tile can remain in its active state).
 #[must_use]
 pub fn is_speaking() -> bool {
-    (crate::journal::now_unix_ms() as u64) < SPEAKING_UNTIL_MS.load(Ordering::Acquire)
+    let state = SPEAKING_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    state.paused_remaining_ms > 0 || (crate::journal::now_unix_ms() as u64) < state.until_ms
+}
+
+/// True while the active Tera utterance has been accepted but its first PCM
+/// buffer has not reached playback yet.
+#[must_use]
+pub fn is_loading() -> bool {
+    let state = SPEAKING_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    state.active_generation != 0 && state.loading_generation == state.active_generation
+}
+
+/// Capture arrives in ~200 ms chunks. Keep only STT muted for two final
+/// chunks after playback drains; the public speaking state still ends exactly
+/// on DONE, while queued loopback audio cannot seed a fresh transcript buffer.
+pub fn should_suppress_stt() -> bool {
+    let state = SPEAKING_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let now = crate::journal::now_unix_ms() as u64;
+    (state.paused_remaining_ms == 0 && now < state.until_ms) || now < state.stt_tail_until_ms
 }
 
 /// Map a read rate (−10..+10) to a speed multiplier (−10→0.5×, 0→1×, +10→2×) —
@@ -49,22 +263,87 @@ fn rate_to_speed(rate: i32) -> f64 {
 /// (chars/sec at 1×) is intentionally low so the window over- rather than
 /// under-shoots; the tail cooldown covers the loopback/mic buffer still in
 /// flight after the audio actually stops. A new speak re-extends it; stop clears.
-fn mark_speaking_for(chars: usize) {
+fn mark_speaking_for(chars: usize) -> u64 {
     const BASE_CPS: f64 = 12.0;
     const SYNTH_LATENCY_S: f64 = 1.5;
     const TAIL_COOLDOWN_S: f64 = 2.0;
-    let speed = rate_to_speed(SPEAK_RATE.load(Ordering::Acquire));
-    let play_s = (chars as f64) / (BASE_CPS * speed).max(1.0);
+    let synthesis_speed = rate_to_speed(SPEAK_RATE.load(Ordering::Acquire));
+    let playback_speed = f64::from(PLAYBACK_SPEED_PERCENT.load(Ordering::Acquire)) / 100.0;
+    let play_s = (chars as f64) / (BASE_CPS * synthesis_speed * playback_speed).max(1.0);
     let secs = SYNTH_LATENCY_S + play_s + TAIL_COOLDOWN_S;
-    PAUSED_REMAINING_MS.store(0, Ordering::Release);
     let until = (crate::journal::now_unix_ms() as u64).saturating_add((secs * 1000.0) as u64);
-    SPEAKING_UNTIL_MS.store(until, Ordering::Release);
+    let mut state = SPEAKING_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let generation = state.next_generation;
+    state.next_generation = state.next_generation.wrapping_add(1).max(1);
+    state.until_ms = until;
+    state.stt_tail_until_ms = 0;
+    state.paused_remaining_ms = 0;
+    state.active_generation = generation;
+    state.loading_generation = 0;
+    generation
 }
 
-fn clear_speaking() {
-    PAUSED_REMAINING_MS.store(0, Ordering::Release);
-    SPEAKING_UNTIL_MS.store(0, Ordering::Release);
+fn mark_loading_generation(generation: u64) {
+    let mut state = SPEAKING_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if state.active_generation == generation {
+        state.loading_generation = generation;
+    }
 }
+
+fn clear_loading_generation(generation: u64) -> bool {
+    let mut state = SPEAKING_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if state.loading_generation != generation {
+        return false;
+    }
+    state.loading_generation = 0;
+    true
+}
+
+#[cfg(test)]
+fn clear_speaking() {
+    let mut state = SPEAKING_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    state.until_ms = 0;
+    state.stt_tail_until_ms =
+        (crate::journal::now_unix_ms() as u64).saturating_add(STT_TAIL_DRAIN_MS);
+    state.paused_remaining_ms = 0;
+    state.active_generation = 0;
+    state.loading_generation = 0;
+}
+
+/// Clear only the utterance that produced the terminal event. A delayed DONE
+/// from an interrupted utterance must never unmute STT over newer playback.
+fn clear_speaking_generation(generation: u64) -> bool {
+    let mut state = SPEAKING_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if state.active_generation != generation {
+        return false;
+    }
+    state.until_ms = 0;
+    state.stt_tail_until_ms =
+        (crate::journal::now_unix_ms() as u64).saturating_add(STT_TAIL_DRAIN_MS);
+    state.paused_remaining_ms = 0;
+    state.active_generation = 0;
+    state.loading_generation = 0;
+    true
+}
+
+fn active_speaking_generation() -> Option<u64> {
+    let state = SPEAKING_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    (state.active_generation != 0).then_some(state.active_generation)
+}
+
+const STT_TAIL_DRAIN_MS: u64 = 400;
 
 fn paused_remaining(until_ms: u64, now_ms: u64) -> Option<u64> {
     (until_ms != u64::MAX && now_ms < until_ms).then(|| until_ms - now_ms)
@@ -76,18 +355,245 @@ fn resumed_until(remaining_ms: u64, now_ms: u64) -> Option<u64> {
 
 fn pause_speaking() {
     let now = crate::journal::now_unix_ms() as u64;
-    let until = SPEAKING_UNTIL_MS.load(Ordering::Acquire);
-    if let Some(remaining) = paused_remaining(until, now) {
-        PAUSED_REMAINING_MS.store(remaining, Ordering::Release);
-        SPEAKING_UNTIL_MS.store(u64::MAX, Ordering::Release);
+    let mut state = SPEAKING_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(remaining) = paused_remaining(state.until_ms, now) {
+        state.paused_remaining_ms = remaining;
+        state.until_ms = 0;
+        state.stt_tail_until_ms = now.saturating_add(STT_TAIL_DRAIN_MS);
     }
 }
 
 fn resume_speaking() {
-    let remaining = PAUSED_REMAINING_MS.swap(0, Ordering::AcqRel);
+    let mut state = SPEAKING_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let remaining = std::mem::take(&mut state.paused_remaining_ms);
     if let Some(until) = resumed_until(remaining, crate::journal::now_unix_ms() as u64) {
-        SPEAKING_UNTIL_MS.store(until, Ordering::Release);
+        state.until_ms = until;
+        state.stt_tail_until_ms = 0;
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum TeraPlaybackEvent {
+    Started { id: u64 },
+    Playing { id: u64 },
+    Done { id: u64 },
+    Failed { id: u64, reason: String },
+    Rejected { reason: String },
+}
+
+/// Parse the non-secret Tera status protocol. READY is handled separately;
+/// malformed status lines are rejected rather than affecting suppression.
+fn parse_tera_playback_event(line: &str) -> Result<Option<TeraPlaybackEvent>, &'static str> {
+    let mut fields = line.trim_end_matches(['\r', '\n']).split_whitespace();
+    let Some(kind) = fields.next() else {
+        return Ok(None);
+    };
+    if kind == "READY" {
+        return Ok(None);
+    }
+    if !matches!(kind, "STARTED" | "PLAYING" | "DONE" | "FAILED" | "REJECTED") {
+        return Err("unknown-event");
+    }
+    let mut id = None;
+    let mut reason = None;
+    for field in fields {
+        let Some((key, value)) = field.split_once('=') else {
+            return Err("malformed-field");
+        };
+        if value.is_empty() {
+            return Err("empty-field");
+        }
+        match key {
+            "id" if id.is_none() => {
+                id = Some(value.parse::<u64>().map_err(|_| "invalid-id")?);
+            }
+            "reason"
+                if reason.is_none()
+                    && value
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') =>
+            {
+                reason = Some(value.to_string());
+            }
+            _ => return Err("invalid-field"),
+        }
+    }
+    match kind {
+        "STARTED" if reason.is_none() => id
+            .map(|id| Some(TeraPlaybackEvent::Started { id }))
+            .ok_or("missing-id"),
+        "PLAYING" if reason.is_none() => id
+            .map(|id| Some(TeraPlaybackEvent::Playing { id }))
+            .ok_or("missing-id"),
+        "DONE" if reason.is_none() => id
+            .map(|id| Some(TeraPlaybackEvent::Done { id }))
+            .ok_or("missing-id"),
+        "FAILED" => match (id, reason) {
+            (Some(id), Some(reason)) => Ok(Some(TeraPlaybackEvent::Failed { id, reason })),
+            _ => Err("missing-terminal-field"),
+        },
+        "REJECTED" if id.is_none() => reason
+            .map(|reason| Some(TeraPlaybackEvent::Rejected { reason }))
+            .ok_or("missing-reason"),
+        _ => Err("unexpected-field"),
+    }
+}
+
+/// Maps the sidecar's per-process utterance ids onto the host suppression
+/// generations. The mapping makes delayed terminal events harmless.
+#[derive(Default)]
+struct TeraPlaybackTracker {
+    pending: VecDeque<u64>,
+    utterances: BTreeMap<u64, u64>,
+}
+
+impl TeraPlaybackTracker {
+    fn register_speak(&mut self, generation: u64) {
+        self.pending.push_back(generation);
+    }
+
+    fn cancel_speak(&mut self, generation: u64) -> bool {
+        let Some(index) = self.pending.iter().position(|queued| *queued == generation) else {
+            return false;
+        };
+        self.pending.remove(index).is_some()
+    }
+
+    fn started(&mut self, id: u64) -> Option<u64> {
+        let generation = self.pending.pop_front()?;
+        self.utterances.insert(id, generation);
+        Some(generation)
+    }
+
+    fn terminal(&mut self, id: u64) -> Option<u64> {
+        self.utterances.remove(&id)
+    }
+
+    fn generation(&self, id: u64) -> Option<u64> {
+        self.utterances.get(&id).copied()
+    }
+
+    /// Forget a host generation stopped explicitly before the sidecar's DONE
+    /// arrives. The delayed terminal line then cannot affect newer playback.
+    fn stop_generation(&mut self, generation: u64) -> bool {
+        if self.cancel_speak(generation) {
+            return true;
+        }
+        let sidecar_id = self
+            .utterances
+            .iter()
+            .find_map(|(id, tracked)| (*tracked == generation).then_some(*id));
+        sidecar_id
+            .and_then(|id| self.utterances.remove(&id))
+            .is_some()
+    }
+
+    /// SPEAK payload parse failures are the only REJECTED events that can
+    /// belong to a registered utterance. Config/control rejections must not
+    /// consume a future SPEAK.
+    fn rejected(&mut self, reason: &str) -> Option<u64> {
+        if !matches!(reason, "invalid-base64" | "invalid-utf8") {
+            return None;
+        }
+        self.pending.pop_front()
+    }
+
+    fn drain_generations(&mut self) -> Vec<u64> {
+        let mut generations: Vec<u64> = self.pending.drain(..).collect();
+        generations.extend(std::mem::take(&mut self.utterances).into_values());
+        generations
+    }
+}
+
+fn finish_tera_generation(generation: Option<u64>, event: &str, sidecar_id: Option<u64>) {
+    let Some(generation) = generation else {
+        log::warn!("tts: Tera {event} did not match an active protocol id");
+        return;
+    };
+    let cleared = clear_speaking_generation(generation);
+    log::info!(
+        "tts: Tera terminal event={event} sidecar_id={sidecar_id:?} generation={generation} cleared={cleared}"
+    );
+}
+
+fn handle_tera_playback_line(playback: &Mutex<TeraPlaybackTracker>, line: &str) {
+    let event = match parse_tera_playback_event(line) {
+        Ok(Some(event)) => event,
+        Ok(None) => return,
+        Err(kind) => {
+            log::warn!("tts: ignored malformed Tera status kind={kind}");
+            return;
+        }
+    };
+    match event {
+        TeraPlaybackEvent::Started { id } => {
+            let generation = playback
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .started(id);
+            if let Some(generation) = generation {
+                log::info!("tts: Tera STARTED sidecar_id={id} generation={generation}");
+            } else {
+                log::warn!("tts: Tera STARTED sidecar_id={id} was not registered");
+            }
+        }
+        TeraPlaybackEvent::Playing { id } => {
+            let generation = playback
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .generation(id);
+            if let Some(generation) = generation {
+                let cleared = clear_loading_generation(generation);
+                log::info!(
+                    "tts: Tera PLAYING sidecar_id={id} generation={generation} loading_cleared={cleared}"
+                );
+            } else {
+                log::warn!("tts: Tera PLAYING sidecar_id={id} was not registered");
+            }
+        }
+        TeraPlaybackEvent::Done { id } => {
+            let generation = playback
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .terminal(id);
+            finish_tera_generation(generation, "done", Some(id));
+        }
+        TeraPlaybackEvent::Failed { id, reason } => {
+            let generation = playback
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .terminal(id);
+            log::warn!("tts: Tera FAILED sidecar_id={id} reason={reason}");
+            finish_tera_generation(generation, "failed", Some(id));
+        }
+        TeraPlaybackEvent::Rejected { reason } => {
+            let generation = playback
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .rejected(&reason);
+            log::warn!("tts: Tera REJECTED reason={reason}");
+            if generation.is_some() {
+                finish_tera_generation(generation, "rejected", None);
+            }
+        }
+    }
+}
+
+fn handle_tera_playback_eof(playback: &Mutex<TeraPlaybackTracker>) {
+    let generations = playback
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .drain_generations();
+    let count = generations.len();
+    let mut cleared = false;
+    for generation in generations {
+        cleared |= clear_speaking_generation(generation);
+    }
+    log::info!("tts: Tera status EOF tracked={count} cleared={cleared}");
 }
 
 /// Markdown → spoken-text cleanup. Read-aloud must voice the WORDS, not the
@@ -283,19 +789,40 @@ pub struct VoiceInfo {
     pub name: String,
 }
 
-/// The sidecar process + its stdin, plus the config to re-apply on respawn.
+/// A Tera sidecar that crashes this many times in one session is declared
+/// unusable; read-aloud falls back to Piper until the app restarts.
+const TERA_CRASH_LIMIT: u32 = 3;
+
+/// One engine's sidecar process + its stdin, plus the config to re-apply on
+/// respawn. Piper and Tera share the line protocol, so one struct drives both.
 struct Sidecar {
+    kind: EngineKind,
     exe: PathBuf,
+    /// Bare voice id inside this engine's namespace (Piper model dir name or
+    /// Tera style id) — re-applied after every respawn.
     voice: String,
     rate: i32,
+    /// Pitch-preserving playback speed as the wire protocol's integer percent.
+    playback_speed_percent: u16,
+    /// Language tag for the Tera sidecar (ignored by Piper).
+    lang: String,
     proc: Option<Proc>,
     stdin: Option<ChildStdin>,
+    /// Respawns after a detected crash. Past [`TERA_CRASH_LIMIT`] the engine
+    /// is bypassed for the rest of the session (fallback stays usable).
+    crashes: u32,
+    /// Latest READY handshake (Tera only; Piper stdout stays null).
+    ready: Arc<Mutex<Option<TeraReady>>>,
+    /// Per-process Tera protocol ids mapped to host speaking generations.
+    playback: Arc<Mutex<TeraPlaybackTracker>>,
 }
 
 impl Sidecar {
-    /// Ensure a live child exists; (re)spawn if missing/dead and re-apply the
-    /// selected voice + rate. Lazy: the first command spawns it, so an idle app
-    /// that never reads anything aloud never starts the process.
+    /// Ensure a live child exists; (re)spawn if missing/dead and re-apply
+    /// LANG/VOICE/RATE/SPEED. Lazy: the first command spawns it, so an idle app that
+    /// never reads anything aloud never starts the process. A child found DEAD
+    /// here crashed since the last spawn (the only other exit is app shutdown,
+    /// which never re-enters `ensure`).
     fn ensure(&mut self) {
         let alive = self
             .proc
@@ -305,160 +832,524 @@ impl Sidecar {
         if alive {
             return;
         }
+        if self.proc.is_some() {
+            self.crashes += 1;
+            log::warn!("tts: {:?} sidecar died (crash {})", self.kind, self.crashes);
+        }
         self.proc = None;
         self.stdin = None;
         if !self.exe.is_file() {
-            log::warn!("tts: sidecar exe not found at {:?}", self.exe);
+            log::warn!(
+                "tts: {:?} sidecar exe not found at {:?}",
+                self.kind,
+                self.exe
+            );
             return;
         }
-        match spawn_sidecar(&self.exe) {
+        match spawn_engine_sidecar(&self.exe, self.kind) {
             Ok(mut child) => {
+                if self.kind == EngineKind::Tera {
+                    if let Some(stdout) = child.stdout.take() {
+                        let slot = self.ready.clone();
+                        let playback = Arc::new(Mutex::new(TeraPlaybackTracker::default()));
+                        self.playback = playback.clone();
+                        let _ = std::thread::Builder::new()
+                            .name("teratts-handshake".into())
+                            .spawn(move || {
+                                use std::io::BufRead as _;
+                                for line in std::io::BufReader::new(stdout).lines() {
+                                    let Ok(line) = line else { break };
+                                    if let Some(parsed) = parse_ready_line(&line) {
+                                        if let Ok(mut guard) = slot.lock() {
+                                            *guard = Some(parsed);
+                                        }
+                                        continue;
+                                    }
+                                    handle_tera_playback_line(&playback, &line);
+                                }
+                                handle_tera_playback_eof(&playback);
+                            });
+                    }
+                }
                 self.stdin = child.stdin.take();
                 self.proc = Some(child);
+                if self.kind == EngineKind::Tera && !self.lang.is_empty() {
+                    let lang = self.lang.clone();
+                    self.write_raw(&format!("LANG {lang}"));
+                }
                 if !self.voice.is_empty() {
                     let v = self.voice.clone();
                     self.write_raw(&format!("VOICE {v}"));
                 }
                 let r = self.rate;
                 self.write_raw(&format!("RATE {r}"));
+                let speed = self.playback_speed_percent;
+                self.write_raw(&format!("SPEED {speed}"));
             }
-            Err(e) => log::warn!("tts: failed to spawn sidecar: {e}"),
+            Err(e) => log::warn!("tts: failed to spawn {:?} sidecar: {e}", self.kind),
         }
+    }
+
+    /// Too many crashes — bypass this engine for the rest of the session.
+    fn crashed_out(&self) -> bool {
+        self.crashes >= TERA_CRASH_LIMIT
     }
 
     /// Write a line without (re)spawning — used internally right after spawn.
-    fn write_raw(&mut self, line: &str) {
+    /// Reports whether the line actually reached the child's stdin: a broken
+    /// pipe (dead/crashed sidecar) drops the handles and reports false so the
+    /// caller can fall back instead of believing playback started.
+    fn write_raw(&mut self, line: &str) -> bool {
         if let Some(si) = self.stdin.as_mut() {
-            if writeln!(si, "{line}").and_then(|_| si.flush()).is_err() {
-                self.stdin = None;
-                self.proc = None;
+            if writeln!(si, "{line}").and_then(|_| si.flush()).is_ok() {
+                return true;
             }
         }
+        self.stdin = None;
+        self.proc = None;
+        false
     }
 
-    /// Ensure the child is up, then send `line`.
-    fn send(&mut self, line: &str) {
+    /// Ensure the child is up, then send `line`. Reports delivery.
+    fn send(&mut self, line: &str) -> bool {
         self.ensure();
-        self.write_raw(line);
+        self.write_raw(line)
+    }
+
+    /// Register the host generation before writing SPEAK so even an immediate
+    /// STARTED+FAILED response is associated with the correct suppression.
+    fn send_tera_speak(&mut self, line: &str, chars: usize) -> bool {
+        self.ensure();
+        if self.stdin.is_none() {
+            return false;
+        }
+        // The sidecar mutex serialises this mark with the wire order. If two
+        // callers race, the newer generation is always the newer SPEAK line.
+        let generation = mark_speaking_for(chars);
+        mark_loading_generation(generation);
+        self.playback
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .register_speak(generation);
+        if self.write_raw(line) {
+            return true;
+        }
+        let cancelled = self
+            .playback
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .cancel_speak(generation);
+        if cancelled {
+            clear_speaking_generation(generation);
+        }
+        false
+    }
+
+    fn send_piper_speak(&mut self, line: &str, chars: usize) -> bool {
+        self.ensure();
+        if !self.write_raw(line) {
+            return false;
+        }
+        // Keep the conservative estimate ordered with the legacy SPEAK line.
+        mark_speaking_for(chars);
+        true
+    }
+
+    /// Deliver `line` only if the child is ALIVE — never respawns. Control
+    /// commands (PAUSE/RESUME/STOP) use this: respawning a dead sidecar just
+    /// to deliver a control line would boot the whole engine for nothing (a
+    /// Tera cold load is hundreds of MB of graphs), and a dead sidecar is not
+    /// playing anything anyway. The dead child stays in `proc` so the next
+    /// `ensure` still counts the crash.
+    fn send_if_alive(&mut self, line: &str) -> bool {
+        let alive = self
+            .proc
+            .as_mut()
+            .map(|p| matches!(p.try_wait(), Ok(None)))
+            .unwrap_or(false);
+        alive && self.write_raw(line)
     }
 }
 
-/// Handle to the TTS sidecar client. Cheap to clone.
+const TARGET_NONE: u8 = 0;
+const TARGET_PIPER: u8 = 1;
+const TARGET_TERA: u8 = 2;
+
+fn engine_code(kind: EngineKind) -> u8 {
+    match kind {
+        EngineKind::Piper => 0,
+        EngineKind::Tera => 1,
+    }
+}
+
+fn engine_from_code(code: u8) -> EngineKind {
+    if code == 1 {
+        EngineKind::Tera
+    } else {
+        EngineKind::Piper
+    }
+}
+
+/// Handle to the TTS sidecar client. Cheap to clone. Holds BOTH engine
+/// sidecars: the selected one speaks, and Piper stays the automatic fallback
+/// whenever Tera is not installed, not ready, or crashes.
 #[derive(Clone)]
 pub struct Tts {
-    sidecar: Arc<Mutex<Sidecar>>,
+    /// Selected engine (config `tts_engine`).
+    engine: Arc<AtomicU8>,
+    /// Which sidecar accepted the last SPEAK — pause/resume/stop route there.
+    last_target: Arc<AtomicU8>,
+    piper: Arc<Mutex<Sidecar>>,
+    tera: Arc<Mutex<Sidecar>>,
+    /// Installed Piper voices (the Settings chooser lists the active engine's
+    /// voices — see `voices`/`tera_voices`).
     voices: Arc<Vec<VoiceInfo>>,
 }
 
 impl Tts {
-    /// Build the client: scan installed voices and prepare (but don't yet spawn)
-    /// the sidecar. `voice_id` empty/unknown → auto-pick a Russian voice.
+    /// Build the client: scan installed Piper voices and prepare (but don't
+    /// yet spawn) both sidecars. `voice_raw` is the namespaced config value
+    /// (`piper:<dir>` / `tera:<style>`; empty/unknown → engine default).
     #[must_use]
-    pub fn spawn(voice_id: Option<String>, rate: i32) -> Self {
+    pub fn spawn(engine: EngineKind, voice_raw: Option<String>, rate: i32, lang: &str) -> Self {
         let voices = scan_installed_voices(true);
-        let voice = pick_voice_id(&voices, &voice_id.unwrap_or_default()).unwrap_or_default();
-        SPEAK_RATE.store(rate.clamp(-10, 10), Ordering::Release);
-        let sidecar = Sidecar {
+        let vref = parse_voice_ref(&voice_raw.unwrap_or_default());
+        let piper_configured = if vref.engine == EngineKind::Piper {
+            vref.id.as_str()
+        } else {
+            ""
+        };
+        let piper_voice = pick_voice_id(&voices, piper_configured).unwrap_or_default();
+        let tera_voice = if vref.engine == EngineKind::Tera {
+            vref.id.clone()
+        } else {
+            String::new()
+        };
+        let rate = rate.clamp(-10, 10);
+        SPEAK_RATE.store(rate, Ordering::Release);
+        let piper = Sidecar {
+            kind: EngineKind::Piper,
             exe: sidecar_exe_path(),
-            voice,
-            rate: rate.clamp(-10, 10),
+            voice: piper_voice,
+            rate,
+            playback_speed_percent: DEFAULT_PLAYBACK_SPEED_PERCENT,
+            lang: String::new(),
             proc: None,
             stdin: None,
+            crashes: 0,
+            ready: Arc::new(Mutex::new(None)),
+            playback: Arc::new(Mutex::new(TeraPlaybackTracker::default())),
+        };
+        let tera = Sidecar {
+            kind: EngineKind::Tera,
+            exe: tera_sidecar_exe_path(),
+            voice: tera_voice,
+            rate,
+            playback_speed_percent: DEFAULT_PLAYBACK_SPEED_PERCENT,
+            lang: lang.to_string(),
+            proc: None,
+            stdin: None,
+            crashes: 0,
+            ready: Arc::new(Mutex::new(None)),
+            playback: Arc::new(Mutex::new(TeraPlaybackTracker::default())),
         };
         Self {
-            sidecar: Arc::new(Mutex::new(sidecar)),
+            engine: Arc::new(AtomicU8::new(engine_code(engine))),
+            last_target: Arc::new(AtomicU8::new(TARGET_NONE)),
+            piper: Arc::new(Mutex::new(piper)),
+            tera: Arc::new(Mutex::new(tera)),
             voices: Arc::new(voices),
         }
     }
 
-    /// True when at least one voice model is installed AND the sidecar exe is
-    /// present (TTS usable).
+    /// The selected engine.
     #[must_use]
-    pub fn is_available(&self) -> bool {
-        if self.voices.is_empty() {
-            return false;
-        }
-        self.sidecar
-            .lock()
-            .map(|s| s.exe.is_file())
-            .unwrap_or(false)
+    pub fn engine_kind(&self) -> EngineKind {
+        engine_from_code(self.engine.load(Ordering::Acquire))
     }
 
-    /// The installed voices, for the Settings chooser.
+    /// Switch the selected engine at runtime (Settings). Warms the new target
+    /// if it is usable.
+    pub fn set_engine(&self, kind: EngineKind) {
+        self.engine.store(engine_code(kind), Ordering::Release);
+        self.warm();
+    }
+
+    /// Tera can speak right now: sidecar exe present, model fully installed,
+    /// and not crashed-out this session.
+    #[must_use]
+    pub fn tera_usable(&self) -> bool {
+        let process_ok = self
+            .tera
+            .lock()
+            .map(|s| s.exe.is_file() && !s.crashed_out())
+            .unwrap_or(false);
+        process_ok
+            && crate::teratts_install::installed_state()
+                == crate::teratts_install::TeraInstalled::Ready
+    }
+
+    /// Latest READY handshake of the Tera sidecar (None until it spawned and
+    /// answered). For the Settings status line + host tests.
+    #[must_use]
+    pub fn tera_ready(&self) -> Option<TeraReady> {
+        self.tera
+            .lock()
+            .ok()
+            .and_then(|s| s.ready.lock().ok().and_then(|g| g.clone()))
+    }
+
+    /// True when read-aloud can speak: the selected engine is usable, or the
+    /// Piper fallback is (Tera selected but broken still leaves Piper).
+    #[must_use]
+    pub fn is_available(&self) -> bool {
+        if self.engine_kind() == EngineKind::Tera && self.tera_usable() {
+            return true;
+        }
+        available_on_disk()
+    }
+
+    /// The installed Piper voices, for the Settings chooser.
     #[must_use]
     pub fn voices(&self) -> &[VoiceInfo] {
         &self.voices
     }
 
-    fn send(&self, line: String) {
-        if let Ok(mut s) = self.sidecar.lock() {
-            s.send(&line);
-        }
+    /// The pinned Tera voice styles, for the Settings chooser (installed or
+    /// not — the install button appears when the model is missing).
+    #[must_use]
+    pub fn tera_voices() -> Vec<String> {
+        crate::teratts_install::manifest()
+            .map(|m| {
+                let mut voices: Vec<String> = m
+                    .files
+                    .iter()
+                    .filter_map(|f| {
+                        let path = f.path.strip_prefix("styles/")?;
+                        Some(path.split('/').next()?.to_string())
+                    })
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .into_iter()
+                    .collect();
+                voices.sort();
+                voices
+            })
+            .unwrap_or_default()
     }
 
-    /// Speak `text` now, interrupting any current speech. `text` may be markdown
-    /// (a tile answer) — it is cleaned to spoken text first so the synthesizer
-    /// voices words, not `**` / backticks / `#`.
+    /// Send `line` to the target sidecar (respawning it if needed — used for
+    /// commands that START work). Reports whether the line was delivered.
+    fn send_to(&self, target: u8, line: &str) -> bool {
+        let sidecar = match target {
+            TARGET_TERA => &self.tera,
+            _ => &self.piper,
+        };
+        sidecar.lock().map(|mut s| s.send(line)).unwrap_or(false)
+    }
+
+    fn send_tera_speak(&self, line: &str, chars: usize) -> bool {
+        self.tera
+            .lock()
+            .map(|mut sidecar| sidecar.send_tera_speak(line, chars))
+            .unwrap_or(false)
+    }
+
+    fn send_piper_speak(&self, line: &str, chars: usize) -> bool {
+        self.piper
+            .lock()
+            .map(|mut sidecar| sidecar.send_piper_speak(line, chars))
+            .unwrap_or(false)
+    }
+
+    /// Deliver a CONTROL line (PAUSE/RESUME/STOP) without ever respawning a
+    /// dead sidecar. Reports delivery.
+    fn control_to(&self, target: u8, line: &str) -> bool {
+        let sidecar = match target {
+            TARGET_TERA => &self.tera,
+            _ => &self.piper,
+        };
+        sidecar
+            .lock()
+            .map(|mut s| s.send_if_alive(line))
+            .unwrap_or(false)
+    }
+
+    /// Speak `text` now, interrupting any current speech. `text` may be
+    /// markdown (a tile answer) — it is cleaned to spoken text first so the
+    /// synthesizer voices words, not `**` / backticks / `#`.
     ///
-    /// Returns whether playback was ACCEPTED — a voice is installed, the sidecar
-    /// exe is present (re-scanned like the free [`is_available`]), and the cleaned
-    /// text is non-empty. The STT suppression window is marked ONLY then, so a
-    /// missing sidecar/voice neither plays nor falsely silences the mic. Callers
-    /// gate their "this tile is speaking" state on this result.
+    /// Engine selection + fallback: with `tts_engine = "tera"` the Tera
+    /// sidecar speaks when usable AND its stdin accepts the SPEAK line; a
+    /// missing engine OR a write failure (sidecar died mid-utterance) falls
+    /// back to Piper within the same call. Returns whether playback was
+    /// ACCEPTED — Tera tracks a successful wire write until its matching
+    /// terminal event; Piper keeps the conservative duration estimate. A
+    /// failed write rolls back its generation, so a dead engine neither plays
+    /// nor falsely silences the mic. Callers gate their "this tile is
+    /// speaking" state on this.
     pub fn speak(&self, text: &str) -> bool {
         let spoken = crate::tts_normalize::normalize_for_speech(&speech_text::to_speech(text));
         if spoken.trim().is_empty() {
             return false;
         }
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&spoken);
+        if self.engine_kind() == EngineKind::Tera {
+            if self.tera_usable() {
+                if self.send_tera_speak(&format!("SPEAK {b64}"), spoken.chars().count()) {
+                    self.last_target.store(TARGET_TERA, Ordering::Release);
+                    return true;
+                }
+                log::warn!("tts: Tera sidecar did not accept SPEAK — falling back to Piper");
+            } else {
+                log::warn!("tts: Tera engine unavailable — falling back to Piper");
+            }
+        }
         if !available_on_disk() {
             return false;
         }
-        mark_speaking_for(spoken.chars().count());
-        let b64 = base64::engine::general_purpose::STANDARD.encode(&spoken);
-        self.send(format!("SPEAK {b64}"));
+        if !self.send_piper_speak(&format!("SPEAK {b64}"), spoken.chars().count()) {
+            return false;
+        }
+        self.last_target.store(TARGET_PIPER, Ordering::Release);
         true
     }
     pub fn pause(&self) {
-        // Preserve the remaining suppression before telling the sidecar to pause,
-        // so a long pause can't let the deadline expire.
+        // Preserve the remaining suppression before telling the sidecar to
+        // pause, so a long pause can't let the deadline expire.
         pause_speaking();
-        self.send("PAUSE".to_string());
+        let target = self.last_target.load(Ordering::Acquire);
+        if target != TARGET_NONE {
+            self.control_to(target, "PAUSE");
+        }
     }
     pub fn resume(&self) {
         resume_speaking();
-        self.send("RESUME".to_string());
+        let target = self.last_target.load(Ordering::Acquire);
+        if target != TARGET_NONE {
+            self.control_to(target, "RESUME");
+        }
     }
     pub fn stop(&self) {
-        clear_speaking();
-        self.send("STOP".to_string());
+        let target = self.last_target.swap(TARGET_NONE, Ordering::AcqRel);
+        // Serialize the generation snapshot with the target's SPEAK/STOP wire
+        // order. Otherwise a concurrent newer SPEAK could slip between two
+        // sidecar locks and receive this older utterance's STOP.
+        let (generation, tracked, delivered) = match target {
+            TARGET_TERA => self
+                .tera
+                .lock()
+                .map(|mut sidecar| {
+                    let generation = active_speaking_generation();
+                    let tracked = generation
+                        .map(|generation| {
+                            sidecar
+                                .playback
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                                .stop_generation(generation)
+                        })
+                        .unwrap_or(false);
+                    let delivered = sidecar.send_if_alive("STOP");
+                    (generation, tracked, delivered)
+                })
+                .unwrap_or((None, false, false)),
+            TARGET_PIPER => self
+                .piper
+                .lock()
+                .map(|mut sidecar| {
+                    let generation = active_speaking_generation();
+                    let delivered = sidecar.send_if_alive("STOP");
+                    (generation, false, delivered)
+                })
+                .unwrap_or((None, false, false)),
+            _ => (active_speaking_generation(), false, false),
+        };
+        let cleared = generation.map(clear_speaking_generation).unwrap_or(false);
+        log::info!(
+            "tts: STOP target={target} generation={generation:?} tracked={tracked} delivered={delivered} cleared={cleared}"
+        );
+        if target != TARGET_NONE && !delivered {
+            // The sidecar is already gone — playback died with it. Never
+            // respawn an engine just to deliver STOP to nothing.
+            log::debug!("tts: STOP not delivered — target sidecar not running");
+        }
     }
     /// Set the read rate (−10…+10, 0 = normal). Applies to the next utterance.
+    /// Stored on both sidecars (survives respawn/fallback); sent live to the
+    /// one that last spoke.
     pub fn set_rate(&self, rate: i32) {
         let r = rate.clamp(-10, 10);
         SPEAK_RATE.store(r, Ordering::Release);
-        if let Ok(mut s) = self.sidecar.lock() {
-            s.rate = r;
-            s.send(&format!("RATE {r}"));
+        for sidecar in [&self.piper, &self.tera] {
+            if let Ok(mut s) = sidecar.lock() {
+                s.rate = r;
+            }
+        }
+        let target = self.last_target.load(Ordering::Acquire);
+        if target != TARGET_NONE {
+            self.send_to(target, &format!("RATE {r}"));
         }
     }
-    /// Switch the active voice by its [`VoiceInfo::id`] (the model dir name).
+    /// Set pitch-preserving playback speed (0.5–3.0×). The client preserves a
+    /// conservative STT suppression deadline when slowing an active read; a
+    /// faster speed may remain muted slightly longer but can never leak TTS.
+    pub fn set_playback_speed(&self, speed: f32) {
+        let next = playback_speed_percent(speed);
+        let previous = PLAYBACK_SPEED_PERCENT.swap(next, Ordering::AcqRel);
+        for sidecar in [&self.piper, &self.tera] {
+            if let Ok(mut sidecar) = sidecar.lock() {
+                sidecar.playback_speed_percent = next;
+            }
+        }
+        extend_speaking_for_slower_playback(previous, next);
+        let target = self.last_target.load(Ordering::Acquire);
+        if target != TARGET_NONE {
+            self.control_to(target, &format!("SPEED {next}"));
+        }
+    }
+    /// Seek the active read-aloud relative to its current audible cursor.
+    /// Sidecars clamp the request to their retained PCM timeline.
+    pub fn seek_seconds(&self, seconds: i32) {
+        let seconds = seconds.clamp(-30, 30);
+        let target = self.last_target.load(Ordering::Acquire);
+        if target != TARGET_NONE && self.control_to(target, &format!("SEEK {seconds}")) {
+            extend_speaking_for_rewind(seconds, PLAYBACK_SPEED_PERCENT.load(Ordering::Acquire));
+        }
+    }
+    /// Switch the active voice by its NAMESPACED id (`piper:<dir>` or
+    /// `tera:<style>`; a bare legacy id targets Piper).
     pub fn set_voice(&self, id: &str) {
-        if let Ok(mut s) = self.sidecar.lock() {
-            s.voice = id.to_string();
-            s.send(&format!("VOICE {id}"));
+        let vref = parse_voice_ref(id);
+        let sidecar = match vref.engine {
+            EngineKind::Piper => &self.piper,
+            EngineKind::Tera => &self.tera,
+        };
+        if let Ok(mut s) = sidecar.lock() {
+            s.voice = vref.id.clone();
+            s.send(&format!("VOICE {}", vref.id));
         }
     }
 
-    /// Spawn the sidecar and preload the selected voice in the background, so the
-    /// first `speak` doesn't pay the model-load latency. No-op if no voice is
-    /// installed. The actual load happens inside the sidecar's own thread, so
-    /// this returns immediately.
+    /// Spawn the SELECTED engine's sidecar and preload its voice in the
+    /// background, so the first `speak` doesn't pay the model-load latency.
+    /// Tera only warms when actually usable (a not-installed model must not
+    /// spawn a failing sidecar); Piper needs an installed voice.
     pub fn warm(&self) {
-        if self.voices.is_empty() {
-            return;
-        }
-        if let Ok(mut s) = self.sidecar.lock() {
-            s.ensure();
+        match self.engine_kind() {
+            EngineKind::Tera => {
+                if self.tera_usable() {
+                    if let Ok(mut s) = self.tera.lock() {
+                        s.ensure();
+                    }
+                }
+            }
+            EngineKind::Piper => {
+                if !self.voices.is_empty() {
+                    if let Ok(mut s) = self.piper.lock() {
+                        s.ensure();
+                    }
+                }
+            }
         }
     }
 }
@@ -467,17 +1358,26 @@ impl Tts {
 
 static GLOBAL: std::sync::OnceLock<std::sync::Mutex<Tts>> = std::sync::OnceLock::new();
 
-/// Initialize the global TTS client ONCE at startup (idempotent). `voice_id` /
-/// `rate` come from config. Warms the sidecar (spawns it + preloads the voice in
-/// the background) so the first 🔊 is prompt rather than paying a cold model load.
-/// Safe to do eagerly: the sidecar has no `ort`, so there's no STT conflict.
-pub fn init(voice_id: Option<String>, rate: i32) {
-    let tts = Tts::spawn(voice_id, rate);
+/// Initialize the global TTS client ONCE at startup (idempotent). `engine` /
+/// `voice_id` / `rate` come from config; `lang` ("ru"/"en") tags Tera speech.
+/// Warms the selected sidecar (spawns it + preloads the voice in the
+/// background) so the first speak is prompt rather than paying a cold model
+/// load. Safe to do eagerly: the sidecars carry their own onnxruntimes, never
+/// sharing the host's `ort`/GigaAM binary.
+pub fn init(engine: Option<String>, voice_id: Option<String>, rate: i32, lang: &str) {
+    let tts = Tts::spawn(
+        parse_engine(&engine.unwrap_or_default()),
+        voice_id,
+        rate,
+        lang,
+    );
     tts.warm();
     let _ = GLOBAL.set(std::sync::Mutex::new(tts));
 }
 
 fn with<R>(f: impl FnOnce(&Tts) -> R) -> Option<R> {
+    // This process-global mutex serializes public speak/stop calls; the
+    // per-sidecar locking in `Tts::stop` additionally pins wire order.
     GLOBAL.get().and_then(|m| m.lock().ok()).map(|t| f(&t))
 }
 
@@ -500,8 +1400,42 @@ pub fn stop() {
 pub fn set_rate(rate: i32) {
     with(|t| t.set_rate(rate));
 }
+/// Set pitch-preserving speed for the currently active (or next) read-aloud.
+pub fn set_playback_speed(speed: f32) {
+    with(|t| t.set_playback_speed(speed));
+}
+/// Seek the active read-aloud by a relative number of seconds (clamped ±30).
+pub fn seek_seconds(seconds: i32) {
+    with(|t| t.seek_seconds(seconds));
+}
 pub fn set_voice(id: &str) {
     with(|t| t.set_voice(id));
+}
+/// Switch the selected read-aloud engine at runtime (Settings changes).
+pub fn set_engine(engine_raw: &str) {
+    let kind = parse_engine(engine_raw);
+    with(|t| t.set_engine(kind));
+}
+/// The engine currently selected for read-aloud.
+#[must_use]
+pub fn active_engine() -> EngineKind {
+    with(|t| t.engine_kind()).unwrap_or(EngineKind::Piper)
+}
+/// Latest READY handshake of the Tera sidecar (Settings status + tests).
+#[must_use]
+pub fn tera_ready() -> Option<TeraReady> {
+    with(|t| t.tera_ready()).flatten()
+}
+/// True when the Tera engine can speak right now (exe + installed model +
+/// not crashed-out).
+#[must_use]
+pub fn tera_usable() -> bool {
+    with(|t| t.tera_usable()).unwrap_or(false)
+}
+/// The pinned Tera voice style ids for the Settings chooser.
+#[must_use]
+pub fn tera_voice_ids() -> Vec<String> {
+    Tts::tera_voices()
 }
 /// Preload the sidecar + voice in the background (called at startup by `init`).
 pub fn warm() {
@@ -520,7 +1454,7 @@ pub fn voices(ru: bool) -> Vec<VoiceInfo> {
 /// so it flips to true right after the install button finishes.
 #[must_use]
 pub fn is_available() -> bool {
-    available_on_disk()
+    with(Tts::is_available).unwrap_or_else(available_on_disk)
 }
 
 fn available_on_disk() -> bool {
@@ -529,8 +1463,11 @@ fn available_on_disk() -> bool {
 
 // ===== Helpers (filesystem only — no sherpa/onnxruntime here) =====
 
-/// Resolve `suflyor-tts.exe` next to the running executable. `pub(crate)` so the
-/// diarization client (`crate::diarize`) spawns the SAME sidecar exe.
+/// Resolve `suflyor-tts.exe` next to the running executable — the PIPER
+/// read-aloud path. The diarization client deliberately resolves the same exe
+/// through its OWN helper (`crate::diarize::diarization_exe_path`) so the
+/// read-aloud and diarization sidecar paths stay independent even when
+/// read-aloud moves to the Tera sidecar.
 pub(crate) fn sidecar_exe_path() -> PathBuf {
     std::env::current_exe()
         .ok()
@@ -538,10 +1475,24 @@ pub(crate) fn sidecar_exe_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("suflyor-tts.exe"))
 }
 
-/// Capture the sidecar's stderr (voice-load + synth + first-audio-latency
-/// diagnostics) to `%APPDATA%\suflyor\suflyor-tts.log`, falling back to null.
-fn sidecar_stderr() -> Stdio {
-    if let Some(p) = crate::paths::data_root().map(|d| d.join("suflyor-tts.log")) {
+/// Resolve `suflyor-teratts.exe` (experimental TeraTTSv2 read-aloud sidecar).
+/// Never used by diarization.
+pub(crate) fn tera_sidecar_exe_path() -> PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("suflyor-teratts.exe")))
+        .unwrap_or_else(|| PathBuf::from("suflyor-teratts.exe"))
+}
+
+/// Capture a sidecar's stderr (voice-load + synth + first-audio-latency
+/// diagnostics) to its own log under `%APPDATA%\suflyor\`, falling back to
+/// null. Logs never contain spoken text — the sidecars only print counts/ids.
+fn sidecar_stderr(kind: EngineKind) -> Stdio {
+    let name = match kind {
+        EngineKind::Piper => "suflyor-tts.log",
+        EngineKind::Tera => "suflyor-teratts.log",
+    };
+    if let Some(p) = crate::paths::data_root().map(|d| d.join(name)) {
         if let Ok(f) = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -553,11 +1504,18 @@ fn sidecar_stderr() -> Stdio {
     Stdio::null()
 }
 
-fn spawn_sidecar(exe: &Path) -> std::io::Result<Proc> {
+fn spawn_engine_sidecar(exe: &Path, kind: EngineKind) -> std::io::Result<Proc> {
     let mut cmd = Command::new(exe);
+    // Tera's stdout carries the status handshake (READY/STARTED/DONE/FAILED);
+    // Piper keeps the legacy null stdout.
+    let stdout = if kind == EngineKind::Tera {
+        Stdio::piped()
+    } else {
+        Stdio::null()
+    };
     cmd.stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(sidecar_stderr());
+        .stdout(stdout)
+        .stderr(sidecar_stderr(kind));
     crate::download::no_window(&mut cmd).spawn()
 }
 
@@ -741,5 +1699,394 @@ mod tests {
             .ok()
             .and_then(|b| String::from_utf8(b).ok());
         assert_eq!(decoded.as_deref(), Some(text));
+    }
+
+    #[test]
+    fn playback_speed_is_protocol_bounded() {
+        assert_eq!(playback_speed_percent(0.1), 50);
+        assert_eq!(playback_speed_percent(1.0), 100);
+        assert_eq!(playback_speed_percent(1.25), 125);
+        assert_eq!(playback_speed_percent(9.0), 300);
+        assert_eq!(rewind_extension_ms(-10, 100), 10_000);
+        assert_eq!(rewind_extension_ms(-10, 200), 5_000);
+        assert_eq!(rewind_extension_ms(-10, 50), 20_000);
+        assert_eq!(rewind_extension_ms(15, 100), 0);
+    }
+
+    // ===== RC17: engine selection, namespaces, handshake, fallback =====
+
+    #[test]
+    fn engine_selection_defaults_to_piper() {
+        assert_eq!(parse_engine("tera"), EngineKind::Tera);
+        assert_eq!(parse_engine("TERA "), EngineKind::Tera);
+        assert_eq!(parse_engine("piper"), EngineKind::Piper);
+        assert_eq!(parse_engine(""), EngineKind::Piper);
+        assert_eq!(parse_engine("garbage"), EngineKind::Piper);
+    }
+
+    #[test]
+    fn voice_refs_namespace_and_legacy_compat() {
+        assert_eq!(
+            parse_voice_ref("tera:ru_f1"),
+            VoiceRef {
+                engine: EngineKind::Tera,
+                id: "ru_f1".into()
+            }
+        );
+        assert_eq!(
+            parse_voice_ref("piper:vits-piper-ru_RU-irina-medium"),
+            VoiceRef {
+                engine: EngineKind::Piper,
+                id: "vits-piper-ru_RU-irina-medium".into()
+            }
+        );
+        // Legacy bare id (pre-RC17 config) resolves to Piper.
+        assert_eq!(
+            parse_voice_ref("vits-piper-ru_RU-irina-medium").engine,
+            EngineKind::Piper
+        );
+        assert_eq!(
+            format_voice_ref(&parse_voice_ref("tera:ru_f1")),
+            "tera:ru_f1"
+        );
+        assert_eq!(
+            format_voice_ref(&parse_voice_ref("piper:irina")),
+            "piper:irina"
+        );
+    }
+
+    #[test]
+    fn ready_handshake_parses_capabilities() {
+        let line = "READY engine=tera revision=f05ea799 voices=ru_f1,ru_m5 \
+                    sample_rate=44100 state=ready";
+        let ready = parse_ready_line(line).unwrap();
+        assert_eq!(ready.revision, "f05ea799");
+        assert_eq!(ready.voices, vec!["ru_f1".to_string(), "ru_m5".to_string()]);
+        assert_eq!(ready.sample_rate, 44100);
+        assert_eq!(ready.state, "ready");
+        // Not-installed state with no voices still parses.
+        let empty = parse_ready_line(
+            "READY engine=tera revision=abc voices= sample_rate=44100 state=not-installed",
+        )
+        .unwrap();
+        assert!(empty.voices.is_empty());
+        assert_eq!(empty.state, "not-installed");
+    }
+
+    #[test]
+    fn ready_handshake_rejects_foreign_lines() {
+        // Legacy suflyor-tts handshake: still just "READY" — must NOT parse
+        // as a Tera handshake.
+        assert!(parse_ready_line("READY").is_none());
+        assert!(parse_ready_line("READY engine=piper").is_none());
+        assert!(parse_ready_line("STARTED id=1").is_none());
+        assert!(parse_ready_line("").is_none());
+        // Missing a required key=value field → malformed.
+        assert!(
+            parse_ready_line("READY engine=tera revision=x sample_rate=oops state=ready").is_none()
+        );
+    }
+
+    #[test]
+    fn tera_playback_events_parse_strictly() {
+        assert_eq!(
+            parse_tera_playback_event("STARTED id=7"),
+            Ok(Some(TeraPlaybackEvent::Started { id: 7 }))
+        );
+        assert_eq!(
+            parse_tera_playback_event("PLAYING id=7"),
+            Ok(Some(TeraPlaybackEvent::Playing { id: 7 }))
+        );
+        assert_eq!(
+            parse_tera_playback_event("DONE id=7"),
+            Ok(Some(TeraPlaybackEvent::Done { id: 7 }))
+        );
+        assert_eq!(
+            parse_tera_playback_event("FAILED id=7 reason=synth"),
+            Ok(Some(TeraPlaybackEvent::Failed {
+                id: 7,
+                reason: "synth".into()
+            }))
+        );
+        assert_eq!(
+            parse_tera_playback_event("REJECTED reason=invalid-base64"),
+            Ok(Some(TeraPlaybackEvent::Rejected {
+                reason: "invalid-base64".into()
+            }))
+        );
+        assert_eq!(parse_tera_playback_event("READY engine=tera"), Ok(None));
+        for malformed in [
+            "STARTED",
+            "DONE id=nope",
+            "FAILED id=1",
+            "REJECTED reason=not safe",
+            "UNKNOWN id=1",
+        ] {
+            assert!(parse_tera_playback_event(malformed).is_err(), "{malformed}");
+        }
+    }
+
+    #[test]
+    fn tera_done_clears_matching_suppression_immediately() {
+        let _lock = SPEAKING_GLOBAL_LOCK.lock().unwrap();
+        clear_speaking();
+        let generation = mark_speaking_for(10_000);
+        let tracker = Mutex::new(TeraPlaybackTracker::default());
+        tracker.lock().unwrap().register_speak(generation);
+        handle_tera_playback_line(&tracker, "STARTED id=41");
+        assert!(is_speaking());
+        mark_loading_generation(generation);
+        assert!(is_loading());
+        handle_tera_playback_line(&tracker, "PLAYING id=41");
+        assert!(!is_loading());
+        handle_tera_playback_line(&tracker, "DONE id=41");
+        assert!(!is_speaking());
+        assert!(
+            should_suppress_stt(),
+            "queued capture chunks need the bounded drain tail"
+        );
+    }
+
+    #[test]
+    fn stale_tera_terminal_cannot_clear_newer_utterance() {
+        let _lock = SPEAKING_GLOBAL_LOCK.lock().unwrap();
+        clear_speaking();
+        let old_generation = mark_speaking_for(10_000);
+        let mut tracker = TeraPlaybackTracker::default();
+        tracker.register_speak(old_generation);
+        tracker.started(1).unwrap();
+
+        let new_generation = mark_speaking_for(10_000);
+        tracker.register_speak(new_generation);
+        tracker.started(2).unwrap();
+
+        let stale = tracker.terminal(1).unwrap();
+        assert!(!clear_speaking_generation(stale));
+        assert!(is_speaking());
+        assert!(clear_speaking_generation(tracker.terminal(2).unwrap()));
+        assert!(!is_speaking());
+    }
+
+    #[test]
+    fn explicit_tera_stop_forgets_only_its_generation() {
+        let _lock = SPEAKING_GLOBAL_LOCK.lock().unwrap();
+        clear_speaking();
+        let stopped_generation = mark_speaking_for(10_000);
+        let tts = Tts::spawn(EngineKind::Tera, Some("tera:ru_f1".into()), 0, "ru");
+        {
+            let sidecar = tts.tera.lock().unwrap();
+            let mut tracker = sidecar.playback.lock().unwrap();
+            tracker.register_speak(stopped_generation);
+            assert_eq!(tracker.started(7), Some(stopped_generation));
+        }
+        tts.last_target.store(TARGET_TERA, Ordering::Release);
+
+        tts.stop();
+        assert!(!is_speaking());
+        assert!(should_suppress_stt(), "STOP keeps the bounded drain tail");
+        assert_eq!(
+            tts.tera
+                .lock()
+                .unwrap()
+                .playback
+                .lock()
+                .unwrap()
+                .terminal(7),
+            None,
+            "late DONE must be detached from the stopped generation"
+        );
+        assert!(
+            tts.tera
+                .lock()
+                .unwrap()
+                .playback
+                .lock()
+                .unwrap()
+                .drain_generations()
+                .is_empty(),
+            "status EOF after STOP must not rediscover the detached generation"
+        );
+
+        let newer = mark_speaking_for(10_000);
+        assert_ne!(newer, stopped_generation);
+        assert!(is_speaking());
+        assert!(!clear_speaking_generation(stopped_generation));
+        assert!(
+            is_speaking(),
+            "a stopped generation cannot clear newer speech"
+        );
+        assert!(clear_speaking_generation(newer));
+    }
+
+    #[test]
+    fn pause_keeps_ui_active_but_suppresses_only_the_drain_tail() {
+        let _lock = SPEAKING_GLOBAL_LOCK.lock().unwrap();
+        clear_speaking();
+        let generation = mark_speaking_for(10_000);
+
+        pause_speaking();
+        assert!(is_speaking(), "a paused tile remains resumable");
+        assert!(
+            should_suppress_stt(),
+            "PAUSE initially drains queued loopback chunks"
+        );
+        {
+            let mut state = SPEAKING_STATE.lock().unwrap();
+            assert!(state.paused_remaining_ms > 0);
+            assert_eq!(state.until_ms, 0);
+            state.stt_tail_until_ms = 0;
+        }
+        assert!(is_speaking(), "tail expiry must not deactivate the tile");
+        assert!(
+            !should_suppress_stt(),
+            "real meeting audio must flow during a long pause"
+        );
+        SPEAKING_STATE.lock().unwrap().stt_tail_until_ms = u64::MAX;
+
+        resume_speaking();
+        assert!(is_speaking());
+        assert!(
+            should_suppress_stt(),
+            "RESUME restores playback suppression"
+        );
+        assert_eq!(
+            SPEAKING_STATE.lock().unwrap().stt_tail_until_ms,
+            0,
+            "RESUME discards a stale PAUSE tail"
+        );
+        assert!(clear_speaking_generation(generation));
+    }
+
+    #[test]
+    fn tera_failed_rejected_and_eof_clear_only_tracked_speech() {
+        let _lock = SPEAKING_GLOBAL_LOCK.lock().unwrap();
+        clear_speaking();
+
+        let failed_generation = mark_speaking_for(10_000);
+        let mut failed = TeraPlaybackTracker::default();
+        failed.register_speak(failed_generation);
+        failed.started(4).unwrap();
+        assert!(clear_speaking_generation(failed.terminal(4).unwrap()));
+
+        let rejected_generation = mark_speaking_for(10_000);
+        let mut rejected = TeraPlaybackTracker::default();
+        rejected.register_speak(rejected_generation);
+        assert!(rejected.rejected("unknown-voice").is_none());
+        assert!(is_speaking(), "config rejection must not consume SPEAK");
+        assert_eq!(
+            rejected.rejected("invalid-base64"),
+            Some(rejected_generation)
+        );
+        assert!(clear_speaking_generation(rejected_generation));
+
+        let eof_generation = mark_speaking_for(10_000);
+        let mut eof = TeraPlaybackTracker::default();
+        eof.register_speak(eof_generation);
+        for generation in eof.drain_generations() {
+            clear_speaking_generation(generation);
+        }
+        assert!(!is_speaking());
+    }
+
+    #[test]
+    fn piper_without_terminal_event_keeps_estimate_fallback() {
+        let _lock = SPEAKING_GLOBAL_LOCK.lock().unwrap();
+        clear_speaking();
+        mark_speaking_for(100);
+        assert!(is_speaking());
+        clear_speaking();
+    }
+
+    #[test]
+    fn tera_engine_falls_back_when_sidecar_missing() {
+        // Test binaries have no suflyor-teratts.exe next to them, so Tera is
+        // unusable and a Tera-selected client must NOT report itself usable —
+        // the Piper fallback path decides availability.
+        let _lock = SPEAKING_GLOBAL_LOCK.lock().unwrap();
+        clear_speaking();
+        let tts = Tts::spawn(EngineKind::Tera, Some("tera:ru_f1".into()), 0, "ru");
+        assert_eq!(tts.engine_kind(), EngineKind::Tera);
+        assert!(!tts.tera_usable());
+        assert!(!tts.speak("Привет"));
+        // A rejected speak must NOT mark the STT suppression window — errors
+        // never falsely mark playback as active.
+        assert!(!is_speaking());
+        tts.set_engine(EngineKind::Piper);
+        assert_eq!(tts.engine_kind(), EngineKind::Piper);
+    }
+
+    fn missing_exe_sidecar(kind: EngineKind) -> Sidecar {
+        Sidecar {
+            kind,
+            exe: PathBuf::from("definitely-missing-sidecar.exe"),
+            voice: String::new(),
+            rate: 0,
+            playback_speed_percent: DEFAULT_PLAYBACK_SPEED_PERCENT,
+            lang: "ru".into(),
+            proc: None,
+            stdin: None,
+            crashes: 0,
+            ready: Arc::new(Mutex::new(None)),
+            playback: Arc::new(Mutex::new(TeraPlaybackTracker::default())),
+        }
+    }
+
+    /// The speaking-window statics are process-global; tests that touch them
+    /// serialize here so parallel test threads cannot interleave.
+    static SPEAKING_GLOBAL_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn send_reports_failure_when_the_sidecar_cannot_run() {
+        // Write-failure P2: a SPEAK into an un-runnable sidecar must report
+        // false (the caller falls back / skips the suppression window)
+        // instead of silently pretending the line was delivered.
+        let mut sidecar = missing_exe_sidecar(EngineKind::Tera);
+        assert!(!sidecar.send("SPEAK aaa"));
+        assert!(sidecar.proc.is_none());
+        assert!(sidecar.stdin.is_none());
+    }
+
+    #[test]
+    fn control_commands_never_respawn_a_dead_sidecar() {
+        // STOP-dead-sidecar P2: PAUSE/RESUME/STOP deliver only to a LIVE
+        // child — a dead/never-spawned sidecar gets no respawn (no pointless
+        // engine boot), and the failure is reported so callers can log it.
+        let mut sidecar = missing_exe_sidecar(EngineKind::Tera);
+        assert!(!sidecar.send_if_alive("STOP"));
+        assert!(!sidecar.send_if_alive("PAUSE"));
+        assert!(!sidecar.send_if_alive("RESUME"));
+        assert!(sidecar.proc.is_none(), "control lines must not spawn");
+    }
+
+    #[test]
+    fn stop_clears_speaking_even_when_no_sidecar_runs() {
+        // The suppression estimate is cleared regardless of delivery, so a
+        // dead sidecar cannot leave the mic suppressed.
+        let _lock = SPEAKING_GLOBAL_LOCK.lock().unwrap();
+        mark_speaking_for(100);
+        assert!(is_speaking());
+        let tts = Tts::spawn(EngineKind::Piper, None, 0, "ru");
+        tts.stop();
+        assert!(!is_speaking());
+    }
+
+    #[test]
+    fn crash_limit_bypasses_the_engine() {
+        let mut sidecar = Sidecar {
+            kind: EngineKind::Tera,
+            exe: PathBuf::from("missing.exe"),
+            voice: String::new(),
+            rate: 0,
+            playback_speed_percent: DEFAULT_PLAYBACK_SPEED_PERCENT,
+            lang: "ru".into(),
+            proc: None,
+            stdin: None,
+            crashes: 0,
+            ready: Arc::new(Mutex::new(None)),
+            playback: Arc::new(Mutex::new(TeraPlaybackTracker::default())),
+        };
+        assert!(!sidecar.crashed_out());
+        sidecar.crashes = TERA_CRASH_LIMIT;
+        assert!(sidecar.crashed_out());
     }
 }

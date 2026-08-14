@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>suflyor v0.36.1-rc.9 retest</title></head>
+<body><h1>suflyor v0.36.1-rc.9 retest</h1><ol>
+<li>Click the unlocked padlock once. Confirm the lock-mode menu remains visible after opening and its Unlocked row uses an open padlock.</li>
+<li>Click the bar, desktop, and another app. Confirm each outside click closes the menu; reopen it between checks.</li>
+<li>Select Listening and then Unlocked. Confirm the chip/icon/state changes and each selection closes the menu.</li>
+<li>Press Escape while the menu is open. Confirm it closes.</li>
+<li>In <code>%APPDATA%\suflyor\overlay-host.log</code>, confirm <code>lock-menu</code> lines record open, reveal, focus, dismiss reason, selection, and any explicit native-window error.</li>
+<li>While a session is running, switch the Windows headset/default audio profile. Confirm audio reopens and new spoken audio again creates transcript lines.</li>
+</ol></body></html>

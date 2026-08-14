@@ -18,6 +18,9 @@
     reason = "bounds-checked precondition makes these pop_front().unwrap() calls safe"
 )]
 
+use crate::audio_route::{
+    DeviceSelection, RecoveryDecision, RecoveryPolicy, RecoveryReason, RouteWatcher,
+};
 use anyhow::{anyhow, Context, Result};
 use serde::Serialize;
 use std::collections::VecDeque;
@@ -204,34 +207,75 @@ fn capture_with_recovery(
     stop: Arc<AtomicBool>,
 ) -> Result<()> {
     let start_ts = Instant::now();
+    let selection = DeviceSelection::from_configured(device_name);
+    let mut recovery_attempt = 0_u32;
+    let mut recovery_reason = "initial_open";
     while !stop.load(Ordering::Acquire) {
+        if recovery_attempt > 0 {
+            log::info!(
+                "[{source:?}] audio_recovery attempt={recovery_attempt} reason={recovery_reason} mode={}",
+                selection.mode_label()
+            );
+        }
         match capture_thread(
             source,
             endpoint_dir,
-            device_name.clone(),
+            &selection,
             tx.clone(),
             stop.clone(),
             start_ts,
+            (recovery_attempt, recovery_reason),
         ) {
-            Ok(()) => break,
+            Ok(CaptureExit::Stopped) => break,
+            Ok(CaptureExit::Recover(reason)) if !stop.load(Ordering::Acquire) => {
+                recovery_reason = reason.label();
+                recovery_attempt = 1;
+                log::warn!(
+                    "[{source:?}] audio_recovery begin reason={recovery_reason} mode={}",
+                    selection.mode_label()
+                );
+            }
             Err(e) if !stop.load(Ordering::Acquire) => {
-                log::warn!("[{source:?}] capture interrupted ({e:#}); reopening audio device");
-                thread::sleep(Duration::from_secs(1));
+                if recovery_attempt == 0 {
+                    recovery_reason = "wasapi_error";
+                    recovery_attempt = 1;
+                    log::warn!(
+                        "[{source:?}] audio_recovery begin reason={recovery_reason} mode={} error={e:#}",
+                        selection.mode_label()
+                    );
+                } else {
+                    log::warn!(
+                        "[{source:?}] audio_recovery failure attempt={recovery_attempt} reason={recovery_reason} mode={} error={e:#}",
+                        selection.mode_label()
+                    );
+                    recovery_attempt = recovery_attempt.saturating_add(1);
+                }
             }
             Err(_) => break,
+            Ok(CaptureExit::Recover(_)) => break,
+        }
+        if !stop.load(Ordering::Acquire) {
+            thread::sleep(Duration::from_secs(1));
         }
     }
     Ok(())
 }
 
+enum CaptureExit {
+    Stopped,
+    Recover(RecoveryReason),
+}
+
 fn capture_thread(
     source: AudioSource,
     endpoint_dir: Direction,
-    device_name: Option<String>,
+    selection: &DeviceSelection,
     tx: mpsc::Sender<AudioChunk>,
     stop: Arc<AtomicBool>,
     start_ts: Instant,
-) -> Result<()> {
+    recovery: (u32, &str),
+) -> Result<CaptureExit> {
+    let (recovery_attempt, recovery_reason) = recovery;
     // Each WASAPI thread needs its own COM apartment.
     // Returns Err if already initialized — safe to ignore.
     let _ = wasapi::initialize_mta();
@@ -240,7 +284,7 @@ fn capture_thread(
     // This handles devices like Astro A50 "Stream Out" — exposed as a
     // capture endpoint that already contains the desired mixed audio,
     // so no WASAPI loopback magic is needed.
-    let (device, used_dir) = match device_name.as_deref() {
+    let (device, used_dir) = match selection.configured_name() {
         Some(name) if !name.is_empty() => {
             if let Some(d) = find_device_by_name(&endpoint_dir, name) {
                 (d, endpoint_dir)
@@ -272,7 +316,22 @@ fn capture_thread(
     };
 
     let dev_name = device.get_friendlyname().unwrap_or_else(|_| "?".into());
-    log::info!("[{source:?}] opening device '{dev_name}' (resolved as {used_dir:?})");
+    let endpoint_id = device.get_id().context("get endpoint id")?;
+    log::info!(
+        "[{source:?}] audio_route open mode={} device={dev_name:?} resolved_dir={used_dir:?}",
+        selection.mode_label()
+    );
+
+    let route_watch = match RouteWatcher::register() {
+        Ok(watch) => Some(watch),
+        Err(e) => {
+            log::warn!(
+                "[{source:?}] audio_route watcher_failure mode={} error={e:#}",
+                selection.mode_label()
+            );
+            None
+        }
+    };
 
     let mut client = device.get_iaudioclient().context("get IAudioClient")?;
     let mix_format = client.get_mixformat().context("get mixformat")?;
@@ -305,6 +364,12 @@ fn capture_thread(
         .context("get audiocaptureclient")?;
 
     client.start_stream().context("start_stream")?;
+    if recovery_attempt > 0 {
+        log::info!(
+            "[{source:?}] audio_recovery success attempt={recovery_attempt} reason={recovery_reason} mode={} device={dev_name:?}",
+            selection.mode_label()
+        );
+    }
 
     let mut byte_q: VecDeque<u8> = VecDeque::with_capacity(64 * 1024);
     let mut f32_buf: Vec<f32> = Vec::with_capacity(actual_rate as usize); // ~1 sec
@@ -313,10 +378,46 @@ fn capture_thread(
     // Downsampling state — simple averaging decimator from actual_rate → 16k.
     let ratio = actual_rate as f64 / TARGET_SAMPLE_RATE as f64;
     let mut dropped_chunks: u64 = 0;
+    let mut last_frame_at = Instant::now();
+    let mut last_no_frame_heartbeat = Instant::now();
+    let route_policy = RecoveryPolicy::new(selection, used_dir, &endpoint_id);
 
     while !stop.load(Ordering::Acquire) {
-        if event.wait_for_event(2000).is_err() {
-            // No audio for 2s — Zoom paused, headphones idle, etc. Keep waiting.
+        if let Some((_, route_rx)) = route_watch.as_ref() {
+            while let Ok(notification) = route_rx.try_recv() {
+                match route_policy.decide(&notification) {
+                    RecoveryDecision::Recover(reason) => {
+                        log::warn!(
+                            "[{source:?}] audio_route notification={} mode={} action=reopen",
+                            notification.kind_label(),
+                            selection.mode_label()
+                        );
+                        let _ = client.stop_stream();
+                        return Ok(CaptureExit::Recover(reason));
+                    }
+                    RecoveryDecision::IgnorePinnedDefaultChange => {
+                        log::info!(
+                            "[{source:?}] audio_route notification={} mode=pinned action=ignore_default_change",
+                            notification.kind_label()
+                        );
+                    }
+                    RecoveryDecision::Unrelated => {}
+                }
+            }
+        }
+
+        if event.wait_for_event(250).is_err() {
+            if last_frame_at.elapsed() >= Duration::from_secs(60)
+                && last_no_frame_heartbeat.elapsed() >= Duration::from_secs(60)
+            {
+                log::info!(
+                    "[{source:?}] audio_no_frame heartbeat idle_s={} mode={} action=wait",
+                    last_frame_at.elapsed().as_secs(),
+                    selection.mode_label()
+                );
+                last_no_frame_heartbeat = Instant::now();
+            }
+            // Zoom paused, headphones idle, or ordinary silence: keep waiting.
             continue;
         }
 
@@ -328,6 +429,7 @@ fn capture_thread(
         if byte_q.is_empty() {
             continue;
         }
+        last_frame_at = Instant::now();
 
         // Decode f32 LE
         while byte_q.len() >= 4 {
@@ -381,7 +483,7 @@ fn capture_thread(
 
     let _ = client.stop_stream();
     log::info!("[{source:?}] capture thread exit");
-    Ok(())
+    Ok(CaptureExit::Stopped)
 }
 
 /// Open a fresh WASAPI handle on the requested source and accumulate

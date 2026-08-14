@@ -22,6 +22,19 @@
 //! imports narrow in a later pass.
 use super::{ComponentHandle, SettingsWindow, SharedString};
 
+pub(crate) fn vision_provider_index_from_id(provider: &str) -> i32 {
+    match provider {
+        "off" => 0,
+        "same" => 1,
+        "cloud" => 2,
+        "local" => 3,
+        "openai" => 4,
+        "anthropic" => 5,
+        "codex" => 6,
+        _ => 2,
+    }
+}
+
 /// Wire the Vision-tab Settings callbacks onto the Settings window. Moved
 /// VERBATIM out of `open_settings` (P1 domain split) — same captures, same
 /// behavior. Needs only `win` (for the closures + the test's `as_weak()`) and
@@ -36,15 +49,32 @@ pub(crate) fn wire_vision_settings(
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_vision_provider_changed(move |idx| {
+            if idx == 1 {
+                let Some(window) = weak.upgrade() else {
+                    return;
+                };
+                if !window.get_vision_same_available() {
+                    let current = cfg_c.read().vision_provider.clone();
+                    window.set_vision_provider_index(vision_provider_index_from_id(&current));
+                    return;
+                }
+            }
             let provider = match idx {
                 0 => "off",
                 1 => "same",
+                2 => "cloud",
                 3 => "local",
-                _ => "cloud",
+                4 => "openai",
+                5 => "anthropic",
+                6 => "codex",
+                _ => "off",
             };
             let saved_provider = {
                 let mut c = cfg_c.write();
                 c.vision_provider = provider.to_string();
+                if provider == "same" && c.ai_provider == "codex" {
+                    c.codex_vision_model = c.codex_model.clone();
+                }
                 // Re-apply the selected model's projector invariant so choosing
                 // "same" cannot route F8 to a managed text-only server.
                 overlay_backend::local_ai::repair_managed_model_state(
@@ -59,13 +89,11 @@ pub(crate) fn wire_vision_settings(
             };
             if saved_provider != provider {
                 if let Some(w) = weak.upgrade() {
-                    w.set_vision_provider_index(match saved_provider.as_str() {
-                        "off" => 0,
-                        "same" => 1,
-                        "local" => 3,
-                        _ => 2,
-                    });
+                    w.set_vision_provider_index(vision_provider_index_from_id(&saved_provider));
                 }
+            }
+            if saved_provider == "codex" {
+                super::settings_ai::refresh_codex_account_status(weak.clone(), cfg_c.clone());
             }
             diag!("vision_provider -> {saved_provider}");
         });
@@ -179,20 +207,18 @@ pub(crate) fn wire_vision_settings(
                     .enable_all()
                     .build()
                 {
-                    Ok(rt) => match rt.block_on(overlay_backend::vision::test_connection(
-                        ep.base_url,
-                        ep.bearer,
-                        ep.model,
-                    )) {
-                        Ok(s) => format!("[ok] {s}"),
-                        Err(e) => {
-                            let chain = format!("{e:#}");
-                            overlay_backend::deep_lock::blocked_test_result(ui_is_ru, &chain)
-                                .unwrap_or_else(|| {
-                                    format!("[err] {chain}").chars().take(90).collect()
-                                })
+                    Ok(rt) => {
+                        match rt.block_on(overlay_backend::vision::test_connection_endpoint(ep)) {
+                            Ok(s) => format!("[ok] {s}"),
+                            Err(e) => {
+                                let chain = format!("{e:#}");
+                                overlay_backend::deep_lock::blocked_test_result(ui_is_ru, &chain)
+                                    .unwrap_or_else(|| {
+                                        format!("[err] {chain}").chars().take(90).collect()
+                                    })
+                            }
                         }
-                    },
+                    }
                     Err(e) => format!("[err] runtime: {e}"),
                 };
                 let _ = slint::invoke_from_event_loop(move || {
@@ -321,5 +347,21 @@ pub(crate) fn wire_vision_settings(
                 });
             });
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::vision_provider_index_from_id;
+
+    #[test]
+    fn vision_provider_ids_match_the_shared_settings_catalog() {
+        assert_eq!(vision_provider_index_from_id("off"), 0);
+        assert_eq!(vision_provider_index_from_id("same"), 1);
+        assert_eq!(vision_provider_index_from_id("cloud"), 2);
+        assert_eq!(vision_provider_index_from_id("local"), 3);
+        assert_eq!(vision_provider_index_from_id("openai"), 4);
+        assert_eq!(vision_provider_index_from_id("anthropic"), 5);
+        assert_eq!(vision_provider_index_from_id("codex"), 6);
     }
 }

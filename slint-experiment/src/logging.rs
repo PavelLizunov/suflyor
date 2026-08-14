@@ -113,8 +113,13 @@ pub fn init() {
     // behaviour (backtrace to stderr) is preserved.
     let prev = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        line(&format!("PANIC: {info}"));
-        prev(info);
+        // Never route panic reporting back through stderr in release: if its
+        // redirected handle is closing, stdio can panic again and mask the
+        // original failure. The direct write is deliberately best-effort.
+        write_file_line(&format!("PANIC: {info}"));
+        if cfg!(debug_assertions) {
+            prev(info);
+        }
     }));
 
     line(&format!(
@@ -127,6 +132,13 @@ pub fn init() {
 /// stderr. The timestamp is UTC `HH:MM:SS` — enough to correlate events
 /// without pulling in a date/time crate.
 pub fn line(msg: &str) {
+    let stamped = stamped_line(msg);
+    #[cfg(debug_assertions)]
+    write_file_stamped(&stamped);
+    eprintln!("{stamped}");
+}
+
+fn stamped_line(msg: &str) -> String {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -141,15 +153,19 @@ pub fn line(msg: &str) {
     // `LOG_FILE` directly here. RELEASE: stderr is redirected to the log file
     // (see `init`), so the `eprintln!` below already lands there; a direct
     // write would duplicate every `line()` entry.
-    #[cfg(debug_assertions)]
+    format!("[{stamp}] {msg}")
+}
+
+fn write_file_line(msg: &str) {
+    write_file_stamped(&stamped_line(msg));
+}
+
+fn write_file_stamped(stamped: &str) {
     if let Some(lock) = LOG_FILE.get() {
         if let Ok(mut f) = lock.lock() {
             use std::io::Write;
-            let _ = writeln!(f, "[{stamp}] {msg}");
+            let _ = writeln!(f, "{stamped}");
             let _ = f.flush();
         }
     }
-    // Console in debug; the redirected log file in release. Timestamped so a
-    // raw `eprintln!` elsewhere and a `line()` entry interleave readably.
-    eprintln!("[{stamp}] {msg}");
 }

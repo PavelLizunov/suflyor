@@ -6,10 +6,13 @@
 
 pub mod ai;
 pub mod audio;
+pub(crate) mod audio_route;
 pub mod bridge;
+pub mod codex_subscription;
 pub mod components;
 pub mod config;
 pub mod conspect;
+pub mod credentials;
 pub mod deep_lock;
 pub mod diar_install;
 pub mod diarize;
@@ -34,6 +37,7 @@ pub mod session_audio;
 pub mod session_names;
 pub mod stt;
 pub mod summary_source;
+pub mod teratts_install;
 pub mod text;
 pub mod tts;
 pub mod tts_install;

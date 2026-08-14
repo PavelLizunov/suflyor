@@ -51,7 +51,7 @@ async fn main() {
     println!("\n===== QUESTION =====\n{question}");
 
     println!("\n===== ANSWER =====");
-    match ai::complete(&ep.base_url, &ep.bearer, &ep.model, messages, 400).await {
+    match ai::complete_endpoint(&ep, messages, 400).await {
         Ok(answer) => println!("{answer}"),
         Err(e) => eprintln!("AI error: {e:#}"),
     }

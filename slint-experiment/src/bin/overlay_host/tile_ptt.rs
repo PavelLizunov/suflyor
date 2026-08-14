@@ -61,7 +61,8 @@ pub(crate) fn ptt_tile_error(weak: slint::Weak<TileWindow>, msg: &str, is_ru: bo
             }));
             t.set_blocks(ModelRc::new(VecModel::from(vec![MarkdownBlock {
                 kind: markdown::kind::PARAGRAPH,
-                text: SharedString::from(msg),
+                text: SharedString::from(msg.clone()),
+                display_text: SharedString::from(msg),
                 lang: SharedString::from(""),
                 marked: false,
             }])));
@@ -145,6 +146,7 @@ pub(crate) fn fire_ptt_ask(
     tile.set_blocks(ModelRc::new(VecModel::from(vec![MarkdownBlock {
         kind: markdown::kind::PARAGRAPH,
         text: SharedString::from(placeholder),
+        display_text: SharedString::from(placeholder),
         lang: SharedString::from(""),
         marked: false,
     }])));
@@ -255,16 +257,28 @@ pub(crate) fn fire_ptt_ask(
     // slot. No supersede, no abort — rapid PTTs no longer clobber each other.
 
     // ===== 3. Snapshot config + rolling transcript (context) =====
-    let (base_url, bearer, model, meeting_context, response_language, is_local) = {
+    let (
+        protocol,
+        base_url,
+        bearer,
+        model,
+        reasoning_effort,
+        meeting_context,
+        response_language,
+        is_local,
+    ) = {
         let c = cfg.read();
         let ep = c.ai_endpoint(false);
+        let is_unmetered = ep.is_unmetered();
         (
+            ep.protocol,
             ep.base_url,
             ep.bearer,
             ep.model,
+            ep.reasoning_effort,
             c.meeting_context.clone(),
             c.response_language.clone(),
-            ep.is_local,
+            is_unmetered,
         )
     };
     let (stt_backend, stt_is_local, groq_key, stt_language, trigger_keywords) = {
@@ -433,10 +447,15 @@ pub(crate) fn fire_ptt_ask(
             "ptt_ask",
         );
         let t0 = std::time::Instant::now();
-        let ai_rx = ai::stream_chat(
-            base_url,
-            bearer,
-            model.clone(),
+        let ai_rx = ai::stream_chat_endpoint(
+            ai::AiEndpoint {
+                protocol,
+                base_url,
+                bearer,
+                model: model.clone(),
+                reasoning_effort,
+                is_local,
+            },
             messages,
             AI_STREAM_MAX_TOKENS,
         );

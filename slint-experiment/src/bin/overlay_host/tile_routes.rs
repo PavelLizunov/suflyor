@@ -28,9 +28,15 @@ pub(crate) enum AskRoute {
 }
 
 impl AskRoute {
-    /// Explicit cloud escalation needs the cloud bearer; other routes do not.
+    /// Every remote endpoint needs its resolved credential. Local endpoints may
+    /// intentionally run without one.
     pub(crate) fn has_required_auth(self, c: &overlay_backend::config::Config) -> bool {
-        self != AskRoute::Cloud || !c.ai_bearer.trim().is_empty()
+        let endpoint = self.endpoint(c);
+        (!endpoint.requires_bearer() || !endpoint.bearer.trim().is_empty())
+            && (!matches!(
+                endpoint.protocol,
+                overlay_backend::ai::AiProtocol::CodexSubscription
+            ) || !endpoint.model.trim().is_empty())
     }
 
     /// Resolve the endpoint for this route from config.
@@ -40,7 +46,18 @@ impl AskRoute {
     ) -> overlay_backend::config::AiEndpoint {
         match self {
             AskRoute::Text => c.ai_endpoint(false),
-            AskRoute::Vision => c.vision_endpoint().unwrap_or_else(|| c.ai_endpoint(false)),
+            AskRoute::Vision => c.vision_endpoint().unwrap_or_else(|| {
+                // A Vision tile must never drift onto a text-only model when
+                // its configured route becomes unavailable between turns.
+                overlay_backend::config::AiEndpoint {
+                    protocol: overlay_backend::ai::AiProtocol::OpenAiCompatible,
+                    base_url: String::new(),
+                    bearer: String::new(),
+                    model: String::new(),
+                    reasoning_effort: None,
+                    is_local: false,
+                }
+            }),
             AskRoute::Cloud => c.ai_endpoint_cloud(),
         }
     }
@@ -75,16 +92,51 @@ mod tests {
     use super::AskRoute;
 
     #[test]
-    fn cloud_route_requires_bearer() {
+    fn remote_routes_require_bearer_and_local_does_not() {
         let mut config = overlay_backend::config::Config {
             ai_bearer: " \t".into(),
             ..Default::default()
         };
 
         assert!(!AskRoute::Cloud.has_required_auth(&config));
-        assert!(AskRoute::Text.has_required_auth(&config));
+        assert!(!AskRoute::Text.has_required_auth(&config));
 
         config.ai_bearer = "token".into();
         assert!(AskRoute::Cloud.has_required_auth(&config));
+        assert!(AskRoute::Text.has_required_auth(&config));
+
+        config.ai_provider = "local".into();
+        config.ai_local_bearer.clear();
+        assert!(AskRoute::Text.has_required_auth(&config));
+
+        config.ai_provider = "codex".into();
+        config.codex_model.clear();
+        assert!(!AskRoute::Text.has_required_auth(&config));
+        assert!(!AskRoute::Cloud.has_required_auth(&config));
+        config.codex_model = "gpt-safe".into();
+        assert!(AskRoute::Text.has_required_auth(&config));
+        assert!(AskRoute::Cloud.has_required_auth(&config));
+        for route in [AskRoute::Text, AskRoute::Cloud] {
+            let endpoint = route.endpoint(&config);
+            assert_eq!(
+                endpoint.protocol,
+                overlay_backend::ai::AiProtocol::CodexSubscription
+            );
+            assert_eq!(endpoint.model, "gpt-safe");
+            assert!(endpoint.base_url.is_empty());
+            assert!(endpoint.bearer.is_empty());
+        }
+    }
+
+    #[test]
+    fn missing_vision_route_never_falls_back_to_the_text_model() {
+        let mut config = overlay_backend::config::Config::defaults();
+        config.ai_provider = "codex".into();
+        config.codex_model = "text-only".into();
+        config.vision_provider = "same".into();
+
+        let endpoint = AskRoute::Vision.endpoint(&config);
+        assert!(endpoint.model.is_empty());
+        assert!(!AskRoute::Vision.has_required_auth(&config));
     }
 }

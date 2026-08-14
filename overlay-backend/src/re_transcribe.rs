@@ -204,10 +204,18 @@ pub async fn transcribe_session(
         _ => {}
     }
 
+    let tts_mask = match recorder::load_tts_mask_in(&dir) {
+        Ok(spans) => spans,
+        Err(error) => {
+            log::warn!("re-transcribe: ignored malformed TTS mask: {error:#}");
+            Vec::new()
+        }
+    };
+
     let mut texts = [String::new(), String::new()]; // [mic, system]
-    for (idx, file, who) in [
-        (0usize, "mic.wav", "you"),
-        (1, "system.wav", "the other side"),
+    for (idx, file, who, source) in [
+        (0usize, "mic.wav", "you", AudioSource::Mic),
+        (1, "system.wav", "the other side", AudioSource::System),
     ] {
         let path = dir.join(file);
         if !path.exists() {
@@ -240,11 +248,13 @@ pub async fn transcribe_session(
             } else {
                 format!("Re-transcribing {who}…")
             }));
-            let buf =
+            let mut buf =
                 read_next_chunk(&mut samples, chunk).with_context(|| format!("load {file}"))?;
             if buf.is_empty() {
                 break; // end-of-file (header over-claimed)
             }
+            let window_start = ((part - 1) as u64).saturating_mul(chunk as u64);
+            crate::session_audio::silence_tts_spans(&mut buf, &tts_mask, source, window_start);
             // Skip padded / silent windows: the recorder pads idle gaps with zeros to
             // keep the WAV a wall-clock timeline (D0.5), and running STT over silence
             // is wasted local inference / paid Cloud requests for no transcript.

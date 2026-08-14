@@ -13,7 +13,7 @@
 //! The store is `!Sync` and lives on the UI thread, so the worker is handed the
 //! utterances as an owned slice and never touches the catalog.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Instant;
 
@@ -132,7 +132,7 @@ pub fn run_diarization(
     }
     guard_wav_len(&wav)?;
 
-    let exe = crate::tts::sidecar_exe_path();
+    let exe = diarization_exe_path();
     let windows = system_windows(utts);
     let (segments, real_speakers) = if num_speakers > 0 {
         on_progress(Progress::Step("Определение говорящих…".to_string()));
@@ -272,6 +272,17 @@ fn guard_wav_len(wav: &Path) -> Result<()> {
         );
     }
     Ok(())
+}
+
+/// The DIARIZATION sidecar path — always `suflyor-tts.exe`, resolved
+/// independently of the read-aloud engine selection (RC17 split): read-aloud
+/// may run on the Tera sidecar while speaker separation keeps using the
+/// sherpa diarizer, and the two paths must never be conflated.
+pub(crate) fn diarization_exe_path() -> PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("suflyor-tts.exe")))
+        .unwrap_or_else(|| PathBuf::from("suflyor-tts.exe"))
 }
 
 /// Spawn `suflyor-tts.exe diarize …`, wait, and return its stdout. Non-zero exit →

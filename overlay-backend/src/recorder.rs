@@ -36,7 +36,7 @@
 
 use crate::audio::{AudioChunk, AudioSource};
 use anyhow::{Context, Result};
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -54,6 +54,22 @@ const WRITER_QUEUE: usize = 256;
 
 /// Canonical `hound` WAV header length (RIFF + fmt(16) + data) in bytes.
 const WAV_HEADER_LEN: u64 = 44;
+
+pub const TTS_MASK_FILE: &str = "tts-mask-v1.jsonl";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TtsMaskSpan {
+    pub source: AudioSource,
+    pub start_sample: u64,
+    pub end_sample: u64,
+}
+
+#[derive(serde::Deserialize)]
+struct StoredTtsMaskSpan {
+    source: String,
+    start_sample: u64,
+    end_sample: u64,
+}
 
 /// Max silence a single gap may pad (D0.5): 10 min of 16 kHz samples. A session
 /// left armed for hours with no audio would otherwise write gigabytes of zeros;
@@ -75,7 +91,7 @@ const MAX_TOTAL_PAD_SAMPLES: u64 = 30 * 60 * SAMPLE_RATE as u64;
 enum RecMsg {
     /// `(source, pcm, timestamp_ms)` — `timestamp_ms` is wall-clock ms since the
     /// channel's capture start (drives the silence-padding, see [`plan_pad`]).
-    Chunk(AudioSource, Vec<i16>, u64),
+    Chunk(AudioSource, Vec<i16>, u64, bool),
     Stop,
 }
 
@@ -171,11 +187,20 @@ impl SessionRecorder {
     /// the audio path). A `Disconnected` writer (thread gone) is silently
     /// ignored — the session continues without recording.
     pub fn feed(&self, chunk: &AudioChunk) {
+        self.feed_with_tts_mask(chunk, false);
+    }
+
+    /// Preserve the raw chunk and mark its exact written sample interval as
+    /// app read-aloud. The live gate marks direct loopback (`System`) chunks;
+    /// microphone speech stays audible even if it overlaps playback. Metadata
+    /// contains no recognized or spoken text.
+    pub fn feed_with_tts_mask(&self, chunk: &AudioChunk, tts_suppressed: bool) {
         if let Some(tx) = &self.tx {
             match tx.try_send(RecMsg::Chunk(
                 chunk.source,
                 chunk.pcm_i16.clone(),
                 chunk.timestamp_ms,
+                tts_suppressed,
             )) {
                 Ok(()) => {}
                 Err(TrySendError::Full(_)) => {
@@ -264,9 +289,9 @@ impl ChannelWriter {
         spec: hound::WavSpec,
         pcm: &[i16],
         timestamp_ms: u64,
-    ) {
+    ) -> Option<(u64, u64)> {
         if self.failed {
-            return; // dead channel — never re-create (would truncate prior audio)
+            return None; // dead channel — never re-create (would truncate prior audio)
         }
         if self.writer.is_none() {
             match hound::WavWriter::create(dir.join(name), spec) {
@@ -274,7 +299,7 @@ impl ChannelWriter {
                 Err(e) => {
                     log::warn!("recorder: cannot create {name}: {e}");
                     self.failed = true;
-                    return;
+                    return None;
                 }
             }
         }
@@ -295,10 +320,11 @@ impl ChannelWriter {
                 if w.write_sample(0i16).is_err() {
                     log::warn!("recorder: write error padding {name} — channel closed");
                     self.failed = true;
-                    return;
+                    return None;
                 }
             }
             self.written += pad;
+            let start = self.written;
             for &s in pcm {
                 if w.write_sample(s).is_err() {
                     // Mark failed + DROP the writer (so no re-create truncates the
@@ -312,7 +338,9 @@ impl ChannelWriter {
                 }
                 self.written += 1;
             }
+            return (self.written > start).then_some((start, self.written));
         }
+        None
     }
 
     fn finalize(self, name: &str) {
@@ -363,14 +391,50 @@ fn writer_loop(rx: &Receiver<RecMsg>, dir: &Path) {
     };
     let mut mic = ChannelWriter::new();
     let mut sys = ChannelWriter::new();
+    let mut mask: Option<BufWriter<File>> = None;
+    let mut mask_failed = false;
     while let Ok(msg) = rx.recv() {
         match msg {
-            RecMsg::Chunk(source, pcm, timestamp_ms) => {
+            RecMsg::Chunk(source, pcm, timestamp_ms, tts_suppressed) => {
                 let (ch, name) = match source {
                     AudioSource::Mic => (&mut mic, "mic.wav"),
                     AudioSource::System => (&mut sys, "system.wav"),
                 };
-                ch.write_chunk(dir, name, spec, &pcm, timestamp_ms);
+                let written = ch.write_chunk(dir, name, spec, &pcm, timestamp_ms);
+                if tts_suppressed && !mask_failed {
+                    if let Some((start_sample, end_sample)) = written {
+                        let source = match source {
+                            AudioSource::Mic => "mic",
+                            AudioSource::System => "system",
+                        };
+                        if mask.is_none() {
+                            match OpenOptions::new()
+                                .create(true)
+                                .append(true)
+                                .open(dir.join(TTS_MASK_FILE))
+                            {
+                                Ok(file) => mask = Some(BufWriter::new(file)),
+                                Err(error) => {
+                                    log::warn!("recorder: cannot create TTS mask: {error}");
+                                    mask_failed = true;
+                                }
+                            }
+                        }
+                        if let Some(file) = mask.as_mut() {
+                            if writeln!(
+                                file,
+                                "{{\"source\":\"{source}\",\"start_sample\":{start_sample},\"end_sample\":{end_sample}}}"
+                            )
+                            .and_then(|()| file.flush())
+                            .is_err()
+                            {
+                                log::warn!("recorder: TTS mask write failed");
+                                mask_failed = true;
+                                mask = None;
+                            }
+                        }
+                    }
+                }
             }
             RecMsg::Stop => break,
         }
@@ -378,6 +442,39 @@ fn writer_loop(rx: &Receiver<RecMsg>, dir: &Path) {
     mic.finalize("mic.wav");
     sys.finalize("system.wav");
     log::debug!("audio-recorder thread exit: {}", dir.display());
+}
+
+/// Read the text-free app-TTS mask. A malformed file is rejected as a whole;
+/// callers then keep the raw audio unchanged rather than applying a partial mask.
+pub fn load_tts_mask_in(session_dir: &Path) -> Result<Vec<TtsMaskSpan>> {
+    let path = session_dir.join(TTS_MASK_FILE);
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let contents =
+        std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+    let mut spans = Vec::new();
+    for (index, line) in contents.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let stored: StoredTtsMaskSpan = serde_json::from_str(line)
+            .with_context(|| format!("parse TTS mask line {}", index + 1))?;
+        let source = match stored.source.as_str() {
+            "mic" => AudioSource::Mic,
+            "system" => AudioSource::System,
+            _ => anyhow::bail!("parse TTS mask line {}: unknown source", index + 1),
+        };
+        if stored.end_sample <= stored.start_sample {
+            anyhow::bail!("parse TTS mask line {}: empty interval", index + 1);
+        }
+        spans.push(TtsMaskSpan {
+            source,
+            start_sample: stored.start_sample,
+            end_sample: stored.end_sample,
+        });
+    }
+    Ok(spans)
 }
 
 /// Per-user recordings root: `<config_dir>/suflyor/recordings`. Sibling of
@@ -1195,5 +1292,62 @@ mod tests {
         .unwrap();
         assert_eq!(removed, 0);
         assert!(d.exists());
+    }
+
+    #[test]
+    fn tts_mask_records_written_offsets_without_modifying_raw_wav() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("session");
+        let recorder = SessionRecorder::start_in(dir.clone()).unwrap();
+        let raw = vec![7i16; 320];
+        recorder.feed_with_tts_mask(&chunk_ts(AudioSource::System, &raw, 20), true);
+        drop(recorder);
+
+        let saved: Vec<i16> = hound::WavReader::open(dir.join("system.wav"))
+            .unwrap()
+            .into_samples::<i16>()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(saved, raw, "mask metadata must not alter raw recording");
+        assert_eq!(
+            load_tts_mask_in(&dir).unwrap(),
+            vec![TtsMaskSpan {
+                source: AudioSource::System,
+                start_sample: 0,
+                end_sample: 320,
+            }]
+        );
+
+        std::fs::write(dir.join(TTS_MASK_FILE), "truncated").unwrap();
+        assert!(load_tts_mask_in(&dir).is_err());
+    }
+
+    #[test]
+    fn tts_mask_uses_the_post_padding_sample_offset() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("session");
+        let recorder = SessionRecorder::start_in(dir.clone()).unwrap();
+        let first = vec![3i16; 320];
+        let masked = vec![7i16; 320];
+        recorder.feed(&chunk_ts(AudioSource::System, &first, 20));
+        recorder.feed_with_tts_mask(&chunk_ts(AudioSource::System, &masked, 60), true);
+        drop(recorder);
+
+        let saved: Vec<i16> = hound::WavReader::open(dir.join("system.wav"))
+            .unwrap()
+            .into_samples::<i16>()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(&saved[..320], first.as_slice());
+        assert!(saved[320..640].iter().all(|sample| *sample == 0));
+        assert_eq!(&saved[640..], masked.as_slice());
+        assert_eq!(
+            load_tts_mask_in(&dir).unwrap(),
+            vec![TtsMaskSpan {
+                source: AudioSource::System,
+                start_sample: 640,
+                end_sample: 960,
+            }]
+        );
     }
 }

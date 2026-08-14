@@ -1,11 +1,100 @@
-//! AI client: POST to OpenAI-compatible endpoint (your Claude OAuth bridge)
-//! with SSE streaming. Emits AiEvent chunks downstream.
+//! AI provider client for legacy OpenAI-compatible endpoints plus native
+//! OpenAI Responses and Anthropic Messages APIs. Emits AiEvent chunks downstream.
 
 use anyhow::{anyhow, Context, Result};
-use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
+
+mod provider;
+
+/// Wire protocol used by a resolved AI endpoint. Existing bridge, local and
+/// Hermes routes stay on OpenAI Chat Completions compatibility; direct cloud
+/// providers use their native, documented APIs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AiProtocol {
+    OpenAiCompatible,
+    OpenAiResponses,
+    AnthropicMessages,
+    /// Official Codex app-server account integration using the experimental,
+    /// fail-closed no-tools permission contract.
+    CodexSubscription,
+}
+
+impl AiProtocol {
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::OpenAiCompatible => "openai-compatible",
+            Self::OpenAiResponses => "openai-responses",
+            Self::AnthropicMessages => "anthropic-messages",
+            Self::CodexSubscription => "codex-subscription",
+        }
+    }
+
+    #[must_use]
+    pub const fn supports_model_listing(self) -> bool {
+        matches!(
+            self,
+            Self::OpenAiCompatible | Self::OpenAiResponses | Self::CodexSubscription
+        )
+    }
+
+    #[must_use]
+    pub const fn supports_prompt_cache_control(self) -> bool {
+        matches!(self, Self::OpenAiCompatible | Self::AnthropicMessages)
+    }
+
+    #[must_use]
+    pub const fn supports_live_answers(self) -> bool {
+        true
+    }
+}
+
+/// Fully resolved target for one request. The credential is held only in
+/// memory; direct-provider keys are loaded from Windows Credential Manager.
+#[derive(Clone)]
+pub struct AiEndpoint {
+    pub protocol: AiProtocol,
+    pub base_url: String,
+    pub bearer: String,
+    pub model: String,
+    /// Optional reasoning effort for the official Codex app-server. Other
+    /// protocols ignore it.
+    pub reasoning_effort: Option<String>,
+    pub is_local: bool,
+}
+
+impl AiEndpoint {
+    #[must_use]
+    pub const fn requires_bearer(&self) -> bool {
+        !self.is_local && !matches!(self.protocol, AiProtocol::CodexSubscription)
+    }
+
+    #[must_use]
+    pub const fn is_unmetered(&self) -> bool {
+        self.is_local || matches!(self.protocol, AiProtocol::CodexSubscription)
+    }
+
+    #[must_use]
+    pub const fn accepts_images(&self) -> bool {
+        true
+    }
+}
+
+impl std::fmt::Debug for AiEndpoint {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("AiEndpoint")
+            .field("protocol", &self.protocol)
+            .field("model", &self.model)
+            .field("has_reasoning_effort", &self.reasoning_effort.is_some())
+            .field("is_local", &self.is_local)
+            .field("has_base_url", &!self.base_url.trim().is_empty())
+            .field("has_credential", &!self.bearer.trim().is_empty())
+            .finish()
+    }
+}
 
 /// Process-wide HTTP client, built once and reused across AI calls so the
 /// 2nd+ ask in a session reuses a warm TLS/HTTP connection (cuts
@@ -22,6 +111,18 @@ pub(crate) fn http_client() -> reqwest::Client {
                 .unwrap_or_else(|_| reqwest::Client::new())
         })
         .clone()
+}
+
+fn transport_failure_kind(error: &reqwest::Error) -> &'static str {
+    if error.is_timeout() {
+        "timeout"
+    } else if error.is_connect() {
+        "connect"
+    } else if error.is_request() {
+        "request"
+    } else {
+        "transport"
+    }
 }
 
 /// EXPERIMENTAL prompt-cache toggle (see `Config::ai_prompt_cache`). When
@@ -178,12 +279,78 @@ pub fn stream_chat(
     messages: Vec<ChatMessage>,
     max_tokens: u32,
 ) -> mpsc::Receiver<AiEvent> {
+    stream_chat_endpoint(
+        AiEndpoint {
+            protocol: AiProtocol::OpenAiCompatible,
+            base_url,
+            bearer,
+            model,
+            reasoning_effort: None,
+            is_local: false,
+        },
+        messages,
+        max_tokens,
+    )
+}
+
+pub fn stream_chat_endpoint(
+    endpoint: AiEndpoint,
+    messages: Vec<ChatMessage>,
+    max_tokens: u32,
+) -> mpsc::Receiver<AiEvent> {
     let (tx, rx) = mpsc::channel::<AiEvent>(64);
 
     tokio::spawn(async move {
+        if endpoint.protocol == AiProtocol::CodexSubscription {
+            let model = endpoint.model.clone();
+            let worker_tx = tx.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                crate::codex_subscription::run_turn(
+                    &model,
+                    endpoint.reasoning_effort.as_deref(),
+                    &messages,
+                    |event| {
+                        let mapped = match event {
+                            crate::codex_subscription::TurnEvent::Start { id } => {
+                                AiEvent::Start { id }
+                            }
+                            crate::codex_subscription::TurnEvent::Delta { text } => {
+                                AiEvent::Delta { text }
+                            }
+                            crate::codex_subscription::TurnEvent::Done => AiEvent::Done {
+                                reason: "stop".into(),
+                            },
+                        };
+                        worker_tx.blocking_send(mapped).is_ok()
+                    },
+                )
+            })
+            .await;
+            match result {
+                Ok(Ok(_)) | Ok(Err(crate::codex_subscription::TurnFailure::Cancelled)) => {}
+                Ok(Err(failure)) => {
+                    let _ = tx
+                        .send(AiEvent::Error {
+                            message: codex_failure_message(failure).to_string(),
+                        })
+                        .await;
+                }
+                Err(_) => {
+                    let _ = tx
+                        .send(AiEvent::Error {
+                            message: "Codex answer unavailable".into(),
+                        })
+                        .await;
+                }
+            }
+            return;
+        }
         // Refuse before waiting behind existing GPU work. Keep the same guard
         // in `stream_inner` as a race check if the lock flips after this point.
-        if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), &base_url) {
+        if crate::deep_lock::endpoint_blocked(
+            crate::deep_lock::deep_lock_active(),
+            &endpoint.base_url,
+        ) {
             let _ = tx
                 .send(AiEvent::Error {
                     message: crate::deep_lock::BLOCKED_ERROR.to_string(),
@@ -201,9 +368,7 @@ pub fn stream_chat(
         if tx.is_closed() {
             return;
         }
-        if let Err(e) =
-            stream_inner(base_url, bearer, model, messages, max_tokens, tx.clone()).await
-        {
+        if let Err(e) = stream_inner(endpoint, messages, max_tokens, tx.clone()).await {
             let _ = tx
                 .send(AiEvent::Error {
                     message: format!("{e:#}"),
@@ -222,34 +387,119 @@ pub fn stream_chat(
 /// so a dead endpoint doesn't hang the UI thread (caller runs this
 /// off-thread anyway). Does NOT log the URL or bearer (secrets).
 pub async fn test_connection(base_url: String, bearer: String, model: String) -> Result<String> {
+    test_connection_endpoint(AiEndpoint {
+        protocol: AiProtocol::OpenAiCompatible,
+        base_url,
+        bearer,
+        model,
+        reasoning_effort: None,
+        is_local: false,
+    })
+    .await
+}
+
+pub async fn test_connection_endpoint(endpoint: AiEndpoint) -> Result<String> {
+    test_connection_messages(
+        endpoint,
+        vec![ChatMessage {
+            role: "user".into(),
+            content: MessageContent::Text("ping".into()),
+        }],
+    )
+    .await
+}
+
+pub async fn test_connection_messages(
+    endpoint: AiEndpoint,
+    messages: Vec<ChatMessage>,
+) -> Result<String> {
+    if endpoint.protocol == AiProtocol::CodexSubscription {
+        let selected_model = endpoint.model.clone();
+        let snapshot = tokio::task::spawn_blocking(crate::codex_subscription::provider_snapshot)
+            .await
+            .map_err(|_| anyhow!("Codex account unavailable"))?;
+        let signed_in = matches!(
+            snapshot.account,
+            crate::codex_subscription::AccountState::SignedIn { .. }
+        );
+        let selected = snapshot
+            .models
+            .iter()
+            .find(|model| model.id == selected_model);
+        let has_image = messages.iter().any(|message| {
+            matches!(&message.content, MessageContent::Parts(parts)
+                if parts.iter().any(|part| matches!(part, ContentPart::ImageUrl { .. })))
+        });
+        if signed_in && selected.is_none() {
+            return Err(anyhow!("Selected Codex model unavailable"));
+        }
+        if signed_in {
+            if !has_image {
+                return Ok("Codex account ready".into());
+            }
+            if !selected.is_some_and(|model| {
+                model
+                    .input_modalities
+                    .iter()
+                    .any(|modality| modality == "image")
+            }) {
+                return Err(anyhow!("Selected Codex model does not accept images"));
+            }
+            let effort = endpoint.reasoning_effort.clone();
+            tokio::task::spawn_blocking(move || {
+                crate::codex_subscription::run_turn(
+                    &selected_model,
+                    effort.as_deref(),
+                    &messages,
+                    |_| true,
+                )
+                .map_err(|failure| anyhow!(codex_failure_message(failure)))
+            })
+            .await
+            .map_err(|_| anyhow!("Codex vision unavailable"))??;
+            return Ok("Codex vision ready".into());
+        }
+        return Err(anyhow!("Codex account unavailable"));
+    }
     // Deep-lock guard (see crate::deep_lock): refuse managed-local traffic
     // while the bar's lock chip holds the deep lock. Cloud/external pass.
-    if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), &base_url) {
+    if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), &endpoint.base_url)
+    {
         return Err(anyhow!(crate::deep_lock::BLOCKED_ERROR));
     }
     let client = http_client();
-    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
-    let body = json!({
-        "model": model,
-        "messages": [{ "role": "user", "content": "ping" }],
-        "max_tokens": 1,
-    });
+    let url = format!(
+        "{}/{}",
+        endpoint.base_url.trim_end_matches('/'),
+        provider::endpoint_path(endpoint.protocol)
+    );
+    let body = provider::request_body(
+        endpoint.protocol,
+        &endpoint.model,
+        &messages,
+        1,
+        false,
+        false,
+    )?;
     // Generic on transport failure: a reqwest error's chain embeds the request
     // `url` (the LAN base_url + port), which `{e:#}` at the Settings AI-bridge /
     // Diagnostics call sites would paint into a screen-capturable field. Log the
     // full detail to the file log; return a secret-free message. Mirrors the
     // stt.rs fix and honours this fn's "does NOT log the URL" contract.
-    let resp = match client
+    let request = client
         .post(&url)
-        .timeout(std::time::Duration::from_secs(10))
-        .bearer_auth(&bearer)
+        .timeout(std::time::Duration::from_secs(10));
+    let resp = match provider::authorize(request, endpoint.protocol, &endpoint.bearer)
         .json(&body)
         .send()
         .await
     {
         Ok(r) => r,
-        Err(e) => {
-            log::warn!("AI bridge test transport error: {e:#}");
+        Err(error) => {
+            log::warn!(
+                "AI provider test transport error ({})",
+                transport_failure_kind(&error)
+            );
             return Err(anyhow!("connection failed"));
         }
     };
@@ -277,16 +527,47 @@ pub async fn test_connection(base_url: String, bearer: String, model: String) ->
 /// OpenAI-shaped `{ "data": [ { "id": ... } ] }` response (empty vec if the
 /// field is missing). Does NOT log the URL or bearer (secrets).
 pub async fn list_models(base_url: &str, bearer: &str) -> Result<Vec<String>> {
-    if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), base_url) {
+    list_models_endpoint(&AiEndpoint {
+        protocol: AiProtocol::OpenAiCompatible,
+        base_url: base_url.to_string(),
+        bearer: bearer.to_string(),
+        model: String::new(),
+        reasoning_effort: None,
+        is_local: false,
+    })
+    .await
+}
+
+pub async fn list_models_endpoint(endpoint: &AiEndpoint) -> Result<Vec<String>> {
+    if endpoint.protocol == AiProtocol::CodexSubscription {
+        let snapshot = tokio::task::spawn_blocking(crate::codex_subscription::provider_snapshot)
+            .await
+            .map_err(|_| anyhow!("Codex model catalog unavailable"))?;
+        return Ok(snapshot.models.into_iter().map(|model| model.id).collect());
+    }
+    if !endpoint.protocol.supports_model_listing() {
+        return Ok(Vec::new());
+    }
+    if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), &endpoint.base_url)
+    {
         return Err(anyhow!(crate::deep_lock::BLOCKED_ERROR));
     }
     let client = http_client();
-    let url = format!("{}/models", base_url.trim_end_matches('/'));
+    let url = format!("{}/models", endpoint.base_url.trim_end_matches('/'));
     let mut req = client.get(&url).timeout(std::time::Duration::from_secs(8));
-    if !bearer.is_empty() {
-        req = req.bearer_auth(bearer);
+    if !endpoint.bearer.is_empty() {
+        req = provider::authorize(req, endpoint.protocol, &endpoint.bearer);
     }
-    let resp = req.send().await.context("GET models")?;
+    let resp = match req.send().await {
+        Ok(response) => response,
+        Err(error) => {
+            log::warn!(
+                "AI model-list transport error ({})",
+                transport_failure_kind(&error)
+            );
+            return Err(anyhow!("connection failed"));
+        }
+    };
     let status = resp.status();
     if !status.is_success() {
         // Status only (no body): same P0-1 / screen-share guard as test_connection.
@@ -311,44 +592,54 @@ pub async fn list_models(base_url: &str, bearer: &str) -> Result<Vec<String>> {
 }
 
 async fn stream_inner(
-    base_url: String,
-    bearer: String,
-    model: String,
+    endpoint: AiEndpoint,
     messages: Vec<ChatMessage>,
     max_tokens: u32,
     tx: mpsc::Sender<AiEvent>,
 ) -> Result<()> {
-    if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), &base_url) {
+    if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), &endpoint.base_url)
+    {
         return Err(anyhow!(crate::deep_lock::BLOCKED_ERROR));
     }
     let client = http_client();
 
-    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
-    let mut body = json!({
-        "model": model,
-        "messages": messages,
-        "stream": true,
-        "max_tokens": max_tokens,
-    });
-    apply_prompt_cache(&mut body);
-    // Live-answer streaming path: honor the user's `ai_local_thinking` toggle
-    // (force = false). Structuring goes through the non-streaming `complete`.
-    apply_local_no_think(&mut body, false);
-    apply_managed_gemma_sampler(&mut body, &base_url, &model);
+    let url = format!(
+        "{}/{}",
+        endpoint.base_url.trim_end_matches('/'),
+        provider::endpoint_path(endpoint.protocol)
+    );
+    let prompt_cache = PROMPT_CACHE.load(std::sync::atomic::Ordering::Relaxed)
+        && endpoint.protocol.supports_prompt_cache_control();
+    let mut body = provider::request_body(
+        endpoint.protocol,
+        &endpoint.model,
+        &messages,
+        max_tokens,
+        true,
+        prompt_cache,
+    )?;
+    if endpoint.protocol == AiProtocol::OpenAiCompatible {
+        apply_prompt_cache(&mut body);
+        // Live-answer streaming path: honor the user's `ai_local_thinking` toggle
+        // (force = false). Structuring goes through the non-streaming `complete`.
+        apply_local_no_think(&mut body, false);
+        apply_managed_gemma_sampler(&mut body, &endpoint.base_url, &endpoint.model);
+    }
 
     // SECURITY: do NOT log the full URL — the configured ai_base_url often
     // contains the user's LAN IP / proxy port (network topology leak in
     // crash dumps / support bundles). Surface only model + message count.
     log::info!(
-        "AI stream → /chat/completions (model={}, msgs={})",
-        model,
+        "AI stream → provider (protocol={}, model={}, msgs={})",
+        endpoint.protocol.label(),
+        endpoint.model,
         messages.len()
     );
 
-    let resp = match client
+    let request = client
         .post(&url)
-        .timeout(std::time::Duration::from_secs(120))
-        .bearer_auth(&bearer)
+        .timeout(std::time::Duration::from_secs(120));
+    let mut resp = match provider::authorize(request, endpoint.protocol, &endpoint.bearer)
         .json(&body)
         .send()
         .await
@@ -359,8 +650,11 @@ async fn stream_inner(
         // streamed error tile (screen-share leak — CLAUDE.md security boundary).
         // Log the detail; return a secret-free, RETRYABLE message (no "HTTP 4xx"
         // → is_permanent_ai_error keeps retrying).
-        Err(e) => {
-            log::warn!("AI stream POST failed: {e:#}");
+        Err(error) => {
+            log::warn!(
+                "AI stream transport error ({})",
+                transport_failure_kind(&error)
+            );
             return Err(anyhow!("AI connection error"));
         }
     };
@@ -382,15 +676,13 @@ async fn stream_inner(
 
     let mut byte_buf: Vec<u8> = Vec::with_capacity(8 * 1024);
     let mut buf = String::new();
-    let mut stream = resp.bytes_stream();
     let mut id_sent = false;
     let mut delta_count: u32 = 0;
     // Time of the first content token — tok/s is measured over the GENERATION
     // window (first token -> done), excluding prompt-processing latency.
     let mut first_delta_at: Option<std::time::Instant> = None;
 
-    while let Some(chunk_res) = stream.next().await {
-        let chunk = chunk_res.context("read sse chunk")?;
+    while let Some(chunk) = resp.chunk().await.context("read sse chunk")? {
         byte_buf.extend_from_slice(&chunk);
         let text = drain_complete_frames(&mut byte_buf);
         buf.push_str(&text);
@@ -406,7 +698,7 @@ async fn stream_inner(
                     continue;
                 }
                 let payload = line["data:".len()..].trim();
-                if payload == "[DONE]" {
+                if endpoint.protocol == AiProtocol::OpenAiCompatible && payload == "[DONE]" {
                     log::info!("AI stream got [DONE]: deltas={}", delta_count);
                     record_stream_tps(delta_count, first_delta_at);
                     let _ = tx
@@ -422,55 +714,41 @@ async fn stream_inner(
                     Err(_) => continue,
                 };
 
+                let parsed = provider::parse_stream(endpoint.protocol, &v);
+                if parsed.failed {
+                    return Err(anyhow!("AI provider stream error"));
+                }
                 if !id_sent {
-                    if let Some(id) = v.get("id").and_then(|x| x.as_str()) {
+                    if let Some(id) = parsed.id {
                         let _ = tx.send(AiEvent::Start { id: id.to_string() }).await;
                         id_sent = true;
                     }
                 }
 
-                if let Some(choices) = v.get("choices").and_then(|c| c.as_array()) {
-                    if let Some(choice) = choices.first() {
-                        if let Some(delta) = choice.get("delta") {
-                            if let Some(content) = delta.get("content").and_then(|c| c.as_str()) {
-                                if !content.is_empty() {
-                                    if first_delta_at.is_none() {
-                                        first_delta_at = Some(std::time::Instant::now());
-                                    }
-                                    delta_count += 1;
-                                    // If the receiver is gone (tile closed /
-                                    // consumer aborted), STOP pulling from llama
-                                    // instead of draining the SSE body to
-                                    // completion — returning here drops the
-                                    // response, closing the HTTP connection so
-                                    // llama.cpp aborts the slot and frees the GPU.
-                                    if tx
-                                        .send(AiEvent::Delta {
-                                            text: content.to_string(),
-                                        })
-                                        .await
-                                        .is_err()
-                                    {
-                                        return Ok(());
-                                    }
-                                }
-                            }
-                        }
-                        if let Some(reason) = choice.get("finish_reason").and_then(|r| r.as_str()) {
-                            log::info!(
-                                "AI stream finished: reason={} deltas={}",
-                                reason,
-                                delta_count
-                            );
-                            record_stream_tps(delta_count, first_delta_at);
-                            let _ = tx
-                                .send(AiEvent::Done {
-                                    reason: reason.to_string(),
-                                })
-                                .await;
-                            return Ok(());
-                        }
+                if let Some(content) = parsed.delta {
+                    if first_delta_at.is_none() {
+                        first_delta_at = Some(std::time::Instant::now());
                     }
+                    delta_count += 1;
+                    // If the receiver is gone (tile closed /
+                    // consumer aborted), STOP pulling from llama
+                    // instead of draining the SSE body to
+                    // completion — returning here drops the
+                    // response, closing the HTTP connection so
+                    // llama.cpp aborts the slot and frees the GPU.
+                    if tx.send(AiEvent::Delta { text: content }).await.is_err() {
+                        return Ok(());
+                    }
+                }
+                if let Some(reason) = parsed.done {
+                    log::info!(
+                        "AI stream finished: reason={} deltas={}",
+                        reason,
+                        delta_count
+                    );
+                    record_stream_tps(delta_count, first_delta_at);
+                    let _ = tx.send(AiEvent::Done { reason }).await;
+                    return Ok(());
                 }
             }
         }
@@ -500,16 +778,24 @@ async fn stream_inner(
 /// This is the regression-tested part of the SSE pipeline: it must NEVER
 /// panic on UTF-8 split across chunk boundaries.
 fn drain_complete_frames(byte_buf: &mut Vec<u8>) -> String {
-    let last_boundary = byte_buf
+    let lf_boundary = byte_buf
         .windows(2)
         .rposition(|w| w == b"\n\n")
         .map(|p| p + 2);
+    let crlf_boundary = byte_buf
+        .windows(4)
+        .rposition(|w| w == b"\r\n\r\n")
+        .map(|p| p + 4);
+    let last_boundary = match (lf_boundary, crlf_boundary) {
+        (Some(left), Some(right)) => Some(left.max(right)),
+        (left, right) => left.or(right),
+    };
     let Some(split_at) = last_boundary else {
         return String::new();
     };
     let decodable: Vec<u8> = byte_buf.drain(..split_at).collect();
     match std::str::from_utf8(&decodable) {
-        Ok(s) => s.to_string(),
+        Ok(s) => s.replace("\r\n", "\n"),
         Err(e) => {
             log::warn!("SSE utf8 error at byte {}: {}", e.valid_up_to(), e);
             std::str::from_utf8(&decodable[..e.valid_up_to()])
@@ -519,11 +805,14 @@ fn drain_complete_frames(byte_buf: &mut Vec<u8>) -> String {
     }
 }
 
-/// USD price per 1M tokens for each model. Source: the `claude-api` skill
-/// pricing table (verified 2026-06-23). Re-verify on each model launch.
+/// USD price per 1M tokens for each model. Re-verify on each model launch.
 pub fn pricing_per_million(model: &str) -> (f64, f64) {
     // (input, output)
     match model {
+        // Official OpenAI pricing, verified 2026-08-09:
+        // https://developers.openai.com/api/docs/models/gpt-5.2
+        "gpt-5.2" | "gpt-5.2-chat-latest" => (1.75, 14.0),
+        "gpt-5.2-pro" => (21.0, 168.0),
         "claude-haiku-4-5" => (1.0, 5.0),
         "claude-sonnet-4-5" | "claude-sonnet-4-6" => (3.0, 15.0),
         // Opus 4.6/4.7/4.8 are all $5/$25 — the old (15,75) over-billed 3×.
@@ -642,12 +931,77 @@ pub async fn complete_with_usage(
 ) -> Result<(String, TokenUsage)> {
     // Live-answer entry point: honor the user's `ai_local_thinking` toggle
     // (force_no_think = false). The structuring entry point is `complete`.
-    complete_with_usage_inner(base_url, bearer, model, messages, max_tokens, false).await
+    complete_with_usage_inner(
+        AiProtocol::OpenAiCompatible,
+        base_url,
+        bearer,
+        model,
+        messages,
+        max_tokens,
+        false,
+    )
+    .await
+}
+
+pub async fn complete_with_usage_endpoint(
+    endpoint: &AiEndpoint,
+    messages: Vec<ChatMessage>,
+    max_tokens: u32,
+) -> Result<(String, TokenUsage)> {
+    if endpoint.protocol == AiProtocol::CodexSubscription {
+        let model = endpoint.model.clone();
+        let reasoning_effort = endpoint.reasoning_effort.clone();
+        return tokio::task::spawn_blocking(move || {
+            let mut text = String::new();
+            let usage = crate::codex_subscription::run_turn(
+                &model,
+                reasoning_effort.as_deref(),
+                &messages,
+                |event| {
+                    if let crate::codex_subscription::TurnEvent::Delta { text: delta } = event {
+                        text.push_str(&delta);
+                    }
+                    true
+                },
+            )
+            .map_err(|failure| anyhow!(codex_failure_message(failure)))?;
+            Ok((text, usage))
+        })
+        .await
+        .map_err(|_| anyhow!("Codex answer unavailable"))?;
+    }
+    complete_with_usage_inner(
+        endpoint.protocol,
+        &endpoint.base_url,
+        &endpoint.bearer,
+        &endpoint.model,
+        messages,
+        max_tokens,
+        false,
+    )
+    .await
+}
+
+fn codex_failure_message(failure: crate::codex_subscription::TurnFailure) -> &'static str {
+    use crate::codex_subscription::TurnFailure;
+    match failure {
+        TurnFailure::NotInstalled => "Official Codex app-server is unavailable",
+        TurnFailure::SignedOut => "ChatGPT sign-in is required",
+        TurnFailure::InvalidModel => "Select an available Codex model",
+        TurnFailure::UnsupportedSecurityProfile => {
+            "This Codex version cannot provide the required safe mode"
+        }
+        TurnFailure::SecurityViolation => "Codex security policy stopped this answer",
+        TurnFailure::ModelMismatch => "Codex did not honor the selected model",
+        TurnFailure::Cancelled => "Codex answer cancelled",
+        TurnFailure::Unavailable => "Codex answer unavailable",
+    }
 }
 
 /// Shared retry wrapper. `force_no_think` is threaded down to `complete_once`:
 /// `true` for structuring (summary/debrief/profile), `false` for live answers.
 async fn complete_with_usage_inner(
+    protocol: AiProtocol,
     base_url: &str,
     bearer: &str,
     model: &str,
@@ -665,6 +1019,7 @@ async fn complete_with_usage_inner(
     // the retry loop. Covers the live-answer AND structuring (summary) paths.
     let _permit = AI_SEMAPHORE.acquire().await.ok();
     complete_with_usage_unlocked(
+        protocol,
         base_url,
         bearer,
         model,
@@ -676,6 +1031,7 @@ async fn complete_with_usage_inner(
 }
 
 async fn complete_with_usage_unlocked(
+    protocol: AiProtocol,
     base_url: &str,
     bearer: &str,
     model: &str,
@@ -692,6 +1048,7 @@ async fn complete_with_usage_unlocked(
     let mut last_err: Option<anyhow::Error> = None;
     for attempt in 1..=MAX_ATTEMPTS {
         match complete_once(
+            protocol,
             base_url,
             bearer,
             model,
@@ -760,6 +1117,7 @@ pub(crate) fn is_permanent_ai_error(msg: &str) -> bool {
 /// Single attempt — no retry. Extracted so the retry wrapper above can
 /// call it cleanly with a fresh clone of `messages` each time.
 async fn complete_once(
+    protocol: AiProtocol,
     base_url: &str,
     bearer: &str,
     model: &str,
@@ -769,29 +1127,34 @@ async fn complete_once(
 ) -> Result<(String, TokenUsage)> {
     let t0 = std::time::Instant::now();
     let client = http_client();
-    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
-    let mut body = serde_json::json!({
-        "model": model,
-        "messages": messages,
-        "stream": false,
-        "max_tokens": max_tokens,
-    });
-    apply_prompt_cache(&mut body);
-    apply_local_no_think(&mut body, force_no_think);
-    apply_managed_gemma_sampler(&mut body, base_url, model);
+    let url = format!(
+        "{}/{}",
+        base_url.trim_end_matches('/'),
+        provider::endpoint_path(protocol)
+    );
+    let prompt_cache = PROMPT_CACHE.load(std::sync::atomic::Ordering::Relaxed)
+        && protocol.supports_prompt_cache_control();
+    let mut body =
+        provider::request_body(protocol, model, &messages, max_tokens, false, prompt_cache)?;
+    if protocol == AiProtocol::OpenAiCompatible {
+        apply_prompt_cache(&mut body);
+        apply_local_no_think(&mut body, force_no_think);
+        apply_managed_gemma_sampler(&mut body, base_url, model);
+    }
 
     // SECURITY: don't log the host portion of the URL (LAN IP/topology). See
     // the matching comment on stream_chat above for the rationale.
     log::info!(
-        "AI complete → /chat/completions (model={}, msgs={})",
+        "AI complete → provider (protocol={}, model={}, msgs={})",
+        protocol.label(),
         model,
         messages.len()
     );
 
-    let resp = match client
+    let request = client
         .post(&url)
-        .timeout(std::time::Duration::from_secs(180))
-        .bearer_auth(bearer)
+        .timeout(std::time::Duration::from_secs(180));
+    let resp = match provider::authorize(request, protocol, bearer)
         .json(&body)
         .send()
         .await
@@ -799,8 +1162,11 @@ async fn complete_once(
         Ok(r) => r,
         // Generic on transport failure (see stream_inner): the reqwest url must
         // not reach a UI surface; log the detail, return a retryable message.
-        Err(e) => {
-            log::warn!("AI complete POST failed: {e:#}");
+        Err(error) => {
+            log::warn!(
+                "AI complete transport error ({})",
+                transport_failure_kind(&error)
+            );
             return Err(anyhow!("AI connection error"));
         }
     };
@@ -815,59 +1181,8 @@ async fn complete_once(
         anyhow::bail!("HTTP {status}");
     }
     let v: serde_json::Value = resp.json().await.context("parse json")?;
-    let text = v
-        .get("choices")
-        .and_then(|c| c.as_array())
-        .and_then(|a| a.first())
-        .and_then(|c| c.get("message"))
-        .and_then(|m| m.get("content"))
-        .and_then(|c| c.as_str())
-        .unwrap_or("")
-        .to_string();
-    let input = v
-        .get("usage")
-        .and_then(|u| u.get("prompt_tokens"))
-        .and_then(|n| n.as_u64())
-        .unwrap_or(0);
-    let output = v
-        .get("usage")
-        .and_then(|u| u.get("completion_tokens"))
-        .and_then(|n| n.as_u64())
-        .unwrap_or(0);
-    // The provider's real finish reason ("stop", "length" = truncated by
-    // max_tokens, …). Absent/empty/null → "stop", the safe default the
-    // journaling sites used to hardcode (audit D4).
-    let finish_reason = v
-        .get("choices")
-        .and_then(|c| c.as_array())
-        .and_then(|a| a.first())
-        .and_then(|c| c.get("finish_reason"))
-        .and_then(|r| r.as_str())
-        .filter(|s| !s.is_empty())
-        .unwrap_or("stop")
-        .to_string();
-    // Prefer llama.cpp's own server-side timing (excludes our network + queue);
-    // fall back to completion_tokens over the wall-clock request time.
-    let tok_per_sec = v
-        .get("timings")
-        .and_then(|t| t.get("predicted_per_second"))
-        .and_then(|n| n.as_f64())
-        .filter(|x| x.is_finite() && *x > 0.0)
-        .unwrap_or_else(|| {
-            let secs = t0.elapsed().as_secs_f64();
-            if secs > 0.0 && output > 0 {
-                output as f64 / secs
-            } else {
-                0.0
-            }
-        });
-    record_tps(tok_per_sec);
-    let usage = TokenUsage {
-        input,
-        output,
-        tok_per_sec,
-        finish_reason,
-    };
+    let (text, usage) = provider::parse_completion(protocol, &v, t0.elapsed().as_secs_f64());
+    record_tps(usage.tok_per_sec);
     Ok((text, usage))
 }
 
@@ -884,8 +1199,39 @@ pub async fn complete(
     messages: Vec<ChatMessage>,
     max_tokens: u32,
 ) -> Result<String> {
-    let (text, _usage) =
-        complete_with_usage_inner(base_url, bearer, model, messages, max_tokens, true).await?;
+    let (text, _usage) = complete_with_usage_inner(
+        AiProtocol::OpenAiCompatible,
+        base_url,
+        bearer,
+        model,
+        messages,
+        max_tokens,
+        true,
+    )
+    .await?;
+    Ok(text)
+}
+
+pub async fn complete_endpoint(
+    endpoint: &AiEndpoint,
+    messages: Vec<ChatMessage>,
+    max_tokens: u32,
+) -> Result<String> {
+    if endpoint.protocol == AiProtocol::CodexSubscription {
+        return complete_with_usage_endpoint(endpoint, messages, max_tokens)
+            .await
+            .map(|(text, _)| text);
+    }
+    let (text, _usage) = complete_with_usage_inner(
+        endpoint.protocol,
+        &endpoint.base_url,
+        &endpoint.bearer,
+        &endpoint.model,
+        messages,
+        max_tokens,
+        true,
+    )
+    .await?;
     Ok(text)
 }
 
@@ -896,8 +1242,16 @@ pub(crate) async fn complete_exclusive(
     messages: Vec<ChatMessage>,
     max_tokens: u32,
 ) -> Result<String> {
-    let (text, _usage) =
-        complete_with_usage_unlocked(base_url, bearer, model, messages, max_tokens, true).await?;
+    let (text, _usage) = complete_with_usage_unlocked(
+        AiProtocol::OpenAiCompatible,
+        base_url,
+        bearer,
+        model,
+        messages,
+        max_tokens,
+        true,
+    )
+    .await?;
     Ok(text)
 }
 
@@ -1220,6 +1574,18 @@ mod tests {
         assert_eq!(b, b"data: c");
     }
 
+    #[test]
+    fn drain_normalizes_crlf_sse_frames() {
+        let mut bytes =
+            b"event: message\r\ndata: {\"type\":\"response.completed\"}\r\n\r\n".to_vec();
+        let text = drain_complete_frames(&mut bytes);
+        assert_eq!(
+            text,
+            "event: message\ndata: {\"type\":\"response.completed\"}\n\n"
+        );
+        assert!(bytes.is_empty());
+    }
+
     // ── Smoke check on build_request shape ──
 
     #[test]
@@ -1287,6 +1653,35 @@ mod tests {
         let m = cost_microcents("claude-sonnet-4-6", 100_000, 50_000);
         assert_eq!(m, 100_000 * 300 + 50_000 * 1500);
         assert!((microcents_to_usd(m) - 1.05).abs() < 0.001);
+    }
+
+    #[test]
+    fn gpt_5_2_pricing_and_endpoint_debug_are_safe() {
+        assert_eq!(pricing_per_million("gpt-5.2"), (1.75, 14.0));
+        let endpoint = AiEndpoint {
+            protocol: AiProtocol::OpenAiResponses,
+            base_url: "https://private.example/v1".into(),
+            bearer: "super-secret-token".into(),
+            model: "gpt-5.2".into(),
+            reasoning_effort: None,
+            is_local: false,
+        };
+        let debug = format!("{endpoint:?}");
+        assert!(!debug.contains("private.example"));
+        assert!(!debug.contains("super-secret-token"));
+        assert!(debug.contains("has_credential: true"));
+
+        let codex = AiEndpoint {
+            protocol: AiProtocol::CodexSubscription,
+            base_url: String::new(),
+            bearer: String::new(),
+            model: "gpt-safe".into(),
+            reasoning_effort: Some("high".into()),
+            is_local: false,
+        };
+        assert!(!codex.requires_bearer());
+        assert!(codex.is_unmetered());
+        assert!(codex.accepts_images());
     }
 
     #[test]
@@ -1427,6 +1822,161 @@ mod tests {
             }
         });
         url
+    }
+
+    #[derive(Debug)]
+    struct CapturedRequest {
+        path: String,
+        headers: Vec<(String, String)>,
+        body: String,
+    }
+
+    fn serve_one_capture(
+        response_body: &'static str,
+        content_type: &'static str,
+    ) -> (String, std::sync::mpsc::Receiver<CapturedRequest>) {
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", server.server_addr());
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            if let Ok(mut req) = server.recv() {
+                let path = req.url().to_string();
+                let headers = req
+                    .headers()
+                    .iter()
+                    .map(|header| (header.field.to_string(), header.value.as_str().to_string()))
+                    .collect();
+                let mut body = String::new();
+                let _ = std::io::Read::read_to_string(req.as_reader(), &mut body);
+                let _ = tx.send(CapturedRequest {
+                    path,
+                    headers,
+                    body,
+                });
+                let mut response = tiny_http::Response::from_string(response_body);
+                if let Ok(header) =
+                    tiny_http::Header::from_bytes(&b"Content-Type"[..], content_type.as_bytes())
+                {
+                    response = response.with_header(header);
+                }
+                let _ = req.respond(response);
+            }
+        });
+        (url, rx)
+    }
+
+    fn header<'a>(captured: &'a CapturedRequest, name: &str) -> Option<&'a str> {
+        captured
+            .headers
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
+    }
+
+    #[tokio::test]
+    async fn direct_openai_uses_responses_contract() {
+        let (url, captured) = serve_one_capture(
+            r#"{"status":"completed","output":[{"content":[{"type":"output_text","text":"ok"}]}],"usage":{"input_tokens":4,"output_tokens":1}}"#,
+            "application/json",
+        );
+        let endpoint = AiEndpoint {
+            protocol: AiProtocol::OpenAiResponses,
+            base_url: url,
+            bearer: "openai-secret".into(),
+            model: "gpt-test".into(),
+            reasoning_effort: None,
+            is_local: false,
+        };
+        let (text, usage) = complete_with_usage_endpoint(
+            &endpoint,
+            vec![ChatMessage {
+                role: "user".into(),
+                content: MessageContent::Text("hello".into()),
+            }],
+            42,
+        )
+        .await
+        .unwrap();
+        assert_eq!(text, "ok");
+        assert_eq!(usage.output, 1);
+        let request = captured.recv().unwrap();
+        assert_eq!(request.path, "/responses");
+        assert_eq!(
+            header(&request, "authorization"),
+            Some("Bearer openai-secret")
+        );
+        let body: Value = serde_json::from_str(&request.body).unwrap();
+        assert_eq!(body["max_output_tokens"], 42);
+        assert!(body.get("messages").is_none());
+    }
+
+    #[tokio::test]
+    async fn direct_anthropic_uses_messages_contract_and_headers() {
+        let (url, captured) = serve_one_capture(
+            r#"{"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":5,"output_tokens":1}}"#,
+            "application/json",
+        );
+        let endpoint = AiEndpoint {
+            protocol: AiProtocol::AnthropicMessages,
+            base_url: url,
+            bearer: "anthropic-secret".into(),
+            model: "claude-test".into(),
+            reasoning_effort: None,
+            is_local: false,
+        };
+        let (text, usage) = complete_with_usage_endpoint(
+            &endpoint,
+            vec![ChatMessage {
+                role: "user".into(),
+                content: MessageContent::Text("hello".into()),
+            }],
+            43,
+        )
+        .await
+        .unwrap();
+        assert_eq!(text, "ok");
+        assert_eq!(usage.finish_reason, "end_turn");
+        let request = captured.recv().unwrap();
+        assert_eq!(request.path, "/messages");
+        assert_eq!(header(&request, "x-api-key"), Some("anthropic-secret"));
+        assert_eq!(header(&request, "anthropic-version"), Some("2023-06-01"));
+        assert!(header(&request, "authorization").is_none());
+        let body: Value = serde_json::from_str(&request.body).unwrap();
+        assert_eq!(body["max_tokens"], 43);
+    }
+
+    #[tokio::test]
+    async fn native_streams_emit_delta_and_terminal_event() {
+        for (protocol, body) in [
+            (
+                AiProtocol::OpenAiResponses,
+                "data: {\"type\":\"response.created\",\"response\":{\"id\":\"r1\"}}\n\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"hi\"}\n\ndata: {\"type\":\"response.completed\"}\n\n",
+            ),
+            (
+                AiProtocol::AnthropicMessages,
+                "data: {\"type\":\"message_start\",\"message\":{\"id\":\"m1\"}}\n\ndata: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"hi\"}}\n\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"}}\n\n",
+            ),
+        ] {
+            let (url, _captured) = serve_one_capture(body, "text/event-stream");
+            let mut rx = stream_chat_endpoint(
+                AiEndpoint {
+                    protocol,
+                    base_url: url,
+                    bearer: "secret".into(),
+                    model: "model".into(),
+                    reasoning_effort: None,
+                    is_local: false,
+                },
+                vec![ChatMessage {
+                    role: "user".into(),
+                    content: MessageContent::Text("hello".into()),
+                }],
+                8,
+            );
+            assert!(matches!(rx.recv().await, Some(AiEvent::Start { .. })));
+            assert!(matches!(rx.recv().await, Some(AiEvent::Delta { text }) if text == "hi"));
+            assert!(matches!(rx.recv().await, Some(AiEvent::Done { .. })));
+        }
     }
 
     /// A provider reporting `finish_reason: "length"` (answer truncated by

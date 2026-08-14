@@ -1316,6 +1316,7 @@ pub(crate) fn spawn_content_tile(
         .map(|b| MarkdownBlock {
             kind: b.kind,
             text: SharedString::from(b.text),
+            display_text: SharedString::from(b.display_text),
             lang: SharedString::from(b.lang),
             marked: false,
         })
@@ -2849,6 +2850,9 @@ pub(crate) fn open_transcript(
             // «По голосам» view, where `rebuild_speaker_labels` overwrites it.
             speaker_color: slint::Color::from_rgb_u8(0, 0, 0),
             text: SharedString::from(overlay_backend::text::collapse_ws(&u.text)),
+            display_text: SharedString::from(slint_replay::math_display::normalize_math_display(
+                &overlay_backend::text::collapse_ws(&u.text),
+            )),
             checked: false,
             marked: false,
             start_ms: off.unwrap_or(0) as i32,

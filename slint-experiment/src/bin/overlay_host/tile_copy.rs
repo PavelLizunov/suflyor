@@ -35,9 +35,10 @@
 //! pass.
 use super::{
     ai, vision, Arc, ComponentHandle, Duration, MarkdownBlock, OverlayBarBridge, SharedString,
-    TileWindow, Timer, VecModel,
+    TileWindow, Timer, TimerMode, VecModel,
 };
 use slint::Model;
+use std::cell::RefCell;
 // `conversations_evict_keys` lives in `tile_controller.rs`; only this module's
 // eviction unit test (`copy_tests`) exercises it, so import it TEST-ONLY — a
 // plain module-level import would be unused in the normal build (clippy -D).
@@ -677,9 +678,61 @@ pub(crate) fn speak_answer_text(messages: &[ai::ChatMessage], rendered: &str) ->
 // speech: closing THAT tile (or the app) stops it; a new speak re-points it.
 static SPEAKING_CONVO: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(i64::MIN);
 
+thread_local! {
+    static SPEAK_TILES: RefCell<Vec<(i32, slint::Weak<TileWindow>)>> = const { RefCell::new(Vec::new()) };
+    static SPEAK_STATE_TIMER: Timer = Timer::default();
+}
+
+fn sync_speaking_tiles(active: Option<i32>) {
+    SPEAK_TILES.with(|tiles| {
+        tiles.borrow_mut().retain(|(id, weak)| {
+            let Some(tile) = weak.upgrade() else {
+                return false;
+            };
+            let is_active = active == Some(*id);
+            tile.set_speak_active(is_active);
+            tile.set_speak_loading(is_active && overlay_backend::tts::is_loading());
+            tile.set_speak_speed_label(SharedString::from(speak_speed_label(if is_active {
+                SPEAK_SPEED_PERCENT.load(std::sync::atomic::Ordering::Acquire)
+            } else {
+                100
+            })));
+            if !is_active {
+                tile.set_speak_paused(false);
+                tile.set_speak_loading(false);
+            }
+            true
+        });
+    });
+}
+
+fn clear_speaking_tile() {
+    SPEAKING_CONVO.store(i64::MIN, std::sync::atomic::Ordering::Release);
+    reset_pause();
+    sync_speaking_tiles(None);
+    SPEAK_STATE_TIMER.with(Timer::stop);
+}
+
+fn start_speaking_state_timer() {
+    SPEAK_STATE_TIMER.with(|timer| {
+        timer.start(TimerMode::Repeated, Duration::from_millis(100), || {
+            if !overlay_backend::tts::is_speaking() {
+                clear_speaking_tile();
+            } else {
+                let active = current_speaking_convo();
+                if active >= 0 {
+                    sync_speaking_tiles(Some(active));
+                }
+            }
+        });
+    });
+}
+
 /// Record that `convo_id` started the current read-aloud.
 pub(crate) fn mark_speaking(convo_id: i32) {
     SPEAKING_CONVO.store(convo_id as i64, std::sync::atomic::Ordering::Release);
+    sync_speaking_tiles(Some(convo_id));
+    start_speaking_state_timer();
 }
 
 /// Stop the read-aloud iff `convo_id` is the tile currently being spoken — called
@@ -687,7 +740,7 @@ pub(crate) fn mark_speaking(convo_id: i32) {
 pub(crate) fn stop_if_speaking(convo_id: i32) {
     if SPEAKING_CONVO.load(std::sync::atomic::Ordering::Acquire) == convo_id as i64 {
         overlay_backend::tts::stop();
-        SPEAKING_CONVO.store(i64::MIN, std::sync::atomic::Ordering::Release);
+        clear_speaking_tile();
     }
 }
 
@@ -704,6 +757,34 @@ pub(crate) fn current_speaking_convo() -> i32 {
 // Process-global pause latch, shared by the tile ⏯ button AND the Shift+Alt+3
 // hotkey so they stay coherent (TTS is global + one-at-a-time). false = playing.
 static SPEAK_PAUSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Per-read speed shown by the active tile player. It intentionally is not a
+/// persisted Settings value: every new read starts at a predictable 1.0x.
+static SPEAK_SPEED_PERCENT: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(100);
+
+fn speak_speed_label(percent: u16) -> String {
+    let compact = format!("{:.2}", f32::from(percent) / 100.0);
+    format!("{}x", compact.trim_end_matches('0').trim_end_matches('.'))
+}
+
+fn next_speak_speed_percent(current: u16) -> u16 {
+    match current {
+        100 => 125,
+        125 => 150,
+        150 => 200,
+        _ => 100,
+    }
+}
+
+fn set_speak_speed_percent(percent: u16) {
+    let percent = percent.clamp(50, 300);
+    SPEAK_SPEED_PERCENT.store(percent, std::sync::atomic::Ordering::Release);
+    overlay_backend::tts::set_playback_speed(f32::from(percent) / 100.0);
+}
+
+fn reset_speak_speed() {
+    set_speak_speed_percent(100);
+}
 
 /// Toggle pause/resume of the current read-aloud; returns the NEW paused state.
 pub(crate) fn toggle_pause() -> bool {
@@ -729,10 +810,20 @@ pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayB
     // Only advertise a working 🔊 when a voice + the sidecar are actually
     // installed; a missing engine must not show a usable action (F2).
     tile.set_can_speak(overlay_backend::tts::is_available());
+    SPEAK_TILES.with(|tiles| {
+        let mut tiles = tiles.borrow_mut();
+        tiles.retain(|(id, weak)| *id != convo_id && weak.upgrade().is_some());
+        tiles.push((convo_id, tile.as_weak()));
+    });
     let bridge_speak = bridge.clone();
     {
         let weak = tile.as_weak();
         tile.on_speak_clicked(move || {
+            if current_speaking_convo() == convo_id && overlay_backend::tts::is_speaking() {
+                overlay_backend::tts::stop();
+                clear_speaking_tile();
+                return;
+            }
             let text = convo_speak_text(&bridge_speak, convo_id);
             if text.trim().is_empty() {
                 return;
@@ -742,6 +833,9 @@ pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayB
             // window ONLY when playback is accepted. Gate the tile's speaking
             // state on that result so a missing engine neither shows as speaking
             // nor falsely silences the mic (F2).
+            // Reset before SPEAK so a new tile cannot inherit the previous
+            // tile's fast-forward rate even when the sidecar stays warm.
+            reset_speak_speed();
             if !overlay_backend::tts::speak(&text) {
                 return;
             }
@@ -754,11 +848,32 @@ pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayB
     }
     let weak_p = tile.as_weak();
     tile.on_speak_pause_clicked(move || {
+        if current_speaking_convo() != convo_id || !overlay_backend::tts::is_speaking() {
+            return;
+        }
         // Shared global latch so this ⏯ button and the Shift+Alt+3 hotkey stay
         // coherent (one TTS engine, one utterance at a time).
         let now_paused = toggle_pause();
         if let Some(t) = weak_p.upgrade() {
             t.set_speak_paused(now_paused);
+        }
+    });
+    tile.on_speak_seek_clicked(move |seconds| {
+        if current_speaking_convo() == convo_id && overlay_backend::tts::is_speaking() {
+            overlay_backend::tts::seek_seconds(seconds);
+        }
+    });
+    let weak_speed = tile.as_weak();
+    tile.on_speak_speed_next_clicked(move || {
+        if current_speaking_convo() != convo_id || !overlay_backend::tts::is_speaking() {
+            return;
+        }
+        let next = next_speak_speed_percent(
+            SPEAK_SPEED_PERCENT.load(std::sync::atomic::Ordering::Acquire),
+        );
+        set_speak_speed_percent(next);
+        if let Some(t) = weak_speed.upgrade() {
+            t.set_speak_speed_label(SharedString::from(speak_speed_label(next)));
         }
     });
 }
@@ -769,6 +884,16 @@ mod copy_tests {
     //! copy pulling in the raw Mic/System transcript, and follow-ups being
     //! re-answered as the original question. Pure: no bridge, no UI, no network.
     use super::*;
+
+    #[test]
+    fn tile_player_speed_cycle_returns_to_normal() {
+        assert_eq!(next_speak_speed_percent(100), 125);
+        assert_eq!(next_speak_speed_percent(125), 150);
+        assert_eq!(next_speak_speed_percent(150), 200);
+        assert_eq!(next_speak_speed_percent(200), 100);
+        assert_eq!(speak_speed_label(100), "1x");
+        assert_eq!(speak_speed_label(125), "1.25x");
+    }
 
     #[test]
     fn char_boundary_clamps_into_multibyte() {
@@ -790,6 +915,7 @@ mod copy_tests {
         let mk = |kind: i32, text: &str| MarkdownBlock {
             kind,
             text: text.into(),
+            display_text: text.into(),
             lang: "".into(),
             marked: false,
         };
@@ -812,6 +938,7 @@ mod copy_tests {
         let mk = |text: &str| MarkdownBlock {
             kind: 0,
             text: text.into(),
+            display_text: text.into(),
             lang: "".into(),
             marked: false,
         };
@@ -837,6 +964,7 @@ mod copy_tests {
         let mk = |text: &str, marked: bool| MarkdownBlock {
             kind: 0,
             text: text.into(),
+            display_text: text.into(),
             lang: "".into(),
             marked,
         };

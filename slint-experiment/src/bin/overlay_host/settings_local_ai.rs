@@ -300,12 +300,12 @@ pub(crate) fn wire_local_ai(
                                     let c = cfg_done.read();
                                     refresh_local_context_controls(&w, &c);
                                     w.set_ai_local_vision(c.ai_local_vision);
-                                    w.set_vision_provider_index(match c.vision_provider.as_str() {
-                                        "off" => 0,
-                                        "same" => 1,
-                                        "local" => 3,
-                                        _ => 2,
-                                    });
+                                    w.set_vision_same_available(c.ai_local_vision);
+                                    w.set_vision_provider_index(
+                                        super::settings_vision::vision_provider_index_from_id(
+                                            &c.vision_provider,
+                                        ),
+                                    );
                                 }
                                 refresh_local_model_resource_warning(
                                     &w,
@@ -429,12 +429,12 @@ pub(crate) fn wire_local_ai(
                                     ])));
                                     w.set_ai_local_model_index(0);
                                     w.set_ai_local_vision(local_vision);
-                                    w.set_vision_provider_index(match vision_provider.as_str() {
-                                        "off" => 0,
-                                        "same" => 1,
-                                        "local" => 3,
-                                        _ => 2,
-                                    });
+                                    w.set_vision_same_available(local_vision);
+                                    w.set_vision_provider_index(
+                                        super::settings_vision::vision_provider_index_from_id(
+                                            &vision_provider,
+                                        ),
+                                    );
                                     refresh_local_model_resource_warning(
                                         &w,
                                         opts.root.clone(),
@@ -765,12 +765,12 @@ pub(crate) fn wire_local_ai(
                         ])));
                         w.set_ai_local_model_index(0);
                         w.set_ai_local_vision(local_vision);
-                        w.set_vision_provider_index(match vision_provider.as_str() {
-                            "off" => 0,
-                            "same" => 1,
-                            "local" => 3,
-                            _ => 2,
-                        });
+                        w.set_vision_same_available(local_vision);
+                        w.set_vision_provider_index(
+                            super::settings_vision::vision_provider_index_from_id(
+                                &vision_provider,
+                            ),
+                        );
                         refresh_local_model_resource_warning(&w, root.clone(), base_url, model);
                     }
                     if let Some(o) = overlay_done.upgrade() {
@@ -1278,8 +1278,11 @@ pub(crate) fn wire_local_ai(
                             w.set_quality_vision_present(true);
                             w.set_ai_local_vision_available(restarted);
                             w.set_ai_local_vision(restarted);
+                            w.set_vision_same_available(restarted);
                             if restarted {
-                                w.set_vision_provider_index(1);
+                                w.set_vision_provider_index(
+                                    super::settings_vision::vision_provider_index_from_id("same"),
+                                );
                             }
                             w.set_vision12b_status(SharedString::from(if restarted {
                                 "Зрение 26B включено — F8 теперь работает на 26B."
@@ -1482,12 +1485,10 @@ pub(crate) fn wire_local_ai(
                         ])));
                         w.set_ai_local_model_index(0);
                         w.set_ai_local_vision(local_vision);
-                        w.set_vision_provider_index(match vision_provider.as_str() {
-                            "off" => 0,
-                            "same" => 1,
-                            "local" => 3,
-                            _ => 2,
-                        });
+                        w.set_vision_same_available(local_vision);
+                        w.set_vision_provider_index(
+                            super::settings_vision::vision_provider_index_from_id(&vision_provider),
+                        );
                         refresh_local_model_resource_warning(&w, root.clone(), base_url, model);
                     }
                     let msg = match res {

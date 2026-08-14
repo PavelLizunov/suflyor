@@ -47,15 +47,15 @@
 use super::{
     active_stack_label, ai, apply_bar_stealth, apply_scheme_bar, apply_scheme_settings, audio,
     clamp_scheme, cloud_model_index, config, drag_begin, drag_update, fetch_models,
-    global_stealth_effective, grab_hwnd, make_transparent_tile, open_wizard,
-    parse_tile_monitor_pin, populate_diagnostics, present_window_stealth_aware,
-    preset_for_tts_rate, refresh_local_context_controls, refresh_local_model_resource_warning,
-    set_always_on_top, set_global_scheme, set_global_stealth, set_global_tile_monitor,
-    set_global_tile_opacity, spawn_ptt_watchdog, stt, try_acquire_mic, wire_ai_settings,
-    wire_diagnostics, wire_import_export, wire_local_ai, wire_memory, wire_stt_settings,
-    wire_updates, wire_vision_settings, wire_voice_settings, Arc, AtomicBool, ComponentHandle,
-    ComponentRow, ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell, SettingsWindow,
-    SharedString, TileWindows, VecModel, WindowRegistry,
+    global_stealth_effective, grab_hwnd, invalidate_codex_snapshot_ui, make_transparent_tile,
+    open_wizard, parse_tile_monitor_pin, populate_diagnostics, present_window_stealth_aware,
+    preset_for_tts_rate, refresh_codex_account_status, refresh_local_context_controls,
+    refresh_local_model_resource_warning, set_always_on_top, set_global_scheme, set_global_stealth,
+    set_global_tile_monitor, set_global_tile_opacity, spawn_ptt_watchdog, stt, try_acquire_mic,
+    wire_ai_settings, wire_diagnostics, wire_import_export, wire_local_ai, wire_memory,
+    wire_stt_settings, wire_updates, wire_vision_settings, wire_voice_settings, Arc, AtomicBool,
+    ComponentHandle, ComponentRow, ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell,
+    SettingsWindow, SharedString, TileWindows, VecModel, WindowRegistry,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -82,6 +82,14 @@ pub(crate) fn open_settings(
         // Refresh token status + profiles — config might have changed since last open.
         reset_component_install_state(existing);
         populate_token_status(existing, cfg);
+        {
+            let snap = cfg.read();
+            if (snap.ai_provider == "codex" || snap.vision_provider == "codex")
+                && !existing.get_codex_auth_busy()
+            {
+                refresh_codex_account_status(existing.as_weak(), cfg.clone());
+            }
+        }
         populate_diagnostics(existing, cfg);
         {
             let snap = cfg.read();
@@ -116,6 +124,14 @@ pub(crate) fn open_settings(
         }
     }
     populate_token_status(&win, cfg);
+    {
+        let snap = cfg.read();
+        if (snap.ai_provider == "codex" || snap.vision_provider == "codex")
+            && !win.get_codex_auth_busy()
+        {
+            refresh_codex_account_status(win.as_weak(), cfg.clone());
+        }
+    }
     populate_diagnostics(&win, cfg);
     // Phase E8 — show the running version in the Updates tab.
     win.set_app_version(SharedString::from(env!("CARGO_PKG_VERSION")));
@@ -522,6 +538,8 @@ pub(crate) fn open_settings(
             // and the bar lock chip's per-state description.
             let snap = cfg_lang.read();
             if let Some(w) = win_lang.upgrade() {
+                let codex_login_busy = w.get_codex_auth_busy();
+                invalidate_codex_snapshot_ui();
                 populate_tile_monitors(&w, &snap);
                 populate_component_rows(&w, &snap);
                 populate_tts_voices(&w, &snap);
@@ -537,6 +555,11 @@ pub(crate) fn open_settings(
                         snap.ui_is_ru(),
                     ),
                 ));
+                if (snap.ai_provider == "codex" || snap.vision_provider == "codex")
+                    && !codex_login_busy
+                {
+                    refresh_codex_account_status(w.as_weak(), cfg_lang.clone());
+                }
             }
             drop(snap);
             if let Some(o) = overlay_lang.upgrade() {
@@ -956,13 +979,18 @@ pub(crate) fn open_settings(
                 ));
                 return;
             }
-            let (base_url, bearer, model, is_local) = {
+            let endpoint = {
                 let c = cfg_c.read();
                 // Structuring uses the smarter "prep" model.
-                let ep = c.ai_endpoint(true);
-                (ep.base_url, ep.bearer, ep.model, ep.is_local)
+                c.ai_endpoint(true)
             };
-            if base_url.is_empty() || model.is_empty() || (!is_local && bearer.is_empty()) {
+            if (!matches!(
+                endpoint.protocol,
+                overlay_backend::ai::AiProtocol::CodexSubscription
+            ) && endpoint.base_url.is_empty())
+                || endpoint.model.is_empty()
+                || (endpoint.requires_bearer() && endpoint.bearer.is_empty())
+            {
                 w.set_meeting_context_result(SharedString::from(
                     "[--] AI мост не настроен (вкладка AI мост)",
                 ));
@@ -999,7 +1027,7 @@ pub(crate) fn open_settings(
                     .enable_all()
                     .build()
                 {
-                    Ok(rt) => rt.block_on(ai::complete(&base_url, &bearer, &model, messages, 1024)),
+                    Ok(rt) => rt.block_on(ai::complete_endpoint(&endpoint, messages, 1024)),
                     Err(e) => Err(anyhow::anyhow!("runtime: {e}")),
                 };
                 let _ = slint::invoke_from_event_loop(move || {
@@ -1397,25 +1425,71 @@ pub(crate) fn populate_tile_monitors(win: &SettingsWindow, c: &overlay_backend::
     win.set_tile_monitor_index(sel);
 }
 
-/// Seed the Read-aloud tab's voice dropdown from the installed voices, with
-/// labels in the CURRENT UI language. Called on Settings open AND on a live
-/// language switch (Rust-built labels don't auto-refresh like @tr bindings).
+/// Seed the Read-aloud tab's engine chooser + voice dropdown for the SELECTED
+/// engine, with labels in the CURRENT UI language. Called on Settings open AND
+/// on a live language switch (Rust-built labels don't auto-refresh like @tr
+/// bindings). RC17: `tts_engine` picks Piper (default) or the experimental
+/// Tera sidecar; the voice list follows the engine, and `tts-available`
+/// reflects the engine's own installed state.
 pub(crate) fn populate_tts_voices(win: &SettingsWindow, c: &overlay_backend::config::Config) {
-    let voices = overlay_backend::tts::voices(c.ui_is_ru());
-    let names: Vec<SharedString> = voices
-        .iter()
-        .map(|v| SharedString::from(v.name.as_str()))
-        .collect();
-    // Show the voice the ENGINE actually resolves to, not blindly voices[0]:
-    // for an empty/uninstalled `tts_voice`, `pick_voice_id` mirrors the
-    // sidecar's preference (Irina → any Piper → any RU → first), so the
-    // dropdown label matches the voice that Test / read-aloud will play.
-    let vidx = overlay_backend::tts::pick_voice_id(&voices, &c.tts_voice)
-        .and_then(|id| voices.iter().position(|v| v.id == id))
-        .unwrap_or(0) as i32;
-    win.set_tts_available(!voices.is_empty());
-    win.set_tts_voice_names(ModelRc::new(VecModel::from(names)));
-    win.set_tts_voice_index(vidx);
+    let ru = c.ui_is_ru();
+    win.set_tts_engine_names(ModelRc::new(VecModel::from(vec![
+        SharedString::from("Piper"),
+        SharedString::from(super::settings_voice::tera_engine_label(ru)),
+    ])));
+    let engine = overlay_backend::tts::parse_engine(&c.tts_engine);
+    win.set_tts_engine_index(match engine {
+        overlay_backend::tts::EngineKind::Piper => 0,
+        overlay_backend::tts::EngineKind::Tera => 1,
+    });
+    match engine {
+        overlay_backend::tts::EngineKind::Piper => {
+            let voices = overlay_backend::tts::voices(ru);
+            let names: Vec<SharedString> = voices
+                .iter()
+                .map(|v| SharedString::from(v.name.as_str()))
+                .collect();
+            // Show the voice the ENGINE actually resolves to, not blindly
+            // voices[0]: for an empty/uninstalled `tts_voice`, `pick_voice_id`
+            // mirrors the sidecar's preference (Irina → any Piper → any RU →
+            // first), so the dropdown label matches the voice that Test /
+            // read-aloud will play.
+            let vref = overlay_backend::tts::parse_voice_ref(&c.tts_voice);
+            let configured = if vref.engine == overlay_backend::tts::EngineKind::Piper {
+                vref.id.as_str()
+            } else {
+                ""
+            };
+            let vidx = overlay_backend::tts::pick_voice_id(&voices, configured)
+                .and_then(|id| voices.iter().position(|v| v.id == id))
+                .unwrap_or(0) as i32;
+            win.set_tts_available(!voices.is_empty());
+            win.set_tts_voice_names(ModelRc::new(VecModel::from(names)));
+            win.set_tts_voice_index(vidx);
+        }
+        overlay_backend::tts::EngineKind::Tera => {
+            let ids = overlay_backend::tts::tera_voice_ids();
+            let names: Vec<SharedString> = ids
+                .iter()
+                .map(|id| SharedString::from(super::settings_voice::tera_voice_label(id)))
+                .collect();
+            let vref = overlay_backend::tts::parse_voice_ref(&c.tts_voice);
+            let vidx = if vref.engine == overlay_backend::tts::EngineKind::Tera {
+                ids.iter().position(|id| *id == vref.id).unwrap_or(0)
+            } else {
+                0
+            } as i32;
+            let installed = overlay_backend::teratts_install::installed_state()
+                == overlay_backend::teratts_install::TeraInstalled::Ready;
+            win.set_tts_available(installed && !ids.is_empty());
+            win.set_tts_voice_names(ModelRc::new(VecModel::from(names)));
+            win.set_tts_voice_index(vidx);
+            win.set_tera_model_status(SharedString::from(super::settings_voice::tera_status_line(
+                overlay_backend::teratts_install::installed_state(),
+                ru,
+            )));
+        }
+    }
     win.set_tts_rate_index(preset_for_tts_rate(c.tts_rate));
 }
 
@@ -1427,6 +1501,8 @@ pub(crate) fn populate_token_status(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::SharedConfig,
 ) {
+    let codex_login_busy = win.get_codex_auth_busy();
+    invalidate_codex_snapshot_ui();
     // Phase E6 v18 — ASCII status prefixes ("[ok]" / "[--]") instead of
     // Unicode ✓ / ❌ which Slint+skia rendered as missing-glyph boxes
     // on the user's font fallback. Same root cause as the Close button
@@ -1448,6 +1524,55 @@ pub(crate) fn populate_token_status(
     };
     win.set_ai_bearer_status(SharedString::from(ai_status));
     win.set_groq_api_key_status(SharedString::from(groq_status));
+    let protected_status = |slot| match overlay_backend::credentials::read(slot) {
+        Ok(Some(secret)) if !secret.is_empty() => "[ok] stored securely",
+        _ => "[--] not set",
+    };
+    win.set_openai_key_status(SharedString::from(protected_status(
+        overlay_backend::credentials::SecretSlot::OpenAi,
+    )));
+    win.set_anthropic_key_status(SharedString::from(protected_status(
+        overlay_backend::credentials::SecretSlot::Anthropic,
+    )));
+    if !codex_login_busy {
+        win.set_codex_auth_status(SharedString::from(if c.ui_is_ru() {
+            "Проверка официального Codex app-server..."
+        } else {
+            "Checking official Codex app-server..."
+        }));
+        win.set_codex_auth_busy(false);
+        win.set_codex_models_busy(false);
+        win.set_codex_login_url(SharedString::default());
+        win.set_codex_user_code(SharedString::default());
+        win.set_codex_copy_status(SharedString::default());
+    }
+    let codex_ids = if c.codex_model.is_empty() {
+        Vec::new()
+    } else {
+        vec![SharedString::from(c.codex_model.clone())]
+    };
+    win.set_codex_model_ids(ModelRc::new(VecModel::from(codex_ids.clone())));
+    win.set_codex_model_labels(ModelRc::new(VecModel::from(codex_ids)));
+    win.set_codex_model_index(if c.codex_model.is_empty() { -1 } else { 0 });
+    win.set_codex_reasoning_ids(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+    win.set_codex_reasoning_labels(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+    win.set_codex_reasoning_index(-1);
+    let codex_vision_ids = if c.codex_vision_model.is_empty() {
+        Vec::new()
+    } else {
+        vec![SharedString::from(c.codex_vision_model.clone())]
+    };
+    win.set_codex_vision_model_ids(ModelRc::new(VecModel::from(codex_vision_ids.clone())));
+    win.set_codex_vision_model_labels(ModelRc::new(VecModel::from(codex_vision_ids)));
+    win.set_codex_vision_model_index(if c.codex_vision_model.is_empty() {
+        -1
+    } else {
+        0
+    });
+    win.set_codex_rate_status(SharedString::default());
+    win.set_codex_models_busy(false);
+    win.set_openai_key_input(SharedString::default());
+    win.set_anthropic_key_input(SharedString::default());
     // ТЗ 2026-07-09 — Hermes tab transient status props on every (re)open: clear
     // the action results (stale «готово…» must not linger) and refresh the LIVE
     // bridge status (the reused window keeps its old text otherwise).
@@ -1476,14 +1601,16 @@ pub(crate) fn populate_token_status(
     // switch (Rust-built labels don't auto-refresh like @tr bindings do).
     populate_tile_monitors(win, &c);
     win.set_ai_base_url_input(SharedString::from(c.ai_base_url.clone()));
+    win.set_openai_base_url_input(SharedString::from(c.openai_base_url.clone()));
+    win.set_openai_model_input(SharedString::from(c.openai_model.clone()));
+    win.set_anthropic_base_url_input(SharedString::from(c.anthropic_base_url.clone()));
+    win.set_anthropic_model_input(SharedString::from(c.anthropic_model.clone()));
     // V4 — vision section: provider index + non-secret fields (bearers stay blank
     // on screen; saving a blank field is a no-op the user controls).
-    win.set_vision_provider_index(match c.vision_provider.as_str() {
-        "off" => 0,
-        "same" => 1,
-        "local" => 3,
-        _ => 2,
-    });
+    win.set_vision_provider_index(super::settings_vision::vision_provider_index_from_id(
+        &c.vision_provider,
+    ));
+    win.set_vision_same_available(c.same_text_model_accepts_images_declared());
     win.set_vision_base_url_input(SharedString::from(c.vision_base_url.clone()));
     win.set_vision_model_input(SharedString::from(c.vision_model.clone()));
     win.set_vision_local_base_url_input(SharedString::from(c.vision_local_base_url.clone()));
@@ -1546,7 +1673,13 @@ pub(crate) fn populate_token_status(
     win.set_component_busy_label(blank());
     win.set_component_busy_index(-1);
     win.set_ai_prompt_cache(c.ai_prompt_cache);
-    win.set_ai_provider_index(i32::from(c.ai_provider == "local"));
+    win.set_ai_provider_index(match c.ai_provider.as_str() {
+        "local" => 1,
+        "openai" => 2,
+        "anthropic" => 3,
+        "codex" => 4,
+        _ => 0,
+    });
     win.set_ai_local_base_url_input(SharedString::from(c.ai_local_base_url.clone()));
     let managed_local_server =
         overlay_backend::local_ai::is_managed_llama_endpoint(&c.ai_local_base_url);
@@ -1608,7 +1741,9 @@ pub(crate) fn populate_token_status(
     // Read-aloud (Озвучка): build the installed-voice dropdown + reflect the
     // saved voice/speed. The neural voices live in `%APPDATA%\suflyor\tts`;
     // `tts::voices()` scans them (empty until the user installs one → the panel
-    // shows a "no voices" hint and disables the Test button).
+    // shows a "no voices" hint and disables the Test button). RC17: the Tera
+    // status is blanked first (reused window), then re-seeded per engine.
+    win.set_tera_model_status(blank());
     populate_tts_voices(win, &c);
     {
         // Reset the transient install state on (re)open — the Settings window is
@@ -1616,6 +1751,9 @@ pub(crate) fn populate_token_status(
         win.set_tts_installing(false);
         win.set_tts_install_phase(0);
         win.set_tts_install_label(SharedString::from(""));
+        win.set_tera_installing(false);
+        win.set_tera_install_phase(0);
+        win.set_tera_install_label(SharedString::from(""));
     }
     win.set_ai_local_thinking(c.ai_local_thinking);
     // Local model choice + whether the optional 26B-A4B is downloaded.

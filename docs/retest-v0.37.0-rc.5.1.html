@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>suflyor v0.37.0-rc.5.1 retest</title>
+<h1>suflyor v0.37.0-rc.5.1 - TTS stop and recording mask</h1>
+<ol>
+  <li>Start a recorded session and confirm mic/system transcription advances.</li>
+  <li>Read a long tile with Tera. The voice button becomes Stop and live STT stays muted.</li>
+  <li>Press Stop. Playback ends immediately; after the 400 ms drain tail, transcription resumes without closing the tile.</li>
+  <li>Pause a long read: after the same 400 ms drain tail, transcription resumes while the tile remains resumable. Resume the read and confirm TTS suppression returns.</li>
+  <li>Start another tile, then press pause on the old tile: the newer playback must continue.</li>
+  <li>Open the saved session player: app TTS is silent, simultaneous microphone speech remains audible, and timecodes/duration are unchanged.</li>
+  <li>Run re-transcription: app TTS does not appear in the result. Raw mic.wav/system.wav remain intact.</li>
+  <li>Note: only direct system-loopback playback plus its 400 ms drain tail is masked. Simultaneous microphone speech remains; remote system audio inside that shared loopback interval is the unavoidable tradeoff. Acoustic speaker leakage into an open microphone cannot be separated from real mic speech without altering the raw mic channel.</li>
+</ol>

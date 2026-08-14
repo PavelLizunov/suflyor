@@ -20,14 +20,16 @@ use overlay_backend::events::{MonitorHint, RuntimeEvents, TileKind, TileSpec};
 use overlay_backend::{ai, audio, config, journal, kb, stt, vision};
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
 use slint_replay::app_state::{format_timer, new_shared_state};
+use slint_replay::lock_menu::{FocusState as LockMenuFocusState, FocusTransition};
 use slint_replay::markdown;
 use slint_replay::runtime_state::{shared_runtime, SharedSlintRuntime};
 use slint_replay::slint_events::{SlintEvents, SlintUiBridge};
 use slint_replay::slint_session;
 use slint_replay::win32::{
     drag_begin, drag_update, enum_monitors, focus_window, get_window_rect, grab_hwnd,
-    make_transparent_overlay, make_transparent_tile, move_window_pos_only, pick_monitor,
-    set_always_on_top, set_skip_taskbar, set_stealth, set_window_owner, work_area_for_window,
+    is_foreground_window, make_transparent_overlay, make_transparent_tile, move_window_pos_only,
+    pick_monitor, set_always_on_top, set_skip_taskbar, set_stealth, set_window_owner,
+    work_area_for_window,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -278,7 +280,7 @@ use settings_stt::*;
 
 // Phase 3b.3 — the 💭 Memory Settings tab (curated-memory review). `use
 // settings_memory::*;` re-exports `wire_memory`, which `open_settings` calls to
-// bind the candidate/item lists + approve/reject/delete/extract over the SQLite
+// bind the/item lists + approve/reject/delete/extract over the SQLite
 // memory tables (3b.1) + the heuristic extractor (3b.2a).
 #[path = "overlay_host/settings_memory.rs"]
 mod settings_memory;
@@ -456,6 +458,18 @@ fn spawn_text_tile(
     }
 }
 
+fn after_read_aloud_hotkey_release(attempts_left: u8, action: Rc<dyn Fn()>) {
+    if slint_replay::win32::read_aloud_hotkey_modifiers_released() {
+        action();
+    } else if attempts_left > 0 {
+        Timer::single_shot(std::time::Duration::from_millis(25), move || {
+            after_read_aloud_hotkey_release(attempts_left - 1, action);
+        });
+    } else {
+        diag!("[overlay-host] sa1: modifier release timed out");
+    }
+}
+
 /// Fill an already-spawned OCR placeholder tile with the recognized text and
 /// read it aloud — the Ctrl+F8 / Shift+Alt+2 Tesseract path. The capture flow
 /// (`launch_vision_for_bgra`) creates the tile with a "Распознаю текст…"
@@ -517,6 +531,7 @@ pub(crate) fn to_md_blocks(md: &str) -> Vec<MarkdownBlock> {
         .map(|b| MarkdownBlock {
             kind: b.kind,
             text: SharedString::from(b.text),
+            display_text: SharedString::from(b.display_text),
             lang: SharedString::from(b.lang),
             marked: false,
         })
@@ -538,6 +553,16 @@ pub(crate) fn to_md_blocks(md: &str) -> Vec<MarkdownBlock> {
 /// touches the device) frees it for the next recorder immediately. One acquire
 /// pairs with exactly one release.
 static MIC_BUSY: AtomicBool = AtomicBool::new(false);
+
+/// hidden-to-tray — the bar is hidden ONLY by an explicit action (bar chip
+/// or tray menu) and restored from the tray; the flag is process-local and
+/// NEVER persisted, so every startup is visible. While hidden, everything else
+/// keeps running: recording, hotkeys, TTS, session tasks, tiles, F6/F9.
+static BAR_TRAY_HIDDEN: AtomicBool = AtomicBool::new(false);
+
+/// The hide chip is deliberately a no-op if Windows rejected the tray icon:
+/// without an icon, hiding the only restore surface would strand the user.
+static TRAY_AVAILABLE: AtomicBool = AtomicBool::new(false);
 
 /// RAII release for the single-mic lock. Dropping this — on ANY exit path,
 /// including a panic unwinding the record thread (WASAPI/COM fault, USB mic
@@ -715,6 +740,17 @@ fn main() -> Result<(), slint::PlatformError> {
     // Phase C — tokio runtime for async AI calls. Multi-threaded so
     // AI HTTP requests don't block the Slint UI event loop. Spawn
     // background tasks via `rt.handle().spawn(...)` from UI callbacks.
+    // A native crash cannot finalize WAV headers. Repair them as soon as the
+    // next process owns the singleton so the last session is immediately
+    // visible and playable, without waiting for another recording to start.
+    match overlay_backend::recorder::recordings_dir()
+        .and_then(|root| overlay_backend::recorder::repair_unfinalized_in(&root, Duration::ZERO))
+    {
+        Ok(0) => {}
+        Ok(count) => diag!("[overlay-host] repaired {count} crash-truncated recording(s)"),
+        Err(error) => diag!("[overlay-host] startup recording repair failed: {error:#}"),
+    }
+
     let tokio_rt = match tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
@@ -764,9 +800,11 @@ fn main() -> Result<(), slint::PlatformError> {
         eprintln!("[overlay-host] hermes bridge: {status}");
     }
 
-    // Read-aloud — initialize the process-global SAPI TTS engine once (voice +
-    // rate from config; empty voice = auto-pick a Russian voice). The COM init +
-    // voice enumeration run on the engine's own worker thread.
+    // Read-aloud — initialize the process-global TTS client once (engine +
+    // voice + rate from config; empty voice = auto-pick within the engine).
+    // RC17: `tts_engine` selects Piper (default) or the experimental Tera
+    // sidecar; Piper remains the automatic fallback. The Tera sidecar speaks
+    // `response_language`-tagged text.
     {
         let c = cfg.read();
         let voice = if c.tts_voice.trim().is_empty() {
@@ -774,7 +812,12 @@ fn main() -> Result<(), slint::PlatformError> {
         } else {
             Some(c.tts_voice.clone())
         };
-        overlay_backend::tts::init(voice, c.tts_rate);
+        let lang = if c.response_language.trim().is_empty() {
+            "ru"
+        } else {
+            c.response_language.trim()
+        };
+        overlay_backend::tts::init(Some(c.tts_engine.clone()), voice, c.tts_rate, lang);
     }
 
     // P2 — build the local session archive (SQLite catalog) OFF the hot path:
@@ -799,15 +842,17 @@ fn main() -> Result<(), slint::PlatformError> {
         // Log key PRESENCE only (never the values) so a tester can confirm
         // from the log file whether their AI/STT keys are configured.
         let c = cfg.read();
+        let active_ai = c.ai_endpoint(false);
         diag!(
-            "config loaded: ai_model={} base_url={} ai_bearer={} groq_key={}",
-            c.ai_model,
-            if c.ai_base_url.is_empty() {
+            "config loaded: ai_provider={} model={} endpoint={} credential={} groq_key={}",
+            c.ai_provider,
+            active_ai.model,
+            if active_ai.base_url.is_empty() {
                 "unset"
             } else {
                 "set"
             },
-            if c.ai_bearer.is_empty() {
+            if active_ai.requires_bearer() && active_ai.bearer.is_empty() {
                 "MISSING"
             } else {
                 "set"
@@ -821,19 +866,7 @@ fn main() -> Result<(), slint::PlatformError> {
         // E10.3 — log the resolved AI + STT stack (which engine + which
         // endpoint) so the log shows what is actually used. The tester could
         // not tell from logs whether AI was local/cloud or on which port.
-        let ai_desc = if c.ai_provider == "local" {
-            format!(
-                "local {} model={}",
-                c.ai_local_base_url,
-                if c.ai_local_model.is_empty() {
-                    "(unset)"
-                } else {
-                    c.ai_local_model.as_str()
-                }
-            )
-        } else {
-            format!("cloud {}", c.ai_model)
-        };
+        let ai_desc = format!("{} model={}", c.ai_provider, active_ai.model);
         let stt_desc = match c.stt_provider.as_str() {
             "gigaam" => format!(
                 "GigaAM in-process/{} dir={}",
@@ -1881,6 +1914,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 .map(|b| MarkdownBlock {
                     kind: b.kind,
                     text: SharedString::from(b.text),
+                    display_text: SharedString::from(b.display_text),
                     lang: SharedString::from(b.lang),
                     marked: false,
                 })
@@ -2607,12 +2641,15 @@ fn main() -> Result<(), slint::PlatformError> {
                         "Selected text"
                     }
                     .to_string();
-                    // The callback fires on key-down. Let Shift+Alt come up before
-                    // synthesising Ctrl+C, otherwise Windows receives
-                    // Ctrl+Shift+Alt+C and the foreground selection is not copied.
-                    Timer::single_shot(std::time::Duration::from_millis(80), move || {
+                    let saved = Rc::new(saved);
+                    let copy_selection = Rc::new(move || {
                         slint_replay::win32::clipboard_clear();
                         slint_replay::win32::send_ctrl_c();
+                        let saved = saved.clone();
+                        let bridge_sa1 = bridge_sa1.clone();
+                        let tiles_sa1 = tiles_sa1.clone();
+                        let overlay_sa1 = overlay_sa1.clone();
+                        let title = title.clone();
                         // Ctrl+C is async — the foreground app writes the clipboard
                         // on its own message loop; read after a short second delay.
                         Timer::single_shot(std::time::Duration::from_millis(140), move || {
@@ -2621,7 +2658,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                 "[overlay-host] sa1: copied {} chars from selection",
                                 copied.as_ref().map(|s| s.chars().count()).unwrap_or(0)
                             );
-                            match &saved {
+                            match saved.as_ref() {
                                 Some(s) => slint_replay::win32::clipboard_write_text(s),
                                 None => slint_replay::win32::clipboard_clear(),
                             }
@@ -2639,6 +2676,9 @@ fn main() -> Result<(), slint::PlatformError> {
                             }
                         });
                     });
+                    // Poll the actual key state instead of guessing a fixed
+                    // release delay. At 25 ms x 40 this remains bounded.
+                    after_read_aloud_hotkey_release(40, copy_selection);
                 } else if event.id == sa2_id {
                     // Shift+Alt+2 — OCR a screen region and read it. Reuses the
                     // region capture; the OCR engine swaps to Tesseract next.
@@ -3141,13 +3181,15 @@ fn main() -> Result<(), slint::PlatformError> {
             // plain, ACTIONABLE empty-state hint when there's nothing to ask
             // yet. No hourglass glyph — rare Unicode renders as a tofu square
             // on the skia font fallback (project no-tofu rule).
+            let placeholder_text = SharedString::from(manual_tile_placeholder(
+                deep_locked,
+                has_tx,
+                is_ru,
+            ));
             let placeholder = vec![MarkdownBlock {
                 kind: markdown::kind::PARAGRAPH,
-                text: SharedString::from(manual_tile_placeholder(
-                    deep_locked,
-                    has_tx,
-                    is_ru,
-                )),
+                text: placeholder_text.clone(),
+                display_text: placeholder_text,
                 lang: SharedString::from(""),
                 marked: false,
             }];
@@ -3212,18 +3254,24 @@ fn main() -> Result<(), slint::PlatformError> {
             // the cloud fields unconditionally, which silently failed for a
             // local-provider user (the cloud bridge wasn't even running).
             let ep = cfg_ref.read().ai_endpoint(false);
-            let is_local = ep.is_local;
-            let (base_url, bearer, model) = (ep.base_url, ep.bearer, ep.model);
+            let is_local = ep.is_unmetered();
+            let (base_url, bearer, model) =
+                (ep.base_url.clone(), ep.bearer.clone(), ep.model.clone());
             // Cloud needs a bearer; a LOCAL server (llama.cpp / Ollama) usually
             // doesn't — so an empty LOCAL bearer must NOT block the ask. This is
             // why "+ tile" wrongly said "AI не настроен" for a working local model.
-            if base_url.is_empty() || (!is_local && bearer.is_empty()) {
+            if (!matches!(ep.protocol, ai::AiProtocol::CodexSubscription)
+                && base_url.is_empty())
+                || (!is_local && bearer.is_empty())
+                || model.is_empty()
+            {
                 if let Some(t) = weak_for_ai.upgrade() {
                     let blocks: Vec<MarkdownBlock> = markdown::parse(manual_tile_not_configured(is_ru))
                     .into_iter()
                     .map(|b| MarkdownBlock {
                         kind: b.kind,
                         text: SharedString::from(b.text),
+                        display_text: SharedString::from(b.display_text),
                         lang: SharedString::from(b.lang),
                         marked: false,
                     })
@@ -3246,14 +3294,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     role: "user".to_string(),
                     content: ai::MessageContent::Text(question_for_task.clone()),
                 }];
-                let result = ai::complete_with_usage(
-                    &base_url,
-                    &bearer,
-                    &model,
-                    messages,
-                    AI_MAX_TOKENS,
-                )
-                .await;
+                let result = ai::complete_with_usage_endpoint(&ep, messages, AI_MAX_TOKENS).await;
 
                 // Post result back to UI thread.
                 let _ = slint::invoke_from_event_loop(move || {
@@ -3277,6 +3318,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                 .map(|b| MarkdownBlock {
                                     kind: b.kind,
                                     text: SharedString::from(b.text),
+                                    display_text: SharedString::from(b.display_text),
                                     lang: SharedString::from(b.lang),
                                     marked: false,
                                 })
@@ -3325,6 +3367,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                 .map(|b| MarkdownBlock {
                                     kind: b.kind,
                                     text: SharedString::from(b.text),
+                                    display_text: SharedString::from(b.display_text),
                                     lang: SharedString::from(b.lang),
                                     marked: false,
                                 })
@@ -3546,23 +3589,62 @@ fn main() -> Result<(), slint::PlatformError> {
             }
         };
         *lock_menu.borrow_mut() = Some(menu.clone());
+        let menu_focus = Rc::new(RefCell::new(LockMenuFocusState::default()));
         {
             // This is a top-level native window, so it needs ordinary drop-down
             // dismissal semantics instead of the old in-bar popup behaviour.
             use slint::winit_030::{winit, EventResult, WinitWindowAccessor};
             use winit::event::WindowEvent;
             let menu_weak = Rc::downgrade(&menu);
-            let focused_once = Rc::new(std::cell::Cell::new(false));
-            let focused_for_event = focused_once.clone();
+            let focus_for_event = menu_focus.clone();
+            let bar_weak_for_focus = overlay.as_weak();
             menu.window().on_winit_window_event(move |_, event| {
-                match event {
-                    WindowEvent::Focused(true) => focused_for_event.set(true),
-                    WindowEvent::Focused(false) if focused_for_event.get() => {
+                let WindowEvent::Focused(focused) = event else {
+                    return EventResult::Propagate;
+                };
+                let (phase, generation) = focus_for_event.borrow().diagnostic_snapshot();
+                diag!(
+                    "[overlay-host] lock-menu event=focus-native focused={focused} phase={phase} generation={generation}"
+                );
+                let transition = focus_for_event.borrow_mut().focus_changed(*focused);
+                match transition {
+                    FocusTransition::Acquired => {
+                        diag!(
+                            "[overlay-host] lock-menu event=focus-acquired generation={generation}"
+                        );
+                    }
+                    FocusTransition::IgnoreInitialLoss => {
+                        diag!(
+                            "[overlay-host] lock-menu event=focus-loss-ignored reason=initial-open"
+                        );
+                    }
+                    FocusTransition::DismissOutside => {
+                        let owner_focused = bar_weak_for_focus
+                            .upgrade()
+                            .and_then(|bar| grab_hwnd(bar.window()).ok())
+                            .is_some_and(is_foreground_window);
+                        if owner_focused {
+                            focus_for_event.borrow_mut().suppress_next_open();
+                            let focus_for_clear = focus_for_event.clone();
+                            Timer::single_shot(Duration::from_millis(150), move || {
+                                focus_for_clear.borrow_mut().clear_suppressed_open();
+                            });
+                        }
+                        let reason = if owner_focused {
+                            "focus-outside-owner-bar"
+                        } else {
+                            "focus-outside"
+                        };
+                        diag!(
+                            "[overlay-host] lock-menu event=dismiss reason={reason} generation={generation}"
+                        );
                         if let Some(menu) = menu_weak.upgrade() {
-                            menu.hide().ok();
+                            if let Err(e) = menu.hide() {
+                                diag!("[overlay-host] lock-menu event=error stage=hide-focus-outside error={e}");
+                            }
                         }
                     }
-                    _ => {}
+                    FocusTransition::None => {}
                 }
                 EventResult::Propagate
             });
@@ -3570,52 +3652,92 @@ fn main() -> Result<(), slint::PlatformError> {
         {
             let menu = menu.clone();
             let menu_for_callback = menu.clone();
+            let focus_for_callback = menu_focus.clone();
             let weak = overlay.as_weak();
             menu.on_mode_selected(move |mode| {
-                menu_for_callback.hide().ok();
+                focus_for_callback.borrow_mut().close();
+                diag!("[overlay-host] lock-menu event=select mode={mode}");
+                if let Err(e) = menu_for_callback.hide() {
+                    diag!("[overlay-host] lock-menu event=error stage=hide-selection error={e}");
+                }
                 if let Some(bar) = weak.upgrade() {
                     bar.invoke_lock_mode_selected(mode);
+                } else {
+                    diag!("[overlay-host] lock-menu event=error stage=select reason=bar-dropped");
                 }
             });
         }
         {
             let menu = menu.clone();
             let menu_for_callback = menu.clone();
+            let focus_for_callback = menu_focus.clone();
             menu.on_dismissed(move || {
-                menu_for_callback.hide().ok();
+                focus_for_callback.borrow_mut().close();
+                diag!("[overlay-host] lock-menu event=dismiss reason=escape");
+                if let Err(e) = menu_for_callback.hide() {
+                    diag!("[overlay-host] lock-menu event=error stage=hide-escape error={e}");
+                }
             });
         }
         {
             let menu = menu.clone();
             let weak = overlay.as_weak();
             let cfg_for_menu = cfg.clone();
+            let focus_for_open = menu_focus.clone();
             overlay.on_lock_menu_opened(move |anchor_x, anchor_y| {
+                if focus_for_open.borrow_mut().consume_suppressed_open() {
+                    diag!(
+                        "[overlay-host] lock-menu event=dismiss reason=chip-toggle-after-owner-focus"
+                    );
+                    return;
+                }
+                diag!(
+                    "[overlay-host] lock-menu event=open-request visible={}",
+                    menu.window().is_visible()
+                );
                 if menu.window().is_visible() {
-                    menu.hide().ok();
+                    focus_for_open.borrow_mut().close();
+                    diag!("[overlay-host] lock-menu event=dismiss reason=chip-toggle");
+                    if let Err(e) = menu.hide() {
+                        diag!("[overlay-host] lock-menu event=error stage=hide-chip-toggle error={e}");
+                    }
                     return;
                 }
                 let Some(bar) = weak.upgrade() else {
+                    diag!("[overlay-host] lock-menu event=error stage=open reason=bar-dropped");
                     return;
                 };
                 let snap = cfg_for_menu.read();
                 let managed = overlay_backend::deep_lock::cfg_is_managed_local(&snap);
-                menu.set_managed(managed);
-                menu.set_mode(if managed && snap.deep_lock {
+                let mode = if managed && snap.deep_lock {
                     2
                 } else if snap.suppress_tiles {
                     1
                 } else {
                     0
-                });
+                };
+                menu.set_managed(managed);
+                menu.set_mode(mode);
                 menu.global::<ui::Theme>()
                     .set_scheme(clamp_scheme(snap.color_scheme));
                 drop(snap);
+                diag!(
+                    "[overlay-host] lock-menu event=prepared mode={mode} managed={managed}"
+                );
 
-                let Ok(bar_hwnd) = grab_hwnd(bar.window()) else {
-                    return;
+                let bar_hwnd = match grab_hwnd(bar.window()) {
+                    Ok(hwnd) => hwnd,
+                    Err(e) => {
+                        diag!("[overlay-host] lock-menu event=error stage=bar-hwnd error={e}");
+                        return;
+                    }
                 };
-                let Ok((bar_left, bar_top, _, _)) = get_window_rect(bar_hwnd) else {
-                    return;
+                let (bar_left, bar_top, _, _) = match get_window_rect(bar_hwnd) {
+                    Ok(rect) => rect,
+                    Err(e) => {
+                        diag!("[overlay-host] lock-menu event=error stage=bar-rect error={e}");
+                        return;
+                    }
                 };
                 let scale = bar.window().scale_factor().max(0.1);
                 let menu_width = (210.0 * scale).round() as i32;
@@ -3632,6 +3754,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     })
                     .or_else(|| enum_monitors().into_iter().find(|m| m.is_primary));
                 let Some(monitor) = monitor else {
+                    diag!("[overlay-host] lock-menu event=error stage=monitor reason=none");
                     return;
                 };
                 let x = (anchor_x - menu_width).clamp(monitor.left, monitor.right - menu_width);
@@ -3647,29 +3770,78 @@ fn main() -> Result<(), slint::PlatformError> {
                 // retry helper rather than a best-effort one-shot grab.
                 menu.window()
                     .set_position(slint::PhysicalPosition::new(-32000, -32000));
-                if menu.show().is_err() {
+                let generation = focus_for_open.borrow_mut().begin_open();
+                if let Err(e) = menu.show() {
+                    focus_for_open.borrow_mut().close();
+                    diag!("[overlay-host] lock-menu event=error stage=show error={e}");
                     return;
                 }
+                diag!("[overlay-host] lock-menu event=show-request generation={generation}");
+                let last_reveal_error = Rc::new(RefCell::new(None::<String>));
+                let focus_for_reveal = focus_for_open.clone();
+                let error_for_reveal = last_reveal_error.clone();
                 let reveal = Rc::new(move |window: &LockModeMenuWindow| {
-                    let Ok(hwnd) = grab_hwnd(window.window()) else {
-                        return false;
+                    if !focus_for_reveal.borrow().is_current_open(generation) {
+                        return true;
+                    }
+                    let hwnd = match grab_hwnd(window.window()) {
+                        Ok(hwnd) => hwnd,
+                        Err(e) => {
+                            *error_for_reveal.borrow_mut() = Some(format!("hwnd: {e}"));
+                            return false;
+                        }
                     };
                     set_window_owner(hwnd, bar_hwnd);
-                    if set_skip_taskbar(hwnd, true).is_err()
-                        || set_always_on_top(hwnd, true).is_err()
-                        || (global_stealth() && set_stealth(hwnd, true).is_err())
-                    {
+                    if let Err(e) = set_skip_taskbar(hwnd, true) {
+                        *error_for_reveal.borrow_mut() = Some(format!("skip-taskbar: {e}"));
                         return false;
                     }
-                    let moved = move_window_pos_only(hwnd, x, y).is_ok();
-                    if moved {
-                        focus_window(hwnd);
+                    if let Err(e) = set_always_on_top(hwnd, true) {
+                        *error_for_reveal.borrow_mut() = Some(format!("always-on-top: {e}"));
+                        return false;
                     }
-                    moved
+                    if global_stealth() {
+                        if let Err(e) = set_stealth(hwnd, true) {
+                            *error_for_reveal.borrow_mut() = Some(format!("stealth: {e}"));
+                            return false;
+                        }
+                    }
+                    if let Err(e) = move_window_pos_only(hwnd, x, y) {
+                        *error_for_reveal.borrow_mut() = Some(format!("move: {e}"));
+                        return false;
+                    }
+                    if !focus_for_reveal.borrow_mut().mark_revealed(generation) {
+                        return true;
+                    }
+                    *error_for_reveal.borrow_mut() = None;
+                    focus_window(hwnd);
+                    diag!(
+                        "[overlay-host] lock-menu event=revealed generation={generation} x={x} y={y} mode={mode} managed={managed} focus=requested"
+                    );
+                    let focus_for_arm = focus_for_reveal.clone();
+                    Timer::single_shot(Duration::ZERO, move || {
+                        if focus_for_arm.borrow_mut().arm(generation) {
+                            diag!(
+                                "[overlay-host] lock-menu event=armed generation={generation}"
+                            );
+                        }
+                    });
+                    true
                 });
-                let fallback = Rc::new(|window: &LockModeMenuWindow| {
-                    window.hide().ok();
-                    diag!("[overlay-host] lock menu: native window did not realize; kept hidden");
+                let focus_for_fallback = focus_for_open.clone();
+                let fallback = Rc::new(move |window: &LockModeMenuWindow| {
+                    if !focus_for_fallback.borrow().is_current_open(generation) {
+                        return;
+                    }
+                    focus_for_fallback.borrow_mut().close();
+                    if let Err(e) = window.hide() {
+                        diag!("[overlay-host] lock-menu event=error stage=hide-reveal-fallback error={e}");
+                    }
+                    let detail = last_reveal_error
+                        .borrow()
+                        .clone()
+                        .unwrap_or_else(|| "native-window-not-realized".to_string());
+                    diag!("[overlay-host] lock-menu event=error stage=reveal error={detail}");
                 });
                 realize_with_retries(menu.as_ref(), reveal, fallback);
             });
@@ -4040,6 +4212,22 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // ===== Hide to tray =====
+    // Separate action beside the compact control: hides ONLY the bar window.
+    // Explicit-only — startup is always visible and nothing is persisted; the
+    // tray icon (installed below) is the restore path. Compact mode is not
+    // touched, so a restore returns the bar exactly as it was.
+    {
+        let weak_for_hide = overlay.as_weak();
+        overlay.on_hide_to_tray_clicked(move || {
+            if TRAY_AVAILABLE.load(Ordering::Relaxed) {
+                hide_bar_to_tray(&weak_for_hide);
+            } else {
+                diag!("hide-to-tray ignored: tray icon unavailable");
+            }
+        });
+    }
+
     // ===== Bar drag-to-move (Phase E6 v22 — manual cursor-delta) =====
     // drag-start-requested (pointer-down on status pill) records the
     // anchor; drag-moved (move while pressed) moves the window by the
@@ -4244,7 +4432,64 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    let result = overlay.run();
+    // ===== Tray icon (hidden-to-tray) =====
+    // Installed on the UI thread right before the event loop; its hidden
+    // message window is pumped by the same loop. The menu is state-pulled
+    // (built fresh on every right click) and every action routes through the
+    // EXISTING bar callbacks below — no duplicated session lifecycle. A failed
+    // install is logged and non-fatal. The bar stays usable, while its hide
+    // callback refuses to strand the user without a restore surface.
+    let tray_handle = {
+        let weak_for_tray = overlay.as_weak();
+        let state_for_snapshot = state.clone();
+        let state_for_dispatch = state.clone();
+        let cfg_for_tray = cfg.clone();
+        let weak_for_availability = overlay.as_weak();
+        match slint_replay::tray::install(
+            move || {
+                let (paused, running) = state_for_snapshot
+                    .lock()
+                    .map(|s| (s.paused, s.timer_active))
+                    .unwrap_or((false, false));
+                slint_replay::tray::TraySnapshot {
+                    bar_visible: !BAR_TRAY_HIDDEN.load(Ordering::Relaxed),
+                    paused,
+                    session_running: running,
+                }
+            },
+            move || cfg_for_tray.read().ui_language == "ru",
+            move |action| tray_action_dispatch(action, &weak_for_tray, &state_for_dispatch),
+            move |available| {
+                TRAY_AVAILABLE.store(available, Ordering::Relaxed);
+                if let Some(o) = weak_for_availability.upgrade() {
+                    o.set_tray_available(available);
+                    if !available && BAR_TRAY_HIDDEN.load(Ordering::Relaxed) {
+                        restore_bar_from_tray(&weak_for_availability);
+                    }
+                }
+            },
+        ) {
+            Ok(handle) => {
+                diag!("tray icon installed");
+                Some(handle)
+            }
+            Err(e) => {
+                diag!("tray icon unavailable: {e}");
+                None
+            }
+        }
+    };
+
+    // `ComponentHandle::run()` exits as soon as the last Slint window is
+    // hidden. Hidden-to-tray deliberately has no visible Slint window, so keep
+    // the UI thread pumping our native tray message window until an explicit
+    // Quit action calls `slint::quit_event_loop()`.
+    overlay.show()?;
+    let result = slint::run_event_loop_until_quit();
+    // — remove the tray icon on the clean shutdown path (icon gone before
+    // the process exits; a relaunch child adds its own, never a duplicate).
+    drop(tray_handle);
+    TRAY_AVAILABLE.store(false, Ordering::Relaxed);
     // All event-loop exits share the normal session stop path.
     let _ = slint_session::stop_session(slint_rt.clone(), &cfg);
     // E10.4 — kill any local-AI servers the in-app installer launched so they
@@ -4396,6 +4641,78 @@ fn recenter_when_sized(weak: slint::Weak<OverlayBarWindow>, target_w_logical: f3
     });
 }
 
+/// — hide ONLY the bar window (hide-to-tray). Same hide recipe as the
+/// tile close path (`hide()` + Win32 `force_hide`, which also clears
+/// secondary-monitor pixels). Nothing else stops: recording, hotkeys, TTS,
+/// session tasks and tiles keep running. Never touches compact state.
+fn hide_bar_to_tray(weak: &slint::Weak<OverlayBarWindow>) {
+    let Some(o) = weak.upgrade() else { return };
+    let _ = o.hide();
+    slint_replay::win32::force_hide(o.window());
+    BAR_TRAY_HIDDEN.store(true, Ordering::Relaxed);
+    diag!("bar hidden to tray (recording/hotkeys/TTS keep running)");
+}
+
+/// — restore the bar from the tray EXACTLY as it was: no resize, no
+/// compact-mode change, no config write. `show_windows` re-shows without
+/// stealing focus AND re-asserts the always-on-top band that hide/show drops
+/// (the bar is always topmost — `always-on-top: true` in overlay_bar.slint).
+fn restore_bar_from_tray(weak: &slint::Weak<OverlayBarWindow>) {
+    let Some(o) = weak.upgrade() else { return };
+    BAR_TRAY_HIDDEN.store(false, Ordering::Relaxed);
+    // Slint-side show first; the bar was SW_HIDE'd out from under Slint, so
+    // the Win32 re-show below is what actually makes it visible again (same
+    // stale-state reasoning as `win32::reveal_window`).
+    let _ = o.show();
+    if let Ok(hwnd) = grab_hwnd(o.window()) {
+        slint_replay::win32::show_windows(&[(hwnd.0 as isize, true)]);
+    }
+    diag!("bar restored from tray (compact mode unchanged)");
+}
+
+/// — tray menu / icon actions, all routed through the EXISTING session
+/// machinery: Pause/Resume invokes the bar's pause callback, Stop invokes the
+/// timer-toggle callback (guarded to STOP-only — it must never START a
+/// session), Quit uses the same clean `quit_event_loop` path as the bar's ✕.
+fn tray_action_dispatch(
+    action: slint_replay::tray::TrayAction,
+    weak: &slint::Weak<OverlayBarWindow>,
+    state: &slint_replay::app_state::SharedState,
+) {
+    use slint_replay::tray::TrayAction;
+    match action {
+        TrayAction::ShowHide => {
+            if BAR_TRAY_HIDDEN.load(Ordering::Relaxed) {
+                restore_bar_from_tray(weak);
+            } else {
+                hide_bar_to_tray(weak);
+            }
+        }
+        TrayAction::PauseResume => {
+            let running = state.lock().map(|s| s.timer_active).unwrap_or(false);
+            if running {
+                if let Some(o) = weak.upgrade() {
+                    diag!("session pause/resume requested from tray");
+                    o.invoke_pause_toggle_clicked();
+                }
+            }
+        }
+        TrayAction::Stop => {
+            let running = state.lock().map(|s| s.timer_active).unwrap_or(false);
+            if running {
+                if let Some(o) = weak.upgrade() {
+                    diag!("session stop requested from tray");
+                    o.invoke_timer_toggle_clicked();
+                }
+            }
+        }
+        TrayAction::Quit => {
+            diag!("quit confirmed (tray)");
+            let _ = slint::quit_event_loop();
+        }
+    }
+}
+
 fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_replay::app_state::SharedState) {
     // Поток C (stealth bar-flash fix) + I3: park the bar OFF the virtual desktop
     // synchronously NOW (this fn runs before overlay.run(), which composites the
@@ -4537,16 +4854,20 @@ pub(crate) fn active_stack_label(c: &overlay_backend::config::Config) -> String 
         _ => ("Groq".to_string(), false),
     };
     let ai_local = c.ai_provider == "local";
-    let model_full = if ai_local {
-        c.ai_local_model.as_str()
-    } else {
-        c.ai_model.as_str()
+    let model_full = match c.ai_provider.as_str() {
+        "local" => c.ai_local_model.as_str(),
+        "openai" => c.openai_model.as_str(),
+        "anthropic" => c.anthropic_model.as_str(),
+        "codex" => c.codex_model.as_str(),
+        _ => c.ai_model.as_str(),
     };
     // For a LOCAL model show the friendly "Gemma 12B" / "Gemma 26B-A4B" so the user
     // can tell the fallback vs primary model apart at a glance (the user asked to see
     // the selected model more explicitly); cloud models keep the short id.
     let model = if ai_local {
         overlay_backend::local_ai::local_model_label(model_full)
+    } else if c.ai_provider == "codex" {
+        model_full.to_string()
     } else {
         short_model_name(model_full)
     };
@@ -4652,9 +4973,21 @@ pub(crate) fn refresh_lock_chip(o: &OverlayBarWindow, cfg: &config::SharedConfig
 mod tile_heading_tests {
     #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)] // test asserts
     use super::{
-        manual_tile_failure, manual_tile_heading, manual_tile_not_configured,
+        active_stack_label, manual_tile_failure, manual_tile_heading, manual_tile_not_configured,
         manual_tile_placeholder, mic_busy_status, summary_empty_copy,
     };
+
+    #[test]
+    fn active_stack_uses_the_selected_direct_provider_model() {
+        let mut cfg = overlay_backend::config::Config::defaults();
+        cfg.stt_provider = "gigaam".into();
+        cfg.ai_model = "claude-haiku-4-5".into();
+        cfg.ai_provider = "codex".into();
+        cfg.codex_model = "gpt-5.6-terra".into();
+        let label = active_stack_label(&cfg);
+        assert!(label.contains("gpt-5.6-terra"));
+        assert!(!label.contains("haiku"));
+    }
 
     /// Double-numbering guard: `tile.slint` prepends `#<sequence>`, so a title
     /// carrying its own number (or digit) renders doubled in the tile header.

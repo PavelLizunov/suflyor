@@ -18,6 +18,15 @@ This project ships with hook-enforced autonomous rules. When the file
 Rules R1-R10 live in `.claude/AUTONOMOUS_RULES.md`. Read them before
 starting any autonomous session.
 
+## Winbrat remote work and recovery
+
+Before any Winbrat build, test, installer, or live UI action, read
+[`docs/winbrat-recovery.md`](docs/winbrat-recovery.md). Treat SSH loss as a
+connection incident, not proof of build failure. Do not restart the job until
+its recorded task/log/exit marker is inspected. Winbrat is agent-managed: use
+SSH, WinRM, or its verified console to recover it autonomously, but never act
+on the owner's workstation as though it were the test VM.
+
 ## State files (single source of truth)
 
 - `NIGHT_RUN_PLAN.md` — current backlog, work log, decision journal.
@@ -51,11 +60,19 @@ TypeScript. **THREE** standalone crates, NO root workspace:
   local_ai, memory, ocr, ocr_install, paths, persistence, re_transcribe,
   recorder, runtime, session_names, stt, tts, tts_install, update, vision.
   `slint-experiment` depends on it via a path dep.
-- **`suflyor-tts/`** — the neural read-aloud SIDECAR (`suflyor-tts.exe`, shipped
-  beside overlay-host in the installer). Links sherpa-onnx (TTS) ONLY and MUST
-  stay a separate process: two onnxruntimes in one binary crash on the 2nd model
-  load (the app keeps `ort`/GigaAM STT). DO NOT merge it back into
-  overlay-backend. Takes stdin line-commands (SPEAK/PAUSE/RESUME/STOP/VOICE/RATE).
+- **`suflyor-tts/`** — the Piper neural read-aloud + diarization SIDECAR
+  (`suflyor-tts.exe`, shipped beside overlay-host in the installer). Links
+  sherpa-onnx (TTS) ONLY and MUST stay a separate process: two onnxruntimes in
+  one binary crash on the 2nd model load (the app keeps `ort`/GigaAM STT). DO
+  NOT merge it back into overlay-backend. Takes stdin line-commands
+  (SPEAK/PAUSE/RESUME/STOP/VOICE/RATE). Diarization ALWAYS stays here.
+- **`suflyor-teratts/`** — experimental TeraTTSv2 read-aloud SIDECAR (RC17,
+  `suflyor-teratts.exe`). Links ONNX Runtime through `ort` ONLY; the same
+  process-isolation rule applies. Never add a second ONNX Runtime to
+  suflyor-tts instead. The ~370 MB model is pinned in
+  `suflyor-teratts/manifest/teratts-v2.json` and downloads on demand — never
+  bundle weights in the installer; `suflyor-teratts/NOTICE.md` carries the
+  upstream licensing release gate (upstream has NO LICENSE file).
 
 Run/build from `slint-experiment/`:
 ```pwsh

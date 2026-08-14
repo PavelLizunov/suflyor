@@ -3,7 +3,7 @@
 # the sibling overlay-backend crate for audio/STT/AI/journal/KB/config.
 [package]
 name = "slint-replay"
-version = "0.36.1-rc.8"
+version = "0.37.0-rc.13"
 edition = "2021"
 description = "suflyor — AI-interview overlay (Slint UI + orchestration)"
 license = "GPL-3.0-or-later"
@@ -102,6 +102,9 @@ windows = { version = "0.62", features = [
     # overlay-host.log in release (windows_subsystem="windows" has no console,
     # so every eprintln! would otherwise be discarded — testers got empty logs).
     "Win32_System_Console",
+    # RC4 hidden-to-tray — GetModuleHandleW for the tray icon loader
+    # (Shell_NotifyIconW itself comes from the Win32_UI_Shell above).
+    "Win32_System_LibraryLoader",
 ] }
 
 # Phase 0.5 markdown spike: CommonMark + GFM parser. Already a transitive

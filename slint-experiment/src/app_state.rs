@@ -244,7 +244,13 @@ pub fn classify_ai_error(msg: &str) -> &'static str {
         return "Local AI is deep-locked (unlock from the bar's lock chip)";
     }
     let lower = msg.to_lowercase();
-    if lower.contains("timed out") || lower.contains("timeout") {
+    if lower.contains("codex security policy stopped this answer") {
+        "Codex security policy stopped this answer"
+    } else if lower.contains("codex did not honor the selected model") {
+        "Codex did not honor the selected model"
+    } else if lower.contains("codex version cannot provide the required safe mode") {
+        "This Codex version cannot provide the required safe mode"
+    } else if lower.contains("timed out") || lower.contains("timeout") {
         "AI bridge timed out"
     } else if lower.contains("connection refused") || lower.contains("connection error") {
         "AI bridge unreachable (connection refused)"
@@ -467,6 +473,18 @@ mod tests {
             (
                 "some weird new failure mode we never heard of",
                 "AI bridge call failed (see overlay-host.log for diagnostic)",
+            ),
+            (
+                "Codex security policy stopped this answer",
+                "Codex security policy stopped this answer",
+            ),
+            (
+                "Codex did not honor the selected model",
+                "Codex did not honor the selected model",
+            ),
+            (
+                "This Codex version cannot provide the required safe mode",
+                "This Codex version cannot provide the required safe mode",
             ),
         ];
         for (input, expected_category) in cases {

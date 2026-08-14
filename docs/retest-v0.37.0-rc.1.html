@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>suflyor v0.37.0-rc.1 retest</title>
+</head>
+<body>
+<h1>suflyor v0.37.0-rc.1 retest — experimental TeraTTSv2 read-aloud engine</h1>
+<ol>
+<li>Start from the SAFE state: engine Piper (default), at least one Piper
+voice installed. Confirm Settings &rarr; Read aloud shows the Engine chooser
+with "Piper" selected and the Piper voice/speed/test controls unchanged from
+rc.16; read-aloud from a tile still speaks through Piper.</li>
+<li>Switch Engine to "Tera (experimental)". The tab must show the
+EXPERIMENTAL warning, a model status line ("not installed"), Install model +
+Cancel buttons, and NO Tera voice dropdown yet. Config persists: reopen
+Settings — Tera is still selected.</li>
+<li>Install the Tera model: phases advance (Preparing / Downloading file
+(i/N) / Verifying / Publishing / Model installed). Cancel mid-download once:
+the run stops, status shows cancelled, and a retry resumes to completion.
+After success the status flips to installed+ready and the ten Tera voices
+appear; restarting the app keeps the installed state
+(%APPDATA%\suflyor\tts\teratts-v2-&lt;revision&gt;).</li>
+<li>Select a Tera voice (ru_f1 recommended), press Test voice: speech must
+play at 44.1 kHz through the Tera sidecar. Read a tile answer aloud
+(Shift+Alt+1), pause/resume (Shift+Alt+3) and stop — all must work; STT must
+stay suppressed while Tera speaks.</li>
+<li>Fallback: with engine Tera selected, delete/rename the
+teratts-v2-&lt;revision&gt; dir (or the suflyor-teratts.exe) and read aloud
+again — speech must still play through Piper without a restart decision from
+the user; no crash, no silent failure.</li>
+<li>Diarization stays independent: run "Определить говорящих" on a recorded
+session with engine Tera selected — it must complete through the Piper
+sidecar (suflyor-tts.exe) exactly as before.</li>
+<li>Persistence + compatibility: an rc.16 config (bare tts_voice, no
+tts_engine) must open on Piper with the same voice; after choosing a Tera
+voice, config.json stores "tera:&lt;style&gt;" and engine "tera".</li>
+<li>Reused-window hygiene: open Settings, trigger a Tera install status,
+close and reopen Settings — no stale install progress/status strings survive;
+switching UI language EN/RU re-renders engine labels and status correctly
+(no Cyrillic labels in the English UI, no tofu glyphs anywhere on the tab).</li>
+<li>Resolution matrix: at 1280x768 and 720x600, in English and Russian, the
+Read aloud tab (both engine sections, install phases, status lines) renders
+without clipping or missing glyphs.</li>
+<li>Logs: %APPDATA%\suflyor\suflyor-teratts.log exists after Tera speaks and
+contains ids/counts only — never the spoken text; overlay-host log shows the
+Tera READY handshake line and no URLs with credentials.</li>
+<li>P1 hardening — self-healing install: with the model installed, damage the
+release dir (truncate one file under models\ or delete its manifest.json),
+then press Install model again. The run must NOT fail forever at Publishing:
+the broken dir is moved aside (teratts-v2-&lt;revision&gt;.broken-*), the
+fresh copy publishes, status flips to installed+ready, and Tera speaks. A
+valid install must never be re-downloaded or touched.</li>
+<li>P1 hardening — STOP/interrupt during synthesis: with Tera selected, read
+a LONG tile answer aloud and press stop while speech has not started yet or
+is mid-first-chunk (synthesis still running). Audio must stop IMMEDIATELY —
+no waiting for CPU synthesis. Likewise start a NEW read-aloud while the
+previous one is still synthesizing: the old utterance is replaced and none of
+its audio ever plays. Every interruption still shows exactly one terminal
+state on the tile.</li>
+<li>P1 hardening — dead engine never falsely suppresses the mic: with Tera
+selected, make the engine unusable (rename the model dir AND
+suflyor-teratts.exe) and read aloud. Speech must fall back to Piper; when
+Piper is unavailable too, read-aloud is refused and STT does NOT enter the
+speaking-suppression window (the next dictation is transcribed immediately).
+STOP with a dead sidecar must not spawn a new engine process.</li>
+</ol>
+</body>
+</html>

@@ -694,6 +694,12 @@ pub fn focus_window(hwnd: HWND) {
     }
 }
 
+/// Whether `hwnd` is currently the native foreground window.
+pub fn is_foreground_window(hwnd: HWND) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+    unsafe { GetForegroundWindow() == hwnd }
+}
+
 /// Force a window VISIBLE at the Win32 level and bring it to the foreground.
 /// Used when re-opening a REUSED overlay window (Settings) that may have been
 /// hidden OUT FROM UNDER Slint by `hide_own_windows()` — the F8 / capture-chip
@@ -1037,6 +1043,18 @@ pub fn send_ctrl_c() {
     unsafe {
         SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
     }
+}
+
+/// Global hotkeys arrive on key-down. Synthetic Ctrl+C must wait until the
+/// physical Shift+Alt chord is released, otherwise foreground applications
+/// receive Ctrl+Shift+Alt+C and do not copy the selection.
+#[must_use]
+pub fn read_aloud_hotkey_modifiers_released() -> bool {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        GetAsyncKeyState, VIRTUAL_KEY, VK_CONTROL, VK_MENU, VK_SHIFT,
+    };
+    let down = |key: VIRTUAL_KEY| unsafe { GetAsyncKeyState(i32::from(key.0)) < 0 };
+    !down(VK_SHIFT) && !down(VK_MENU) && !down(VK_CONTROL)
 }
 
 #[cfg(test)]

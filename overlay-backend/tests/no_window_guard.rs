@@ -17,6 +17,7 @@ const SPAWN_FILES: &[&str] = &[
     "src/ocr.rs",
     "src/diarize.rs",
     "src/update.rs",
+    "src/codex_subscription.rs",
 ];
 
 /// Substrings that mark a `Command::new` site as intentionally windowless.

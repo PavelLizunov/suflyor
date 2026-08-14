@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>suflyor v0.36.1-rc.16 retest</title></head>
+<body><h1>suflyor v0.36.1-rc.16 retest</h1><ol>
+<li>Use only the isolated mock app-server. Do not sign in to a real account. Open Settings -&gt; AI providers -&gt; Codex and confirm signed-out, loading, signed-in, empty-catalog, malformed-response, timeout, and usage-unavailable states stay generic.</li>
+<li>In the signed-in mock state, confirm the model picker contains exactly the visible paginated mock models, marks no hard-coded model as universally available, and does not show server/account/error payloads.</li>
+<li>Select a non-default mock model, close and reopen Settings, restart the debug app, and confirm the selection persists. Remove it from the next mock catalog and confirm the visible server default is selected and saved with a short fallback notice.</li>
+<li>Run F9 and a typed ask. Confirm Start, ordered text deltas, and one terminal completion render in the tile. Cancel a second stream and confirm the mock receives turn/interrupt and no stale delta repaints the tile.</li>
+<li>Exercise follow-up and a non-streaming answer path. Confirm both use the selected Codex model and subscription requests add zero USD while token/rate-limit information is not shown as API billing.</li>
+<li>Make the mock emit a failed turn, malformed delta, wrong thread/turn ids, a timeout, and a tool/approval request. Confirm every path fails closed with a generic tile/status and never displays raw mock payload, path, URL, prompt, or account data.</li>
+<li>Repeat Connect, Copy code, Open sign-in page, Disconnect, provider switch, language switch, and Settings reopen. Confirm login URL/code/copy/model/usage/busy statuses never return stale; only the explicit Open action can launch a browser.</li>
+<li>At 1280x768 and 720x600 in English and Russian, verify model row, refresh action, account/usage copy, device-code row, scrolling, accessibility label, and no clipping/tofu glyphs.</li>
+<li>Inspect the mock request log: isolated CODEX_HOME and empty cwd, ephemeral thread, the exact suflyor-text-only profile, elevated Windows sandbox, root filesystem deny, approval never, selected model, no inherited application secrets, no auth.json/token/client id, no Hermes/direct ChatGPT endpoint, and no model-command network access.</li>
+</ol></body></html>

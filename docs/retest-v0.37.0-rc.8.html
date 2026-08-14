@@ -1,0 +1,15 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>suflyor v0.37.0-rc.8 retest</title>
+<h1>suflyor v0.37.0-rc.8 - hidden-to-tray mode</h1>
+<ol>
+  <li>Start suflyor. The bar must always start visible; hidden state must not survive a restart.</li>
+  <li>Verify the Hide to tray chip appears beside the compact-bar control in both wide and compact layouts, with no clipping at 1280 px and no tofu glyphs.</li>
+  <li>Start a session, open a tile, begin TTS, then choose Hide to tray. Only the bar disappears; the tile, recording, TTS, timer, and global hotkeys continue working.</li>
+  <li>Left-click the suflyor tray icon. The bar returns without changing compact mode, size, monitor, always-on-top behavior, or focus unexpectedly. Left-click again to hide it.</li>
+  <li>Right-click the tray icon. Verify Restore/Hide, Pause/Resume, Stop, and Quit labels follow the selected RU/EN UI language and disabled/checked states match the running session.</li>
+  <li>Use Pause/Resume and Stop from the tray menu. They must behave exactly like the existing bar controls; Stop must never start an idle session.</li>
+  <li>With the bar hidden, restart Windows Explorer. The tray icon must return and still restore the bar. If icon recovery fails, the bar must become visible automatically.</li>
+  <li>Run the normal screenshot hotkey while the bar is hidden. The bar must remain hidden after the capture cycle; other hotkeys must remain registered.</li>
+  <li>Quit from the tray menu. Recording and sidecars must follow the normal clean shutdown path, and no duplicate or stale tray icon should remain after relaunch.</li>
+</ol>

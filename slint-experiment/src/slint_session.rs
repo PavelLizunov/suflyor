@@ -433,7 +433,14 @@ fn forward_audio_chunks(
                 continue;
             }
             if let Some(recorder) = recorder.as_ref() {
-                recorder.feed(&chunk);
+                // Raw PCM is always recorded. Only direct system-loopback
+                // chunks get text-free app-TTS mask metadata; real microphone
+                // speech remains available during simultaneous read-aloud.
+                recorder.feed_with_tts_mask(
+                    &chunk,
+                    matches!(chunk.source, AudioSource::System)
+                        && overlay_backend::tts::should_suppress_stt(),
+                );
             }
             let permit = match stt_tx.reserve().await {
                 Ok(permit) => permit,
@@ -671,9 +678,11 @@ async fn maybe_spawn_auto_tile(
         enabled,
         every_line,
         trigger_keywords,
+        protocol,
         base_url,
         bearer,
         model,
+        reasoning_effort,
         response_language,
         meeting_context,
         cap_usd,
@@ -683,19 +692,22 @@ async fn maybe_spawn_auto_tile(
     ) = {
         let c = cfg.read();
         let ep = c.ai_endpoint(false);
+        let is_unmetered = ep.is_unmetered();
         (
             c.auto_tiles_enabled,
             c.auto_tile_every_line,
             c.trigger_keywords.clone(),
+            ep.protocol,
             ep.base_url,
             ep.bearer,
             ep.model,
+            ep.reasoning_effort,
             c.response_language.clone(),
             c.meeting_context.clone(),
             c.max_session_cost_usd,
             c.tile_monitor_name.clone(),
             c.stealth_enabled,
-            ep.is_local,
+            is_unmetered,
         )
     };
     // A bearer is required only for the CLOUD bridge; local servers
@@ -947,9 +959,15 @@ async fn maybe_spawn_auto_tile(
     });
 
     let t0 = Instant::now();
-    let (answer, usage) = match ai::complete_with_usage(&base_url, &bearer, &model, messages, 512)
-        .await
-    {
+    let endpoint = ai::AiEndpoint {
+        protocol,
+        base_url,
+        bearer,
+        model: model.clone(),
+        reasoning_effort,
+        is_local,
+    };
+    let (answer, usage) = match ai::complete_with_usage_endpoint(&endpoint, messages, 512).await {
         Ok((t, u)) => {
             lock(&rt)
                 .health

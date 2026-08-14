@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>suflyor v0.37.0-rc.4 retest</title>
+</head>
+<body>
+<h1>suflyor v0.37.0-rc.4 retest - Codex speed and shared Vision providers</h1>
+<ol>
+<li>Open Settings &rarr; AI providers &rarr; Codex. A fresh or previously
+unset selection must choose <code>gpt-5.6-luna</code>. An existing explicit
+model must remain unchanged.</li>
+<li>For Luna or Spark, open Reasoning effort. It must list only efforts
+advertised by that account model. Select Low: it is labelled as the fastest
+available option. No Off/None option may appear unless the catalog advertises
+it. Model names themselves must not contain reasoning metadata.</li>
+<li>Ask a harmless text question with Low selected. It must stream an answer,
+not stop with the former security-policy error. Reopen Settings and confirm
+the selected model and effort persist.</li>
+<li>In Vision (screenshots &middot; F8), confirm the provider list matches AI
+providers: custom OpenAI-compatible, local OpenAI-compatible, OpenAI API,
+Anthropic API and Codex, plus Off.</li>
+<li>Select Codex for Vision. The model picker must contain only account models
+that advertise image input; the text-only Spark model must not appear. The
+text and Vision model selections must remain independent.</li>
+<li>Select an image-capable Codex text model. “Same as text model above” must
+be available for Vision. Switch the text model to text-only Spark: the Same
+option must become unavailable with a clear reason and must not silently route
+the screenshot or later Vision-tile turns to Spark.</li>
+<li>Use Test vision connection, then capture a harmless screenshot with F8.
+Both must work through the selected image-capable Codex model. Local OCR and
+its fallback behaviour must remain unchanged.</li>
+<li>At 1280x768 in English and Russian, inspect AI providers, the full Vision
+section, the top bar and a Vision tile for clipping, stale provider names or
+an incorrect model label.</li>
+</ol>
+</body>
+</html>

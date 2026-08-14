@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+pub use crate::ai::AiEndpoint;
+use crate::ai::AiProtocol;
+use crate::credentials::SecretSlot;
+
 /// The curated `/key` snippet pack (the ~1000-line default data literal) lives
 /// in its own file to keep this module navigable; `default_snippets` is the
 /// only item it exposes. Unit tests live in `config/tests.rs` (declared at the
@@ -66,6 +70,29 @@ pub struct Config {
     /// phase.) `#[serde(default)]` → old configs default to "cloud".
     #[serde(default = "default_ai_provider")]
     pub ai_provider: String,
+    /// Direct OpenAI Responses API profile. The API key is intentionally not
+    /// serialized; it lives in Windows Credential Manager.
+    #[serde(default = "default_openai_base_url")]
+    pub openai_base_url: String,
+    #[serde(default = "default_openai_model")]
+    pub openai_model: String,
+    /// Direct Anthropic Messages API profile. The API key is intentionally not
+    /// serialized; it lives in Windows Credential Manager.
+    #[serde(default = "default_anthropic_base_url")]
+    pub anthropic_base_url: String,
+    #[serde(default = "default_anthropic_model")]
+    pub anthropic_model: String,
+    /// Exact account-managed model id selected from the official Codex
+    /// app-server catalog. No credential or endpoint is persisted alongside it.
+    #[serde(default)]
+    pub codex_model: String,
+    /// Empty means the selected model's app-server default.
+    #[serde(default)]
+    pub codex_reasoning_effort: String,
+    /// Image-capable Codex model selected independently for F8. The Settings
+    /// picker fills this only from catalog entries advertising `image` input.
+    #[serde(default)]
+    pub codex_vision_model: String,
     /// Local server base URL (OpenAI-compatible). Default is llama.cpp's
     /// "http://127.0.0.1:8080/v1" (the shipped setup pipeline); Ollama uses
     /// "http://127.0.0.1:11434/v1".
@@ -110,11 +137,10 @@ pub struct Config {
 
     /// Screenshot/vision channel — resolved INDEPENDENTLY of the text AI (via
     /// [`Config::vision_endpoint`]) so a local text model can keep answering
-    /// while screenshots go to a vision-capable model. Provider: "off"
-    /// (disabled), "same" (reuse the text endpoint), "cloud" (the `vision_*`
-    /// bridge fields), or "local" (a 2nd local vision server). Default "cloud"
-    /// → F8 capture works out of the box through the configured bridge with a
-    /// Sonnet vision model.
+    /// while screenshots go to a vision-capable model. Provider: "off",
+    /// "cloud" (custom OpenAI-compatible bridge), "local", "openai",
+    /// "anthropic", or "codex". Legacy "same" configs remain readable.
+    /// Default "cloud" keeps F8 working through the configured bridge.
     #[serde(default = "default_vision_provider")]
     pub vision_provider: String,
     /// Cloud vision endpoint. Empty `base_url`/`bearer` fall back to the text
@@ -151,14 +177,22 @@ pub struct Config {
     #[serde(default)]
     pub vision_test_practice: bool,
 
-    /// Read-aloud (TTS, read-aloud feature): the SAPI voice id to speak with.
-    /// Empty = auto-pick a Russian voice. A machine-local OUTPUT preference
-    /// (like `vision_phonetics`) — deliberately NOT transferred on a
-    /// server-settings import.
+    /// Read-aloud (TTS, read-aloud feature): the voice to speak with, as a
+    /// NAMESPACED reference — `piper:<voice-dir>` or `tera:<style>` (RC17).
+    /// Legacy bare ids from older configs resolve to Piper. Empty = auto-pick
+    /// within the selected engine. A machine-local OUTPUT preference (like
+    /// `vision_phonetics`) — deliberately NOT transferred on a server-settings
+    /// import.
     #[serde(default)]
     pub tts_voice: String,
 
-    /// Read-aloud speech rate (SAPI range −10…+10, 0 = normal). Machine-local.
+    /// Read-aloud engine (RC17): "piper" (default) or "tera" — the
+    /// experimental TeraTTSv2 ONNX sidecar. Unknown values fall back to
+    /// Piper; diarization always stays on the Piper sidecar. Machine-local.
+    #[serde(default)]
+    pub tts_engine: String,
+
+    /// Read-aloud speech rate (range −10…+10, 0 = normal). Machine-local.
     #[serde(default)]
     pub tts_rate: i32,
 
@@ -391,8 +425,10 @@ pub struct Config {
     /// falls back to "ru" at the t() lookup level.
     ///
     /// Stored in config.json. Loaded once per window mount; switching
-    /// re-renders via React state. Tray menu remains Russian (Rust-side
-    /// menu builder doesn't observe this field — separate concern).
+    /// re-renders via React state. The tray context menu (RC4, Rust-side
+    /// `slint_replay::tray`) reads this field for its RU/EN labels.
+    /// NOTE: the hidden-to-tray STATE is deliberately NOT a config field —
+    /// it is explicit-only, process-local, and never persisted.
     #[serde(default = "default_ui_language")]
     pub ui_language: String,
 
@@ -587,6 +623,13 @@ impl Config {
             prep_model: "claude-sonnet-4-6".into(),
             ai_prompt_cache: false,
             ai_provider: default_ai_provider(),
+            openai_base_url: default_openai_base_url(),
+            openai_model: default_openai_model(),
+            anthropic_base_url: default_anthropic_base_url(),
+            anthropic_model: default_anthropic_model(),
+            codex_model: String::new(),
+            codex_reasoning_effort: String::new(),
+            codex_vision_model: String::new(),
             ai_local_base_url: default_ai_local_base_url(),
             ai_local_bearer: String::new(),
             ai_local_model: String::new(),
@@ -605,7 +648,8 @@ impl Config {
             vision_local_model: String::new(),
             vision_phonetics: false,
             vision_test_practice: false,
-            tts_voice: String::new(),
+            tts_voice: "tera:ru_f1".into(),
+            tts_engine: "tera".into(),
             tts_rate: 0,
             response_language: "ru".into(),
             groq_api_key: String::new(),
@@ -653,17 +697,6 @@ impl Config {
     }
 }
 
-/// Resolved AI endpoint for a single call (live answer or prep/structuring).
-#[derive(Debug, Clone)]
-pub struct AiEndpoint {
-    pub base_url: String,
-    pub bearer: String,
-    pub model: String,
-    /// True when the LOCAL provider is active. Callers zero out cost and
-    /// gate screenshots (text-only local models) on this flag.
-    pub is_local: bool,
-}
-
 /// Default cloud vision model when `vision_model` is unset — Sonnet (strong
 /// vision + present in the ai.rs pricing table).
 pub const DEFAULT_VISION_MODEL: &str = "claude-sonnet-4-6";
@@ -703,36 +736,65 @@ impl Config {
     /// existing configs behave exactly as before.
     #[must_use]
     pub fn ai_endpoint(&self, prep: bool) -> AiEndpoint {
-        if self.ai_provider == "local" {
-            let model = if prep && !self.ai_local_prep_model.trim().is_empty() {
-                self.ai_local_prep_model.clone()
-            } else {
-                self.ai_local_model.clone()
-            };
-            AiEndpoint {
-                base_url: self.ai_local_base_url.clone(),
-                bearer: self.ai_local_bearer.clone(),
-                model,
-                is_local: true,
+        match self.ai_provider.as_str() {
+            "local" => {
+                let model = if prep && !self.ai_local_prep_model.trim().is_empty() {
+                    self.ai_local_prep_model.clone()
+                } else {
+                    self.ai_local_model.clone()
+                };
+                AiEndpoint {
+                    protocol: AiProtocol::OpenAiCompatible,
+                    base_url: self.ai_local_base_url.clone(),
+                    bearer: self.ai_local_bearer.clone(),
+                    model,
+                    reasoning_effort: None,
+                    is_local: true,
+                }
             }
-        } else {
-            let model = if prep {
-                self.prep_model.clone()
-            } else {
-                self.ai_model.clone()
-            };
-            AiEndpoint {
+            "openai" => AiEndpoint {
+                protocol: AiProtocol::OpenAiResponses,
+                base_url: self.openai_base_url.clone(),
+                bearer: protected_provider_secret(SecretSlot::OpenAi),
+                model: self.openai_model.clone(),
+                reasoning_effort: None,
+                is_local: false,
+            },
+            "anthropic" => AiEndpoint {
+                protocol: AiProtocol::AnthropicMessages,
+                base_url: self.anthropic_base_url.clone(),
+                bearer: protected_provider_secret(SecretSlot::Anthropic),
+                model: self.anthropic_model.clone(),
+                reasoning_effort: None,
+                is_local: false,
+            },
+            "codex" => AiEndpoint {
+                protocol: AiProtocol::CodexSubscription,
+                base_url: String::new(),
+                bearer: String::new(),
+                model: self.codex_model.clone(),
+                reasoning_effort: (!self.codex_reasoning_effort.trim().is_empty())
+                    .then(|| self.codex_reasoning_effort.clone()),
+                is_local: false,
+            },
+            _ => AiEndpoint {
+                protocol: AiProtocol::OpenAiCompatible,
                 base_url: self.ai_base_url.clone(),
                 bearer: self.ai_bearer.clone(),
-                model,
+                model: if prep {
+                    self.prep_model.clone()
+                } else {
+                    self.ai_model.clone()
+                },
+                reasoning_effort: None,
                 is_local: false,
-            }
+            },
         }
     }
 
-    /// V0.8.0 (Поток D) — one-shot CLOUD escalation endpoint. Always the cloud
-    /// bridge with the SMART model (`prep_model`, default Sonnet), IGNORING
-    /// `ai_provider`. Used when the user escalates a single hard question (a
+    /// V0.8.0 (Поток D) — one-shot CLOUD escalation endpoint. A local provider
+    /// escalates through the legacy cloud bridge; a direct cloud provider stays
+    /// on its native API. Used when the user escalates a single hard question (a
     /// Shift+F9 ask, a per-tile "↑ ask the smart model", or a 🧠 follow-up)
     /// without flipping the persistent provider — so the default stays local
     /// (free, private) and there is no "forgot to switch back" trap.
@@ -742,23 +804,40 @@ impl Config {
     /// a separate web-search / tool-use feature (out of scope here).
     ///
     /// `is_local` is forced false so callers bill it + allow screenshots as for
-    /// any cloud call. The bridge fields are always present in config (even when
-    /// the active provider is local), so this is safe regardless of provider.
+    /// any cloud call. Existing local + bridge configurations retain their exact
+    /// routing, including Hermes as an OpenAI-compatible bridge.
     #[must_use]
     pub fn ai_endpoint_cloud(&self) -> AiEndpoint {
-        AiEndpoint {
-            base_url: self.ai_base_url.clone(),
-            bearer: self.ai_bearer.clone(),
-            model: self.prep_model.clone(),
-            is_local: false,
+        if matches!(self.ai_provider.as_str(), "openai" | "anthropic" | "codex") {
+            self.ai_endpoint(true)
+        } else {
+            AiEndpoint {
+                protocol: AiProtocol::OpenAiCompatible,
+                base_url: self.ai_base_url.clone(),
+                bearer: self.ai_bearer.clone(),
+                model: self.prep_model.clone(),
+                reasoning_effort: None,
+                is_local: false,
+            }
         }
     }
 
     /// Resolve the SEPARATE vision endpoint, or `None` when vision is "off".
-    /// "same" reuses the text endpoint; "cloud"/"local" use the `vision_*` /
-    /// `vision_local_*` fields but fall back to the corresponding text fields
-    /// when left empty, so a configured bridge works without re-entering creds.
-    /// Cloud model falls back to Sonnet ([`DEFAULT_VISION_MODEL`]).
+    /// Legacy "same" reuses the text endpoint except for Codex, which requires
+    /// a catalog-verified image model. Bridge/local fields fall back to their
+    /// corresponding text fields; direct providers reuse their protected
+    /// profiles. Cloud model falls back to [`DEFAULT_VISION_MODEL`].
+    #[must_use]
+    pub fn same_text_model_accepts_images_declared(&self) -> bool {
+        match self.ai_provider.as_str() {
+            "local" => self.ai_local_vision,
+            "codex" => {
+                !self.codex_model.trim().is_empty() && self.codex_model == self.codex_vision_model
+            }
+            _ => false,
+        }
+    }
+
     #[must_use]
     pub fn vision_endpoint(&self) -> Option<AiEndpoint> {
         let pick = |specific: &str, fallback: &str| {
@@ -769,40 +848,79 @@ impl Config {
             }
         };
         match self.vision_provider.as_str() {
+            "same" if !self.same_text_model_accepts_images_declared() => None,
             "same" => Some(self.ai_endpoint(false)),
             "cloud" => Some(AiEndpoint {
+                protocol: AiProtocol::OpenAiCompatible,
                 base_url: pick(&self.vision_base_url, &self.ai_base_url),
                 bearer: pick(&self.vision_bearer, &self.ai_bearer),
                 model: pick(&self.vision_model, DEFAULT_VISION_MODEL),
+                reasoning_effort: None,
                 is_local: false,
             }),
             "local" => Some(AiEndpoint {
+                protocol: AiProtocol::OpenAiCompatible,
                 base_url: pick(&self.vision_local_base_url, &self.ai_local_base_url),
                 bearer: pick(&self.vision_local_bearer, &self.ai_local_bearer),
                 model: pick(&self.vision_local_model, &self.ai_local_model),
+                reasoning_effort: None,
                 is_local: true,
+            }),
+            "openai" => Some(AiEndpoint {
+                protocol: AiProtocol::OpenAiResponses,
+                base_url: self.openai_base_url.clone(),
+                bearer: protected_provider_secret(SecretSlot::OpenAi),
+                model: self.openai_model.clone(),
+                reasoning_effort: None,
+                is_local: false,
+            }),
+            "anthropic" => Some(AiEndpoint {
+                protocol: AiProtocol::AnthropicMessages,
+                base_url: self.anthropic_base_url.clone(),
+                bearer: protected_provider_secret(SecretSlot::Anthropic),
+                model: self.anthropic_model.clone(),
+                reasoning_effort: None,
+                is_local: false,
+            }),
+            "codex" if !self.codex_vision_model.trim().is_empty() => Some(AiEndpoint {
+                protocol: AiProtocol::CodexSubscription,
+                base_url: String::new(),
+                bearer: String::new(),
+                model: self.codex_vision_model.clone(),
+                reasoning_effort: None,
+                is_local: false,
             }),
             _ => None, // "off" (or unknown) → feature disabled
         }
     }
 
-    /// Config-only readiness snapshot for the diagnostics panel (#131). Pure
-    /// (no network, no audio) so it's instant + testable; the UI layers live
-    /// AI/STT pings on top. `detail` strings carry NO secrets.
+    /// Readiness snapshot for the diagnostics panel (#131). It performs no
+    /// network or audio work; direct providers may read their protected key
+    /// from Windows Credential Manager. `detail` strings carry NO secrets.
     #[must_use]
     pub fn readiness(&self) -> ReadinessReport {
         // AI — resolve the ACTIVE provider (local vs cloud) via the resolver.
         let ep = self.ai_endpoint(false);
-        let ai_configured = !ep.base_url.trim().is_empty()
-            && !ep.model.trim().is_empty()
-            && (ep.is_local || !ep.bearer.trim().is_empty());
+        let ai_configured = if ep.protocol == AiProtocol::CodexSubscription {
+            !ep.model.trim().is_empty()
+        } else {
+            !ep.base_url.trim().is_empty()
+                && !ep.model.trim().is_empty()
+                && (ep.is_local || !ep.bearer.trim().is_empty())
+        };
         let ai_detail = if ai_configured {
-            format!(
-                "{} · {} · {}",
-                if ep.is_local { "local" } else { "cloud" },
-                ep.base_url,
-                ep.model
-            )
+            let provider = match ep.protocol {
+                AiProtocol::OpenAiCompatible if ep.is_local => "local",
+                AiProtocol::OpenAiCompatible => "cloud",
+                AiProtocol::OpenAiResponses => "openai",
+                AiProtocol::AnthropicMessages => "anthropic",
+                AiProtocol::CodexSubscription => "codex-subscription",
+            };
+            if ep.protocol == AiProtocol::CodexSubscription {
+                format!("{} · {}", provider, ep.model)
+            } else {
+                format!("{} · {} · {}", provider, ep.base_url, ep.model)
+            }
         } else {
             String::new()
         };
@@ -851,9 +969,15 @@ impl Config {
         // never a bearer (mirrors the AI line).
         let (vision_configured, vision_detail) = match self.vision_endpoint() {
             Some(ep) => {
-                let ok = !ep.base_url.trim().is_empty() && !ep.model.trim().is_empty();
+                let is_codex = ep.protocol == AiProtocol::CodexSubscription;
+                let ok =
+                    !ep.model.trim().is_empty() && (is_codex || !ep.base_url.trim().is_empty());
                 let d = if ok {
-                    format!("{} · {} · {}", self.vision_provider, ep.base_url, ep.model)
+                    if is_codex {
+                        format!("codex · account · {}", ep.model)
+                    } else {
+                        format!("{} · {} · {}", self.vision_provider, ep.base_url, ep.model)
+                    }
                 } else {
                     String::new()
                 };
@@ -936,6 +1060,30 @@ impl Config {
 
 fn default_ai_provider() -> String {
     "cloud".into()
+}
+
+fn default_openai_base_url() -> String {
+    "https://api.openai.com/v1".into()
+}
+
+fn default_openai_model() -> String {
+    "gpt-5.2".into()
+}
+
+fn default_anthropic_base_url() -> String {
+    "https://api.anthropic.com/v1".into()
+}
+
+fn default_anthropic_model() -> String {
+    "claude-sonnet-4-6".into()
+}
+
+fn protected_provider_secret(slot: SecretSlot) -> String {
+    match crate::credentials::read(slot) {
+        Ok(Some(secret)) => secret,
+        Ok(None) => String::new(),
+        Err(_) => String::new(),
+    }
 }
 
 fn default_vision_provider() -> String {
@@ -1246,6 +1394,11 @@ pub fn load() -> Config {
         log::info!("migrated meeting_context into a default profile");
         dirty = true;
     }
+    // RC3: the former implicit empty selection meant Piper. A user who made
+    // an explicit choice already has at least one of these fields populated,
+    // so migrate only the untouched legacy state.
+    dirty |= migrate_legacy_tts_default(&mut cfg);
+    dirty |= migrate_legacy_vision_same(&mut cfg);
     // P1.3 — schema-versioning anchor. Stamp the file with the current schema
     // version so a FUTURE release can detect an older layout (config_version <
     // CURRENT) and run a one-time, number-keyed migration right here. Every
@@ -1265,6 +1418,31 @@ pub fn load() -> Config {
         }
     }
     cfg
+}
+
+fn migrate_legacy_tts_default(cfg: &mut Config) -> bool {
+    if cfg.tts_engine.trim().is_empty() && cfg.tts_voice.trim().is_empty() {
+        cfg.tts_engine = "tera".into();
+        cfg.tts_voice = "tera:ru_f1".into();
+        true
+    } else {
+        false
+    }
+}
+
+fn migrate_legacy_vision_same(cfg: &mut Config) -> bool {
+    if cfg.vision_provider != "same" {
+        return false;
+    }
+    let replacement = match cfg.ai_provider.as_str() {
+        "cloud" => "cloud",
+        "openai" => "openai",
+        "anthropic" => "anthropic",
+        "local" | "codex" if cfg.same_text_model_accepts_images_declared() => return false,
+        _ => "off",
+    };
+    cfg.vision_provider = replacement.to_string();
+    true
 }
 
 pub fn save(cfg: &Config) -> Result<()> {
@@ -1390,6 +1568,19 @@ pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
     next.ai_model = imported.ai_model;
     next.prep_model = imported.prep_model;
     next.ai_prompt_cache = imported.ai_prompt_cache;
+    next.openai_base_url = imported.openai_base_url;
+    next.openai_model = imported.openai_model;
+    next.anthropic_base_url = imported.anthropic_base_url;
+    next.anthropic_model = imported.anthropic_model;
+    // Empty remains the legacy/fresh "unset" marker. Importing an older
+    // profile must not erase an explicit account model chosen on this PC.
+    if !imported.codex_model.trim().is_empty() {
+        next.codex_model = imported.codex_model;
+        next.codex_reasoning_effort = imported.codex_reasoning_effort;
+    }
+    if !imported.codex_vision_model.trim().is_empty() {
+        next.codex_vision_model = imported.codex_vision_model;
+    }
     // Local AI provider/endpoint.
     next.ai_local_base_url = imported.ai_local_base_url;
     next.ai_local_bearer = imported.ai_local_bearer;
@@ -1591,18 +1782,41 @@ pub fn mask_host(url: &str) -> String {
 #[must_use]
 pub fn preview_server_settings(current: &Config, imported: &Config) -> ServerSettingsPreview {
     let present = |s: &str| !s.trim().is_empty();
+    let ai_profile = |cfg: &Config| match cfg.ai_provider.as_str() {
+        "openai" => (
+            cfg.openai_base_url.clone(),
+            cfg.openai_model.clone(),
+            false,
+            false,
+        ),
+        "anthropic" => (
+            cfg.anthropic_base_url.clone(),
+            cfg.anthropic_model.clone(),
+            false,
+            false,
+        ),
+        "codex" => (String::new(), cfg.codex_model.clone(), false, false),
+        _ => (
+            cfg.ai_base_url.clone(),
+            cfg.ai_model.clone(),
+            present(&cfg.ai_bearer),
+            true,
+        ),
+    };
+    let (ai_url_old, ai_model_old, ai_key_old, ai_has_key_old) = ai_profile(current);
+    let (ai_url_new, ai_model_new, ai_key_new, ai_has_key_new) = ai_profile(imported);
     ServerSettingsPreview {
         cloud_ai: PreviewGroup {
             label: "Cloud AI".into(),
             provider_old: current.ai_provider.clone(),
             provider_new: imported.ai_provider.clone(),
-            base_url_old: current.ai_base_url.clone(),
-            base_url_new: imported.ai_base_url.clone(),
-            model_old: current.ai_model.clone(),
-            model_new: imported.ai_model.clone(),
-            key_present_old: present(&current.ai_bearer),
-            key_present_new: present(&imported.ai_bearer),
-            has_key_field: true,
+            base_url_old: ai_url_old,
+            base_url_new: ai_url_new,
+            model_old: ai_model_old,
+            model_new: ai_model_new,
+            key_present_old: ai_key_old,
+            key_present_new: ai_key_new,
+            has_key_field: ai_has_key_old || ai_has_key_new,
         },
         local_ai: PreviewGroup {
             label: "Local AI".into(),

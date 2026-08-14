@@ -285,6 +285,7 @@ pub(crate) fn fire_f9_ask(
     let placeholder = vec![MarkdownBlock {
         kind: markdown::kind::PARAGRAPH,
         text: SharedString::from("Asking AI…"),
+        display_text: SharedString::from("Asking AI…"),
         lang: SharedString::from(""),
         marked: false,
     }];
@@ -413,9 +414,11 @@ pub(crate) fn fire_f9_ask(
 
     // ===== 3. Snapshot cfg + cost-cap + transcript + screenshot =====
     let (
+        protocol,
         base_url,
         bearer,
         model,
+        reasoning_effort,
         meeting_context,
         response_language,
         cap_usd,
@@ -426,14 +429,17 @@ pub(crate) fn fire_f9_ask(
         // V0.8.0 (Поток D) — route picks the endpoint: normal F9 = Text (local
         // or cloud per provider), Shift+F9 = Cloud (smart model, one-shot).
         let ep = route.endpoint(&c);
+        let is_unmetered = ep.is_unmetered();
         (
+            ep.protocol,
             ep.base_url,
             ep.bearer,
             ep.model,
+            ep.reasoning_effort,
             c.meeting_context.clone(),
             c.response_language.clone(),
             c.max_session_cost_usd,
-            ep.is_local,
+            is_unmetered,
             overlay_backend::local_ai::local_vision_enabled(
                 &c,
                 &overlay_backend::local_ai::default_root(),
@@ -464,11 +470,12 @@ pub(crate) fn fire_f9_ask(
     };
     // A local TEXT model can't accept an image_url part — drop the
     // screenshot unless the user flagged the local model as vision-capable.
-    let screenshot = if is_local && !local_vision {
-        None
-    } else {
-        screenshot
-    };
+    let screenshot =
+        if matches!(protocol, ai::AiProtocol::CodexSubscription) || (is_local && !local_vision) {
+            None
+        } else {
+            screenshot
+        };
     let attached_screenshot = screenshot.is_some();
 
     let (journal_for_loop, health_for_stream) = {
@@ -577,10 +584,15 @@ pub(crate) fn fire_f9_ask(
             // panics with "there is no reactor running" off a tokio thread; the
             // rt_handle.spawn future provides the runtime context.
             let task = rt_handle_for_work.spawn(async move {
-                let ai_rx = ai::stream_chat(
-                    base_url,
-                    bearer,
-                    model.clone(),
+                let ai_rx = ai::stream_chat_endpoint(
+                    ai::AiEndpoint {
+                        protocol,
+                        base_url,
+                        bearer,
+                        model: model.clone(),
+                        reasoning_effort,
+                        is_local,
+                    },
                     messages,
                     AI_STREAM_MAX_TOKENS,
                 );

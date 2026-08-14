@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>suflyor v0.36.1-rc.11 retest</title></head>
+<body><h1>suflyor v0.36.1-rc.11 retest</h1><ol>
+<li>At exactly 1280 px screen width, open one tile while the full bar is visible. Confirm the lock state, tile count, and every action stay on the top row; nothing overlaps the transcript/status row or the tile below.</li>
+<li>Repeat with two open tiles and then enough tiles to display a two-digit count. Confirm the compact tile action keeps the correct live count and Close all remains available as the trash action.</li>
+<li>Repeat steps 1–2 in English and Russian, including the red unloaded-local-AI state. Confirm its full label becomes the explicit short <code>AI off</code>/<code>ИИ выкл.</code> state while tiles are open, without clipping into the archive icon.</li>
+<li>Close all tiles. Confirm the full <code>Local AI unloaded</code> label returns and all existing actions remain in their original order.</li>
+<li>Collapse and expand the compact bar with tiles open. Confirm both modes stay inside the screen and the expanded full bar returns to the non-overlapping tight representation.</li>
+</ol></body></html>

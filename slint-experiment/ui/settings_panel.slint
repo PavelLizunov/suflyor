@@ -355,6 +355,30 @@ export component SettingsWindow inherits Window {
     in-out property <string> groq-api-key-status: "(loading...)";
     in-out property <string> groq-api-key-input: "";
     in-out property <string> ai-base-url-input: "";
+    in-out property <string> openai-key-status: "(loading...)";
+    in-out property <string> openai-key-input: "";
+    in-out property <string> openai-base-url-input: "";
+    in-out property <string> openai-model-input: "";
+    in-out property <string> anthropic-key-status: "(loading...)";
+    in-out property <string> anthropic-key-input: "";
+    in-out property <string> anthropic-base-url-input: "";
+    in-out property <string> anthropic-model-input: "";
+    in-out property <string> codex-auth-status: "";
+    in-out property <bool> codex-auth-busy: false;
+    in-out property <bool> codex-models-busy: false;
+    in-out property <string> codex-login-url: "";
+    in-out property <string> codex-user-code: "";
+    in-out property <string> codex-copy-status: "";
+    in-out property <[string]> codex-model-labels: [];
+    in-out property <[string]> codex-model-ids: [];
+    in-out property <int> codex-model-index: -1;
+    in-out property <[string]> codex-reasoning-labels: [];
+    in-out property <[string]> codex-reasoning-ids: [];
+    in-out property <int> codex-reasoning-index: -1;
+    in-out property <[string]> codex-vision-model-labels: [];
+    in-out property <[string]> codex-vision-model-ids: [];
+    in-out property <int> codex-vision-model-index: -1;
+    in-out property <string> codex-rate-status: "";
 
     // ТЗ 2026-07-09 — Hermes integration tab (settings_hermes.rs).
     // Bridge (Hermes → suflyor): loopback server the local agent reads from.
@@ -393,7 +417,8 @@ export component SettingsWindow inherits Window {
     // Local AI provider (Phase 1): 0 = cloud bridge, 1 = local (Ollama/llama.cpp).
     in-out property <int> ai-provider-index: 0;
     // V4 — vision (screenshot · F8) channel, resolved separately from the text model.
-    in-out property <int> vision-provider-index: 2; // 0=off 1=same 2=cloud 3=local
+    in-out property <int> vision-provider-index: 3; // 0=off, 1=same, then the text-provider catalog
+    in-out property <bool> vision-same-available: false;
     // Feature #4 — IPA phonetics in F8 translate-mode output (OFF by default).
     in-out property <bool> vision-phonetics: false;
     // v0.11.0 — Test Practice mode for plain F8 (study / self-check). OFF default.
@@ -428,6 +453,17 @@ export component SettingsWindow inherits Window {
     callback tts-rate-changed(int);
     callback tts-test-clicked();
     callback tts-install-clicked();
+    // RC17 — read-aloud ENGINE choice (Piper default / Tera experimental) and
+    // the Tera model's install lifecycle (status string is Rust-built + localized).
+    in-out property <[string]> tts-engine-names;
+    in-out property <int> tts-engine-index: 0;
+    callback tts-engine-changed(int);
+    in-out property <string> tera-model-status;
+    in-out property <bool> tera-installing: false;
+    in-out property <int> tera-install-phase: 0;
+    in-out property <string> tera-install-label;
+    callback tera-install-clicked();
+    callback tera-install-cancel-clicked();
 
     // Text recognition (OCR) engine — local Tesseract for Shift+Alt+2 / Ctrl+F8,
     // installed on demand (not bundled).
@@ -527,6 +563,20 @@ export component SettingsWindow inherits Window {
     callback ai-bearer-save(string);
     callback groq-api-key-save(string);
     callback ai-base-url-save(string);
+    callback openai-key-save(string);
+    callback openai-base-url-save(string);
+    callback openai-model-save(string);
+    callback anthropic-key-save(string);
+    callback anthropic-base-url-save(string);
+    callback anthropic-model-save(string);
+    callback codex-connect-clicked();
+    callback codex-disconnect-clicked();
+    callback codex-open-signin-clicked(string);
+    callback codex-copy-code-clicked(string);
+    callback codex-model-selected(int);
+    callback codex-reasoning-selected(int);
+    callback codex-vision-model-selected(int);
+    callback codex-models-refresh();
     callback ai-model-selected(string);
     callback ai-models-refresh();
     callback ai-prompt-cache-changed(bool);
@@ -818,7 +868,7 @@ export component SettingsWindow inherits Window {
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
-                    label: @tr("AI bridge"); icon: @image-url("../assets/icons/ai.svg"); tab-index: 11;
+                    label: @tr("AI providers"); icon: @image-url("../assets/icons/ai.svg"); tab-index: 11;
                     active: root.active-tab == 11;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
@@ -1073,7 +1123,7 @@ export component SettingsWindow inherits Window {
                                 ["Ctrl+F8", @tr("Screenshot → OCR the text, then read it aloud")],
                                 ["Shift+Alt+1", @tr("Read the selected text aloud")],
                                 ["Shift+Alt+2", @tr("OCR a screen region and read it aloud")],
-                                ["Shift+Alt+3", @tr("Pause / stop reading aloud")],
+                                ["Shift+Alt+3", @tr("Pause / resume reading aloud")],
                                 ["F4",  @tr("Knowledge-base palette (open / close)")],
                                 ["F1",  @tr("Help (open / close)")],
                                 ["F7",  @tr("Session archive (open / close)")],
@@ -1367,6 +1417,26 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
+                        // RC17 — engine choice: Piper (default) or the
+                        // experimental Tera sidecar. Piper stays the automatic
+                        // fallback whenever Tera is unavailable.
+                        HorizontalLayout {
+                            spacing: 8px;
+                            height: 32px;
+                            Text {
+                                text: @tr("Engine:");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                vertical-alignment: center;
+                            }
+                            SettingsComboBox {
+                                model: root.tts-engine-names;
+                                current-index: root.tts-engine-index;
+                                selected => { root.tts-engine-changed(self.current-index); }
+                            }
+                        }
+                        if root.tts-engine-index == 0 : VerticalLayout {
+                            spacing: 6px;
                         // Voice chooser — only when at least one voice is installed.
                         if root.tts-available : HorizontalLayout {
                             spacing: 8px;
@@ -1418,6 +1488,76 @@ export component SettingsWindow inherits Window {
                             font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
+                        }
+                        }
+                        if root.tts-engine-index == 1 : VerticalLayout {
+                            spacing: 6px;
+                            // The Tera install status grows to multiple lines. Keep this
+                            // section at its natural height so the following speed picker
+                            // cannot overlap the Install model / Cancel controls.
+                            vertical-stretch: 0;
+                            // `SettingsCard` derives its preferred height before this
+                            // conditional block's wrapped status text has a final width.
+                            // Reserve the complete controls/status stack explicitly;
+                            // the parent ScrollView can grow, but Speed must never enter
+                            // this rectangle.
+                            min-height: root.tts-available
+                                ? (root.tera-install-phase != 0 ? 164px : 145px)
+                                : (root.tera-install-phase != 0 ? 128px : 108px);
+                        Text {
+                            text: @tr("EXPERIMENTAL: TeraTTSv2 neural engine (44.1 kHz, RU+EN). Downloads ~370 MB of ONNX graphs on demand. Read-aloud falls back to Piper while Tera is not installed or unavailable; speaker separation always uses Piper.");
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        Text {
+                            text: root.tera-model-status;
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
+                        if root.tts-available : HorizontalLayout {
+                            spacing: 8px;
+                            height: 32px;
+                            Text {
+                                text: @tr("Voice:");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                vertical-alignment: center;
+                            }
+                            SettingsComboBox {
+                                model: root.tts-voice-names;
+                                current-index: root.tts-voice-index;
+                                selected => { root.tts-voice-changed(self.current-index); }
+                            }
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            height: 32px;
+                            spacing: 8px;
+                            Button {
+                                text: root.tera-installing ? @tr("Installing…") : @tr("Install model");
+                                enabled: !root.tera-installing && !root.tts-available;
+                                clicked => { root.tera-install-clicked(); }
+                            }
+                            Button {
+                                text: @tr("Cancel");
+                                visible: root.tera-installing;
+                                clicked => { root.tera-install-cancel-clicked(); }
+                            }
+                        }
+                        if root.tera-install-phase != 0 : Text {
+                            text: root.tera-install-phase == 1 ? @tr("Preparing…")
+                                : root.tera-install-phase == 2 ? @tr("Downloading: {}…", root.tera-install-label)
+                                : root.tera-install-phase == 3 ? @tr("Verifying: {}…", root.tera-install-label)
+                                : root.tera-install-phase == 4 ? @tr("Publishing…")
+                                : root.tera-install-phase == 6 ? @tr("Model installed")
+                                : root.tera-install-phase == 8 ? @tr("Install cancelled")
+                                : @tr("Couldn't install the model — check the connection and retry.");
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
                         }
                         // Speed preset (multipliers are language-neutral, untranslated).
                         HorizontalLayout {
@@ -1519,7 +1659,7 @@ export component SettingsWindow inherits Window {
                         // servers, keeps local profiles/devices/UI/snippets.
                         // Import shows a redacted preview before applying.
                         Text {
-                            text: @tr("Server transfer copies ONLY AI/STT providers, URLs, models and keys — local UI, profiles, devices and snippets stay unchanged. Use it to carry your server setup to another PC. Export writes those server fields (INCLUDING keys) to a .json; import shows a preview and asks you to confirm before applying.");
+                            text: @tr("Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in Windows Credential Manager on this PC. Local UI, profiles, devices and snippets stay unchanged.");
                             font-size: 10px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -2042,7 +2182,7 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 11 : VerticalLayout {
                         spacing: 10px;
                         SettingsCard {
-                            title: @tr("AI bridge");
+                            title: @tr("AI providers");
                         Text {
                             text: @tr("Where do live answers come from? Pick a type, then configure it.");
                             font-size: 11px;
@@ -2051,7 +2191,13 @@ export component SettingsWindow inherits Window {
                         }
                         // ===== TYPE selector — gates everything below =====
                         SettingsComboBox {
-                            model: [@tr("Cloud (Claude bridge)"), @tr("Local (llama.cpp / Ollama)")];
+                            model: [
+                                @tr("Custom OpenAI-compatible bridge"),
+                                @tr("Local OpenAI-compatible"),
+                                @tr("OpenAI API (Responses)"),
+                                @tr("Anthropic API (Messages)"),
+                                @tr("Codex safe models (ChatGPT, experimental)"),
+                            ];
                             current-index: root.ai-provider-index;
                             selected => {
                                 root.ai-provider-index = self.current-index;
@@ -2164,6 +2310,191 @@ export component SettingsWindow inherits Window {
                                 font-size: 10px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
+                            }
+                        }
+
+                        // ============================ OPENAI ============================
+                        if root.ai-provider-index == 2 : VerticalLayout {
+                            spacing: 8px;
+                            vertical-stretch: 0;
+                            Text { text: @tr("OpenAI Responses API"); font-size: 12px; font-weight: 700; color: Theme.text-primary; }
+                            Text { text: @tr("API key:") + " " + root.openai-key-status; font-size: 11px; color: Theme.text-secondary; }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                SettingsLineEdit { placeholder-text: @tr("paste OpenAI API key"); text <=> root.openai-key-input; input-type: password; horizontal-stretch: 1; }
+                                Button { text: @tr("Save"); clicked => { root.openai-key-save(root.openai-key-input); root.openai-key-input = ""; } }
+                            }
+                            Text { text: @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: 10px; color: Theme.text-muted; wrap: word-wrap; }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                SettingsLineEdit { placeholder-text: "https://api.openai.com/v1"; text <=> root.openai-base-url-input; horizontal-stretch: 1; }
+                                Button { text: @tr("Save URL"); clicked => { root.openai-base-url-save(root.openai-base-url-input); } }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                SettingsLineEdit { placeholder-text: @tr("OpenAI model ID"); text <=> root.openai-model-input; horizontal-stretch: 1; }
+                                Button { text: @tr("Save model"); clicked => { root.openai-model-save(root.openai-model-input); } }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button { text: @tr("Test OpenAI connection"); clicked => { root.ai-bridge-test-clicked(); } }
+                                if root.ai-bridge-test-result != "" : Text { text: root.ai-bridge-test-result; font-size: 11px; color: Theme.accent; vertical-alignment: center; }
+                            }
+                        }
+
+                        // ============================ ANTHROPIC ============================
+                        if root.ai-provider-index == 3 : VerticalLayout {
+                            spacing: 8px;
+                            vertical-stretch: 0;
+                            Text { text: @tr("Anthropic Messages API"); font-size: 12px; font-weight: 700; color: Theme.text-primary; }
+                            Text { text: @tr("API key:") + " " + root.anthropic-key-status; font-size: 11px; color: Theme.text-secondary; }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                SettingsLineEdit { placeholder-text: @tr("paste Anthropic API key"); text <=> root.anthropic-key-input; input-type: password; horizontal-stretch: 1; }
+                                Button { text: @tr("Save"); clicked => { root.anthropic-key-save(root.anthropic-key-input); root.anthropic-key-input = ""; } }
+                            }
+                            Text { text: @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: 10px; color: Theme.text-muted; wrap: word-wrap; }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                SettingsLineEdit { placeholder-text: "https://api.anthropic.com/v1"; text <=> root.anthropic-base-url-input; horizontal-stretch: 1; }
+                                Button { text: @tr("Save URL"); clicked => { root.anthropic-base-url-save(root.anthropic-base-url-input); } }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                SettingsLineEdit { placeholder-text: @tr("Anthropic model ID"); text <=> root.anthropic-model-input; horizontal-stretch: 1; }
+                                Button { text: @tr("Save model"); clicked => { root.anthropic-model-save(root.anthropic-model-input); } }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button { text: @tr("Test Anthropic connection"); clicked => { root.ai-bridge-test-clicked(); } }
+                                if root.ai-bridge-test-result != "" : Text { text: root.ai-bridge-test-result; font-size: 11px; color: Theme.accent; vertical-alignment: center; }
+                            }
+                            DarkCheck {
+                                text: @tr("Prompt caching");
+                                checked <=> root.ai-prompt-cache;
+                                toggled(v) => { root.ai-prompt-cache-changed(v); }
+                            }
+                        }
+
+                        // ============================ CODEX SUBSCRIPTION ============================
+                        if root.ai-provider-index == 4 : VerticalLayout {
+                            spacing: 8px;
+                            vertical-stretch: 0;
+                            Text { text: @tr("Codex safe models (ChatGPT subscription)"); font-size: 12px; font-weight: 700; color: Theme.text-primary; }
+                            Text {
+                                text: @tr("Uses the official local Codex app-server. Codex owns the ChatGPT login and stores tokens; suflyor never reads them.");
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            Text { text: root.codex-auth-status; font-size: 11px; color: Theme.text-secondary; wrap: word-wrap; }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: root.codex-auth-busy ? @tr("Connecting...") : @tr("Connect ChatGPT");
+                                    enabled: !root.codex-auth-busy && !root.codex-models-busy;
+                                    clicked => { root.codex-connect-clicked(); }
+                                }
+                                Button {
+                                    text: @tr("Disconnect");
+                                    clicked => { root.codex-disconnect-clicked(); }
+                                }
+                            }
+                            Text {
+                                text: @tr("Account model:");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                SettingsComboBox {
+                                    model: root.codex-model-labels;
+                                    current-index: root.codex-model-index;
+                                    enabled: !root.codex-auth-busy && !root.codex-models-busy;
+                                    horizontal-stretch: 1;
+                                    selected => {
+                                        root.codex-model-index = self.current-index;
+                                        root.codex-model-selected(self.current-index);
+                                    }
+                                }
+                                Button {
+                                    text: root.codex-models-busy ? @tr("loading...") : @tr("refresh");
+                                    enabled: !root.codex-auth-busy && !root.codex-models-busy;
+                                    clicked => { root.codex-models-refresh(); }
+                                }
+                            }
+                            Text {
+                                text: @tr("Reasoning effort:");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                            }
+                            SettingsComboBox {
+                                model: root.codex-reasoning-labels;
+                                current-index: root.codex-reasoning-index;
+                                enabled: !root.codex-auth-busy && !root.codex-models-busy && root.codex-reasoning-labels.length > 0;
+                                selected => {
+                                    root.codex-reasoning-index = self.current-index;
+                                    root.codex-reasoning-selected(self.current-index);
+                                }
+                            }
+                            if root.codex-models-busy : Text {
+                                text: @tr("Loading account models...");
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                            }
+                            if !root.codex-models-busy && root.codex-model-labels.length == 0 : Text {
+                                text: @tr("No account models are available. Sign in or refresh.");
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            if root.codex-rate-status != "" : Text {
+                                text: root.codex-rate-status;
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            if root.codex-login-url != "" && root.codex-user-code != "" : HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: @tr("Open sign-in page");
+                                    clicked => { root.codex-open-signin-clicked(root.codex-login-url); }
+                                }
+                                Text {
+                                    text: @tr("Code:") + " " + root.codex-user-code;
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    color: Theme.accent;
+                                    vertical-alignment: center;
+                                }
+                                Button {
+                                    text: @tr("Copy code");
+                                    accessible-label: @tr("Copy one-time code");
+                                    enabled: root.codex-user-code != "";
+                                    clicked => { root.codex-copy-code-clicked(root.codex-user-code); }
+                                }
+                            }
+                            if root.codex-copy-status != "" : Text {
+                                text: root.codex-copy-status;
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                            }
+                            Text {
+                                text: @tr("Experimental safe mode: the model is pinned; model-command file and network access are denied, and unexpected tools are stopped.");
+                                font-size: 10px;
+                                color: Theme.warning;
+                                wrap: word-wrap;
+                                // Conditional wrapped rows can under-report their
+                                // preferred height to this long SettingsCard.
+                                // Reserve three lines for EN/RU at 720 px.
+                                height: 36px;
+                            }
+                            Text {
+                                text: @tr("OpenCode or Qwen belong under Custom OpenAI-compatible bridge only when they expose a compatible inference endpoint.");
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                                height: 36px;
                             }
                         }
 
@@ -2728,12 +3059,28 @@ export component SettingsWindow inherits Window {
                         }
                         Rectangle { background: Theme.border; height: 1px; }
                         SettingsComboBox {
-                            model: [@tr("Off"), @tr("Same as text model above"), @tr("Cloud (Sonnet via bridge)"), @tr("Local (2nd vision server)")];
+                            model: [
+                                @tr("Off"),
+                                root.vision-same-available
+                                    ? @tr("Same as text model above")
+                                    : @tr("Same as text model above (unavailable)"),
+                                @tr("Custom OpenAI-compatible bridge"),
+                                @tr("Local OpenAI-compatible"),
+                                @tr("OpenAI API (Responses)"),
+                                @tr("Anthropic API (Messages)"),
+                                @tr("Codex safe models (ChatGPT, experimental)"),
+                            ];
                             current-index: root.vision-provider-index;
                             selected => {
                                 root.vision-provider-index = self.current-index;
                                 root.vision-provider-changed(self.current-index);
                             }
+                        }
+                        if !root.vision-same-available : Text {
+                            text: @tr("Same as text model is unavailable because the selected text model does not declare image input. Choose another Vision provider or model.");
+                            font-size: 10px;
+                            color: Theme.warning;
+                            wrap: word-wrap;
                         }
                         if root.vision-provider-index == 2 : VerticalLayout {
                             spacing: 8px;
@@ -2809,7 +3156,90 @@ export component SettingsWindow inherits Window {
                                 Button { text: @tr("Save"); clicked => { root.vision-local-bearer-save(root.vision-local-bearer-input); root.vision-local-bearer-input = ""; } }
                             }
                         }
-                        if root.vision-provider-index >= 2 : HorizontalLayout {
+                        if root.vision-provider-index == 4 : Text {
+                            text: @tr("Vision uses the OpenAI API connection and model configured in AI providers above. Text and vision selections remain independent.");
+                            font-size: 10px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        if root.vision-provider-index == 5 : Text {
+                            text: @tr("Vision uses the Anthropic API connection and model configured in AI providers above. Text and vision selections remain independent.");
+                            font-size: 10px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        if root.vision-provider-index == 6 : VerticalLayout {
+                            spacing: 8px;
+                            Text {
+                                text: @tr("Choose a separate Codex model for screenshots. Only account models that advertise image input are shown.");
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            Text { text: root.codex-auth-status; font-size: 11px; color: Theme.text-secondary; wrap: word-wrap; }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: root.codex-auth-busy ? @tr("Connecting...") : @tr("Connect ChatGPT");
+                                    enabled: !root.codex-auth-busy && !root.codex-models-busy;
+                                    clicked => { root.codex-connect-clicked(); }
+                                }
+                                Button {
+                                    text: @tr("Disconnect");
+                                    clicked => { root.codex-disconnect-clicked(); }
+                                }
+                            }
+                            if root.codex-login-url != "" && root.codex-user-code != "" : HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: @tr("Open sign-in page");
+                                    clicked => { root.codex-open-signin-clicked(root.codex-login-url); }
+                                }
+                                Text {
+                                    text: @tr("Code:") + " " + root.codex-user-code;
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    color: Theme.accent;
+                                    vertical-alignment: center;
+                                }
+                                Button {
+                                    text: @tr("Copy code");
+                                    accessible-label: @tr("Copy one-time code");
+                                    enabled: root.codex-user-code != "";
+                                    clicked => { root.codex-copy-code-clicked(root.codex-user-code); }
+                                }
+                            }
+                            if root.codex-copy-status != "" : Text {
+                                text: root.codex-copy-status;
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                SettingsComboBox {
+                                    model: root.codex-vision-model-labels;
+                                    current-index: root.codex-vision-model-index;
+                                    enabled: !root.codex-auth-busy && !root.codex-models-busy && root.codex-vision-model-labels.length > 0;
+                                    horizontal-stretch: 1;
+                                    selected => {
+                                        root.codex-vision-model-index = self.current-index;
+                                        root.codex-vision-model-selected(self.current-index);
+                                    }
+                                }
+                                Button {
+                                    text: root.codex-models-busy ? @tr("loading...") : @tr("refresh");
+                                    enabled: !root.codex-auth-busy && !root.codex-models-busy;
+                                    clicked => { root.codex-models-refresh(); }
+                                }
+                            }
+                            if !root.codex-models-busy && root.codex-vision-model-labels.length == 0 : Text {
+                                text: @tr("No image-capable Codex account models are available. Sign in or refresh.");
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                        }
+                        if root.vision-provider-index >= 1 : HorizontalLayout {
                             spacing: 6px;
                             Button { text: @tr("Test vision connection"); clicked => { root.vision-test-clicked(); } }
                             if root.vision-test-result != "" : Text {
@@ -3516,7 +3946,7 @@ export component SettingsWindow inherits Window {
                idx == 7 ? @tr("Auto-tiles") :
                idx == 9 ? @tr("Knowledge base") :
                idx == 10 ? @tr("Profile + context") :
-               idx == 11 ? @tr("AI bridge") :
+               idx == 11 ? @tr("AI providers") :
                idx == 12 ? @tr("STT") :
                idx == 13 ? @tr("Diagnostics") :
                idx == 14 ? @tr("Memory") :

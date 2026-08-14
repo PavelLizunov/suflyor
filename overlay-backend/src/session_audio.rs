@@ -11,6 +11,8 @@
 //! so no resampling is needed. True sample-accuracy (a shared capture epoch +
 //! per-channel WAV padding) is deferred — see F1 notes / line_start_offset_ms.
 
+use crate::audio::AudioSource;
+use crate::recorder::TtsMaskSpan;
 use anyhow::{bail, Result};
 use std::path::Path;
 
@@ -26,6 +28,42 @@ pub fn mix_pcm(a: &[i16], b: &[i16]) -> Vec<i16> {
         out.push(s.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16);
     }
     out
+}
+
+/// Silence the union of one source's app-TTS intervals overlapping this PCM
+/// window. Duration is kept, so transcript timecodes do not move.
+pub fn silence_tts_spans(
+    pcm: &mut [i16],
+    spans: &[TtsMaskSpan],
+    source: AudioSource,
+    window_start: u64,
+) -> usize {
+    let window_end = window_start.saturating_add(pcm.len() as u64);
+    let mut ranges: Vec<(usize, usize)> = spans
+        .iter()
+        .filter(|span| span.source == source)
+        .filter_map(|span| {
+            let start = span.start_sample.max(window_start);
+            let end = span.end_sample.min(window_end);
+            (start < end).then_some((
+                (start - window_start) as usize,
+                (end - window_start) as usize,
+            ))
+        })
+        .collect();
+    ranges.sort_unstable();
+    let mut masked = 0;
+    let mut cursor = 0;
+    for (start, end) in ranges {
+        let start = start.max(cursor);
+        if start >= end {
+            continue;
+        }
+        pcm[start..end].fill(0);
+        masked += end - start;
+        cursor = end;
+    }
+    masked
 }
 
 /// Read one 16-bit WAV into PCM + its sample rate; `None` if absent/unreadable.
@@ -53,8 +91,21 @@ pub fn load_mixed_from_dir(session_dir: &Path) -> Result<(Vec<i16>, u32)> {
     let Some(sample_rate) = mic.as_ref().or(sys.as_ref()).map(|(_, r)| *r) else {
         bail!("no recordings to play in {}", session_dir.display());
     };
-    let mic_pcm = mic.map(|(s, _)| s).unwrap_or_default();
-    let sys_pcm = sys.map(|(s, _)| s).unwrap_or_default();
+    let mut mic_pcm = mic.map(|(s, _)| s).unwrap_or_default();
+    let mut sys_pcm = sys.map(|(s, _)| s).unwrap_or_default();
+    match crate::recorder::load_tts_mask_in(session_dir) {
+        Ok(spans) if sample_rate == crate::recorder::SAMPLE_RATE => {
+            silence_tts_spans(&mut mic_pcm, &spans, AudioSource::Mic, 0);
+            silence_tts_spans(&mut sys_pcm, &spans, AudioSource::System, 0);
+        }
+        Ok(spans) if !spans.is_empty() => {
+            log::warn!("session audio: ignored TTS mask for unexpected sample rate {sample_rate}");
+        }
+        Ok(_) => {}
+        Err(error) => {
+            log::warn!("session audio: ignored malformed TTS mask: {error:#}");
+        }
+    }
     Ok((mix_pcm(&mic_pcm, &sys_pcm), sample_rate))
 }
 
@@ -264,5 +315,61 @@ mod tests {
         write_wav(&dir.join("mic.wav"), &[5, 6, 7]);
         let (pcm, _) = load_mixed_from_dir(dir).unwrap();
         assert_eq!(pcm, vec![5, 6, 7]); // system silent → mic passes through
+    }
+
+    #[test]
+    fn tts_mask_clamps_merges_and_filters_sources() {
+        let spans = vec![
+            TtsMaskSpan {
+                source: AudioSource::Mic,
+                start_sample: 2,
+                end_sample: 6,
+            },
+            TtsMaskSpan {
+                source: AudioSource::Mic,
+                start_sample: 4,
+                end_sample: 8,
+            },
+            TtsMaskSpan {
+                source: AudioSource::System,
+                start_sample: 8,
+                end_sample: 99,
+            },
+        ];
+        let mut mic = vec![1; 10];
+        assert_eq!(silence_tts_spans(&mut mic, &spans, AudioSource::Mic, 0), 6);
+        assert_eq!(mic, vec![1, 1, 0, 0, 0, 0, 0, 0, 1, 1]);
+
+        let mut window = vec![1; 10];
+        let cross_window = [TtsMaskSpan {
+            source: AudioSource::System,
+            start_sample: 95,
+            end_sample: 105,
+        }];
+        assert_eq!(
+            silence_tts_spans(&mut window, &cross_window, AudioSource::System, 100),
+            5
+        );
+        assert_eq!(window, vec![0, 0, 0, 0, 0, 1, 1, 1, 1, 1]);
+    }
+
+    #[test]
+    fn playback_masks_tts_without_changing_timeline_and_malformed_fails_open() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        write_wav(&dir.join("mic.wav"), &[10, 10, 10, 10, 10]);
+        write_wav(&dir.join("system.wav"), &[1, 2, 3, 4, 5]);
+        std::fs::write(
+            dir.join(crate::recorder::TTS_MASK_FILE),
+            "{\"source\":\"system\",\"start_sample\":1,\"end_sample\":4}\n",
+        )
+        .unwrap();
+        let (masked, _) = load_mixed_from_dir(dir).unwrap();
+        assert_eq!(masked, vec![11, 10, 10, 10, 15]);
+        assert_eq!(masked.len(), 5, "masking must preserve timecodes");
+
+        std::fs::write(dir.join(crate::recorder::TTS_MASK_FILE), "truncated").unwrap();
+        let (raw, _) = load_mixed_from_dir(dir).unwrap();
+        assert_eq!(raw, vec![11, 12, 13, 14, 15]);
     }
 }

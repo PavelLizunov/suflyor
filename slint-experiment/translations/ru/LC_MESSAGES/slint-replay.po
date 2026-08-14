@@ -62,6 +62,11 @@ msgstr "Нет"
 msgid "Restart?"
 msgstr "Перезапустить?"
 
+# RC4 — hide-to-tray bar action (accessible label of the icon-only chip that
+# sits beside the compact control). Tray MENU labels are Rust-side (tray.rs).
+msgid "Hide to tray"
+msgstr "Скрыть в трей"
+
 # === tile.slint ===
 
 msgid "#{}  {}"
@@ -469,8 +474,8 @@ msgstr "Импорт настроек…"
 
 # === #125 / P1.7 server-only settings transfer (export + import preview) ===
 
-msgid "Server transfer copies ONLY AI/STT providers, URLs, models and keys — local UI, profiles, devices and snippets stay unchanged. Use it to carry your server setup to another PC. Export writes those server fields (INCLUDING keys) to a .json; import shows a preview and asks you to confirm before applying."
-msgstr "Перенос сервера копирует ТОЛЬКО AI/STT-провайдеров, URL, модели и ключи — локальные UI, профили, устройства и сниппеты не меняются. Используйте, чтобы перенести серверную настройку на другой ПК. Экспорт пишет эти серверные поля (ВКЛЮЧАЯ ключи) в .json; импорт показывает предпросмотр и просит подтвердить перед применением."
+msgid "Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in Windows Credential Manager on this PC. Local UI, profiles, devices and snippets stay unchanged."
+msgstr "Перенос сервера копирует AI/STT-провайдеров, URL, модели и старые ключи мостов. Защищённые ключи OpenAI и Anthropic остаются в Диспетчере учётных данных Windows на этом ПК. Локальные UI, профили, устройства и сниппеты не меняются."
 
 msgid "Export server settings…"
 msgstr "Экспортировать серверные настройки…"
@@ -1473,6 +1478,9 @@ msgstr "Настройка"
 msgid "Read aloud"
 msgstr "Озвучка"
 
+msgid "Stop reading aloud"
+msgstr "Остановить озвучку"
+
 msgid "Recording"
 msgstr "Запись"
 
@@ -1522,9 +1530,6 @@ msgstr "Озвучить выделенный текст"
 msgid "OCR a screen region and read it aloud"
 msgstr "OCR области экрана и озвучить"
 
-msgid "Pause / stop reading aloud"
-msgstr "Пауза / стоп озвучки"
-
 msgid "Help (open / close)"
 msgstr "Справка (открыть / закрыть)"
 
@@ -1573,6 +1578,15 @@ msgstr "Озвучить выделенный текст (TTS)"
 
 msgid "Pause / resume reading aloud"
 msgstr "Пауза / продолжение озвучки"
+
+msgid "Back 10 seconds"
+msgstr "Назад на 10 секунд"
+
+msgid "Forward 15 seconds"
+msgstr "Вперёд на 15 секунд"
+
+msgid "Reading speed"
+msgstr "Скорость чтения"
 
 msgid "Local model and vision"
 msgstr "Локальная модель и зрение"
@@ -1867,6 +1881,10 @@ msgstr "Повторить"
 msgid "Local AI unloaded"
 msgstr "Локальный ИИ выгружен"
 
+# Tight 1280px bar state while tile actions are visible.
+msgid "AI off"
+msgstr "ИИ выкл."
+
 msgid "Current"
 msgstr "Текущий"
 
@@ -1881,3 +1899,161 @@ msgstr "Выгрузить локальный ИИ"
 
 msgid "Lock mode"
 msgstr "Режим блокировки"
+
+# RC13 — direct AI providers.
+msgid "Custom OpenAI-compatible bridge"
+msgstr "Настраиваемый OpenAI-совместимый мост"
+
+msgid "Local OpenAI-compatible"
+msgstr "Локальный OpenAI-совместимый"
+
+msgid "OpenAI API (Responses)"
+msgstr "OpenAI API (Responses)"
+
+msgid "Anthropic API (Messages)"
+msgstr "Anthropic API (Messages)"
+
+msgid "OpenAI Responses API"
+msgstr "OpenAI Responses API"
+
+msgid "Anthropic Messages API"
+msgstr "Anthropic Messages API"
+
+msgid "API key:"
+msgstr "API-ключ:"
+
+msgid "paste OpenAI API key"
+msgstr "вставьте API-ключ OpenAI"
+
+msgid "paste Anthropic API key"
+msgstr "вставьте API-ключ Anthropic"
+
+msgid "Stored in Windows Credential Manager and excluded from configuration exports."
+msgstr "Хранится в Диспетчере учётных данных Windows и не попадает в экспорт настроек."
+
+msgid "Save URL"
+msgstr "Сохранить URL"
+
+msgid "OpenAI model ID"
+msgstr "ID модели OpenAI"
+
+msgid "Anthropic model ID"
+msgstr "ID модели Anthropic"
+
+msgid "Save model"
+msgstr "Сохранить модель"
+
+msgid "Test OpenAI connection"
+msgstr "Проверить подключение OpenAI"
+
+msgid "Test Anthropic connection"
+msgstr "Проверить подключение Anthropic"
+
+msgid "Prompt caching"
+msgstr "Кэширование промпта"
+
+# RC14 — official Codex app-server subscription sign-in.
+msgid "AI providers"
+msgstr "AI-провайдеры"
+
+msgid "Codex safe models (ChatGPT, experimental)"
+msgstr "Безопасные модели Codex (ChatGPT, экспериментально)"
+
+msgid "Codex safe models (ChatGPT subscription)"
+msgstr "Безопасные модели Codex (подписка ChatGPT)"
+
+msgid "Uses the official local Codex app-server. Codex owns the ChatGPT login and stores tokens; suflyor never reads them."
+msgstr "Использует официальный локальный Codex app-server. Codex выполняет вход в ChatGPT и хранит токены; suflyor никогда их не читает."
+
+msgid "Connecting..."
+msgstr "Подключение..."
+
+msgid "Connect ChatGPT"
+msgstr "Подключить ChatGPT"
+
+msgid "Disconnect"
+msgstr "Отключить"
+
+msgid "Open sign-in page"
+msgstr "Открыть страницу входа"
+
+msgid "Code:"
+msgstr "Код:"
+
+msgid "Copy code"
+msgstr "Копировать код"
+
+msgid "Copy one-time code"
+msgstr "Копировать одноразовый код"
+
+msgid "Account model:"
+msgstr "Модель аккаунта:"
+
+msgid "No account models are available. Sign in or refresh."
+msgstr "Нет доступных моделей аккаунта. Войдите или обновите список."
+
+msgid "Experimental safe mode: the model is pinned; model-command file and network access are denied, and unexpected tools are stopped."
+msgstr "Экспериментальный безопасный режим: модель закреплена; командам модели запрещён доступ к файлам и сети, а неожиданные инструменты останавливаются."
+
+msgid "loading..."
+msgstr "загрузка..."
+
+msgid "Loading account models..."
+msgstr "Загрузка моделей аккаунта..."
+
+msgid "OpenCode or Qwen belong under Custom OpenAI-compatible bridge only when they expose a compatible inference endpoint."
+msgstr "OpenCode или Qwen настраиваются как пользовательский OpenAI-совместимый мост, только если они предоставляют совместимый endpoint для ответов."
+
+msgid "Engine:"
+msgstr "Движок:"
+
+msgid "EXPERIMENTAL: TeraTTSv2 neural engine (44.1 kHz, RU+EN). Downloads ~370 MB of ONNX graphs on demand. Read-aloud falls back to Piper while Tera is not installed or unavailable; speaker separation always uses Piper."
+msgstr "ЭКСПЕРИМЕНТАЛЬНО: нейродвижок TeraTTSv2 (44,1 кГц, RU+EN). По запросу скачивает ~370 МБ ONNX-графов. Пока Tera не установлена или недоступна, озвучка автоматически работает через Piper; определение говорящих всегда использует Piper."
+
+msgid "Install model"
+msgstr "Установить модель"
+
+msgid "Publishing…"
+msgstr "Публикация…"
+
+msgid "Model installed"
+msgstr "Модель установлена"
+
+msgid "Install cancelled"
+msgstr "Установка отменена"
+
+msgid "Couldn't install the model — check the connection and retry."
+msgstr "Не удалось установить модель — проверьте соединение и повторите."
+
+msgid "Reasoning effort:"
+msgstr "Уровень рассуждений:"
+
+msgid "Vision uses the OpenAI API connection and model configured in AI providers above. Text and vision selections remain independent."
+msgstr "Для зрения используются подключение и модель OpenAI API, настроенные выше в разделе AI-провайдеров. Модели текста и зрения выбираются независимо."
+
+msgid "Vision uses the Anthropic API connection and model configured in AI providers above. Text and vision selections remain independent."
+msgstr "Для зрения используются подключение и модель Anthropic API, настроенные выше в разделе AI-провайдеров. Модели текста и зрения выбираются независимо."
+
+msgid "Choose a separate Codex model for screenshots. Only account models that advertise image input are shown."
+msgstr "Выберите отдельную модель Codex для скриншотов. Показаны только модели аккаунта с заявленной поддержкой изображений."
+
+msgid "No image-capable Codex account models are available. Sign in or refresh."
+msgstr "Нет доступных моделей Codex аккаунта с поддержкой изображений. Войдите или обновите список."
+
+msgid "Same as text model above (unavailable)"
+msgstr "Как у текстовой модели выше (недоступно)"
+
+msgid "Same as text model is unavailable because the selected text model does not declare image input. Choose another Vision provider or model."
+msgstr "Режим «как у текстовой модели» недоступен: выбранная текстовая модель не заявляет поддержку изображений. Выберите другого провайдера или модель для зрения."
+
+msgid "Preparing voice..."
+msgstr "Подготовка голоса..."
+
+msgid "Reading aloud"
+msgstr "Озвучивание"
+
+msgid "Resume"
+msgstr "Продолжить"
+
+msgid "Pause"
+msgstr "Пауза"

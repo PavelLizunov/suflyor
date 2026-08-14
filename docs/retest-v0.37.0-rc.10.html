@@ -1,0 +1,13 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>suflyor v0.37.0-rc.10 retest</title>
+<h1>suflyor v0.37.0-rc.10 - native Windows TLS</h1>
+<ol>
+  <li>Install over RC9. Settings, credentials, models, and journal data must remain unchanged.</li>
+  <li>Start suflyor and verify the bar opens at 1280x64 with no UI changes.</li>
+  <li>With a cloud AI provider, send a typed question. The streamed answer must arrive incrementally and finish normally.</li>
+  <li>With Groq STT, run the connection check and transcribe one short phrase. HTTPS and multipart upload must succeed.</li>
+  <li>With local AI or local Whisper over HTTP, repeat one request. Local endpoints must remain unaffected.</li>
+  <li>Temporarily disconnect the network and retry a cloud request. The tile must show a generic connection error without exposing its URL.</li>
+  <li>Hide the bar to the tray and restore it once. The app must stay alive throughout.</li>
+  <li>Quit normally and confirm no overlay-host, suflyor-tts, or suflyor-teratts process remains.</li>

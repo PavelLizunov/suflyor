@@ -3,17 +3,27 @@
 Windows-only AI-interview overlay. **Pure Rust + Slint 1.17** (no Node, no web
 engine). Read this file fully before editing; the checks below define "done".
 
-## Project map (three standalone crates, NO root workspace)
+## Project map (five standalone crates, NO root workspace)
 
 - `slint-experiment/` — the `overlay-host` binary. UI in `ui/*.slint`
   (compiled in via build.rs). Host logic is the ~25-module DIRECTORY
   `src/bin/overlay_host/` (settings_*, tile_*, hotkeys, diagnostics, …) —
   grep the directory, not just `overlay_host.rs` (thin entrypoint).
 - `overlay-backend/` — no-UI shared crate (ai, audio, bridge, config, memory,
-  persistence, stt, tts, hermes_install, …). Most unit tests live here.
-- `suflyor-tts/` — read-aloud + diarization SIDECAR exe. Links sherpa-onnx
-  ONLY and MUST stay a separate process (two onnxruntimes crash in one
-  binary). Never merge it into overlay-backend.
+  persistence, stt, tts, teratts_install, hermes_install, …). Most unit tests
+  live here.
+- `suflyor-tts/` — Piper read-aloud + diarization SIDECAR exe. Links
+  sherpa-onnx ONLY and MUST stay a separate process (two onnxruntimes crash
+  in one binary). Never merge it into overlay-backend. Diarization ALWAYS
+  stays in this sidecar.
+- `suflyor-teratts/` — experimental TeraTTSv2 read-aloud SIDECAR exe (RC17).
+  Links ONNX Runtime through `ort` ONLY; same process-isolation rule as
+  suflyor-tts. Never add a second ONNX Runtime to suflyor-tts instead. Its
+  ~370 MB model is pinned in `suflyor-teratts/manifest/teratts-v2.json` and
+  downloads on demand — NEVER bundle weights in NSIS; see
+  `suflyor-teratts/NOTICE.md` for the upstream licensing release gate.
+- `suflyor-wsola/` — tiny WSOLA time-stretch helper used by the transcript
+  player.
 
 Version lives in BOTH `slint-experiment/Cargo.toml` and
 `scripts/slint-installer.nsi` (`PRODUCT_VERSION`) — keep in sync.
@@ -25,7 +35,7 @@ Claude-Code twin of this file — same rules, different tooling notes.
 
 - Full gate (REQUIRED green before any commit is considered done):
   `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci.ps1`
-  = fmt --check + clippy -D warnings + tests for all 3 crates + i18n_guard +
+  = fmt --check + clippy -D warnings + tests for all 5 crates + i18n_guard +
   the `ui-mcp` QA-feature compile check.
   Takes ~9 min. Run it yourself; do not declare success without it.
 - Quick compile check: `cargo check --bin overlay-host --manifest-path
@@ -36,6 +46,16 @@ Claude-Code twin of this file — same rules, different tooling notes.
   `taskkill /IM overlay-host.exe /F` + `taskkill /IM suflyor-tts.exe /F`.
 - Release build + installer (rarely needed by agents):
   `powershell -File scripts/build-slint-release.ps1 -Installer`.
+
+## Winbrat remote work and recovery
+
+Before starting or resuming any Winbrat build, test, installer, or live UI
+task, read [`docs/winbrat-recovery.md`](docs/winbrat-recovery.md). A lost SSH
+connection does not mean a scheduled build failed: diagnose Tailscale and port
+22 separately, inspect the recorded task/log/exit marker before restarting,
+and recover the agent-managed Winbrat through SSH, WinRM, or its verified
+console. Never mistake the owner's workstation for the test VM or run/build
+Suflyor there as a fallback.
 
 ## Mandatory Slint MCP visual gate
 
