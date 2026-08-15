@@ -54,9 +54,9 @@
 //! guard, and `classify_ai_error` through it). That is intentional for the
 //! extraction; the imports get narrowed in a later pass.
 use super::{
-    ai, classify_ai_error, to_md_blocks, tokio_mpsc, Arc, AtomicU64, ModelRc, MonitorHint,
-    Ordering, OverlayBarWindow, RuntimeEvents, SharedString, SlintUiBridge, TileKind, TileSpec,
-    TileWindow, VecModel,
+    ai, classify_ai_error, to_md_blocks, to_md_blocks_streaming, tokio_mpsc, Arc, AtomicU64,
+    ModelRc, MonitorHint, Ordering, OverlayBarWindow, RuntimeEvents, SharedString, SlintUiBridge,
+    TileKind, TileSpec, TileWindow, VecModel,
 };
 
 /// Phase E6 v45 — monotonic conversation id for the in-tile continue-dialog
@@ -274,7 +274,7 @@ impl RuntimeEvents for PttStreamSink {
                 let weak = self.tile.clone();
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(t) = weak.upgrade() {
-                        t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&body))));
+                        t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks_streaming(&body))));
                     }
                 });
             }
@@ -583,7 +583,7 @@ impl OverlayBarBridge {
                     let Some(tile) = weak.upgrade() else {
                         return;
                     };
-                    tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&body))));
+                    tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks_streaming(&body))));
                 });
             }
             ai::AiEvent::Done { reason } => {

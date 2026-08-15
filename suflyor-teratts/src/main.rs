@@ -153,6 +153,7 @@ struct Controller<P: Player> {
     voice: Option<String>,
     lang: String,
     rate: i32,
+    playback_speed_percent: i32,
     next_id: u64,
     active: Option<u64>,
     player: Option<P>,
@@ -229,7 +230,8 @@ impl<P: Player> Controller<P> {
             return;
         }
         match (self.make_player)(tera::SAMPLE_RATE, id) {
-            Ok(player) => {
+            Ok(mut player) => {
+                player.set_speed(self.playback_speed_percent as f32 / 100.0);
                 self.voice = Some(voice.clone());
                 self.player = Some(player);
                 self.active = Some(id);
@@ -336,8 +338,9 @@ impl<P: Player> Controller<P> {
                 }
             }
             Cmd::SetPlaybackSpeed(percent) => {
+                self.playback_speed_percent = percent.clamp(50, 300);
                 if let Some(player) = self.player.as_mut() {
-                    player.set_speed(percent as f32 / 100.0);
+                    player.set_speed(self.playback_speed_percent as f32 / 100.0);
                 }
             }
             Cmd::Stop => self.close_active(),
@@ -568,6 +571,7 @@ fn main() {
         voice: None,
         lang: "ru".to_string(),
         rate: 0,
+        playback_speed_percent: 100,
         next_id: 1,
         active: None,
         player: None,
@@ -693,6 +697,7 @@ mod tests {
                 voice: None,
                 lang: "ru".to_string(),
                 rate: 0,
+                playback_speed_percent: 100,
                 next_id: 1,
                 active: None,
                 player: None,
@@ -924,13 +929,14 @@ mod tests {
     }
 
     #[test]
-    fn seek_and_speed_forward_only_to_an_active_generation() {
+    fn seek_and_speed_apply_to_the_active_and_next_generation() {
         let mut h = harness();
         h.controller.on_cmd(Cmd::Seek(-10));
         h.controller.on_cmd(Cmd::SetPlaybackSpeed(150));
         assert!(h.player_log.borrow().is_empty());
 
         h.controller.on_cmd(Cmd::Speak("Text.".into()));
+        assert!(h.player_log.borrow().iter().any(|e| e == "speed:1:1.50"));
         h.controller.on_cmd(Cmd::Seek(-10));
         h.controller.on_cmd(Cmd::SetPlaybackSpeed(150));
         let log = h.player_log.borrow();

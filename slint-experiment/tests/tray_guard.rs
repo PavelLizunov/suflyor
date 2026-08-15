@@ -215,12 +215,12 @@ fn tray_module_never_persists_state() {
         "single-icon guard prevents duplicate icons within one process"
     );
     assert!(
-        tray.contains("WM_CONTEXTMENU => request_tray_menu()"),
-        "notify-icon v4 context requests must share one menu path"
+        tray.contains("WM_RBUTTONUP | WM_CONTEXTMENU => request_tray_menu()"),
+        "legacy and v4 Explorer context events must share one menu path"
     );
     assert!(
-        !tray.contains("WM_RBUTTONUP | WM_CONTEXTMENU => request_tray_menu()"),
-        "one physical click must not dispatch both legacy and v4 context events"
+        tray.contains("arm_menu_request(&TRAY_MENU_REQUEST_PENDING)"),
+        "duplicate legacy + v4 callbacks must arm only one async menu"
     );
     assert!(
         tray.contains("GetCursorPos(&mut point)"),

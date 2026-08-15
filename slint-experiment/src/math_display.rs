@@ -58,9 +58,77 @@ pub(crate) fn normalize_math_fragment(input: &str) -> String {
     if let Some(matrix) = normalize_pmatrices(input) {
         return matrix;
     }
+    let restored_case_rows = (input.contains("\\begin{cases}") && !input.contains("\\\\"))
+        .then(|| restore_case_rows(input));
+    let input = restored_case_rows.as_deref().unwrap_or(input);
     let mut out = String::with_capacity(input.len());
     push_normalized(&mut out, input);
     out
+}
+
+fn restore_case_rows(input: &str) -> String {
+    const BEGIN: &str = "\\begin{cases}";
+    const END: &str = "\\end{cases}";
+    let Some(begin) = input.find(BEGIN) else {
+        return input.to_string();
+    };
+    let body_start = begin + BEGIN.len();
+    let Some(relative_end) = input[body_start..].find(END) else {
+        return input.to_string();
+    };
+    let body_end = body_start + relative_end;
+    let body = &input[body_start..body_end];
+    let mut restored = String::with_capacity(input.len() + 4);
+    restored.push_str(&input[..body_start]);
+
+    let mut index = 0;
+    while index < body.len() {
+        let rest = &body[index..];
+        if let Some(after_slash) = rest.strip_prefix('\\') {
+            let command_end = after_slash
+                .char_indices()
+                .find_map(|(offset, ch)| (!ch.is_ascii_alphabetic()).then_some(offset))
+                .unwrap_or(after_slash.len());
+            let command = &after_slash[..command_end];
+            let is_tex_command = named_symbol(command).is_some()
+                || matches!(
+                    command,
+                    "frac"
+                        | "sqrt"
+                        | "left"
+                        | "right"
+                        | "big"
+                        | "bigl"
+                        | "bigr"
+                        | "quad"
+                        | "qquad"
+                        | "sin"
+                        | "cos"
+                        | "tan"
+                        | "log"
+                        | "ln"
+                        | "exp"
+                        | "text"
+                        | "mathrm"
+                        | "mathbf"
+                        | "operatorname"
+                );
+            if is_tex_command {
+                restored.push('\\');
+            } else {
+                restored.push_str("\\\\");
+            }
+            index += 1;
+            continue;
+        }
+        let Some(ch) = rest.chars().next() else {
+            break;
+        };
+        restored.push(ch);
+        index += ch.len_utf8();
+    }
+    restored.push_str(&input[body_end..]);
+    restored
 }
 
 fn normalize_pmatrices(input: &str) -> Option<String> {
@@ -80,7 +148,15 @@ fn normalize_pmatrices(input: &str) -> Option<String> {
         found = true;
         push_normalized(&mut out, &rest[..begin]);
         out.push('(');
-        for (row_index, row) in rest[body_start..body_end].split("\\\\").enumerate() {
+        let body = &rest[body_start..body_end];
+        // Outside a math delimiter CommonMark unescapes TeX's `\\` row
+        // separator to `\ ` before this display-only pass sees it.
+        let body = if body.contains("\\\\") {
+            body.to_string()
+        } else {
+            body.replace("\\ ", "\\\\ ")
+        };
+        for (row_index, row) in body.split("\\\\").enumerate() {
             if row_index > 0 {
                 out.push('\n');
                 out.push_str("  ");
@@ -111,6 +187,8 @@ fn has_math_delimiter(input: &str) -> bool {
 fn looks_like_bare_math(text: &str) -> bool {
     !text.contains("https://")
         && !text.contains("http://")
+        && !text.contains('?')
+        && !text.contains('/')
         && text.contains('=')
         && looks_like_math(text)
 }
@@ -214,6 +292,17 @@ fn push_normalized(out: &mut String, text: &str) {
     let mut index = 0;
     while index < text.len() {
         let rest = &text[index..];
+        if rest.starts_with("\\\\") {
+            out.push('\n');
+            out.push_str("  ");
+            index += 2;
+            continue;
+        }
+        if rest.starts_with("\\,") || rest.starts_with("\\;") || rest.starts_with("\\!") {
+            out.push(' ');
+            index += 2;
+            continue;
+        }
         if rest.starts_with('\\') {
             let command_start = index + 1;
             let command_end = text[command_start..]
@@ -226,9 +315,52 @@ fn push_normalized(out: &mut String, text: &str) {
                 let command = &text[command_start..command_end];
                 if let Some(symbol) = named_symbol(command) {
                     out.push_str(symbol);
-                } else {
-                    out.push_str(&text[index..command_end]);
+                    index = command_end;
+                    continue;
                 }
+                if command == "frac" {
+                    if let Some((numerator, after_numerator)) = tex_argument_at(text, command_end) {
+                        if let Some((denominator, end)) = tex_argument_at(text, after_numerator) {
+                            out.push('(');
+                            push_normalized(out, numerator);
+                            out.push_str(")/(");
+                            push_normalized(out, denominator);
+                            out.push(')');
+                            index = end;
+                            continue;
+                        }
+                    }
+                } else if command == "sqrt" {
+                    if let Some((radicand, end)) = tex_argument_at(text, command_end) {
+                        out.push_str("√(");
+                        push_normalized(out, radicand);
+                        out.push(')');
+                        index = end;
+                        continue;
+                    }
+                } else if matches!(
+                    command,
+                    "left" | "right" | "big" | "bigl" | "bigr" | "Big" | "Bigl" | "Bigr"
+                ) {
+                    index = command_end;
+                    continue;
+                } else if matches!(command, "quad" | "qquad") {
+                    out.push(' ');
+                    index = command_end;
+                    continue;
+                } else if matches!(command, "begin" | "end") {
+                    if let Some((environment, end)) = braced_group_at(text, command_end) {
+                        if environment == "cases" {
+                            if command == "begin" {
+                                out.push_str("{ ");
+                            }
+                            index = end;
+                            continue;
+                        }
+                    }
+                }
+                // Malformed or unknown commands remain literal.
+                out.push_str(&text[index..command_end]);
                 index = command_end;
                 continue;
             }
@@ -242,10 +374,54 @@ fn push_normalized(out: &mut String, text: &str) {
                 index = end;
                 continue;
             }
+            if let Some((script, end)) = tex_argument_at(text, index + ch.len_utf8()) {
+                out.push(ch);
+                out.push('(');
+                push_normalized(out, script);
+                out.push(')');
+                index = end;
+                continue;
+            }
         }
         out.push(ch);
         index += ch.len_utf8();
     }
+}
+
+fn tex_argument_at(text: &str, start: usize) -> Option<(&str, usize)> {
+    let whitespace = text[start..]
+        .char_indices()
+        .take_while(|(_, ch)| ch.is_whitespace())
+        .map(|(_, ch)| ch.len_utf8())
+        .sum::<usize>();
+    let start = start + whitespace;
+    if text[start..].starts_with('{') {
+        return braced_group_at(text, start);
+    }
+    let ch = text[start..].chars().next()?;
+    Some((&text[start..start + ch.len_utf8()], start + ch.len_utf8()))
+}
+
+fn braced_group_at(text: &str, start: usize) -> Option<(&str, usize)> {
+    if !text[start..].starts_with('{') {
+        return None;
+    }
+    let inner_start = start + 1;
+    let mut depth = 1_usize;
+    for (offset, ch) in text[inner_start..].char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    let end = inner_start + offset;
+                    return Some((&text[inner_start..end], end + 1));
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 fn script_at(text: &str, start: usize, subscript: bool) -> Option<(String, usize)> {
@@ -352,6 +528,14 @@ fn named_symbol(command: &str) -> Option<&'static str> {
         "prod" => "∏",
         "times" => "×",
         "cdot" => "·",
+        "pm" => "±",
+        "neq" => "≠",
+        "le" | "leq" => "≤",
+        "ge" | "geq" => "≥",
+        "approx" => "≈",
+        "equiv" => "≡",
+        "infty" => "∞",
+        "to" => "→",
         "alpha" => "α",
         "beta" => "β",
         "gamma" => "γ",
@@ -406,6 +590,11 @@ mod tests {
     fn urls_are_verbatim_and_normalization_is_idempotent() {
         let url = "https://example.test/c_{ij}?q=\\sum_{k=1}";
         assert_eq!(normalize_math_display(url), url);
+        let parsed_url_fragment = "example.test/c_{ij}?q=sum_k=1";
+        assert_eq!(
+            normalize_math_display(parsed_url_fragment),
+            parsed_url_fragment
+        );
 
         let once = normalize_math_display("$c_{ij} = \\sum_{k=1}^{n}$");
         assert_eq!(normalize_math_display(&once), once);
@@ -438,5 +627,26 @@ mod tests {
         assert!(!shown.contains("\\begin"));
         assert!(!shown.contains("\\end"));
         assert!(shown.contains("10  12"));
+    }
+
+    #[test]
+    fn renders_common_algebra_without_raw_tex_commands() {
+        let shown =
+            normalize_math_display(r"x_{1,2}=\frac{-b\pm\sqrt{b^2-4ac}}{2a},\quad b_n\neq0");
+        assert!(shown.contains("(-b±√(b²-4ac))/(2a)"), "{shown}");
+        assert!(shown.contains("bₙ≠0"), "{shown}");
+        assert!(!shown.contains("\\frac"));
+        assert!(!shown.contains("\\sqrt"));
+        assert!(!shown.contains("\\quad"));
+    }
+
+    #[test]
+    fn renders_cases_as_readable_lines() {
+        let shown =
+            normalize_math_display(r"\begin{cases}a_1x+b_1y=c_1,\\a_2x+b_2y=c_2\end{cases}");
+        assert!(shown.starts_with("{ a₁x+b₁y=c₁,"), "{shown}");
+        assert!(shown.contains("\n  a₂x+b₂y=c₂"), "{shown}");
+        assert!(!shown.contains("\\begin"));
+        assert!(!shown.contains("\\end"));
     }
 }

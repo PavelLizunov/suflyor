@@ -31,7 +31,7 @@ use windows::Win32::UI::Shell::{
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GetCursorPos, LoadIconW, RegisterClassExW,
     RegisterWindowMessageW, HICON, IDI_APPLICATION, WM_APP, WM_CONTEXTMENU, WM_DESTROY,
-    WNDCLASSEXW,
+    WM_RBUTTONUP, WNDCLASSEXW,
 };
 
 // ===== Pure core (unit-testable without any Win32) =====
@@ -174,6 +174,10 @@ static TASKBAR_CREATED_MESSAGE: AtomicU32 = AtomicU32::new(0);
 /// the notification area immediately.
 static TRAY_HWND: AtomicIsize = AtomicIsize::new(0);
 static TRAY_ICON_VISIBLE: AtomicBool = AtomicBool::new(false);
+/// Explorer versions disagree on whether a right click arrives as the v4
+/// `WM_CONTEXTMENU`, legacy `WM_RBUTTONUP`, or both. Arm once until the themed
+/// menu finishes so every variant opens exactly one menu.
+static TRAY_MENU_REQUEST_PENDING: AtomicBool = AtomicBool::new(false);
 
 fn claim_install_slot(slot: &AtomicBool) -> Result<(), String> {
     slot.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -331,6 +335,7 @@ pub fn show_icon() -> Result<(), String> {
 /// Remove the notification icon once the bar is visible again. The hidden
 /// message window stays alive so a later explicit hide can add the icon anew.
 pub fn hide_icon() {
+    TRAY_MENU_REQUEST_PENDING.store(false, Ordering::Release);
     if !TRAY_ICON_VISIBLE.swap(false, Ordering::SeqCst) {
         return;
     }
@@ -354,6 +359,7 @@ pub fn hide_icon() {
 /// custom tray menu has completed. Windows explicitly requires NIM_SETFOCUS
 /// after the UI operation, not while the styled Slint menu is opening.
 pub fn return_focus() {
+    TRAY_MENU_REQUEST_PENDING.store(false, Ordering::Release);
     if !TRAY_ICON_VISIBLE.load(Ordering::SeqCst) {
         return;
     }
@@ -467,10 +473,9 @@ unsafe extern "system" fn tray_wndproc(
             // v4 emits NIN_SELECT for mouse activation. Handling WM_LBUTTONUP
             // as well toggles twice on affected shells (restore then hide).
             NIN_SELECT | NIN_KEYSELECT => dispatch_from_ctx(TrayAction::ShowHide),
-            // Version 4 reports context activation as WM_CONTEXTMENU. Some
-            // Shell versions also emit the legacy WM_RBUTTONUP for the same
-            // physical click; accepting both opens the async Slint menu twice.
-            WM_CONTEXTMENU => request_tray_menu(),
+            // Some Explorer builds send only the legacy event even after
+            // NIM_SETVERSION(4); others send WM_CONTEXTMENU, or both.
+            WM_RBUTTONUP | WM_CONTEXTMENU => request_tray_menu(),
             _ => {}
         }
         return LRESULT(0);
@@ -503,14 +508,22 @@ fn publish_availability(available: bool) {
 }
 
 fn request_tray_menu() {
+    if !arm_menu_request(&TRAY_MENU_REQUEST_PENDING) {
+        return;
+    }
     let mut point = POINT::default();
     if unsafe { GetCursorPos(&mut point) }.is_err() {
+        TRAY_MENU_REQUEST_PENDING.store(false, Ordering::Release);
         return;
     }
     dispatch_from_ctx(TrayAction::OpenMenu {
         x: point.x,
         y: point.y,
     });
+}
+
+fn arm_menu_request(pending: &AtomicBool) -> bool {
+    !pending.swap(true, Ordering::AcqRel)
 }
 
 #[cfg(test)]
@@ -525,6 +538,15 @@ mod tests {
         assert!(snap.bar_visible, "startup must ALWAYS be visible");
         assert!(!snap.paused);
         assert!(!snap.session_running);
+    }
+
+    #[test]
+    fn duplicate_context_events_arm_only_one_menu() {
+        let pending = AtomicBool::new(false);
+        assert!(arm_menu_request(&pending));
+        assert!(!arm_menu_request(&pending));
+        pending.store(false, Ordering::Release);
+        assert!(arm_menu_request(&pending));
     }
 
     #[test]

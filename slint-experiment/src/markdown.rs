@@ -12,9 +12,14 @@
 //! stripped, see Event::Code). GFM tables render as an aligned monospace block (#109);
 //! links, images, footnotes, HTML are silently dropped — Phase 4.x.
 
-use crate::math_display::{looks_like_delimited_math, normalize_math_fragment};
+use crate::math_display::{
+    looks_like_delimited_math, normalize_math_display, normalize_math_fragment,
+};
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use std::borrow::Cow;
+
+const INLINE_CODE_START: char = '\u{e000}';
+const INLINE_CODE_END: char = '\u{e001}';
 
 /// Block discriminant values — keep in sync with
 /// `ui/markdown_spike.slint` and `ui/tile.slint`.
@@ -58,13 +63,58 @@ pub fn parse(source: &str) -> Vec<Block> {
     let source = canonicalize_tex_math_delimiters(source);
     let source = source.as_ref();
     let mut raw = parse_variant(source, false);
-    let display = parse_variant(source, true);
+    let mut display = parse_variant(source, true);
+    // CommonMark may split one bare TeX expression into several Text events
+    // (notably at escaped matrix row separators). Normalize the completed
+    // block once more so detection sees the expression and its `=` together.
+    for block in &mut display {
+        let contains_inline_code =
+            block.text.contains(INLINE_CODE_START) || block.text.contains(INLINE_CODE_END);
+        if block.kind != kind::CODE && !contains_inline_code {
+            block.text = normalize_math_display(&block.text);
+        }
+        block
+            .text
+            .retain(|ch| !matches!(ch, INLINE_CODE_START | INLINE_CODE_END));
+    }
     for (block, shown) in raw.iter_mut().zip(display) {
         if block.kind == shown.kind {
             block.display_text = shown.text;
         }
     }
     raw
+}
+
+/// Parse a growing AI answer without exposing the unfinished TeX tail. A
+/// formula appears when its explicit delimiter or physical line completes;
+/// ordinary prose still streams token-by-token.
+#[must_use]
+pub fn parse_streaming(source: &str) -> Vec<Block> {
+    parse(stable_streaming_prefix(source))
+}
+
+fn stable_streaming_prefix(source: &str) -> &str {
+    for (open, close) in [("\\[", "\\]"), ("\\(", "\\)")] {
+        if let Some(start) = source.rfind(open) {
+            if !source[start + open.len()..].contains(close) {
+                return &source[..start];
+            }
+        }
+    }
+    if source.ends_with('\r') || source.ends_with('\n') {
+        return source;
+    }
+    let line_start = source.rfind('\n').map_or(0, |index| index + 1);
+    let tail = &source[line_start..];
+    let explicit_formula_finished = tail.contains("\\]") || tail.contains("\\)");
+    let bare_math_tail = tail.contains('\\')
+        || ((tail.contains('=') || tail.contains('+') || tail.contains('-'))
+            && (tail.contains('^') || tail.contains('_')));
+    if bare_math_tail && !explicit_formula_finished {
+        &source[..line_start]
+    } else {
+        source
+    }
 }
 
 /// pulldown-cmark intentionally recognizes only `$...$` and `$$...$$` math.
@@ -300,7 +350,13 @@ fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
                 } else {
                     &mut current_text
                 };
+                if normalize_math {
+                    buf.push(INLINE_CODE_START);
+                }
                 buf.push_str(&t);
+                if normalize_math {
+                    buf.push(INLINE_CODE_END);
+                }
             }
             Event::InlineMath(t) => {
                 let buf = if in_cell {
@@ -646,12 +702,15 @@ mod tests {
         assert!(blocks
             .iter()
             .any(|block| block.text.contains(". c_{ij}. https://")));
-        assert!(blocks.iter().any(|block| {
-            block
-                .display_text
-                .contains("https://example.test/c_{ij}?q=sum_k=1")
-                && block.display_text.contains("$100 = 90$")
-        }));
+        assert!(
+            blocks.iter().any(|block| {
+                block
+                    .display_text
+                    .contains("https://example.test/c_{ij}?q=sum_k=1")
+                    && block.display_text.contains("$100 = 90$")
+            }),
+            "{blocks:#?}"
+        );
         assert!(blocks.iter().any(|block| {
             block.kind == kind::CODE
                 && block.text.trim_end_matches('\n') == "c_{ij} = \\sum_{k=1}^{n}"
@@ -717,6 +776,39 @@ mod tests {
     }
 
     #[test]
+    fn bare_matrix_paragraph_does_not_expose_tex_scaffolding() {
+        let blocks = parse(
+            r"Matrix sum: \begin{pmatrix}1 & 2 \\ 3 & 4\end{pmatrix} + \begin{pmatrix}5 & 6 \\ 7 & 8\end{pmatrix} = \begin{pmatrix}6 & 8 \\ 10 & 12\end{pmatrix}.",
+        );
+        assert!(
+            blocks
+                .iter()
+                .all(|block| !block.display_text.contains("\\begin")
+                    && !block.display_text.contains("\\end")),
+            "{blocks:#?}"
+        );
+        assert!(
+            blocks
+                .iter()
+                .any(|block| block.display_text.contains("10  12")),
+            "{blocks:#?}"
+        );
+        assert!(
+            blocks.iter().any(|block| block.display_text.contains('\n')),
+            "matrix rows must remain visually distinct: {blocks:#?}"
+        );
+    }
+
+    #[test]
+    fn bare_cases_paragraph_keeps_equations_on_separate_rows() {
+        let blocks = parse(r"System: \begin{cases}a_1x+b_1y=c_1,\\a_2x+b_2y=c_2\end{cases}");
+        let shown = &blocks[0].display_text;
+        assert!(shown.contains("\n  a₂x+b₂y=c₂"), "{blocks:#?}");
+        assert!(!shown.contains("\\begin"), "{blocks:#?}");
+        assert!(!shown.contains("\\end"), "{blocks:#?}");
+    }
+
+    #[test]
     fn tex_bracket_delimiters_inside_code_stay_literal() {
         let blocks =
             parse("Literal `\\[x = 1\\]` and `\\(y = 2\\)`.\n\n```text\n\\[\nx = 1\n\\]\n```");
@@ -733,6 +825,12 @@ mod tests {
     }
 
     #[test]
+    fn bare_tex_inside_inline_code_stays_literal() {
+        let blocks = parse("Literal `c_{ij} = \\sum_{k=1}^{n}`.");
+        assert_eq!(blocks[0].display_text, "Literal c_{ij} = \\sum_{k=1}^{n}.");
+    }
+
+    #[test]
     fn tex_parenthesis_inline_becomes_normalized_math() {
         let blocks = parse(r"Matrix product: \(c_{ij} = \sum_{k=1}^{n} a_{ik} \cdot b_{kj}\).");
         let shown = &blocks[0].display_text;
@@ -740,6 +838,30 @@ mod tests {
         assert!(shown.contains('·'));
         assert!(!shown.contains("\\("));
         assert!(!shown.contains("\\sum"));
+    }
+
+    #[test]
+    fn streaming_hides_only_the_unfinished_formula_tail() {
+        let partial = parse_streaming("Explanation is visible.\n\\[\n\\frac{a}{");
+        assert_eq!(partial.len(), 1);
+        assert_eq!(partial[0].display_text, "Explanation is visible.");
+
+        let complete = parse_streaming("Explanation is visible.\n\\[\\frac{a}{b}\\]");
+        assert!(complete
+            .iter()
+            .any(|block| block.display_text.contains("(a)/(b)")));
+        assert!(complete
+            .iter()
+            .all(|block| !block.display_text.contains("\\frac")));
+    }
+
+    #[test]
+    fn streaming_plain_prose_is_not_delayed() {
+        let blocks = parse_streaming("An ordinary sentence is still growing");
+        assert_eq!(
+            blocks[0].display_text,
+            "An ordinary sentence is still growing"
+        );
     }
 
     /// Micro-bench for audit P1: the tile re-`parse`s the WHOLE accumulated answer

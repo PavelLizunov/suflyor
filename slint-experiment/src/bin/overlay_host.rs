@@ -452,10 +452,7 @@ fn spawn_text_tile(
     // Auto-start the read (mirror wire_speak's click handler). Mark the tile as
     // speaking ONLY when playback is accepted — a missing sidecar/voice must not
     // show as speaking nor falsely suppress STT (F2).
-    if overlay_backend::tts::speak(text) {
-        reset_pause();
-        mark_speaking(convo_id);
-    }
+    auto_speak_if_idle(text, convo_id);
 }
 
 fn after_read_aloud_hotkey_release(attempts_left: u8, action: Rc<dyn Fn()>) {
@@ -517,16 +514,23 @@ pub(crate) fn fill_ocr_tile(
     // Auto-read (mirror spawn_text_tile's tail). Mark the tile as speaking ONLY
     // when playback is accepted — a missing sidecar/voice must not show as
     // speaking nor falsely suppress STT (F2).
-    if overlay_backend::tts::speak(trimmed) {
-        reset_pause();
-        mark_speaking(convo_id);
-    }
+    auto_speak_if_idle(trimmed, convo_id);
 }
 
 /// Parse markdown source into the Slint `MarkdownBlock` rows a tile body
 /// renders. Shared by the streaming Delta/Error paths + follow-ups.
 pub(crate) fn to_md_blocks(md: &str) -> Vec<MarkdownBlock> {
-    markdown::parse(md)
+    map_md_blocks(markdown::parse(md))
+}
+
+/// Streaming variant: keeps an unfinished TeX tail out of the model until the
+/// formula is structurally complete, avoiding repeated whole-tile relayout.
+pub(crate) fn to_md_blocks_streaming(md: &str) -> Vec<MarkdownBlock> {
+    map_md_blocks(markdown::parse_streaming(md))
+}
+
+fn map_md_blocks(blocks: Vec<markdown::Block>) -> Vec<MarkdownBlock> {
+    blocks
         .into_iter()
         .map(|b| MarkdownBlock {
             kind: b.kind,
@@ -4748,6 +4752,7 @@ fn open_tray_menu(
 
     let Some(work) = work_area_for_point(anchor_x, anchor_y) else {
         diag!("tray menu open failed: no monitor work area");
+        slint_replay::tray::return_focus();
         return;
     };
     let scale = menu.window().scale_factor().max(0.1);

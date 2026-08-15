@@ -40,6 +40,20 @@ on the owner's workstation as though it were the test VM.
   the whole point).
 - `.claude/_progress_counter` — internal, managed by hooks. Don't touch.
 
+## OpenCode Go worker
+
+For small, bounded tasks, the project may use OpenCode Go with
+`opencode-go/deepseek-v4-flash`:
+
+```pwsh
+opencode run -m opencode-go/deepseek-v4-flash "<exact scoped prompt>"
+```
+
+Keep it read-only in a shared checkout; `--auto` is allowed only in a dedicated
+task worktree. It must not read secrets or perform Git/GitHub remote actions.
+The primary agent validates its output. Non-trivial work still follows the
+project's Qwen/Claude worker rules.
+
 ## Stack (the source of truth)
 
 The product is **pure Rust + Slint** (Phase 7 cut, 2026-05-28 removed the

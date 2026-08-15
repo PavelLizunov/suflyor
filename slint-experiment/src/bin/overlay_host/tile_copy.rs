@@ -735,6 +735,24 @@ pub(crate) fn mark_speaking(convo_id: i32) {
     start_speaking_state_timer();
 }
 
+/// Auto-read a newly opened tile only when no existing player is active. A
+/// paused read remains active, so preparing the next tile cannot steal its
+/// controls; an explicit click on the new tile may still replace it.
+fn auto_speak_allowed(is_speaking: bool) -> bool {
+    !is_speaking
+}
+
+pub(crate) fn auto_speak_if_idle(text: &str, convo_id: i32) -> bool {
+    if !auto_speak_allowed(overlay_backend::tts::is_speaking())
+        || !overlay_backend::tts::speak(text)
+    {
+        return false;
+    }
+    reset_pause();
+    mark_speaking(convo_id);
+    true
+}
+
 /// Stop the read-aloud iff `convo_id` is the tile currently being spoken — called
 /// from each tile's close handler so closing the speaking tile silences it.
 pub(crate) fn stop_if_speaking(convo_id: i32) {
@@ -758,8 +776,8 @@ pub(crate) fn current_speaking_convo() -> i32 {
 // hotkey so they stay coherent (TTS is global + one-at-a-time). false = playing.
 static SPEAK_PAUSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Per-read speed shown by the active tile player. It intentionally is not a
-/// persisted Settings value: every new read starts at a predictable 1.0x.
+/// Process-global read speed shown by the active tile player. A user's choice
+/// carries into the next tile and is applied before that tile starts playback.
 static SPEAK_SPEED_PERCENT: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(100);
 
 fn speak_speed_label(percent: u16) -> String {
@@ -780,10 +798,6 @@ fn set_speak_speed_percent(percent: u16) {
     let percent = percent.clamp(50, 300);
     SPEAK_SPEED_PERCENT.store(percent, std::sync::atomic::Ordering::Release);
     overlay_backend::tts::set_playback_speed(f32::from(percent) / 100.0);
-}
-
-fn reset_speak_speed() {
-    set_speak_speed_percent(100);
 }
 
 /// Toggle pause/resume of the current read-aloud; returns the NEW paused state.
@@ -833,9 +847,6 @@ pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayB
             // window ONLY when playback is accepted. Gate the tile's speaking
             // state on that result so a missing engine neither shows as speaking
             // nor falsely silences the mic (F2).
-            // Reset before SPEAK so a new tile cannot inherit the previous
-            // tile's fast-forward rate even when the sidecar stays warm.
-            reset_speak_speed();
             if !overlay_backend::tts::speak(&text) {
                 return;
             }
@@ -1265,5 +1276,11 @@ mod copy_tests {
             message_text(&msgs[2].content),
             format!("{FOLLOWUP_DIRECTIVE}перезапрашиваемый вопрос")
         );
+    }
+
+    #[test]
+    fn auto_read_policy_keeps_an_active_or_paused_player() {
+        assert!(auto_speak_allowed(false));
+        assert!(!auto_speak_allowed(true));
     }
 }

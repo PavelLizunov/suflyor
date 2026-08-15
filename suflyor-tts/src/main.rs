@@ -10,6 +10,8 @@
 //!   RATE <-10..10>       set read rate
 //!   SPEAK <base64-utf8>  synthesize + play, interrupting any current speech
 //!   PAUSE / RESUME / STOP / SEEK <-30..30> / SPEED <50..300>
+//! stdout emits READY, STARTED id=<n>, and a matching DONE/FAILED event so the
+//! host keeps controls visible until the render device has actually drained.
 //! EOF on stdin (parent exits) → this process exits.
 
 mod diar;
@@ -34,6 +36,39 @@ enum Cmd {
     SetPlaybackSpeed(i32),
     SetRate(i32),
     SetVoice(String),
+}
+
+enum Message {
+    Command(Cmd),
+    PlaybackDone(u64),
+    Shutdown,
+}
+
+#[derive(Clone, Copy)]
+struct PlaybackSpeed(i32);
+
+impl Default for PlaybackSpeed {
+    fn default() -> Self {
+        Self(100)
+    }
+}
+
+impl PlaybackSpeed {
+    fn set(&mut self, percent: i32) -> f32 {
+        self.0 = percent.clamp(50, 300);
+        self.factor()
+    }
+
+    fn factor(self) -> f32 {
+        self.0 as f32 / 100.0
+    }
+}
+
+fn take_finished_playback<P>(current: &mut Option<(u64, P)>, id: u64) -> Option<P> {
+    if current.as_ref().map(|(active, _)| *active) != Some(id) {
+        return None;
+    }
+    current.take().map(|(_, playback)| playback)
 }
 
 fn parse_cmd(line: &str) -> Option<Cmd> {
@@ -88,22 +123,24 @@ fn main() {
 
     // stdin → Cmd channel. Dropping `tx` on EOF makes the worker's recv() return
     // Err, which exits the process.
-    let (tx, rx) = mpsc::channel::<Cmd>();
+    let (tx, rx) = mpsc::channel::<Message>();
+    let worker_tx = tx.clone();
     std::thread::spawn(move || {
         let stdin = std::io::stdin();
         for line in stdin.lock().lines() {
             let Ok(line) = line else { break };
             if let Some(cmd) = parse_cmd(&line) {
-                if tx.send(cmd).is_err() {
+                if tx.send(Message::Command(cmd)).is_err() {
                     break;
                 }
             }
         }
+        let _ = tx.send(Message::Shutdown);
     });
-    worker(rx);
+    worker(rx, worker_tx);
 }
 
-fn worker(rx: mpsc::Receiver<Cmd>) {
+fn worker(rx: mpsc::Receiver<Message>, events: mpsc::Sender<Message>) {
     let tts_dir = match engine::tts_root() {
         Some(d) => d,
         None => {
@@ -121,8 +158,10 @@ fn worker(rx: mpsc::Receiver<Cmd>) {
     let mut current_voice = engine::pick_voice_id(&voices, "");
     let mut engine_opt: Option<NeuralEngine> = None;
     let mut rate = 0i32;
+    let mut playback_speed = PlaybackSpeed::default();
     let sid = 0;
-    let mut current: Option<Playback> = None;
+    let mut next_id = 1_u64;
+    let mut current: Option<(u64, Playback)> = None;
     let mut pending: VecDeque<String> = VecDeque::new();
     // Latency diagnostics: time from a SPEAK to its first audio chunk.
     let mut speak_t0: Option<std::time::Instant> = None;
@@ -134,7 +173,7 @@ fn worker(rx: mpsc::Receiver<Cmd>) {
     let _ = out.flush();
 
     loop {
-        let cmd = if pending.is_empty() {
+        let message = if pending.is_empty() {
             match rx.recv() {
                 Ok(c) => Some(c),
                 Err(_) => break,
@@ -147,14 +186,18 @@ fn worker(rx: mpsc::Receiver<Cmd>) {
             }
         };
 
-        match cmd {
-            Some(Cmd::Speak(text)) => {
+        match message {
+            Some(Message::Command(Cmd::Speak(text))) => {
                 speak_t0 = Some(std::time::Instant::now());
                 announced = false;
-                if let Some(pb) = current.take() {
+                if let Some((id, pb)) = current.take() {
                     pb.stop();
+                    emit_playback_event(&mut out, "DONE", id);
                 }
                 pending.clear();
+                let id = next_id;
+                next_id = next_id.wrapping_add(1).max(1);
+                emit_playback_event(&mut out, "STARTED", id);
                 if engine_opt.is_none() {
                     if let Some(id) = current_voice.clone() {
                         match engine::load_voice(&tts_dir, &id) {
@@ -169,48 +212,65 @@ fn worker(rx: mpsc::Receiver<Cmd>) {
                 if let Some(e) = &engine_opt {
                     let chunks = engine::text::chunk_text(&text);
                     if !chunks.is_empty() {
-                        match Playback::start(e.sample_rate()) {
+                        let notify = events.clone();
+                        match Playback::start(
+                            e.sample_rate(),
+                            Some(Box::new(move || {
+                                let _ = notify.send(Message::PlaybackDone(id));
+                            })),
+                        ) {
                             Ok(pb) => {
-                                current = Some(pb);
+                                pb.set_speed(playback_speed.factor());
+                                current = Some((id, pb));
                                 pending = VecDeque::from(chunks);
                             }
-                            Err(err) => eprintln!("[suflyor-tts] playback start failed: {err:#}"),
+                            Err(err) => {
+                                eprintln!("[suflyor-tts] playback start failed: {err:#}");
+                                emit_playback_failure(&mut out, id, "playback");
+                            }
                         }
+                    } else {
+                        emit_playback_failure(&mut out, id, "empty");
                     }
+                } else {
+                    emit_playback_failure(&mut out, id, "voice");
                 }
             }
-            Some(Cmd::Pause) => {
-                if let Some(pb) = &current {
+            Some(Message::Command(Cmd::Pause)) => {
+                if let Some((_, pb)) = &current {
                     pb.pause();
                 }
             }
-            Some(Cmd::Resume) => {
-                if let Some(pb) = &current {
+            Some(Message::Command(Cmd::Resume)) => {
+                if let Some((_, pb)) = &current {
                     pb.resume();
                 }
             }
-            Some(Cmd::Seek(seconds)) => {
-                if let Some(pb) = &current {
+            Some(Message::Command(Cmd::Seek(seconds))) => {
+                if let Some((_, pb)) = &current {
                     pb.seek_seconds(seconds);
                 }
             }
-            Some(Cmd::SetPlaybackSpeed(percent)) => {
-                if let Some(pb) = &current {
-                    pb.set_speed(percent as f32 / 100.0);
+            Some(Message::Command(Cmd::SetPlaybackSpeed(percent))) => {
+                let speed = playback_speed.set(percent);
+                if let Some((_, pb)) = &current {
+                    pb.set_speed(speed);
                 }
             }
-            Some(Cmd::Stop) => {
+            Some(Message::Command(Cmd::Stop)) => {
                 pending.clear();
-                if let Some(pb) = current.take() {
+                if let Some((id, pb)) = current.take() {
                     pb.stop();
+                    emit_playback_event(&mut out, "DONE", id);
                 }
             }
-            Some(Cmd::SetRate(r)) => {
+            Some(Message::Command(Cmd::SetRate(r))) => {
                 rate = r.clamp(-10, 10);
             }
-            Some(Cmd::SetVoice(id)) => {
-                if let Some(pb) = current.take() {
+            Some(Message::Command(Cmd::SetVoice(id))) => {
+                if let Some((active, pb)) = current.take() {
                     pb.stop();
+                    emit_playback_event(&mut out, "DONE", active);
                 }
                 pending.clear();
                 match engine::load_voice(&tts_dir, &id) {
@@ -222,8 +282,15 @@ fn worker(rx: mpsc::Receiver<Cmd>) {
                     Err(err) => eprintln!("[suflyor-tts] switch '{id}' failed: {err:#}"),
                 }
             }
+            Some(Message::PlaybackDone(id)) => {
+                if let Some(pb) = take_finished_playback(&mut current, id) {
+                    pb.stop();
+                    emit_playback_event(&mut out, "DONE", id);
+                }
+            }
+            Some(Message::Shutdown) => break,
             None => match (&engine_opt, &current) {
-                (Some(e), Some(pb)) => {
+                (Some(e), Some((_, pb))) => {
                     if let Some(chunk) = pending.pop_front() {
                         let speed = engine::rate_to_speed(rate);
                         match e.synth(&chunk, speed, sid) {
@@ -263,9 +330,19 @@ fn worker(rx: mpsc::Receiver<Cmd>) {
     // stdin closed (the app exited / was closed): STOP immediately so speech
     // does not keep playing after the app is gone (the tester hit read-aloud
     // continuing after closing the app).
-    if let Some(pb) = current.take() {
+    if let Some((_, pb)) = current.take() {
         pb.stop();
     }
+}
+
+fn emit_playback_event(out: &mut impl Write, kind: &str, id: u64) {
+    let _ = writeln!(out, "{kind} id={id}");
+    let _ = out.flush();
+}
+
+fn emit_playback_failure(out: &mut impl Write, id: u64, reason: &str) {
+    let _ = writeln!(out, "FAILED id={id} reason={reason}");
+    let _ = out.flush();
 }
 
 #[cfg(test)]
@@ -284,5 +361,21 @@ mod tests {
         ));
         assert!(parse_cmd("SEEK 31").is_none());
         assert!(parse_cmd("SPEED 301").is_none());
+    }
+
+    #[test]
+    fn playback_speed_is_remembered_for_the_next_player() {
+        let mut speed = PlaybackSpeed::default();
+        assert_eq!(speed.factor(), 1.0);
+        assert_eq!(speed.set(150), 1.5);
+        assert_eq!(speed.factor(), 1.5);
+    }
+
+    #[test]
+    fn playback_done_is_consumed_once_and_stale_ids_are_ignored() {
+        let mut current = Some((7, "player"));
+        assert_eq!(take_finished_playback(&mut current, 6), None);
+        assert_eq!(take_finished_playback(&mut current, 7), Some("player"));
+        assert_eq!(take_finished_playback(&mut current, 7), None);
     }
 }

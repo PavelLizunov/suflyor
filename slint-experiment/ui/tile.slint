@@ -255,7 +255,7 @@ export component TileWindow inherits Window {
     in-out property <bool> speak-active: false;
     in-out property <bool> speak-paused: false;
     in-out property <bool> speak-loading: false;
-    // Tile-player speed is transient and resets to 1.0x for every new read.
+    // Tile-player speed follows the process-global read speed across tiles.
     in-out property <string> speak-speed-label: "1.0x";
     // Bound to the follow-up LineEdit so do-submit() can read + clear it.
     in-out property <string> followup-text;

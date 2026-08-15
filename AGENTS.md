@@ -31,6 +31,19 @@ Docs/plans: `docs/goal-*.md` (task charters), `docs/retest-*.html` (tester
 acceptance checklists), `docs/memory-architecture.md`. CLAUDE.md is the
 Claude-Code twin of this file — same rules, different tooling notes.
 
+## OpenCode Go worker
+
+- OpenCode Go is available for small, bounded tasks through model
+  `opencode-go/deepseek-v4-flash`: mechanical inspection, focused test-gap
+  review, documentation, or a tiny isolated implementation.
+- Invoke it non-interactively with `opencode run -m
+  opencode-go/deepseek-v4-flash <prompt>`. Keep it read-only in a shared
+  checkout; use `--auto` only inside a dedicated task worktree with an exact
+  scope. It must not read secrets, publish, push, tag, or act outside the
+  checkout. The primary agent validates its result and owns Git/GitHub work.
+- Qwen remains the first-class worker for non-trivial implementation and
+  investigation; OpenCode Go is the faster lane for genuinely simple work.
+
 ## Build / test / lint (Windows; cargo at `~/.cargo/bin/cargo.exe`)
 
 Use the smallest gate that matches the diff. The agent-agnostic classifier is:
