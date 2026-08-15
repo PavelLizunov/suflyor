@@ -87,25 +87,6 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 # (SetWindowLongPtrW, DWM blur, layered/click-through styles).
 # windows 0.62 is Microsoft's official Win32 binding.
 raw-window-handle = "0.6"
-windows = { version = "0.62", features = [
-    "Win32_Foundation",
-    "Win32_UI_WindowsAndMessaging",
-    "Win32_UI_Controls",
-    "Win32_UI_Shell",
-    "Win32_UI_Input_KeyboardAndMouse",
-    "Win32_Graphics_Dwm",
-    "Win32_Graphics_Gdi",
-    # V0.8.0 (Поток B) — named mutex for the single-instance guard so the
-    # emergency-restart child waits for the parent to exit before it shows a bar.
-    "Win32_System_Threading",
-    # v0.9.3 — SetStdHandle to redirect the process stderr into
-    # overlay-host.log in release (windows_subsystem="windows" has no console,
-    # so every eprintln! would otherwise be discarded — testers got empty logs).
-    "Win32_System_Console",
-    # RC4 hidden-to-tray — GetModuleHandleW for the tray icon loader
-    # (Shell_NotifyIconW itself comes from the Win32_UI_Shell above).
-    "Win32_System_LibraryLoader",
-] }
 
 # Phase 0.5 markdown spike: CommonMark + GFM parser. Already a transitive
 # dep of slint-build, so no new third-party risk.
@@ -128,12 +109,6 @@ rfd = { version = "0.17", default-features = false }
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 base64 = "0.23"
 
-# V0.8.3 — 📋 copy a tile's answer to the Windows clipboard. clipboard-win is
-# already in the dependency tree (winit pulls it transitively), so declaring it
-# directly adds no new third-party crate — it just lets the copy button call
-# `set_clipboard_string`. Windows-only, which matches this app.
-clipboard-win = "5"
-
 # ТЗ2b — playback engine for the session-transcript player (decision #4: rodio
 # for seek/pause/position out of the box; new dep gated by cargo-deny). We feed
 # the already-mixed i16 PCM (overlay_backend::session_audio) as a raw SamplesBuffer
@@ -147,6 +122,36 @@ suflyor-wsola = { path = "../suflyor-wsola" }
 # only consumer, via path dep.
 [dependencies.overlay-backend]
 path = "../overlay-backend"
+
+# Windows-only deps — the Win32 overlay calls (`windows`) and the clipboard copy
+# button (`clipboard-win`) only apply on Windows; target-gating keeps them out of
+# the macOS dependency graph.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Controls",
+    "Win32_UI_Shell",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
+    # V0.8.0 (Поток B) — named mutex for the single-instance guard so the
+    # emergency-restart child waits for the parent to exit before it shows a bar.
+    "Win32_System_Threading",
+    # v0.9.3 — SetStdHandle to redirect the process stderr into
+    # overlay-host.log in release (windows_subsystem="windows" has no console,
+    # so every eprintln! would otherwise be discarded — testers got empty logs).
+    "Win32_System_Console",
+    # RC4 hidden-to-tray — GetModuleHandleW for the tray icon loader
+    # (Shell_NotifyIconW itself comes from the Win32_UI_Shell above).
+    "Win32_System_LibraryLoader",
+] }
+
+# V0.8.3 — 📋 copy a tile's answer to the Windows clipboard. clipboard-win is
+# already in the dependency tree (winit pulls it transitively), so declaring it
+# directly adds no new third-party crate — it just lets the copy button call
+# `set_clipboard_string`. Windows-only, which matches this app.
+clipboard-win = "5"
 
 [dev-dependencies]
 # i-slint-backend-testing is the OFFICIAL test framework (not
