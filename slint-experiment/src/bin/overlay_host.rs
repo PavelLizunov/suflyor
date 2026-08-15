@@ -452,10 +452,7 @@ fn spawn_text_tile(
     // Auto-start the read (mirror wire_speak's click handler). Mark the tile as
     // speaking ONLY when playback is accepted — a missing sidecar/voice must not
     // show as speaking nor falsely suppress STT (F2).
-    if overlay_backend::tts::speak(text) {
-        reset_pause();
-        mark_speaking(convo_id);
-    }
+    auto_speak_if_idle(text, convo_id);
 }
 
 fn after_read_aloud_hotkey_release(attempts_left: u8, action: Rc<dyn Fn()>) {
@@ -517,10 +514,7 @@ pub(crate) fn fill_ocr_tile(
     // Auto-read (mirror spawn_text_tile's tail). Mark the tile as speaking ONLY
     // when playback is accepted — a missing sidecar/voice must not show as
     // speaking nor falsely suppress STT (F2).
-    if overlay_backend::tts::speak(trimmed) {
-        reset_pause();
-        mark_speaking(convo_id);
-    }
+    auto_speak_if_idle(trimmed, convo_id);
 }
 
 /// Parse markdown source into the Slint `MarkdownBlock` rows a tile body

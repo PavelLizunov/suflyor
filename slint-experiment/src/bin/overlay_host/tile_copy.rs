@@ -735,6 +735,24 @@ pub(crate) fn mark_speaking(convo_id: i32) {
     start_speaking_state_timer();
 }
 
+/// Auto-read a newly opened tile only when no existing player is active. A
+/// paused read remains active, so preparing the next tile cannot steal its
+/// controls; an explicit click on the new tile may still replace it.
+fn auto_speak_allowed(is_speaking: bool) -> bool {
+    !is_speaking
+}
+
+pub(crate) fn auto_speak_if_idle(text: &str, convo_id: i32) -> bool {
+    if !auto_speak_allowed(overlay_backend::tts::is_speaking())
+        || !overlay_backend::tts::speak(text)
+    {
+        return false;
+    }
+    reset_pause();
+    mark_speaking(convo_id);
+    true
+}
+
 /// Stop the read-aloud iff `convo_id` is the tile currently being spoken — called
 /// from each tile's close handler so closing the speaking tile silences it.
 pub(crate) fn stop_if_speaking(convo_id: i32) {
@@ -1258,5 +1276,11 @@ mod copy_tests {
             message_text(&msgs[2].content),
             format!("{FOLLOWUP_DIRECTIVE}перезапрашиваемый вопрос")
         );
+    }
+
+    #[test]
+    fn auto_read_policy_keeps_an_active_or_paused_player() {
+        assert!(auto_speak_allowed(false));
+        assert!(!auto_speak_allowed(true));
     }
 }

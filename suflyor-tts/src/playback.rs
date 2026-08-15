@@ -54,6 +54,16 @@ enum PlaybackControl {
     SetSpeed(f32),
 }
 
+struct ExitNotifier(Option<Box<dyn FnOnce() + Send>>);
+
+impl Drop for ExitNotifier {
+    fn drop(&mut self) {
+        if let Some(notify) = self.0.take() {
+            notify();
+        }
+    }
+}
+
 const BACK_HISTORY_SECONDS: u64 = 30;
 const STRETCH_INPUT_CHUNK: usize = 4096;
 
@@ -116,7 +126,9 @@ impl BufferedTimeline {
 }
 
 impl Playback {
-    pub fn start(sample_rate: u32) -> Result<Self> {
+    /// `on_exit`, when given, runs exactly once after the render loop ends.
+    /// The sidecar uses it to report the real audible end of an utterance.
+    pub fn start(sample_rate: u32, on_exit: Option<Box<dyn FnOnce() + Send>>) -> Result<Self> {
         let (feed_tx, feed_rx) = std::sync::mpsc::channel::<Vec<f32>>();
         let (control_tx, control_rx) = std::sync::mpsc::channel::<PlaybackControl>();
         let eos = Arc::new(AtomicBool::new(false));
@@ -127,8 +139,9 @@ impl Playback {
         let handle = std::thread::Builder::new()
             .name("tts-playback".into())
             .spawn(move || {
-                if let Err(e) = render_loop(sample_rate, feed_rx, control_rx, eos2, stop2, paused2)
-                {
+                let _exit_notifier = ExitNotifier(on_exit);
+                let result = render_loop(sample_rate, feed_rx, control_rx, eos2, stop2, paused2);
+                if let Err(e) = result {
                     eprintln!("[suflyor-tts] playback render loop ended: {e:#}");
                 }
             })
@@ -420,6 +433,18 @@ mod tests {
         assert_eq!(empty_queue_action(false, 0), EmptyQueueAction::WriteSilence);
         assert_eq!(empty_queue_action(true, 8), EmptyQueueAction::Drain);
         assert_eq!(empty_queue_action(true, 0), EmptyQueueAction::Finish);
+    }
+
+    #[test]
+    fn exit_notifier_runs_when_its_scope_ends() {
+        let notified = Arc::new(AtomicBool::new(false));
+        let flag = notified.clone();
+        {
+            let _notifier = ExitNotifier(Some(Box::new(move || {
+                flag.store(true, Ordering::Release);
+            })));
+        }
+        assert!(notified.load(Ordering::Acquire));
     }
 
     #[test]
