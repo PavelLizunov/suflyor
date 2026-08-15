@@ -23,10 +23,12 @@ cd ~/Developer/suflyor/experiments/macos-gate0a
 open "target/Suflyor Gate 0A.app"
 ```
 
-The script uses ad-hoc signing by default. Once a valid Apple Development
-identity exists, set `SIGN_IDENTITY` to that identity and rebuild. Ad-hoc
-signing can prove technical feasibility but cannot close the development-signing
-acceptance item.
+The script uses ad-hoc signing by default. This is the selected local
+development path for the owner's free Personal Team account; no paid Apple
+Developer Program enrollment is planned. If a valid signing identity becomes
+available in the future, set `SIGN_IDENTITY` to that identity and rebuild.
+Ad-hoc signing proves local technical feasibility but does not provide
+Developer ID distribution or Apple notarization.
 
 For the embedded Slint MCP visual audit, build the debug binary with
 `SLINT_EMIT_DEBUG_INFO=1 cargo build --features ui-mcp`, then launch that exact
@@ -43,5 +45,7 @@ Manual acceptance matrix:
 7. Compare the logged logical frames and scale factors with System Settings.
 8. Confirm no UI or documentation claims external capture exclusion.
 
-Gate 0A remains incomplete until the development-signed `.app` and every
-applicable manual row above have sanitized evidence from the real Mac.
+Gate 0A is accepted for local technical feasibility once every applicable
+manual row above has sanitized evidence from the real Mac. Public distribution
+signing/notarization is outside that local gate and remains unavailable without
+the paid Apple program.

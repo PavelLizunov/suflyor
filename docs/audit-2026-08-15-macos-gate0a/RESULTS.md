@@ -41,9 +41,12 @@ UAP STT process was changed.
 
 - Only one physical display was connected, so cross-display movement remains
   unverified.
-- Xcode account sign-in is complete, but Apple Development signing remains
-  blocked by the remote certificate/pending-request state. No remote
-  certificate was revoked. Ad-hoc signing proves packaging only.
+- The signed-in Apple ID is a free Personal Team. The Certificates portal is
+  unavailable without paid Apple Developer Program enrollment, and the owner
+  explicitly chose not to purchase that enrollment. No certificate was
+  revoked. The strict-valid ad-hoc signature is the accepted local Gate 0
+  development path; it does not provide Developer ID distribution or Apple
+  notarization.
 - External-capture exclusion is unsupported and the prototype says so in the
   UI; it makes no concealment claim.
 - When another application is frontmost, the first click on the Slint/Winit
@@ -62,6 +65,7 @@ UAP STT process was changed.
 
 The isolated native-windowing approach is technically viable for the tested
 single-display, Spaces, fullscreen, Stage Manager visibility, focus, drag,
-recovery, Retina, packaging, and ad-hoc-signing surfaces. Gate 0A is not fully
-closed until Apple Development signing and backend-supported inactive-window
-click-through are available; cross-display behavior also remains unverified.
+recovery, Retina, packaging, and local ad-hoc-signing surfaces. Gate 0A is
+accepted as a local technical-feasibility result. It does not validate public
+Developer ID/notarized distribution, backend-supported inactive-window
+click-through, or cross-display behavior.

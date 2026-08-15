@@ -16,8 +16,10 @@ only for this machine-local feasibility run.
 Still pending:
 
 - a second physical display, which was unavailable;
-- Apple Development signing, which is blocked on certificate state in Apple's
-  backend (the ad-hoc package is not an acceptance substitute);
+- Apple Development/Developer ID signing and notarization: the current Apple
+  ID is a free Personal Team, and the owner explicitly chose not to enroll in
+  the paid Apple Developer Program. The local ad-hoc package remains the Gate
+  0 development path, but it is not a public-distribution substitute;
 - click-through from an inactive foreign app: the first click currently
   activates the Slint/Winit app and the control acts on the next click;
 - a production decision for external-capture exclusion, which this prototype
