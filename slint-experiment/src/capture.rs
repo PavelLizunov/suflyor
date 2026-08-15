@@ -1,6 +1,6 @@
 //! Screen capture for the vision feature (V2).
 //!
-//! On Windows, grabs a monitor via the BitBlt helpers in `crate::win32`.
+//! On Windows, grabs a monitor via the native GDI screen adapter.
 //! The shared portion converts top-down BGRA to a downscaled JPEG and crops
 //! frozen frames without depending on an OS capture API.
 
@@ -37,7 +37,7 @@ pub fn capture_monitor_under_cursor() -> Result<CapturedBgra, Box<dyn std::error
         .or_else(|| monitors.first())
         .ok_or("no monitor under cursor")?;
     let (w, h) = (mon.width(), mon.height());
-    let bgra = crate::win32::capture_rect_bgra(mon.left, mon.top, w, h)?;
+    let bgra = crate::native::screen::capture_rect_bgra(mon.left, mon.top, w, h)?;
     Ok(CapturedBgra {
         bgra,
         width: w as u32,
@@ -103,7 +103,7 @@ pub fn capture_virtual_desktop() -> Result<(CapturedBgra, i32, i32), Box<dyn std
     if vw <= 0 || vh <= 0 {
         return Err(format!("virtual desktop has zero size {vw}x{vh}").into());
     }
-    let bgra = crate::win32::capture_rect_bgra(vx, vy, vw, vh)?;
+    let bgra = crate::native::screen::capture_rect_bgra(vx, vy, vw, vh)?;
     Ok((
         CapturedBgra {
             bgra,
