@@ -16,6 +16,10 @@
 
 mod diar;
 mod engine;
+#[cfg(windows)]
+mod playback;
+#[cfg(not(windows))]
+#[path = "playback_unavailable.rs"]
 mod playback;
 
 use std::collections::VecDeque;

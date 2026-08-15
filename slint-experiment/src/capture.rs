@@ -1,10 +1,8 @@
 //! Screen capture for the vision feature (V2).
 //!
-//! Grabs a monitor (later: a region) via the Win32 BitBlt helpers in
-//! [`crate::win32`], converts the top-down BGRA buffer to a downscaled JPEG,
-//! and base64-encodes it into a `data:image/jpeg;base64,…` URI ready for the
-//! vision endpoint. The only Win32 lives in `win32`; this module is the
-//! image-processing + monitor-pick orchestration.
+//! On Windows, grabs a monitor via the BitBlt helpers in `crate::win32`.
+//! The shared portion converts top-down BGRA to a downscaled JPEG and crops
+//! frozen frames without depending on an OS capture API.
 
 use base64::Engine;
 
@@ -24,7 +22,8 @@ pub struct CapturedBgra {
 
 /// Capture the full monitor currently under the mouse cursor. The caller is
 /// responsible for hiding our own windows first
-/// ([`crate::win32::hide_own_windows`]) so they don't appear in the shot.
+/// (`crate::win32::hide_own_windows`) so they don't appear in the shot.
+#[cfg(windows)]
 pub fn capture_monitor_under_cursor() -> Result<CapturedBgra, Box<dyn std::error::Error>> {
     let monitors = crate::win32::enum_monitors();
     if monitors.is_empty() {
@@ -98,6 +97,7 @@ pub fn bgra_to_jpeg_data_url(
 /// the region-select overlay. Returns the frame plus the virtual-desktop origin
 /// (vx, vy) — NEGATIVE on multi-monitor — which the caller needs to position the
 /// fullscreen overlay window. Hide our own windows first (caller's job).
+#[cfg(windows)]
 pub fn capture_virtual_desktop() -> Result<(CapturedBgra, i32, i32), Box<dyn std::error::Error>> {
     let (vx, vy, vw, vh) = crate::win32::virtual_screen_bounds();
     if vw <= 0 || vh <= 0 {
