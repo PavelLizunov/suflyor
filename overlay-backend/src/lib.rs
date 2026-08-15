@@ -5,7 +5,16 @@
 //! crate's `src/`.
 
 pub mod ai;
+#[cfg(windows)]
 pub mod audio;
+// Non-Windows seam: same public `overlay_backend::audio` surface, but capture /
+// device enumeration / recording entry points fail with explicit unsupported
+// errors (no OS calls, no fake success).
+#[cfg(not(windows))]
+#[path = "audio_unavailable.rs"]
+pub mod audio;
+// WASAPI route-change watcher; only the Windows audio.rs consumes it.
+#[cfg(windows)]
 pub(crate) mod audio_route;
 pub mod bridge;
 pub mod codex_subscription;

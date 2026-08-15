@@ -6,10 +6,13 @@
 //!   CARGO_TARGET_DIR=slint-experiment/target \
 //!     cargo run --manifest-path overlay-backend/Cargo.toml --example stt_double
 
+#[cfg(windows)]
 use std::path::Path;
 
+#[cfg(windows)]
 const GIGAAM_DIR: &str = r"C:\Users\x3d_mutant\suflyor-local-ai\gigaam-v3";
 
+#[cfg(windows)]
 fn load_once(tag: &str) {
     overlay_backend::stt::configure_gigaam_accelerator(true); // DirectML, like the app
     match transcribe_rs::onnx::gigaam::GigaAMModel::load(
@@ -22,10 +25,16 @@ fn load_once(tag: &str) {
     // _m dropped here → onnxruntime session torn down
 }
 
+#[cfg(windows)]
 fn main() {
     eprintln!("[double] === load #1 (warm) ===");
     load_once("load#1");
     eprintln!("[double] === load #2 (session) — the app's crash point ===");
     load_once("load#2");
     eprintln!("[double] SURVIVED both loads (crash NOT reproduced here)");
+}
+
+#[cfg(not(windows))]
+fn main() {
+    eprintln!("stt_double is a Windows-only GigaAM/DirectML diagnostic");
 }

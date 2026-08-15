@@ -4,7 +4,9 @@
 //! config format for compatibility. New OpenAI and Anthropic keys never enter
 //! `Config`, config exports, backups, or diagnostics.
 
-use anyhow::{anyhow, Context, Result};
+#[cfg(windows)]
+use anyhow::Context;
+use anyhow::{anyhow, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecretSlot {
