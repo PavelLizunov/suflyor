@@ -12,7 +12,7 @@ available through an explicit stealth toggle.
 Interface languages: English and Russian (switchable at runtime).
 
 <!-- latest-release:start -->
-Latest published build: [v0.36.0](https://github.com/PavelLizunov/suflyor/releases/tag/v0.36.0).
+Latest published build: [v0.37.0](https://github.com/PavelLizunov/suflyor/releases/tag/v0.37.0).
 <!-- latest-release:end -->
 The `master` branch may contain unreleased work.
 
