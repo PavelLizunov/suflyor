@@ -1,15 +1,15 @@
 # Machine-independent gate (added 2026-06-14 from the regression-risk audit).
 #
-# The local `.claude/hooks/git-gate.ps1` is the ONLY enforcement today, and it
-# is fail-OPEN: a commit/push from a plain shell, a different machine, a
-# `--no-verify`, or a cargo not at the hard-coded path runs NONE of the checks.
-# This workflow recomputes the same checks on GitHub regardless of how the
-# commit was made, so a broken fmt/clippy/test can't reach a release unnoticed.
+# Local `.githooks` route commits and pushes through the native gate selector,
+# but a different machine or `--no-verify` can still bypass local enforcement.
+# This workflow recomputes the checks on GitHub regardless of how the commit
+# was made, so a broken fmt/clippy/test can't reach a release unnoticed.
 #
-# Windows-only by design — the product is pure Win32 + WASAPI + Slint. Mirrors
-# the local gate's 5 layers (fmt --check, clippy -D warnings, FULL cargo test —
-# NOT --lib, so the tests/ guard tests run) for all three standalone crates
-# (overlay-backend, slint-experiment, suflyor-tts).
+# Windows remains the required product gate. An independent advisory Apple
+# Silicon job compiles only the macOS surfaces that are already honest: the
+# backend, portable Slint/UI core, and TTS sidecar with unsupported playback.
+# It is visible on code changes but is intentionally not a dependency of the
+# stable required `gate` context yet.
 #
 # Selected-path contract (docs-only fast path):
 #   Classification lives in .github/scripts/is-docs-only.sh (single source of
@@ -108,6 +108,31 @@ jobs:
         run: cargo clippy --manifest-path suflyor-tts/Cargo.toml --all-targets -- -D warnings
       - name: tts test
         run: cargo test --manifest-path suflyor-tts/Cargo.toml
+
+  macos:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: macos-15
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable + rustfmt + clippy)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            overlay-backend
+            slint-experiment
+            suflyor-tts
+
+      - name: macOS compile-seam gate
+        run: bash scripts/git-gate-macos.sh
 
   # Stable required context: "gate".  `if: always()` is load-bearing:
   # docs-only PRs skip the rust job, and without always() GitHub would skip

@@ -8,6 +8,7 @@ Workflow tooling for the Slint build + the testing methodology in `../CLAUDE.md`
 |---|---|
 | `git-gate-native.ps1` | Selects docs, targeted, or full verification from the diff |
 | `ci.ps1` | Full CI — fmt + clippy + tests for all five crates + UI-MCP compile |
+| `git-gate-macos.sh` | Native macOS compile-seam gate for backend, portable Slint/UI, and TTS |
 | `post-release-cleanup.ps1` | Preview/apply safe PR, prerelease, branch, worktree, and target cleanup |
 | `build-slint-release.ps1` | `-Installer` → release `overlay-host.exe` + NSIS `suflyor-slint-setup.exe` |
 | `slint-installer.nsi` | NSIS script (installs to `%LOCALAPPDATA%\suflyor-slint\`) |
@@ -30,6 +31,14 @@ powershell scripts\build-slint-release.ps1 -Installer
 # After publishing: preview, then apply repository/disk hygiene:
 powershell scripts\post-release-cleanup.ps1
 powershell scripts\post-release-cleanup.ps1 -Apply
+```
+
+On an Apple Silicon Mac, run the current compile-seam gate from the repository
+root. It deliberately excludes the unported `overlay-host` and does not claim
+that AppKit windows, capture, permissions, or playback are production-ready:
+
+```bash
+bash scripts/git-gate-macos.sh
 ```
 
 ## Why this exists
