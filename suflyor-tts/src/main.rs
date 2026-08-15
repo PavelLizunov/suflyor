@@ -36,6 +36,26 @@ enum Cmd {
     SetVoice(String),
 }
 
+#[derive(Clone, Copy)]
+struct PlaybackSpeed(i32);
+
+impl Default for PlaybackSpeed {
+    fn default() -> Self {
+        Self(100)
+    }
+}
+
+impl PlaybackSpeed {
+    fn set(&mut self, percent: i32) -> f32 {
+        self.0 = percent.clamp(50, 300);
+        self.factor()
+    }
+
+    fn factor(self) -> f32 {
+        self.0 as f32 / 100.0
+    }
+}
+
 fn parse_cmd(line: &str) -> Option<Cmd> {
     let line = line.trim_end_matches(['\r', '\n']);
     match line {
@@ -121,6 +141,7 @@ fn worker(rx: mpsc::Receiver<Cmd>) {
     let mut current_voice = engine::pick_voice_id(&voices, "");
     let mut engine_opt: Option<NeuralEngine> = None;
     let mut rate = 0i32;
+    let mut playback_speed = PlaybackSpeed::default();
     let sid = 0;
     let mut current: Option<Playback> = None;
     let mut pending: VecDeque<String> = VecDeque::new();
@@ -171,6 +192,7 @@ fn worker(rx: mpsc::Receiver<Cmd>) {
                     if !chunks.is_empty() {
                         match Playback::start(e.sample_rate()) {
                             Ok(pb) => {
+                                pb.set_speed(playback_speed.factor());
                                 current = Some(pb);
                                 pending = VecDeque::from(chunks);
                             }
@@ -195,8 +217,9 @@ fn worker(rx: mpsc::Receiver<Cmd>) {
                 }
             }
             Some(Cmd::SetPlaybackSpeed(percent)) => {
+                let speed = playback_speed.set(percent);
                 if let Some(pb) = &current {
-                    pb.set_speed(percent as f32 / 100.0);
+                    pb.set_speed(speed);
                 }
             }
             Some(Cmd::Stop) => {
@@ -284,5 +307,13 @@ mod tests {
         ));
         assert!(parse_cmd("SEEK 31").is_none());
         assert!(parse_cmd("SPEED 301").is_none());
+    }
+
+    #[test]
+    fn playback_speed_is_remembered_for_the_next_player() {
+        let mut speed = PlaybackSpeed::default();
+        assert_eq!(speed.factor(), 1.0);
+        assert_eq!(speed.set(150), 1.5);
+        assert_eq!(speed.factor(), 1.5);
     }
 }
