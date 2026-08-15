@@ -1616,7 +1616,7 @@ fn copy_to_clipboard_and_flash(w: &TranscriptWindow, text: &str) {
     if text.is_empty() {
         return;
     }
-    match clipboard_win::set_clipboard_string(text) {
+    match slint_replay::native::clipboard::set_text(text) {
         Ok(()) => {
             w.set_copied(true);
             let w2 = w.as_weak();

@@ -1128,7 +1128,7 @@ pub(crate) fn wire_ai_settings(
                 return;
             }
             let result = copy_codex_user_code(code.as_str(), |value| {
-                clipboard_win::set_clipboard_string(value).map_err(|_| ())
+                slint_replay::native::clipboard::set_text(value).map_err(|_| ())
             });
             if result == CodexCopyResult::Failed {
                 eprintln!("[overlay-host] Codex code copy failed");

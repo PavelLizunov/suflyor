@@ -337,7 +337,7 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
         win.on_diagnostics_copy_report_clicked(move || {
             let Some(w) = weak.upgrade() else { return };
             let report = build_diag_report(&cfg_c);
-            match clipboard_win::set_clipboard_string(&report) {
+            match slint_replay::native::clipboard::set_text(&report) {
                 Ok(()) => {
                     w.set_diag_copied(true);
                     let wk = w.as_weak();

@@ -1008,24 +1008,11 @@ pub fn acquire_singleton(wait_ms: u32) -> Result<SingletonGuard, Box<dyn std::er
 
 // ===== Read-aloud helpers: copy-the-selection + clipboard text =====
 
-/// Read the current clipboard as UTF-8 text (None if empty / not text).
-pub fn clipboard_read_text() -> Option<String> {
-    clipboard_win::get_clipboard_string()
-        .ok()
-        .filter(|s| !s.is_empty())
-}
-
-/// Replace the clipboard text — used to restore the user's clipboard after a
-/// programmatic copy.
-pub fn clipboard_write_text(text: &str) {
-    let _ = clipboard_win::set_clipboard_string(text);
-}
-
-/// Plant an empty sentinel so a subsequent Ctrl+C tells us whether anything was
-/// actually selected (still empty afterwards = nothing was highlighted).
-pub fn clipboard_clear() {
-    let _ = clipboard_win::set_clipboard_string("");
-}
+// Compatibility aliases keep the selection-copy path unchanged while the
+// clipboard implementation lives behind the native boundary.
+pub use crate::native::clipboard::{
+    clear as clipboard_clear, read_text as clipboard_read_text, write_text as clipboard_write_text,
+};
 
 /// Synthesize Ctrl+C to the FOREGROUND window. The overlay is click-through and
 /// never focused, so the keystroke lands in whatever app the user is looking at,

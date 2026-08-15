@@ -27,7 +27,7 @@ fn copy_button_is_code_gated_accessible_and_routes_exact_displayed_code() {
         "win.on_ai_local_base_url_save",
     );
     assert!(copy.contains("code != window.get_codex_user_code() || code.is_empty()"));
-    assert!(copy.contains("clipboard_win::set_clipboard_string(value)"));
+    assert!(copy.contains("slint_replay::native::clipboard::set_text(value)"));
     assert!(!copy.contains("explorer.exe"));
 
     let connect = between(
@@ -36,6 +36,32 @@ fn copy_button_is_code_gated_accessible_and_routes_exact_displayed_code() {
         "win.on_codex_disconnect_clicked",
     );
     assert!(!connect.contains("explorer.exe"));
+}
+
+fn assert_clipboard_crate_isolated_to(path: &Path, allowed: &Path) {
+    for entry in fs::read_dir(path).expect("read source directory") {
+        let path = entry.expect("read source entry").path();
+        if path.is_dir() {
+            assert_clipboard_crate_isolated_to(&path, allowed);
+        } else if path.extension().is_some_and(|extension| extension == "rs") && path != allowed {
+            let source = fs::read_to_string(&path).expect("read Rust source");
+            assert!(
+                !source.contains("clipboard_win::"),
+                "direct clipboard_win use outside native adapter: {}",
+                path.display()
+            );
+        }
+    }
+}
+
+#[test]
+fn clipboard_crate_is_owned_by_the_windows_adapter() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let adapter = root.join("src/native/windows/clipboard.rs");
+    let source = fs::read_to_string(&adapter).expect("read clipboard adapter");
+    assert!(source.contains("clipboard_win::get_clipboard_string"));
+    assert!(source.contains("clipboard_win::set_clipboard_string"));
+    assert_clipboard_crate_isolated_to(&root.join("src"), &adapter);
 }
 
 #[test]

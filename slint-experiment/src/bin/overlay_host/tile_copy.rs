@@ -255,7 +255,7 @@ pub(crate) fn wire_copy(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayBa
         if text.is_empty() {
             return;
         }
-        match clipboard_win::set_clipboard_string(&text) {
+        match slint_replay::native::clipboard::set_text(&text) {
             Ok(()) => {
                 let Some(t) = weak.upgrade() else {
                     return;
@@ -286,7 +286,7 @@ pub(crate) fn wire_code_copy(tile: &TileWindow) {
         if code.is_empty() {
             return;
         }
-        match clipboard_win::set_clipboard_string(code.as_str()) {
+        match slint_replay::native::clipboard::set_text(code.as_str()) {
             Ok(()) => {
                 let Some(t) = weak.upgrade() else {
                     return;
@@ -527,7 +527,7 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
             if text.trim().is_empty() {
                 return;
             }
-            if let Err(e) = clipboard_win::set_clipboard_string(&text) {
+            if let Err(e) = slint_replay::native::clipboard::set_text(&text) {
                 eprintln!("[overlay-host] copy marked failed: {e}");
             }
         });
