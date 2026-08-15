@@ -39,11 +39,12 @@ static NSWindow *configure_floating_window(void *rawView) {
     [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
     window.level = NSStatusWindowLevel;
     NSWindowCollectionBehavior behavior = NSWindowCollectionBehaviorCanJoinAllSpaces |
-        NSWindowCollectionBehaviorFullScreenAuxiliary |
         NSWindowCollectionBehaviorStationary |
         NSWindowCollectionBehaviorIgnoresCycle;
     if (@available(macOS 26.0, *)) {
         behavior |= NSWindowCollectionBehaviorCanJoinAllApplications;
+    } else {
+        behavior |= NSWindowCollectionBehaviorFullScreenAuxiliary;
     }
     window.collectionBehavior = behavior;
     window.opaque = NO;
@@ -54,8 +55,10 @@ static NSWindow *configure_floating_window(void *rawView) {
     window.ignoresMouseEvents = NO;
 
     fprintf(stderr,
-            "[gate0a] configured floating window level=%ld behavior=0x%lx sharing=default\n",
+            "[gate0a] configured floating window class=%s level=%ld style=0x%lx behavior=0x%lx sharing=default\n",
+            NSStringFromClass(window.class).UTF8String,
             (long)window.level,
+            (unsigned long)window.styleMask,
             (unsigned long)window.collectionBehavior);
     return window;
 }

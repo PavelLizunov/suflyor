@@ -24,12 +24,7 @@ component GateChip inherits Rectangle {
 
     touch := TouchArea {
         mouse-cursor: pointer;
-        pointer-event(ev) => {
-            if (ev.button == PointerEventButton.left
-                && ev.kind == PointerEventKind.down) {
-                root.clicked();
-            }
-        }
+        clicked => { root.clicked(); }
     }
 }
 

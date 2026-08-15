@@ -15,9 +15,10 @@ only for this machine-local feasibility run.
 
 Still pending:
 
-- Stage Manager, which was disabled during this run;
 - a second physical display, which was unavailable;
 - Apple Development signing, which is blocked on certificate state in Apple's
   backend (the ad-hoc package is not an acceptance substitute);
+- click-through from an inactive foreign app: the first click currently
+  activates the Slint/Winit app and the control acts on the next click;
 - a production decision for external-capture exclusion, which this prototype
   explicitly reports as unsupported.
