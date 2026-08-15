@@ -31,7 +31,7 @@ use windows::Win32::UI::Shell::{
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GetCursorPos, LoadIconW, RegisterClassExW,
     RegisterWindowMessageW, HICON, IDI_APPLICATION, WM_APP, WM_CONTEXTMENU, WM_DESTROY,
-    WM_RBUTTONUP, WNDCLASSEXW,
+    WNDCLASSEXW,
 };
 
 // ===== Pure core (unit-testable without any Win32) =====
@@ -350,6 +350,30 @@ pub fn hide_icon() {
     }
 }
 
+/// Return keyboard focus bookkeeping to the notification area after the
+/// custom tray menu has completed. Windows explicitly requires NIM_SETFOCUS
+/// after the UI operation, not while the styled Slint menu is opening.
+pub fn return_focus() {
+    if !TRAY_ICON_VISIBLE.load(Ordering::SeqCst) {
+        return;
+    }
+    let raw = TRAY_HWND.load(Ordering::SeqCst);
+    if raw == 0 {
+        return;
+    }
+    let data = NOTIFYICONDATAW {
+        cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
+        hWnd: HWND(raw as *mut std::ffi::c_void),
+        uID: TRAY_ICON_ID,
+        ..Default::default()
+    };
+    // SAFETY: data identifies this process' currently visible notification
+    // icon. NIM_SETFOCUS changes only Shell focus bookkeeping.
+    unsafe {
+        let _ = Shell_NotifyIconW(NIM_SETFOCUS, &data);
+    }
+}
+
 /// Add the notification icon and opt into the current accessible interaction
 /// contract. `NIM_SETVERSION` is required after every `NIM_ADD`; version 4
 /// enables keyboard selection/context-menu events as well as mouse events.
@@ -437,14 +461,16 @@ unsafe extern "system" fn tray_wndproc(
     }
     if msg == TRAY_CALLBACK_MESSAGE {
         // With NOTIFYICON_VERSION_4, LOWORD(lparam) is the mouse/keyboard
-        // event. Mouse right-click and keyboard context-menu requests are
-        // separate Shell events; both use the current cursor position so an
+        // event. The current cursor position anchors context requests, so an
         // undefined WM_CONTEXTMENU wparam can never anchor at (1, 0).
         match (lparam.0 as u32) & 0xFFFF {
             // v4 emits NIN_SELECT for mouse activation. Handling WM_LBUTTONUP
             // as well toggles twice on affected shells (restore then hide).
             NIN_SELECT | NIN_KEYSELECT => dispatch_from_ctx(TrayAction::ShowHide),
-            WM_RBUTTONUP | WM_CONTEXTMENU => request_tray_menu(hwnd),
+            // Version 4 reports context activation as WM_CONTEXTMENU. Some
+            // Shell versions also emit the legacy WM_RBUTTONUP for the same
+            // physical click; accepting both opens the async Slint menu twice.
+            WM_CONTEXTMENU => request_tray_menu(),
             _ => {}
         }
         return LRESULT(0);
@@ -476,7 +502,7 @@ fn publish_availability(available: bool) {
     });
 }
 
-fn request_tray_menu(hwnd: HWND) {
+fn request_tray_menu() {
     let mut point = POINT::default();
     if unsafe { GetCursorPos(&mut point) }.is_err() {
         return;
@@ -485,17 +511,6 @@ fn request_tray_menu(hwnd: HWND) {
         x: point.x,
         y: point.y,
     });
-    let focus_data = NOTIFYICONDATAW {
-        cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
-        hWnd: hwnd,
-        uID: TRAY_ICON_ID,
-        ..Default::default()
-    };
-    // Return keyboard focus bookkeeping to the notification icon after the
-    // host has opened its own styled window.
-    unsafe {
-        let _ = Shell_NotifyIconW(NIM_SETFOCUS, &focus_data);
-    }
 }
 
 #[cfg(test)]

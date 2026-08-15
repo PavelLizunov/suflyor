@@ -55,7 +55,7 @@ pub fn normalize_math_display(input: &str) -> String {
 /// Normalize a fragment already known to be math (for pulldown-cmark math events).
 #[must_use]
 pub(crate) fn normalize_math_fragment(input: &str) -> String {
-    if let Some(matrix) = normalize_pmatrix(input) {
+    if let Some(matrix) = normalize_pmatrices(input) {
         return matrix;
     }
     let mut out = String::with_capacity(input.len());
@@ -63,31 +63,45 @@ pub(crate) fn normalize_math_fragment(input: &str) -> String {
     out
 }
 
-fn normalize_pmatrix(input: &str) -> Option<String> {
+fn normalize_pmatrices(input: &str) -> Option<String> {
     const BEGIN: &str = "\\begin{pmatrix}";
     const END: &str = "\\end{pmatrix}";
-    let begin = input.find(BEGIN)?;
-    let body_start = begin + BEGIN.len();
-    let body_end = body_start + input[body_start..].find(END)?;
-
     let mut out = String::with_capacity(input.len());
-    push_normalized(&mut out, &input[..begin]);
-    out.push('(');
-    for (row_index, row) in input[body_start..body_end].split("\\\\").enumerate() {
-        if row_index > 0 {
-            out.push('\n');
-            out.push_str("  ");
-        }
-        for (cell_index, cell) in row.trim().split('&').enumerate() {
-            if cell_index > 0 {
+    let mut rest = input;
+    let mut found = false;
+
+    while let Some(begin) = rest.find(BEGIN) {
+        let body_start = begin + BEGIN.len();
+        let Some(relative_end) = rest[body_start..].find(END) else {
+            break;
+        };
+        let body_end = body_start + relative_end;
+
+        found = true;
+        push_normalized(&mut out, &rest[..begin]);
+        out.push('(');
+        for (row_index, row) in rest[body_start..body_end].split("\\\\").enumerate() {
+            if row_index > 0 {
+                out.push('\n');
                 out.push_str("  ");
             }
-            push_normalized(&mut out, cell.trim());
+            for (cell_index, cell) in row.trim().split('&').enumerate() {
+                if cell_index > 0 {
+                    out.push_str("  ");
+                }
+                push_normalized(&mut out, cell.trim());
+            }
         }
+        out.push(')');
+        rest = &rest[body_end + END.len()..];
     }
-    out.push(')');
-    push_normalized(&mut out, &input[body_end + END.len()..]);
-    Some(out)
+
+    if found {
+        push_normalized(&mut out, rest);
+        Some(out)
+    } else {
+        None
+    }
 }
 
 fn has_math_delimiter(input: &str) -> bool {
@@ -409,5 +423,20 @@ mod tests {
     fn renders_pmatrix_rows_without_latex_scaffolding() {
         let raw = "A = \\begin{pmatrix} a_{11} & a_{12} \\\\ a_{21} & a_{22} \\end{pmatrix}";
         assert_eq!(normalize_math_display(raw), "A = (a₁₁  a₁₂\n  a₂₁  a₂₂)");
+    }
+
+    #[test]
+    fn renders_every_pmatrix_in_one_display_fragment() {
+        let raw = concat!(
+            "\\begin{pmatrix}1 & 2 \\\\ 3 & 4\\end{pmatrix} + ",
+            "\\begin{pmatrix}5 & 6 \\\\ 7 & 8\\end{pmatrix} = ",
+            "\\begin{pmatrix}6 & 8 \\\\ 10 & 12\\end{pmatrix}"
+        );
+        let shown = super::normalize_math_fragment(raw);
+        assert_eq!(shown.matches('(').count(), 3);
+        assert_eq!(shown.matches(')').count(), 3);
+        assert!(!shown.contains("\\begin"));
+        assert!(!shown.contains("\\end"));
+        assert!(shown.contains("10  12"));
     }
 }
