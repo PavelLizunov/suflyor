@@ -8,5 +8,9 @@
 pub mod clipboard;
 
 #[cfg(windows)]
+#[path = "windows/lifecycle.rs"]
+pub mod lifecycle;
+
+#[cfg(windows)]
 #[path = "windows/screen.rs"]
 pub mod screen;

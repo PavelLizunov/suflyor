@@ -727,7 +727,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let is_relaunch = std::env::args().any(|a| a == "--relaunch");
     // Relaunch: give the parent up to 8s to exit. Normal: try-once (0ms).
     let wait_ms = if is_relaunch { 8_000 } else { 0 };
-    let _singleton = match slint_replay::win32::acquire_singleton(wait_ms) {
+    let _singleton = match slint_replay::native::lifecycle::acquire_singleton(wait_ms) {
         Ok(g) => {
             if is_relaunch {
                 eprintln!("[overlay-host] relaunch: parent exited, singleton acquired");
