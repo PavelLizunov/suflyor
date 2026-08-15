@@ -4461,7 +4461,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 };
                 if should_hide {
                     if let Some(menu) = menu_weak.upgrade() {
-                        let _ = menu.hide();
+                        dismiss_tray_menu(menu.as_ref(), focus.as_ref());
                     }
                 }
             }
@@ -4472,9 +4472,8 @@ fn main() -> Result<(), slint::PlatformError> {
         let menu_weak = Rc::downgrade(&tray_menu);
         let focus = tray_menu_focus.clone();
         tray_menu.on_dismissed(move || {
-            *focus.borrow_mut() = false;
             if let Some(menu) = menu_weak.upgrade() {
-                let _ = menu.hide();
+                dismiss_tray_menu(menu.as_ref(), focus.as_ref());
             }
         });
     }
@@ -4491,8 +4490,6 @@ fn main() -> Result<(), slint::PlatformError> {
             let Some(menu) = menu_weak.upgrade() else {
                 return;
             };
-            *focus.borrow_mut() = false;
-            let _ = menu.hide();
             tray_action_dispatch(
                 action,
                 &weak,
@@ -4715,6 +4712,12 @@ fn tray_menu_action(index: i32) -> Option<slint_replay::tray::TrayAction> {
     }
 }
 
+fn dismiss_tray_menu(menu: &TrayMenuWindow, focus_armed: &RefCell<bool>) {
+    *focus_armed.borrow_mut() = false;
+    let _ = menu.hide();
+    slint_replay::tray::return_focus();
+}
+
 fn open_tray_menu(
     menu: &Rc<TrayMenuWindow>,
     anchor_x: i32,
@@ -4763,6 +4766,7 @@ fn open_tray_menu(
         .set_position(slint::PhysicalPosition::new(-32000, -32000));
     if let Err(e) = menu.show() {
         diag!("tray menu show failed: {e}");
+        slint_replay::tray::return_focus();
         return;
     }
 
@@ -4787,6 +4791,7 @@ fn open_tray_menu(
     let fallback = Rc::new(move |window: &TrayMenuWindow| {
         *armed_for_fallback.borrow_mut() = false;
         let _ = window.hide();
+        slint_replay::tray::return_focus();
         diag!("tray menu show failed: native window unavailable");
     });
     realize_with_retries(menu.as_ref(), reveal, fallback);
@@ -4839,6 +4844,12 @@ fn tray_action_dispatch(
     focus_armed: &Rc<RefCell<bool>>,
 ) {
     use slint_replay::tray::TrayAction;
+    if !matches!(action, TrayAction::OpenMenu { .. }) {
+        // Left-click activation and menu rows share one close path. This
+        // prevents an open, stale "Restore" menu from surviving a left-click
+        // restore and toggling the now-visible bar back to hidden.
+        dismiss_tray_menu(menu.as_ref(), focus_armed.as_ref());
+    }
     match action {
         TrayAction::OpenMenu { x, y } => open_tray_menu(menu, x, y, state, cfg, focus_armed),
         TrayAction::ShowHide => {

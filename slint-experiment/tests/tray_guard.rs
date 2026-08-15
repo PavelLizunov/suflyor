@@ -215,8 +215,12 @@ fn tray_module_never_persists_state() {
         "single-icon guard prevents duplicate icons within one process"
     );
     assert!(
-        tray.contains("WM_RBUTTONUP | WM_CONTEXTMENU => request_tray_menu(hwnd)"),
-        "mouse and keyboard context-menu requests must share one menu path"
+        tray.contains("WM_CONTEXTMENU => request_tray_menu()"),
+        "notify-icon v4 context requests must share one menu path"
+    );
+    assert!(
+        !tray.contains("WM_RBUTTONUP | WM_CONTEXTMENU => request_tray_menu()"),
+        "one physical click must not dispatch both legacy and v4 context events"
     );
     assert!(
         tray.contains("GetCursorPos(&mut point)"),
@@ -242,6 +246,42 @@ fn tray_module_never_persists_state() {
         !tray.contains("point_from_wparam"),
         "WM_CONTEXTMENU wparam is undefined under notify-icon v4"
     );
+
+    let request_start = tray
+        .find("fn request_tray_menu()")
+        .expect("menu request helper");
+    let request_end = tray[request_start..]
+        .find("#[cfg(test)]")
+        .map(|offset| request_start + offset)
+        .expect("tests after request helper");
+    assert!(
+        !tray[request_start..request_end].contains("NIM_SETFOCUS"),
+        "opening the custom window must not immediately steal its focus back"
+    );
+    assert!(
+        tray.contains("pub fn return_focus()"),
+        "Shell focus bookkeeping returns only after the menu operation completes"
+    );
+}
+
+#[test]
+fn every_non_open_tray_action_closes_the_styled_menu_first() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let host = read(root, "src/bin/overlay_host.rs");
+    let start = host
+        .find("fn tray_action_dispatch(")
+        .expect("tray dispatch helper");
+    let end = host[start..]
+        .find("fn apply_overlay_hwnd(")
+        .map(|offset| start + offset)
+        .expect("helper after dispatch");
+    let dispatch = &host[start..end];
+    assert!(dispatch.contains("if !matches!(action, TrayAction::OpenMenu { .. })"));
+    assert!(dispatch.contains("dismiss_tray_menu(menu.as_ref(), focus_armed.as_ref());"));
+    assert!(
+        host.contains("slint_replay::tray::return_focus();"),
+        "dismissal must complete the notification-area focus lifecycle"
+    );
 }
 
 #[test]
@@ -251,6 +291,8 @@ fn themed_menu_stays_above_and_clear_of_the_taskbar() {
     let menu = read(root, "ui/tray_menu.slint");
     assert!(menu.contains("export component TrayMenuWindow inherits Window"));
     assert!(menu.contains("always-on-top: true;"));
+    assert!(menu.lines().any(|line| line.trim() == "width: 196px;"));
+    assert!(menu.lines().any(|line| line.trim() == "height: 136px;"));
     assert!(host.contains("work_area_for_point(anchor_x, anchor_y)"));
     assert!(host.contains("set_always_on_top(hwnd, true)"));
     assert!(host.contains("set_skip_taskbar(hwnd, true)"));

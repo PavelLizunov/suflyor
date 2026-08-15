@@ -14,6 +14,7 @@
 
 use crate::math_display::{looks_like_delimited_math, normalize_math_fragment};
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use std::borrow::Cow;
 
 /// Block discriminant values — keep in sync with
 /// `ui/markdown_spike.slint` and `ui/tile.slint`.
@@ -54,6 +55,8 @@ impl Block {
 /// Parse a CommonMark source string into a `Vec<Block>`.
 #[must_use]
 pub fn parse(source: &str) -> Vec<Block> {
+    let source = canonicalize_tex_math_delimiters(source);
+    let source = source.as_ref();
     let mut raw = parse_variant(source, false);
     let display = parse_variant(source, true);
     for (block, shown) in raw.iter_mut().zip(display) {
@@ -62,6 +65,125 @@ pub fn parse(source: &str) -> Vec<Block> {
         }
     }
     raw
+}
+
+/// pulldown-cmark intentionally recognizes only `$...$` and `$$...$$` math.
+/// AI providers also commonly emit TeX's `\[...\]` and `\(...\)` delimiters.
+/// Convert paired delimiters before Markdown sees them so formulas become math
+/// events and a standalone `=` cannot become a Setext heading. Fenced and
+/// inline code stay exact.
+fn canonicalize_tex_math_delimiters(source: &str) -> Cow<'_, str> {
+    let has_display = source.contains("\\[") && source.contains("\\]");
+    let has_inline = source.contains("\\(") && source.contains("\\)");
+    if !has_display && !has_inline {
+        return Cow::Borrowed(source);
+    }
+
+    let mut out = String::with_capacity(source.len());
+    let mut fence: Option<(u8, usize)> = None;
+    let mut inline_ticks = 0_usize;
+    let mut math_close: Option<&'static str> = None;
+    let mut changed = false;
+
+    for line in source.split_inclusive('\n') {
+        let trimmed = line.trim_start_matches([' ', '\t']);
+        if inline_ticks == 0 && math_close.is_none() {
+            if let Some((marker, count)) = fence_marker(trimmed) {
+                match fence {
+                    Some((active, minimum)) if marker == active && count >= minimum => {
+                        out.push_str(line);
+                        fence = None;
+                        continue;
+                    }
+                    None => {
+                        out.push_str(line);
+                        fence = Some((marker, count));
+                        continue;
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
+        if fence.is_some() {
+            out.push_str(line);
+            continue;
+        }
+
+        let bytes = line.as_bytes();
+        let mut index = 0_usize;
+        while index < line.len() {
+            if bytes[index] == b'`' {
+                let start = index;
+                while index < line.len() && bytes[index] == b'`' {
+                    index += 1;
+                }
+                let run = index - start;
+                inline_ticks = if inline_ticks == 0 {
+                    run
+                } else if inline_ticks == run {
+                    0
+                } else {
+                    inline_ticks
+                };
+                out.push_str(&line[start..index]);
+                continue;
+            }
+            if inline_ticks == 0 {
+                if let Some(close) = math_close {
+                    if line[index..].starts_with(close) {
+                        out.push_str(if close == "\\]" { "$$" } else { "$" });
+                        index += 2;
+                        math_close = None;
+                        continue;
+                    }
+                } else if line[index..].starts_with("\\[") {
+                    out.push_str("$$");
+                    index += 2;
+                    math_close = Some("\\]");
+                    changed = true;
+                    continue;
+                } else if line[index..].starts_with("\\(") {
+                    out.push('$');
+                    index += 2;
+                    math_close = Some("\\)");
+                    changed = true;
+                    continue;
+                }
+            }
+            let Some(ch) = line[index..].chars().next() else {
+                break;
+            };
+            // pulldown-cmark's math span cannot cross a physical newline.
+            // TeX display whitespace is insignificant here (matrix rows use
+            // explicit `\\\\`), so keep the whole paired display in one span.
+            if math_close.is_some() && matches!(ch, '\r' | '\n') {
+                out.push(' ');
+            } else {
+                out.push(ch);
+            }
+            index += ch.len_utf8();
+        }
+    }
+
+    if changed && math_close.is_none() {
+        Cow::Owned(out)
+    } else {
+        // Never reinterpret a malformed, unfinished display fragment.
+        Cow::Borrowed(source)
+    }
+}
+
+fn fence_marker(line: &str) -> Option<(u8, usize)> {
+    let marker = *line.as_bytes().first()?;
+    if !matches!(marker, b'`' | b'~') {
+        return None;
+    }
+    let count = line
+        .as_bytes()
+        .iter()
+        .take_while(|byte| **byte == marker)
+        .count();
+    (count >= 3).then_some((marker, count))
 }
 
 fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
@@ -559,6 +681,65 @@ mod tests {
         assert!(blocks[0].display_text.contains("a₁₁  a₁₂"));
         assert!(blocks[0].display_text.contains("a₂₁  a₂₂"));
         assert!(blocks[0].display_text.contains('\n'));
+    }
+
+    #[test]
+    fn tex_bracket_display_is_math_before_markdown_heading_rules() {
+        let blocks = parse(
+            r#"## Matrix addition
+
+\[
+\begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix}
++
+\begin{pmatrix} 5 & 6 \\ 7 & 8 \end{pmatrix}
+=
+\begin{pmatrix} 6 & 8 \\ 10 & 12 \end{pmatrix}
+\]
+"#,
+        );
+
+        assert!(
+            blocks.iter().all(|block| block.kind != kind::H1),
+            "the '=' inside display math must not become a Setext heading: {blocks:?}"
+        );
+        let formula = blocks
+            .iter()
+            .find(|block| block.display_text.contains("10  12"))
+            .expect("matrix display block");
+        assert_eq!(formula.kind, kind::PARAGRAPH);
+        assert_eq!(formula.display_text.matches('(').count(), 3);
+        assert!(!formula.display_text.contains("\\begin"));
+        assert!(!formula.display_text.contains("\\end"));
+        assert!(
+            formula.text.contains("$$"),
+            "copy text keeps math delimiters"
+        );
+    }
+
+    #[test]
+    fn tex_bracket_delimiters_inside_code_stay_literal() {
+        let blocks =
+            parse("Literal `\\[x = 1\\]` and `\\(y = 2\\)`.\n\n```text\n\\[\nx = 1\n\\]\n```");
+        assert!(blocks.iter().any(|block| {
+            block.kind == kind::PARAGRAPH
+                && block.display_text.contains("\\[x = 1\\]")
+                && block.display_text.contains("\\(y = 2\\)")
+        }));
+        assert!(blocks.iter().any(|block| {
+            block.kind == kind::CODE
+                && block.display_text.contains("\\[")
+                && block.display_text.contains("\\]")
+        }));
+    }
+
+    #[test]
+    fn tex_parenthesis_inline_becomes_normalized_math() {
+        let blocks = parse(r"Matrix product: \(c_{ij} = \sum_{k=1}^{n} a_{ik} \cdot b_{kj}\).");
+        let shown = &blocks[0].display_text;
+        assert!(shown.contains('∑'));
+        assert!(shown.contains('·'));
+        assert!(!shown.contains("\\("));
+        assert!(!shown.contains("\\sum"));
     }
 
     /// Micro-bench for audit P1: the tile re-`parse`s the WHOLE accumulated answer
