@@ -17,6 +17,7 @@ pub mod audio;
 #[cfg(windows)]
 pub(crate) mod audio_route;
 pub mod bridge;
+pub mod capabilities;
 pub mod codex_subscription;
 pub mod components;
 pub mod config;
