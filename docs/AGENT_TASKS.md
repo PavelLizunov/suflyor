@@ -76,4 +76,29 @@ CLAUDE.md/AGENTS.md hotkey list.
 
 ---
 
+## [ ] T5 — finish common mathematical notation rendering
+
+**Priority:** backlog after the macOS port.
+**Problem:** v0.37.0 renders the main matrix/fraction/root cases, but some
+generated notation is still shown as raw TeX, including `\operatorname{...}`,
+`\bar{...}`, `\overline{...}`, and related inline commands.
+**Do:** extend the existing math normalizer/renderer without adding a second
+rendering stack. Preserve stable streaming layout and ordinary prose/code.
+**Accept:** focused parser tests cover operator names, accents, determinants,
+and mixed prose; the full gate is green; an owner screenshot contains no raw
+supported TeX commands and no streaming text jumps.
+
+## [ ] T6 — restore the custom tray context menu on owner Windows
+
+**Priority:** backlog after the macOS port.
+**Problem:** left-click restore works in v0.37.0, but right-clicking the tray
+icon can produce no menu on the owner's Windows installation.
+**Do:** trace both legacy `WM_RBUTTONUP` and notification-icon v4
+`WM_CONTEXTMENU` delivery, including Explorer/taskbar recreation. Keep the
+project-styled menu above the taskbar; do not fall back to a native popup.
+**Accept:** automated event-routing coverage plus owner verification that one
+right-click opens exactly one styled menu in front of the taskbar.
+
+---
+
 Done tasks move to the bottom with a one-line result + commit hash.
