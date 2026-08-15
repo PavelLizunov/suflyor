@@ -1533,25 +1533,42 @@ fn available_on_disk() -> bool {
 
 // ===== Helpers (filesystem only — no sherpa/onnxruntime here) =====
 
-/// Resolve `suflyor-tts.exe` next to the running executable — the PIPER
+/// Resolve the `suflyor-tts` executable next to the running executable — the PIPER
 /// read-aloud path. The diarization client deliberately resolves the same exe
 /// through its OWN helper (`crate::diarize::diarization_exe_path`) so the
 /// read-aloud and diarization sidecar paths stay independent even when
 /// read-aloud moves to the Tera sidecar.
 pub(crate) fn sidecar_exe_path() -> PathBuf {
+    let name = format!("suflyor-tts{}", std::env::consts::EXE_SUFFIX);
     std::env::current_exe()
         .ok()
-        .and_then(|p| p.parent().map(|d| d.join("suflyor-tts.exe")))
-        .unwrap_or_else(|| PathBuf::from("suflyor-tts.exe"))
+        .and_then(|p| p.parent().map(|d| d.join(&name)))
+        .unwrap_or_else(|| PathBuf::from(name))
 }
 
-/// Resolve `suflyor-teratts.exe` (experimental TeraTTSv2 read-aloud sidecar).
+/// Resolve the `suflyor-teratts` executable (experimental TeraTTSv2 sidecar).
 /// Never used by diarization.
 pub(crate) fn tera_sidecar_exe_path() -> PathBuf {
+    let name = format!("suflyor-teratts{}", std::env::consts::EXE_SUFFIX);
     std::env::current_exe()
         .ok()
-        .and_then(|p| p.parent().map(|d| d.join("suflyor-teratts.exe")))
-        .unwrap_or_else(|| PathBuf::from("suflyor-teratts.exe"))
+        .and_then(|p| p.parent().map(|d| d.join(&name)))
+        .unwrap_or_else(|| PathBuf::from(name))
+}
+
+#[cfg(test)]
+#[test]
+fn sidecar_paths_use_the_platform_executable_suffix() {
+    let piper = format!("suflyor-tts{}", std::env::consts::EXE_SUFFIX);
+    let tera = format!("suflyor-teratts{}", std::env::consts::EXE_SUFFIX);
+    assert_eq!(
+        sidecar_exe_path().file_name(),
+        Some(std::ffi::OsStr::new(&piper))
+    );
+    assert_eq!(
+        tera_sidecar_exe_path().file_name(),
+        Some(std::ffi::OsStr::new(&tera))
+    );
 }
 
 /// Capture a sidecar's stderr (voice-load + synth + first-audio-latency

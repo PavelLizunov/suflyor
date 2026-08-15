@@ -274,18 +274,29 @@ fn guard_wav_len(wav: &Path) -> Result<()> {
     Ok(())
 }
 
-/// The DIARIZATION sidecar path — always `suflyor-tts.exe`, resolved
+/// The DIARIZATION sidecar path — always the `suflyor-tts` executable, resolved
 /// independently of the read-aloud engine selection (RC17 split): read-aloud
 /// may run on the Tera sidecar while speaker separation keeps using the
 /// sherpa diarizer, and the two paths must never be conflated.
 pub(crate) fn diarization_exe_path() -> PathBuf {
+    let name = format!("suflyor-tts{}", std::env::consts::EXE_SUFFIX);
     std::env::current_exe()
         .ok()
-        .and_then(|p| p.parent().map(|d| d.join("suflyor-tts.exe")))
-        .unwrap_or_else(|| PathBuf::from("suflyor-tts.exe"))
+        .and_then(|p| p.parent().map(|d| d.join(&name)))
+        .unwrap_or_else(|| PathBuf::from(name))
 }
 
-/// Spawn `suflyor-tts.exe diarize …`, wait, and return its stdout. Non-zero exit →
+#[cfg(test)]
+#[test]
+fn diarization_path_uses_the_platform_executable_suffix() {
+    let expected = format!("suflyor-tts{}", std::env::consts::EXE_SUFFIX);
+    assert_eq!(
+        diarization_exe_path().file_name(),
+        Some(std::ffi::OsStr::new(&expected))
+    );
+}
+
+/// Spawn `suflyor-tts diarize …`, wait, and return its stdout. Non-zero exit →
 /// error carrying the sidecar's stderr reason. No console window.
 fn run_sidecar(
     exe: &Path,
