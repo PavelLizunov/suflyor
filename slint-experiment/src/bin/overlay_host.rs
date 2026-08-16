@@ -21,6 +21,8 @@ include!("overlay_host_windows.rs");
 #[cfg(target_os = "macos")]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use slint::ComponentHandle;
+    use std::cell::RefCell;
+    use std::rc::Rc;
     use std::time::Duration;
 
     slint_replay::logging::init();
@@ -43,6 +45,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
+    let status_item = Rc::new(RefCell::new(None));
+    let status_item_from_timer = status_item.clone();
     let weak = window.as_weak();
     slint::Timer::single_shot(Duration::from_millis(200), move || {
         let Some(window) = weak.upgrade() else {
@@ -53,9 +57,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "[macos] floating-window configuration failed: {error}"
             ));
         }
+        match slint_replay::native::status::install(window.window()) {
+            Ok(item) => drop(status_item_from_timer.replace(Some(item))),
+            Err(error) => {
+                slint_replay::logging::line(&format!(
+                    "[macos] status-item install failed: {error}"
+                ));
+            }
+        }
     });
 
-    window.run()?;
+    let result = window.run();
+    drop(status_item);
+    result?;
     Ok(())
 }
 

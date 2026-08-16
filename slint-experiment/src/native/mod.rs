@@ -16,6 +16,10 @@ pub mod lifecycle;
 pub mod lifecycle;
 
 #[cfg(target_os = "macos")]
+#[path = "macos/status.rs"]
+pub mod status;
+
+#[cfg(target_os = "macos")]
 #[path = "macos/window.rs"]
 pub mod window;
 

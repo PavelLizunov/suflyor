@@ -35,10 +35,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         cc::Build::new()
             .file("src/native/macos/window.m")
+            .file("src/native/macos/status.m")
             .flag("-fobjc-arc")
-            .compile("suflyor_appkit_window");
+            .compile("suflyor_appkit");
         println!("cargo:rustc-link-lib=framework=AppKit");
         println!("cargo:rerun-if-changed=src/native/macos/window.m");
+        println!("cargo:rerun-if-changed=src/native/macos/status.m");
     }
 
     // Embed the app icon into the .exe so Explorer / the taskbar / a
