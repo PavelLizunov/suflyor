@@ -29,6 +29,20 @@ fn process_singleton_is_owned_by_the_windows_lifecycle_adapter() {
     assert!(source.contains("Global\\\\suflyor-overlay-singleton"));
     assert_create_mutex_isolated_to(&root.join("src"), &adapter);
 
-    let host = fs::read_to_string(root.join("src/bin/overlay_host.rs")).expect("read host");
-    assert!(host.contains("native::lifecycle::acquire_singleton"));
+    let wrapper = fs::read_to_string(root.join("src/bin/overlay_host.rs")).expect("read wrapper");
+    let windows_host = fs::read_to_string(root.join("src/bin/overlay_host_windows.rs"))
+        .expect("read Windows host");
+    let manifest = fs::read_to_string(root.join("Cargo.toml")).expect("read manifest");
+    assert!(wrapper.contains("include!(\"overlay_host_windows.rs\")"));
+    assert!(windows_host.contains("native::lifecycle::acquire_singleton"));
+    assert!(manifest.contains("autobins = false"));
+}
+
+#[test]
+fn macos_lifecycle_uses_a_native_file_lock() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let source = fs::read_to_string(root.join("src/native/macos/lifecycle.rs"))
+        .expect("read macOS lifecycle adapter");
+    assert!(source.contains("try_lock()"));
+    assert!(source.contains("suflyor-overlay-singleton.lock"));
 }

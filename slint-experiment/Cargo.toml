@@ -8,6 +8,7 @@ edition = "2021"
 description = "suflyor — AI-interview overlay (Slint UI + orchestration)"
 license = "GPL-3.0-or-later"
 publish = false
+autobins = false
 
 [lib]
 name = "slint_replay"

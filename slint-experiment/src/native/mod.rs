@@ -11,6 +11,10 @@ pub mod clipboard;
 #[path = "windows/lifecycle.rs"]
 pub mod lifecycle;
 
+#[cfg(target_os = "macos")]
+#[path = "macos/lifecycle.rs"]
+pub mod lifecycle;
+
 #[cfg(windows)]
 #[path = "windows/screen.rs"]
 pub mod screen;

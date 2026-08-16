@@ -17,9 +17,9 @@ cargo test --manifest-path overlay-backend/Cargo.toml
 
 echo "=== macOS portable Slint/UI ==="
 cargo fmt --manifest-path slint-experiment/Cargo.toml --all -- --check
-cargo check --locked --lib --bin slint-replay --bin markdown-spike \
+cargo check --locked --lib --bin slint-replay --bin markdown-spike --bin overlay-host \
   --manifest-path slint-experiment/Cargo.toml
-cargo clippy --locked --lib --bin slint-replay --bin markdown-spike \
+cargo clippy --locked --lib --bin slint-replay --bin markdown-spike --bin overlay-host \
   --manifest-path slint-experiment/Cargo.toml -- -D warnings
 cargo test --locked --lib --manifest-path slint-experiment/Cargo.toml
 cargo test --locked --bin slint-replay --manifest-path slint-experiment/Cargo.toml
