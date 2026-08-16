@@ -2060,3 +2060,12 @@ msgstr "Пауза"
 
 msgid "suflyor"
 msgstr "suflyor"
+
+msgid "Suflyor for macOS"
+msgstr "Suflyor для macOS"
+
+msgid "Native overlay ready; product features are being connected."
+msgstr "Нативный оверлей готов; функции продукта подключаются."
+
+msgid "Quit"
+msgstr "Выйти"

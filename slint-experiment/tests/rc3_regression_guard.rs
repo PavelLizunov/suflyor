@@ -28,7 +28,8 @@ fn installer_stops_only_the_exact_installed_copy_before_overwrite() {
 #[test]
 fn read_aloud_hotkeys_wait_for_release_and_ignore_phantom_pointer_up() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let host = fs::read_to_string(root.join("src/bin/overlay_host.rs")).expect("read host");
+    let host = fs::read_to_string(root.join("src/bin/overlay_host_windows.rs"))
+        .expect("read Windows host");
     let win32 = fs::read_to_string(root.join("src/win32.rs")).expect("read win32");
     let capture =
         fs::read_to_string(root.join("ui/capture_overlay.slint")).expect("read capture UI");

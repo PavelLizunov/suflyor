@@ -30,19 +30,6 @@ macro_rules! diag {
     };
 }
 
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::indexing_slicing,
-    clippy::pedantic,
-    clippy::nursery,
-    clippy::all
-)]
-mod ui {
-    slint::include_modules!();
-}
-
 use ui::{
     ArchiveRow, ArchiveWindow, CaptureOverlay, ComponentRow, HelpWindow, LockModeMenuWindow,
     MarkdownBlock, MemoryRow, OverlayBarWindow, PaletteResult, PaletteWindow, RecoverOfferWindow,

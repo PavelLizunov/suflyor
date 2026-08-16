@@ -54,6 +54,11 @@ slint-build = "1.17"
 # the build — the NSIS installer also sets the shortcut icon directly.
 winresource = "0.1"
 
+[target.'cfg(target_os = "macos")'.build-dependencies]
+# Compiles the tiny AppKit bridge already proven by Gate 0A. `cc` is already
+# present in Cargo.lock through the existing native dependency graph.
+cc = "1"
+
 [dependencies]
 # Default features include the winit + skia backends, which on Windows
 # need no system deps (no GTK/X11). `raw-window-handle-06` exposes the

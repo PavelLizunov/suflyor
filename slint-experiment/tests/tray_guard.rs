@@ -46,7 +46,7 @@ fn hide_action_present_in_both_bar_layouts() {
 #[test]
 fn tray_actions_route_through_existing_bar_callbacks() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let host = read(root, "src/bin/overlay_host.rs");
+    let host = read(root, "src/bin/overlay_host_windows.rs");
 
     // Session actions must reuse the bar's own callbacks (single lifecycle
     // implementation — the tray must never start/stop sessions itself).
@@ -85,7 +85,7 @@ fn tray_actions_route_through_existing_bar_callbacks() {
 #[test]
 fn startup_is_always_visible_and_hide_is_explicit_only() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let host = read(root, "src/bin/overlay_host.rs");
+    let host = read(root, "src/bin/overlay_host_windows.rs");
     assert!(
         host.contains("static BAR_TRAY_HIDDEN: AtomicBool = AtomicBool::new(false);"),
         "the hidden flag must start false — every startup is visible"
@@ -127,7 +127,7 @@ fn startup_is_always_visible_and_hide_is_explicit_only() {
 #[test]
 fn restore_keeps_compact_mode_and_icon_lifecycle_is_clean() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let host = read(root, "src/bin/overlay_host.rs");
+    let host = read(root, "src/bin/overlay_host_windows.rs");
 
     // Restore must not resize / re-compact the bar.
     let restore_start = host
@@ -267,7 +267,7 @@ fn tray_module_never_persists_state() {
 #[test]
 fn every_non_open_tray_action_closes_the_styled_menu_first() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let host = read(root, "src/bin/overlay_host.rs");
+    let host = read(root, "src/bin/overlay_host_windows.rs");
     let start = host
         .find("fn tray_action_dispatch(")
         .expect("tray dispatch helper");
@@ -287,7 +287,7 @@ fn every_non_open_tray_action_closes_the_styled_menu_first() {
 #[test]
 fn themed_menu_stays_above_and_clear_of_the_taskbar() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let host = read(root, "src/bin/overlay_host.rs");
+    let host = read(root, "src/bin/overlay_host_windows.rs");
     let menu = read(root, "ui/tray_menu.slint");
     assert!(menu.contains("export component TrayMenuWindow inherits Window"));
     assert!(menu.contains("always-on-top: true;"));
