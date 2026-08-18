@@ -45,7 +45,7 @@ reqwest = { version = "0.13", features = ["json", "multipart", "native-tls"], de
 transcribe-rs = { version = "0.3.11", default-features = false, features = ["onnx", "ort-directml"] }
 
 # Audio capture (audio.rs)
-wasapi = "0.23"
+wasapi = "0.24"
 
 # Text-to-speech (tts.rs, read-aloud feature) — Windows SAPI 5 ISpVoice via the
 # official Win32 binding, feature-gated to just the Speech + COM namespaces it
