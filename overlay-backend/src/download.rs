@@ -16,6 +16,11 @@ use std::process::Command;
 /// `--retry … --retry-all-errors` is essential. Follows redirects, fails on HTTP
 /// error, no console window. Blocking. Removes a partial file on failure.
 pub(crate) fn curl_download(url: &str, dest: &Path) -> Result<()> {
+    // SECURITY: Enforce HTTPS scheme for downloads to prevent MITM attacks
+    // and arbitrary protocol handler execution (e.g. file://, http://).
+    if !url.trim().starts_with("https://") {
+        bail!("refusing to download from non-HTTPS URL: {url}");
+    }
     let status = no_window(Command::new("curl.exe").args([
         "-L",
         "--fail",
@@ -108,5 +113,18 @@ mod tests {
     #[test]
     fn hex_is_lowercase_and_padded() {
         assert_eq!(hex(&[0x00, 0x0f, 0xa0, 0xff]), "000fa0ff");
+    }
+
+    #[test]
+    fn curl_download_rejects_non_https_urls() {
+        let dest = std::env::temp_dir().join("test_non_https.tmp");
+        let err_http = curl_download("http://example.com/model.tar.bz2", &dest).unwrap_err();
+        assert!(err_http.to_string().contains("non-HTTPS"));
+
+        let err_file = curl_download("file:///C:/Windows/System32/calc.exe", &dest).unwrap_err();
+        assert!(err_file.to_string().contains("non-HTTPS"));
+
+        let err_empty = curl_download("", &dest).unwrap_err();
+        assert!(err_empty.to_string().contains("non-HTTPS"));
     }
 }
