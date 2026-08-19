@@ -116,6 +116,12 @@ use wizard::*;
 mod vision_capture;
 use vision_capture::*;
 
+// The production capture watchdog is macOS-only. Its pure policy still builds
+// under `cargo test --bin overlay-host` on Windows.
+#[cfg(any(target_os = "macos", test))]
+#[path = "overlay_host/capture_watchdog.rs"]
+mod capture_watchdog;
+
 // Phase 7a of the modularization (docs/overlay-host-modularization-plan.md §5.10):
 // the AI-ask / tile-streaming / conversation machinery — the `OverlayBarBridge`
 // (`SlintUiBridge`/`RuntimeEvents` sink + conversation map + the SOLE
@@ -296,8 +302,10 @@ use settings_import_export::*;
 // macro / `overlay_backend::update` through the crate-root scope. SECURITY: the
 // download -> verify -> spawn sequence is unchanged (verification lives in
 // `overlay_backend::update`).
+#[cfg(windows)]
 #[path = "overlay_host/settings_updates.rs"]
 mod settings_updates;
+#[cfg(windows)]
 use settings_updates::*;
 
 // The one-click local-AI installer Settings-tab callbacks (install pipeline +
@@ -327,6 +335,15 @@ mod transcript_player;
 use aux_windows::*;
 
 pub(crate) type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
+
+fn restore_text_clipboard(saved: &Option<String>) {
+    // ponytail: SA1 preserves only UTF-8 text; snapshot every pasteboard item
+    // and format if non-text clipboard parity becomes a product requirement.
+    match saved {
+        Some(text) => slint_replay::win32::clipboard_write_text(text),
+        None => slint_replay::win32::clipboard_clear(),
+    }
+}
 
 /// Spawn a conversational tile that DISPLAYS `text` and immediately reads it
 /// aloud — no AI/vision call. Used by the Shift+Alt+1 "read selection" path so
@@ -437,17 +454,25 @@ fn after_read_aloud_hotkey_release(attempts_left: u8, action: Rc<dyn Fn()>) {
     }
 }
 
-/// Fill an already-spawned OCR placeholder tile with the recognized text and
-/// read it aloud — the Ctrl+F8 / Shift+Alt+2 Tesseract path. The capture flow
-/// (`launch_vision_for_bgra`) creates the tile with a "Распознаю текст…"
-/// placeholder, runs Tesseract off-thread, then marshals the result here on the
-/// Slint UI thread. Mirrors the tail of `spawn_text_tile` (seed conversation →
-/// auto-read), but the tile already exists.
+#[must_use]
+fn ocr_source_label() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "OCR · Apple Vision"
+    } else {
+        "OCR · Tesseract"
+    }
+}
+
+/// Finish an already-spawned OCR placeholder tile with recognized text and
+/// read it aloud. The platform-local engine runs off-thread, then marshals the
+/// result here on the Slint UI thread. Mirrors the tail of `spawn_text_tile`
+/// (seed conversation -> auto-read), but the tile already exists.
 pub(crate) fn fill_ocr_tile(
     weak: slint::Weak<TileWindow>,
     convo_id: i32,
     bridge: &Arc<OverlayBarBridge>,
     text: &str,
+    ui_is_ru: bool,
 ) {
     let Some(tile) = weak.upgrade() else {
         return;
@@ -456,11 +481,15 @@ pub(crate) fn fill_ocr_tile(
     // OCR output isn't regeneratable (no model call to vary) — hide 🔄.
     tile.set_can_regenerate(false);
     let trimmed = text.trim();
+    let source = ocr_source_label();
     if trimmed.is_empty() {
-        tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(
-            "*(текст не распознан)*",
-        ))));
-        tile.set_source_label(SharedString::from("OCR · пусто"));
+        let empty = if ui_is_ru {
+            "*(текст не распознан)*"
+        } else {
+            "*(no text recognized)*"
+        };
+        tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(empty))));
+        tile.set_source_label(SharedString::from(source));
         // Nothing to read or copy — don't present no-op 🔊/📋 controls (the
         // conversation is never seeded on this path, so they'd be dead anyway).
         tile.set_can_speak(false);
@@ -468,7 +497,7 @@ pub(crate) fn fill_ocr_tile(
         return;
     }
     tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(trimmed))));
-    tile.set_source_label(SharedString::from("OCR · Tesseract"));
+    tile.set_source_label(SharedString::from(source));
     // Seed the conversation so wire_speak / wire_copy read THIS text (they read
     // from the conversation store, NOT tile.blocks).
     bridge.store_conversation(
@@ -485,6 +514,25 @@ pub(crate) fn fill_ocr_tile(
     // when playback is accepted — a missing sidecar/voice must not show as
     // speaking nor falsely suppress STT (F2).
     auto_speak_if_idle(trimmed, convo_id);
+}
+
+/// Finish an existing OCR tile after the platform-local engine fails. Called
+/// on the Slint UI thread; diagnostic detail stays in the worker-side log.
+pub(crate) fn fill_ocr_error_tile(weak: slint::Weak<TileWindow>, ui_is_ru: bool) {
+    let Some(tile) = weak.upgrade() else {
+        return;
+    };
+    let message = if ui_is_ru {
+        "Не удалось распознать текст."
+    } else {
+        "Text recognition failed."
+    };
+    tile.set_followup_busy(false);
+    tile.set_can_regenerate(false);
+    tile.set_can_speak(false);
+    tile.set_can_copy(false);
+    tile.set_source_label(SharedString::from(ocr_source_label()));
+    tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(message))));
 }
 
 /// Parse markdown source into the Slint `MarkdownBlock` rows a tile body
@@ -533,6 +581,10 @@ static MIC_BUSY: AtomicBool = AtomicBool::new(false);
 /// NEVER persisted, so every startup is visible. While hidden, everything else
 /// keeps running: recording, hotkeys, TTS, session tasks, tiles, F6/F9.
 static BAR_TRAY_HIDDEN: AtomicBool = AtomicBool::new(false);
+#[cfg(target_os = "macos")]
+extern "C" fn sync_bar_status_visibility(visible: bool) {
+    BAR_TRAY_HIDDEN.store(!visible, Ordering::Relaxed);
+}
 
 /// The hide chip is deliberately a no-op if Windows rejected the tray icon:
 /// without an icon, hiding the only restore surface would strand the user.
@@ -890,6 +942,16 @@ fn main() -> Result<(), slint::PlatformError> {
     if let Ok(mut st) = state.lock() {
         st.stealth = cfg.read().stealth_enabled;
     }
+    #[cfg(target_os = "macos")]
+    let capture_watchdog = Arc::new(std::sync::Mutex::new(
+        capture_watchdog::CaptureWatchdog::default(),
+    ));
+    #[cfg(target_os = "macos")]
+    let session_intent_generation = Arc::new(AtomicU64::new(0));
+    #[cfg(target_os = "macos")]
+    let session_lifecycle = Arc::new(tokio::sync::Mutex::new(()));
+    #[cfg(target_os = "macos")]
+    let capture_stop_pending = Arc::new(AtomicBool::new(false));
     // Choose the GigaAM ONNX Runtime accelerator (GPU via DirectML, or CPU) ONCE
     // at startup — the ORT session bakes its execution provider in at model load
     // time, so this must run before any transcription. Falls back to CPU when no
@@ -1680,12 +1742,34 @@ fn main() -> Result<(), slint::PlatformError> {
         let cfg_for_timer = cfg.clone();
         let rt_for_timer = slint_rt.clone();
         let rt_handle_for_timer = rt_handle.clone();
+        #[cfg(target_os = "macos")]
+        let watchdog_for_timer_toggle = capture_watchdog.clone();
+        #[cfg(target_os = "macos")]
+        let generation_for_timer_toggle = session_intent_generation.clone();
+        #[cfg(target_os = "macos")]
+        let lifecycle_for_timer_toggle = session_lifecycle.clone();
+        #[cfg(target_os = "macos")]
+        let stop_pending_for_timer_toggle = capture_stop_pending.clone();
         overlay.on_timer_toggle_clicked(move || {
+            #[cfg(target_os = "macos")]
+            if stop_pending_for_timer_toggle.load(Ordering::Acquire) {
+                return;
+            }
             // v0.22.0 — every Start/Stop toggle clears any paused state: a new
             // session starts recording, and a Stop ends it outright. The audio
             // pipeline's own flag is reset here too (start_session also resets
             // it, but a Stop-while-paused must clear it now).
             slint_replay::runtime_state::lock(&rt_for_timer).paused = false;
+            #[cfg(target_os = "macos")]
+            let session_intent = {
+                watchdog_for_timer_toggle
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .reset();
+                generation_for_timer_toggle
+                    .fetch_add(1, Ordering::AcqRel)
+                    .wrapping_add(1)
+            };
             // Capture the elapsed session seconds BEFORE the stop-reset below.
             // The debrief snapshot further down used to RE-READ st.session_secs
             // AFTER this handler had already zeroed it on Stop, so every session
@@ -1727,15 +1811,33 @@ fn main() -> Result<(), slint::PlatformError> {
                 let rt_c = rt_for_timer.clone();
                 let s_for_revert = s.clone();
                 let weak_revert = weak.clone();
+                #[cfg(target_os = "macos")]
+                let lifecycle_c = lifecycle_for_timer_toggle.clone();
+                #[cfg(target_os = "macos")]
+                let generation_c = generation_for_timer_toggle.clone();
                 rt_handle_for_timer.spawn(async move {
+                    #[cfg(target_os = "macos")]
+                    let _lifecycle_guard = lifecycle_c.lock().await;
+                    #[cfg(target_os = "macos")]
+                    if generation_c.load(Ordering::Acquire) != session_intent {
+                        return;
+                    }
                     if let Err(e) = slint_session::start_session(events_c, cfg_c, rt_c) {
                         eprintln!("[overlay-host] start_session failed: {e:#}");
                         // Revert UI toggle since the pipeline didn't start.
                         let _ = slint::invoke_from_event_loop(move || {
+                            #[cfg(target_os = "macos")]
+                            if generation_c.load(Ordering::Acquire) != session_intent {
+                                return;
+                            }
                             let mut st = match s_for_revert.lock() {
                                 Ok(g) => g,
                                 Err(p) => p.into_inner(),
                             };
+                            #[cfg(target_os = "macos")]
+                            if !st.timer_active {
+                                return;
+                            }
                             st.timer_active = false;
                             st.session_secs = 0;
                             drop(st);
@@ -1766,27 +1868,173 @@ fn main() -> Result<(), slint::PlatformError> {
                     .current_session_id
                     .clone()
                     .unwrap_or_default();
+                #[cfg(target_os = "macos")]
+                let lifecycle_c = lifecycle_for_timer_toggle.clone();
+                #[cfg(target_os = "macos")]
+                let generation_c = generation_for_timer_toggle.clone();
                 rt_handle_for_timer.spawn(async move {
-                    let snapshot = slint_session::stop_session(rt_c, &cfg_c);
-                    eprintln!(
-                        "[overlay-host] session stopped — {} transcript lines snapshotted",
-                        snapshot.len()
-                    );
-                    events_c.emit("session:stopped", serde_json::Value::Null);
-                    // Phase E5 — debrief (gated: opt-in + ≥30s +
-                    // ≥5 mic lines + AI configured local-or-cloud).
-                    slint_session::maybe_run_debrief(
+                    #[cfg(target_os = "macos")]
+                    let _lifecycle_guard = lifecycle_c.lock().await;
+                    #[cfg(target_os = "macos")]
+                    if generation_c.load(Ordering::Acquire) != session_intent {
+                        return;
+                    }
+                    stop_session_and_maybe_debrief(
+                        rt_c,
                         events_c,
                         cfg_c,
-                        snapshot,
                         session_id_snapshot,
-                        session_secs_snapshot * 1000,
+                        session_secs_snapshot,
                         &rt_handle_c,
                     );
                 });
             }
         });
     }
+
+    // macOS-only fail-safe for an already-flowing capture that stops making
+    // progress. It finalizes this host's sole session and waits for manual Start.
+    #[cfg(target_os = "macos")]
+    let _capture_watchdog_timer = {
+        let timer = Timer::default();
+        let watchdog = capture_watchdog.clone();
+        let runtime = slint_rt.clone();
+        let app_state = state.clone();
+        let session_events = events.clone();
+        let session_cfg = cfg.clone();
+        let handle = rt_handle.clone();
+        let generation = session_intent_generation.clone();
+        let lifecycle = session_lifecycle.clone();
+        let stop_pending = capture_stop_pending.clone();
+        let weak_overlay = overlay.as_weak();
+        timer.start(
+            TimerMode::Repeated,
+            capture_watchdog::TICK_INTERVAL,
+            move || {
+                let intended = app_state
+                    .lock()
+                    .map(|state| state.timer_active)
+                    .unwrap_or(false);
+                let snapshot = if intended {
+                    slint_replay::runtime_state::lock(&runtime)
+                        .capture
+                        .as_ref()
+                        .map(|capture| {
+                            let metrics = capture.metrics_snapshot();
+                            (metrics.mic.emitted_chunks, metrics.system.emitted_chunks)
+                        })
+                } else {
+                    None
+                };
+                let decision = watchdog
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .tick(intended, snapshot);
+                if decision != capture_watchdog::Decision::Stop
+                    || stop_pending.swap(true, Ordering::AcqRel)
+                {
+                    return;
+                }
+
+                let session_secs_snapshot = {
+                    let mut state = match app_state.lock() {
+                        Ok(state) => state,
+                        Err(poisoned) => poisoned.into_inner(),
+                    };
+                    if !state.timer_active {
+                        stop_pending.store(false, Ordering::Release);
+                        return;
+                    }
+                    state.timer_active = false;
+                    state.paused = false;
+                    let elapsed = state.session_secs;
+                    state.session_secs = 0;
+                    elapsed
+                };
+                let stop_intent = generation.fetch_add(1, Ordering::AcqRel).wrapping_add(1);
+                let session_id_snapshot = {
+                    let mut runtime = slint_replay::runtime_state::lock(&runtime);
+                    runtime.paused = false;
+                    runtime.current_session_id.clone().unwrap_or_default()
+                };
+                let (status, title, body, stealth) = {
+                    let cfg = session_cfg.read();
+                    let (status, title, body) = capture_stopped_copy(cfg.ui_is_ru());
+                    (status, title, body, cfg.stealth_enabled)
+                };
+                if let Some(overlay) = weak_overlay.upgrade() {
+                    overlay.set_timer_active(false);
+                    overlay.set_session_paused(false);
+                    overlay.set_timer_label(SharedString::from("00:00"));
+                    overlay.set_session_name(SharedString::from(""));
+                    overlay.set_status_text(SharedString::from(status));
+                    overlay.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x4b, 0x4b));
+                }
+
+                let runtime = runtime.clone();
+                let session_events = session_events.clone();
+                let session_cfg = session_cfg.clone();
+                let app_state = app_state.clone();
+                let generation = generation.clone();
+                let lifecycle = lifecycle.clone();
+                let stop_pending = stop_pending.clone();
+                let handle_for_debrief = handle.clone();
+                let weak_overlay_after_stop = weak_overlay.clone();
+                handle.spawn(async move {
+                    // Lifecycle is always the outermost lock. No AppState,
+                    // runtime, or watchdog guard is held across this await.
+                    let _lifecycle_guard = lifecycle.lock().await;
+                    let timer_still_stopped = match app_state.lock() {
+                        Ok(state) => !state.timer_active,
+                        Err(poisoned) => !poisoned.into_inner().timer_active,
+                    };
+                    let still_stopped =
+                        generation.load(Ordering::Acquire) == stop_intent && timer_still_stopped;
+                    if !still_stopped {
+                        stop_pending.store(false, Ordering::Release);
+                        return;
+                    }
+                    // ponytail: transparent restart stays deferred until the journal and
+                    // recorder can continue one session without splitting its history.
+                    diag!("[macos] capture watchdog: stopping stagnant capture");
+                    stop_session_and_maybe_debrief(
+                        runtime,
+                        session_events.clone(),
+                        session_cfg,
+                        session_id_snapshot,
+                        session_secs_snapshot,
+                        &handle_for_debrief,
+                    );
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(overlay) = weak_overlay_after_stop.upgrade() {
+                            overlay.set_status_text(SharedString::from(status));
+                            overlay.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x4b, 0x4b));
+                        }
+                    });
+                    if session_events
+                        .spawn_tile_full(
+                            TileSpec {
+                                question: title.to_string(),
+                                answer: body.to_string(),
+                                source: "capture_error".into(),
+                                is_translation: false,
+                                highlights: vec![],
+                                summary_session: None,
+                            },
+                            MonitorHint::Auto,
+                            stealth,
+                            TileKind::Error,
+                        )
+                        .is_err()
+                    {
+                        diag!("[macos] capture watchdog: error tile spawn failed");
+                    }
+                    stop_pending.store(false, Ordering::Release);
+                });
+            },
+        );
+        timer
+    };
 
     // ===== Spawn-tile poll Timer (Phase E3) =====
     //
@@ -2610,9 +2858,11 @@ fn main() -> Result<(), slint::PlatformError> {
                     diag!("[overlay-host] Shift+Alt+1 — read selection (clipboard)");
                     let saved = slint_replay::win32::clipboard_read_text();
                     let bridge_sa1 = hp_bridge.clone();
+                    let events_sa1 = hp_events.clone();
                     let tiles_sa1 = hp_tiles.clone();
                     let overlay_sa1 = hp_weak_overlay.clone();
-                    let title = if hp_cfg.read().ui_is_ru() {
+                    let is_ru = hp_cfg.read().ui_is_ru();
+                    let title = if is_ru {
                         "Выделенный текст"
                     } else {
                         "Selected text"
@@ -2621,7 +2871,35 @@ fn main() -> Result<(), slint::PlatformError> {
                     let saved = Rc::new(saved);
                     let copy_selection = Rc::new(move || {
                         slint_replay::win32::clipboard_clear();
-                        slint_replay::win32::send_ctrl_c();
+                        if !slint_replay::win32::send_ctrl_c() {
+                            restore_text_clipboard(saved.as_ref());
+                            #[cfg(target_os = "macos")]
+                            let copy_failure = if is_ru {
+                                "Для копирования выделенного текста нужен доступ «Универсальный доступ» в macOS."
+                            } else {
+                                "Accessibility permission is required to copy selected text on macOS."
+                            };
+                            #[cfg(not(target_os = "macos"))]
+                            let copy_failure = if is_ru {
+                                "Не удалось скопировать выделенный текст."
+                            } else {
+                                "Could not copy the selected text."
+                            };
+                            let _ = events_sa1.spawn_tile_full(
+                                TileSpec {
+                                    question: title.clone(),
+                                    answer: copy_failure.into(),
+                                    source: "read_aloud_error".into(),
+                                    is_translation: false,
+                                    highlights: vec![],
+                                    summary_session: None,
+                                },
+                                MonitorHint::Auto,
+                                false,
+                                TileKind::Error,
+                            );
+                            return;
+                        }
                         let saved = saved.clone();
                         let bridge_sa1 = bridge_sa1.clone();
                         let tiles_sa1 = tiles_sa1.clone();
@@ -2635,10 +2913,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                 "[overlay-host] sa1: copied {} chars from selection",
                                 copied.as_ref().map(|s| s.chars().count()).unwrap_or(0)
                             );
-                            match saved.as_ref() {
-                                Some(s) => slint_replay::win32::clipboard_write_text(s),
-                                None => slint_replay::win32::clipboard_clear(),
-                            }
+                            restore_text_clipboard(saved.as_ref());
                             if let Some(text) = copied {
                                 // Spawn a visible tile showing the text + 🔊/⏯/📋/✕,
                                 // which auto-starts the read-aloud.
@@ -2657,8 +2932,8 @@ fn main() -> Result<(), slint::PlatformError> {
                     // release delay. At 25 ms x 40 this remains bounded.
                     after_read_aloud_hotkey_release(40, copy_selection);
                 } else if event.id == sa2_id {
-                    // Shift+Alt+2 — OCR a screen region and read it. Reuses the
-                    // region capture; the OCR engine swaps to Tesseract next.
+                    // Shift+Alt+2 — OCR a screen region and read it using the
+                    // platform-local engine (Tesseract / Apple Vision).
                     diag!("[overlay-host] Shift+Alt+2 — OCR region + read");
                     fire_f8_vision_capture(
                         &hp_bridge,
@@ -3709,17 +3984,31 @@ fn main() -> Result<(), slint::PlatformError> {
                         return;
                     }
                 };
+                #[cfg(windows)]
                 let (bar_left, bar_top) = {
                     let pos = bar.window().position();
-                    if cfg!(target_os = "macos") || (pos.x != -32000 && pos.x != 0) {
+                    if pos.x != -32000 && pos.x != 0 {
                         (pos.x, pos.y)
                     } else {
                         get_window_rect(bar_hwnd)
                             .map(|(l, t, _, _)| (l, t))
-                            .unwrap_or((pos.x, pos.y))
+                        .unwrap_or((pos.x, pos.y))
                     }
                 };
+                #[cfg(target_os = "macos")]
+                let (bar_left, bar_top) = match get_window_rect(bar_hwnd) {
+                    Ok((left, top, _, _)) => (left, top),
+                    Err(e) => {
+                        diag!(
+                            "[overlay-host] lock-menu event=error stage=bar-rect error={e}"
+                        );
+                        return;
+                    }
+                };
+                #[cfg(windows)]
                 let scale = bar.window().scale_factor().max(0.1);
+                #[cfg(target_os = "macos")]
+                let scale = 1.0_f32;
                 let menu_width = (210.0 * scale).round() as i32;
                 let menu_height = ((if managed { 106.0 } else { 74.0 }) * scale).round() as i32;
                 let anchor_x = bar_left + (anchor_x * scale) as i32;
@@ -3748,8 +4037,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 // before the first visible frame. A fresh Slint HWND is not
                 // always available immediately after show(), hence the shared
                 // retry helper rather than a best-effort one-shot grab.
-                menu.window()
-                    .set_position(slint::PhysicalPosition::new(-32000, -32000));
+                set_platform_window_position(menu.window(), -32000, -32000);
                 let generation = focus_for_open.borrow_mut().begin_open();
                 if let Err(e) = menu.show() {
                     focus_for_open.borrow_mut().close();
@@ -3790,7 +4078,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         *error_for_reveal.borrow_mut() = Some(format!("move: {e}"));
                         return false;
                     }
-                    window.window().set_position(slint::PhysicalPosition::new(x, y));
+                    set_platform_window_position(window.window(), x, y);
                     if !focus_for_reveal.borrow_mut().mark_revealed(generation) {
                         return true;
                     }
@@ -4219,6 +4507,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let weak_for_drag = overlay.as_weak();
         overlay.on_drag_start_requested(move || {
             if let Some(o) = weak_for_drag.upgrade() {
+                #[cfg(target_os = "macos")]
                 let _ = slint_replay::native::window::begin_drag(o.window());
                 if let Ok(hwnd) = grab_hwnd(o.window()) {
                     drag_begin(hwnd);
@@ -4235,7 +4524,8 @@ fn main() -> Result<(), slint::PlatformError> {
                 {
                     let (cx, cy) = slint_replay::win32::cursor_pos();
                     let _ = slint_replay::native::window::begin_drag(o.window());
-                    let _ = cx; let _ = cy;
+                    let _ = cx;
+                    let _ = cy;
                 }
             }
         });
@@ -4531,12 +4821,29 @@ fn main() -> Result<(), slint::PlatformError> {
     };
 
     #[cfg(target_os = "macos")]
+    let status_item = Rc::new(RefCell::new(None));
+    #[cfg(target_os = "macos")]
     {
         let weak_status = overlay.as_weak();
+        let status_item_for_timer = status_item.clone();
         slint::Timer::single_shot(Duration::from_millis(200), move || {
             if let Some(window) = weak_status.upgrade() {
                 let _ = slint_replay::native::window::configure_floating(window.window());
-                let _ = slint_replay::native::status::install(window.window());
+                match slint_replay::native::status::install(
+                    window.window(),
+                    sync_bar_status_visibility,
+                ) {
+                    Ok(item) => {
+                        drop(status_item_for_timer.borrow_mut().replace(item));
+                        TRAY_AVAILABLE.store(true, Ordering::Relaxed);
+                        window.set_tray_available(true);
+                    }
+                    Err(_) => {
+                        TRAY_AVAILABLE.store(false, Ordering::Relaxed);
+                        window.set_tray_available(false);
+                        diag!("macOS status item unavailable");
+                    }
+                }
             }
         });
     }
@@ -4551,6 +4858,11 @@ fn main() -> Result<(), slint::PlatformError> {
     // the process exits; a relaunch child adds its own, never a duplicate).
     #[cfg(windows)]
     drop(_tray_handle);
+    #[cfg(target_os = "macos")]
+    {
+        let installed_status_item = status_item.borrow_mut().take();
+        drop(installed_status_item);
+    }
     TRAY_AVAILABLE.store(false, Ordering::Relaxed);
     // All event-loop exits share the normal session stop path.
     let _ = slint_session::stop_session(slint_rt.clone(), &cfg);
@@ -4639,8 +4951,7 @@ fn spawn_relaunch() -> bool {
     };
     #[cfg(not(windows))]
     let res = std::process::Command::new(&exe).arg("--relaunch").spawn();
-    match res
-    {
+    match res {
         Ok(child) => {
             eprintln!(
                 "[overlay-host] relaunch: spawned child pid={} from {:?}",
@@ -4684,7 +4995,8 @@ fn apply_bar_size(overlay: &OverlayBarWindow, compact: bool) {
 /// event-loop cycle, and at STARTUP the HWND isn't realized for ~200 ms, so a
 /// single fixed delay raced the resize/pin (it left a startup-compact bar
 /// left-of-centre). Poll every 50 ms (≤ ~0.6 s) until the rect width matches the
-/// requested logical size (DPI-scaled), then center by the ACTUAL width.
+/// requested size in native geometry units (DPI-scaled pixels on Windows,
+/// logical points on macOS), then center by the ACTUAL width.
 fn recenter_when_sized(weak: slint::Weak<OverlayBarWindow>, target_w_logical: f32, attempt: u32) {
     Timer::single_shot(Duration::from_millis(50), move || {
         let Some(o) = weak.upgrade() else { return };
@@ -4694,9 +5006,12 @@ fn recenter_when_sized(weak: slint::Weak<OverlayBarWindow>, target_w_logical: f3
             }
             return;
         };
-        let target_px = (target_w_logical * o.window().scale_factor()).round() as i32;
+        #[cfg(windows)]
+        let target_width = (target_w_logical * o.window().scale_factor()).round() as i32;
+        #[cfg(target_os = "macos")]
+        let target_width = target_w_logical.round() as i32;
         let cur_w = get_window_rect(hwnd).map(|(_, _, bw, _)| bw).unwrap_or(0);
-        if (cur_w - target_px).abs() > 24 && attempt < 12 {
+        if (cur_w - target_width).abs() > 24 && attempt < 12 {
             recenter_when_sized(weak.clone(), target_w_logical, attempt + 1);
             return;
         }
@@ -4706,9 +5021,7 @@ fn recenter_when_sized(weak: slint::Weak<OverlayBarWindow>, target_w_logical: f3
             None => (60, 24),
         };
         let _ = move_window_pos_only(hwnd, x, y);
-        o.window().set_position(slint::PhysicalPosition::new(x, y));
-        #[cfg(target_os = "macos")]
-        let _ = slint_replay::native::window::center_window(o.window());
+        set_platform_window_position(o.window(), x, y);
     });
 }
 
@@ -4924,9 +5237,7 @@ fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_replay::app_stat
     // frame is already complete + capture-excluded. Parking unconditionally also
     // closes the bare-outline flash for stealth-off starts (same reasoning as the
     // aux-window helper).
-    overlay
-        .window()
-        .set_position(slint::PhysicalPosition::new(-32000, -32000));
+    set_platform_window_position(overlay.window(), -32000, -32000);
     let st = state.clone();
     let attempt: Rc<dyn Fn(&OverlayBarWindow) -> bool> = Rc::new(move |o: &OverlayBarWindow| {
         let Ok(hwnd) = grab_hwnd(o.window()) else {
@@ -4967,9 +5278,7 @@ fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_replay::app_stat
             Some(p) => (p.left + ((p.width() - bar_w) / 2).max(0), p.top + 24),
             None => (60, 24),
         };
-        o.window().set_position(slint::PhysicalPosition::new(x, y));
-        #[cfg(target_os = "macos")]
-        let _ = slint_replay::native::window::center_window(o.window());
+        set_platform_window_position(o.window(), x, y);
         // I3 — success means the bar actually landed on-screen. If BOTH the
         // computed pin and the hard (60,24) retry fail, report the attempt as
         // FAILED so realize_with_retries keeps retrying and eventually runs
@@ -4984,7 +5293,7 @@ fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_replay::app_stat
                 // Last resort: even the pin failed — try a hard (60,24) so
                 // a parked bar can't stay invisible at (-32000).
                 eprintln!("[overlay-host] bar pin failed: {e}; retry at (60,24)");
-                o.window().set_position(slint::PhysicalPosition::new(60, 24));
+                set_platform_window_position(o.window(), 60, 24);
                 match move_window_pos_only(hwnd, 60, 24) {
                     Ok(()) => {
                         eprintln!("[overlay-host] bar pinned at hard fallback (60, 24)");
@@ -5021,7 +5330,7 @@ fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_replay::app_stat
             Some(p) => (p.left + 60, p.top + 24),
             None => (60, 24),
         };
-        o.window().set_position(slint::PhysicalPosition::new(x, y));
+        set_platform_window_position(o.window(), x, y);
     });
     // The SAME retry/fallback schedule as the aux windows (I3) — fast attempt,
     // two conservative retries, then the fallback above. No private timer loop.
@@ -5118,6 +5427,47 @@ fn summary_empty_copy(is_ru: bool) -> (&'static str, &'static str) {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn capture_stopped_copy(is_ru: bool) -> (&'static str, &'static str, &'static str) {
+    if is_ru {
+        (
+            "захват остановлен",
+            "Захват остановлен",
+            "Аудиозахват остановился. Нажмите Старт, чтобы продолжить.",
+        )
+    } else {
+        (
+            "capture stopped",
+            "Capture stopped",
+            "Audio capture stopped. Press Start to continue.",
+        )
+    }
+}
+
+fn stop_session_and_maybe_debrief(
+    runtime: SharedSlintRuntime,
+    events: Arc<dyn RuntimeEvents>,
+    cfg: config::SharedConfig,
+    session_id: String,
+    session_secs: u64,
+    runtime_handle: &tokio::runtime::Handle,
+) {
+    let snapshot = slint_session::stop_session(runtime, &cfg);
+    eprintln!(
+        "[overlay-host] session stopped — {} transcript lines snapshotted",
+        snapshot.len()
+    );
+    events.emit("session:stopped", serde_json::Value::Null);
+    slint_session::maybe_run_debrief(
+        events,
+        cfg,
+        snapshot,
+        session_id,
+        session_secs * 1000,
+        runtime_handle,
+    );
+}
+
 fn mic_busy_status(is_ru: bool) -> &'static str {
     if is_ru {
         "микрофон занят"
@@ -5180,6 +5530,9 @@ mod tile_heading_tests {
         active_stack_label, manual_tile_failure, manual_tile_heading, manual_tile_not_configured,
         manual_tile_placeholder, mic_busy_status, summary_empty_copy,
     };
+
+    #[cfg(target_os = "macos")]
+    use super::capture_stopped_copy;
 
     #[test]
     fn active_stack_uses_the_selected_direct_provider_model() {
@@ -5245,6 +5598,24 @@ mod tile_heading_tests {
     fn mic_busy_status_follows_ui_language() {
         assert_eq!(mic_busy_status(false), "microphone busy");
         assert_eq!(mic_busy_status(true), "микрофон занят");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn capture_stopped_copy_is_generic_localized_and_requests_manual_start() {
+        let english = capture_stopped_copy(false);
+        assert_eq!(english.0, "capture stopped");
+        assert!(english.2.contains("Press Start"));
+
+        let russian = capture_stopped_copy(true);
+        assert_eq!(russian.0, "захват остановлен");
+        assert!(russian.2.contains("Нажмите Старт"));
+
+        for copy in [
+            english.0, english.1, english.2, russian.0, russian.1, russian.2,
+        ] {
+            assert!(!copy.contains("http") && !copy.contains("192.168."));
+        }
     }
 }
 

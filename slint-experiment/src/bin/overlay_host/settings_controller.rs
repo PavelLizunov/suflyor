@@ -44,6 +44,8 @@
 // `set_global_stealth`, `populate_diagnostics` / `build_diag_report`,
 // `open_wizard`, `try_acquire_mic` / `release_mic`, and `active_stack_label`
 // through it). That is intentional for the move; imports narrow in a later pass.
+#[cfg(windows)]
+use super::wire_updates;
 use super::{
     active_stack_label, ai, apply_bar_stealth, apply_scheme_bar, apply_scheme_settings, audio,
     clamp_scheme, cloud_model_index, config, drag_begin, drag_update, fetch_models,
@@ -51,9 +53,9 @@ use super::{
     open_wizard, parse_tile_monitor_pin, populate_diagnostics, present_window_stealth_aware,
     preset_for_tts_rate, refresh_codex_account_status, refresh_local_context_controls,
     refresh_local_model_resource_warning, set_always_on_top, set_global_scheme, set_global_stealth,
-    set_global_tile_monitor, set_global_tile_opacity, spawn_ptt_watchdog, stt, try_acquire_mic,
-    wire_ai_settings, wire_diagnostics, wire_import_export, wire_local_ai, wire_memory,
-    wire_stt_settings, wire_updates, wire_vision_settings, wire_voice_settings, Arc, AtomicBool,
+    set_global_tile_monitor, set_global_tile_opacity, spawn_ptt_watchdog, stt, stt_provider_index,
+    try_acquire_mic, ui, wire_ai_settings, wire_diagnostics, wire_import_export, wire_local_ai,
+    wire_memory, wire_stt_settings, wire_vision_settings, wire_voice_settings, Arc, AtomicBool,
     ComponentHandle, ComponentRow, ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell,
     SettingsWindow, SharedString, TileWindows, VecModel, WindowRegistry,
 };
@@ -115,6 +117,8 @@ pub(crate) fn open_settings(
             return;
         }
     };
+    win.global::<ui::Platform>()
+        .set_is_macos(cfg!(target_os = "macos"));
     reset_component_install_state(&win);
     {
         let st = state.lock().ok();
@@ -191,8 +195,8 @@ pub(crate) fn open_settings(
             let weak_done = w.as_weak();
             let cfg_t = cfg_inst.clone();
             std::thread::spawn(move || {
-                // Row order from components::status(): 0=engine 1=model 2=stt
-                // 3=voices 4=ocr. Only 3/4 are inline-installable here.
+                // Row order from components::status(): 0=engine 1=model 2=stt,
+                // 3=voices, 4=Windows Tesseract OCR.
                 let result: std::result::Result<(), String> = match idx {
                     3 => {
                         let cancel = std::sync::atomic::AtomicBool::new(false);
@@ -219,6 +223,7 @@ pub(crate) fn open_settings(
                         overlay_backend::tts_install::install_voices(&cancel, &on, ru)
                             .map_err(|e| format!("{e:#}"))
                     }
+                    #[cfg(windows)]
                     4 => {
                         let weak_cb = weak_done.clone();
                         let on = move |p: overlay_backend::ocr_install::OcrProgress| {
@@ -1197,6 +1202,7 @@ pub(crate) fn open_settings(
         let weak = win.as_weak();
         win.on_drag_start_requested(move || {
             if let Some(w) = weak.upgrade() {
+                #[cfg(target_os = "macos")]
                 let _ = slint_replay::native::window::begin_drag(w.window());
                 if let Ok(hwnd) = grab_hwnd(w.window()) {
                     drag_begin(hwnd);
@@ -1217,6 +1223,7 @@ pub(crate) fn open_settings(
     // Extracted to settings_updates.rs (P1 domain split) — wired verbatim there.
     // SECURITY: download -> verify -> spawn stays in overlay_backend::update;
     // this only CALLs it; the sequence is byte-for-byte unchanged.
+    #[cfg(windows)]
     wire_updates(&win);
 
     let weak_close = win.as_weak();
@@ -1343,9 +1350,14 @@ pub(crate) fn populate_component_rows(
     let ru = snap.ui_is_ru();
     let rows: Vec<ComponentRow> = status(snap)
         .into_iter()
-        .map(|c| {
+        .map(|mut c| {
+            if cfg!(target_os = "macos") && c.kind == ComponentKind::Ocr {
+                c.installed = true;
+                c.detail = "Apple Vision".into();
+            }
             // Light, single-call installers wired inline in the hub.
-            let installable = matches!(c.kind, ComponentKind::Voices | ComponentKind::Ocr);
+            let installable = matches!(c.kind, ComponentKind::Voices)
+                || (cfg!(windows) && c.kind == ComponentKind::Ocr);
             // «Открыть» jump target for the heavy components (their full installer
             // with progress + cancel lives in a dedicated panel); -1 = inline.
             let jump_tab: i32 = match c.kind {
@@ -1637,10 +1649,11 @@ pub(crate) fn populate_token_status(
     // A1 — drop any in-flight inline memory edit so reopening Settings never lands
     // on a row stuck in edit mode (reused-window transient-state rule).
     win.set_memory_editing_id(-1);
-    // OCR engine (Tesseract) install state — re-checked each open (the data dir
-    // is user-writable + the installer button writes it). Transient install
-    // status reset so a stale "Готово…" can't survive a reopen.
-    win.set_ocr_installed(overlay_backend::ocr_install::is_installed());
+    // Apple Vision ships with macOS; Windows re-checks its user-writable
+    // Tesseract install on every open.
+    win.set_ocr_installed(
+        cfg!(target_os = "macos") || overlay_backend::ocr_install::is_installed(),
+    );
     win.set_ocr_installing(false);
     win.set_ocr_install_phase(0);
     // Speaker-diarization models — same reset-on-reopen discipline (the window is
@@ -1788,11 +1801,10 @@ pub(crate) fn populate_token_status(
         win.set_engine_update_status(blank());
     }
     // Phase E10 — STT provider selector + local-engine fields.
-    win.set_stt_provider_index(match c.stt_provider.as_str() {
-        "gigaam" => 1,
-        "whisper" => 2,
-        _ => 0,
-    });
+    win.set_stt_provider_index(stt_provider_index(
+        &c.stt_provider,
+        cfg!(target_os = "macos"),
+    ));
     // Recognition language (stt_language): None=auto → 0, "ru" → 1, "en" → 2.
     win.set_stt_language_index(match c.stt_language.as_deref() {
         Some("ru") => 1,

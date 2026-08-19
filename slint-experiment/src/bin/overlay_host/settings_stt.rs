@@ -49,6 +49,28 @@ pub(crate) fn cloud_model_index(model: &str) -> i32 {
     }
 }
 
+/// Map the persisted provider to the platform-specific dropdown index.
+/// GigaAM is Windows-only; a legacy GigaAM config therefore displays Cloud
+/// on macOS without rewriting the persisted value merely by opening Settings.
+pub(crate) fn stt_provider_index(provider: &str, is_macos: bool) -> i32 {
+    match (is_macos, provider) {
+        (true, "whisper") => 1,
+        (false, "gigaam") => 1,
+        (false, "whisper") => 2,
+        _ => 0,
+    }
+}
+
+/// Map the platform-specific dropdown index back to a persisted provider.
+pub(crate) fn stt_provider_from_index(idx: i32, is_macos: bool) -> &'static str {
+    match (is_macos, idx) {
+        (true, 1) => "whisper",
+        (false, 1) => "gigaam",
+        (false, 2) => "whisper",
+        _ => "cloud",
+    }
+}
+
 fn update_cloud_model<E>(
     config: &mut overlay_backend::config::Config,
     idx: i32,
@@ -121,11 +143,7 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
     {
         let cfg_c = cfg.clone();
         win.on_stt_provider_changed(move |idx| {
-            let provider = match idx {
-                1 => "gigaam",
-                2 => "whisper",
-                _ => "cloud",
-            };
+            let provider = stt_provider_from_index(idx, cfg!(target_os = "macos"));
             let mut c = cfg_c.write();
             c.stt_provider = provider.to_string();
             if let Err(e) = overlay_backend::config::save(&c) {
@@ -244,6 +262,27 @@ mod tests {
         assert_eq!(cloud_model_from_index(2), "whisper-large-v3-turbo");
         assert_eq!(cloud_model_index(""), 0);
         assert_eq!(cloud_model_index("bogus"), 0);
+    }
+
+    #[test]
+    fn provider_mapping_preserves_windows_indices() {
+        assert_eq!(stt_provider_index("cloud", false), 0);
+        assert_eq!(stt_provider_index("gigaam", false), 1);
+        assert_eq!(stt_provider_index("whisper", false), 2);
+        assert_eq!(stt_provider_from_index(0, false), "cloud");
+        assert_eq!(stt_provider_from_index(1, false), "gigaam");
+        assert_eq!(stt_provider_from_index(2, false), "whisper");
+    }
+
+    #[test]
+    fn provider_mapping_on_macos_exposes_only_cloud_and_whisper() {
+        assert_eq!(stt_provider_index("cloud", true), 0);
+        assert_eq!(stt_provider_index("gigaam", true), 0);
+        assert_eq!(stt_provider_index("whisper", true), 1);
+        assert_eq!(stt_provider_index("retired-provider", true), 0);
+        assert_eq!(stt_provider_from_index(0, true), "cloud");
+        assert_eq!(stt_provider_from_index(1, true), "whisper");
+        assert_eq!(stt_provider_from_index(2, true), "cloud");
     }
 
     #[test]

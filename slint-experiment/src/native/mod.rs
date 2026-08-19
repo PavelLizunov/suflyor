@@ -1,9 +1,7 @@
 //! Compile-time selected native UI and capture adapters.
 //!
-//! The Windows clipboard preserves four operations: empty-filtered
-//! `read_text`, result-aware `set_text`, and best-effort `write_text` /
-//! `clear`. macOS exposes only the result-aware `set_text` the local copy
-//! affordances use.
+//! Both supported platforms expose empty-filtered `read_text`, result-aware
+//! `set_text`, and best-effort `write_text` / `clear` clipboard operations.
 
 #[cfg(windows)]
 #[path = "windows/clipboard.rs"]

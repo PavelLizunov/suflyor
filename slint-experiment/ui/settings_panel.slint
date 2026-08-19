@@ -604,7 +604,8 @@ export component SettingsWindow inherits Window {
     // Phase E6 v27 — connection test buttons (AI bridge + STT).
     in-out property <string> ai-bridge-test-result: "";
     in-out property <string> stt-test-result: "";
-    // STT provider (Phase E10): 0=cloud Groq, 1=local GigaAM, 2=local whisper-server.
+    // STT provider: Windows 0=cloud, 1=GigaAM, 2=Whisper;
+    // macOS 0=cloud, 1=external Whisper.
     in-out property <int> stt-provider-index: 0;
     // Recognition language (stt_language): 0=auto-detect, 1=Russian, 2=English.
     in-out property <int> stt-language-index: 0;
@@ -921,7 +922,7 @@ export component SettingsWindow inherits Window {
                     active: root.active-tab == 0;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
-                NavItem {
+                if !Platform.is-macos : NavItem {
                     label: @tr("Updates"); icon: @image-url("../assets/icons/update.svg"); tab-index: 4;
                     active: root.active-tab == 4;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
@@ -1589,7 +1590,7 @@ export component SettingsWindow inherits Window {
                         }
                         }
                     }
-                    if root.active-tab == 4 : VerticalLayout {
+                    if !Platform.is-macos && root.active-tab == 4 : VerticalLayout {
                         spacing: 10px;
                         SettingsCard {
                             title: @tr("Updates");
@@ -2877,56 +2878,59 @@ export component SettingsWindow inherits Window {
                                 color: Theme.accent;
                                 wrap: word-wrap;
                             }
-                            // ----- one-click in-app local-AI installer -----
-                            Rectangle { background: Theme.border; height: 1px; }
-                            Text {
-                                text: @tr("Installs or completes the local stack: llama.cpp, the 12B fallback, speech components, and 26B on supported hardware. Complete verified files are reused; partial downloads resume. The optional 4B profile is kept when already present.");
-                                font-size: 11px;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
-                            HorizontalLayout {
+                            if !Platform.is-macos : VerticalLayout {
                                 spacing: 6px;
-                                height: 32px;
-                                Button {
-                                    text: root.local-ai-installing ? @tr("Installing…") : @tr("Install / complete local AI");
-                                    enabled: !root.local-ai-installing && !root.quality-downloading && !root.model-switching && !root.engine-updating && !root.vision12b-downloading;
-                                    clicked => {
-                                        root.install-local-ai-clicked();
-                                    }
-                                }
-                                if root.local-ai-installing : Button {
-                                    text: @tr("Cancel");
-                                    clicked => {
-                                        root.cancel-local-ai-clicked();
-                                    }
-                                }
-                                if root.local-ai-gpu != "" : Text {
-                                    text: root.local-ai-gpu;
+                                // ----- one-click in-app local-AI installer -----
+                                Rectangle { background: Theme.border; height: 1px; }
+                                Text {
+                                    text: @tr("Installs or completes the local stack: llama.cpp, the 12B fallback, speech components, and 26B on supported hardware. Complete verified files are reused; partial downloads resume. The optional 4B profile is kept when already present.");
                                     font-size: 11px;
-                                    color: root.local-ai-on-gpu ? Theme.success : Theme.warning;
-                                    vertical-alignment: center;
+                                    color: Theme.text-muted;
                                     wrap: word-wrap;
-                                    horizontal-stretch: 1;
                                 }
-                            }
-                            if root.local-ai-status != "" : Text {
-                                text: root.local-ai-status;
-                                font-size: 11px;
-                                color: Theme.accent;
-                                wrap: word-wrap;
-                            }
-                            if root.local-ai-installing : Rectangle {
-                                height: 6px;
-                                border-radius: 3px;
-                                background: Theme.border;
-                                Rectangle {
-                                    x: 0;
-                                    y: 0;
-                                    height: parent.height;
-                                    width: parent.width * root.local-ai-progress;
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    height: 32px;
+                                    Button {
+                                        text: root.local-ai-installing ? @tr("Installing…") : @tr("Install / complete local AI");
+                                        enabled: !root.local-ai-installing && !root.quality-downloading && !root.model-switching && !root.engine-updating && !root.vision12b-downloading;
+                                        clicked => {
+                                            root.install-local-ai-clicked();
+                                        }
+                                    }
+                                    if root.local-ai-installing : Button {
+                                        text: @tr("Cancel");
+                                        clicked => {
+                                            root.cancel-local-ai-clicked();
+                                        }
+                                    }
+                                    if root.local-ai-gpu != "" : Text {
+                                        text: root.local-ai-gpu;
+                                        font-size: 11px;
+                                        color: root.local-ai-on-gpu ? Theme.success : Theme.warning;
+                                        vertical-alignment: center;
+                                        wrap: word-wrap;
+                                        horizontal-stretch: 1;
+                                    }
+                                }
+                                if root.local-ai-status != "" : Text {
+                                    text: root.local-ai-status;
+                                    font-size: 11px;
+                                    color: Theme.accent;
+                                    wrap: word-wrap;
+                                }
+                                if root.local-ai-installing : Rectangle {
+                                    height: 6px;
                                     border-radius: 3px;
-                                    background: Theme.accent;
+                                    background: Theme.border;
+                                    Rectangle {
+                                        x: 0;
+                                        y: 0;
+                                        height: parent.height;
+                                        width: parent.width * root.local-ai-progress;
+                                        border-radius: 3px;
+                                        background: Theme.accent;
+                                    }
                                 }
                             }
                         }
@@ -2998,39 +3002,48 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
-                        // Local OCR engine (Tesseract) for Shift+Alt+2 / Ctrl+F8
-                        // text recognition. Installed on demand (~53 MB), not
-                        // bundled in the app installer.
-                        Text {
-                            text: @tr("Text recognition (OCR) — Shift+Alt+2 reads on-screen text aloud / copies it via a local engine. Without it, OCR falls back to the slower vision model.");
+                        if Platform.is-macos : Text {
+                            text: @tr("Text recognition (OCR) - Apple Vision is built into macOS; no download is required.");
                             font-size: 11px;
-                            color: Theme.text-muted;
+                            color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
-                        if !root.ocr-installed : HorizontalLayout {
-                            alignment: start;
-                            Button {
-                                text: root.ocr-installing ? @tr("Installing…") : @tr("Install text recognition (OCR)");
-                                enabled: !root.ocr-installing;
-                                clicked => { root.ocr-install-clicked(); }
+                        if !Platform.is-macos : VerticalLayout {
+                            spacing: 6px;
+                            // Local OCR engine (Tesseract) for Shift+Alt+2 / Ctrl+F8
+                            // text recognition. Installed on demand (~53 MB), not
+                            // bundled in the app installer.
+                            Text {
+                                text: @tr("Text recognition (OCR) — Shift+Alt+2 reads on-screen text aloud / copies it via a local engine. Without it, OCR falls back to the slower vision model.");
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
                             }
-                        }
-                        if root.ocr-installed && root.ocr-install-phase == 0 : Text {
-                            text: @tr("Text recognition is installed.");
-                            font-size: 11px;
-                            color: Theme.text-secondary;
-                        }
-                        if root.ocr-install-phase != 0 : Text {
-                            text: root.ocr-install-phase == 1 ? @tr("Preparing…")
-                                : root.ocr-install-phase == 2 ? @tr("Downloading the engine (~53 MB)…")
-                                : root.ocr-install-phase == 3 ? @tr("Verifying…")
-                                : root.ocr-install-phase == 4 ? @tr("Unpacking…")
-                                : root.ocr-install-phase == 5 ? @tr("Text recognition already installed")
-                                : root.ocr-install-phase == 6 ? @tr("Text recognition installed")
-                                : @tr("Couldn't install text recognition — check the connection and retry.");
-                            font-size: 11px;
-                            color: Theme.text-secondary;
-                            wrap: word-wrap;
+                            if !root.ocr-installed : HorizontalLayout {
+                                alignment: start;
+                                Button {
+                                    text: root.ocr-installing ? @tr("Installing…") : @tr("Install text recognition (OCR)");
+                                    enabled: !root.ocr-installing;
+                                    clicked => { root.ocr-install-clicked(); }
+                                }
+                            }
+                            if root.ocr-installed && root.ocr-install-phase == 0 : Text {
+                                text: @tr("Text recognition is installed.");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                            }
+                            if root.ocr-install-phase != 0 : Text {
+                                text: root.ocr-install-phase == 1 ? @tr("Preparing…")
+                                    : root.ocr-install-phase == 2 ? @tr("Downloading the engine (~53 MB)…")
+                                    : root.ocr-install-phase == 3 ? @tr("Verifying…")
+                                    : root.ocr-install-phase == 4 ? @tr("Unpacking…")
+                                    : root.ocr-install-phase == 5 ? @tr("Text recognition already installed")
+                                    : root.ocr-install-phase == 6 ? @tr("Text recognition installed")
+                                    : @tr("Couldn't install text recognition — check the connection and retry.");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
                         }
                         // ── Speaker-diarization models (for «Определить говорящих») ──
                         Rectangle { background: Theme.border; height: 1px; }
@@ -3498,13 +3511,17 @@ export component SettingsWindow inherits Window {
 
                         // ===== STT engine (Phase E10) =====
                         Text {
-                            text: @tr("Speech-to-text engine. Local options run on this PC (no cloud, no Groq key needed).");
+                            text: Platform.is-macos
+                                ? @tr("Speech-to-text engine. Configure Groq cloud or your own OpenAI-compatible whisper-server.")
+                                : @tr("Speech-to-text engine. Local options run on this PC (no cloud, no Groq key needed).");
                             font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         SettingsComboBox {
-                            model: [@tr("Cloud (Groq Whisper)"), @tr("Local GigaAM-v3 (Russian)"), @tr("Local Whisper (whisper.cpp)")];
+                            model: Platform.is-macos
+                                ? [@tr("Cloud (Groq Whisper)"), @tr("External Whisper (whisper-server)")]
+                                : [@tr("Cloud (Groq Whisper)"), @tr("Local GigaAM-v3 (Russian)"), @tr("Local Whisper (whisper.cpp)")];
                             current-index: root.stt-provider-index;
                             selected => {
                                 // Write the index back so the conditional engine
@@ -3523,14 +3540,16 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
-                        if root.stt-provider-index == 1 : Text {
+                        if !Platform.is-macos && root.stt-provider-index == 1 : Text {
                             text: @tr("Local: runs entirely on this PC, no cloud. Russian only. Requires the GigaAM model folder set below.");
                             font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
-                        if root.stt-provider-index == 2 : Text {
-                            text: @tr("Local: runs on your whisper-server. Multilingual. Configure the server URL and model below.");
+                        if (Platform.is-macos && root.stt-provider-index == 1) || (!Platform.is-macos && root.stt-provider-index == 2) : Text {
+                            text: Platform.is-macos
+                                ? @tr("External: sends audio to the whisper-server URL below. Multilingual; no Groq key required.")
+                                : @tr("Local: runs on your whisper-server. Multilingual. Configure the server URL and model below.");
                             font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
@@ -3566,7 +3585,7 @@ export component SettingsWindow inherits Window {
                                 root.stt-cloud-model-changed(self.current-index);
                             }
                         }
-                        if root.stt-provider-index == 1 : HorizontalLayout {
+                        if !Platform.is-macos && root.stt-provider-index == 1 : HorizontalLayout {
                             spacing: 6px;
                             SettingsLineEdit {
                                 placeholder-text: @tr("GigaAM model dir — folder with model.int8.onnx + vocab.txt");
@@ -3580,14 +3599,14 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                         }
-                        if root.stt-provider-index == 1 : DarkCheck {
+                        if !Platform.is-macos && root.stt-provider-index == 1 : DarkCheck {
                             text: @tr("Use GPU (DirectML) — faster on long audio, ~1s warm-up on first use");
                             checked <=> root.stt-gigaam-gpu;
                             toggled(v) => {
                                 root.stt-gigaam-gpu-changed(v);
                             }
                         }
-                        if root.stt-provider-index == 2 : HorizontalLayout {
+                        if (Platform.is-macos && root.stt-provider-index == 1) || (!Platform.is-macos && root.stt-provider-index == 2) : HorizontalLayout {
                             spacing: 6px;
                             SettingsLineEdit {
                                 placeholder-text: @tr("whisper-server URL — http://127.0.0.1:8081/v1");
@@ -3601,7 +3620,7 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                         }
-                        if root.stt-provider-index == 2 : HorizontalLayout {
+                        if (Platform.is-macos && root.stt-provider-index == 1) || (!Platform.is-macos && root.stt-provider-index == 2) : HorizontalLayout {
                             spacing: 6px;
                             SettingsLineEdit {
                                 placeholder-text: @tr("whisper-server bearer token (optional)");
@@ -3619,7 +3638,7 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                         }
-                        if root.stt-provider-index == 2 : HorizontalLayout {
+                        if (Platform.is-macos && root.stt-provider-index == 1) || (!Platform.is-macos && root.stt-provider-index == 2) : HorizontalLayout {
                             spacing: 6px;
                             SettingsLineEdit {
                                 placeholder-text: @tr("Server model id (advanced) — e.g. whisper-large-v3-turbo");

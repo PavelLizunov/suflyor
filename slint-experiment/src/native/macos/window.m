@@ -1,4 +1,5 @@
 #import <AppKit/AppKit.h>
+#import <CoreGraphics/CoreGraphics.h>
 #include <stdint.h>
 
 static NSWindow *suflyor_window_for_view(void *raw_view) {
@@ -58,18 +59,22 @@ int32_t suflyor_macos_raise_window_key_front(void *raw_view) {
     return 1;
 }
 
-int32_t suflyor_macos_center_window(void *raw_view) {
+int32_t suflyor_macos_get_window_rect(
+    void *raw_view,
+    int32_t *out_x,
+    int32_t *out_y,
+    int32_t *out_width,
+    int32_t *out_height
+) {
     NSWindow *window = suflyor_window_for_view(raw_view);
-    if (window == nil) {
+    if (window == nil || out_x == NULL || out_y == NULL || out_width == NULL || out_height == NULL) {
         return 0;
     }
-    NSScreen *screen = [NSScreen mainScreen];
-    if (screen != nil) {
-        NSRect screenFrame = [screen visibleFrame];
-        NSRect windowFrame = [window frame];
-        CGFloat x = screenFrame.origin.x + (screenFrame.size.width - windowFrame.size.width) / 2.0;
-        CGFloat y = screenFrame.origin.y + (screenFrame.size.height - windowFrame.size.height) / 2.0;
-        [window setFrameOrigin:NSMakePoint(x, y)];
-    }
-    return 1;
+    NSRect frame = window.frame;
+    CGRect primary_bounds = CGDisplayBounds(CGMainDisplayID());
+    *out_x = (int32_t)NSMinX(frame);
+    *out_y = (int32_t)(CGRectGetMaxY(primary_bounds) - NSMaxY(frame));
+    *out_width = (int32_t)NSWidth(frame);
+    *out_height = (int32_t)NSHeight(frame);
+    return *out_width > 0 && *out_height > 0;
 }

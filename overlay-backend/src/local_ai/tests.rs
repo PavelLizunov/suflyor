@@ -105,8 +105,54 @@ fn llama_readiness_requires_nonempty_text_message_content() {
     }
 }
 
+#[cfg(windows)]
+fn mark_sparse(file: &std::fs::File) -> std::io::Result<()> {
+    use std::ffi::c_void;
+    use std::os::windows::io::{AsRawHandle, RawHandle};
+
+    const FSCTL_SET_SPARSE: u32 = 0x0009_00C4;
+    #[link(name = "kernel32")]
+    extern "system" {
+        #[link_name = "DeviceIoControl"]
+        fn device_io_control(
+            handle: RawHandle,
+            control_code: u32,
+            input: *mut c_void,
+            input_len: u32,
+            output: *mut c_void,
+            output_len: u32,
+            bytes_returned: *mut u32,
+            overlapped: *mut c_void,
+        ) -> i32;
+    }
+
+    let mut bytes_returned = 0_u32;
+    // SAFETY: `file` owns this synchronous handle for the whole call; no
+    // ownership is transferred and every optional buffer is intentionally null.
+    let succeeded = unsafe {
+        device_io_control(
+            file.as_raw_handle(),
+            FSCTL_SET_SPARSE,
+            std::ptr::null_mut(),
+            0,
+            std::ptr::null_mut(),
+            0,
+            &mut bytes_returned,
+            std::ptr::null_mut(),
+        )
+    };
+    if succeeded == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
 fn make_complete(path: &Path, size: u64) {
     let file = std::fs::File::create(path).unwrap();
+    #[cfg(windows)]
+    mark_sparse(&file)
+        .unwrap_or_else(|error| panic!("mark sparse test fixture {}: {error}", path.display()));
     file.set_len(size).unwrap();
 }
 
@@ -203,7 +249,21 @@ fn stat_only_presence_accepts_an_exact_size_fixture_without_hashing() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     std::fs::create_dir_all(root.join("llama.cpp")).unwrap();
-    make_complete(&quality_gguf_path(root), GEMMA26_SIZE);
+    let fixture = quality_gguf_path(root);
+    make_complete(&fixture, GEMMA26_SIZE);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+
+        const FILE_ATTRIBUTE_SPARSE_FILE: u32 = 0x0000_0200;
+        let metadata = std::fs::metadata(&fixture).unwrap();
+        assert_eq!(metadata.len(), GEMMA26_SIZE);
+        assert_ne!(
+            metadata.file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE,
+            0,
+            "large test fixture must remain sparse"
+        );
+    }
     assert!(quality_model_present(root));
 }
 

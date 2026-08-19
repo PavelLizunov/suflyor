@@ -1,7 +1,5 @@
 // First-slice macOS AI bridge setup — configures the legacy bridge fields
-// (ai_base_url / ai_bearer) through overlay_backend::config, plus one
-// optional local raw-PCM STT service URL (stored in stt_whisper_url with
-// stt_provider = "uap" when non-empty; blank keeps the stored STT config).
+// (ai_base_url / ai_bearer) through overlay_backend::config.
 // Deliberately tiny: bridge URL + password-masked access token + one generic
 // status line. The token is never displayed in clear text and never populated
 // from the stored config — Rust reads the typed value on Save and clears the
@@ -20,16 +18,13 @@ export component MacAiSetupWindow inherits Window {
     default-font-family: Theme.font-sans;
     background: Theme.bg-surface;
     preferred-width: 460px;
-    preferred-height: 334px;
+    preferred-height: 274px;
 
     in-out property <string> bridge-url;
     // Typed token. Never populated from the stored config; cleared on Save.
     in-out property <string> token-input;
     // A stored token exists, so leaving the field blank keeps it.
     in property <bool> token-stored: false;
-    // Optional local raw-PCM STT service URL. Shown ONLY while the stored
-    // provider is "uap"; blank on Save keeps the stored STT config untouched.
-    in-out property <string> local-stt-url;
     // Status code (words stay in @tr below): 0 missing · 1 configured ·
     // 2 check the fields · 3 saved · 4 save failed.
     in property <int> status-kind: 0;
@@ -119,16 +114,6 @@ export component MacAiSetupWindow inherits Window {
                     : @tr("Paste the access token");
                 text <=> root.token-input;
                 input-type: password;
-            }
-
-            Text {
-                text: @tr("Local STT service URL (optional)");
-                color: Theme.text-secondary;
-                font-size: Metrics.font-label;
-            }
-            LineEdit {
-                placeholder-text: @tr("http://your.stt.host:PORT");
-                text <=> root.local-stt-url;
             }
 
             Text {

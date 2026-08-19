@@ -193,8 +193,6 @@ fn start_session_inner(
         overlay_backend::config::SttBackendCfg::Gigaam { model_dir } => {
             format!("local-gigaam (dir={model_dir})")
         }
-        // Deliberately URL-free: the service address must not reach the log.
-        overlay_backend::config::SttBackendCfg::Uap { .. } => "local-uap".to_string(),
     };
     log_info(&format!(
         "stt config — backend={backend_desc} language={:?} whisper_prompt={}",

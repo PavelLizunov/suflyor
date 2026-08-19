@@ -3,6 +3,9 @@
 const PLIST: &str = include_str!("../macos/Info.plist");
 const ENTITLEMENTS: &str = include_str!("../macos/entitlements.plist");
 const SCRIPT: &str = include_str!("../scripts/build-macos-app.sh");
+const HOST: &str = include_str!("../src/bin/overlay_host_windows.rs");
+const SETTINGS_CONTROLLER: &str = include_str!("../src/bin/overlay_host/settings_controller.rs");
+const SETTINGS_UI: &str = include_str!("../ui/settings_panel.slint");
 
 fn has_plist_value(key: &str, value: &str) -> bool {
     let key = format!("<key>{key}</key>");
@@ -98,32 +101,80 @@ fn script_builds_and_ad_hoc_signs_the_app() {
     for required in [
         "set -euo pipefail",
         "BASH_SOURCE",
+        "export CARGO_TARGET_DIR=\"$target_dir\"",
+        "if [[ \"$target_dir\" == \"/\" ]]",
+        "$(basename \"$app_dir\")\" != \"Suflyor.app\"",
         "export CARGO_INCREMENTAL=0",
         "cargo build --locked --release --bin overlay-host",
         "cargo build --locked --release --manifest-path \"$crate_root/../suflyor-tts/Cargo.toml\"",
+        "cargo build --locked --release --manifest-path \"$crate_root/../suflyor-teratts/Cargo.toml\"",
         "--manifest-path \"$crate_root/Cargo.toml\"",
+        "sidecar_binary=\"$target_dir/release/suflyor-tts\"",
+        "tera_binary=\"$target_dir/release/suflyor-teratts\"",
+        "for executable in \"$binary\" \"$sidecar_binary\" \"$tera_binary\"",
+        "[[ ! -x \"$executable\" ]]",
+        "plutil -lint \"$crate_root/macos/Info.plist\"",
+        "plutil -lint \"$crate_root/macos/entitlements.plist\"",
+        "rm -rf -- \"$app_dir\"",
         "mkdir -p \"$macos_dir\" \"$resources_dir\"",
         "cp \"$crate_root/macos/Info.plist\" \"$contents_dir/Info.plist\"",
-        "chmod 755 \"$macos_dir/overlay-host\"",
-        "codesign --force --sign - --options runtime",
+        "install -m 755 \"$binary\" \"$macos_dir/overlay-host\"",
+        "install -m 755 \"$sidecar_binary\" \"$macos_dir/suflyor-tts\"",
+        "install -m 755 \"$tera_binary\" \"$macos_dir/suflyor-teratts\"",
+        "[[ ! -s \"$resources_dir/AppIcon.icns\" ]]",
         "--entitlements \"$crate_root/macos/entitlements.plist\"",
+        "codesign --verify --strict --verbose=2 \"$macos_dir/suflyor-tts\"",
+        "codesign --verify --strict --verbose=2 \"$macos_dir/suflyor-teratts\"",
         "codesign --verify --deep --strict --verbose=2 \"$app_dir\"",
     ] {
         assert!(SCRIPT.contains(required), "missing script step: {required}");
     }
+    assert!(
+        !SCRIPT.contains("$crate_root/../suflyor-tts/target/release"),
+        "the package must never select a stale per-crate TTS artifact"
+    );
+    assert!(
+        !SCRIPT.contains("if [[ -f \"$sidecar_binary\"")
+            && !SCRIPT.contains("if [[ -f \"$tera_binary\""),
+        "both sidecars are mandatory, not best-effort"
+    );
+
+    let tts_sign = SCRIPT
+        .find("codesign --force --sign - --options runtime \"$macos_dir/suflyor-tts\"")
+        .expect("missing TTS sidecar signature");
+    let tera_sign = SCRIPT
+        .find("codesign --force --sign - --options runtime \"$macos_dir/suflyor-teratts\"")
+        .expect("missing Tera sidecar signature");
+    let app_sign = SCRIPT
+        .find(
+            "codesign --force --sign - --options runtime \\\n  --entitlements \"$crate_root/macos/entitlements.plist\" \\\n  \"$app_dir\"",
+        )
+        .expect("missing app entitlements signature");
+    assert!(
+        tts_sign < tera_sign && tera_sign < app_sign,
+        "nested executables must be signed before the outer app"
+    );
     assert!(SCRIPT.trim_end().ends_with("echo \"$app_dir\""));
 }
 
 #[test]
 fn script_stays_free_local_packaging() {
     let script = SCRIPT.to_ascii_lowercase();
-    for forbidden in [
-        "developer id",
-        "notar",
-        "hdiutil",
-        "productbuild",
-        "pkgbuild",
-    ] {
+    for forbidden in ["notarytool ", "hdiutil ", "productbuild ", "pkgbuild "] {
         assert!(!script.contains(forbidden), "unexpected step: {forbidden}");
     }
+}
+
+#[test]
+fn windows_updater_is_absent_from_the_macos_settings_surface() {
+    assert!(HOST.contains(
+        "#[cfg(windows)]\n#[path = \"overlay_host/settings_updates.rs\"]\nmod settings_updates;"
+    ));
+    assert!(HOST.contains("#[cfg(windows)]\nuse settings_updates::*;"));
+    assert!(SETTINGS_CONTROLLER.contains("#[cfg(windows)]\nuse super::wire_updates;"));
+    assert!(SETTINGS_CONTROLLER.contains("#[cfg(windows)]\n    wire_updates(&win);"));
+    assert!(SETTINGS_UI.contains(
+        "if !Platform.is-macos : NavItem {\n                    label: @tr(\"Updates\")"
+    ));
+    assert!(SETTINGS_UI.contains("if !Platform.is-macos && root.active-tab == 4 : VerticalLayout"));
 }

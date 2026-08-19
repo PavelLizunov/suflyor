@@ -159,7 +159,7 @@ fn restore_keeps_compact_mode_and_icon_lifecycle_is_clean() {
     let run_pos = host
         .find("slint::run_event_loop_until_quit()")
         .expect("tray-safe event loop run");
-    let drop_pos = host.find("drop(tray_handle)").expect("tray drop");
+    let drop_pos = host.find("drop(_tray_handle)").expect("tray drop");
     assert!(
         install_pos < show_pos,
         "the tray installs before the bar shows"

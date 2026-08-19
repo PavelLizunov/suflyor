@@ -15,6 +15,7 @@ mod ui {
     slint::include_modules!();
 }
 
+#[cfg(any(windows, target_os = "macos"))]
 include!("overlay_host_windows.rs");
 
 #[cfg(not(any(windows, target_os = "macos")))]

@@ -395,18 +395,6 @@ fn readiness_reflects_active_providers() {
     c3.stt_gigaam_dir = r"C:\m\gigaam".into();
     assert!(c3.readiness().stt.detail.contains("gigaam"));
 
-    // uap raw-PCM STT: needs the service URL in stt_whisper_url, is local.
-    let mut cu = Config::defaults();
-    cu.stt_provider = "uap".into();
-    cu.stt_whisper_url = String::new();
-    assert!(!cu.readiness().stt.configured);
-    cu.stt_whisper_url = "http://127.0.0.1:9000".into();
-    let ru = cu.readiness();
-    assert!(ru.stt.configured);
-    assert_eq!(ru.stt.detail, "uap · configured");
-    assert!(!ru.stt.detail.contains("127.0.0.1"));
-    assert!(cu.stt_is_local(), "uap never needs the Groq key");
-
     // Vision (F8): "off" → unconfigured; "same" only reuses a text endpoint
     // whose image support is explicitly declared. Detail carries provider +
     // url + model but never a secret.
@@ -1094,6 +1082,14 @@ fn stt_backend_defaults_to_cloud() {
 }
 
 #[test]
+fn unknown_stt_provider_falls_back_to_cloud() {
+    let mut config = Config::defaults();
+    config.stt_provider = "retired-provider".into();
+    assert!(!config.stt_is_local());
+    assert!(matches!(config.stt_backend(), SttBackendCfg::Cloud { .. }));
+}
+
+#[test]
 fn stt_backend_gigaam_uses_dir_and_is_local() {
     let mut d = Config::defaults();
     d.stt_provider = "gigaam".into();
@@ -1125,22 +1121,6 @@ fn stt_backend_whisper_uses_url_bearer_model_and_is_local() {
         }
         other => panic!("expected Whisper, got {other:?}"),
     }
-}
-
-#[test]
-fn stt_backend_uap_uses_whisper_url_field_and_is_local() {
-    let mut d = Config::defaults();
-    d.stt_provider = "uap".into();
-    d.stt_whisper_url = "http://127.0.0.1:9000".into();
-    assert!(d.stt_is_local());
-    match d.stt_backend() {
-        SttBackendCfg::Uap { base_url } => assert_eq!(base_url, "http://127.0.0.1:9000"),
-        other => panic!("expected Uap, got {other:?}"),
-    }
-    // The ordinary whisper fields stay irrelevant for the uap backend.
-    d.stt_whisper_bearer = "tok".into();
-    d.stt_whisper_model = "whisper-large-v3-turbo".into();
-    assert!(matches!(d.stt_backend(), SttBackendCfg::Uap { .. }));
 }
 
 #[test]

@@ -234,6 +234,7 @@ pub(crate) fn wire_vision_settings(
     // Mirrors the voice installer: download + SHA-verify + extract on a worker
     // thread (the ~53 MB engine is NOT bundled). On success the OCR path
     // (Shift+Alt+2 / Ctrl+F8) starts using Tesseract instead of the VLM.
+    #[cfg(windows)]
     {
         let weak = win.as_weak();
         win.on_ocr_install_clicked(move || {

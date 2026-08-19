@@ -6,7 +6,11 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 extern "C" {
-    fn suflyor_macos_status_install(view: *mut c_void, on_quit: extern "C" fn()) -> c_int;
+    fn suflyor_macos_status_install(
+        view: *mut c_void,
+        on_quit: extern "C" fn(),
+        on_visibility: extern "C" fn(bool),
+    ) -> c_int;
     fn suflyor_macos_status_remove();
 }
 
@@ -35,9 +39,13 @@ impl Drop for StatusItemGuard {
 }
 
 /// Install synchronously once the host's startup timer can see the AppKit view.
-pub fn install(window: &slint::Window) -> Result<StatusItemGuard, Box<dyn std::error::Error>> {
-    let result =
-        unsafe { suflyor_macos_status_install(appkit_view(window)?, quit_through_event_loop) };
+pub fn install(
+    window: &slint::Window,
+    on_visibility: extern "C" fn(bool),
+) -> Result<StatusItemGuard, Box<dyn std::error::Error>> {
+    let result = unsafe {
+        suflyor_macos_status_install(appkit_view(window)?, quit_through_event_loop, on_visibility)
+    };
     if result == 1 {
         Ok(StatusItemGuard {
             _main_thread: PhantomData,

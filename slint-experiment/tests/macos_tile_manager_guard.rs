@@ -1,28 +1,22 @@
-//! Wiring guard for the macOS MacTileManager.
+//! Reachability guard for shared tile creation and presentation.
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
 use std::fs;
 use std::path::Path;
 
-fn read(root: &Path, relative: &str) -> String {
-    fs::read_to_string(root.join(relative))
+fn read(relative: &str) -> String {
+    fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(relative))
         .unwrap_or_else(|error| panic!("read {relative}: {error}"))
 }
 
-fn root() -> &'static Path {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-}
-
 #[test]
-fn macos_overlay_host_wires_tile_manager() {
-    let host = read(root(), "src/bin/overlay_host.rs");
-    let manager = read(root(), "src/bin/overlay_host/macos_tile_manager.rs");
+fn canonical_runtime_reaches_the_shared_tile_presenter() {
+    let host = read("src/bin/overlay_host_windows.rs");
+    let presenter = read("src/bin/overlay_host/tile_window.rs");
 
-    assert!(host.contains("mod macos_tile_manager;"));
-    assert!(host.contains("MacTileManager::new()"));
-    assert!(host.contains("tile_manager.present_tile"));
-
-    assert!(manager.contains("ui::TileWindow::new()"));
-    assert!(manager.contains("slint_replay::native::window::configure_floating"));
-    assert!(manager.contains("slint_replay::native::window::raise_key_front"));
+    assert!(host.contains("#[path = \"overlay_host/tile_window.rs\"]"));
+    assert!(host.contains("present_tile_window(&tile);"));
+    assert!(presenter.contains("pub(crate) fn present_tile_window(tile: &TileWindow)"));
+    assert!(presenter.contains("pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow)"));
+    assert!(presenter.contains("let _ = tile.show();"));
 }

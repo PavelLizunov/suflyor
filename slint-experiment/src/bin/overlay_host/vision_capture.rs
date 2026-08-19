@@ -62,6 +62,40 @@ pub(crate) fn bgra_to_slint_image(bgra: &[u8], w: u32, h: u32) -> slint::Image {
     slint::Image::from_rgba8(buf)
 }
 
+#[must_use]
+fn local_ocr_available() -> bool {
+    #[cfg(windows)]
+    {
+        overlay_backend::ocr::is_available()
+    }
+    #[cfg(target_os = "macos")]
+    {
+        true
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        false
+    }
+}
+
+fn run_local_ocr(bgra: &[u8], width: u32, height: u32) -> Result<String, String> {
+    #[cfg(windows)]
+    {
+        overlay_backend::ocr::run_ocr(bgra, width, height, overlay_backend::ocr::DEFAULT_OCR_LANG)
+            .map_err(|error| format!("{error:#}"))
+    }
+    #[cfg(target_os = "macos")]
+    {
+        slint_replay::native::screen::recognize_text_from_bgra(bgra, width, height)
+            .map_err(|error| error.to_string())
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        let _ = (bgra, width, height);
+        Err("local OCR is unsupported".into())
+    }
+}
+
 /// V3 — F8 screenshot. Freezes the whole virtual desktop, shows a Lightshot-
 /// style selection overlay, and on release crops the frozen frame to the chosen
 /// region and hands it to `launch_vision_for_bgra`. Esc / right-click / a tiny
@@ -93,12 +127,10 @@ pub(crate) fn fire_f8_vision_capture(
             }
         }
     }
-    // The VLM modes need a configured vision endpoint. OCR (read-aloud) runs on
-    // the LOCAL Tesseract child process, so it must work even when Vision is
-    // "off" — as long as the engine is installed. In that case `ep` is `None`
-    // (no endpoint needed) and `launch_vision_for_bgra` takes the Tesseract
-    // branch; a non-OCR mode always has `Some`.
-    let ocr_ready = matches!(mode, vision::VisionMode::Ocr) && overlay_backend::ocr::is_available();
+    // The VLM modes need a configured vision endpoint. OCR uses the platform's
+    // local engine (Tesseract on Windows, Apple Vision on macOS), so it remains
+    // available when the VLM route is off.
+    let ocr_ready = matches!(mode, vision::VisionMode::Ocr) && local_ocr_available();
     let ep = cfg.read().vision_endpoint();
     if ep.is_none() && !ocr_ready {
         let (is_ru, preferred_monitor, stealth) = {
@@ -133,11 +165,10 @@ pub(crate) fn fire_f8_vision_capture(
         return;
     }
 
-    // Freeze the WHOLE virtual desktop (ALL monitors) so the user can select on
-    // either screen. The earlier "shrunk" bug was NOT DPI — it was the geometry
-    // never applying (grab_hwnd failed right after show()); fixed below by
-    // sizing via Slint's own set_size/set_position. The origin can be NEGATIVE
-    // (the portrait secondary sits at x=-1200).
+    // Freeze the virtual desktop for region selection. Windows composes all
+    // monitors; macOS currently captures the display under the cursor. In both
+    // cases the returned global origin can be negative and must position the
+    // overlay rather than assuming (0, 0).
     let hidden = slint_replay::win32::hide_own_windows();
     let frozen = slint_replay::capture::capture_virtual_desktop();
     slint_replay::win32::show_windows(&hidden);
@@ -150,7 +181,7 @@ pub(crate) fn fire_f8_vision_capture(
     };
     let (fw, fh) = (frozen.width, frozen.height);
     diag!(
-        "[overlay-host] F8 capture virtual=({vx},{vy}) {fw}x{fh} monitors={:?}",
+        "[overlay-host] F8 capture origin=({vx},{vy}) {fw}x{fh} monitors={:?}",
         slint_replay::win32::enum_monitors()
             .iter()
             .map(|m| (m.left, m.top, m.right, m.bottom))
@@ -173,16 +204,33 @@ pub(crate) fn fire_f8_vision_capture(
                              // caller). The on-overlay tap can still flip to translate before drag.
     win.set_translate_mode(mode == vision::VisionMode::Translate);
     win.set_practice_mode(mode == vision::VisionMode::TestPractice);
-    // PHYSICAL units = monitor pixels (1:1 with the captured frame). Geometry is
-    // set on the still-hidden window, then show() lands it there (Slint's
-    // set_size/set_position apply reliably).
-    win.window()
-        .set_size(slint::PhysicalSize::new(fw.max(1), fh.max(1)));
-    win.window()
-        .set_position(slint::PhysicalPosition::new(vx, vy));
+    // Geometry is set on the still-hidden window, then show() lands it there.
+    // GDI frames use physical pixels; ScreenCaptureKit is configured in macOS
+    // screen points, matching Slint's logical coordinates on Retina displays.
+    #[cfg(windows)]
+    {
+        win.window()
+            .set_size(slint::PhysicalSize::new(fw.max(1), fh.max(1)));
+        win.window()
+            .set_position(slint::PhysicalPosition::new(vx, vy));
+    }
+    #[cfg(target_os = "macos")]
+    {
+        win.window()
+            .set_size(slint::LogicalSize::new(fw.max(1) as f32, fh.max(1) as f32));
+        win.window()
+            .set_position(slint::LogicalPosition::new(vx as f32, vy as f32));
+    }
     let _ = win.show();
-    let scale = win.window().scale_factor().max(0.1);
-    diag!("[overlay-host] F8 overlay {fw}x{fh} at ({vx},{vy}) scale={scale}");
+    let window_scale = win.window().scale_factor().max(0.1);
+    #[cfg(windows)]
+    let capture_scale = window_scale;
+    #[cfg(target_os = "macos")]
+    let capture_scale = 1.0_f32;
+    diag!(
+        "[overlay-host] F8 overlay {fw}x{fh} at ({vx},{vy}) \
+         window-scale={window_scale} capture-scale={capture_scale}"
+    );
 
     // Share the frozen frame into the region callback (UI thread only → Rc ok).
     let frozen_rc = Rc::new(frozen);
@@ -219,21 +267,23 @@ pub(crate) fn fire_f8_vision_capture(
             } else {
                 mode
             };
-            // logical px × scale = image px.
-            let to_px = |v: f32| (v * scale).round().max(0.0) as u32;
+            // Windows GDI frames use physical pixels; the macOS frame is
+            // deliberately one image pixel per logical ScreenCaptureKit point.
+            let to_px = |v: f32| (v * capture_scale).round().max(0.0) as u32;
             let (px1, py1) = (to_px(x1), to_px(y1));
             let (px2, py2) = (to_px(x2), to_px(y2));
             let (cw, ch) = (px2.saturating_sub(px1), py2.saturating_sub(py1));
             // Audit (F8 #4): reject a tiny/degenerate region BEFORE crop_bgra — its
             // `.max(1)` would otherwise coerce it into a 1×1 buffer and launch a
             // spurious vision request on noise. The .slint already guards with a
-            // 16px-logical minimum + a fresh-drag check; this is the physical-px
+            // 16px-logical minimum + a fresh-drag check; this is the image-pixel
             // backstop (covers DPI rounding + any future caller of this path).
             const MIN_CAPTURE_PX: u32 = 8;
             if cw < MIN_CAPTURE_PX || ch < MIN_CAPTURE_PX {
                 diag!(
-                    "[overlay-host] F8 region rejected: {cw}x{ch}px physical \
-                     (logical {x1:.0},{y1:.0}-{x2:.0},{y2:.0} scale={scale:.2}) — too small, no request"
+                    "[overlay-host] F8 region rejected: {cw}x{ch} image px \
+                     (logical {x1:.0},{y1:.0}-{x2:.0},{y2:.0} \
+                     capture-scale={capture_scale:.2}) — too small, no request"
                 );
                 return;
             }
@@ -307,7 +357,7 @@ pub(crate) fn fire_f8_vision_capture(
 ///
 /// `ep` is `Some` for the VLM modes (Describe / Translate / TestPractice) and
 /// for an OCR request that may need to fall back to the VLM; it is `None` only
-/// for a local-OCR request made while Vision is "off" (the Tesseract path needs
+/// for a local-OCR request made while Vision is "off" (the platform engine needs
 /// no endpoint). If a non-OCR path is reached with `ep == None` — only possible
 /// if the OCR engine vanished between the `is_available()` checks (TOCTOU) — a
 /// generic "OCR недоступен" tile is shown instead of a network call.
@@ -504,7 +554,7 @@ pub(crate) fn launch_vision_for_bgra(
     // follow-ups return to the Vision endpoint. Gate mirrors `wire_escalate` but
     // on the VISION endpoint: only offer when the answer was local (cloud→cloud
     // is a no-op) AND a cloud bearer exists (no dead affordance), and never on
-    // the OCR path (Tesseract text has no cloud upgrade; also covers the
+    // the OCR path (platform-local text has no cloud upgrade; also covers the
     // OCR→VLM fallback, which still enters this fn with mode == Ocr).
     if ep.as_ref().is_some_and(|e| e.is_local)
         && !cfg.read().ai_bearer.trim().is_empty()
@@ -548,37 +598,33 @@ pub(crate) fn launch_vision_for_bgra(
     tiles.borrow_mut().push(tile);
     refresh_open_tiles(weak_overlay, tiles);
 
-    // ===== OCR (read-aloud) — local Tesseract, NOT the VLM =====
-    // VisionMode::Ocr transcribes the region with the bundled Tesseract child
-    // process: deterministic, never loops/hallucinates like the small VLM did.
-    // Run it off-thread, then fill THIS tile + auto-read on the UI thread. If
-    // Tesseract isn't installed (`is_available()` false), fall through to the
-    // VLM streaming path below so a tester without the OCR pack still gets a
-    // result.
-    if matches!(mode, vision::VisionMode::Ocr) && overlay_backend::ocr::is_available() {
+    // ===== OCR (read-aloud) — platform-local engine, NOT the VLM =====
+    // Keep both native engines off the UI thread. Windows still falls through
+    // to the configured VLM when Tesseract is absent; Apple Vision is built in.
+    if matches!(mode, vision::VisionMode::Ocr) && local_ocr_available() {
         let weak_ocr = weak_for_stream.clone();
         let bridge_ocr = bridge.clone();
-        let lang = overlay_backend::ocr::DEFAULT_OCR_LANG;
         let (bgra, w, h) = (shot.bgra, shot.width, shot.height);
         rt_handle.spawn(async move {
-            let res = tokio::task::spawn_blocking(move || {
-                overlay_backend::ocr::run_ocr(&bgra, w, h, lang)
-            })
-            .await;
+            let res = tokio::task::spawn_blocking(move || run_local_ocr(&bgra, w, h)).await;
             let text = match res {
-                Ok(Ok(t)) => t,
+                Ok(Ok(text)) => Some(text),
                 Ok(Err(e)) => {
                     // Detail to the local log only; the tile stays generic.
                     diag!("[overlay-host] OCR failed: {e:#}");
-                    String::new()
+                    None
                 }
                 Err(e) => {
                     diag!("[overlay-host] OCR task join error: {e}");
-                    String::new()
+                    None
                 }
             };
             let _ = slint::invoke_from_event_loop(move || {
-                super::fill_ocr_tile(weak_ocr, convo_id, &bridge_ocr, &text);
+                if let Some(text) = text {
+                    super::fill_ocr_tile(weak_ocr, convo_id, &bridge_ocr, &text, ui_is_ru);
+                } else {
+                    super::fill_ocr_error_tile(weak_ocr, ui_is_ru);
+                }
             });
         });
         return;

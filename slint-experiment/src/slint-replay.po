@@ -1046,6 +1046,9 @@ msgstr "Проверить подключение STT"
 msgid "Speech-to-text engine. Local options run on this PC (no cloud, no Groq key needed)."
 msgstr "Движок распознавания речи. Локальные варианты работают на этом ПК (без облака и ключа Groq)."
 
+msgid "Speech-to-text engine. Configure Groq cloud or your own OpenAI-compatible whisper-server."
+msgstr "Движок распознавания речи. Настройте облако Groq или свой OpenAI-совместимый whisper-server."
+
 msgid "Cloud (Groq Whisper)"
 msgstr "Облако (Groq Whisper)"
 
@@ -1054,6 +1057,9 @@ msgstr "Локально GigaAM-v3 (русский)"
 
 msgid "Local Whisper (whisper.cpp)"
 msgstr "Локально Whisper (whisper.cpp)"
+
+msgid "External Whisper (whisper-server)"
+msgstr "Внешний Whisper (whisper-server)"
 
 msgid "Recognition language — Auto detects per phrase (Whisper/Groq). GigaAM is Russian-only."
 msgstr "Язык распознавания — «Авто» определяет по фразе (Whisper/Groq). GigaAM только русский."
@@ -1087,6 +1093,9 @@ msgstr "Локально: работает полностью на этом ПК
 
 msgid "Local: runs on your whisper-server. Multilingual. Configure the server URL and model below."
 msgstr "Локально: работает на вашем whisper-server. Много языков. Настройте URL и модель сервера ниже."
+
+msgid "External: sends audio to the whisper-server URL below. Multilingual; no Groq key required."
+msgstr "Внешний: отправляет аудио на URL whisper-server, указанный ниже. Поддерживает много языков; ключ Groq не нужен."
 
 msgid "Cloud recognition model"
 msgstr "Модель облачного распознавания"
@@ -2128,9 +2137,3 @@ msgstr "Сохранено."
 
 msgid "Saving the bridge settings failed."
 msgstr "Не удалось сохранить настройки моста."
-
-msgid "Local STT service URL (optional)"
-msgstr "URL локального STT-сервиса (необязательно)"
-
-msgid "http://your.stt.host:PORT"
-msgstr "http://your.stt.host:PORT"

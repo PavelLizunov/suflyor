@@ -945,15 +945,6 @@ impl Config {
                 };
                 (ok, d)
             }
-            "uap" => {
-                let ok = !self.stt_whisper_url.trim().is_empty();
-                let d = if ok {
-                    "uap · configured".to_string()
-                } else {
-                    String::new()
-                };
-                (ok, d)
-            }
             _ => {
                 let ok = !self.groq_api_key.trim().is_empty();
                 let d = if ok {
@@ -1036,11 +1027,6 @@ pub enum SttBackendCfg {
     },
     /// Local in-process GigaAM-v3 (ONNX). `model_dir` holds `model.int8.onnx` + `vocab.txt`.
     Gigaam { model_dir: String },
-    /// Explicit zero-cost local raw-PCM STT service ("uap"): POST
-    /// `/v1/audio/transcriptions` with an octet-stream i16 body, UTF-8
-    /// `text/plain` answer. `base_url` is the user-supplied service root
-    /// (never hardcoded here).
-    Uap { base_url: String },
 }
 
 impl Config {
@@ -1057,9 +1043,6 @@ impl Config {
                 bearer: self.stt_whisper_bearer.clone(),
                 model: self.stt_whisper_model.clone(),
             },
-            "uap" => SttBackendCfg::Uap {
-                base_url: self.stt_whisper_url.clone(),
-            },
             _ => SttBackendCfg::Cloud {
                 api_key: self.groq_api_key.clone(),
                 model: self.stt_model.clone(),
@@ -1067,11 +1050,11 @@ impl Config {
         }
     }
 
-    /// True when STT runs locally (GigaAM, local Whisper, or the local
-    /// raw-PCM "uap" service) — callers skip the Groq-key "configured" check.
+    /// True when STT runs locally (GigaAM or local Whisper) — callers skip the
+    /// Groq-key "configured" check.
     #[must_use]
     pub fn stt_is_local(&self) -> bool {
-        matches!(self.stt_provider.as_str(), "gigaam" | "whisper" | "uap")
+        matches!(self.stt_provider.as_str(), "gigaam" | "whisper")
     }
 }
 

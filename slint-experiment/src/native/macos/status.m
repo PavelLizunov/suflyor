@@ -1,11 +1,13 @@
 #import <AppKit/AppKit.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 extern int32_t suflyor_macos_configure_floating_window(void *raw_view);
 
 typedef void (*SuflyorStatusQuitCallback)(void);
+typedef void (*SuflyorStatusVisibilityCallback)(bool visible);
 
-@interface SuflyorStatusController : NSObject
+@interface SuflyorStatusController : NSObject <NSMenuDelegate>
 - (void)toggleOverlay:(id)sender;
 - (void)quitSuflyor:(id)sender;
 @end
@@ -14,24 +16,34 @@ static NSStatusItem *suflyor_status_item;
 static NSView *suflyor_status_overlay_view;
 static SuflyorStatusController *suflyor_status_controller;
 static SuflyorStatusQuitCallback suflyor_status_quit_callback;
+static SuflyorStatusVisibilityCallback suflyor_status_visibility_callback;
 
 @implementation SuflyorStatusController
 - (void)toggleOverlay:(id)sender {
+    (void)sender;
     NSWindow *window = suflyor_status_overlay_view.window;
     if (window == nil) {
         return;
     }
 
-    NSMenuItem *toggle = (NSMenuItem *)sender;
     if (window.isVisible) {
         [window orderOut:nil];
-        toggle.title = @"Show Suflyor";
     } else {
         (void)suflyor_macos_configure_floating_window(
             (__bridge void *)suflyor_status_overlay_view);
         [NSApp activateIgnoringOtherApps:YES];
         [window orderFrontRegardless];
-        toggle.title = @"Hide Suflyor";
+    }
+    if (suflyor_status_visibility_callback != NULL) {
+        suflyor_status_visibility_callback(window.isVisible ? true : false);
+    }
+}
+
+- (void)menuNeedsUpdate:(NSMenu *)menu {
+    NSWindow *window = suflyor_status_overlay_view.window;
+    NSMenuItem *toggle = menu.itemArray.firstObject;
+    if (toggle != nil) {
+        toggle.title = window.isVisible ? @"Hide Suflyor" : @"Show Suflyor";
     }
 }
 
@@ -44,9 +56,10 @@ static SuflyorStatusQuitCallback suflyor_status_quit_callback;
 @end
 
 int32_t suflyor_macos_status_install(void *raw_view,
-                                     SuflyorStatusQuitCallback on_quit) {
+                                     SuflyorStatusQuitCallback on_quit,
+                                     SuflyorStatusVisibilityCallback on_visibility) {
     if (![NSThread isMainThread] || raw_view == NULL || on_quit == NULL ||
-        suflyor_status_item != nil) {
+        on_visibility == NULL || suflyor_status_item != nil) {
         return 0;
     }
 
@@ -58,6 +71,7 @@ int32_t suflyor_macos_status_install(void *raw_view,
 
     suflyor_status_overlay_view = view;
     suflyor_status_quit_callback = on_quit;
+    suflyor_status_visibility_callback = on_visibility;
     suflyor_status_controller = [SuflyorStatusController new];
     suflyor_status_item = [[NSStatusBar systemStatusBar]
         statusItemWithLength:NSVariableStatusItemLength];
@@ -65,6 +79,7 @@ int32_t suflyor_macos_status_install(void *raw_view,
     suflyor_status_item.button.toolTip = @"Suflyor overlay";
 
     NSMenu *menu = [NSMenu new];
+    menu.delegate = suflyor_status_controller;
     NSString *toggle_title = window.isVisible ? @"Hide Suflyor" : @"Show Suflyor";
     NSMenuItem *toggle = [[NSMenuItem alloc]
         initWithTitle:toggle_title
@@ -81,6 +96,7 @@ int32_t suflyor_macos_status_install(void *raw_view,
     quit.target = suflyor_status_controller;
     [menu addItem:quit];
     suflyor_status_item.menu = menu;
+    on_visibility(window.isVisible ? true : false);
     return 1;
 }
 
@@ -89,6 +105,7 @@ void suflyor_macos_status_remove(void) {
         return;
     }
     if (suflyor_status_item != nil) {
+        suflyor_status_item.menu.delegate = nil;
         suflyor_status_item.menu = nil;
         [[NSStatusBar systemStatusBar] removeStatusItem:suflyor_status_item];
     }
@@ -96,4 +113,5 @@ void suflyor_macos_status_remove(void) {
     suflyor_status_overlay_view = nil;
     suflyor_status_controller = nil;
     suflyor_status_quit_callback = NULL;
+    suflyor_status_visibility_callback = NULL;
 }

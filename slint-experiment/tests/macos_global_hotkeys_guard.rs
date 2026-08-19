@@ -1,54 +1,41 @@
-//! Wiring guard for the macOS global hotkey foundation.
+//! Reachability guard for global hotkeys in the canonical shared host.
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
 use std::fs;
 use std::path::Path;
 
-fn read(root: &Path, relative: &str) -> String {
-    fs::read_to_string(root.join(relative))
+fn read(relative: &str) -> String {
+    fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(relative))
         .unwrap_or_else(|error| panic!("read {relative}: {error}"))
 }
 
-fn root() -> &'static Path {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-}
-
 #[test]
-fn macos_main_registers_and_polls_global_hotkeys() {
-    let host = read(root(), "src/bin/overlay_host.rs");
+fn canonical_runtime_registers_and_polls_all_product_hotkeys() {
+    let host = read("src/bin/overlay_host_windows.rs");
+    let hotkeys = read("src/bin/overlay_host/hotkeys.rs");
 
-    assert!(host.contains("mod hotkeys;"));
-    assert!(host.contains("let registered_hotkeys = hotkeys::register_hotkeys();"));
+    assert!(host.contains("#[path = \"overlay_host/hotkeys.rs\"]"));
+    assert!(host.contains("} = register_hotkeys();"));
+    assert!(host.contains("hotkey_poll.start("));
+    assert!(host.contains("TimerMode::Repeated"));
+    assert!(host.contains("global_hotkey::GlobalHotKeyEvent::receiver()"));
+    assert!(host.contains("open_text_ask("));
 
-    let before_run = host
-        .split_once("let result = window.run();")
-        .expect("window.run() exists")
-        .0;
-    let hotkey_block = before_run
-        .split_once("let hotkey_timer = slint::Timer::default();")
-        .expect("hotkey timer exists before window.run()")
-        .1;
-
-    assert!(hotkey_block.contains("slint::TimerMode::Repeated"));
-    assert!(hotkey_block.contains("global_hotkey::GlobalHotKeyEvent::receiver()"));
-    assert!(hotkey_block.contains("macos_text_ask::TextAskSlice::open_text_ask"));
-    assert!(hotkey_block.contains("f1_id"));
-    assert!(hotkey_block.contains("f3_id"));
-    assert!(hotkey_block.contains("f4_id"));
-    assert!(hotkey_block.contains("f6_id"));
-    assert!(hotkey_block.contains("f7_id"));
-    assert!(hotkey_block.contains("f8_id"));
-    assert!(hotkey_block.contains("sf8_id"));
-    assert!(hotkey_block.contains("cf8_id"));
-    assert!(hotkey_block.contains("f9_id"));
-    assert!(hotkey_block.contains("sf9_id"));
-    assert!(hotkey_block.contains("sa1_id"));
-    assert!(hotkey_block.contains("sa2_id"));
-    assert!(hotkey_block.contains("sa3_id"));
-
-    let after_run = host
-        .split_once("let result = window.run();")
-        .expect("window.run() exists")
-        .1;
-    assert!(after_run.contains("drop(registered_hotkeys);"));
+    for label in [
+        "F1",
+        "F3",
+        "F4",
+        "F6",
+        "F7",
+        "F8",
+        "Shift+F8",
+        "Ctrl+F8",
+        "F9",
+        "Shift+F9",
+        "Shift+Alt+1",
+        "Shift+Alt+2",
+        "Shift+Alt+3",
+    ] {
+        assert!(hotkeys.contains(&format!("\"{label}\"")), "missing {label}");
+    }
 }

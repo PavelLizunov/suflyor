@@ -45,10 +45,12 @@ pub fn capture_monitor_under_cursor() -> Result<CapturedBgra, Box<dyn std::error
     })
 }
 
-/// Capture the main display on macOS via ScreenCaptureKit.
+/// Capture the display under the cursor on macOS via ScreenCaptureKit. The
+/// native filter excludes every window owned by this process.
 #[cfg(target_os = "macos")]
 pub fn capture_monitor_under_cursor() -> Result<CapturedBgra, Box<dyn std::error::Error>> {
-    let (bgra, width, height) = crate::native::screen::capture_display_bgra_with_dimensions()?;
+    let (bgra, width, height, _display) =
+        crate::native::screen::capture_display_bgra_with_dimensions()?;
     Ok(CapturedBgra {
         bgra,
         width,
@@ -126,10 +128,23 @@ pub fn capture_virtual_desktop() -> Result<(CapturedBgra, i32, i32), Box<dyn std
     ))
 }
 
+/// Freeze the one macOS display currently under the cursor for region select.
+/// The tuple origin is that display's actual global CoreGraphics origin.
 #[cfg(target_os = "macos")]
 pub fn capture_virtual_desktop() -> Result<(CapturedBgra, i32, i32), Box<dyn std::error::Error>> {
-    let captured = capture_monitor_under_cursor()?;
-    Ok((captured, 0, 0))
+    // macOS intentionally freezes only the display under the cursor for now;
+    // composing mixed-scale displays into one BGRA frame is a separate feature.
+    let (bgra, width, height, display) =
+        crate::native::screen::capture_display_bgra_with_dimensions()?;
+    Ok((
+        CapturedBgra {
+            bgra,
+            width,
+            height,
+        },
+        display.left,
+        display.top,
+    ))
 }
 
 /// Crop a TOP-DOWN BGRA frame to a sub-rect (image-pixel coords), clamped to the

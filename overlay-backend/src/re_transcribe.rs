@@ -64,9 +64,6 @@ fn chunk_secs(backend: &SttBackendCfg) -> u64 {
         SttBackendCfg::Cloud { .. } => 600,
         SttBackendCfg::Whisper { .. } => 300,
         SttBackendCfg::Gigaam { .. } => 60,
-        // The raw-PCM service hard-caps one request at 25 s / 800 000 bytes;
-        // stay safely under it.
-        SttBackendCfg::Uap { .. } => 20,
     }
 }
 
@@ -403,20 +400,12 @@ mod tests {
         let gigaam = SttBackendCfg::Gigaam {
             model_dir: "d".into(),
         };
-        let uap = SttBackendCfg::Uap {
-            base_url: "http://127.0.0.1:9000".into(),
-        };
         // Cloud window must stay under Groq's 25 MB file cap:
         // secs × 16000 Hz × 2 B + 44 B header.
         let cloud_bytes = chunk_secs(&cloud) * u64::from(recorder::SAMPLE_RATE) * 2 + 44;
         assert!(cloud_bytes < 25 * 1024 * 1024, "{cloud_bytes}");
         // GigaAM windows are much smaller (in-process RAM bound).
         assert!(chunk_secs(&gigaam) <= 60);
-        // Raw-PCM uap body (no WAV header) must stay under the service's
-        // hard 25 s / 800 000-byte per-request cap.
-        assert_eq!(chunk_secs(&uap), 20);
-        let uap_bytes = chunk_secs(&uap) * u64::from(recorder::SAMPLE_RATE) * 2;
-        assert!(uap_bytes <= 800_000, "{uap_bytes}");
     }
 
     #[test]

@@ -39,8 +39,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .file("src/native/macos/clipboard.m")
             .file("src/native/macos/screen.m")
             .flag("-fobjc-arc")
+            .flag("-fblocks")
             .compile("suflyor_appkit");
         println!("cargo:rustc-link-lib=framework=AppKit");
+        println!("cargo:rustc-link-lib=framework=ApplicationServices");
         println!("cargo:rustc-link-lib=framework=ScreenCaptureKit");
         println!("cargo:rustc-link-lib=framework=CoreGraphics");
         println!("cargo:rustc-link-lib=framework=Vision");

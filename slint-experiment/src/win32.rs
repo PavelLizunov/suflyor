@@ -887,7 +887,7 @@ mod windows_impl {
     /// just the virtual key: some apps — notably Telegram Desktop and other Qt
     /// builds — read the scan code and IGNORE a synthetic keystroke whose `wScan`
     /// is 0, so a bare-vk Ctrl+C copied nothing there.
-    pub fn send_ctrl_c() {
+    pub fn send_ctrl_c() -> bool {
         use windows::Win32::UI::Input::KeyboardAndMouse::{
             MapVirtualKeyW, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
             KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, MAPVK_VK_TO_VSC, VIRTUAL_KEY, VK_CONTROL,
@@ -919,9 +919,7 @@ mod windows_impl {
             ev(vk_c, true),
             ev(VK_CONTROL, true),
         ];
-        unsafe {
-            SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
-        }
+        unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) == inputs.len() as u32 }
     }
 
     /// Global hotkeys arrive on key-down. Synthetic Ctrl+C must wait until the
@@ -1054,8 +1052,16 @@ mod posix_stubs {
         }
     }
 
-    pub fn grab_hwnd(_window: &slint::Window) -> Result<HWND, Box<dyn std::error::Error>> {
-        Ok(HWND(1))
+    pub fn grab_hwnd(window: &slint::Window) -> Result<HWND, Box<dyn std::error::Error>> {
+        #[cfg(target_os = "macos")]
+        {
+            crate::native::window::view_id(window).map(HWND)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = window;
+            Ok(HWND(1))
+        }
     }
 
     pub fn force_hide(_window: &slint::Window) {}
@@ -1072,11 +1078,25 @@ mod posix_stubs {
         true
     }
 
-    pub fn set_always_on_top(_hwnd: HWND, _on: bool) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn set_always_on_top(hwnd: HWND, on: bool) -> Result<(), Box<dyn std::error::Error>> {
+        #[cfg(target_os = "macos")]
+        {
+            if on {
+                return crate::native::window::configure_floating_by_id(hwnd.0);
+            }
+        }
+        let _ = (hwnd, on);
         Ok(())
     }
 
-    pub fn set_stealth(_hwnd: HWND, _on: bool) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn set_stealth(_hwnd: HWND, on: bool) -> Result<(), Box<dyn std::error::Error>> {
+        if on {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "screen-capture exclusion is not available on this platform",
+            )
+            .into());
+        }
         Ok(())
     }
 
@@ -1102,21 +1122,61 @@ mod posix_stubs {
     }
 
     pub fn enum_monitors() -> Vec<MonitorRect> {
-        vec![MonitorRect {
-            left: 0,
-            top: 0,
-            right: 1920,
-            bottom: 1080,
-            is_primary: true,
-        }]
+        #[cfg(target_os = "macos")]
+        {
+            crate::native::screen::active_displays()
+                .into_iter()
+                .map(|display| MonitorRect {
+                    left: display.left,
+                    top: display.top,
+                    right: display.right,
+                    bottom: display.bottom,
+                    is_primary: display.is_primary,
+                })
+                .collect()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            vec![MonitorRect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+                is_primary: true,
+            }]
+        }
     }
 
     pub fn virtual_screen_bounds() -> (i32, i32, i32, i32) {
-        (0, 0, 1920, 1080)
+        #[cfg(target_os = "macos")]
+        {
+            let displays = crate::native::screen::active_displays();
+            crate::native::screen::display_union(&displays)
+                .map(|display| {
+                    (
+                        display.left,
+                        display.top,
+                        display.right - display.left,
+                        display.bottom - display.top,
+                    )
+                })
+                .unwrap_or((0, 0, 0, 0))
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            (0, 0, 1920, 1080)
+        }
     }
 
     pub fn cursor_pos() -> (i32, i32) {
-        (500, 500)
+        #[cfg(target_os = "macos")]
+        {
+            crate::native::screen::cursor_position().unwrap_or((0, 0))
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            (500, 500)
+        }
     }
 
     pub fn hide_own_windows() -> Vec<(isize, bool)> {
@@ -1125,13 +1185,20 @@ mod posix_stubs {
 
     pub fn show_windows(_hwnds: &[(isize, bool)]) {}
 
-    pub fn focus_window(_hwnd: HWND) {}
+    pub fn focus_window(hwnd: HWND) {
+        #[cfg(target_os = "macos")]
+        let _ = crate::native::window::raise_key_front_by_id(hwnd.0);
+        #[cfg(not(target_os = "macos"))]
+        let _ = hwnd;
+    }
 
     pub fn is_foreground_window(_hwnd: HWND) -> bool {
         true
     }
 
-    pub fn reveal_window(_hwnd: HWND) {}
+    pub fn reveal_window(hwnd: HWND) {
+        focus_window(hwnd);
+    }
 
     #[allow(clippy::type_complexity)]
     static POSIX_WINDOW_RECTS: std::sync::Mutex<
@@ -1173,6 +1240,11 @@ mod posix_stubs {
     }
 
     pub fn get_window_rect(hwnd: HWND) -> Result<(i32, i32, i32, i32), Box<dyn std::error::Error>> {
+        #[cfg(target_os = "macos")]
+        if let Ok(rect) = crate::native::window::window_rect_by_id(hwnd.0) {
+            return Ok(rect);
+        }
+
         if let Ok(guard) = POSIX_WINDOW_RECTS.lock() {
             if let Some(map) = guard.as_ref() {
                 if let Some(&rect) = map.get(&hwnd.0) {
@@ -1180,27 +1252,63 @@ mod posix_stubs {
                 }
             }
         }
+        #[cfg(target_os = "macos")]
+        return Err("AppKit window geometry is unavailable".into());
+        #[cfg(not(target_os = "macos"))]
         Ok((100, 100, 1280, 800))
     }
 
-    pub fn work_area_for_window(_hwnd: HWND) -> Option<MonitorRect> {
-        Some(MonitorRect {
-            left: 0,
-            top: 0,
-            right: 1920,
-            bottom: 1080,
-            is_primary: true,
-        })
+    fn monitor_for_point(monitors: &[MonitorRect], x: i32, y: i32) -> Option<MonitorRect> {
+        monitors
+            .iter()
+            .find(|monitor| {
+                x >= monitor.left && x < monitor.right && y >= monitor.top && y < monitor.bottom
+            })
+            .or_else(|| monitors.iter().find(|monitor| monitor.is_primary))
+            .or_else(|| monitors.first())
+            .copied()
     }
 
-    pub fn work_area_for_point(_x: i32, _y: i32) -> Option<MonitorRect> {
-        Some(MonitorRect {
-            left: 0,
-            top: 0,
-            right: 1920,
-            bottom: 1080,
-            is_primary: true,
-        })
+    pub fn work_area_for_window(hwnd: HWND) -> Option<MonitorRect> {
+        #[cfg(target_os = "macos")]
+        {
+            let monitors = enum_monitors();
+            get_window_rect(hwnd)
+                .ok()
+                .and_then(|(x, y, width, height)| {
+                    monitor_for_point(&monitors, x + width / 2, y + height / 2)
+                })
+                .or_else(|| pick_monitor(&monitors))
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = hwnd;
+            Some(MonitorRect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+                is_primary: true,
+            })
+        }
+    }
+
+    pub fn work_area_for_point(x: i32, y: i32) -> Option<MonitorRect> {
+        #[cfg(target_os = "macos")]
+        {
+            monitor_for_point(&enum_monitors(), x, y)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (x, y);
+            Some(MonitorRect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+                is_primary: true,
+            })
+        }
     }
 
     pub fn drag_begin(_hwnd: HWND) {}
@@ -1212,17 +1320,48 @@ mod posix_stubs {
     pub fn set_round_corners(_hwnd: HWND) {}
 
     pub fn pick_monitor(monitors: &[MonitorRect]) -> Option<MonitorRect> {
-        monitors.first().copied()
+        #[cfg(target_os = "macos")]
+        {
+            let (x, y) = cursor_pos();
+            monitor_for_point(monitors, x, y)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            monitors.first().copied()
+        }
     }
 
-    pub fn send_ctrl_c() {}
+    pub fn send_ctrl_c() -> bool {
+        #[cfg(target_os = "macos")]
+        {
+            crate::native::clipboard::send_command_c()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            false
+        }
+    }
 
     pub fn read_aloud_hotkey_modifiers_released() -> bool {
-        true
+        #[cfg(target_os = "macos")]
+        {
+            crate::native::clipboard::copy_modifiers_released()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            true
+        }
     }
 
     pub fn clipboard_read_text() -> Option<String> {
-        None
+        #[cfg(target_os = "macos")]
+        {
+            crate::native::clipboard::read_text()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            None
+        }
     }
 
     pub fn clipboard_write_text(text: &str) {
@@ -1236,7 +1375,44 @@ mod posix_stubs {
         }
     }
 
-    pub fn clipboard_clear() {}
+    pub fn clipboard_clear() {
+        #[cfg(target_os = "macos")]
+        crate::native::clipboard::clear();
+    }
+
+    #[cfg(all(test, target_os = "macos"))]
+    mod tests {
+        #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
+
+        use super::{monitor_for_point, MonitorRect};
+
+        #[test]
+        fn monitor_selection_prefers_cursor_then_primary() {
+            let primary = MonitorRect {
+                left: 0,
+                top: 0,
+                right: 1512,
+                bottom: 982,
+                is_primary: true,
+            };
+            let secondary = MonitorRect {
+                left: -1080,
+                top: -300,
+                right: 0,
+                bottom: 1620,
+                is_primary: false,
+            };
+            let monitors = [primary, secondary];
+            assert_eq!(
+                monitor_for_point(&monitors, -50, 400).map(|m| m.left),
+                Some(-1080)
+            );
+            assert_eq!(
+                monitor_for_point(&monitors, 9000, 9000).map(|m| m.left),
+                Some(0)
+            );
+        }
+    }
 }
 
 #[cfg(not(windows))]
