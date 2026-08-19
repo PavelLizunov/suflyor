@@ -16,7 +16,7 @@ use std::process::Command;
 /// `--retry … --retry-all-errors` is essential. Follows redirects, fails on HTTP
 /// error, no console window. Blocking. Removes a partial file on failure.
 pub(crate) fn curl_download(url: &str, dest: &Path) -> Result<()> {
-    let status = no_window(Command::new("curl.exe").args([
+    let status = no_window(Command::new(system_curl()).args([
         "-L",
         "--fail",
         "--silent",
@@ -55,6 +55,15 @@ pub(crate) fn extract_tar_bz2(tarball: &Path, dest_dir: &Path) -> Result<()> {
         bail!("bsdtar exited with {status}");
     }
     Ok(())
+}
+
+/// Full path to `curl.exe` under System32 (Win10 1803+), so PATH order can't
+/// substitute a different `curl`. Falls back to a bare `curl.exe`.
+pub(crate) fn system_curl() -> PathBuf {
+    std::env::var_os("SystemRoot")
+        .map(|r| PathBuf::from(r).join("System32").join("curl.exe"))
+        .filter(|p| p.is_file())
+        .unwrap_or_else(|| PathBuf::from("curl.exe"))
 }
 
 /// Full path to the libarchive `tar.exe` under System32 (Win10 1803+), so PATH
@@ -108,5 +117,11 @@ mod tests {
     #[test]
     fn hex_is_lowercase_and_padded() {
         assert_eq!(hex(&[0x00, 0x0f, 0xa0, 0xff]), "000fa0ff");
+    }
+
+    #[test]
+    fn system_curl_returns_path_or_fallback() {
+        let path = system_curl();
+        assert!(!path.as_os_str().is_empty());
     }
 }
