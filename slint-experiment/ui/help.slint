@@ -300,9 +300,10 @@ export component HelpWindow inherits Window {
                     ] : TableRow {
                         key-row: true;
                         glyph: Platform.is-macos ? (
-                            row[0] == "Shift+Alt+1" ? "Shift+Option+1" :
-                            row[0] == "Shift+Alt+2" ? "Shift+Option+2" :
-                            row[0] == "Shift+Alt+3" ? "Shift+Option+3" : row[0]
+                            row[0] == "Ctrl+F8" ? @tr("Control+F8") :
+                            row[0] == "Shift+Alt+1" ? @tr("Shift+Option+1") :
+                            row[0] == "Shift+Alt+2" ? @tr("Shift+Option+2") :
+                            row[0] == "Shift+Alt+3" ? @tr("Shift+Option+3") : row[0]
                         ) : row[0];
                         desc: row[1];
                     }
@@ -330,7 +331,9 @@ export component HelpWindow inherits Window {
                     }
                     Rectangle { height: 8px; }
                     Text {
-                        text: @tr("Local AI model: Faster (4B) or Smarter (12B) — choose in Settings → AI. If the local AI drops, the overlay restarts the server itself. Recognition language (Auto/Russian/English) is in the same place, under Settings → Speech. Vision (F8) runs on the 4B model.");
+                        text: Platform.is-macos
+                            ? @tr("Choose the text and Vision providers separately in Settings → AI providers. Gemma 4B is text-only and cannot analyse screenshots. Speech recognition is configured in Settings → STT.")
+                            : @tr("Choose the text and Vision providers separately in Settings → AI. Gemma 4B is text-only and cannot analyse screenshots. Speech recognition is configured in Settings → STT.");
                         font-size: Metrics.font-label;
                         color: Theme.text-secondary;
                         wrap: word-wrap;
@@ -345,7 +348,9 @@ export component HelpWindow inherits Window {
                     }
                     Rectangle { height: 8px; }
                     Text {
-                        text: @tr("Shift+Alt+1 — read the selected text aloud; Shift+Alt+2 — OCR text from a screen region and read it; Shift+Alt+3 — pause/resume. Voices (TTS) and the recognition engine (OCR) install with a button in Settings → AI (TTS and Vision). Compact \"reader\" mode: the collapse chip on the bar turns it into a tiny read-aloud-only pill. \"Listening mode\" (Settings → Auto-tiles) mutes auto-tiles so you can just record and listen.");
+                        text: Platform.is-macos
+                            ? @tr("Shift+Option+1 — read the selected text aloud; Shift+Option+2 — recognize a screen region with Apple Vision and read it; Shift+Option+3 — pause/resume. Voices are configured in Settings → TTS; Apple Vision is built into macOS. Compact reader mode uses the collapse chip on the bar. Listening mode in Settings → Auto-tiles mutes automatic tiles.")
+                            : @tr("Shift+Alt+1 — read the selected text aloud; Shift+Alt+2 — OCR text from a screen region and read it; Shift+Alt+3 — pause/resume. Voices (TTS) and the recognition engine (OCR) install with a button in Settings → AI (TTS and Vision). Compact \"reader\" mode: the collapse chip on the bar turns it into a tiny read-aloud-only pill. \"Listening mode\" (Settings → Auto-tiles) mutes auto-tiles so you can just record and listen.");
                         font-size: Metrics.font-label;
                         color: Theme.text-secondary;
                         wrap: word-wrap;

@@ -49,6 +49,7 @@ for test in \
   tera_tts_layout_guard \
   tile_player_layout_guard \
   tray_guard \
+  tts_speech_policy_guard \
   version_guard
 do
   cargo test --locked --test "$test" --manifest-path slint-experiment/Cargo.toml

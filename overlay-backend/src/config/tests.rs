@@ -718,17 +718,33 @@ fn codex_subscription_profile_round_trips_selected_model_without_secrets() {
     cfg.codex_reasoning_effort = "xhigh".into();
     cfg.codex_vision_model = "gpt-vision".into();
     let endpoint = cfg.ai_endpoint(false);
-    assert_eq!(endpoint.protocol, crate::ai::AiProtocol::CodexSubscription);
-    assert!(endpoint.protocol.supports_live_answers());
-    assert_eq!(endpoint.model, "gpt-5.4-codex");
-    assert_eq!(endpoint.reasoning_effort.as_deref(), Some("xhigh"));
+    assert_eq!(
+        endpoint.protocol,
+        if cfg!(windows) {
+            crate::ai::AiProtocol::CodexSubscription
+        } else {
+            crate::ai::AiProtocol::OpenAiCompatible
+        }
+    );
+    assert_eq!(
+        endpoint.model,
+        if cfg!(windows) { "gpt-5.4-codex" } else { "" }
+    );
+    assert_eq!(
+        endpoint.reasoning_effort.as_deref(),
+        if cfg!(windows) { Some("xhigh") } else { None }
+    );
     assert!(endpoint.base_url.is_empty());
     assert!(endpoint.bearer.is_empty());
 
     let cloud_endpoint = cfg.ai_endpoint_cloud();
     assert_eq!(
         cloud_endpoint.protocol,
-        crate::ai::AiProtocol::CodexSubscription
+        if cfg!(windows) {
+            crate::ai::AiProtocol::CodexSubscription
+        } else {
+            crate::ai::AiProtocol::OpenAiCompatible
+        }
     );
     assert!(cloud_endpoint.base_url.is_empty());
     assert!(cloud_endpoint.bearer.is_empty());
@@ -866,20 +882,30 @@ fn vision_endpoint_off_is_none() {
 }
 
 #[test]
-fn vision_endpoint_same_reuses_text_endpoint() {
+fn vision_endpoint_same_honors_external_local_declaration() {
     let mut d = Config::defaults();
     d.vision_provider = "same".into();
     d.ai_provider = "local".into();
-    d.ai_local_base_url = "http://127.0.0.1:8080/v1".into();
-    d.ai_local_model = "gemma".into();
+    d.ai_local_base_url = "http://127.0.0.1:11434/v1".into();
+    d.ai_local_model = "user-selected-model".into();
+    assert!(d.vision_endpoint().is_none());
+
     d.ai_local_vision = true;
     let v = d.vision_endpoint();
     assert_eq!(v.as_ref().map(|e| e.is_local), Some(true));
     assert_eq!(
         v.as_ref().map(|e| e.base_url.clone()),
-        Some("http://127.0.0.1:8080/v1".to_string())
+        Some("http://127.0.0.1:11434/v1".to_string())
     );
-    assert_eq!(v.map(|e| e.model), Some("gemma".to_string()));
+    assert_eq!(v.map(|e| e.model), Some("user-selected-model".to_string()));
+}
+
+#[test]
+fn vision_endpoint_same_rejects_unknown_text_provider() {
+    let mut d = Config::defaults();
+    d.vision_provider = "same".into();
+    d.ai_provider = "custom-text-provider".into();
+    assert!(d.vision_endpoint().is_none());
 }
 
 #[test]
@@ -898,9 +924,13 @@ fn vision_endpoint_same_uses_only_catalog_confirmed_codex_model() {
     d.ai_provider = "codex".into();
     d.codex_model = "gpt-image".into();
     d.codex_vision_model = "gpt-image".into();
-    let endpoint = d.vision_endpoint().expect("confirmed same Codex model");
-    assert_eq!(endpoint.protocol, crate::ai::AiProtocol::CodexSubscription);
-    assert_eq!(endpoint.model, "gpt-image");
+    if cfg!(windows) {
+        let endpoint = d.vision_endpoint().expect("confirmed same Codex model");
+        assert_eq!(endpoint.protocol, crate::ai::AiProtocol::CodexSubscription);
+        assert_eq!(endpoint.model, "gpt-image");
+    } else {
+        assert!(d.vision_endpoint().is_none());
+    }
 
     d.codex_vision_model = "other-image-model".into();
     assert!(d.vision_endpoint().is_none());
@@ -950,6 +980,11 @@ fn vision_endpoint_codex_requires_an_explicit_image_capable_selection() {
     d.vision_provider = "codex".into();
     assert!(d.vision_endpoint().is_none());
     d.codex_vision_model = "gpt-account-vision".into();
+    if !cfg!(windows) {
+        assert!(d.vision_endpoint().is_none());
+        assert!(!d.readiness().vision.configured);
+        return;
+    }
     let endpoint = d.vision_endpoint().expect("codex vision endpoint");
     assert_eq!(endpoint.protocol, crate::ai::AiProtocol::CodexSubscription);
     assert_eq!(endpoint.model, "gpt-account-vision");
@@ -1017,7 +1052,7 @@ fn vision_endpoint_local_falls_back_to_text_local() {
 #[test]
 fn vision_endpoint_default_provider_is_cloud() {
     // Fresh defaults → vision enabled (cloud) so F8 works out of the box.
-    assert_eq!(Config::defaults().vision_provider, "same");
+    assert_eq!(Config::defaults().vision_provider, "cloud");
     assert!(Config::defaults().vision_endpoint().is_some());
 }
 

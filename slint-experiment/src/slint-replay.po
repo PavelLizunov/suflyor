@@ -2137,3 +2137,63 @@ msgstr "Сохранено."
 
 msgid "Saving the bridge settings failed."
 msgstr "Не удалось сохранить настройки моста."
+
+msgid "Backup"
+msgstr "Резервная копия"
+
+msgid "macOS has no public API that can hide the overlay from other screen-sharing apps. Suflyor only excludes its own windows from its own screenshots."
+msgstr "В macOS нет публичного API, позволяющего скрыть оверлей от других приложений демонстрации экрана. Suflyor исключает свои окна только из собственных снимков экрана."
+
+msgid "Always on top"
+msgstr "Поверх всех окон"
+
+msgid "Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in this user's local credentials file. Local UI, profiles, devices and snippets stay unchanged."
+msgstr "Перенос серверов копирует провайдеры AI/STT, URL, модели и устаревшие ключи моста. Защищённые API-ключи OpenAI и Anthropic остаются в локальном файле учётных данных этого пользователя. Локальный интерфейс, профили, устройства и сниппеты не меняются."
+
+msgid "Microphone device selection. The list comes from the audio devices available to macOS."
+msgstr "Выбор микрофона. Список формируется из аудиоустройств, доступных в macOS."
+
+msgid "Stored in a user-only local credentials file and excluded from configuration exports."
+msgstr "Хранится в локальном файле учётных данных, доступном только пользователю, и не включается в экспорт конфигурации."
+
+msgid "Recognition language — Auto detects per phrase with Whisper or Groq."
+msgstr "Язык распознавания — автоопределение для каждой фразы через Whisper или Groq."
+
+msgid "Personal memory is stored locally. Approved items are added to new AI requests and may be sent to your configured AI provider."
+msgstr "Личная память хранится локально. Одобренные элементы добавляются в новые AI-запросы и могут отправляться настроенному AI-провайдеру."
+
+msgid "Read-aloud is unavailable. Check the installed voice and try again."
+msgstr "Озвучка сейчас недоступна. Проверьте установленный голос и повторите."
+
+msgid "Read selected text (Shift+Option+1) or a screen region (Shift+Option+2) aloud. Pause or resume with Shift+Option+3."
+msgstr "Озвучивайте выделенный текст (Shift+Option+1) или область экрана (Shift+Option+2). Пауза и продолжение — Shift+Option+3."
+
+msgid "Choose the text and Vision providers separately in Settings → AI providers. Gemma 4B is text-only and cannot analyse screenshots. Speech recognition is configured in Settings → STT."
+msgstr "Выбирайте провайдеры текста и Vision отдельно в разделе «Настройки → AI-провайдеры». Gemma 4B работает только с текстом и не анализирует снимки экрана. Распознавание речи настраивается в разделе «Настройки → STT»."
+
+msgid "Choose the text and Vision providers separately in Settings → AI. Gemma 4B is text-only and cannot analyse screenshots. Speech recognition is configured in Settings → STT."
+msgstr "Выбирайте провайдеры текста и Vision отдельно в разделе «Настройки → AI». Gemma 4B работает только с текстом и не анализирует снимки экрана. Распознавание речи настраивается в разделе «Настройки → STT»."
+
+msgid "Shift+Option+1 — read the selected text aloud; Shift+Option+2 — recognize a screen region with Apple Vision and read it; Shift+Option+3 — pause/resume. Voices are configured in Settings → TTS; Apple Vision is built into macOS. Compact reader mode uses the collapse chip on the bar. Listening mode in Settings → Auto-tiles mutes automatic tiles."
+msgstr "Shift+Option+1 — озвучить выделенный текст; Shift+Option+2 — распознать область экрана через Apple Vision и озвучить её; Shift+Option+3 — пауза или продолжение. Голоса настраиваются в разделе «Настройки → TTS»; Apple Vision встроен в macOS. Компактный режим чтения включается кнопкой сворачивания на панели. Режим прослушивания в разделе «Настройки → Авто-тайлы» отключает автоматические тайлы."
+
+msgid "The saved Codex provider is unavailable on macOS. Choose a supported provider."
+msgstr "Сохранённый провайдер Codex недоступен в macOS. Выберите поддерживаемый провайдер."
+
+msgid "The saved Codex Vision provider is unavailable on macOS. Choose another Vision provider."
+msgstr "Сохранённый провайдер Codex Vision недоступен в macOS. Выберите другой провайдер Vision."
+
+msgid "The saved GigaAM engine is unavailable on macOS. Choose Cloud or External Whisper."
+msgstr "Сохранённый движок GigaAM недоступен в macOS. Выберите облачный режим или внешний Whisper."
+
+msgid "Control+F8"
+msgstr "Control+F8"
+
+msgid "Shift+Option+1"
+msgstr "Shift+Option+1"
+
+msgid "Shift+Option+2"
+msgstr "Shift+Option+2"
+
+msgid "Shift+Option+3"
+msgstr "Shift+Option+3"

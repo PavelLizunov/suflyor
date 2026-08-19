@@ -97,8 +97,10 @@ use recovery::*;
 // and `open_settings`' "Run setup wizard" button resolve unchanged. The shared
 // mic guard (`try_acquire_mic`/`release_mic`) the step-4 check uses stays here
 // (a dozen non-wizard sites need it) and is reached from wizard.rs via its glob.
+#[cfg(windows)]
 #[path = "overlay_host/wizard.rs"]
 mod wizard;
+#[cfg(windows)]
 use wizard::*;
 
 // Phase 5 of the modularization (docs/overlay-host-modularization-plan.md §5.6):
@@ -439,7 +441,7 @@ fn spawn_text_tile(
     // Auto-start the read (mirror wire_speak's click handler). Mark the tile as
     // speaking ONLY when playback is accepted — a missing sidecar/voice must not
     // show as speaking nor falsely suppress STT (F2).
-    auto_speak_if_idle(text, convo_id);
+    speak_explicit(text, convo_id);
 }
 
 fn after_read_aloud_hotkey_release(attempts_left: u8, action: Rc<dyn Fn()>) {
@@ -513,7 +515,7 @@ pub(crate) fn fill_ocr_tile(
     // Auto-read (mirror spawn_text_tile's tail). Mark the tile as speaking ONLY
     // when playback is accepted — a missing sidecar/voice must not show as
     // speaking nor falsely suppress STT (F2).
-    auto_speak_if_idle(trimmed, convo_id);
+    speak_explicit(trimmed, convo_id);
 }
 
 /// Finish an existing OCR tile after the platform-local engine fails. Called
@@ -4648,10 +4650,11 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // V0.8.4 — first launch (no config.json): auto-open the guided setup wizard
+    // V0.8.4 — Windows first launch (no config.json): auto-open the setup wizard
     // a beat after the bar is up, so the bar has pinned + realized first. The
     // wizard is created stealth-aware (centred on the picked monitor). Step 1's
     // mode pick writes config.json, so this branch will not fire again next run.
+    #[cfg(windows)]
     if first_run {
         eprintln!("[overlay-host] first run detected — auto-opening setup wizard");
         let wz = wizard.clone();

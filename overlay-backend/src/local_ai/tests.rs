@@ -486,6 +486,8 @@ fn legacy_4b_install_survives_upgrade_until_12b_is_installed() {
         ai_local_model: GEMMA26_FILE.to_string(),
         ai_local_prep_model: "stale-prep".to_string(),
         ai_local_quality: true,
+        ai_local_vision: true,
+        vision_provider: "same".to_string(),
         ..Default::default()
     };
     assert!(repair_managed_model_state(&mut cfg, tmp.path()));
@@ -493,6 +495,9 @@ fn legacy_4b_install_survives_upgrade_until_12b_is_installed() {
     assert!(!cfg.ai_local_quality);
     assert_eq!(cfg.ai_local_model, LEGACY_GEMMA_FILE);
     assert!(cfg.ai_local_prep_model.is_empty());
+    assert!(!local_vision_available(&cfg, tmp.path()));
+    assert!(!cfg.ai_local_vision);
+    assert_eq!(cfg.vision_provider, "off");
 
     make_complete(&llama_dir.join(GEMMA_FILE), GEMMA_SIZE);
     assert!(

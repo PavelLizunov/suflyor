@@ -747,11 +747,11 @@ pub(crate) fn wire_ai_settings(
                 1 => "local",
                 2 => "openai",
                 3 => "anthropic",
-                4 => "codex",
+                4 if !cfg!(target_os = "macos") => "codex",
                 _ => "cloud",
             };
             let mut c = cfg_c.write();
-            if provider == "local" {
+            if provider == "local" && !cfg!(target_os = "macos") {
                 overlay_backend::local_ai::select_local_provider(
                     &mut c,
                     &overlay_backend::local_ai::default_root(),
@@ -784,7 +784,8 @@ pub(crate) fn wire_ai_settings(
                 eprintln!("[overlay-host] ai_provider save failed: {e:#}");
                 return;
             }
-            let codex_needed = provider == "codex" || c.vision_provider == "codex";
+            let codex_needed =
+                !cfg!(target_os = "macos") && (provider == "codex" || c.vision_provider == "codex");
             overlay_backend::ai::set_local_no_think(provider == "local" && !c.ai_local_thinking);
             drop(c);
             if let Some(o) = overlay.upgrade() {

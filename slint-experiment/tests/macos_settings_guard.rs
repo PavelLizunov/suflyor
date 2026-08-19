@@ -37,3 +37,64 @@ fn macos_reports_builtin_apple_vision_without_tesseract_install_actions() {
     assert!(ui.contains("Apple Vision is built into macOS; no download is required."));
     assert!(ui.contains("if !Platform.is-macos : VerticalLayout"));
 }
+
+#[test]
+fn macos_settings_hide_windows_only_setup_and_managed_local_actions() {
+    let host = read("src/bin/overlay_host_windows.rs");
+    let settings = read("src/bin/overlay_host/settings_controller.rs");
+    let ui = read("ui/settings_panel.slint");
+
+    assert!(host.contains("#[cfg(windows)]\n    if first_run {"));
+    assert!(host.contains("#[cfg(windows)]\n#[path = \"overlay_host/wizard.rs\"]"));
+    assert!(settings.contains("#[cfg(windows)]\n    {\n        // The wizard slot"));
+    assert!(
+        settings.contains("#[cfg(windows)]\n    wire_local_ai(&win, cfg, state, overlay_weak);")
+    );
+    assert!(ui.contains(
+        "if !Platform.is-macos : SettingsCard {\n                            title: @tr(\"Setup\")"
+    ));
+    assert!(ui.contains("if !Platform.is-macos && root.ai-provider-index == 1 : SettingsCard {\n                            title: @tr(\"Engine (llama.cpp)\")"));
+    assert!(ui.contains(
+        "if !Platform.is-macos : VerticalLayout {\n                            spacing: 6px;"
+    ));
+}
+
+#[test]
+fn macos_provider_catalogs_and_components_keep_platform_indices_honest() {
+    let ai = read("src/bin/overlay_host/settings_ai.rs");
+    let settings = read("src/bin/overlay_host/settings_controller.rs");
+    let stt = read("src/bin/overlay_host/settings_stt.rs");
+    let vision = read("src/bin/overlay_host/settings_vision.rs");
+    let ui = read("ui/settings_panel.slint");
+
+    assert!(ai.contains("4 if !cfg!(target_os = \"macos\") => \"codex\""));
+    assert!(ai.contains("provider == \"local\" && !cfg!(target_os = \"macos\")"));
+    assert!(vision.contains("\"codex\" if !cfg!(target_os = \"macos\") => 6"));
+    assert!(vision.contains("\"codex\" => -1"));
+    assert!(stt.contains("(true, \"gigaam\") => -1"));
+    assert!(settings.contains("(\"codex\", true) => -1"));
+    assert!(vision.contains("6 if !cfg!(target_os = \"macos\") => \"codex\""));
+    assert!(settings.contains("ComponentKind::Engine | ComponentKind::LocalModel"));
+    assert!(settings.contains("if cfg!(target_os = \"macos\") { 1 } else { 3 }"));
+    assert!(settings.contains("c.detail = \"Apple Vision\".into()"));
+    assert!(settings.contains("\"whisper\" => !snap.stt_whisper_url.trim().is_empty()"));
+    assert!(ui.contains("if !Platform.is-macos && root.ai-provider-index == 4 : VerticalLayout"));
+    assert!(
+        ui.contains("if !Platform.is-macos && root.vision-provider-index == 6 : VerticalLayout")
+    );
+    assert!(ui.contains("if root.stt-provider-index == 0 : VerticalLayout"));
+    assert!(ui.contains("if Platform.is-macos && root.ai-provider-index < 0 : Text"));
+    assert!(ui.contains("if Platform.is-macos && root.vision-provider-index < 0 : Text"));
+    assert!(ui.contains("if Platform.is-macos && root.stt-provider-index < 0 : Text"));
+    assert!(ui.contains("entry[0] == \"Ctrl+F8\" ? @tr(\"Control+F8\")"));
+    assert!(ui.contains("entry[0] == \"Shift+Alt+2\" ? @tr(\"Shift+Option+2\")"));
+    assert!(ui.contains(
+        "Microphone device selection. The list comes from the audio devices available to macOS."
+    ));
+    assert!(ui.contains(
+        "Stored in a user-only local credentials file and excluded from configuration exports."
+    ));
+    assert!(ui.contains(
+        "Personal memory is stored locally. Approved items are added to new AI requests"
+    ));
+}

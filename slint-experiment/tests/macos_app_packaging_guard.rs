@@ -166,15 +166,15 @@ fn script_stays_free_local_packaging() {
 }
 
 #[test]
-fn windows_updater_is_absent_from_the_macos_settings_surface() {
+fn windows_updater_is_absent_but_backup_remains_on_the_macos_settings_surface() {
     assert!(HOST.contains(
         "#[cfg(windows)]\n#[path = \"overlay_host/settings_updates.rs\"]\nmod settings_updates;"
     ));
     assert!(HOST.contains("#[cfg(windows)]\nuse settings_updates::*;"));
     assert!(SETTINGS_CONTROLLER.contains("#[cfg(windows)]\nuse super::wire_updates;"));
     assert!(SETTINGS_CONTROLLER.contains("#[cfg(windows)]\n    wire_updates(&win);"));
-    assert!(SETTINGS_UI.contains(
-        "if !Platform.is-macos : NavItem {\n                    label: @tr(\"Updates\")"
-    ));
-    assert!(SETTINGS_UI.contains("if !Platform.is-macos && root.active-tab == 4 : VerticalLayout"));
+    assert!(SETTINGS_UI.contains("label: Platform.is-macos ? @tr(\"Backup\") : @tr(\"Updates\")"));
+    assert!(SETTINGS_UI.contains("if root.active-tab == 4 : VerticalLayout"));
+    assert!(SETTINGS_UI.contains("if !Platform.is-macos : SettingsCard {\n                            title: @tr(\"Updates\")"));
+    assert!(SETTINGS_UI.contains("title: @tr(\"Backup / transfer settings\")"));
 }

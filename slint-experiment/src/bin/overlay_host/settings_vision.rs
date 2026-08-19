@@ -30,8 +30,9 @@ pub(crate) fn vision_provider_index_from_id(provider: &str) -> i32 {
         "local" => 3,
         "openai" => 4,
         "anthropic" => 5,
-        "codex" => 6,
-        _ => 2,
+        "codex" if !cfg!(target_os = "macos") => 6,
+        "codex" => -1,
+        _ => 0,
     }
 }
 
@@ -66,7 +67,7 @@ pub(crate) fn wire_vision_settings(
                 3 => "local",
                 4 => "openai",
                 5 => "anthropic",
-                6 => "codex",
+                6 if !cfg!(target_os = "macos") => "codex",
                 _ => "off",
             };
             let saved_provider = {
@@ -363,6 +364,10 @@ mod tests {
         assert_eq!(vision_provider_index_from_id("local"), 3);
         assert_eq!(vision_provider_index_from_id("openai"), 4);
         assert_eq!(vision_provider_index_from_id("anthropic"), 5);
-        assert_eq!(vision_provider_index_from_id("codex"), 6);
+        assert_eq!(
+            vision_provider_index_from_id("codex"),
+            if cfg!(target_os = "macos") { -1 } else { 6 }
+        );
+        assert_eq!(vision_provider_index_from_id("retired-provider"), 0);
     }
 }

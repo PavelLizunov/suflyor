@@ -50,11 +50,12 @@ pub(crate) fn cloud_model_index(model: &str) -> i32 {
 }
 
 /// Map the persisted provider to the platform-specific dropdown index.
-/// GigaAM is Windows-only; a legacy GigaAM config therefore displays Cloud
-/// on macOS without rewriting the persisted value merely by opening Settings.
+/// GigaAM is Windows-only. A saved GigaAM choice therefore has no selected
+/// macOS row instead of being mislabeled as Cloud without changing the config.
 pub(crate) fn stt_provider_index(provider: &str, is_macos: bool) -> i32 {
     match (is_macos, provider) {
         (true, "whisper") => 1,
+        (true, "gigaam") => -1,
         (false, "gigaam") => 1,
         (false, "whisper") => 2,
         _ => 0,
@@ -277,7 +278,7 @@ mod tests {
     #[test]
     fn provider_mapping_on_macos_exposes_only_cloud_and_whisper() {
         assert_eq!(stt_provider_index("cloud", true), 0);
-        assert_eq!(stt_provider_index("gigaam", true), 0);
+        assert_eq!(stt_provider_index("gigaam", true), -1);
         assert_eq!(stt_provider_index("whisper", true), 1);
         assert_eq!(stt_provider_index("retired-provider", true), 0);
         assert_eq!(stt_provider_from_index(0, true), "cloud");

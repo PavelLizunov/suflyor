@@ -768,13 +768,25 @@ impl Config {
                 reasoning_effort: None,
                 is_local: false,
             },
-            "codex" => AiEndpoint {
+            "codex" if cfg!(windows) => AiEndpoint {
                 protocol: AiProtocol::CodexSubscription,
                 base_url: String::new(),
                 bearer: String::new(),
                 model: self.codex_model.clone(),
                 reasoning_effort: (!self.codex_reasoning_effort.trim().is_empty())
                     .then(|| self.codex_reasoning_effort.clone()),
+                is_local: false,
+            },
+            // The current Codex subscription adapter launches `codex.exe` and
+            // writes a Windows sandbox profile. Keep an imported/saved choice
+            // fail-closed on other platforms instead of silently billing the
+            // configured cloud bridge.
+            "codex" => AiEndpoint {
+                protocol: AiProtocol::OpenAiCompatible,
+                base_url: String::new(),
+                bearer: String::new(),
+                model: String::new(),
+                reasoning_effort: None,
                 is_local: false,
             },
             _ => AiEndpoint {
@@ -823,18 +835,18 @@ impl Config {
     }
 
     /// Resolve the SEPARATE vision endpoint, or `None` when vision is "off".
-    /// Legacy "same" reuses the text endpoint except for Codex, which requires
-    /// a catalog-verified image model. Bridge/local fields fall back to their
-    /// corresponding text fields; direct providers reuse their protected
-    /// profiles. Cloud model falls back to [`DEFAULT_VISION_MODEL`].
+    /// "Same" reuses the text endpoint only when image input was explicitly
+    /// declared. Bridge/local fields fall back to their corresponding text
+    /// fields; direct providers reuse their protected profiles. Cloud model
+    /// falls back to [`DEFAULT_VISION_MODEL`].
     #[must_use]
     pub fn same_text_model_accepts_images_declared(&self) -> bool {
         match self.ai_provider.as_str() {
             "local" => self.ai_local_vision,
-            "codex" => {
+            "codex" if cfg!(windows) => {
                 !self.codex_model.trim().is_empty() && self.codex_model == self.codex_vision_model
             }
-            _ => true,
+            _ => false,
         }
     }
 
@@ -882,14 +894,16 @@ impl Config {
                 reasoning_effort: None,
                 is_local: false,
             }),
-            "codex" if !self.codex_vision_model.trim().is_empty() => Some(AiEndpoint {
-                protocol: AiProtocol::CodexSubscription,
-                base_url: String::new(),
-                bearer: String::new(),
-                model: self.codex_vision_model.clone(),
-                reasoning_effort: None,
-                is_local: false,
-            }),
+            "codex" if cfg!(windows) && !self.codex_vision_model.trim().is_empty() => {
+                Some(AiEndpoint {
+                    protocol: AiProtocol::CodexSubscription,
+                    base_url: String::new(),
+                    bearer: String::new(),
+                    model: self.codex_vision_model.clone(),
+                    reasoning_effort: None,
+                    is_local: false,
+                })
+            }
             _ => None, // "off" (or unknown) → feature disabled
         }
     }
@@ -1087,7 +1101,7 @@ fn protected_provider_secret(slot: SecretSlot) -> String {
 }
 
 fn default_vision_provider() -> String {
-    "same".into()
+    "cloud".into()
 }
 
 fn default_ai_local_base_url() -> String {

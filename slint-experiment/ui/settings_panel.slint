@@ -447,6 +447,7 @@ export component SettingsWindow inherits Window {
     in-out property <int> tts-voice-index: 0;
     in-out property <int> tts-rate-index: 1; // 0..4 preset, default «1.0×»
     in-out property <bool> tts-available: false;
+    in-out property <string> tts-test-status;
     in-out property <bool> tts-installing: false;
     in-out property <int> tts-install-phase: 0;
     in-out property <string> tts-install-label;
@@ -922,8 +923,8 @@ export component SettingsWindow inherits Window {
                     active: root.active-tab == 0;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
-                if !Platform.is-macos : NavItem {
-                    label: @tr("Updates"); icon: @image-url("../assets/icons/update.svg"); tab-index: 4;
+                NavItem {
+                    label: Platform.is-macos ? @tr("Backup") : @tr("Updates"); icon: @image-url("../assets/icons/update.svg"); tab-index: 4;
                     active: root.active-tab == 4;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
@@ -1007,7 +1008,9 @@ export component SettingsWindow inherits Window {
 
                     // Header
                     Text {
-                        text: tab-name-for(root.active-tab);
+                        text: root.active-tab == 4 && Platform.is-macos
+                            ? @tr("Backup")
+                            : tab-name-for(root.active-tab);
                         font-size: Metrics.font-heading;
                         font-weight: 700;
                         color: Theme.text-primary;
@@ -1020,17 +1023,19 @@ export component SettingsWindow inherits Window {
                         SettingsCard {
                             title: @tr("Window behaviour");
                             Text {
-                                text: @tr("Stealth mode hides the overlay window from screen capture (Print Screen, Teams/Meet, OBS). Uses WDA_EXCLUDEFROMCAPTURE on Windows 10/11.");
+                                text: Platform.is-macos
+                                    ? @tr("macOS has no public API that can hide the overlay from other screen-sharing apps. Suflyor only excludes its own windows from its own screenshots.")
+                                    : @tr("Stealth mode hides the overlay window from screen capture (Print Screen, Teams/Meet, OBS). Uses WDA_EXCLUDEFROMCAPTURE on Windows 10/11.");
                                 font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
                             DarkCheck {
-                                text: @tr("Always on top (HWND_TOPMOST)");
+                                text: Platform.is-macos ? @tr("Always on top") : @tr("Always on top (HWND_TOPMOST)");
                                 checked <=> root.always-on-top-toggle;
                                 toggled(v) => { root.always-on-top-changed(v); }
                             }
-                            DarkCheck {
+                            if !Platform.is-macos : DarkCheck {
                                 text: @tr("Stealth (hide from screen capture)");
                                 checked <=> root.stealth-toggle;
                                 toggled(v) => { root.stealth-changed(v); }
@@ -1038,7 +1043,7 @@ export component SettingsWindow inherits Window {
                             // I1 — verified (effective) stealth state: translated
                             // here (@tr) and driven by the verified flag + toggle
                             // intent; ASCII status markers only (skia-safe glyphs).
-                            Text {
+                            if !Platform.is-macos : Text {
                                 text: root.stealth-effective
                                     ? @tr("[ok] active - verify with a screen-share preview")
                                     : root.stealth-toggle
@@ -1134,7 +1139,12 @@ export component SettingsWindow inherits Window {
                                 padding: 4px;
                                 spacing: 12px;
                                 Text {
-                                    text: entry[0];
+                                    text: Platform.is-macos ? (
+                                        entry[0] == "Ctrl+F8" ? @tr("Control+F8") :
+                                        entry[0] == "Shift+Alt+1" ? @tr("Shift+Option+1") :
+                                        entry[0] == "Shift+Alt+2" ? @tr("Shift+Option+2") :
+                                        entry[0] == "Shift+Alt+3" ? @tr("Shift+Option+3") : entry[0]
+                                    ) : entry[0];
                                     font-size: 11px;
                                     font-weight: 700;
                                     color: Theme.accent;
@@ -1392,7 +1402,7 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                         }
-                        SettingsCard {
+                        if !Platform.is-macos : SettingsCard {
                             title: @tr("Setup");
                             // First-run setup wizard — relaunchable any time.
                             Text {
@@ -1415,7 +1425,9 @@ export component SettingsWindow inherits Window {
                         SettingsCard {
                             title: @tr("Read aloud");
                         Text {
-                            text: @tr("Read selected text (Shift+Alt+1) or a screen region (Shift+Alt+2) aloud. Pause or resume with Shift+Alt+3.");
+                            text: Platform.is-macos
+                                ? @tr("Read selected text (Shift+Option+1) or a screen region (Shift+Option+2) aloud. Pause or resume with Shift+Option+3.")
+                                : @tr("Read selected text (Shift+Alt+1) or a screen region (Shift+Alt+2) aloud. Pause or resume with Shift+Alt+3.");
                             font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -1588,11 +1600,17 @@ export component SettingsWindow inherits Window {
                                 clicked => { root.tts-test-clicked(); }
                             }
                         }
+                        if root.tts-test-status != "" : Text {
+                            text: root.tts-test-status;
+                            font-size: 11px;
+                            color: Theme.danger;
+                            wrap: word-wrap;
+                        }
                         }
                     }
-                    if !Platform.is-macos && root.active-tab == 4 : VerticalLayout {
+                    if root.active-tab == 4 : VerticalLayout {
                         spacing: 10px;
-                        SettingsCard {
+                        if !Platform.is-macos : SettingsCard {
                             title: @tr("Updates");
                         Text {
                             text: @tr("Check GitHub for a newer release. If one is found you can download + install it in one click (the app restarts).");
@@ -1662,7 +1680,9 @@ export component SettingsWindow inherits Window {
                         // servers, keeps local profiles/devices/UI/snippets.
                         // Import shows a redacted preview before applying.
                         Text {
-                            text: @tr("Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in Windows Credential Manager on this PC. Local UI, profiles, devices and snippets stay unchanged.");
+                            text: Platform.is-macos
+                                ? @tr("Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in this user's local credentials file. Local UI, profiles, devices and snippets stay unchanged.")
+                                : @tr("Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in Windows Credential Manager on this PC. Local UI, profiles, devices and snippets stay unchanged.");
                             font-size: 10px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -1754,7 +1774,9 @@ export component SettingsWindow inherits Window {
                         SettingsCard {
                             title: @tr("Microphone");
                         Text {
-                            text: @tr("Microphone device selection. List is live from WASAPI capture endpoints.");
+                            text: Platform.is-macos
+                                ? @tr("Microphone device selection. The list comes from the audio devices available to macOS.")
+                                : @tr("Microphone device selection. List is live from WASAPI capture endpoints.");
                             font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -2194,7 +2216,12 @@ export component SettingsWindow inherits Window {
                         }
                         // ===== TYPE selector — gates everything below =====
                         SettingsComboBox {
-                            model: [
+                            model: Platform.is-macos ? [
+                                @tr("Custom OpenAI-compatible bridge"),
+                                @tr("Local OpenAI-compatible"),
+                                @tr("OpenAI API (Responses)"),
+                                @tr("Anthropic API (Messages)"),
+                            ] : [
                                 @tr("Custom OpenAI-compatible bridge"),
                                 @tr("Local OpenAI-compatible"),
                                 @tr("OpenAI API (Responses)"),
@@ -2206,6 +2233,12 @@ export component SettingsWindow inherits Window {
                                 root.ai-provider-index = self.current-index;
                                 root.ai-provider-changed(self.current-index);
                             }
+                        }
+                        if Platform.is-macos && root.ai-provider-index < 0 : Text {
+                            text: @tr("The saved Codex provider is unavailable on macOS. Choose a supported provider.");
+                            font-size: 10px;
+                            color: Theme.warning;
+                            wrap: word-wrap;
                         }
                         Rectangle { background: Theme.border; height: 1px; }
 
@@ -2327,7 +2360,9 @@ export component SettingsWindow inherits Window {
                                 SettingsLineEdit { placeholder-text: @tr("paste OpenAI API key"); text <=> root.openai-key-input; input-type: password; horizontal-stretch: 1; }
                                 Button { text: @tr("Save"); clicked => { root.openai-key-save(root.openai-key-input); root.openai-key-input = ""; } }
                             }
-                            Text { text: @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: 10px; color: Theme.text-muted; wrap: word-wrap; }
+                            Text { text: Platform.is-macos
+                                ? @tr("Stored in a user-only local credentials file and excluded from configuration exports.")
+                                : @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: 10px; color: Theme.text-muted; wrap: word-wrap; }
                             HorizontalLayout {
                                 spacing: 6px;
                                 SettingsLineEdit { placeholder-text: "https://api.openai.com/v1"; text <=> root.openai-base-url-input; horizontal-stretch: 1; }
@@ -2356,7 +2391,9 @@ export component SettingsWindow inherits Window {
                                 SettingsLineEdit { placeholder-text: @tr("paste Anthropic API key"); text <=> root.anthropic-key-input; input-type: password; horizontal-stretch: 1; }
                                 Button { text: @tr("Save"); clicked => { root.anthropic-key-save(root.anthropic-key-input); root.anthropic-key-input = ""; } }
                             }
-                            Text { text: @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: 10px; color: Theme.text-muted; wrap: word-wrap; }
+                            Text { text: Platform.is-macos
+                                ? @tr("Stored in a user-only local credentials file and excluded from configuration exports.")
+                                : @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: 10px; color: Theme.text-muted; wrap: word-wrap; }
                             HorizontalLayout {
                                 spacing: 6px;
                                 SettingsLineEdit { placeholder-text: "https://api.anthropic.com/v1"; text <=> root.anthropic-base-url-input; horizontal-stretch: 1; }
@@ -2380,7 +2417,7 @@ export component SettingsWindow inherits Window {
                         }
 
                         // ============================ CODEX SUBSCRIPTION ============================
-                        if root.ai-provider-index == 4 : VerticalLayout {
+                        if !Platform.is-macos && root.ai-provider-index == 4 : VerticalLayout {
                             spacing: 8px;
                             vertical-stretch: 0;
                             Text { text: @tr("Codex safe models (ChatGPT subscription)"); font-size: 12px; font-weight: 700; color: Theme.text-primary; }
@@ -2572,13 +2609,13 @@ export component SettingsWindow inherits Window {
                                     root.ai-local-vision-changed(v);
                                 }
                             }
-                            if root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index != 2 : Text {
+                            if !Platform.is-macos && root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index != 2 : Text {
                                 text: @tr("Local Vision requires the installed 12B model and its projector. Use the separate Vision section below for cloud or another server.");
                                 font-size: 10px;
                                 color: Theme.warning;
                                 wrap: word-wrap;
                             }
-                            if root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index == 2 : Text {
+                            if !Platform.is-macos && root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index == 2 : Text {
                                 text: root.quality-vision-supported
                                     ? @tr("Vision for 26B requires its matching ~1.1 GiB projector.")
                                     : @tr("Update the local engine before installing Vision for 26B.");
@@ -2586,7 +2623,7 @@ export component SettingsWindow inherits Window {
                                 color: Theme.warning;
                                 wrap: word-wrap;
                             }
-                            if root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index == 2 && root.quality-vision-supported : HorizontalLayout {
+                            if !Platform.is-macos && root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index == 2 && root.quality-vision-supported : HorizontalLayout {
                                 spacing: 6px;
                                 vertical-stretch: 0;
                                 Button {
@@ -2607,7 +2644,7 @@ export component SettingsWindow inherits Window {
                                     }
                                 }
                             }
-                            if root.vision12b-status != "" : Text {
+                            if !Platform.is-macos && root.vision12b-status != "" : Text {
                                 text: root.vision12b-status;
                                 font-size: 11px;
                                 color: Theme.accent;
@@ -2620,6 +2657,8 @@ export component SettingsWindow inherits Window {
                                     root.ai-local-thinking-changed(v);
                                 }
                             }
+                            if !Platform.is-macos : VerticalLayout {
+                            spacing: 6px;
                             // ----- bundled local model: 4B / 12B / 26B -----
                             Rectangle { background: Theme.border; height: 1px; }
                             Text {
@@ -2858,6 +2897,7 @@ export component SettingsWindow inherits Window {
                                     background: Theme.accent;
                                 }
                             }
+                            }
                             HorizontalLayout {
                                 spacing: 6px;
                                 height: 32px;
@@ -2938,7 +2978,7 @@ export component SettingsWindow inherits Window {
                         // Keep engine maintenance in its own card. The local-AI
                         // card is intentionally long and Slint can under-report
                         // the final conditional rows when sizing its ScrollView.
-                        if root.ai-provider-index == 1 : SettingsCard {
+                        if !Platform.is-macos && root.ai-provider-index == 1 : SettingsCard {
                             title: @tr("Engine (llama.cpp)");
                             Text {
                                 text: @tr("The app checks it weekly and verifies a new build before replacing the current one.");
@@ -3074,7 +3114,16 @@ export component SettingsWindow inherits Window {
                         }
                         Rectangle { background: Theme.border; height: 1px; }
                         SettingsComboBox {
-                            model: [
+                            model: Platform.is-macos ? [
+                                @tr("Off"),
+                                root.vision-same-available
+                                    ? @tr("Same as text model above")
+                                    : @tr("Same as text model above (unavailable)"),
+                                @tr("Custom OpenAI-compatible bridge"),
+                                @tr("Local OpenAI-compatible"),
+                                @tr("OpenAI API (Responses)"),
+                                @tr("Anthropic API (Messages)"),
+                            ] : [
                                 @tr("Off"),
                                 root.vision-same-available
                                     ? @tr("Same as text model above")
@@ -3090,6 +3139,12 @@ export component SettingsWindow inherits Window {
                                 root.vision-provider-index = self.current-index;
                                 root.vision-provider-changed(self.current-index);
                             }
+                        }
+                        if Platform.is-macos && root.vision-provider-index < 0 : Text {
+                            text: @tr("The saved Codex Vision provider is unavailable on macOS. Choose another Vision provider.");
+                            font-size: 10px;
+                            color: Theme.warning;
+                            wrap: word-wrap;
                         }
                         if !root.vision-same-available : Text {
                             text: @tr("Same as text model is unavailable because the selected text model does not declare image input. Choose another Vision provider or model.");
@@ -3183,7 +3238,7 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
-                        if root.vision-provider-index == 6 : VerticalLayout {
+                        if !Platform.is-macos && root.vision-provider-index == 6 : VerticalLayout {
                             spacing: 8px;
                             Text {
                                 text: @tr("Choose a separate Codex model for screenshots. Only account models that advertise image input are shown.");
@@ -3532,6 +3587,12 @@ export component SettingsWindow inherits Window {
                                 root.stt-provider-changed(self.current-index);
                             }
                         }
+                        if Platform.is-macos && root.stt-provider-index < 0 : Text {
+                            text: @tr("The saved GigaAM engine is unavailable on macOS. Choose Cloud or External Whisper.");
+                            font-size: 10px;
+                            color: Theme.warning;
+                            wrap: word-wrap;
+                        }
                         // Contextual engine description — helps a novice understand
                         // privacy / language / setup for the selected engine.
                         if root.stt-provider-index == 0 : Text {
@@ -3557,7 +3618,9 @@ export component SettingsWindow inherits Window {
                         // Recognition language (stt_language) — what the mic is
                         // transcribed as, by default.
                         Text {
-                            text: @tr("Recognition language — Auto detects per phrase (Whisper/Groq). GigaAM is Russian-only.");
+                            text: Platform.is-macos
+                                ? @tr("Recognition language — Auto detects per phrase with Whisper or Groq.")
+                                : @tr("Recognition language — Auto detects per phrase (Whisper/Groq). GigaAM is Russian-only.");
                             font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -3653,6 +3716,8 @@ export component SettingsWindow inherits Window {
                             }
                         }
 
+                        if root.stt-provider-index == 0 : VerticalLayout {
+                        spacing: 6px;
                         Rectangle { background: Theme.border; height: 1px; }
 
                         Text {
@@ -3688,6 +3753,7 @@ export component SettingsWindow inherits Window {
                         Button {
                             text: @tr("Get Groq API Key (console.groq.com)");
                             clicked => { root.open-groq-keys-clicked(); }
+                        }
                         }
 
                         Rectangle { background: Theme.border; height: 1px; }
@@ -3734,7 +3800,7 @@ export component SettingsWindow inherits Window {
                         SettingsCard {
                             title: @tr("Personal memory");
                         Text {
-                            text: @tr("Personal memory: approve useful fragments from your sessions. Only APPROVED items are mixed into new AI requests. Stored locally; nothing leaves your machine.");
+                            text: @tr("Personal memory is stored locally. Approved items are added to new AI requests and may be sent to your configured AI provider.");
                             font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;

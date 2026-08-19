@@ -45,20 +45,35 @@
 // `open_wizard`, `try_acquire_mic` / `release_mic`, and `active_stack_label`
 // through it). That is intentional for the move; imports narrow in a later pass.
 #[cfg(windows)]
+use super::open_wizard;
+#[cfg(windows)]
+use super::wire_local_ai;
+#[cfg(windows)]
 use super::wire_updates;
 use super::{
     active_stack_label, ai, apply_bar_stealth, apply_scheme_bar, apply_scheme_settings, audio,
     clamp_scheme, cloud_model_index, config, drag_begin, drag_update, fetch_models,
     global_stealth_effective, grab_hwnd, invalidate_codex_snapshot_ui, make_transparent_tile,
-    open_wizard, parse_tile_monitor_pin, populate_diagnostics, present_window_stealth_aware,
+    parse_tile_monitor_pin, populate_diagnostics, present_window_stealth_aware,
     preset_for_tts_rate, refresh_codex_account_status, refresh_local_context_controls,
     refresh_local_model_resource_warning, set_always_on_top, set_global_scheme, set_global_stealth,
     set_global_tile_monitor, set_global_tile_opacity, spawn_ptt_watchdog, stt, stt_provider_index,
-    try_acquire_mic, ui, wire_ai_settings, wire_diagnostics, wire_import_export, wire_local_ai,
-    wire_memory, wire_stt_settings, wire_vision_settings, wire_voice_settings, Arc, AtomicBool,
-    ComponentHandle, ComponentRow, ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell,
-    SettingsWindow, SharedString, TileWindows, VecModel, WindowRegistry,
+    try_acquire_mic, ui, wire_ai_settings, wire_diagnostics, wire_import_export, wire_memory,
+    wire_stt_settings, wire_vision_settings, wire_voice_settings, Arc, AtomicBool, ComponentHandle,
+    ComponentRow, ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell, SettingsWindow,
+    SharedString, TileWindows, VecModel, WindowRegistry,
 };
+
+fn ai_provider_index(provider: &str, is_macos: bool) -> i32 {
+    match (provider, is_macos) {
+        ("local", _) => 1,
+        ("openai", _) => 2,
+        ("anthropic", _) => 3,
+        ("codex", false) => 4,
+        ("codex", true) => -1,
+        _ => 0,
+    }
+}
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn open_settings(
@@ -86,7 +101,8 @@ pub(crate) fn open_settings(
         populate_token_status(existing, cfg);
         {
             let snap = cfg.read();
-            if (snap.ai_provider == "codex" || snap.vision_provider == "codex")
+            if !cfg!(target_os = "macos")
+                && (snap.ai_provider == "codex" || snap.vision_provider == "codex")
                 && !existing.get_codex_auth_busy()
             {
                 refresh_codex_account_status(existing.as_weak(), cfg.clone());
@@ -130,7 +146,8 @@ pub(crate) fn open_settings(
     populate_token_status(&win, cfg);
     {
         let snap = cfg.read();
-        if (snap.ai_provider == "codex" || snap.vision_provider == "codex")
+        if !cfg!(target_os = "macos")
+            && (snap.ai_provider == "codex" || snap.vision_provider == "codex")
             && !win.get_codex_auth_busy()
         {
             refresh_codex_account_status(win.as_weak(), cfg.clone());
@@ -195,10 +212,10 @@ pub(crate) fn open_settings(
             let weak_done = w.as_weak();
             let cfg_t = cfg_inst.clone();
             std::thread::spawn(move || {
-                // Row order from components::status(): 0=engine 1=model 2=stt,
-                // 3=voices, 4=Windows Tesseract OCR.
+                // Windows keeps components::status() order. macOS filters the
+                // first two Windows-only rows, so Voices moves from 3 to 1.
                 let result: std::result::Result<(), String> = match idx {
-                    3 => {
+                    idx if idx == if cfg!(target_os = "macos") { 1 } else { 3 } => {
                         let cancel = std::sync::atomic::AtomicBool::new(false);
                         let weak_cb = weak_done.clone();
                         let on = move |p: overlay_backend::tts_install::VoiceProgress| {
@@ -421,8 +438,9 @@ pub(crate) fn open_settings(
         registry_stealth.apply_stealth(on);
     });
 
-    // V0.8.4 — Settings → Interface "🪄 Run setup wizard" button. Re-opens the
+    // V0.8.4 — Windows Settings → Interface setup wizard button. Re-opens the
     // guided first-run wizard on demand (it is also auto-shown on first launch).
+    #[cfg(windows)]
     {
         // The wizard slot lives in the registry; forward the same registry so the
         // wizard's stealth toggle reaches every open window (Phase 1 §5.1).
@@ -456,6 +474,7 @@ pub(crate) fn open_settings(
     // Extracted to settings_local_ai.rs (P1 domain split) — wired verbatim there.
     // SECURITY: download -> verify -> spawn stays in overlay_backend::local_ai;
     // this only CALLs install(); the sequence is byte-for-byte unchanged.
+    #[cfg(windows)]
     wire_local_ai(&win, cfg, state, overlay_weak);
 
     // Phase E6 v20 — tile opacity slider. Persists to config AND
@@ -560,7 +579,8 @@ pub(crate) fn open_settings(
                         snap.ui_is_ru(),
                     ),
                 ));
-                if (snap.ai_provider == "codex" || snap.vision_provider == "codex")
+                if !cfg!(target_os = "macos")
+                    && (snap.ai_provider == "codex" || snap.vision_provider == "codex")
                     && !codex_login_busy
                 {
                     refresh_codex_account_status(w.as_weak(), cfg_lang.clone());
@@ -1348,12 +1368,37 @@ pub(crate) fn populate_component_rows(
 ) {
     use overlay_backend::components::{status, ComponentKind};
     let ru = snap.ui_is_ru();
+    let is_macos = cfg!(target_os = "macos");
     let rows: Vec<ComponentRow> = status(snap)
         .into_iter()
+        .filter(|c| {
+            !is_macos || !matches!(c.kind, ComponentKind::Engine | ComponentKind::LocalModel)
+        })
         .map(|mut c| {
-            if cfg!(target_os = "macos") && c.kind == ComponentKind::Ocr {
-                c.installed = true;
-                c.detail = "Apple Vision".into();
+            if is_macos {
+                match c.kind {
+                    ComponentKind::Stt => {
+                        c.installed = match snap.stt_provider.as_str() {
+                            "cloud" => !snap.groq_api_key.trim().is_empty(),
+                            "whisper" => !snap.stt_whisper_url.trim().is_empty(),
+                            _ => false,
+                        };
+                        c.detail = if c.installed {
+                            match snap.stt_provider.as_str() {
+                                "cloud" => "Groq Whisper".into(),
+                                "whisper" => "External Whisper".into(),
+                                _ => String::new(),
+                            }
+                        } else {
+                            String::new()
+                        };
+                    }
+                    ComponentKind::Ocr => {
+                        c.installed = true;
+                        c.detail = "Apple Vision".into();
+                    }
+                    _ => {}
+                }
             }
             // Light, single-call installers wired inline in the hub.
             let installable = matches!(c.kind, ComponentKind::Voices)
@@ -1365,7 +1410,21 @@ pub(crate) fn populate_component_rows(
                 ComponentKind::Stt => 12,                                // STT
                 ComponentKind::Voices | ComponentKind::Ocr => -1,
             };
-            let (name, hint) = component_row_copy(c.kind, ru);
+            let (name, hint) = if is_macos && c.kind == ComponentKind::Stt {
+                if ru {
+                    (
+                        "Распознавание речи (STT)",
+                        "Настройки → STT → Cloud или External Whisper",
+                    )
+                } else {
+                    (
+                        "Speech recognition (STT)",
+                        "Settings → STT → Cloud or External Whisper",
+                    )
+                }
+            } else {
+                component_row_copy(c.kind, ru)
+            };
             ComponentRow {
                 name: SharedString::from(name),
                 detail: SharedString::from(c.detail.as_str()),
@@ -1525,6 +1584,7 @@ pub(crate) fn populate_token_status(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::SharedConfig,
 ) {
+    win.set_tts_test_status(SharedString::from(""));
     let codex_login_busy = win.get_codex_auth_busy();
     invalidate_codex_snapshot_ui();
     // Phase E6 v18 — ASCII status prefixes ("[ok]" / "[--]") instead of
@@ -1698,13 +1758,10 @@ pub(crate) fn populate_token_status(
     win.set_component_busy_label(blank());
     win.set_component_busy_index(-1);
     win.set_ai_prompt_cache(c.ai_prompt_cache);
-    win.set_ai_provider_index(match c.ai_provider.as_str() {
-        "local" => 1,
-        "openai" => 2,
-        "anthropic" => 3,
-        "codex" => 4,
-        _ => 0,
-    });
+    win.set_ai_provider_index(ai_provider_index(
+        &c.ai_provider,
+        cfg!(target_os = "macos"),
+    ));
     win.set_ai_local_base_url_input(SharedString::from(c.ai_local_base_url.clone()));
     let managed_local_server =
         overlay_backend::local_ai::is_managed_llama_endpoint(&c.ai_local_base_url);
@@ -1841,7 +1898,7 @@ pub(crate) fn populate_token_status(
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-    use super::component_row_copy;
+    use super::{ai_provider_index, component_row_copy};
     use overlay_backend::components::ComponentKind;
 
     /// The Components hub rows follow the interface language in BOTH
@@ -1880,5 +1937,13 @@ mod tests {
             component_row_copy(ComponentKind::Engine, true).0,
             "Движок (llama.cpp)"
         );
+    }
+
+    #[test]
+    fn codex_has_no_fake_cloud_selection_on_macos() {
+        assert_eq!(ai_provider_index("codex", true), -1);
+        assert_eq!(ai_provider_index("codex", false), 4);
+        assert_eq!(ai_provider_index("cloud", true), 0);
+        assert_eq!(ai_provider_index("local", true), 1);
     }
 }

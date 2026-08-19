@@ -31,6 +31,24 @@ pub(crate) fn tera_voice_label(id: &str) -> String {
     format!("Tera {id}")
 }
 
+/// Generic screen-share-safe copy for a read-aloud request the selected
+/// engine could not accept.
+pub(crate) fn tts_unavailable_status(ru: bool) -> &'static str {
+    if ru {
+        "Озвучка сейчас недоступна. Проверьте установленный голос и повторите."
+    } else {
+        "Read-aloud is unavailable. Check the installed voice and try again."
+    }
+}
+
+pub(crate) fn tts_test_status(accepted: bool, ru: bool) -> &'static str {
+    if accepted {
+        ""
+    } else {
+        tts_unavailable_status(ru)
+    }
+}
+
 /// Localized one-line model status for the Tera section (ASCII markers only —
 /// no tofu glyphs).
 pub(crate) fn tera_status_line(
@@ -167,8 +185,17 @@ pub(crate) fn wire_voice_settings(
     }
     // Test: speak a short sample with the CURRENT voice + speed (no tile — this
     // is a quick aural check). Plays through the sidecar like any read-aloud.
+    let cfg_test = cfg.clone();
+    let weak_test = win.as_weak();
     win.on_tts_test_clicked(move || {
-        overlay_backend::tts::speak("Привет! Это проверка озвучки: раз, два, три.");
+        let accepted = overlay_backend::tts::speak("Привет! Это проверка озвучки: раз, два, три.");
+        let status = tts_test_status(accepted, cfg_test.read().ui_is_ru());
+        if let Some(w) = weak_test.upgrade() {
+            w.set_tts_test_status(SharedString::from(status));
+        }
+        if !status.is_empty() {
+            diag!("[overlay-host] voice test unavailable");
+        }
     });
 
     // Install the neural voices on demand (like the local-AI model installer):
@@ -428,5 +455,21 @@ mod tests {
         }
         assert!(tera_status_line(TeraInstalled::Ready, true).contains("установлена"));
         assert!(tera_status_line(TeraInstalled::Ready, false).contains("installed"));
+    }
+
+    #[test]
+    fn unavailable_status_is_localized_and_screen_share_safe() {
+        let ru = tts_unavailable_status(true);
+        let en = tts_unavailable_status(false);
+        assert!(ru.contains("недоступна"));
+        assert!(en.contains("unavailable"));
+        for line in [ru, en] {
+            assert!(!line.contains("http"));
+            assert!(!line.contains('\\'));
+            assert!(!line.contains('/'));
+        }
+        assert_eq!(tts_test_status(true, true), "");
+        assert_eq!(tts_test_status(false, true), ru);
+        assert_eq!(tts_test_status(false, false), en);
     }
 }

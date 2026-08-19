@@ -255,6 +255,7 @@ export component TileWindow inherits Window {
     in-out property <bool> speak-active: false;
     in-out property <bool> speak-paused: false;
     in-out property <bool> speak-loading: false;
+    in-out property <bool> speak-error: false;
     // Tile-player speed follows the process-global read speed across tiles.
     in-out property <string> speak-speed-label: "1.0x";
     // Bound to the follow-up LineEdit so do-submit() can read + clear it.
@@ -592,6 +593,13 @@ export component TileWindow inherits Window {
             Rectangle {
                 background: Theme.border;
                 height: 1px;
+            }
+
+            if root.speak-error : Text {
+                text: @tr("Read-aloud is unavailable. Check the installed voice and try again.");
+                font-size: 11px;
+                color: Theme.danger;
+                wrap: word-wrap;
             }
 
             // ===== Trigger badge =====
