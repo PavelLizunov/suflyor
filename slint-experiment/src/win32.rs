@@ -21,197 +21,203 @@
 
 #![allow(clippy::missing_errors_doc)]
 
-use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
-use windows::Win32::Graphics::Dwm::{
-    DwmEnableBlurBehindWindow, DwmExtendFrameIntoClientArea, DwmIsCompositionEnabled,
-    DWM_BB_BLURREGION, DWM_BB_ENABLE, DWM_BLURBEHIND,
-};
-use windows::Win32::Graphics::Gdi::{CreateRectRgn, DeleteObject};
-use windows::Win32::UI::Controls::MARGINS;
-use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
-use windows::Win32::UI::WindowsAndMessaging::{
-    GetWindowDisplayAffinity, GetWindowLongPtrW, KillTimer, LoadCursorW, SetCursor, SetTimer,
-    SetWindowDisplayAffinity, SetWindowLongPtrW, SetWindowPos, ShowWindow, GWLP_HWNDPARENT,
-    GWL_EXSTYLE, GWL_STYLE, HWND_NOTOPMOST, HWND_TOPMOST, IDC_ARROW, SWP_FRAMECHANGED,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE, SW_SHOWNOACTIVATE,
-    WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WM_MOUSEMOVE, WM_SETCURSOR, WM_TIMER, WS_EX_APPWINDOW,
-    WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SYSMENU,
-};
-
-const STEALTH_CURSOR_SUBCLASS_ID: usize = 0x55F1_0001;
-const STEALTH_CURSOR_TIMER_ID: usize = 0x55F1_0002;
-
-fn restore_arrow_after_message(message: u32) -> bool {
-    message == WM_MOUSEMOVE
-}
-
-unsafe fn force_arrow_if_stealthed(hwnd: HWND) -> bool {
-    let Ok(affinity) = read_display_affinity(hwnd) else {
-        return false;
+#[cfg(windows)]
+mod windows_impl {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    pub use windows::Win32::Foundation::HWND;
+    use windows::Win32::Foundation::{LPARAM, LRESULT, POINT, RECT, WPARAM};
+    use windows::Win32::Graphics::Dwm::{
+        DwmEnableBlurBehindWindow, DwmExtendFrameIntoClientArea, DwmIsCompositionEnabled,
+        DWM_BB_BLURREGION, DWM_BB_ENABLE, DWM_BLURBEHIND,
     };
-    if affinity != WDA_EXCLUDEFROMCAPTURE.0 {
-        return false;
-    }
-    let Ok(cursor) = (unsafe { LoadCursorW(None, IDC_ARROW) }) else {
-        return false;
+    use windows::Win32::Graphics::Gdi::{CreateRectRgn, DeleteObject};
+    use windows::Win32::UI::Controls::MARGINS;
+    use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowDisplayAffinity, GetWindowLongPtrW, KillTimer, LoadCursorW, SetCursor, SetTimer,
+        SetWindowDisplayAffinity, SetWindowLongPtrW, SetWindowPos, ShowWindow, GWLP_HWNDPARENT,
+        GWL_EXSTYLE, GWL_STYLE, HWND_NOTOPMOST, HWND_TOPMOST, IDC_ARROW, SWP_FRAMECHANGED,
+        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE, SW_SHOWNOACTIVATE,
+        WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WM_MOUSEMOVE, WM_SETCURSOR, WM_TIMER, WS_EX_APPWINDOW,
+        WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SYSMENU,
     };
-    unsafe {
-        SetCursor(Some(cursor));
-    }
-    true
-}
 
-/// WDA hides window pixels from capture, but the OS cursor remains visible.
-/// Keep the normal arrow over stealthed windows without swallowing mouse input.
-unsafe extern "system" fn stealth_cursor_subclass_proc(
-    hwnd: HWND,
-    message: u32,
-    wparam: WPARAM,
-    lparam: LPARAM,
-    _subclass_id: usize,
-    _ref_data: usize,
-) -> LRESULT {
-    if message == WM_SETCURSOR && unsafe { force_arrow_if_stealthed(hwnd) } {
-        return LRESULT(1);
-    }
-    if message == WM_TIMER && wparam.0 == STEALTH_CURSOR_TIMER_ID {
-        let _ = unsafe { KillTimer(Some(hwnd), STEALTH_CURSOR_TIMER_ID) };
-        let _ = unsafe { force_arrow_if_stealthed(hwnd) };
-        return LRESULT(0);
+    const STEALTH_CURSOR_SUBCLASS_ID: usize = 0x55F1_0001;
+    const STEALTH_CURSOR_TIMER_ID: usize = 0x55F1_0002;
+
+    fn restore_arrow_after_message(message: u32) -> bool {
+        message == WM_MOUSEMOVE
     }
 
-    let result = unsafe { DefSubclassProc(hwnd, message, wparam, lparam) };
-    // Slint handles the pointer event after this native callback returns and
-    // calls SetCursor directly. Restore once after its deferred work runs.
-    if restore_arrow_after_message(message) && unsafe { force_arrow_if_stealthed(hwnd) } {
+    unsafe fn force_arrow_if_stealthed(hwnd: HWND) -> bool {
+        let Ok(affinity) = read_display_affinity(hwnd) else {
+            return false;
+        };
+        if affinity != WDA_EXCLUDEFROMCAPTURE.0 {
+            return false;
+        }
+        let Ok(cursor) = (unsafe { LoadCursorW(None, IDC_ARROW) }) else {
+            return false;
+        };
         unsafe {
-            SetTimer(Some(hwnd), STEALTH_CURSOR_TIMER_ID, 1, None);
+            SetCursor(Some(cursor));
+        }
+        true
+    }
+
+    /// WDA hides window pixels from capture, but the OS cursor remains visible.
+    /// Keep the normal arrow over stealthed windows without swallowing mouse input.
+    unsafe extern "system" fn stealth_cursor_subclass_proc(
+        hwnd: HWND,
+        message: u32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+        _subclass_id: usize,
+        _ref_data: usize,
+    ) -> LRESULT {
+        if message == WM_SETCURSOR && unsafe { force_arrow_if_stealthed(hwnd) } {
+            return LRESULT(1);
+        }
+        if message == WM_TIMER && wparam.0 == STEALTH_CURSOR_TIMER_ID {
+            let _ = unsafe { KillTimer(Some(hwnd), STEALTH_CURSOR_TIMER_ID) };
+            let _ = unsafe { force_arrow_if_stealthed(hwnd) };
+            return LRESULT(0);
+        }
+
+        let result = unsafe { DefSubclassProc(hwnd, message, wparam, lparam) };
+        // Slint handles the pointer event after this native callback returns and
+        // calls SetCursor directly. Restore once after its deferred work runs.
+        if restore_arrow_after_message(message) && unsafe { force_arrow_if_stealthed(hwnd) } {
+            unsafe {
+                SetTimer(Some(hwnd), STEALTH_CURSOR_TIMER_ID, 1, None);
+            }
+        }
+        result
+    }
+
+    fn install_stealth_cursor_guard(hwnd: HWND) -> Result<(), Box<dyn std::error::Error>> {
+        let installed = unsafe {
+            SetWindowSubclass(
+                hwnd,
+                Some(stealth_cursor_subclass_proc),
+                STEALTH_CURSOR_SUBCLASS_ID,
+                0,
+            )
+        };
+        if installed.as_bool() {
+            Ok(())
+        } else {
+            Err(windows::core::Error::from_thread().into())
         }
     }
-    result
-}
 
-fn install_stealth_cursor_guard(hwnd: HWND) -> Result<(), Box<dyn std::error::Error>> {
-    let installed = unsafe {
-        SetWindowSubclass(
-            hwnd,
-            Some(stealth_cursor_subclass_proc),
-            STEALTH_CURSOR_SUBCLASS_ID,
-            0,
-        )
-    };
-    if installed.as_bool() {
-        Ok(())
-    } else {
-        Err(windows::core::Error::from_thread().into())
-    }
-}
-
-/// Extract a raw Win32 HWND from any Slint window. Requires the
-/// `raw-window-handle-06` feature on `slint`.
-///
-/// Two-step: `slint::Window::window_handle()` returns slint's wrapper
-/// `slint::WindowHandle`, which implements `raw_window_handle::
-/// HasWindowHandle`. That yields the real `raw_window_handle::WindowHandle`
-/// from which we pull the Win32 HWND.
-///
-/// IMPORTANT: must be called AFTER the first event-loop iteration.
-/// `slint::Timer::single_shot(Duration::from_millis(200), ...)` after
-/// `window.show()` / `window.run()` is the reliable pattern. Calling
-/// earlier returns `HandleError::NotSupported` because winit realizes
-/// the native window lazily.
-pub fn grab_hwnd(window: &slint::Window) -> Result<HWND, Box<dyn std::error::Error>> {
-    let slint_handle = window.window_handle();
-    let raw = slint_handle.window_handle()?;
-    match raw.as_raw() {
-        RawWindowHandle::Win32(w32) => Ok(HWND(w32.hwnd.get() as *mut _)),
-        other => Err(format!("not a Win32 window handle: {other:?}").into()),
-    }
-}
-
-/// Force-hide `window` at the Win32 level (`ShowWindow(SW_HIDE)`). Slint's own
-/// `Window::hide()` does NOT reliably clear an overlay window that lives on a
-/// NON-PRIMARY monitor — its pixels can linger until that monitor repaints —
-/// but an explicit `SW_HIDE` does (the same call `hide_own_windows` uses for
-/// the F8 capture-hide). The tile close paths call this in ADDITION to
-/// `hide()` so "close all" actually clears tiles the user moved to a second
-/// screen. No-op if the HWND can't be resolved.
-pub fn force_hide(window: &slint::Window) {
-    if let Ok(hwnd) = grab_hwnd(window) {
-        // SAFETY: a live top-level window owned by this process; SW_HIDE only
-        // toggles visibility — no lifetime or threading hazard.
-        unsafe {
-            let _ = ShowWindow(hwnd, SW_HIDE);
+    /// Extract a raw Win32 HWND from any Slint window. Requires the
+    /// `raw-window-handle-06` feature on `slint`.
+    ///
+    /// Two-step: `slint::Window::window_handle()` returns slint's wrapper
+    /// `slint::WindowHandle`, which implements `raw_window_handle::
+    /// HasWindowHandle`. That yields the real `raw_window_handle::WindowHandle`
+    /// from which we pull the Win32 HWND.
+    ///
+    /// IMPORTANT: must be called AFTER the first event-loop iteration.
+    /// `slint::Timer::single_shot(Duration::from_millis(200), ...)` after
+    /// `window.show()` / `window.run()` is the reliable pattern. Calling
+    /// earlier returns `HandleError::NotSupported` because winit realizes
+    /// the native window lazily.
+    pub fn grab_hwnd(window: &slint::Window) -> Result<HWND, Box<dyn std::error::Error>> {
+        let slint_handle = window.window_handle();
+        let raw = slint_handle.window_handle()?;
+        match raw.as_raw() {
+            RawWindowHandle::Win32(w32) => Ok(HWND(w32.hwnd.get() as *mut _)),
+            other => Err(format!("not a Win32 window handle: {other:?}").into()),
         }
     }
-}
 
-/// Apply the overlay flag combination + DWM transparency wiring.
-///
-/// After this call:
-/// - WS_EX_TRANSPARENT — mouse/touch events pass through to underlying windows
-/// - WS_EX_TOOLWINDOW — no taskbar / Alt-Tab entry
-/// - DwmExtendFrameIntoClientArea with margins=-1 — DWM frame covers whole client area
-/// - DwmEnableBlurBehindWindow with empty region — flags window for per-pixel alpha compositing
-///
-/// Combined with Slint's `Window { background: transparent; }` declaration,
-/// this yields a true transparent overlay on Windows 11. Confirmed
-/// visually 2026-05-27.
-pub fn make_transparent_overlay(hwnd: HWND) -> Result<(), Box<dyn std::error::Error>> {
-    apply_transparency(hwnd, /* click_through */ true)
-}
-
-/// Apply the same transparency wiring as `make_transparent_overlay`
-/// but WITHOUT `WS_EX_TRANSPARENT`, so the window accepts clicks +
-/// drag interaction. Use for tile windows where the user needs to
-/// click buttons (pin, close) and drag the chrome row. Phase E6 —
-/// fixes user complaint "тайлы нельзя двигать": tiles inherited
-/// click-through from make_transparent_overlay and silently
-/// swallowed every TouchArea press.
-pub fn make_transparent_tile(hwnd: HWND) -> Result<(), Box<dyn std::error::Error>> {
-    apply_transparency(hwnd, /* click_through */ false)
-}
-
-/// True if DWM desktop composition is active. Per-pixel-alpha transparency
-/// (`DwmEnableBlurBehindWindow`, above) REQUIRES this — without it the overlay
-/// renders OPAQUE (the transparent margins show as black) no matter what we wire.
-/// It can be OFF on RDP / remote sessions, some VMs without a virtual GPU, or
-/// with a very old GPU driver. Logged at startup so a "transparency doesn't work"
-/// report is diagnosable from the log instead of guessed. NOTE: this is NOT the
-/// Windows "Transparency effects" toggle (that only gates acrylic/Mica, a
-/// different API).
-#[must_use]
-pub fn composition_enabled() -> bool {
-    unsafe {
-        DwmIsCompositionEnabled()
-            .map(|b| b.as_bool())
-            .unwrap_or(false)
+    /// Force-hide `window` at the Win32 level (`ShowWindow(SW_HIDE)`). Slint's own
+    /// `Window::hide()` does NOT reliably clear an overlay window that lives on a
+    /// NON-PRIMARY monitor — its pixels can linger until that monitor repaints —
+    /// but an explicit `SW_HIDE` does (the same call `hide_own_windows` uses for
+    /// the F8 capture-hide). The tile close paths call this in ADDITION to
+    /// `hide()` so "close all" actually clears tiles the user moved to a second
+    /// screen. No-op if the HWND can't be resolved.
+    pub fn force_hide(window: &slint::Window) {
+        if let Ok(hwnd) = grab_hwnd(window) {
+            // SAFETY: a live top-level window owned by this process; SW_HIDE only
+            // toggles visibility — no lifetime or threading hazard.
+            unsafe {
+                let _ = ShowWindow(hwnd, SW_HIDE);
+            }
+        }
     }
-}
 
-fn apply_transparency(hwnd: HWND, click_through: bool) -> Result<(), Box<dyn std::error::Error>> {
-    // A top-level window can reach this shared path with WS_EX_APPWINDOW.
-    // Merely OR-ing TOOLWINDOW leaves both bits set, so Explorer keeps a taskbar button.
-    // This shared transition also performs the required hide/restyle/show refresh.
-    set_skip_taskbar(hwnd, true)?;
-    let before = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
-    let target = transparency_exstyle(before, click_through);
-    unsafe {
-        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, target);
+    /// Apply the overlay flag combination + DWM transparency wiring.
+    ///
+    /// After this call:
+    /// - WS_EX_TRANSPARENT — mouse/touch events pass through to underlying windows
+    /// - WS_EX_TOOLWINDOW — no taskbar / Alt-Tab entry
+    /// - DwmExtendFrameIntoClientArea with margins=-1 — DWM frame covers whole client area
+    /// - DwmEnableBlurBehindWindow with empty region — flags window for per-pixel alpha compositing
+    ///
+    /// Combined with Slint's `Window { background: transparent; }` declaration,
+    /// this yields a true transparent overlay on Windows 11. Confirmed
+    /// visually 2026-05-27.
+    pub fn make_transparent_overlay(hwnd: HWND) -> Result<(), Box<dyn std::error::Error>> {
+        apply_transparency(hwnd, /* click_through */ true)
     }
-    // Phase E6 v7 diagnostic — verify the ex_style actually changed.
-    // Logs the before/after bits so we can confirm WS_EX_TRANSPARENT
-    // (0x20) is cleared for tiles and set for overlay. If Slint
-    // re-applies WS_EX_TRANSPARENT later we'll see it diverge.
-    let after = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
-    let transparent_bit = WS_EX_TRANSPARENT.0 as isize;
-    // Diagnostic only — gate behind debug builds so normal (release) window
-    // creation isn't spammed with this per-window line (it also bypasses the
-    // timestamped file log). cfg! keeps it compiled, so `after`/`transparent_bit`
-    // stay "used"; the format work is just skipped at runtime in release.
-    if cfg!(debug_assertions) {
-        eprintln!(
+
+    /// Apply the same transparency wiring as `make_transparent_overlay`
+    /// but WITHOUT `WS_EX_TRANSPARENT`, so the window accepts clicks +
+    /// drag interaction. Use for tile windows where the user needs to
+    /// click buttons (pin, close) and drag the chrome row. Phase E6 —
+    /// fixes user complaint "тайлы нельзя двигать": tiles inherited
+    /// click-through from make_transparent_overlay and silently
+    /// swallowed every TouchArea press.
+    pub fn make_transparent_tile(hwnd: HWND) -> Result<(), Box<dyn std::error::Error>> {
+        apply_transparency(hwnd, /* click_through */ false)
+    }
+
+    /// True if DWM desktop composition is active. Per-pixel-alpha transparency
+    /// (`DwmEnableBlurBehindWindow`, above) REQUIRES this — without it the overlay
+    /// renders OPAQUE (the transparent margins show as black) no matter what we wire.
+    /// It can be OFF on RDP / remote sessions, some VMs without a virtual GPU, or
+    /// with a very old GPU driver. Logged at startup so a "transparency doesn't work"
+    /// report is diagnosable from the log instead of guessed. NOTE: this is NOT the
+    /// Windows "Transparency effects" toggle (that only gates acrylic/Mica, a
+    /// different API).
+    #[must_use]
+    pub fn composition_enabled() -> bool {
+        unsafe {
+            DwmIsCompositionEnabled()
+                .map(|b| b.as_bool())
+                .unwrap_or(false)
+        }
+    }
+
+    fn apply_transparency(
+        hwnd: HWND,
+        click_through: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // A top-level window can reach this shared path with WS_EX_APPWINDOW.
+        // Merely OR-ing TOOLWINDOW leaves both bits set, so Explorer keeps a taskbar button.
+        // This shared transition also performs the required hide/restyle/show refresh.
+        set_skip_taskbar(hwnd, true)?;
+        let before = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
+        let target = transparency_exstyle(before, click_through);
+        unsafe {
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, target);
+        }
+        // Phase E6 v7 diagnostic — verify the ex_style actually changed.
+        // Logs the before/after bits so we can confirm WS_EX_TRANSPARENT
+        // (0x20) is cleared for tiles and set for overlay. If Slint
+        // re-applies WS_EX_TRANSPARENT later we'll see it diverge.
+        let after = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
+        let transparent_bit = WS_EX_TRANSPARENT.0 as isize;
+        // Diagnostic only — gate behind debug builds so normal (release) window
+        // creation isn't spammed with this per-window line (it also bypasses the
+        // timestamped file log). cfg! keeps it compiled, so `after`/`transparent_bit`
+        // stay "used"; the format work is just skipped at runtime in release.
+        if cfg!(debug_assertions) {
+            eprintln!(
             "[overlay-host] apply_transparency: click_through={} before=0x{:x} target=0x{:x} after=0x{:x} \
              transparent_bit_after={}",
             click_through,
@@ -220,787 +226,1018 @@ fn apply_transparency(hwnd: HWND, click_through: bool) -> Result<(), Box<dyn std
             after,
             (after & transparent_bit) != 0,
         );
+        }
+
+        // V0.8.4 — kill the ghost caption buttons. Slint's `no-frame: true` leaves
+        // WS_CAPTION | WS_SYSMENU | WS_MAXIMIZEBOX | WS_MINIMIZEBOX on the HWND; once
+        // we extend the DWM frame into the client area (below), DWM paints the
+        // caption's close/min/max glyphs faintly in the top-right corner — the
+        // "еле заметный крестик" the user kept reporting on the bar (and it was on
+        // tiles too). Clearing the sys-menu + min/max bits drops those non-client
+        // buttons while leaving WS_CAPTION/WS_THICKFRAME, so the DWM frame extension
+        // is unchanged. Verified live: the × disappears, transparency + rounded
+        // corners stay intact. Alt+F4 also goes away — fine, every overlay window
+        // has its own close affordance (the bar's X chip, the tile's X button).
+        unsafe {
+            let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+            let no_buttons = style
+                & !(WS_SYSMENU.0 as isize | WS_MAXIMIZEBOX.0 as isize | WS_MINIMIZEBOX.0 as isize);
+            if no_buttons != style {
+                SetWindowLongPtrW(hwnd, GWL_STYLE, no_buttons);
+                // SWP_FRAMECHANGED forces a non-client recompute so the removed
+                // buttons stop being drawn immediately (not on the next frame).
+                let _ = SetWindowPos(
+                    hwnd,
+                    None,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                );
+            }
+        }
+
+        let margins = MARGINS {
+            cxLeftWidth: -1,
+            cxRightWidth: -1,
+            cyTopHeight: -1,
+            cyBottomHeight: -1,
+        };
+        unsafe { DwmExtendFrameIntoClientArea(hwnd, &margins)? };
+
+        let h_rgn = unsafe { CreateRectRgn(0, 0, -1, -1) };
+        let bb = DWM_BLURBEHIND {
+            dwFlags: DWM_BB_ENABLE | DWM_BB_BLURREGION,
+            fEnable: true.into(),
+            hRgnBlur: h_rgn,
+            fTransitionOnMaximized: false.into(),
+        };
+        unsafe {
+            let result = DwmEnableBlurBehindWindow(hwnd, &bb);
+            let _ = DeleteObject(h_rgn.into());
+            result?;
+        }
+
+        Ok(())
     }
 
-    // V0.8.4 — kill the ghost caption buttons. Slint's `no-frame: true` leaves
-    // WS_CAPTION | WS_SYSMENU | WS_MAXIMIZEBOX | WS_MINIMIZEBOX on the HWND; once
-    // we extend the DWM frame into the client area (below), DWM paints the
-    // caption's close/min/max glyphs faintly in the top-right corner — the
-    // "еле заметный крестик" the user kept reporting on the bar (and it was on
-    // tiles too). Clearing the sys-menu + min/max bits drops those non-client
-    // buttons while leaving WS_CAPTION/WS_THICKFRAME, so the DWM frame extension
-    // is unchanged. Verified live: the × disappears, transparency + rounded
-    // corners stay intact. Alt+F4 also goes away — fine, every overlay window
-    // has its own close affordance (the bar's X chip, the tile's X button).
-    unsafe {
-        let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
-        let no_buttons = style
-            & !(WS_SYSMENU.0 as isize | WS_MAXIMIZEBOX.0 as isize | WS_MINIMIZEBOX.0 as isize);
-        if no_buttons != style {
-            SetWindowLongPtrW(hwnd, GWL_STYLE, no_buttons);
-            // SWP_FRAMECHANGED forces a non-client recompute so the removed
-            // buttons stop being drawn immediately (not on the next frame).
-            let _ = SetWindowPos(
+    #[must_use]
+    fn transparency_exstyle(before: isize, click_through: bool) -> isize {
+        let taskbar_safe = skip_taskbar_exstyle(before, true);
+        if click_through {
+            taskbar_safe | WS_EX_TRANSPARENT.0 as isize
+        } else {
+            taskbar_safe & !(WS_EX_TRANSPARENT.0 as isize)
+        }
+    }
+
+    /// Toggle HWND_TOPMOST. `true` puts the window above all non-topmost
+    /// windows; `false` reverts to the normal Z-order.
+    ///
+    /// Slint's `always-on-top: true;` property does the same thing
+    /// declaratively. Use this helper for runtime toggling (e.g. a
+    /// Settings switch).
+    pub fn set_always_on_top(hwnd: HWND, on: bool) -> Result<(), Box<dyn std::error::Error>> {
+        let insert_after = if on { HWND_TOPMOST } else { HWND_NOTOPMOST };
+        unsafe {
+            SetWindowPos(
+                hwnd,
+                Some(insert_after),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Toggle WDA_EXCLUDEFROMCAPTURE — the window becomes invisible in
+    /// Print Screen, screen recording, and Teams/Meet screen share.
+    ///
+    /// This is the "stealth" toggle in the existing overlay-mvp Settings
+    /// → Stealth panel. WDA_EXCLUDEFROMCAPTURE is the Win32 mechanism
+    /// behind it. Requires Windows 10 build 2004 / Windows 11.
+    ///
+    /// I1: success means the exclusion was APPLIED AND READ BACK via
+    /// `GetWindowDisplayAffinity` — callers reduce the Result through
+    /// `presentable_stealth` to the EFFECTIVE state they show to the user,
+    /// so a failed/unsupported exclusion can never be presented as stealth on.
+    pub fn set_stealth(hwnd: HWND, on: bool) -> Result<(), Box<dyn std::error::Error>> {
+        let affinity = if on { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE };
+        unsafe {
+            SetWindowDisplayAffinity(hwnd, affinity)?;
+        }
+        // The cursor guard is cosmetic (keeps the arrow over a stealthed window)
+        // and a repeat install on the same HWND legitimately fails — its error
+        // must not mask the capture exclusion verified below.
+        let _ = install_stealth_cursor_guard(hwnd);
+        let actual = read_display_affinity(hwnd)?;
+        if actual == affinity.0 {
+            Ok(())
+        } else {
+            Err(format!(
+                "display affinity readback mismatch: wanted 0x{:x}, got 0x{:x}",
+                affinity.0, actual
+            )
+            .into())
+        }
+    }
+
+    /// Read the window's EFFECTIVE display affinity (WDA_* bits) back from the OS.
+    /// `set_stealth` verifies through this; any path that must prove an exclusion
+    /// independently can too (I1).
+    pub fn read_display_affinity(hwnd: HWND) -> Result<u32, Box<dyn std::error::Error>> {
+        let mut affinity = 0u32;
+        unsafe {
+            GetWindowDisplayAffinity(hwnd, &mut affinity)?;
+        }
+        Ok(affinity)
+    }
+
+    /// The stealth state callers may PRESENT to the user (I1): active only when it
+    /// was requested AND the apply/readback proved the exclusion. Any failure —
+    /// forced or real — reduces to false; we never present a false success. Config
+    /// intent is a separate decision: callers preserve it so the next apply
+    /// retries.
+    #[must_use]
+    pub fn presentable_stealth(
+        wanted: bool,
+        applied: &Result<(), Box<dyn std::error::Error>>,
+    ) -> bool {
+        wanted && applied.is_ok()
+    }
+
+    /// Toggle the window's TASKBAR exclusion. Wired to the stealth toggle so the
+    /// overlay also disappears from the taskbar (a screen-share viewer shouldn't see
+    /// "suflyor" in the taskbar). WS_EX_TOOLWINDOW/APPWINDOW only affect the taskbar
+    /// at show-time, so a bit change does a brief hide -> restyle -> show-no-activate
+    /// and re-asserts topmost. Only the TOOLWINDOW/APPWINDOW bits are touched (via
+    /// `skip_taskbar_exstyle`); all other ex-style bits (layered / transparent /
+    /// etc.) are preserved.
+    ///
+    /// I2: BOTH directions force the TOOLWINDOW baseline + clear APPWINDOW, so an
+    /// overlay window can never become a taskbar-eligible APPWINDOW through this
+    /// toggle (and a winit re-show that dropped TOOLWINDOW gets it re-asserted).
+    pub fn set_skip_taskbar(hwnd: HWND, skip: bool) -> Result<(), Box<dyn std::error::Error>> {
+        unsafe {
+            let before = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            let after = skip_taskbar_exstyle(before, skip);
+            if after == before {
+                return Ok(());
+            }
+            let _ = ShowWindow(hwnd, SW_HIDE);
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, after);
+            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            // hide/show can drop topmost — re-assert it without stealing focus.
+            SetWindowPos(
+                hwnd,
+                Some(HWND_TOPMOST),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Make a transient native window an owned popup of the overlay bar. Ownership
+    /// keeps it above its bar and lets Windows destroy it with the owner; it is not
+    /// parented, so its coordinates remain screen-relative.
+    pub fn set_window_owner(popup: HWND, owner: HWND) {
+        unsafe {
+            let _ = SetWindowLongPtrW(popup, GWLP_HWNDPARENT, owner.0 as isize);
+        }
+    }
+
+    /// Pure ex-style transition behind `set_skip_taskbar` (I2), shared by every
+    /// caller so the baseline cannot drift. Audit acceptance: an overlay window
+    /// ALWAYS has the TOOLWINDOW baseline and NEVER APPWINDOW — so BOTH directions
+    /// force TOOLWINDOW on + APPWINDOW off (a winit re-show may have dropped
+    /// TOOLWINDOW; `skip = false` must re-assert it, not merely clear APPWINDOW).
+    /// `skip` stays in the signature for call-site clarity; the baseline is
+    /// identical in both directions. Every other ex-style bit (layered /
+    /// transparent / topmost / …) is preserved.
+    #[must_use]
+    pub fn skip_taskbar_exstyle(before: isize, skip: bool) -> isize {
+        let _ = skip; // baseline is identical in both directions — see doc
+        let tool = WS_EX_TOOLWINDOW.0 as isize;
+        let app = WS_EX_APPWINDOW.0 as isize;
+        (before | tool) & !app
+    }
+
+    /// Bounds of a display monitor in screen-coordinate space.
+    #[derive(Debug, Clone, Copy)]
+    pub struct MonitorRect {
+        pub left: i32,
+        pub top: i32,
+        pub right: i32,
+        pub bottom: i32,
+        pub is_primary: bool,
+    }
+
+    impl MonitorRect {
+        #[must_use]
+        pub fn width(&self) -> i32 {
+            self.right - self.left
+        }
+        #[must_use]
+        pub fn height(&self) -> i32 {
+            self.bottom - self.top
+        }
+        #[must_use]
+        pub fn is_landscape(&self) -> bool {
+            self.width() >= self.height()
+        }
+    }
+
+    /// Enumerate all attached display monitors with their bounds + primary flag.
+    ///
+    /// Uses `EnumDisplayMonitors` (Win32). Consumed by `pick_monitor`
+    /// below + by overlay_host's `apply_tile_hwnd_with_monitor` helper
+    /// to choose a tile-spawn display + call `move_window` for placement.
+    pub fn enum_monitors() -> Vec<MonitorRect> {
+        use std::cell::RefCell;
+        use windows::core::BOOL;
+        use windows::Win32::Foundation::LPARAM;
+        use windows::Win32::Graphics::Gdi::{
+            EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO,
+        };
+
+        // Win32 constant — equals MONITORINFOF_PRIMARY. Hardcoded to avoid
+        // a feature-flag dependency that differs across windows-rs versions.
+        const MONITORINFOF_PRIMARY: u32 = 0x0000_0001;
+
+        thread_local! {
+            static MONITORS: RefCell<Vec<MonitorRect>> = const { RefCell::new(Vec::new()) };
+        }
+
+        unsafe extern "system" fn callback(
+            hmonitor: HMONITOR,
+            _hdc: HDC,
+            _lprect: *mut RECT,
+            _lparam: LPARAM,
+        ) -> BOOL {
+            let mut info = MONITORINFO {
+                cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+                ..Default::default()
+            };
+            if unsafe { GetMonitorInfoW(hmonitor, &mut info) }.as_bool() {
+                let rect = MonitorRect {
+                    left: info.rcMonitor.left,
+                    top: info.rcMonitor.top,
+                    right: info.rcMonitor.right,
+                    bottom: info.rcMonitor.bottom,
+                    is_primary: info.dwFlags & MONITORINFOF_PRIMARY != 0,
+                };
+                MONITORS.with(|m| m.borrow_mut().push(rect));
+            }
+            true.into()
+        }
+
+        MONITORS.with(|m| m.borrow_mut().clear());
+        unsafe {
+            let _ = EnumDisplayMonitors(None, None, Some(callback), LPARAM(0));
+        }
+        MONITORS.with(|m| m.borrow().clone())
+    }
+
+    /// (x, y, width, height) of the ENTIRE virtual desktop spanning all monitors.
+    /// The origin can be NEGATIVE (the user's portrait secondary sits at x = -1200),
+    /// so callers must never assume (0,0). Physical pixels.
+    #[must_use]
+    pub fn virtual_screen_bounds() -> (i32, i32, i32, i32) {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
+            SM_YVIRTUALSCREEN,
+        };
+        unsafe {
+            (
+                GetSystemMetrics(SM_XVIRTUALSCREEN),
+                GetSystemMetrics(SM_YVIRTUALSCREEN),
+                GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                GetSystemMetrics(SM_CYVIRTUALSCREEN),
+            )
+        }
+    }
+
+    /// Current mouse-cursor position in physical virtual-screen coordinates.
+    #[must_use]
+    pub fn cursor_pos() -> (i32, i32) {
+        use windows::Win32::Foundation::POINT;
+        use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+        let mut p = POINT::default();
+        unsafe {
+            let _ = GetCursorPos(&mut p);
+        }
+        (p.x, p.y)
+    }
+
+    /// Hide every visible top-level window owned by THIS process; returns each
+    /// hidden window's HWND (as `isize`) PLUS whether it was topmost, so
+    /// `show_windows` can restore BOTH visibility and the always-on-top band —
+    /// keeps our bar/tiles out of a GDI screenshot without dropping them behind
+    /// other windows afterward.
+    #[must_use]
+    pub fn hide_own_windows() -> Vec<(isize, bool)> {
+        use std::cell::RefCell;
+        use windows::core::BOOL;
+        use windows::Win32::Foundation::LPARAM;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            EnumWindows, GetWindowThreadProcessId, IsWindowVisible, WS_EX_TOPMOST,
+        };
+        thread_local! {
+            static HIDDEN: RefCell<Vec<(isize, bool)>> = const { RefCell::new(Vec::new()) };
+        }
+        unsafe extern "system" fn cb(hwnd: HWND, _l: LPARAM) -> BOOL {
+            let pid = std::process::id();
+            let mut wpid: u32 = 0;
+            unsafe { GetWindowThreadProcessId(hwnd, Some(&mut wpid)) };
+            if wpid == pid && unsafe { IsWindowVisible(hwnd) }.as_bool() {
+                let ex = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
+                let was_topmost = (ex & (WS_EX_TOPMOST.0 as isize)) != 0;
+                let _ = unsafe { ShowWindow(hwnd, SW_HIDE) };
+                HIDDEN.with(|h| h.borrow_mut().push((hwnd.0 as isize, was_topmost)));
+            }
+            true.into()
+        }
+        HIDDEN.with(|h| h.borrow_mut().clear());
+        unsafe {
+            let _ = EnumWindows(Some(cb), LPARAM(0));
+        }
+        // Force a DWM compositor flush so the windows we just hid are gone from the
+        // next composited frame BEFORE the caller's GDI BitBlt reads the screen.
+        // Without it, on a busy frame the just-hidden bar/tiles could still be
+        // captured into the (possibly cloud) vision screenshot — GDI BitBlt ignores
+        // WDA_EXCLUDEFROMCAPTURE, so this hide-then-flush is the only thing keeping
+        // our own overlay out of the outbound image.
+        {
+            use windows::Win32::Graphics::Dwm::DwmFlush;
+            let _ = unsafe { DwmFlush() };
+        }
+        HIDDEN.with(|h| h.borrow().clone())
+    }
+
+    /// Re-show windows hidden by `hide_own_windows` without stealing focus, and
+    /// re-assert HWND_TOPMOST for those that were topmost — hide/show drops the
+    /// always-on-top band, so without this the bar/tiles fall behind the foreground
+    /// window after a capture (same fix as `apply_transparency`).
+    pub fn show_windows(hwnds: &[(isize, bool)]) {
+        for &(h, was_topmost) in hwnds {
+            let hwnd = HWND(h as *mut std::ffi::c_void);
+            unsafe {
+                let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+                if was_topmost {
+                    let _ = SetWindowPos(
+                        hwnd,
+                        Some(HWND_TOPMOST),
+                        0,
+                        0,
+                        0,
+                        0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                    );
+                }
+            }
+        }
+    }
+
+    /// Bring a window to the foreground + give it keyboard focus so its FocusScope
+    /// receives key events (e.g. Esc on the capture overlay). Unlike the always-on-
+    /// top bar (which avoids activation to not steal focus), the capture overlay is
+    /// modal and SHOULD take focus.
+    pub fn focus_window(hwnd: HWND) {
+        use windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow;
+        unsafe {
+            let _ = SetForegroundWindow(hwnd);
+        }
+    }
+
+    /// Whether `hwnd` is currently the native foreground window.
+    pub fn is_foreground_window(hwnd: HWND) -> bool {
+        use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+        unsafe { GetForegroundWindow() == hwnd }
+    }
+
+    /// Force a window VISIBLE at the Win32 level and bring it to the foreground.
+    /// Used when re-opening a REUSED overlay window (Settings) that may have been
+    /// hidden OUT FROM UNDER Slint by `hide_own_windows()` — the F8 / capture-chip
+    /// flow hides every app window via `SW_HIDE`, but Slint's own visibility state
+    /// is unchanged, so a later `window().show()` is a no-op and the window would
+    /// stay invisible with no way back. `SW_SHOW` bypasses that stale state, so the
+    /// gear ALWAYS brings Settings back. WDA stealth + DWM alpha persist across
+    /// show/hide, so this does not un-stealth the window.
+    pub fn reveal_window(hwnd: HWND) {
+        use windows::Win32::UI::WindowsAndMessaging::{SetForegroundWindow, ShowWindow, SW_SHOW};
+        unsafe {
+            let _ = ShowWindow(hwnd, SW_SHOW);
+            let _ = SetForegroundWindow(hwnd);
+        }
+    }
+
+    /// Position a window at the given screen coordinates with the given size.
+    /// Used by `apply_tile_hwnd_with_monitor` in overlay_host to drive
+    /// freshly-spawned tile windows onto the chosen display.
+    pub fn move_window(
+        hwnd: HWND,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        unsafe {
+            SetWindowPos(
                 hwnd,
                 None,
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                x,
+                y,
+                w,
+                h,
+                windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Move the window to (x, y) without changing its size. Used by tile
+    /// placement so Slint's natural sizing (per-monitor DPI scale aware)
+    /// stays intact while we just position the window. Fixes Phase E6
+    /// bug: setting `move_window(..., 460, 360)` with raw pixel sizes
+    /// forces the window smaller than Slint's logical-size render canvas
+    /// on HiDPI monitors → text overflows the dark fill area.
+    pub fn move_window_pos_only(
+        hwnd: HWND,
+        x: i32,
+        y: i32,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use windows::Win32::UI::WindowsAndMessaging::{SWP_NOSIZE, SWP_NOZORDER};
+        unsafe {
+            SetWindowPos(hwnd, None, x, y, 0, 0, SWP_NOZORDER | SWP_NOSIZE)?;
+        }
+        Ok(())
+    }
+
+    /// Read the actual physical window rect (x, y, w, h) for placement
+    /// math. Returns dimensions in screen coordinates (raw OS pixels).
+    /// Used by the tile-spawn poll Timer to know each tile's real size
+    /// after Slint's HiDPI-aware layout settles, so the right-edge
+    /// alignment math uses the true width.
+    pub fn get_window_rect(hwnd: HWND) -> Result<(i32, i32, i32, i32), Box<dyn std::error::Error>> {
+        use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
+        let mut r = RECT::default();
+        unsafe {
+            GetWindowRect(hwnd, &mut r)?;
+        }
+        Ok((r.left, r.top, r.right - r.left, r.bottom - r.top))
+    }
+
+    /// Work area (monitor bounds MINUS the taskbar) of the monitor that most
+    /// contains `hwnd`, as a `MonitorRect`. Used by `toggle_tile_maximize` to
+    /// keep a maximized tile fully on-screen AND clear of the taskbar (so the
+    /// tile's bottom row — e.g. the follow-up input — stays reachable).
+    /// `is_primary` is meaningless here and always false.
+    #[must_use]
+    pub fn work_area_for_window(hwnd: HWND) -> Option<MonitorRect> {
+        use windows::Win32::Graphics::Gdi::{
+            GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+        };
+        unsafe {
+            let hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            let mut info = MONITORINFO {
+                cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+                ..Default::default()
+            };
+            if GetMonitorInfoW(hmon, &mut info).as_bool() {
+                Some(MonitorRect {
+                    left: info.rcWork.left,
+                    top: info.rcWork.top,
+                    right: info.rcWork.right,
+                    bottom: info.rcWork.bottom,
+                    is_primary: false,
+                })
+            } else {
+                None
+            }
+        }
+    }
+
+    /// Work area of the monitor nearest a physical screen point. Tray popups use
+    /// this instead of full monitor bounds so they never overlap the Windows
+    /// taskbar, regardless of its edge or monitor.
+    #[must_use]
+    pub fn work_area_for_point(x: i32, y: i32) -> Option<MonitorRect> {
+        use windows::Win32::Graphics::Gdi::{
+            GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+        };
+        unsafe {
+            let hmon = MonitorFromPoint(POINT { x, y }, MONITOR_DEFAULTTONEAREST);
+            let mut info = MONITORINFO {
+                cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+                ..Default::default()
+            };
+            if GetMonitorInfoW(hmon, &mut info).as_bool() {
+                Some(MonitorRect {
+                    left: info.rcWork.left,
+                    top: info.rcWork.top,
+                    right: info.rcWork.right,
+                    bottom: info.rcWork.bottom,
+                    is_primary: false,
+                })
+            } else {
+                None
+            }
+        }
+    }
+
+    // Phase E6 v22 — manual cursor-delta drag state.
+    //
+    // REPLACES the old WM_NCLBUTTONDOWN system-drag. That approach
+    // entered a Windows MODAL drag loop (SendMessageW blocks until
+    // mouse-up), and the modal loop CONSUMED the mouse-up event before
+    // Slint could see it. Slint's TouchArea then stayed stuck in the
+    // "pressed" state forever → every subsequent click was treated as
+    // a drag → bar + tiles became unclickable. User: "после того как
+    // кликнул на :: idle вся зона стала drag и больше ничего не
+    // кликается; вызванный тайл завис, двигается но ничего не
+    // прожимается".
+    //
+    // New model: no modal loop. We track the cursor delta ourselves.
+    //   drag_begin(hwnd) on pointer-down  → record cursor + window pos
+    //   drag_update(hwnd) on pointer-move → move window by the delta
+    // Slint sees the real mouse-up normally, so TouchArea state stays
+    // consistent and clicks keep working after a drag.
+
+    use std::cell::Cell;
+
+    thread_local! {
+        /// (cursor_start_x, cursor_start_y, window_start_x, window_start_y).
+        /// Set on drag_begin, read on drag_update. UI-thread-only so a
+        /// thread-local Cell is sufficient (no cross-thread sharing).
+        static DRAG_ANCHOR: Cell<Option<(i32, i32, i32, i32)>> = const { Cell::new(None) };
+    }
+
+    /// Begin a manual window drag — capture the cursor + window origin so
+    /// subsequent `drag_update` calls can move the window by the delta.
+    /// Call from the drag-handle TouchArea's pointer-event(down).
+    pub fn drag_begin(hwnd: HWND) {
+        use windows::Win32::Foundation::POINT;
+        use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetWindowRect};
+        let mut cursor = POINT::default();
+        let mut rect = RECT::default();
+        unsafe {
+            if GetCursorPos(&mut cursor).is_err() {
+                return;
+            }
+            if GetWindowRect(hwnd, &mut rect).is_err() {
+                return;
+            }
+        }
+        DRAG_ANCHOR.with(|a| a.set(Some((cursor.x, cursor.y, rect.left, rect.top))));
+    }
+
+    /// Continue a manual window drag — move the window so its origin
+    /// tracks the cursor by the same delta seen since `drag_begin`.
+    /// Call from the drag-handle TouchArea's `moved` callback (guarded
+    /// by `self.pressed` on the Slint side). No-op if no drag is active.
+    pub fn drag_update(hwnd: HWND) {
+        use windows::Win32::Foundation::POINT;
+        use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, SWP_NOSIZE, SWP_NOZORDER};
+        let Some((cx0, cy0, wx0, wy0)) = DRAG_ANCHOR.with(Cell::get) else {
+            return;
+        };
+        let mut cursor = POINT::default();
+        unsafe {
+            if GetCursorPos(&mut cursor).is_err() {
+                return;
+            }
+            let nx = wx0 + (cursor.x - cx0);
+            let ny = wy0 + (cursor.y - cy0);
+            let _ = SetWindowPos(hwnd, None, nx, ny, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+        }
+    }
+
+    /// Clear drag anchor. Optional — `drag_begin` overwrites it anyway —
+    /// but calling on pointer-up keeps the state tidy.
+    pub fn drag_end() {
+        DRAG_ANCHOR.with(|a| a.set(None));
+    }
+
+    /// v0.17.1 — ask DWM to round this window's corners (Windows 11). A frameless
+    /// Slint window with an OPAQUE background (the archive / settings / palette,
+    /// which can't use per-pixel-alpha rounding like the transparent-overlay
+    /// tiles) otherwise shows hard square corners; an inner `border-radius` only
+    /// rounds the FILL, leaving the window's own square edges. `DWMWCP_ROUND`
+    /// clips the actual window region at the OS level — all four corners, no
+    /// content change. No-op on Windows 10 (the attribute is silently ignored).
+    pub fn set_round_corners(hwnd: HWND) {
+        use windows::Win32::Graphics::Dwm::{
+            DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE,
+        };
+        // DWMWCP_ROUND = 2 (the standard, larger-radius rounding).
+        const DWMWCP_ROUND: u32 = 2;
+        unsafe {
+            let pref = DWMWCP_ROUND;
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_WINDOW_CORNER_PREFERENCE,
+                std::ptr::addr_of!(pref).cast(),
+                std::mem::size_of::<u32>() as u32,
             );
         }
     }
 
-    let margins = MARGINS {
-        cxLeftWidth: -1,
-        cxRightWidth: -1,
-        cyTopHeight: -1,
-        cyBottomHeight: -1,
-    };
-    unsafe { DwmExtendFrameIntoClientArea(hwnd, &margins)? };
-
-    let h_rgn = unsafe { CreateRectRgn(0, 0, -1, -1) };
-    let bb = DWM_BLURBEHIND {
-        dwFlags: DWM_BB_ENABLE | DWM_BB_BLURREGION,
-        fEnable: true.into(),
-        hRgnBlur: h_rgn,
-        fTransitionOnMaximized: false.into(),
-    };
-    unsafe {
-        let result = DwmEnableBlurBehindWindow(hwnd, &bb);
-        let _ = DeleteObject(h_rgn.into());
-        result?;
-    }
-
-    Ok(())
-}
-
-#[must_use]
-fn transparency_exstyle(before: isize, click_through: bool) -> isize {
-    let taskbar_safe = skip_taskbar_exstyle(before, true);
-    if click_through {
-        taskbar_safe | WS_EX_TRANSPARENT.0 as isize
-    } else {
-        taskbar_safe & !(WS_EX_TRANSPARENT.0 as isize)
-    }
-}
-
-/// Toggle HWND_TOPMOST. `true` puts the window above all non-topmost
-/// windows; `false` reverts to the normal Z-order.
-///
-/// Slint's `always-on-top: true;` property does the same thing
-/// declaratively. Use this helper for runtime toggling (e.g. a
-/// Settings switch).
-pub fn set_always_on_top(hwnd: HWND, on: bool) -> Result<(), Box<dyn std::error::Error>> {
-    let insert_after = if on { HWND_TOPMOST } else { HWND_NOTOPMOST };
-    unsafe {
-        SetWindowPos(
-            hwnd,
-            Some(insert_after),
-            0,
-            0,
-            0,
-            0,
-            SWP_NOMOVE | SWP_NOSIZE,
-        )?;
-    }
-    Ok(())
-}
-
-/// Toggle WDA_EXCLUDEFROMCAPTURE — the window becomes invisible in
-/// Print Screen, screen recording, and Teams/Meet screen share.
-///
-/// This is the "stealth" toggle in the existing overlay-mvp Settings
-/// → Stealth panel. WDA_EXCLUDEFROMCAPTURE is the Win32 mechanism
-/// behind it. Requires Windows 10 build 2004 / Windows 11.
-///
-/// I1: success means the exclusion was APPLIED AND READ BACK via
-/// `GetWindowDisplayAffinity` — callers reduce the Result through
-/// `presentable_stealth` to the EFFECTIVE state they show to the user,
-/// so a failed/unsupported exclusion can never be presented as stealth on.
-pub fn set_stealth(hwnd: HWND, on: bool) -> Result<(), Box<dyn std::error::Error>> {
-    let affinity = if on { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE };
-    unsafe {
-        SetWindowDisplayAffinity(hwnd, affinity)?;
-    }
-    // The cursor guard is cosmetic (keeps the arrow over a stealthed window)
-    // and a repeat install on the same HWND legitimately fails — its error
-    // must not mask the capture exclusion verified below.
-    let _ = install_stealth_cursor_guard(hwnd);
-    let actual = read_display_affinity(hwnd)?;
-    if actual == affinity.0 {
-        Ok(())
-    } else {
-        Err(format!(
-            "display affinity readback mismatch: wanted 0x{:x}, got 0x{:x}",
-            affinity.0, actual
-        )
-        .into())
-    }
-}
-
-/// Read the window's EFFECTIVE display affinity (WDA_* bits) back from the OS.
-/// `set_stealth` verifies through this; any path that must prove an exclusion
-/// independently can too (I1).
-pub fn read_display_affinity(hwnd: HWND) -> Result<u32, Box<dyn std::error::Error>> {
-    let mut affinity = 0u32;
-    unsafe {
-        GetWindowDisplayAffinity(hwnd, &mut affinity)?;
-    }
-    Ok(affinity)
-}
-
-/// The stealth state callers may PRESENT to the user (I1): active only when it
-/// was requested AND the apply/readback proved the exclusion. Any failure —
-/// forced or real — reduces to false; we never present a false success. Config
-/// intent is a separate decision: callers preserve it so the next apply
-/// retries.
-#[must_use]
-pub fn presentable_stealth(wanted: bool, applied: &Result<(), Box<dyn std::error::Error>>) -> bool {
-    wanted && applied.is_ok()
-}
-
-/// Toggle the window's TASKBAR exclusion. Wired to the stealth toggle so the
-/// overlay also disappears from the taskbar (a screen-share viewer shouldn't see
-/// "suflyor" in the taskbar). WS_EX_TOOLWINDOW/APPWINDOW only affect the taskbar
-/// at show-time, so a bit change does a brief hide -> restyle -> show-no-activate
-/// and re-asserts topmost. Only the TOOLWINDOW/APPWINDOW bits are touched (via
-/// `skip_taskbar_exstyle`); all other ex-style bits (layered / transparent /
-/// etc.) are preserved.
-///
-/// I2: BOTH directions force the TOOLWINDOW baseline + clear APPWINDOW, so an
-/// overlay window can never become a taskbar-eligible APPWINDOW through this
-/// toggle (and a winit re-show that dropped TOOLWINDOW gets it re-asserted).
-pub fn set_skip_taskbar(hwnd: HWND, skip: bool) -> Result<(), Box<dyn std::error::Error>> {
-    unsafe {
-        let before = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-        let after = skip_taskbar_exstyle(before, skip);
-        if after == before {
-            return Ok(());
-        }
-        let _ = ShowWindow(hwnd, SW_HIDE);
-        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, after);
-        let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-        // hide/show can drop topmost — re-assert it without stealing focus.
-        SetWindowPos(
-            hwnd,
-            Some(HWND_TOPMOST),
-            0,
-            0,
-            0,
-            0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-        )?;
-    }
-    Ok(())
-}
-
-/// Make a transient native window an owned popup of the overlay bar. Ownership
-/// keeps it above its bar and lets Windows destroy it with the owner; it is not
-/// parented, so its coordinates remain screen-relative.
-pub fn set_window_owner(popup: HWND, owner: HWND) {
-    unsafe {
-        let _ = SetWindowLongPtrW(popup, GWLP_HWNDPARENT, owner.0 as isize);
-    }
-}
-
-/// Pure ex-style transition behind `set_skip_taskbar` (I2), shared by every
-/// caller so the baseline cannot drift. Audit acceptance: an overlay window
-/// ALWAYS has the TOOLWINDOW baseline and NEVER APPWINDOW — so BOTH directions
-/// force TOOLWINDOW on + APPWINDOW off (a winit re-show may have dropped
-/// TOOLWINDOW; `skip = false` must re-assert it, not merely clear APPWINDOW).
-/// `skip` stays in the signature for call-site clarity; the baseline is
-/// identical in both directions. Every other ex-style bit (layered /
-/// transparent / topmost / …) is preserved.
-#[must_use]
-pub fn skip_taskbar_exstyle(before: isize, skip: bool) -> isize {
-    let _ = skip; // baseline is identical in both directions — see doc
-    let tool = WS_EX_TOOLWINDOW.0 as isize;
-    let app = WS_EX_APPWINDOW.0 as isize;
-    (before | tool) & !app
-}
-
-/// Bounds of a display monitor in screen-coordinate space.
-#[derive(Debug, Clone, Copy)]
-pub struct MonitorRect {
-    pub left: i32,
-    pub top: i32,
-    pub right: i32,
-    pub bottom: i32,
-    pub is_primary: bool,
-}
-
-impl MonitorRect {
+    /// Pick a target monitor for a new tile. Mirrors the heuristic in
+    /// `src-tauri/src/tile.rs::pick_monitor` — default to primary unless
+    /// a non-primary monitor is landscape AND at least as wide as primary.
+    ///
+    /// User memory `[[user-setup-monitors]]`: primary 1920x1080 landscape,
+    /// secondary 1200x1920 PORTRAIT at x=-1200. The "first non-primary"
+    /// default in earlier versions put tiles invisibly off-screen. This
+    /// helper preserves the fix.
     #[must_use]
-    pub fn width(&self) -> i32 {
-        self.right - self.left
+    pub fn pick_monitor(monitors: &[MonitorRect]) -> Option<MonitorRect> {
+        let primary = monitors.iter().find(|m| m.is_primary).copied()?;
+        let upgrade = monitors
+            .iter()
+            .filter(|m| !m.is_primary && m.is_landscape() && m.width() >= primary.width())
+            .copied()
+            .next();
+        Some(upgrade.unwrap_or(primary))
     }
-    #[must_use]
-    pub fn height(&self) -> i32 {
-        self.bottom - self.top
-    }
-    #[must_use]
-    pub fn is_landscape(&self) -> bool {
-        self.width() >= self.height()
-    }
-}
 
-/// Enumerate all attached display monitors with their bounds + primary flag.
-///
-/// Uses `EnumDisplayMonitors` (Win32). Consumed by `pick_monitor`
-/// below + by overlay_host's `apply_tile_hwnd_with_monitor` helper
-/// to choose a tile-spawn display + call `move_window` for placement.
-pub fn enum_monitors() -> Vec<MonitorRect> {
-    use std::cell::RefCell;
-    use windows::core::BOOL;
-    use windows::Win32::Foundation::LPARAM;
-    use windows::Win32::Graphics::Gdi::{
-        EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO,
+    // ===== Read-aloud helpers: copy-the-selection + clipboard text =====
+
+    // Compatibility aliases keep the selection-copy path unchanged while the
+    // clipboard implementation lives behind the native boundary.
+    pub use crate::native::clipboard::{
+        clear as clipboard_clear, read_text as clipboard_read_text,
+        write_text as clipboard_write_text,
     };
 
-    // Win32 constant — equals MONITORINFOF_PRIMARY. Hardcoded to avoid
-    // a feature-flag dependency that differs across windows-rs versions.
-    const MONITORINFOF_PRIMARY: u32 = 0x0000_0001;
-
-    thread_local! {
-        static MONITORS: RefCell<Vec<MonitorRect>> = const { RefCell::new(Vec::new()) };
-    }
-
-    unsafe extern "system" fn callback(
-        hmonitor: HMONITOR,
-        _hdc: HDC,
-        _lprect: *mut RECT,
-        _lparam: LPARAM,
-    ) -> BOOL {
-        let mut info = MONITORINFO {
-            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
-            ..Default::default()
+    /// Synthesize Ctrl+C to the FOREGROUND window. The overlay is click-through and
+    /// never focused, so the keystroke lands in whatever app the user is looking at,
+    /// copying their current selection. All four key events go in ONE `SendInput` so
+    /// Ctrl is reliably released (a stuck Ctrl would mangle the user's next keys).
+    ///
+    /// Each event carries its real hardware SCAN CODE (via `MapVirtualKeyW`), not
+    /// just the virtual key: some apps — notably Telegram Desktop and other Qt
+    /// builds — read the scan code and IGNORE a synthetic keystroke whose `wScan`
+    /// is 0, so a bare-vk Ctrl+C copied nothing there.
+    pub fn send_ctrl_c() {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{
+            MapVirtualKeyW, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
+            KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, MAPVK_VK_TO_VSC, VIRTUAL_KEY, VK_CONTROL,
         };
-        if unsafe { GetMonitorInfoW(hmonitor, &mut info) }.as_bool() {
-            let rect = MonitorRect {
-                left: info.rcMonitor.left,
-                top: info.rcMonitor.top,
-                right: info.rcMonitor.right,
-                bottom: info.rcMonitor.bottom,
-                is_primary: info.dwFlags & MONITORINFOF_PRIMARY != 0,
+        let vk_c = VIRTUAL_KEY(0x43); // 'C'
+        let ev = |vk: VIRTUAL_KEY, up: bool| {
+            let scan = unsafe { MapVirtualKeyW(u32::from(vk.0), MAPVK_VK_TO_VSC) } as u16;
+            let flags = if up {
+                KEYEVENTF_KEYUP
+            } else {
+                KEYBD_EVENT_FLAGS(0)
             };
-            MONITORS.with(|m| m.borrow_mut().push(rect));
-        }
-        true.into()
-    }
-
-    MONITORS.with(|m| m.borrow_mut().clear());
-    unsafe {
-        let _ = EnumDisplayMonitors(None, None, Some(callback), LPARAM(0));
-    }
-    MONITORS.with(|m| m.borrow().clone())
-}
-
-/// (x, y, width, height) of the ENTIRE virtual desktop spanning all monitors.
-/// The origin can be NEGATIVE (the user's portrait secondary sits at x = -1200),
-/// so callers must never assume (0,0). Physical pixels.
-#[must_use]
-pub fn virtual_screen_bounds() -> (i32, i32, i32, i32) {
-    use windows::Win32::UI::WindowsAndMessaging::{
-        GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
-        SM_YVIRTUALSCREEN,
-    };
-    unsafe {
-        (
-            GetSystemMetrics(SM_XVIRTUALSCREEN),
-            GetSystemMetrics(SM_YVIRTUALSCREEN),
-            GetSystemMetrics(SM_CXVIRTUALSCREEN),
-            GetSystemMetrics(SM_CYVIRTUALSCREEN),
-        )
-    }
-}
-
-/// Current mouse-cursor position in physical virtual-screen coordinates.
-#[must_use]
-pub fn cursor_pos() -> (i32, i32) {
-    use windows::Win32::Foundation::POINT;
-    use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
-    let mut p = POINT::default();
-    unsafe {
-        let _ = GetCursorPos(&mut p);
-    }
-    (p.x, p.y)
-}
-
-/// Hide every visible top-level window owned by THIS process; returns each
-/// hidden window's HWND (as `isize`) PLUS whether it was topmost, so
-/// `show_windows` can restore BOTH visibility and the always-on-top band —
-/// keeps our bar/tiles out of a GDI screenshot without dropping them behind
-/// other windows afterward.
-#[must_use]
-pub fn hide_own_windows() -> Vec<(isize, bool)> {
-    use std::cell::RefCell;
-    use windows::core::BOOL;
-    use windows::Win32::Foundation::LPARAM;
-    use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindowThreadProcessId, IsWindowVisible, WS_EX_TOPMOST,
-    };
-    thread_local! {
-        static HIDDEN: RefCell<Vec<(isize, bool)>> = const { RefCell::new(Vec::new()) };
-    }
-    unsafe extern "system" fn cb(hwnd: HWND, _l: LPARAM) -> BOOL {
-        let pid = std::process::id();
-        let mut wpid: u32 = 0;
-        unsafe { GetWindowThreadProcessId(hwnd, Some(&mut wpid)) };
-        if wpid == pid && unsafe { IsWindowVisible(hwnd) }.as_bool() {
-            let ex = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
-            let was_topmost = (ex & (WS_EX_TOPMOST.0 as isize)) != 0;
-            let _ = unsafe { ShowWindow(hwnd, SW_HIDE) };
-            HIDDEN.with(|h| h.borrow_mut().push((hwnd.0 as isize, was_topmost)));
-        }
-        true.into()
-    }
-    HIDDEN.with(|h| h.borrow_mut().clear());
-    unsafe {
-        let _ = EnumWindows(Some(cb), LPARAM(0));
-    }
-    // Force a DWM compositor flush so the windows we just hid are gone from the
-    // next composited frame BEFORE the caller's GDI BitBlt reads the screen.
-    // Without it, on a busy frame the just-hidden bar/tiles could still be
-    // captured into the (possibly cloud) vision screenshot — GDI BitBlt ignores
-    // WDA_EXCLUDEFROMCAPTURE, so this hide-then-flush is the only thing keeping
-    // our own overlay out of the outbound image.
-    {
-        use windows::Win32::Graphics::Dwm::DwmFlush;
-        let _ = unsafe { DwmFlush() };
-    }
-    HIDDEN.with(|h| h.borrow().clone())
-}
-
-/// Re-show windows hidden by `hide_own_windows` without stealing focus, and
-/// re-assert HWND_TOPMOST for those that were topmost — hide/show drops the
-/// always-on-top band, so without this the bar/tiles fall behind the foreground
-/// window after a capture (same fix as `apply_transparency`).
-pub fn show_windows(hwnds: &[(isize, bool)]) {
-    for &(h, was_topmost) in hwnds {
-        let hwnd = HWND(h as *mut std::ffi::c_void);
+            INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: vk,
+                        wScan: scan,
+                        dwFlags: flags,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            }
+        };
+        let inputs = [
+            ev(VK_CONTROL, false),
+            ev(vk_c, false),
+            ev(vk_c, true),
+            ev(VK_CONTROL, true),
+        ];
         unsafe {
-            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-            if was_topmost {
-                let _ = SetWindowPos(
-                    hwnd,
-                    Some(HWND_TOPMOST),
-                    0,
-                    0,
-                    0,
-                    0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-                );
+            SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
+        }
+    }
+
+    /// Global hotkeys arrive on key-down. Synthetic Ctrl+C must wait until the
+    /// physical Shift+Alt chord is released, otherwise foreground applications
+    /// receive Ctrl+Shift+Alt+C and do not copy the selection.
+    #[must_use]
+    pub fn read_aloud_hotkey_modifiers_released() -> bool {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{
+            GetAsyncKeyState, VIRTUAL_KEY, VK_CONTROL, VK_MENU, VK_SHIFT,
+        };
+        let down = |key: VIRTUAL_KEY| unsafe { GetAsyncKeyState(i32::from(key.0)) < 0 };
+        !down(VK_SHIFT) && !down(VK_MENU) && !down(VK_CONTROL)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+        use super::*;
+
+        #[test]
+        fn stealth_cursor_guard_defers_mouse_move_restore() {
+            assert!(restore_arrow_after_message(WM_MOUSEMOVE));
+            assert!(!restore_arrow_after_message(WM_SETCURSOR));
+        }
+
+        /// I1 — a forced apply/readback failure must reduce to effective-off, even
+        /// when stealth was requested; we never present a false success.
+        #[test]
+        fn presentable_stealth_requires_a_verified_exclusion() {
+            let ok: Result<(), Box<dyn std::error::Error>> = Ok(());
+            let forced: Result<(), Box<dyn std::error::Error>> =
+                Err("forced apply/readback failure".into());
+            assert!(presentable_stealth(true, &ok));
+            assert!(!presentable_stealth(true, &forced));
+            assert!(!presentable_stealth(false, &ok));
+            assert!(!presentable_stealth(false, &forced));
+        }
+
+        /// I2 — BOTH directions must force the TOOLWINDOW baseline on and
+        /// APPWINDOW off (never APPWINDOW), while every unrelated ex-style bit
+        /// survives — including the audit's regression input: a window whose
+        /// ex-style LACKS TOOLWINDOW (winit dropped it on a re-show) and CARRIES
+        /// APPWINDOW.
+        #[test]
+        fn skip_taskbar_keeps_toolwindow_baseline() {
+            use windows::Win32::UI::WindowsAndMessaging::{
+                WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+            };
+            let tool = WS_EX_TOOLWINDOW.0 as isize;
+            let app = WS_EX_APPWINDOW.0 as isize;
+            let unrelated =
+                WS_EX_LAYERED.0 as isize | WS_EX_TRANSPARENT.0 as isize | WS_EX_TOPMOST.0 as isize;
+
+            // skip on: TOOLWINDOW forced, APPWINDOW cleared, other bits preserved.
+            assert_eq!(
+                skip_taskbar_exstyle(unrelated | app, true),
+                unrelated | tool
+            );
+            // skip off: SAME baseline — APPWINDOW cleared AND the missing
+            // TOOLWINDOW re-asserted (the old code left TOOLWINDOW absent here).
+            let off = skip_taskbar_exstyle(unrelated | app, false);
+            assert_eq!(off, unrelated | tool);
+            assert_eq!(off & app, 0);
+            // The bare regression input (no TOOLWINDOW, APPWINDOW set) lands the
+            // exact baseline in BOTH directions.
+            assert_eq!(skip_taskbar_exstyle(app, true), tool);
+            assert_eq!(skip_taskbar_exstyle(app, false), tool);
+            // Idempotent on an already-baseline window (caller skips the hide/show).
+            assert_eq!(
+                skip_taskbar_exstyle(unrelated | tool, true),
+                unrelated | tool
+            );
+            assert_eq!(
+                skip_taskbar_exstyle(unrelated | tool, false),
+                unrelated | tool
+            );
+        }
+
+        #[test]
+        fn transparent_windows_clear_appwindow_without_losing_other_flags() {
+            use windows::Win32::UI::WindowsAndMessaging::{
+                WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+            };
+            let app = WS_EX_APPWINDOW.0 as isize;
+            let tool = WS_EX_TOOLWINDOW.0 as isize;
+            let transparent = WS_EX_TRANSPARENT.0 as isize;
+            let preserved = WS_EX_LAYERED.0 as isize | WS_EX_TOPMOST.0 as isize;
+
+            let overlay = transparency_exstyle(preserved | app, true);
+            assert_eq!(overlay, preserved | tool | transparent);
+            assert_eq!(overlay & app, 0);
+
+            let tile = transparency_exstyle(preserved | app | transparent, false);
+            assert_eq!(tile, preserved | tool);
+            assert_eq!(tile & app, 0);
+        }
+    }
+}
+
+#[cfg(windows)]
+pub use windows_impl::*;
+
+#[cfg(not(windows))]
+mod posix_stubs {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct HWND(pub isize);
+
+    #[derive(Debug, Clone, Copy)]
+    pub struct MonitorRect {
+        pub left: i32,
+        pub top: i32,
+        pub right: i32,
+        pub bottom: i32,
+        pub is_primary: bool,
+    }
+
+    impl MonitorRect {
+        #[must_use]
+        pub fn width(&self) -> i32 {
+            self.right - self.left
+        }
+        #[must_use]
+        pub fn height(&self) -> i32 {
+            self.bottom - self.top
+        }
+        #[must_use]
+        pub fn is_landscape(&self) -> bool {
+            self.width() >= self.height()
+        }
+    }
+
+    pub fn grab_hwnd(_window: &slint::Window) -> Result<HWND, Box<dyn std::error::Error>> {
+        Ok(HWND(1))
+    }
+
+    pub fn force_hide(_window: &slint::Window) {}
+
+    pub fn make_transparent_overlay(_hwnd: HWND) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+
+    pub fn make_transparent_tile(_hwnd: HWND) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+
+    pub fn composition_enabled() -> bool {
+        true
+    }
+
+    pub fn set_always_on_top(_hwnd: HWND, _on: bool) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+
+    pub fn set_stealth(_hwnd: HWND, _on: bool) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+
+    pub fn read_display_affinity(_hwnd: HWND) -> Result<u32, Box<dyn std::error::Error>> {
+        Ok(0)
+    }
+
+    pub fn presentable_stealth(
+        wanted: bool,
+        applied: &Result<(), Box<dyn std::error::Error>>,
+    ) -> bool {
+        wanted && applied.is_ok()
+    }
+
+    pub fn set_skip_taskbar(_hwnd: HWND, _skip: bool) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+
+    pub fn set_window_owner(_popup: HWND, _owner: HWND) {}
+
+    pub fn skip_taskbar_exstyle(before: isize, _skip: bool) -> isize {
+        before
+    }
+
+    pub fn enum_monitors() -> Vec<MonitorRect> {
+        vec![MonitorRect {
+            left: 0,
+            top: 0,
+            right: 1920,
+            bottom: 1080,
+            is_primary: true,
+        }]
+    }
+
+    pub fn virtual_screen_bounds() -> (i32, i32, i32, i32) {
+        (0, 0, 1920, 1080)
+    }
+
+    pub fn cursor_pos() -> (i32, i32) {
+        (500, 500)
+    }
+
+    pub fn hide_own_windows() -> Vec<(isize, bool)> {
+        Vec::new()
+    }
+
+    pub fn show_windows(_hwnds: &[(isize, bool)]) {}
+
+    pub fn focus_window(_hwnd: HWND) {}
+
+    pub fn is_foreground_window(_hwnd: HWND) -> bool {
+        true
+    }
+
+    pub fn reveal_window(_hwnd: HWND) {}
+
+    #[allow(clippy::type_complexity)]
+    static POSIX_WINDOW_RECTS: std::sync::Mutex<
+        Option<std::collections::HashMap<isize, (i32, i32, i32, i32)>>,
+    > = std::sync::Mutex::new(None);
+
+    pub fn set_window_rect(hwnd: HWND, x: i32, y: i32, w: i32, h: i32) {
+        if let Ok(mut guard) = POSIX_WINDOW_RECTS.lock() {
+            let map = guard.get_or_insert_with(std::collections::HashMap::new);
+            map.insert(hwnd.0, (x, y, w, h));
+        }
+    }
+
+    pub fn move_window(
+        hwnd: HWND,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        set_window_rect(hwnd, x, y, w, h);
+        Ok(())
+    }
+
+    pub fn move_window_pos_only(
+        hwnd: HWND,
+        x: i32,
+        y: i32,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if let Ok(mut guard) = POSIX_WINDOW_RECTS.lock() {
+            let map = guard.get_or_insert_with(std::collections::HashMap::new);
+            let old_size = map
+                .get(&hwnd.0)
+                .map(|(_, _, w, h)| (*w, *h))
+                .unwrap_or((460, 360));
+            map.insert(hwnd.0, (x, y, old_size.0, old_size.1));
+        }
+        Ok(())
+    }
+
+    pub fn get_window_rect(hwnd: HWND) -> Result<(i32, i32, i32, i32), Box<dyn std::error::Error>> {
+        if let Ok(guard) = POSIX_WINDOW_RECTS.lock() {
+            if let Some(map) = guard.as_ref() {
+                if let Some(&rect) = map.get(&hwnd.0) {
+                    return Ok(rect);
+                }
             }
         }
+        Ok((100, 100, 1280, 800))
     }
-}
 
-/// Bring a window to the foreground + give it keyboard focus so its FocusScope
-/// receives key events (e.g. Esc on the capture overlay). Unlike the always-on-
-/// top bar (which avoids activation to not steal focus), the capture overlay is
-/// modal and SHOULD take focus.
-pub fn focus_window(hwnd: HWND) {
-    use windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow;
-    unsafe {
-        let _ = SetForegroundWindow(hwnd);
+    pub fn work_area_for_window(_hwnd: HWND) -> Option<MonitorRect> {
+        Some(MonitorRect {
+            left: 0,
+            top: 0,
+            right: 1920,
+            bottom: 1080,
+            is_primary: true,
+        })
     }
-}
 
-/// Whether `hwnd` is currently the native foreground window.
-pub fn is_foreground_window(hwnd: HWND) -> bool {
-    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
-    unsafe { GetForegroundWindow() == hwnd }
-}
-
-/// Force a window VISIBLE at the Win32 level and bring it to the foreground.
-/// Used when re-opening a REUSED overlay window (Settings) that may have been
-/// hidden OUT FROM UNDER Slint by `hide_own_windows()` — the F8 / capture-chip
-/// flow hides every app window via `SW_HIDE`, but Slint's own visibility state
-/// is unchanged, so a later `window().show()` is a no-op and the window would
-/// stay invisible with no way back. `SW_SHOW` bypasses that stale state, so the
-/// gear ALWAYS brings Settings back. WDA stealth + DWM alpha persist across
-/// show/hide, so this does not un-stealth the window.
-pub fn reveal_window(hwnd: HWND) {
-    use windows::Win32::UI::WindowsAndMessaging::{SetForegroundWindow, ShowWindow, SW_SHOW};
-    unsafe {
-        let _ = ShowWindow(hwnd, SW_SHOW);
-        let _ = SetForegroundWindow(hwnd);
+    pub fn work_area_for_point(_x: i32, _y: i32) -> Option<MonitorRect> {
+        Some(MonitorRect {
+            left: 0,
+            top: 0,
+            right: 1920,
+            bottom: 1080,
+            is_primary: true,
+        })
     }
-}
 
-/// Position a window at the given screen coordinates with the given size.
-/// Used by `apply_tile_hwnd_with_monitor` in overlay_host to drive
-/// freshly-spawned tile windows onto the chosen display.
-pub fn move_window(
-    hwnd: HWND,
-    x: i32,
-    y: i32,
-    w: i32,
-    h: i32,
-) -> Result<(), Box<dyn std::error::Error>> {
-    unsafe {
-        SetWindowPos(
-            hwnd,
-            None,
-            x,
-            y,
-            w,
-            h,
-            windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER,
-        )?;
+    pub fn drag_begin(_hwnd: HWND) {}
+
+    pub fn drag_update(_hwnd: HWND) {}
+
+    pub fn drag_end() {}
+
+    pub fn set_round_corners(_hwnd: HWND) {}
+
+    pub fn pick_monitor(monitors: &[MonitorRect]) -> Option<MonitorRect> {
+        monitors.first().copied()
     }
-    Ok(())
-}
 
-/// Move the window to (x, y) without changing its size. Used by tile
-/// placement so Slint's natural sizing (per-monitor DPI scale aware)
-/// stays intact while we just position the window. Fixes Phase E6
-/// bug: setting `move_window(..., 460, 360)` with raw pixel sizes
-/// forces the window smaller than Slint's logical-size render canvas
-/// on HiDPI monitors → text overflows the dark fill area.
-pub fn move_window_pos_only(hwnd: HWND, x: i32, y: i32) -> Result<(), Box<dyn std::error::Error>> {
-    use windows::Win32::UI::WindowsAndMessaging::{SWP_NOSIZE, SWP_NOZORDER};
-    unsafe {
-        SetWindowPos(hwnd, None, x, y, 0, 0, SWP_NOZORDER | SWP_NOSIZE)?;
+    pub fn send_ctrl_c() {}
+
+    pub fn read_aloud_hotkey_modifiers_released() -> bool {
+        true
     }
-    Ok(())
-}
 
-/// Read the actual physical window rect (x, y, w, h) for placement
-/// math. Returns dimensions in screen coordinates (raw OS pixels).
-/// Used by the tile-spawn poll Timer to know each tile's real size
-/// after Slint's HiDPI-aware layout settles, so the right-edge
-/// alignment math uses the true width.
-pub fn get_window_rect(hwnd: HWND) -> Result<(i32, i32, i32, i32), Box<dyn std::error::Error>> {
-    use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
-    let mut r = RECT::default();
-    unsafe {
-        GetWindowRect(hwnd, &mut r)?;
+    pub fn clipboard_read_text() -> Option<String> {
+        None
     }
-    Ok((r.left, r.top, r.right - r.left, r.bottom - r.top))
-}
 
-/// Work area (monitor bounds MINUS the taskbar) of the monitor that most
-/// contains `hwnd`, as a `MonitorRect`. Used by `toggle_tile_maximize` to
-/// keep a maximized tile fully on-screen AND clear of the taskbar (so the
-/// tile's bottom row — e.g. the follow-up input — stays reachable).
-/// `is_primary` is meaningless here and always false.
-#[must_use]
-pub fn work_area_for_window(hwnd: HWND) -> Option<MonitorRect> {
-    use windows::Win32::Graphics::Gdi::{
-        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
-    };
-    unsafe {
-        let hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-        let mut info = MONITORINFO {
-            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
-            ..Default::default()
-        };
-        if GetMonitorInfoW(hmon, &mut info).as_bool() {
-            Some(MonitorRect {
-                left: info.rcWork.left,
-                top: info.rcWork.top,
-                right: info.rcWork.right,
-                bottom: info.rcWork.bottom,
-                is_primary: false,
-            })
-        } else {
-            None
+    pub fn clipboard_write_text(text: &str) {
+        #[cfg(target_os = "macos")]
+        {
+            let _ = crate::native::clipboard::set_text(text);
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = text;
         }
     }
+
+    pub fn clipboard_clear() {}
 }
 
-/// Work area of the monitor nearest a physical screen point. Tray popups use
-/// this instead of full monitor bounds so they never overlap the Windows
-/// taskbar, regardless of its edge or monitor.
-#[must_use]
-pub fn work_area_for_point(x: i32, y: i32) -> Option<MonitorRect> {
-    use windows::Win32::Graphics::Gdi::{
-        GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
-    };
-    unsafe {
-        let hmon = MonitorFromPoint(POINT { x, y }, MONITOR_DEFAULTTONEAREST);
-        let mut info = MONITORINFO {
-            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
-            ..Default::default()
-        };
-        if GetMonitorInfoW(hmon, &mut info).as_bool() {
-            Some(MonitorRect {
-                left: info.rcWork.left,
-                top: info.rcWork.top,
-                right: info.rcWork.right,
-                bottom: info.rcWork.bottom,
-                is_primary: false,
-            })
-        } else {
-            None
-        }
-    }
-}
-
-// Phase E6 v22 — manual cursor-delta drag state.
-//
-// REPLACES the old WM_NCLBUTTONDOWN system-drag. That approach
-// entered a Windows MODAL drag loop (SendMessageW blocks until
-// mouse-up), and the modal loop CONSUMED the mouse-up event before
-// Slint could see it. Slint's TouchArea then stayed stuck in the
-// "pressed" state forever → every subsequent click was treated as
-// a drag → bar + tiles became unclickable. User: "после того как
-// кликнул на :: idle вся зона стала drag и больше ничего не
-// кликается; вызванный тайл завис, двигается но ничего не
-// прожимается".
-//
-// New model: no modal loop. We track the cursor delta ourselves.
-//   drag_begin(hwnd) on pointer-down  → record cursor + window pos
-//   drag_update(hwnd) on pointer-move → move window by the delta
-// Slint sees the real mouse-up normally, so TouchArea state stays
-// consistent and clicks keep working after a drag.
-
-use std::cell::Cell;
-
-thread_local! {
-    /// (cursor_start_x, cursor_start_y, window_start_x, window_start_y).
-    /// Set on drag_begin, read on drag_update. UI-thread-only so a
-    /// thread-local Cell is sufficient (no cross-thread sharing).
-    static DRAG_ANCHOR: Cell<Option<(i32, i32, i32, i32)>> = const { Cell::new(None) };
-}
-
-/// Begin a manual window drag — capture the cursor + window origin so
-/// subsequent `drag_update` calls can move the window by the delta.
-/// Call from the drag-handle TouchArea's pointer-event(down).
-pub fn drag_begin(hwnd: HWND) {
-    use windows::Win32::Foundation::POINT;
-    use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetWindowRect};
-    let mut cursor = POINT::default();
-    let mut rect = RECT::default();
-    unsafe {
-        if GetCursorPos(&mut cursor).is_err() {
-            return;
-        }
-        if GetWindowRect(hwnd, &mut rect).is_err() {
-            return;
-        }
-    }
-    DRAG_ANCHOR.with(|a| a.set(Some((cursor.x, cursor.y, rect.left, rect.top))));
-}
-
-/// Continue a manual window drag — move the window so its origin
-/// tracks the cursor by the same delta seen since `drag_begin`.
-/// Call from the drag-handle TouchArea's `moved` callback (guarded
-/// by `self.pressed` on the Slint side). No-op if no drag is active.
-pub fn drag_update(hwnd: HWND) {
-    use windows::Win32::Foundation::POINT;
-    use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, SWP_NOSIZE, SWP_NOZORDER};
-    let Some((cx0, cy0, wx0, wy0)) = DRAG_ANCHOR.with(Cell::get) else {
-        return;
-    };
-    let mut cursor = POINT::default();
-    unsafe {
-        if GetCursorPos(&mut cursor).is_err() {
-            return;
-        }
-        let nx = wx0 + (cursor.x - cx0);
-        let ny = wy0 + (cursor.y - cy0);
-        let _ = SetWindowPos(hwnd, None, nx, ny, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-    }
-}
-
-/// Clear drag anchor. Optional — `drag_begin` overwrites it anyway —
-/// but calling on pointer-up keeps the state tidy.
-pub fn drag_end() {
-    DRAG_ANCHOR.with(|a| a.set(None));
-}
-
-/// v0.17.1 — ask DWM to round this window's corners (Windows 11). A frameless
-/// Slint window with an OPAQUE background (the archive / settings / palette,
-/// which can't use per-pixel-alpha rounding like the transparent-overlay
-/// tiles) otherwise shows hard square corners; an inner `border-radius` only
-/// rounds the FILL, leaving the window's own square edges. `DWMWCP_ROUND`
-/// clips the actual window region at the OS level — all four corners, no
-/// content change. No-op on Windows 10 (the attribute is silently ignored).
-pub fn set_round_corners(hwnd: HWND) {
-    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE};
-    // DWMWCP_ROUND = 2 (the standard, larger-radius rounding).
-    const DWMWCP_ROUND: u32 = 2;
-    unsafe {
-        let pref = DWMWCP_ROUND;
-        let _ = DwmSetWindowAttribute(
-            hwnd,
-            DWMWA_WINDOW_CORNER_PREFERENCE,
-            std::ptr::addr_of!(pref).cast(),
-            std::mem::size_of::<u32>() as u32,
-        );
-    }
-}
-
-/// Pick a target monitor for a new tile. Mirrors the heuristic in
-/// `src-tauri/src/tile.rs::pick_monitor` — default to primary unless
-/// a non-primary monitor is landscape AND at least as wide as primary.
-///
-/// User memory `[[user-setup-monitors]]`: primary 1920x1080 landscape,
-/// secondary 1200x1920 PORTRAIT at x=-1200. The "first non-primary"
-/// default in earlier versions put tiles invisibly off-screen. This
-/// helper preserves the fix.
-#[must_use]
-pub fn pick_monitor(monitors: &[MonitorRect]) -> Option<MonitorRect> {
-    let primary = monitors.iter().find(|m| m.is_primary).copied()?;
-    let upgrade = monitors
-        .iter()
-        .filter(|m| !m.is_primary && m.is_landscape() && m.width() >= primary.width())
-        .copied()
-        .next();
-    Some(upgrade.unwrap_or(primary))
-}
-
-// ===== Read-aloud helpers: copy-the-selection + clipboard text =====
-
-// Compatibility aliases keep the selection-copy path unchanged while the
-// clipboard implementation lives behind the native boundary.
-pub use crate::native::clipboard::{
-    clear as clipboard_clear, read_text as clipboard_read_text, write_text as clipboard_write_text,
-};
-
-/// Synthesize Ctrl+C to the FOREGROUND window. The overlay is click-through and
-/// never focused, so the keystroke lands in whatever app the user is looking at,
-/// copying their current selection. All four key events go in ONE `SendInput` so
-/// Ctrl is reliably released (a stuck Ctrl would mangle the user's next keys).
-///
-/// Each event carries its real hardware SCAN CODE (via `MapVirtualKeyW`), not
-/// just the virtual key: some apps — notably Telegram Desktop and other Qt
-/// builds — read the scan code and IGNORE a synthetic keystroke whose `wScan`
-/// is 0, so a bare-vk Ctrl+C copied nothing there.
-pub fn send_ctrl_c() {
-    use windows::Win32::UI::Input::KeyboardAndMouse::{
-        MapVirtualKeyW, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
-        KEYEVENTF_KEYUP, MAPVK_VK_TO_VSC, VIRTUAL_KEY, VK_CONTROL,
-    };
-    let vk_c = VIRTUAL_KEY(0x43); // 'C'
-    let ev = |vk: VIRTUAL_KEY, up: bool| {
-        let scan = unsafe { MapVirtualKeyW(u32::from(vk.0), MAPVK_VK_TO_VSC) } as u16;
-        let flags = if up {
-            KEYEVENTF_KEYUP
-        } else {
-            KEYBD_EVENT_FLAGS(0)
-        };
-        INPUT {
-            r#type: INPUT_KEYBOARD,
-            Anonymous: INPUT_0 {
-                ki: KEYBDINPUT {
-                    wVk: vk,
-                    wScan: scan,
-                    dwFlags: flags,
-                    time: 0,
-                    dwExtraInfo: 0,
-                },
-            },
-        }
-    };
-    let inputs = [
-        ev(VK_CONTROL, false),
-        ev(vk_c, false),
-        ev(vk_c, true),
-        ev(VK_CONTROL, true),
-    ];
-    unsafe {
-        SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
-    }
-}
-
-/// Global hotkeys arrive on key-down. Synthetic Ctrl+C must wait until the
-/// physical Shift+Alt chord is released, otherwise foreground applications
-/// receive Ctrl+Shift+Alt+C and do not copy the selection.
-#[must_use]
-pub fn read_aloud_hotkey_modifiers_released() -> bool {
-    use windows::Win32::UI::Input::KeyboardAndMouse::{
-        GetAsyncKeyState, VIRTUAL_KEY, VK_CONTROL, VK_MENU, VK_SHIFT,
-    };
-    let down = |key: VIRTUAL_KEY| unsafe { GetAsyncKeyState(i32::from(key.0)) < 0 };
-    !down(VK_SHIFT) && !down(VK_MENU) && !down(VK_CONTROL)
-}
-
-#[cfg(test)]
-mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-
-    use super::*;
-
-    #[test]
-    fn stealth_cursor_guard_defers_mouse_move_restore() {
-        assert!(restore_arrow_after_message(WM_MOUSEMOVE));
-        assert!(!restore_arrow_after_message(WM_SETCURSOR));
-    }
-
-    /// I1 — a forced apply/readback failure must reduce to effective-off, even
-    /// when stealth was requested; we never present a false success.
-    #[test]
-    fn presentable_stealth_requires_a_verified_exclusion() {
-        let ok: Result<(), Box<dyn std::error::Error>> = Ok(());
-        let forced: Result<(), Box<dyn std::error::Error>> =
-            Err("forced apply/readback failure".into());
-        assert!(presentable_stealth(true, &ok));
-        assert!(!presentable_stealth(true, &forced));
-        assert!(!presentable_stealth(false, &ok));
-        assert!(!presentable_stealth(false, &forced));
-    }
-
-    /// I2 — BOTH directions must force the TOOLWINDOW baseline on and
-    /// APPWINDOW off (never APPWINDOW), while every unrelated ex-style bit
-    /// survives — including the audit's regression input: a window whose
-    /// ex-style LACKS TOOLWINDOW (winit dropped it on a re-show) and CARRIES
-    /// APPWINDOW.
-    #[test]
-    fn skip_taskbar_keeps_toolwindow_baseline() {
-        use windows::Win32::UI::WindowsAndMessaging::{
-            WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
-        };
-        let tool = WS_EX_TOOLWINDOW.0 as isize;
-        let app = WS_EX_APPWINDOW.0 as isize;
-        let unrelated =
-            WS_EX_LAYERED.0 as isize | WS_EX_TRANSPARENT.0 as isize | WS_EX_TOPMOST.0 as isize;
-
-        // skip on: TOOLWINDOW forced, APPWINDOW cleared, other bits preserved.
-        assert_eq!(
-            skip_taskbar_exstyle(unrelated | app, true),
-            unrelated | tool
-        );
-        // skip off: SAME baseline — APPWINDOW cleared AND the missing
-        // TOOLWINDOW re-asserted (the old code left TOOLWINDOW absent here).
-        let off = skip_taskbar_exstyle(unrelated | app, false);
-        assert_eq!(off, unrelated | tool);
-        assert_eq!(off & app, 0);
-        // The bare regression input (no TOOLWINDOW, APPWINDOW set) lands the
-        // exact baseline in BOTH directions.
-        assert_eq!(skip_taskbar_exstyle(app, true), tool);
-        assert_eq!(skip_taskbar_exstyle(app, false), tool);
-        // Idempotent on an already-baseline window (caller skips the hide/show).
-        assert_eq!(
-            skip_taskbar_exstyle(unrelated | tool, true),
-            unrelated | tool
-        );
-        assert_eq!(
-            skip_taskbar_exstyle(unrelated | tool, false),
-            unrelated | tool
-        );
-    }
-
-    #[test]
-    fn transparent_windows_clear_appwindow_without_losing_other_flags() {
-        use windows::Win32::UI::WindowsAndMessaging::{
-            WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
-        };
-        let app = WS_EX_APPWINDOW.0 as isize;
-        let tool = WS_EX_TOOLWINDOW.0 as isize;
-        let transparent = WS_EX_TRANSPARENT.0 as isize;
-        let preserved = WS_EX_LAYERED.0 as isize | WS_EX_TOPMOST.0 as isize;
-
-        let overlay = transparency_exstyle(preserved | app, true);
-        assert_eq!(overlay, preserved | tool | transparent);
-        assert_eq!(overlay & app, 0);
-
-        let tile = transparency_exstyle(preserved | app | transparent, false);
-        assert_eq!(tile, preserved | tool);
-        assert_eq!(tile & app, 0);
-    }
-}
+#[cfg(not(windows))]
+pub use posix_stubs::*;

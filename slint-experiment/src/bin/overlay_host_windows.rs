@@ -7,6 +7,7 @@ use slint_replay::markdown;
 use slint_replay::runtime_state::{shared_runtime, SharedSlintRuntime};
 use slint_replay::slint_events::{SlintEvents, SlintUiBridge};
 use slint_replay::slint_session;
+#[allow(unused_imports)]
 use slint_replay::win32::{
     drag_begin, drag_update, enum_monitors, focus_window, get_window_rect, grab_hwnd,
     is_foreground_window, make_transparent_overlay, make_transparent_tile, move_window_pos_only,
@@ -973,12 +974,15 @@ fn main() -> Result<(), slint::PlatformError> {
     let tiles: TileWindows = Rc::new(RefCell::new(Vec::new()));
     let settings: Rc<RefCell<Option<SettingsWindow>>> = Rc::new(RefCell::new(None));
 
-    use slint::winit_030::winit::platform::windows::WindowAttributesExtWindows;
-    slint::BackendSelector::new()
-        .backend_name("winit".into())
-        .with_winit_window_attributes_hook(|attributes| attributes.with_skip_taskbar(true))
-        .select()?;
-    diag!("[overlay-host] Slint windows excluded from taskbar at creation");
+    #[cfg(windows)]
+    {
+        use slint::winit_030::winit::platform::windows::WindowAttributesExtWindows;
+        let _ = slint::BackendSelector::new()
+            .backend_name("winit".into())
+            .with_winit_window_attributes_hook(|attributes| attributes.with_skip_taskbar(true))
+            .select();
+        diag!("[overlay-host] Slint windows excluded from taskbar at creation");
+    }
     let overlay = OverlayBarWindow::new()?;
     // Seed the process-global colour scheme from config, then apply to the bar's
     // Theme global so the very first paint uses the user's choice (default
@@ -3705,11 +3709,14 @@ fn main() -> Result<(), slint::PlatformError> {
                         return;
                     }
                 };
-                let (bar_left, bar_top, _, _) = match get_window_rect(bar_hwnd) {
-                    Ok(rect) => rect,
-                    Err(e) => {
-                        diag!("[overlay-host] lock-menu event=error stage=bar-rect error={e}");
-                        return;
+                let (bar_left, bar_top) = {
+                    let pos = bar.window().position();
+                    if cfg!(target_os = "macos") || (pos.x != -32000 && pos.x != 0) {
+                        (pos.x, pos.y)
+                    } else {
+                        get_window_rect(bar_hwnd)
+                            .map(|(l, t, _, _)| (l, t))
+                            .unwrap_or((pos.x, pos.y))
                     }
                 };
                 let scale = bar.window().scale_factor().max(0.1);
@@ -3783,6 +3790,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         *error_for_reveal.borrow_mut() = Some(format!("move: {e}"));
                         return false;
                     }
+                    window.window().set_position(slint::PhysicalPosition::new(x, y));
                     if !focus_for_reveal.borrow_mut().mark_revealed(generation) {
                         return true;
                     }
@@ -4211,6 +4219,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let weak_for_drag = overlay.as_weak();
         overlay.on_drag_start_requested(move || {
             if let Some(o) = weak_for_drag.upgrade() {
+                let _ = slint_replay::native::window::begin_drag(o.window());
                 if let Ok(hwnd) = grab_hwnd(o.window()) {
                     drag_begin(hwnd);
                 }
@@ -4221,6 +4230,12 @@ fn main() -> Result<(), slint::PlatformError> {
             if let Some(o) = weak_for_move.upgrade() {
                 if let Ok(hwnd) = grab_hwnd(o.window()) {
                     drag_update(hwnd);
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    let (cx, cy) = slint_replay::win32::cursor_pos();
+                    let _ = slint_replay::native::window::begin_drag(o.window());
+                    let _ = cx; let _ = cy;
                 }
             }
         });
@@ -4450,6 +4465,7 @@ fn main() -> Result<(), slint::PlatformError> {
             }
         });
     }
+    #[cfg(windows)]
     {
         let menu_weak = Rc::downgrade(&tray_menu);
         let focus = tray_menu_focus.clone();
@@ -4474,7 +4490,8 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    let tray_handle = {
+    #[cfg(windows)]
+    let _tray_handle = {
         let weak_for_tray = overlay.as_weak();
         let state_for_dispatch = state.clone();
         let cfg_for_tray = cfg.clone();
@@ -4513,6 +4530,17 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     };
 
+    #[cfg(target_os = "macos")]
+    {
+        let weak_status = overlay.as_weak();
+        slint::Timer::single_shot(Duration::from_millis(200), move || {
+            if let Some(window) = weak_status.upgrade() {
+                let _ = slint_replay::native::window::configure_floating(window.window());
+                let _ = slint_replay::native::status::install(window.window());
+            }
+        });
+    }
+
     // `ComponentHandle::run()` exits as soon as the last Slint window is
     // hidden. Hidden-to-tray deliberately has no visible Slint window, so keep
     // the UI thread pumping our native tray message window until an explicit
@@ -4521,7 +4549,8 @@ fn main() -> Result<(), slint::PlatformError> {
     let result = slint::run_event_loop_until_quit();
     // — remove the tray icon on the clean shutdown path (icon gone before
     // the process exits; a relaunch child adds its own, never a duplicate).
-    drop(tray_handle);
+    #[cfg(windows)]
+    drop(_tray_handle);
     TRAY_AVAILABLE.store(false, Ordering::Relaxed);
     // All event-loop exits share the normal session stop path.
     let _ = slint_session::stop_session(slint_rt.clone(), &cfg);
@@ -4598,13 +4627,19 @@ fn spawn_relaunch() -> bool {
     };
     // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP so the child is fully
     // independent of this (exiting) process and its console/group.
-    use std::os::windows::process::CommandExt;
-    const DETACHED_PROCESS: u32 = 0x0000_0008;
-    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-    match std::process::Command::new(&exe)
-        .arg("--relaunch")
-        .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
-        .spawn()
+    #[cfg(windows)]
+    let res = {
+        use std::os::windows::process::CommandExt;
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        std::process::Command::new(&exe)
+            .arg("--relaunch")
+            .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+            .spawn()
+    };
+    #[cfg(not(windows))]
+    let res = std::process::Command::new(&exe).arg("--relaunch").spawn();
+    match res
     {
         Ok(child) => {
             eprintln!(
@@ -4671,9 +4706,13 @@ fn recenter_when_sized(weak: slint::Weak<OverlayBarWindow>, target_w_logical: f3
             None => (60, 24),
         };
         let _ = move_window_pos_only(hwnd, x, y);
+        o.window().set_position(slint::PhysicalPosition::new(x, y));
+        #[cfg(target_os = "macos")]
+        let _ = slint_replay::native::window::center_window(o.window());
     });
 }
 
+#[cfg(windows)]
 fn tray_menu_action(index: i32) -> Option<slint_replay::tray::TrayAction> {
     use slint_replay::tray::TrayAction;
     match index {
@@ -4685,12 +4724,20 @@ fn tray_menu_action(index: i32) -> Option<slint_replay::tray::TrayAction> {
     }
 }
 
+#[cfg(windows)]
 fn dismiss_tray_menu(menu: &TrayMenuWindow, focus_armed: &RefCell<bool>) {
     *focus_armed.borrow_mut() = false;
     let _ = menu.hide();
     slint_replay::tray::return_focus();
 }
 
+#[cfg(not(windows))]
+fn dismiss_tray_menu(menu: &TrayMenuWindow, focus_armed: &RefCell<bool>) {
+    *focus_armed.borrow_mut() = false;
+    let _ = menu.hide();
+}
+
+#[cfg(windows)]
 fn open_tray_menu(
     menu: &Rc<TrayMenuWindow>,
     anchor_x: i32,
@@ -4777,6 +4824,7 @@ fn open_tray_menu(
 /// session tasks and tiles keep running. Never touches compact state.
 fn hide_bar_to_tray(weak: &slint::Weak<OverlayBarWindow>) {
     let Some(o) = weak.upgrade() else { return };
+    #[cfg(windows)]
     if let Err(e) = slint_replay::tray::show_icon() {
         diag!("hide-to-tray ignored: notification icon failed: {e}");
         return;
@@ -4791,16 +4839,22 @@ fn hide_bar_to_tray(weak: &slint::Weak<OverlayBarWindow>) {
 /// compact-mode change, no config write. `show_windows` re-shows without
 /// stealing focus AND re-asserts the always-on-top band that hide/show drops
 /// (the bar is always topmost — `always-on-top: true` in overlay_bar.slint).
+#[allow(dead_code)]
 fn restore_bar_from_tray(weak: &slint::Weak<OverlayBarWindow>) {
     let Some(o) = weak.upgrade() else { return };
     BAR_TRAY_HIDDEN.store(false, Ordering::Relaxed);
+    #[cfg(windows)]
     slint_replay::tray::hide_icon();
     // Slint-side show first; the bar was SW_HIDE'd out from under Slint, so
     // the Win32 re-show below is what actually makes it visible again (same
     // stale-state reasoning as `win32::reveal_window`).
     let _ = o.show();
     if let Ok(hwnd) = grab_hwnd(o.window()) {
-        slint_replay::win32::show_windows(&[(hwnd.0 as isize, true)]);
+        #[cfg(windows)]
+        let raw_h = hwnd.0 as isize;
+        #[cfg(not(windows))]
+        let raw_h = hwnd.0;
+        slint_replay::win32::show_windows(&[(raw_h, true)]);
     }
     diag!("bar restored from tray (compact mode unchanged)");
 }
@@ -4809,6 +4863,7 @@ fn restore_bar_from_tray(weak: &slint::Weak<OverlayBarWindow>) {
 /// machinery: Pause/Resume invokes the bar's pause callback, Stop invokes the
 /// timer-toggle callback (guarded to STOP-only — it must never START a
 /// session), Quit uses the same clean `quit_event_loop` path as the bar's ✕.
+#[cfg(windows)]
 fn tray_action_dispatch(
     action: slint_replay::tray::TrayAction,
     weak: &slint::Weak<OverlayBarWindow>,
@@ -4912,6 +4967,9 @@ fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_replay::app_stat
             Some(p) => (p.left + ((p.width() - bar_w) / 2).max(0), p.top + 24),
             None => (60, 24),
         };
+        o.window().set_position(slint::PhysicalPosition::new(x, y));
+        #[cfg(target_os = "macos")]
+        let _ = slint_replay::native::window::center_window(o.window());
         // I3 — success means the bar actually landed on-screen. If BOTH the
         // computed pin and the hard (60,24) retry fail, report the attempt as
         // FAILED so realize_with_retries keeps retrying and eventually runs
@@ -4926,6 +4984,7 @@ fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_replay::app_stat
                 // Last resort: even the pin failed — try a hard (60,24) so
                 // a parked bar can't stay invisible at (-32000).
                 eprintln!("[overlay-host] bar pin failed: {e}; retry at (60,24)");
+                o.window().set_position(slint::PhysicalPosition::new(60, 24));
                 match move_window_pos_only(hwnd, 60, 24) {
                     Ok(()) => {
                         eprintln!("[overlay-host] bar pinned at hard fallback (60, 24)");

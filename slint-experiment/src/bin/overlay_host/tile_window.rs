@@ -149,7 +149,7 @@ fn cascade_cycle(
 /// Win32 SetWindowPos with current position so the tile expands in
 /// place from its top-left corner. Flips tile.tile-maximized so the
 /// button glyph updates.
-pub(crate) fn toggle_tile_maximize(hwnd: windows::Win32::Foundation::HWND, tile: &TileWindow) {
+pub(crate) fn toggle_tile_maximize(hwnd: slint_replay::win32::HWND, tile: &TileWindow) {
     // Phase E6 v18 fix — use Slint's window().set_size() not raw
     // Win32 SetWindowPos. SetWindowPos resized the OS window but
     // left Slint's layout pass thinking the size was still 460×360
@@ -213,6 +213,7 @@ pub(crate) fn wire_tile_drag(tile: &TileWindow) {
     let weak = tile.as_weak();
     tile.on_drag_start_requested(move || {
         if let Some(t) = weak.upgrade() {
+            let _ = slint_replay::native::window::begin_drag(t.window());
             if let Ok(hwnd) = grab_hwnd(t.window()) {
                 drag_begin(hwnd);
             }
@@ -407,11 +408,13 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
             // rendering stays correct (text fills the dark fill area
             // instead of overflowing).
             let _ = move_window_pos_only(hwnd, x_clamped, y_clamped);
+            t.window().set_position(slint::PhysicalPosition::new(x_clamped, y_clamped));
         } else {
             // No monitor from pick_monitor (degenerate — no primary display).
             // A stealth-parked tile would otherwise stay off the virtual desktop
             // (permanently invisible), so bring it back to a safe on-screen spot.
             let _ = move_window_pos_only(hwnd, 100, 100);
+            t.window().set_position(slint::PhysicalPosition::new(100, 100));
             eprintln!("[overlay-host] tile placement: no monitor from pick_monitor — fallback to (100, 100)");
         }
     });

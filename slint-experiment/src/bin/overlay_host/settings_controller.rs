@@ -895,9 +895,10 @@ pub(crate) fn open_settings(
                     // Create it first so the folder opens even before the first
                     // recording exists. Explorer launch is fire-and-forget.
                     let _ = std::fs::create_dir_all(&dir);
-                    if let Err(e) = std::process::Command::new("explorer").arg(&dir).spawn() {
-                        eprintln!("[overlay-host] open recordings folder failed: {e}");
-                    }
+                    #[cfg(target_os = "macos")]
+                    let _ = std::process::Command::new("open").arg(&dir).spawn();
+                    #[cfg(windows)]
+                    let _ = std::process::Command::new("explorer").arg(&dir).spawn();
                 }
                 Err(e) => eprintln!("[overlay-host] cannot resolve recordings dir: {e:#}"),
             }
@@ -911,11 +912,21 @@ pub(crate) fn open_settings(
         win.on_open_data_folder_clicked(move || match overlay_backend::paths::data_root() {
             Some(dir) => {
                 let _ = std::fs::create_dir_all(&dir);
-                if let Err(e) = std::process::Command::new("explorer").arg(&dir).spawn() {
-                    eprintln!("[overlay-host] open data folder failed: {e}");
-                }
+                #[cfg(target_os = "macos")]
+                let _ = std::process::Command::new("open").arg(&dir).spawn();
+                #[cfg(windows)]
+                let _ = std::process::Command::new("explorer").arg(&dir).spawn();
             }
             None => eprintln!("[overlay-host] cannot resolve data folder"),
+        });
+    }
+    {
+        win.on_open_groq_keys_clicked(move || {
+            let url = "https://console.groq.com/keys";
+            #[cfg(target_os = "macos")]
+            let _ = std::process::Command::new("open").arg(url).spawn();
+            #[cfg(windows)]
+            let _ = std::process::Command::new("explorer").arg(url).spawn();
         });
     }
     {
@@ -1186,6 +1197,7 @@ pub(crate) fn open_settings(
         let weak = win.as_weak();
         win.on_drag_start_requested(move || {
             if let Some(w) = weak.upgrade() {
+                let _ = slint_replay::native::window::begin_drag(w.window());
                 if let Ok(hwnd) = grab_hwnd(w.window()) {
                     drag_begin(hwnd);
                 }

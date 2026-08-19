@@ -108,16 +108,8 @@ mod gigaam_shim {
 }
 
 fn public_gigaam_load_error(error: anyhow::Error, public_message: &'static str) -> anyhow::Error {
-    #[cfg(windows)]
-    {
-        log::warn!("GigaAM load failed: {error}");
-        anyhow::anyhow!(public_message)
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = public_message;
-        error
-    }
+    log::warn!("GigaAM load failed: {error}");
+    anyhow::anyhow!(public_message)
 }
 
 /// Select the ONNX Runtime execution provider for the in-process GigaAM model.
@@ -210,7 +202,66 @@ pub async fn test_connection_backend(backend: &SttBackendCfg) -> Result<String> 
             .await
             .map_err(|e| anyhow::anyhow!("GigaAM test join: {e}"))?
         }
+        SttBackendCfg::Uap { base_url } => {
+            let Some(root) = normalize_uap_base_url(base_url) else {
+                anyhow::bail!("local STT service URL is not configured");
+            };
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(10))
+                .build()
+                .context("build reqwest client")?;
+            let resp = match client.get(format!("{root}/healthz")).send().await {
+                Ok(r) => r,
+                Err(_) => {
+                    // The transport error embeds the private service URL.
+                    log::warn!("STT uap health GET failed");
+                    anyhow::bail!("local STT service unreachable");
+                }
+            };
+            if resp.status().is_success() {
+                Ok("local STT service ready".to_string())
+            } else {
+                log::warn!("STT uap health check returned HTTP {}", resp.status());
+                anyhow::bail!("local STT service health check failed")
+            }
+        }
     }
+}
+
+/// Normalize the user-supplied base URL of the raw-PCM "uap" STT service to
+/// its scheme + authority + optional path root, WITHOUT a trailing slash and
+/// WITHOUT a trailing `/v1` (callers append the exact route they need).
+/// Accepts the URL with or without `/v1`; returns `None` for anything that is
+/// not http(s) with a non-empty whitespace-free authority. No host/IP is ever
+/// invented here — the result is built only from the user's input.
+#[must_use]
+pub fn normalize_uap_base_url(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.chars().any(char::is_whitespace) {
+        return None;
+    }
+    let rest = if let Some(rest) = trimmed.strip_prefix("http://") {
+        rest
+    } else {
+        trimmed.strip_prefix("https://")?
+    };
+    if rest.is_empty() || rest.starts_with('/') {
+        return None;
+    }
+    let mut url = reqwest::Url::parse(trimmed).ok()?;
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return None;
+    }
+    let path = url.path().trim_end_matches('/');
+    let path = path.strip_suffix("/v1").unwrap_or(path).to_string();
+    url.set_path(&path);
+    Some(url.as_str().trim_end_matches('/').to_string())
 }
 
 /// Synchronous one-shot validation that a GigaAM model directory actually
@@ -235,6 +286,9 @@ const VAD_RMS_THRESHOLD: f32 = 50.0;
 const VAD_HANG_MS: u64 = 800;
 /// Force flush if buffer is this long (seconds).
 const MAX_UTTERANCE_SEC: u64 = 25;
+/// Leave room below the local service's hard 25-second request limit.
+const UAP_LIVE_FLUSH_SEC: u64 = 20;
+const UAP_MAX_SAMPLES: usize = 400_000;
 /// Skip flushing buffers shorter than this (avoid sending noise).
 const MIN_UTTERANCE_SEC: f32 = 0.4;
 /// Anti-hallucination: require this fraction of 200ms chunks to be above
@@ -350,7 +404,27 @@ pub fn spawn(
                 let bearer = (!bearer.trim().is_empty()).then(|| bearer.clone());
                 Some((url, bearer, model.clone()))
             }
-            SttBackendCfg::Gigaam { .. } => None,
+            SttBackendCfg::Gigaam { .. } | SttBackendCfg::Uap { .. } => None,
+        };
+
+        // Explicit raw-PCM "uap" target: the FULL transcribe URL, built once.
+        // Kept separate from the multipart Cloud/Whisper target above because
+        // the wire contract is different (octet-stream body, text/plain reply).
+        let uap_target: Option<String> = match &backend {
+            SttBackendCfg::Uap { base_url } => match normalize_uap_base_url(base_url) {
+                Some(root) => Some(format!("{root}/v1/audio/transcriptions")),
+                None => {
+                    // Generic: never log the unusable URL itself.
+                    log::error!("STT uap selected but the service URL is not usable");
+                    None
+                }
+            },
+            _ => None,
+        };
+        let utterance_cap_sec = if uap_target.is_some() {
+            UAP_LIVE_FLUSH_SEC
+        } else {
+            MAX_UTTERANCE_SEC
         };
 
         // Per-source rolling buffer + silence tracking
@@ -426,7 +500,7 @@ pub fn spawn(
             }
 
             let dur_sec = utt.samples.len() as f32 / TARGET_SAMPLE_RATE as f32;
-            let forced_by_size = dur_sec >= MAX_UTTERANCE_SEC as f32;
+            let forced_by_size = dur_sec >= utterance_cap_sec as f32;
             let should_flush =
                 (utt.silent_run_ms >= VAD_HANG_MS && utt.had_voice) || forced_by_size;
             if forced_by_size {
@@ -438,7 +512,7 @@ pub fn spawn(
                      had_voice={} silent_run={}ms (VAD threshold {})",
                     chunk.source,
                     dur_sec,
-                    MAX_UTTERANCE_SEC,
+                    utterance_cap_sec,
                     utt.had_voice,
                     utt.silent_run_ms,
                     VAD_RMS_THRESHOLD,
@@ -548,6 +622,34 @@ pub fn spawn(
                                 &model,
                             )
                             .await;
+                            finish_transcript(
+                                result,
+                                src,
+                                start_ts,
+                                sample_count,
+                                &tx,
+                                &health_for_task,
+                            )
+                            .await;
+                        });
+                    } else if let Some(url) = uap_target.clone() {
+                        // Explicit raw-PCM local service — octet-stream body,
+                        // text/plain answer. No bearer, no model, no prompt.
+                        let client = client.clone();
+                        let sem = stt_semaphore.clone();
+                        log::info!(
+                            "STT submitting {:?}: {} samples ({:.1}s, uap raw-pcm)",
+                            src,
+                            sample_count,
+                            dur_sec
+                        );
+                        tokio::spawn(async move {
+                            // Bound concurrent HTTP calls — wait if 6 already in flight.
+                            let _permit = match sem.acquire_owned().await {
+                                Ok(p) => p,
+                                Err(_) => return, // semaphore closed, runtime shutting down
+                            };
+                            let result = transcribe_uap(&client, &url, &to_send.samples).await;
                             finish_transcript(
                                 result,
                                 src,
@@ -819,6 +921,16 @@ pub async fn transcribe_once(
             .await
             .map_err(|e| anyhow::anyhow!("GigaAM join: {e}"))?
         }
+        SttBackendCfg::Uap { base_url } => {
+            let Some(root) = normalize_uap_base_url(base_url) else {
+                anyhow::bail!("local STT service URL is not configured");
+            };
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(60))
+                .build()
+                .context("build client")?;
+            transcribe_uap(&client, &format!("{root}/v1/audio/transcriptions"), pcm).await
+        }
     }
 }
 
@@ -871,6 +983,82 @@ fn is_permanent_error(msg: &str) -> bool {
         || msg.contains("HTTP 403")
         || msg.contains("HTTP 404")
         || msg.contains("HTTP 413")
+}
+
+/// One transcription against the explicit raw-PCM local STT service: POST the
+/// samples as little-endian signed i16 mono 16 kHz octet-stream, expect UTF-8
+/// `text/plain` back. Same retry/backoff + permanent-error policy as the
+/// multipart path. Every failure stays generic — the service URL / LAN
+/// address, the response body, and the transport error chain never leave the
+/// file log.
+async fn transcribe_uap(client: &reqwest::Client, url: &str, pcm: &[i16]) -> Result<String> {
+    if pcm.len() > UAP_MAX_SAMPLES {
+        anyhow::bail!("STT audio chunk too large");
+    }
+    // Encode once; reuse on retries.
+    let mut body = Vec::with_capacity(pcm.len() * 2);
+    for &s in pcm {
+        body.extend_from_slice(&s.to_le_bytes());
+    }
+
+    // Exponential backoff: 0s, 1s, 2s (3 attempts total) — mirrors `transcribe`.
+    let mut last_err: Option<anyhow::Error> = None;
+    for attempt in 0u32..3 {
+        if attempt > 0 {
+            let delay = std::time::Duration::from_millis(1000 * (1u64 << (attempt - 1)));
+            tokio::time::sleep(delay).await;
+            log::info!("STT retry attempt {} (after {:?})", attempt + 1, delay);
+        }
+
+        let result = async {
+            let resp = client
+                .post(url)
+                .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+                .body(body.clone())
+                .send()
+                .await
+                .map_err(|_| {
+                    log::warn!("STT uap POST failed");
+                    anyhow::anyhow!("STT network error")
+                })?;
+            if !resp.status().is_success() {
+                let status = resp.status();
+                // Status + size only; the body can carry internals and must
+                // not reach the tile or the shareable log export.
+                let body = resp.text().await.unwrap_or_default();
+                log::warn!(
+                    "{}",
+                    crate::http_log::http_error_line("STT", status.as_u16(), body.len())
+                );
+                anyhow::bail!("STT HTTP {status}");
+            }
+            let bytes = resp.bytes().await.map_err(|_| {
+                log::warn!("STT uap response read failed");
+                anyhow::anyhow!("STT network error")
+            })?;
+            Ok::<String, anyhow::Error>(String::from_utf8_lossy(&bytes).into_owned())
+        }
+        .await;
+
+        match result {
+            Ok(text) => {
+                let trimmed = text.trim();
+                if trimmed.is_empty() {
+                    anyhow::bail!("STT returned no text");
+                }
+                return Ok(trimmed.to_string());
+            }
+            Err(e) => {
+                let msg = format!("{e:#}");
+                if is_permanent_error(&msg) {
+                    return Err(e);
+                }
+                log::warn!("STT attempt {} failed: {msg}", attempt + 1);
+                last_err = Some(e);
+            }
+        }
+    }
+    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("STT failed after 3 attempts")))
 }
 
 async fn transcribe_once_attempt(
@@ -1564,5 +1752,173 @@ mod tests {
         // Must not panic — the session-start path calls it unconditionally.
         configure_gigaam_accelerator(true);
         configure_gigaam_accelerator(false);
+    }
+
+    // ── uap raw-PCM backend ──
+
+    #[test]
+    fn uap_url_normalization_accepts_with_and_without_v1() {
+        assert_eq!(
+            normalize_uap_base_url("http://127.0.0.1:9000").as_deref(),
+            Some("http://127.0.0.1:9000")
+        );
+        assert_eq!(
+            normalize_uap_base_url("http://127.0.0.1:9000/").as_deref(),
+            Some("http://127.0.0.1:9000")
+        );
+        assert_eq!(
+            normalize_uap_base_url("http://127.0.0.1:9000/v1").as_deref(),
+            Some("http://127.0.0.1:9000")
+        );
+        assert_eq!(
+            normalize_uap_base_url("  http://127.0.0.1:9000/v1/  ").as_deref(),
+            Some("http://127.0.0.1:9000")
+        );
+        assert_eq!(
+            normalize_uap_base_url("https://stt.example/v1").as_deref(),
+            Some("https://stt.example")
+        );
+        // A deeper path root survives; only the trailing /v1 is stripped.
+        assert_eq!(
+            normalize_uap_base_url("http://host:9000/api/v1").as_deref(),
+            Some("http://host:9000/api")
+        );
+    }
+
+    #[test]
+    fn uap_url_normalization_rejects_bad_input() {
+        assert_eq!(normalize_uap_base_url(""), None);
+        assert_eq!(normalize_uap_base_url("   "), None);
+        assert_eq!(normalize_uap_base_url("127.0.0.1:9000"), None);
+        assert_eq!(normalize_uap_base_url("ftp://127.0.0.1:9000"), None);
+        assert_eq!(normalize_uap_base_url("http://"), None);
+        assert_eq!(normalize_uap_base_url("http:///v1"), None);
+        assert_eq!(normalize_uap_base_url("http://host with space"), None);
+        assert_eq!(normalize_uap_base_url("http://host\t/v1"), None);
+        assert_eq!(normalize_uap_base_url("http://user@host/v1"), None);
+        assert_eq!(normalize_uap_base_url("http://host/v1?token=x"), None);
+        assert_eq!(normalize_uap_base_url("http://host/v1#fragment"), None);
+    }
+
+    #[derive(Debug)]
+    struct UapCaptured {
+        path: String,
+        content_type: String,
+        body: Vec<u8>,
+    }
+
+    /// In-process fake raw-PCM STT service: POST /v1/audio/transcriptions
+    /// answers a text/plain transcript, GET /healthz answers 200. Every
+    /// request is captured for wire-contract assertions. Same tiny_http
+    /// pattern as the ai.rs tests — no new dependency.
+    fn serve_fake_uap(
+        transcript: &'static str,
+    ) -> (String, std::sync::mpsc::Receiver<UapCaptured>) {
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", server.server_addr());
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            for mut req in server.incoming_requests() {
+                let path = req.url().to_string();
+                let is_healthz = path == "/healthz";
+                let content_type = req
+                    .headers()
+                    .iter()
+                    .find(|h| h.field.to_string().eq_ignore_ascii_case("content-type"))
+                    .map(|h| h.value.as_str().to_string())
+                    .unwrap_or_default();
+                let mut body = Vec::new();
+                let _ = std::io::Read::read_to_end(req.as_reader(), &mut body);
+                let _ = tx.send(UapCaptured {
+                    path,
+                    content_type,
+                    body,
+                });
+                let mut resp =
+                    tiny_http::Response::from_string(if is_healthz { "ok" } else { transcript });
+                if let Ok(header) = tiny_http::Header::from_bytes(
+                    &b"Content-Type"[..],
+                    &b"text/plain; charset=utf-8"[..],
+                ) {
+                    resp = resp.with_header(header);
+                }
+                let _ = req.respond(resp);
+            }
+        });
+        (url, rx)
+    }
+
+    #[tokio::test]
+    async fn uap_transcribe_sends_raw_le_i16_and_reads_text() {
+        let (url, captured) = serve_fake_uap("  привет, мир  ");
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .unwrap();
+        let pcm: Vec<i16> = vec![1, -2, 32767, -32768, 0];
+        let text = transcribe_uap(&client, &format!("{url}/v1/audio/transcriptions"), &pcm)
+            .await
+            .unwrap();
+        // text/plain UTF-8 answer, trimmed, empty-rejected elsewhere.
+        assert_eq!(text, "привет, мир");
+
+        let request = captured.recv().unwrap();
+        assert_eq!(request.path, "/v1/audio/transcriptions");
+        assert_eq!(request.content_type, "application/octet-stream");
+        // Raw little-endian signed i16 — no WAV header, no multipart.
+        let mut expected = Vec::new();
+        for sample in &pcm {
+            expected.extend_from_slice(&sample.to_le_bytes());
+        }
+        assert_eq!(request.body, expected);
+    }
+
+    #[tokio::test]
+    async fn uap_transcribe_rejects_empty_and_whitespace_transcripts() {
+        let (url, captured) = serve_fake_uap("   \n ");
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .unwrap();
+        let err = transcribe_uap(
+            &client,
+            &format!("{url}/v1/audio/transcriptions"),
+            &vec![100; 1600],
+        )
+        .await
+        .expect_err("whitespace transcript must be rejected");
+        assert!(
+            err.to_string().contains("no text"),
+            "generic error expected, got: {err}"
+        );
+        // Exactly one request — an empty answer is not retried.
+        captured.recv().unwrap();
+        assert!(captured.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn uap_transcribe_rejects_oversize_without_truncating() {
+        let client = reqwest::Client::new();
+        let err = transcribe_uap(
+            &client,
+            "http://127.0.0.1:9/v1/audio/transcriptions",
+            &vec![0; UAP_MAX_SAMPLES + 1],
+        )
+        .await
+        .expect_err("oversize audio must fail before any request");
+        assert_eq!(err.to_string(), "STT audio chunk too large");
+    }
+
+    #[tokio::test]
+    async fn uap_health_check_hits_healthz() {
+        let (url, captured) = serve_fake_uap("unused");
+        // A /v1 suffix on the stored base URL must normalize away.
+        let backend = SttBackendCfg::Uap {
+            base_url: format!("{url}/v1"),
+        };
+        let ok = test_connection_backend(&backend).await.unwrap();
+        assert!(!ok.is_empty());
+        let request = captured.recv().unwrap();
+        assert_eq!(request.path, "/healthz");
     }
 }

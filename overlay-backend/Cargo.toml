@@ -112,6 +112,13 @@ windows = { version = "0.62", features = [
 # crate name even though `windows` re-exports its public types.
 windows-core = "0.62"
 
+# macOS-only BUILD dependency — compiles the tiny Objective-C AVAudioEngine
+# microphone bridge (native/macos/mic_capture.m) via build.rs. No new runtime
+# dependency: the bridge links only the system Foundation + AVFoundation
+# frameworks. Not CPAL, not objc2 — deliberately minimal.
+[target.'cfg(target_os = "macos")'.build-dependencies]
+cc = "1"
+
 [dev-dependencies]
 tempfile = "3"
 # Drop-guard for test cleanup (bookmark_tests in journal.rs).

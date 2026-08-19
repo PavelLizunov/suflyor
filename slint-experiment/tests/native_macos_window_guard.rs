@@ -19,9 +19,20 @@ fn production_macos_window_uses_the_proven_minimal_appkit_bridge() {
     assert!(objc.contains("1UL << 18"));
     assert!(!objc.contains("NSStatusItem"));
     assert!(!objc.contains("Gate 0A"));
+    // The key/front raise reuses the shared view-to-window helper and stays
+    // on plain AppKit: activate the app, then make the window key and front.
+    assert!(objc.contains("int32_t suflyor_macos_raise_window_key_front(void *raw_view)"));
+    assert!(objc.contains("suflyor_window_for_view(raw_view)"));
+    assert!(objc.contains("makeKeyAndOrderFront"));
+    assert!(objc.contains("orderFrontRegardless"));
+    assert!(objc.contains("activateIgnoringOtherApps:YES"));
+    assert!(objc.contains("int32_t suflyor_macos_center_window(void *raw_view)"));
 
     assert!(rust.contains("RawWindowHandle::AppKit"));
-    assert!(host.contains("set_bootstrap_mode(true)"));
+    assert!(rust.contains("fn suflyor_macos_raise_window_key_front(view: *mut c_void) -> c_int;"));
+    assert!(rust.contains("pub fn raise_key_front(window: &slint::Window)"));
+    assert!(rust.contains("pub fn center_window(window: &slint::Window)"));
+    assert!(host.contains("set_bootstrap_mode(false)"));
     assert!(host.contains("native::window::configure_floating"));
     assert!(host.contains("native::window::begin_drag"));
     assert!(ui.contains("!root.compact-bar && !root.bootstrap-mode"));

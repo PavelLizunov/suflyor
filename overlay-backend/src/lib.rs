@@ -7,12 +7,19 @@
 pub mod ai;
 #[cfg(windows)]
 pub mod audio;
-// Non-Windows seam: same public `overlay_backend::audio` surface, but capture /
-// device enumeration / recording entry points fail with explicit unsupported
-// errors (no OS calls, no fake success).
-#[cfg(not(windows))]
+// macOS seam: real microphone capture on the default input through the tiny
+// AVAudioEngine bridge (native/macos/mic_capture.m). System audio stays
+// unsupported there — logged once as degraded, never faked.
+#[cfg(target_os = "macos")]
+#[path = "audio_macos.rs"]
+pub mod audio;
+// Remaining non-Windows seam: same public `overlay_backend::audio` surface,
+// but capture / device enumeration / recording entry points fail with
+// explicit unsupported errors (no OS calls, no fake success).
+#[cfg(all(not(windows), not(target_os = "macos")))]
 #[path = "audio_unavailable.rs"]
 pub mod audio;
+pub mod audio_metrics;
 // WASAPI route-change watcher; only the Windows audio.rs consumes it.
 #[cfg(windows)]
 pub(crate) mod audio_route;

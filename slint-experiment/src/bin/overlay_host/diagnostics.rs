@@ -220,34 +220,37 @@ pub(crate) fn prime_gpu_cache() {
 /// pass leaves it intact. Runs ONLY on the background thread spawned by
 /// `prime_gpu_cache` — never on the event loop.
 fn gpu_name() -> String {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let out = std::process::Command::new("powershell")
-        .creation_flags(CREATE_NO_WINDOW)
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name",
-        ])
-        .output();
-    let Ok(out) = out else {
-        return "unknown".to_string();
-    };
-    if !out.status.success() {
-        return "unknown".to_string();
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let out = std::process::Command::new("powershell")
+            .creation_flags(CREATE_NO_WINDOW)
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name",
+            ])
+            .output();
+        if let Ok(out) = out {
+            let text = String::from_utf8_lossy(&out.stdout);
+            let names: Vec<&str> = text
+                .lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .collect();
+            if !names.is_empty() {
+                return names.join(", ");
+            }
+        }
     }
-    let text = String::from_utf8_lossy(&out.stdout);
-    let names: Vec<&str> = text
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty())
-        .collect();
-    if names.is_empty() {
-        "unknown".to_string()
-    } else {
-        names.join(", ")
+    #[cfg(target_os = "macos")]
+    {
+        return "Apple Silicon (Metal)".to_string();
     }
+    #[allow(unreachable_code)]
+    "Generic GPU".to_string()
 }
 
 /// P1.1 — build a REDACTED plain-text diagnostics report for the clipboard.
@@ -689,12 +692,20 @@ fn collect_redacted_log() -> std::io::Result<std::path::PathBuf> {
 /// `raw_arg` keeps the explicit quotes around the path so `/select` works even
 /// when the profile path contains a space (e.g. a username with a space).
 fn reveal_in_explorer(path: &std::path::Path) {
-    use std::os::windows::process::CommandExt;
-    // No creation_flags here: explorer.exe is a GUI app; CREATE_NO_WINDOW is for
-    // console processes and can interfere with how it opens/selects the folder.
-    let _ = std::process::Command::new("explorer.exe")
-        .raw_arg(format!("/select,\"{}\"", path.display()))
-        .spawn();
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = std::process::Command::new("explorer.exe")
+            .raw_arg(format!("/select,\"{}\"", path.display()))
+            .spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open")
+            .arg("-R")
+            .arg(path)
+            .spawn();
+    }
 }
 
 #[cfg(test)]

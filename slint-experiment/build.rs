@@ -36,11 +36,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cc::Build::new()
             .file("src/native/macos/window.m")
             .file("src/native/macos/status.m")
+            .file("src/native/macos/clipboard.m")
+            .file("src/native/macos/screen.m")
             .flag("-fobjc-arc")
             .compile("suflyor_appkit");
         println!("cargo:rustc-link-lib=framework=AppKit");
+        println!("cargo:rustc-link-lib=framework=ScreenCaptureKit");
+        println!("cargo:rustc-link-lib=framework=CoreGraphics");
+        println!("cargo:rustc-link-lib=framework=Vision");
         println!("cargo:rerun-if-changed=src/native/macos/window.m");
         println!("cargo:rerun-if-changed=src/native/macos/status.m");
+        println!("cargo:rerun-if-changed=src/native/macos/clipboard.m");
+        println!("cargo:rerun-if-changed=src/native/macos/screen.m");
     }
 
     // Embed the app icon into the .exe so Explorer / the taskbar / a

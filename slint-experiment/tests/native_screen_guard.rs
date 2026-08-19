@@ -29,3 +29,26 @@ fn gdi_screenshot_acquisition_is_owned_by_the_windows_adapter() {
     assert!(source.contains("biHeight: -h"));
     assert_get_dibits_isolated_to(&root.join("src"), &adapter);
 }
+
+#[test]
+fn macos_screencapturekit_adapter_is_wired() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let build_rs = fs::read_to_string(root.join("build.rs")).expect("read build.rs");
+    assert!(build_rs.contains("src/native/macos/screen.m"));
+    assert!(build_rs.contains("framework=ScreenCaptureKit"));
+    assert!(build_rs.contains("framework=Vision"));
+
+    let mod_rs = fs::read_to_string(root.join("src/native/mod.rs")).expect("read mod.rs");
+    assert!(mod_rs.contains("path = \"macos/screen.rs\""));
+
+    let screen_rs =
+        fs::read_to_string(root.join("src/native/macos/screen.rs")).expect("read screen.rs");
+    assert!(screen_rs.contains("suflyor_macos_capture_display_bgra"));
+    assert!(screen_rs.contains("recognize_text_from_bgra"));
+
+    let screen_m =
+        fs::read_to_string(root.join("src/native/macos/screen.m")).expect("read screen.m");
+    assert!(screen_m.contains("SCShareableContent"));
+    assert!(screen_m.contains("SCScreenshotManager"));
+    assert!(screen_m.contains("VNRecognizeTextRequest"));
+}

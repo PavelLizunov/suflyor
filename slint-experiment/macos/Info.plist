@@ -6,11 +6,15 @@
     <string>en</string>
     <key>CFBundleExecutable</key>
     <string>overlay-host</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon.icns</string>
     <key>CFBundleIdentifier</key>
     <string>com.ninitux.suflyor.macos</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
+    <string>Suflyor</string>
+    <key>CFBundleDisplayName</key>
     <string>Suflyor</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
@@ -21,8 +25,12 @@
     <key>LSMinimumSystemVersion</key>
     <string>14.2</string>
     <key>LSUIElement</key>
-    <true/>
+    <false/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Suflyor captures your microphone to transcribe what you say during meetings.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Suflyor captures system audio to transcribe meeting participants.</string>
 </dict>
 </plist>

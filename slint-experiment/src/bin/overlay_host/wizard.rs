@@ -361,6 +361,7 @@ pub(crate) fn wire_wizard_steps(
         let weak = win.as_weak();
         win.on_drag_start_requested(move || {
             if let Some(w) = weak.upgrade() {
+                let _ = slint_replay::native::window::begin_drag(w.window());
                 if let Ok(hwnd) = grab_hwnd(w.window()) {
                     drag_begin(hwnd);
                 }

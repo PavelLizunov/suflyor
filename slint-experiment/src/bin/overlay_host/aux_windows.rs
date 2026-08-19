@@ -229,6 +229,7 @@ pub(crate) fn open_text_ask(
         let weak = win.as_weak();
         win.on_drag_start_requested(move || {
             if let Some(w) = weak.upgrade() {
+                let _ = slint_replay::native::window::begin_drag(w.window());
                 if let Ok(hwnd) = grab_hwnd(w.window()) {
                     drag_begin(hwnd);
                 }
@@ -282,6 +283,7 @@ pub(crate) fn open_help(
             return;
         }
     };
+    win.global::<ui::Platform>().set_is_macos(true);
     win.global::<ui::Theme>()
         .set_scheme(clamp_scheme(global_scheme()));
     // Light up the bar's 🆘 chip while help is open (same as ⚙ for Settings).
@@ -307,6 +309,7 @@ pub(crate) fn open_help(
         let weak = win.as_weak();
         win.on_drag_start_requested(move || {
             if let Some(w) = weak.upgrade() {
+                let _ = slint_replay::native::window::begin_drag(w.window());
                 if let Ok(hwnd) = grab_hwnd(w.window()) {
                     drag_begin(hwnd);
                 }
@@ -388,6 +391,7 @@ pub(crate) fn open_palette(
         let weak = win.as_weak();
         win.on_drag_start_requested(move || {
             if let Some(w) = weak.upgrade() {
+                let _ = slint_replay::native::window::begin_drag(w.window());
                 if let Ok(hwnd) = grab_hwnd(w.window()) {
                     drag_begin(hwnd);
                 }
@@ -548,6 +552,8 @@ pub(crate) fn open_archive(
     };
     win.global::<ui::Theme>()
         .set_scheme(clamp_scheme(global_scheme()));
+    win.global::<ui::Platform>()
+        .set_is_macos(cfg!(target_os = "macos"));
     // Egress signpost: warn (in the header) that "↻ Summary" re-uploads saved
     // audio when STT is the cloud (Groq). Local backends stay one-click, no note.
     win.set_stt_is_cloud(!cfg.read().stt_is_local());
@@ -1246,6 +1252,7 @@ pub(crate) fn open_archive(
         let weak = win.as_weak();
         win.on_drag_start_requested(move || {
             if let Some(w) = weak.upgrade() {
+                let _ = slint_replay::native::window::begin_drag(w.window());
                 if let Ok(hwnd) = grab_hwnd(w.window()) {
                     drag_begin(hwnd);
                 }
@@ -2907,6 +2914,8 @@ pub(crate) fn open_transcript(
     };
     win.global::<ui::Theme>()
         .set_scheme(clamp_scheme(global_scheme()));
+    win.global::<ui::Platform>()
+        .set_is_macos(cfg!(target_os = "macos"));
     win.set_heading(SharedString::from(heading));
     win.set_empty(utts.is_empty());
     let model = Rc::new(VecModel::from(lines));
@@ -2949,6 +2958,7 @@ pub(crate) fn open_transcript(
         let weak = win.as_weak();
         win.on_drag_start_requested(move || {
             if let Some(w) = weak.upgrade() {
+                let _ = slint_replay::native::window::begin_drag(w.window());
                 if let Ok(hwnd) = grab_hwnd(w.window()) {
                     drag_begin(hwnd);
                 }

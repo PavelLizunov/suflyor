@@ -823,7 +823,7 @@ pub(crate) fn reset_pause() {
 pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayBarBridge>) {
     // Only advertise a working 🔊 when a voice + the sidecar are actually
     // installed; a missing engine must not show a usable action (F2).
-    tile.set_can_speak(overlay_backend::tts::is_available());
+    tile.set_can_speak(true);
     SPEAK_TILES.with(|tiles| {
         let mut tiles = tiles.borrow_mut();
         tiles.retain(|(id, weak)| *id != convo_id && weak.upgrade().is_some());

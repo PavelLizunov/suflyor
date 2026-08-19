@@ -35,6 +35,10 @@ mod indexer;
 mod manifest;
 mod npy;
 mod num2words;
+#[cfg(windows)]
+mod playback;
+#[cfg(not(windows))]
+#[path = "playback_macos.rs"]
 mod playback;
 mod protocol;
 mod rng;
@@ -51,7 +55,19 @@ use protocol::{Cmd, Event, RejectReason};
 /// `%APPDATA%\suflyor\tts` — shared TTS root (Piper voices live in their own
 /// subdirectories; Tera owns `teratts-v2-<revision>`).
 fn tts_root() -> Option<PathBuf> {
-    std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("suflyor").join("tts"))
+    if let Some(a) = std::env::var_os("APPDATA") {
+        return Some(PathBuf::from(a).join("suflyor").join("tts"));
+    }
+    if let Some(h) = std::env::var_os("HOME") {
+        return Some(
+            PathBuf::from(h)
+                .join("Library")
+                .join("Application Support")
+                .join("suflyor")
+                .join("tts"),
+        );
+    }
+    None
 }
 
 fn emit(out: &mut impl Write, event: &Event) {

@@ -45,6 +45,17 @@ pub fn capture_monitor_under_cursor() -> Result<CapturedBgra, Box<dyn std::error
     })
 }
 
+/// Capture the main display on macOS via ScreenCaptureKit.
+#[cfg(target_os = "macos")]
+pub fn capture_monitor_under_cursor() -> Result<CapturedBgra, Box<dyn std::error::Error>> {
+    let (bgra, width, height) = crate::native::screen::capture_display_bgra_with_dimensions()?;
+    Ok(CapturedBgra {
+        bgra,
+        width,
+        height,
+    })
+}
+
 /// Convert a TOP-DOWN BGRA buffer to a downscaled JPEG `data:` URI. CPU-bound
 /// (per-pixel swizzle + resize + encode) — run it off the UI thread.
 pub fn bgra_to_jpeg_data_url(
@@ -113,6 +124,12 @@ pub fn capture_virtual_desktop() -> Result<(CapturedBgra, i32, i32), Box<dyn std
         vx,
         vy,
     ))
+}
+
+#[cfg(target_os = "macos")]
+pub fn capture_virtual_desktop() -> Result<(CapturedBgra, i32, i32), Box<dyn std::error::Error>> {
+    let captured = capture_monitor_under_cursor()?;
+    Ok((captured, 0, 0))
 }
 
 /// Crop a TOP-DOWN BGRA frame to a sub-rect (image-pixel coords), clamped to the

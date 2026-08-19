@@ -150,7 +150,7 @@ pub(crate) fn apply_bar_stealth(
 /// Apply WDA to a single registry/realize window, logging (never swallowing)
 /// a failure (I1): a window whose exclusion failed stays capturable, and the
 /// user must be able to diagnose it from the log.
-fn apply_stealth_one(hwnd: windows::Win32::Foundation::HWND, on: bool) {
+fn apply_stealth_one(hwnd: slint_replay::win32::HWND, on: bool) {
     if let Err(e) = set_stealth(hwnd, on) {
         diag!("[overlay-host] stealth apply failed (window stays capturable): {e}");
     }
@@ -242,7 +242,7 @@ pub(crate) fn clamp_scheme(n: i32) -> i32 {
 pub(crate) fn present_window_stealth_aware<W, F>(win: &W, decorate: F)
 where
     W: slint::ComponentHandle + 'static,
-    F: Fn(windows::Win32::Foundation::HWND) + 'static,
+    F: Fn(slint_replay::win32::HWND) + 'static,
 {
     present_window_stealth_aware_at(win, None, decorate);
 }
@@ -271,7 +271,7 @@ pub(crate) fn present_window_stealth_aware_at<W, F>(
     decorate: F,
 ) where
     W: slint::ComponentHandle + 'static,
-    F: Fn(windows::Win32::Foundation::HWND) + 'static,
+    F: Fn(slint_replay::win32::HWND) + 'static,
 {
     // G1 — layout-independent Ctrl+C/V/X/A/Z/Y for every editable field on this window
     // (winit key filter; idempotent). Covers Settings / palette / text_ask / wizard /
@@ -307,12 +307,17 @@ pub(crate) fn present_window_stealth_aware_at<W, F>(
         let monitors = enum_monitors();
         if let Some((sx, sy)) = saved_pos.filter(|p| pos_on_visible_monitor(*p, &monitors)) {
             let _ = move_window_pos_only(hwnd, sx, sy);
+            w.window().set_position(slint::PhysicalPosition::new(sx, sy));
         } else if let Some(mon) = pick_monitor(&monitors) {
             let cx = (mon.left + (mon.width() - w_px) / 2).max(mon.left + 8);
             let cy = (mon.top + (mon.height() - h_px) / 2).max(mon.top + 8);
             let _ = move_window_pos_only(hwnd, cx, cy);
+            w.window().set_position(slint::PhysicalPosition::new(cx, cy));
+            #[cfg(target_os = "macos")]
+            let _ = slint_replay::native::window::center_window(w.window());
         } else {
             let _ = move_window_pos_only(hwnd, 100, 100);
+            w.window().set_position(slint::PhysicalPosition::new(100, 100));
         }
         true
     });

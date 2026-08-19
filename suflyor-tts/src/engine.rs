@@ -77,9 +77,9 @@ pub fn rate_to_speed(rate: i32) -> f32 {
     2.0_f32.powf(r / 10.0)
 }
 
-/// `%APPDATA%\suflyor\tts` — where voice models are installed.
+/// `<config_dir>/suflyor/tts` — where voice models are installed.
 pub fn tts_root() -> Option<PathBuf> {
-    std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("suflyor").join("tts"))
+    dirs::config_dir().map(|a| a.join("suflyor").join("tts"))
 }
 
 /// A selectable voice: `id` is the model dir name, `name` the display name.
@@ -247,5 +247,17 @@ pub mod text {
             out.push(cur);
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    #[test]
+    fn tts_root_resolves_cross_platform_config_dir() {
+        let root = super::tts_root().expect("config dir must be resolvable");
+        assert!(root.to_string_lossy().contains("suflyor"));
+        assert!(root.to_string_lossy().contains("tts"));
     }
 }

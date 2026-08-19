@@ -16,22 +16,41 @@
 //! itself after 8 s so the smoke script can screenshot + verify.
 //!
 //! Run: `cargo run --bin overlay-spike` from `slint-experiment/`.
+//!
+//! Windows-only spike: everything below is `#[cfg(windows)]`; on other
+//! targets the file compiles to a stub `main` so `cargo test` never
+//! pulls the (Windows-only, target-gated in Cargo.toml) `windows` crate
+//! into the build.
 
+#[cfg(windows)]
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+#[cfg(windows)]
 use slint::ComponentHandle;
+#[cfg(windows)]
 use std::time::Duration;
+#[cfg(windows)]
 use windows::Win32::Foundation::HWND;
+#[cfg(windows)]
 use windows::Win32::Graphics::Dwm::{
     DwmEnableBlurBehindWindow, DwmExtendFrameIntoClientArea, DWM_BB_BLURREGION, DWM_BB_ENABLE,
     DWM_BLURBEHIND,
 };
+#[cfg(windows)]
 use windows::Win32::Graphics::Gdi::{CreateRectRgn, DeleteObject};
+#[cfg(windows)]
 use windows::Win32::UI::Controls::MARGINS;
+#[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
     GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_TOOLWINDOW,
     WS_EX_TRANSPARENT,
 };
 
+#[cfg(not(windows))]
+fn main() {
+    eprintln!("overlay-spike is a Windows-only spike binary; unsupported on this platform.");
+}
+
+#[cfg(windows)]
 #[allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -45,8 +64,10 @@ mod ui {
     slint::include_modules!();
 }
 
+#[cfg(windows)]
 use ui::OverlaySpike;
 
+#[cfg(windows)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let window = OverlaySpike::new()?;
 
@@ -77,6 +98,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(windows)]
 fn apply_and_log(hwnd: HWND) {
     eprintln!("[overlay-spike] HWND = {:?}", hwnd.0);
 
@@ -180,6 +202,7 @@ fn apply_and_log(hwnd: HWND) {
 /// Two-step: slint::Window::window_handle() returns slint::WindowHandle
 /// (slint's wrapper); slint::WindowHandle implements raw_window_handle::
 /// HasWindowHandle, which yields the raw_window_handle::WindowHandle.
+#[cfg(windows)]
 fn grab_hwnd(window: &OverlaySpike) -> Result<HWND, Box<dyn std::error::Error>> {
     let slint_handle = window.window().window_handle();
     let raw = slint_handle.window_handle()?;

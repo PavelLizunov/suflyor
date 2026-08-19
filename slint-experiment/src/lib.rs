@@ -20,5 +20,4 @@ pub mod slint_events;
 pub mod slint_session;
 #[cfg(windows)]
 pub mod tray;
-#[cfg(windows)]
 pub mod win32;

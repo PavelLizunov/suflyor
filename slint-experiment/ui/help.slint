@@ -1,5 +1,6 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { Platform } from "platform.slint";
 import { BrandHeaderMark, CloseButton, DragGrip } from "controls.slint";
 import { Metrics } from "metrics.slint";
 
@@ -298,7 +299,11 @@ export component HelpWindow inherits Window {
                         ["Shift+Alt+3", @tr("Pause / resume reading aloud")],
                     ] : TableRow {
                         key-row: true;
-                        glyph: row[0];
+                        glyph: Platform.is-macos ? (
+                            row[0] == "Shift+Alt+1" ? "Shift+Option+1" :
+                            row[0] == "Shift+Alt+2" ? "Shift+Option+2" :
+                            row[0] == "Shift+Alt+3" ? "Shift+Option+3" : row[0]
+                        ) : row[0];
                         desc: row[1];
                     }
 

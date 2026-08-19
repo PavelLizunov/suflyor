@@ -619,6 +619,11 @@ export component OverlayBarWindow inherits Window {
     // macOS production bootstrap: keep the real product bar/window while its
     // platform adapters are connected, but never expose dead AI/audio controls.
     in property <bool> bootstrap-mode: false;
+    // macOS bootstrap only: raw AVFoundation authorization status
+    // (0 not determined, 1 restricted, 2 denied, 3 authorized, 4 requesting).
+    in-out property <int> mic-permission-state: 0;
+    // macOS bootstrap only: 0 stopped, 1 receiving native audio, 2 start failed.
+    in-out property <int> mic-capture-state: 0;
     // The hide action is exposed only after Windows accepted the tray icon;
     // otherwise hiding the bar would remove the only restore surface.
     in property <bool> tray-available: false;
@@ -1353,50 +1358,113 @@ export component OverlayBarWindow inherits Window {
 
         // First honest production surface on macOS. The normal product bar is
         // hidden in this mode until its callbacks have real platform adapters.
-        if root.bootstrap-mode : HorizontalLayout {
+        if root.bootstrap-mode : VerticalLayout {
             padding: Metrics.space-sm;
-            spacing: Metrics.space-md;
+            spacing: 4px;
 
-            Rectangle {
-                horizontal-stretch: 1;
-                accessible-role: text;
-                accessible-label: @tr("Suflyor for macOS") + ". "
-                    + @tr("Native overlay ready; product features are being connected.");
-                TouchArea {
-                    mouse-cursor: grab;
-                    pointer-event(ev) => {
-                        if (ev.button == PointerEventButton.left
-                            && ev.kind == PointerEventKind.down) {
-                            root.drag-start-requested();
+            HorizontalLayout {
+                spacing: Metrics.space-md;
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    accessible-role: text;
+                    accessible-label: @tr("Suflyor for macOS") + ". "
+                        + @tr("Native overlay ready; product features are being connected.");
+                    TouchArea {
+                        mouse-cursor: grab;
+                        pointer-event(ev) => {
+                            if (ev.button == PointerEventButton.left
+                                && ev.kind == PointerEventKind.down) {
+                                root.drag-start-requested();
+                            }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: Metrics.space-sm;
+                        BrandStateMark { mark-size: 26px; }
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: @tr("Suflyor for macOS");
+                                color: Theme.text-primary;
+                                font-size: Metrics.font-body;
+                                font-weight: 700;
+                            }
+                            Text {
+                                text: @tr("Native overlay ready; product features are being connected.");
+                                color: Theme.text-secondary;
+                                font-size: Metrics.font-label;
+                                overflow: elide;
+                            }
                         }
                     }
                 }
-                HorizontalLayout {
-                    spacing: Metrics.space-sm;
-                    BrandStateMark { mark-size: 26px; }
-                    VerticalLayout {
-                        alignment: center;
-                        Text {
-                            text: @tr("Suflyor for macOS");
-                            color: Theme.text-primary;
-                            font-size: Metrics.font-body;
-                            font-weight: 700;
-                        }
-                        Text {
-                            text: @tr("Native overlay ready; product features are being connected.");
-                            color: Theme.text-secondary;
-                            font-size: Metrics.font-label;
-                            overflow: elide;
-                        }
-                    }
+
+                // The only product controls with real macOS adapters so far.
+                Chip {
+                    label: root.mic-permission-state == 3
+                        ? (root.mic-capture-state == 1 ? @tr("Mic live")
+                        : (root.mic-capture-state == 2 ? @tr("Mic failed") : @tr("Start mic")))
+                        : (root.mic-permission-state == 4 ? @tr("Requesting...")
+                        : ((root.mic-permission-state == 1 || root.mic-permission-state == 2)
+                        ? @tr("Mic denied") : @tr("Allow mic")));
+                    a11y: self.label;
+                    height: 24px;
+                    active: root.mic-capture-state == 1;
+                    accent: (root.mic-permission-state == 1 || root.mic-permission-state == 2)
+                        || root.mic-capture-state == 2 ? Theme.danger
+                        : (root.mic-capture-state == 1 ? Theme.success : Theme.accent);
+                    accessible-action-default => { root.mic-toggle-clicked(); }
+                    clicked => { root.mic-toggle-clicked(); }
+                }
+                Chip {
+                    label: @tr("Ask");
+                    height: 24px;
+                    accessible-action-default => { root.text-ask-clicked(); }
+                    clicked => { root.text-ask-clicked(); }
+                }
+                Chip {
+                    label: @tr("AI setup");
+                    height: 24px;
+                    accessible-action-default => { root.open-settings-clicked(); }
+                    clicked => { root.open-settings-clicked(); }
+                }
+
+                Chip {
+                    label: @tr("Quit");
+                    accent: Theme.danger;
+                    height: 24px;
+                    accessible-action-default => { root.quit-confirm(); }
+                    clicked => { root.quit-confirm(); }
                 }
             }
 
-            Chip {
-                label: @tr("Quit");
-                accent: Theme.danger;
-                accessible-action-default => { root.quit-confirm(); }
-                clicked => { root.quit-confirm(); }
+            // One compact transcript/status row — the same latest-line
+            // readout the normal bars show (dot = source tag, text = the
+            // newest STT line; the placeholder stays until the first line).
+            HorizontalLayout {
+                padding-left: 4px;
+                padding-right: 4px;
+                spacing: 6px;
+                Rectangle {
+                    width: 8px;
+                    height: 8px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 4px;
+                    background: root.last-transcript-source == "mic"
+                        ? Theme.success
+                        : (root.last-transcript-source == "sys" ? Theme.accent : Theme.border-strong);
+                }
+                Text {
+                    text: root.last-transcript-line == ""
+                        ? @tr("waiting for transcript... (mic/sys → STT)")
+                        : root.last-transcript-line;
+                    font-size: 11px;
+                    color: root.last-transcript-line == "" ? Theme.text-muted : Theme.text-secondary;
+                    overflow: elide;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
             }
         }
     }

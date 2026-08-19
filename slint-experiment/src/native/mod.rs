@@ -1,10 +1,16 @@
 //! Compile-time selected native UI and capture adapters.
 //!
-//! Clipboard implementations preserve four operations: empty-filtered
-//! `read_text`, result-aware `set_text`, and best-effort `write_text` / `clear`.
+//! The Windows clipboard preserves four operations: empty-filtered
+//! `read_text`, result-aware `set_text`, and best-effort `write_text` /
+//! `clear`. macOS exposes only the result-aware `set_text` the local copy
+//! affordances use.
 
 #[cfg(windows)]
 #[path = "windows/clipboard.rs"]
+pub mod clipboard;
+
+#[cfg(target_os = "macos")]
+#[path = "macos/clipboard.rs"]
 pub mod clipboard;
 
 #[cfg(windows)]
@@ -25,6 +31,10 @@ pub mod window;
 
 #[cfg(windows)]
 #[path = "windows/screen.rs"]
+pub mod screen;
+
+#[cfg(target_os = "macos")]
+#[path = "macos/screen.rs"]
 pub mod screen;
 
 #[cfg(test)]

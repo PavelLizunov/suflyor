@@ -18,6 +18,7 @@
 
 import { Button, LineEdit, ScrollView, SpinBox, ComboBox, Slider, TextEdit, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { Platform } from "platform.slint";
 import { Metrics } from "metrics.slint";
 import { CloseButton } from "controls.slint";
 
@@ -722,6 +723,7 @@ export component SettingsWindow inherits Window {
     callback journal-retention-changed(string, string);
     callback open-recordings-clicked();
     callback open-data-folder-clicked();
+    callback open-groq-keys-clicked();
     in-out property <bool> auto-tiles-enabled: true;
     callback auto-tiles-enabled-changed(bool);
     // "Listening mode" — mute auto-detected AI tiles (TileKind::Ai) so the user
@@ -2511,7 +2513,7 @@ export component SettingsWindow inherits Window {
                             HorizontalLayout {
                                 spacing: 6px;
                                 SettingsLineEdit {
-                                    placeholder-text: @tr("local URL — http://127.0.0.1:8080/v1 (llama.cpp) or :11434 (Ollama)");
+                                    placeholder-text: @tr("local URL — http://127.0.0.1:8080/v1 (llama.cpp)");
                                     text <=> root.ai-local-base-url-input;
                                     horizontal-stretch: 1;
                                 }
@@ -2972,7 +2974,7 @@ export component SettingsWindow inherits Window {
                         // outer, the card's VerticalLayout constrains its width and
                         // word-wrap finally kicks in.
                         Text {
-                            text: @tr("Tip: Save writes to %APPDATA%\\suflyor\\config.json. Restart binary to re-load.");
+                            text: @tr("Tip: Save writes to suflyor/config.json in application configuration folder. Restart binary to re-load.");
                             font-size: 10px;
                             color: Theme.accent;
                             wrap: word-wrap;
@@ -3664,6 +3666,10 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                         }
+                        Button {
+                            text: @tr("Get Groq API Key (console.groq.com)");
+                            clicked => { root.open-groq-keys-clicked(); }
+                        }
 
                         Rectangle { background: Theme.border; height: 1px; }
 
@@ -3691,7 +3697,7 @@ export component SettingsWindow inherits Window {
                         // outer, the card's VerticalLayout constrains its width and
                         // word-wrap finally kicks in.
                         Text {
-                            text: @tr("Tip: Save writes to %APPDATA%\\suflyor\\config.json. Restart binary to re-load.");
+                            text: @tr("Tip: Save writes to suflyor/config.json in application configuration folder. Restart binary to re-load.");
                             font-size: 10px;
                             color: Theme.accent;
                             wrap: word-wrap;

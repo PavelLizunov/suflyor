@@ -651,7 +651,7 @@ msgstr "Облако (мост)"
 msgid "Local (Ollama / llama.cpp)"
 msgstr "Локально (Ollama / llama.cpp)"
 
-msgid "local URL — http://127.0.0.1:8080/v1 (llama.cpp) or :11434 (Ollama)"
+msgid "local URL — http://127.0.0.1:8080/v1 (llama.cpp)"
 msgstr "локальный URL — http://127.0.0.1:8080/v1 (llama.cpp) или :11434 (Ollama)"
 
 # V4 — vision (screenshot) settings section.
@@ -729,7 +729,7 @@ msgstr "Откуда брать живые ответы? Выберите тип
 msgid "Cloud (Claude bridge)"
 msgstr "Облако (мост Claude)"
 
-msgid "Local (llama.cpp / Ollama)"
+msgid "Local (llama.cpp)"
 msgstr "Локально (llama.cpp / Ollama)"
 
 msgid "Cloud bridge"
@@ -1020,8 +1020,8 @@ msgstr "Рассуждения локальной модели (медленне
 msgid "Test local connection"
 msgstr "Проверить локальное подключение"
 
-msgid "Tip: Save writes to %APPDATA%\\suflyor\\config.json. Restart binary to re-load."
-msgstr "Подсказка: «Сохранить» пишет в %APPDATA%\\suflyor\\config.json. Перезапустите бинарник для перезагрузки."
+msgid "Tip: Save writes to suflyor/config.json in application configuration folder. Restart binary to re-load."
+msgstr "Подсказка: «Сохранить» пишет в suflyor/config.json в папке настроек приложения. Перезапустите бинарник для перезагрузки."
 
 # --- Tab 12: STT ---
 
@@ -1033,6 +1033,9 @@ msgstr "Ключ API Groq:"
 
 msgid "paste new Groq key then Save"
 msgstr "вставьте новый ключ Groq и нажмите «Сохранить»"
+
+msgid "Get Groq API Key (console.groq.com)"
+msgstr "Получить API ключ Groq (console.groq.com)"
 
 msgid "Test STT (Groq) connection"
 msgstr "Проверить подключение STT (Groq)"
@@ -2069,3 +2072,68 @@ msgstr "Нативный оверлей готов; функции продук�
 
 msgid "Quit"
 msgstr "Выйти"
+
+# === macOS text-ask slice (bootstrap chips + MacAiSetupWindow) ===
+
+msgid "Ask"
+msgstr "Спросить"
+
+msgid "AI setup"
+msgstr "Настройка AI"
+
+msgid "Allow mic"
+msgstr "Разрешить микрофон"
+
+msgid "Requesting..."
+msgstr "Запрашиваем..."
+
+msgid "Mic denied"
+msgstr "Микрофон запрещён"
+
+msgid "Start mic"
+msgstr "Включить микрофон"
+
+msgid "Mic live"
+msgstr "Микрофон активен"
+
+msgid "Mic failed"
+msgstr "Ошибка микрофона"
+
+msgid "AI bridge setup"
+msgstr "Настройка AI-моста"
+
+msgid "Bridge URL"
+msgstr "URL моста"
+
+msgid "Access token"
+msgstr "Токен доступа"
+
+msgid "Paste the access token"
+msgstr "Вставьте токен доступа"
+
+msgid "Leave empty to keep the saved token"
+msgstr "Оставьте пустым, чтобы сохранить текущий токен"
+
+msgid "The AI bridge is not configured yet."
+msgstr "AI-мост ещё не настроен."
+
+msgid "The AI bridge is configured."
+msgstr "AI-мост настроен."
+
+msgid "Check the URLs and access token."
+msgstr "Проверьте URL-адреса и токен доступа."
+
+msgid "Saved."
+msgstr "Сохранено."
+
+msgid "Saving the bridge settings failed."
+msgstr "Не удалось сохранить настройки моста."
+
+msgid "Local STT service URL (optional)"
+msgstr "URL локального STT-сервиса (необязательно)"
+
+msgid "http://your.stt.host:PORT"
+msgstr "http://your.stt.host:PORT"
+
+
+

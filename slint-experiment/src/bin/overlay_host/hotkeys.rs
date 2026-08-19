@@ -30,6 +30,7 @@
 /// P1.2 — outcome of registering the global hotkeys at startup, captured ONCE so
 /// the Diagnostics tab can surface a per-key conflict (not just an eprintln!).
 /// Set in the registration loop; read by [`hotkey_diag_row`].
+#[allow(dead_code)]
 pub(crate) struct HotkeyDiag {
     /// Space-separated keys that registered, e.g. "F1 F3 F4 F6 F8 F9 Shift+F9".
     registered: String,
@@ -46,6 +47,7 @@ static HOTKEY_DIAG: std::sync::OnceLock<HotkeyDiag> = std::sync::OnceLock::new()
 /// failed) triple for the Diagnostics tab. level 0=all registered, 4=a key
 /// failed (conflict), 3=manager unavailable / not yet captured. `failed` is the
 /// raw key list so the .slint composes the translated "conflict:" wording.
+#[allow(dead_code)]
 pub(crate) fn hotkey_diag_row() -> (i32, String, String) {
     match HOTKEY_DIAG.get() {
         None => (3, String::new(), String::new()),
@@ -63,6 +65,7 @@ pub(crate) fn hotkey_diag_row() -> (i32, String, String) {
 /// `GlobalHotKeyEvent` against the right action. `manager` is `None` when the
 /// manager itself couldn't be created (hotkeys disabled); the ids are still
 /// computed (they're just never delivered, so the dispatch arms stay dormant).
+#[allow(dead_code)]
 pub(crate) struct RegisteredHotkeys {
     /// Kept alive by `main`; `None` when the manager couldn't be created.
     pub manager: Option<global_hotkey::GlobalHotKeyManager>,

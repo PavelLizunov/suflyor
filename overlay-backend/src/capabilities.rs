@@ -31,6 +31,48 @@ pub enum CapabilityReason {
     RuntimeFailure,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlatformFeature {
+    Microphone,
+    SystemAudio,
+    ScreenCapture,
+    ExternalStealth,
+    SapiTts,
+    GigaamGpu,
+    HermesInstaller,
+    SelfReplacingUpdater,
+}
+
+/// Query platform capabilities for macOS vs Windows.
+#[must_use]
+pub fn platform_capability(feature: PlatformFeature) -> CapabilityState {
+    #[cfg(target_os = "macos")]
+    match feature {
+        PlatformFeature::ExternalStealth
+        | PlatformFeature::SapiTts
+        | PlatformFeature::GigaamGpu
+        | PlatformFeature::HermesInstaller
+        | PlatformFeature::SelfReplacingUpdater => {
+            CapabilityState::Unsupported(CapabilityReason::NotSupportedOnPlatform)
+        }
+        PlatformFeature::Microphone
+        | PlatformFeature::SystemAudio
+        | PlatformFeature::ScreenCapture => CapabilityState::Available,
+    }
+
+    #[cfg(windows)]
+    match feature {
+        PlatformFeature::Microphone
+        | PlatformFeature::SystemAudio
+        | PlatformFeature::ScreenCapture
+        | PlatformFeature::ExternalStealth
+        | PlatformFeature::SapiTts
+        | PlatformFeature::GigaamGpu
+        | PlatformFeature::HermesInstaller
+        | PlatformFeature::SelfReplacingUpdater => CapabilityState::Available,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -97,6 +139,19 @@ mod tests {
         assert_ne!(
             CapabilityState::Degraded(CapabilityReason::DeviceBusy),
             CapabilityState::Degraded(CapabilityReason::RequirementsNotMet)
+        );
+    }
+
+    #[test]
+    fn platform_capability_reports_correct_states() {
+        assert_eq!(
+            platform_capability(PlatformFeature::Microphone),
+            CapabilityState::Available
+        );
+        #[cfg(target_os = "macos")]
+        assert_eq!(
+            platform_capability(PlatformFeature::ExternalStealth),
+            CapabilityState::Unsupported(CapabilityReason::NotSupportedOnPlatform)
         );
     }
 }
