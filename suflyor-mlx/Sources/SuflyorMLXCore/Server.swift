@@ -47,6 +47,28 @@ private struct ReadyEnvelope: Encodable {
     let model: String
 }
 
+private enum GenerationPhase: String {
+    case container
+    case userInput = "user_input"
+    case prepare
+    case generate
+    case iterate
+    case reasoningFilter = "reasoning_filter"
+}
+
+func generationDiagnosticToken(_ value: String) -> String {
+    let allowed = Set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
+    return String(value.map { allowed.contains($0) ? $0 : "_" }.prefix(96))
+}
+
+private func logGenerationFailure(phase: GenerationPhase, error: Error) {
+    let nsError = error as NSError
+    let type = generationDiagnosticToken(String(reflecting: Swift.type(of: error)))
+    let domain = generationDiagnosticToken(nsError.domain)
+    let line = "MLX generation failed phase=\(phase.rawValue) type=\(type) domain=\(domain) code=\(nsError.code)\n"
+    try? FileHandle.standardError.write(contentsOf: Data(line.utf8))
+}
+
 func readyLine(port: Int, model: SupportedModel) throws -> Data {
     guard (1...65_535).contains(port) else { throw SidecarError.invalidStartup }
     var data = try JSONEncoder().encode(ReadyEnvelope(port: port, model: model.rawValue))
@@ -139,13 +161,17 @@ private actor ModelEngine {
     ) async throws {
         guard request.model == model else { throw SidecarError.unsupportedModel }
         try await gate.acquire()
+        var phase = GenerationPhase.container
         do {
             try Task.checkCancellation()
             let container = try await container()
             try Task.checkCancellation()
+            phase = .userInput
             let input = try request.userInput()
+            phase = .prepare
             let prepared = try await container.prepare(input: input)
             try Task.checkCancellation()
+            phase = .generate
             let stream = try await container.generate(
                 input: prepared,
                 parameters: .init(
@@ -155,18 +181,25 @@ private actor ModelEngine {
             )
             try Task.checkCancellation()
             var filter = ReasoningFilter(required: request.model.requiresReasoningBoundary)
+            phase = .iterate
             for await event in stream {
                 try Task.checkCancellation()
                 if case .chunk(let text) = event {
+                    phase = .reasoningFilter
                     let visible = try filter.feed(text)
                     if !visible.isEmpty { try await onChunk(visible) }
+                    phase = .iterate
                 }
             }
+            phase = .reasoningFilter
             let tail = try filter.feed("", finished: true)
             if !tail.isEmpty { try await onChunk(tail) }
             await gate.release()
         } catch {
             await gate.release()
+            if !(error is SidecarError), !(error is CancellationError) {
+                logGenerationFailure(phase: phase, error: error)
+            }
             throw error
         }
     }

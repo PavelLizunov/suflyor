@@ -4,6 +4,18 @@ import Testing
 
 private let validBearer = String(repeating: "a1", count: 32)
 
+@Test func generationDiagnosticsAreBoundedTechnicalTokens() {
+    let token = generationDiagnosticToken(String(repeating: "Type/путь\n", count: 32))
+    #expect(token.count == 96)
+    #expect(token.utf8.allSatisfy { byte in
+        (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
+            || byte == 45 || byte == 46 || byte == 95
+    })
+    #expect(!token.contains("путь"))
+    #expect(!token.contains("/"))
+    #expect(!token.contains("\n"))
+}
+
 private func startupData(
     version: Int = StartupConfiguration.protocolVersion,
     bearer: String = validBearer,
