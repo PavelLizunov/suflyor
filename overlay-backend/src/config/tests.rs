@@ -1215,6 +1215,18 @@ fn macos_promotes_an_unconfigured_cloud_stt_when_managed_gigaam_is_ready() {
     assert_eq!(cfg.stt_provider, "gigaam");
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_replaces_a_retired_stt_provider_when_managed_gigaam_is_ready() {
+    let mut cfg = Config::defaults();
+    cfg.stt_provider = "uap".into();
+
+    assert!(!migrate_macos_gigaam_default(&mut cfg, false));
+    assert!(migrate_macos_gigaam_default(&mut cfg, true));
+    assert_eq!(cfg.stt_provider, "gigaam");
+    assert!(cfg.stt_gigaam_dir.ends_with("gigaam-v3"));
+}
+
 #[test]
 fn config_missing_provider_fields_default_cloud() {
     // An old config.json without the new fields loads as cloud + the

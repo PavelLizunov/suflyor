@@ -1476,7 +1476,9 @@ fn migrate_macos_gigaam_default(cfg: &mut Config, managed_ready: bool) -> bool {
     if !cfg!(target_os = "macos") {
         return false;
     }
-    if cfg.stt_provider == "cloud" && cfg.groq_api_key.trim().is_empty() && managed_ready {
+    let unknown_provider = !matches!(cfg.stt_provider.as_str(), "cloud" | "gigaam" | "whisper");
+    let unconfigured_cloud = cfg.stt_provider == "cloud" && cfg.groq_api_key.trim().is_empty();
+    if managed_ready && (unconfigured_cloud || unknown_provider) {
         cfg.stt_provider = "gigaam".into();
         cfg.stt_gigaam_dir = default_stt_gigaam_dir();
         return true;
