@@ -184,6 +184,7 @@ done < <(find "$frameworks_dir" -type f -name '*.dylib' -print)
 while IFS= read -r framework; do
   codesign --force --sign - --options runtime "$framework"
 done < <(find "$frameworks_dir" -depth -type d -name '*.framework' -print)
+codesign --force --sign - --options runtime "$macos_dir/mlx.metallib"
 codesign --force --sign - --options runtime "$macos_dir/suflyor-mlx"
 codesign --force --sign - --options runtime "$macos_dir/suflyor-tts"
 codesign --force --sign - --options runtime "$macos_dir/suflyor-teratts"
@@ -193,6 +194,7 @@ codesign --force --sign - --options runtime \
 codesign --verify --strict --verbose=2 "$macos_dir/suflyor-tts"
 codesign --verify --strict --verbose=2 "$macos_dir/suflyor-teratts"
 codesign --verify --strict --verbose=2 "$macos_dir/suflyor-mlx"
+codesign --verify --strict --verbose=2 "$macos_dir/mlx.metallib"
 codesign --verify --deep --strict --verbose=2 "$app_dir"
 plutil -lint "$contents_dir/Info.plist"
 if "$macos_dir/suflyor-mlx" </dev/null >/dev/null 2>&1; then
