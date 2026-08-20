@@ -898,11 +898,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let stt_desc = match c.stt_provider.as_str() {
             "gigaam" => format!(
                 "GigaAM in-process/{} dir={}",
-                if c.stt_gigaam_gpu {
-                    "GPU(DirectML)"
-                } else {
-                    "CPU"
-                },
+                gigaam_accelerator_name(c.stt_gigaam_gpu),
                 if c.stt_gigaam_dir.is_empty() {
                     "(unset)"
                 } else {
@@ -954,10 +950,8 @@ fn main() -> Result<(), slint::PlatformError> {
     let session_lifecycle = Arc::new(tokio::sync::Mutex::new(()));
     #[cfg(target_os = "macos")]
     let capture_stop_pending = Arc::new(AtomicBool::new(false));
-    // Choose the GigaAM ONNX Runtime accelerator (GPU via DirectML, or CPU) ONCE
-    // at startup — the ORT session bakes its execution provider in at model load
-    // time, so this must run before any transcription. Falls back to CPU when no
-    // GPU / DirectML runtime is available.
+    // Choose the GigaAM ONNX Runtime accelerator (DirectML/Core ML, or CPU)
+    // before any model load; the session bakes this choice in.
     overlay_backend::stt::configure_gigaam_accelerator(cfg.read().stt_gigaam_gpu);
 
     // V0.8.4 — warm up LOCAL models shortly after boot so the user's FIRST real
@@ -5361,9 +5355,9 @@ fn short_model_name(full: &str) -> String {
 /// live, prefixed with 🟢 (all-local), ☁ (all-cloud), or ◐ (mixed). (#E10.2)
 pub(crate) fn active_stack_label(c: &overlay_backend::config::Config) -> String {
     let (stt, stt_local): (String, bool) = match c.stt_provider.as_str() {
-        // Show the GigaAM accelerator so the bar reflects GPU (DirectML) vs CPU.
+        // Show the platform accelerator so the bar reflects accelerated vs CPU.
         "gigaam" => (
-            format!("GigaAM {}", if c.stt_gigaam_gpu { "GPU" } else { "CPU" }),
+            format!("GigaAM {}", gigaam_accelerator_name(c.stt_gigaam_gpu)),
             true,
         ),
         "whisper" => ("Whisper".to_string(), true),
@@ -5397,6 +5391,16 @@ pub(crate) fn active_stack_label(c: &overlay_backend::config::Config) -> String 
         "mixed"
     };
     format!("{tag}: {stt} · {model}")
+}
+
+fn gigaam_accelerator_name(enabled: bool) -> &'static str {
+    if !enabled {
+        "CPU"
+    } else if cfg!(target_os = "macos") {
+        "Core ML"
+    } else {
+        "GPU(DirectML)"
+    }
 }
 
 /// Title of a manually spawned "+ tile". The visible number is owned by the

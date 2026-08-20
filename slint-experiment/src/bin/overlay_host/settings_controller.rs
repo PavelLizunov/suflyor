@@ -1858,10 +1858,7 @@ pub(crate) fn populate_token_status(
         win.set_engine_update_status(blank());
     }
     // Phase E10 — STT provider selector + local-engine fields.
-    win.set_stt_provider_index(stt_provider_index(
-        &c.stt_provider,
-        cfg!(target_os = "macos"),
-    ));
+    win.set_stt_provider_index(stt_provider_index(&c.stt_provider));
     // Recognition language (stt_language): None=auto → 0, "ru" → 1, "en" → 2.
     win.set_stt_language_index(match c.stt_language.as_deref() {
         Some("ru") => 1,

@@ -71,7 +71,7 @@ fn macos_provider_catalogs_and_components_keep_platform_indices_honest() {
     assert!(ai.contains("provider == \"local\" && !cfg!(target_os = \"macos\")"));
     assert!(vision.contains("\"codex\" if !cfg!(target_os = \"macos\") => 6"));
     assert!(vision.contains("\"codex\" => -1"));
-    assert!(stt.contains("(true, \"gigaam\") => -1"));
+    assert!(stt.contains("\"gigaam\" => 1"));
     assert!(settings.contains("(\"codex\", true) => -1"));
     assert!(vision.contains("6 if !cfg!(target_os = \"macos\") => \"codex\""));
     assert!(settings.contains("ComponentKind::Engine | ComponentKind::LocalModel"));
@@ -85,7 +85,8 @@ fn macos_provider_catalogs_and_components_keep_platform_indices_honest() {
     assert!(ui.contains("if root.stt-provider-index == 0 : VerticalLayout"));
     assert!(ui.contains("if Platform.is-macos && root.ai-provider-index < 0 : Text"));
     assert!(ui.contains("if Platform.is-macos && root.vision-provider-index < 0 : Text"));
-    assert!(ui.contains("if Platform.is-macos && root.stt-provider-index < 0 : Text"));
+    assert!(ui.contains("@tr(\"Use Apple Core ML — faster on Apple Silicon\")"));
+    assert!(ui.contains("if root.stt-provider-index == 1 : HorizontalLayout"));
     assert!(ui.contains("entry[0] == \"Ctrl+F8\" ? @tr(\"Control+F8\")"));
     assert!(ui.contains("entry[0] == \"Shift+Alt+2\" ? @tr(\"Shift+Option+2\")"));
     assert!(ui.contains(
@@ -97,4 +98,17 @@ fn macos_provider_catalogs_and_components_keep_platform_indices_honest() {
     assert!(ui.contains(
         "Personal memory is stored locally. Approved items are added to new AI requests"
     ));
+}
+
+#[test]
+fn macos_gigaam_is_coreml_backed_and_primary_on_fresh_config() {
+    let cargo = read("../overlay-backend/Cargo.toml");
+    let stt = read("../overlay-backend/src/stt.rs");
+    let config = read("../overlay-backend/src/config.rs");
+
+    assert!(cargo.contains("features = [\"onnx\", \"ort-coreml\"]"));
+    assert!(stt.contains("#[cfg(any(windows, target_os = \"macos\"))]"));
+    assert!(stt.contains("transcribe_rs::OrtAccelerator::CoreMl"));
+    assert!(config.contains("if cfg!(target_os = \"macos\") {\n        \"gigaam\".into()"));
+    assert!(config.contains("gigaam_default_dir(&crate::local_ai::default_root())"));
 }

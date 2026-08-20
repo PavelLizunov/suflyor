@@ -963,6 +963,9 @@ msgstr "Отмена"
 msgid "Use GPU (DirectML) — faster on long audio, ~1s warm-up on first use"
 msgstr "GPU (DirectML) — быстрее на длинном аудио, ~1с прогрев при первом запуске"
 
+msgid "Use Apple Core ML — faster on Apple Silicon"
+msgstr "Использовать Apple Core ML — быстрее на Apple Silicon"
+
 msgid "Profile:"
 msgstr "Профиль:"
 

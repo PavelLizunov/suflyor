@@ -208,19 +208,18 @@ pub struct Config {
     /// Default: large-v3 — accuracy beats latency for interview use.
     pub stt_model: String,
 
-    /// STT provider: "cloud" (default — Groq Whisper), "gigaam" (local
-    /// in-process GigaAM-v3 via ONNX — Russian-specialised, runs on CPU), or
+    /// STT provider: "cloud" (Groq Whisper), "gigaam" (local in-process
+    /// GigaAM-v3 via ONNX — the macOS default), or
     /// "whisper" (local whisper.cpp server, OpenAI-compatible — multilingual,
-    /// best for mixed RU+EN). `#[serde(default)]` → old configs stay "cloud".
+    /// best for mixed RU+EN). Missing fields follow the platform default.
     #[serde(default = "default_stt_provider")]
     pub stt_provider: String,
     /// Directory holding the local GigaAM model (`model.int8.onnx` + `vocab.txt`).
-    /// Used when `stt_provider == "gigaam"`. Empty until the user sets it.
-    #[serde(default)]
+    /// Defaults to the same `~/suflyor-local-ai/gigaam-v3` path the installer uses.
+    #[serde(default = "default_stt_gigaam_dir")]
     pub stt_gigaam_dir: String,
-    /// Run the local GigaAM model on the GPU via the ONNX Runtime DirectML
-    /// execution provider (Windows, vendor-agnostic DX12). Falls back to CPU
-    /// automatically if no compatible GPU / DirectML runtime is present.
+    /// Run GigaAM through DirectML on Windows or Core ML on macOS. Falls back
+    /// to ONNX Runtime CPU when the platform provider cannot load the model.
     /// ~7x faster on long audio; ~1s one-time shader-compile on first use.
     #[serde(default = "default_stt_gigaam_gpu")]
     pub stt_gigaam_gpu: bool,
@@ -656,7 +655,7 @@ impl Config {
             stt_language: Some("ru".into()),
             stt_model: "whisper-large-v3".into(),
             stt_provider: default_stt_provider(),
-            stt_gigaam_dir: String::new(),
+            stt_gigaam_dir: default_stt_gigaam_dir(),
             stt_gigaam_gpu: default_stt_gigaam_gpu(),
             stt_whisper_url: default_stt_whisper_url(),
             stt_whisper_bearer: String::new(),
@@ -1115,7 +1114,17 @@ fn default_ai_local_context() -> String {
 }
 
 fn default_stt_provider() -> String {
-    "cloud".into()
+    if cfg!(target_os = "macos") {
+        "gigaam".into()
+    } else {
+        "cloud".into()
+    }
+}
+
+fn default_stt_gigaam_dir() -> String {
+    crate::local_ai::gigaam_default_dir(&crate::local_ai::default_root())
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn default_stt_gigaam_gpu() -> bool {
@@ -1412,6 +1421,11 @@ pub fn load() -> Config {
     // so migrate only the untouched legacy state.
     dirty |= migrate_legacy_tts_default(&mut cfg);
     dirty |= migrate_legacy_vision_same(&mut cfg);
+    let managed_gigaam_ready = cfg!(target_os = "macos")
+        && crate::local_ai::gigaam_model_present(&crate::local_ai::gigaam_default_dir(
+            &crate::local_ai::default_root(),
+        ));
+    dirty |= migrate_macos_gigaam_default(&mut cfg, managed_gigaam_ready);
     // P1.3 — schema-versioning anchor. Stamp the file with the current schema
     // version so a FUTURE release can detect an older layout (config_version <
     // CURRENT) and run a one-time, number-keyed migration right here. Every
@@ -1456,6 +1470,25 @@ fn migrate_legacy_vision_same(cfg: &mut Config) -> bool {
     };
     cfg.vision_provider = replacement.to_string();
     true
+}
+
+fn migrate_macos_gigaam_default(cfg: &mut Config, managed_ready: bool) -> bool {
+    if !cfg!(target_os = "macos") {
+        return false;
+    }
+    if cfg.stt_provider == "cloud" && cfg.groq_api_key.trim().is_empty() && managed_ready {
+        cfg.stt_provider = "gigaam".into();
+        cfg.stt_gigaam_dir = default_stt_gigaam_dir();
+        return true;
+    }
+    let saved = cfg.stt_gigaam_dir.trim();
+    let windows_path = saved.as_bytes().get(1) == Some(&b':');
+    if cfg.stt_provider == "gigaam" && (saved.is_empty() || windows_path) {
+        cfg.stt_gigaam_dir = default_stt_gigaam_dir();
+        true
+    } else {
+        false
+    }
 }
 
 pub fn save(cfg: &Config) -> Result<()> {

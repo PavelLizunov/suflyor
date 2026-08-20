@@ -1106,13 +1106,20 @@ fn ai_endpoint_cloud_always_uses_cloud_bridge_and_prep_model() {
 }
 
 #[test]
-fn stt_backend_defaults_to_cloud() {
+fn stt_backend_uses_the_platform_default() {
     let d = Config::defaults();
-    assert_eq!(d.stt_provider, "cloud");
-    assert!(!d.stt_is_local());
-    match d.stt_backend() {
-        SttBackendCfg::Cloud { model, .. } => assert_eq!(model, "whisper-large-v3"),
-        other => panic!("expected Cloud, got {other:?}"),
+    if cfg!(target_os = "macos") {
+        assert_eq!(d.stt_provider, "gigaam");
+        assert!(d.stt_is_local());
+        assert!(d.stt_gigaam_dir.ends_with("gigaam-v3"));
+        assert!(matches!(d.stt_backend(), SttBackendCfg::Gigaam { .. }));
+    } else {
+        assert_eq!(d.stt_provider, "cloud");
+        assert!(!d.stt_is_local());
+        match d.stt_backend() {
+            SttBackendCfg::Cloud { model, .. } => assert_eq!(model, "whisper-large-v3"),
+            other => panic!("expected Cloud, got {other:?}"),
+        }
     }
 }
 
@@ -1160,17 +1167,52 @@ fn stt_backend_whisper_uses_url_bearer_model_and_is_local() {
 
 #[test]
 fn stt_provider_defaults_from_partial_json() {
-    // Old config without the STT provider fields → cloud + whisper-server
-    // default URL, and thinking-off for local AI.
+    // Old config without STT fields follows the platform default.
     let cfg: Config = serde_json::from_str(r#"{"ai_model":"x"}"#).expect("parse");
-    assert_eq!(cfg.stt_provider, "cloud");
+    assert_eq!(
+        cfg.stt_provider,
+        if cfg!(target_os = "macos") {
+            "gigaam"
+        } else {
+            "cloud"
+        }
+    );
     assert_eq!(cfg.stt_whisper_url, "http://127.0.0.1:8081/v1");
-    assert!(!cfg.stt_is_local());
+    assert_eq!(cfg.stt_is_local(), cfg!(target_os = "macos"));
+    assert!(cfg.stt_gigaam_dir.ends_with("gigaam-v3"));
     assert!(!cfg.ai_local_thinking);
     // GigaAM GPU (DirectML) is on by default; old configs opt in on upgrade.
     assert!(cfg.stt_gigaam_gpu);
     // Colour scheme defaults to 0 (Glacier) for configs predating the field.
     assert_eq!(cfg.color_scheme, 0);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_migrates_an_empty_saved_gigaam_dir_to_the_managed_path() {
+    let mut cfg = Config::defaults();
+    cfg.stt_provider = "gigaam".into();
+    cfg.stt_gigaam_dir.clear();
+
+    assert!(migrate_macos_gigaam_default(&mut cfg, true));
+    assert!(cfg.stt_gigaam_dir.ends_with("gigaam-v3"));
+    assert!(!migrate_macos_gigaam_default(&mut cfg, true));
+
+    cfg.stt_gigaam_dir = r"C:\imported\gigaam-v3".into();
+    assert!(migrate_macos_gigaam_default(&mut cfg, true));
+    assert!(!cfg.stt_gigaam_dir.contains(r"C:\"));
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_promotes_an_unconfigured_cloud_stt_when_managed_gigaam_is_ready() {
+    let mut cfg = Config::defaults();
+    cfg.stt_provider = "cloud".into();
+    cfg.groq_api_key.clear();
+
+    assert!(!migrate_macos_gigaam_default(&mut cfg, false));
+    assert!(migrate_macos_gigaam_default(&mut cfg, true));
+    assert_eq!(cfg.stt_provider, "gigaam");
 }
 
 #[test]

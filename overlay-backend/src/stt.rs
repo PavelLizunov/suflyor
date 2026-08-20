@@ -18,14 +18,12 @@ const GROQ_STT_URL: &str = "https://api.groq.com/openai/v1/audio/transcriptions"
 /// Models-list endpoint — used by `test_connection` to validate the
 /// Groq API key without uploading audio.
 const GROQ_MODELS_URL: &str = "https://api.groq.com/openai/v1/models";
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 const GIGAAM_UNSUPPORTED: &str = "local GigaAM STT is not supported on this platform";
 
-/// Private cfg-selected shim isolating the Windows-only `transcribe-rs`/GigaAM
-/// dependency. Windows wraps the real GigaAM ONNX model; every other target
-/// keeps the same minimal configure/load/transcribe shape but always returns
-/// an explicit unsupported error — no silent CPU fallback.
-#[cfg(windows)]
+/// Private cfg-selected shim isolating the Windows/macOS `transcribe-rs` GigaAM
+/// dependency. Other targets keep the same shape but fail explicitly.
+#[cfg(any(windows, target_os = "macos"))]
 mod gigaam_shim {
     use std::path::Path;
     use transcribe_rs::onnx::gigaam::GigaAMModel;
@@ -36,8 +34,15 @@ mod gigaam_shim {
     pub(super) struct Model(GigaAMModel);
 
     pub(super) fn configure_accelerator(use_gpu: bool) {
+        #[cfg(windows)]
         let pref = if use_gpu {
             transcribe_rs::OrtAccelerator::DirectMl
+        } else {
+            transcribe_rs::OrtAccelerator::CpuOnly
+        };
+        #[cfg(target_os = "macos")]
+        let pref = if use_gpu {
+            transcribe_rs::OrtAccelerator::CoreMl
         } else {
             transcribe_rs::OrtAccelerator::CpuOnly
         };
@@ -45,12 +50,8 @@ mod gigaam_shim {
         log::info!("GigaAM ONNX Runtime accelerator = {pref}");
     }
 
-    /// Load the int8 model under the configured ORT accelerator, transparently
-    /// falling back to CPU if a GPU (DirectML) session fails to build. DirectML
-    /// can fail at graph fusion (0x80070715) when the system `DirectML.dll` is
-    /// absent or shadowed; rather than break STT entirely we switch the process
-    /// to the always-available CPU provider for this and all future loads, and
-    /// log it.
+    /// Load under the configured ORT accelerator, falling back to CPU if the
+    /// platform provider (DirectML/Core ML) cannot build this model.
     pub(super) fn load(dir: &str) -> anyhow::Result<Model> {
         match GigaAMModel::load(Path::new(dir), &Quantization::Int8) {
             Ok(m) => Ok(Model(m)),
@@ -58,7 +59,7 @@ mod gigaam_shim {
                 if transcribe_rs::get_ort_accelerator()
                     != transcribe_rs::OrtAccelerator::CpuOnly =>
             {
-                log::warn!("GigaAM GPU (DirectML) load failed ({e}); falling back to CPU");
+                log::warn!("GigaAM accelerator load failed ({e}); falling back to CPU");
                 transcribe_rs::set_ort_accelerator(transcribe_rs::OrtAccelerator::CpuOnly);
                 GigaAMModel::load(Path::new(dir), &Quantization::Int8)
                     .map(Model)
@@ -79,7 +80,7 @@ mod gigaam_shim {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 mod gigaam_shim {
     /// Placeholder handle that keeps the shared STT code shape. Never
     /// constructed on this platform — `load` always fails.
@@ -116,11 +117,8 @@ fn public_gigaam_load_error(error: anyhow::Error, public_message: &'static str) 
 ///
 /// Must be called once at startup, BEFORE any GigaAM model is loaded: the ORT
 /// session builder reads this global preference when it creates the session.
-/// `use_gpu` → DirectML (GPU, Windows DX12); otherwise CPU-only. ORT always
-/// appends a CPU fallback, so if DirectML can't initialise (no compatible GPU,
-/// or a missing/shadowed `DirectML.dll`) the model transparently runs on CPU.
-/// The first GPU transcription pays a ~1s one-time DirectML shader-compile.
-/// No-op on non-Windows, where local GigaAM is not compiled in.
+/// `use_gpu` selects DirectML on Windows and Core ML on macOS; otherwise CPU.
+/// Both builds retain ONNX Runtime's CPU fallback.
 pub fn configure_gigaam_accelerator(use_gpu: bool) {
     gigaam_shim::configure_accelerator(use_gpu);
 }
@@ -211,7 +209,7 @@ pub async fn test_connection_backend(backend: &SttBackendCfg) -> Result<String> 
 /// mirroring the cloud "Groq key not set" bail. Blocks for the load duration
 /// (~0.5 s) — acceptable for a once-per-session start gate. The model handle is
 /// dropped immediately; the live pipeline loads its own copy via `spawn`.
-/// On non-Windows this always fails with the explicit unsupported error.
+/// On unsupported platforms this always fails with an explicit error.
 pub fn validate_gigaam_dir(model_dir: &str) -> Result<()> {
     gigaam_shim::load(model_dir).map(|_m| ())
 }
@@ -269,7 +267,7 @@ pub fn spawn(
 ) -> mpsc::Receiver<TranscriptEvent> {
     let (tx, rx) = mpsc::channel::<TranscriptEvent>(64);
 
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     if matches!(&backend, SttBackendCfg::Gigaam { .. }) {
         log::error!("local GigaAM STT is not supported on this platform");
         drop(tx);
@@ -1529,11 +1527,9 @@ mod tests {
         assert!(!is_permanent_error("tcp timed out"));
     }
 
-    // ── Non-Windows GigaAM seam: local STT is explicitly unsupported ──
-    // (never compiled or run on Windows — the shim under test only exists
-    // off-Windows)
+    // ── Unsupported-platform GigaAM seam ──
 
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     #[test]
     fn gigaam_shim_load_unsupported_off_windows() {
         let err = gigaam_shim::load("nonexistent-model-dir")
@@ -1545,13 +1541,13 @@ mod tests {
         );
     }
 
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     #[test]
     fn validate_gigaam_dir_unsupported_off_windows() {
         assert!(validate_gigaam_dir("nonexistent-model-dir").is_err());
     }
 
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     #[test]
     fn configure_gigaam_accelerator_honest_noop_off_windows() {
         // Must not panic — the session-start path calls it unconditionally.

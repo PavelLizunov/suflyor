@@ -31,8 +31,8 @@ reqwest = { version = "0.13", features = ["json", "multipart", "native-tls"], de
 
 # Neural TTS (read-aloud) runs in the `suflyor-tts` SIDECAR process — sherpa-onnx
 # is deliberately NOT linked here. It bundles its own onnxruntime, which crashes
-# natively when static-linked into the same binary as the Windows-only
-# `ort`/GigaAM STT runtime below (two onnxruntimes collide on the 2nd model
+# natively when static-linked into the same binary as the `ort`/GigaAM STT
+# runtime below (two onnxruntimes collide on the 2nd model
 # load). This crate only needs base64 to frame text for the sidecar's stdin
 # command protocol.
 base64 = "0.23"
@@ -62,12 +62,11 @@ hound = "3"
 tiny_http = "0.12"
 getrandom = "0.2"
 
-# Windows-only deps — WASAPI capture (`wasapi`), local GigaAM STT
-# (`transcribe-rs`), the SAPI 5 speech binding + Win32 helpers (`windows`), and
+# Windows-only deps — WASAPI capture (`wasapi`), the SAPI 5 speech binding +
+# Win32 helpers (`windows`), and
 # its runtime core (`windows-core`) only apply on Windows; target-gating keeps
-# them out of the macOS dependency graph. Non-Windows targets get the honest
-# unsupported seam (`audio_unavailable.rs` + the `stt` GigaAM shim) — no silent
-# CPU fallback.
+# them out of the macOS dependency graph. Other targets keep the honest
+# unsupported audio seam (`audio_unavailable.rs`) — no silent fallback.
 [target.'cfg(windows)'.dependencies]
 # Audio capture (audio.rs)
 wasapi = "0.23"
@@ -111,6 +110,11 @@ windows = { version = "0.62", features = [
 # The `#[implement(IMMNotificationClient)]` macro expands against the direct
 # crate name even though `windows` re-exports its public types.
 windows-core = "0.62"
+
+# The same in-process GigaAM-v3 model runs on Apple Silicon through ONNX
+# Runtime's Core ML execution provider, with CPU as the built-in fallback.
+[target.'cfg(target_os = "macos")'.dependencies]
+transcribe-rs = { version = "0.3.11", default-features = false, features = ["onnx", "ort-coreml"] }
 
 # macOS-only BUILD dependency — compiles the tiny Objective-C AVAudioEngine
 # microphone bridge (native/macos/mic_capture.m) via build.rs. No new runtime
