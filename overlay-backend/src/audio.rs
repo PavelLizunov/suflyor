@@ -688,6 +688,7 @@ fn play_test_clip(stop: Arc<AtomicBool>) -> Result<()> {
     let event = client.set_get_eventhandle()?;
     let render_client = client.get_audiorenderclient()?;
     let buffer_frames = client.get_buffer_size()?;
+    #[allow(clippy::chunks_exact_to_as_chunks)]
     let clip: Vec<i16> = DIAG_CHIME_S16
         .chunks_exact(2)
         .map(|b| i16::from_le_bytes([b[0], b[1]]))
