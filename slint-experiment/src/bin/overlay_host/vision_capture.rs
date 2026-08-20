@@ -97,6 +97,42 @@ fn run_local_ocr(bgra: &[u8], width: u32, height: u32) -> Result<String, String>
     }
 }
 
+fn spawn_vision_notice(
+    events: &Arc<dyn RuntimeEvents>,
+    cfg: &overlay_backend::config::SharedConfig,
+    source: &str,
+    ru: &str,
+    en: &str,
+) {
+    let (is_ru, preferred_monitor, stealth) = {
+        let config = cfg.read();
+        (
+            config.ui_is_ru(),
+            config.tile_monitor_name.clone(),
+            config.stealth_enabled,
+        )
+    };
+    let monitor = match preferred_monitor.as_deref() {
+        Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
+        _ => MonitorHint::Auto,
+    };
+    if let Err(error) = events.spawn_tile_full(
+        TileSpec {
+            question: "Vision (F8)".into(),
+            answer: if is_ru { ru } else { en }.into(),
+            source: source.into(),
+            is_translation: false,
+            highlights: vec![],
+            summary_session: None,
+        },
+        monitor,
+        stealth,
+        TileKind::Error,
+    ) {
+        eprintln!("[overlay-host] F8 notice tile spawn failed: {error}");
+    }
+}
+
 /// V3 — F8 screenshot. Freezes the whole virtual desktop, shows a Lightshot-
 /// style selection overlay, and on release crops the frozen frame to the chosen
 /// region and hands it to `launch_vision_for_bgra`. Esc / right-click / a tiny
@@ -140,36 +176,40 @@ pub(crate) fn fire_f8_vision_capture(
         )
     };
     if ep.is_none() && !ocr_ready && !mlx_pending {
-        let (is_ru, preferred_monitor, stealth) = {
-            let c = cfg.read();
-            (c.ui_is_ru(), c.tile_monitor_name.clone(), c.stealth_enabled)
-        };
-        let answer = if is_ru {
-            "Vision выключен. Выберите маршрут в Настройки → AI мост → Vision."
-        } else {
-            "Vision is off. Choose a route in Settings → AI bridge → Vision."
-        };
-        let monitor = match preferred_monitor.as_deref() {
-            Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
-            _ => MonitorHint::Auto,
-        };
-        if let Err(e) = events.spawn_tile_full(
-            TileSpec {
-                question: "Vision (F8)".into(),
-                answer: answer.into(),
-                source: "vision_off".into(),
-                is_translation: false,
-                highlights: vec![],
-                summary_session: None,
-            },
-            monitor,
-            stealth,
-            TileKind::Error,
-        ) {
-            eprintln!("[overlay-host] F8 vision-off notice tile spawn failed: {e}");
-        }
+        spawn_vision_notice(
+            events,
+            cfg,
+            "vision_off",
+            "Vision выключен. Выберите маршрут в Настройки > AI мост > Vision.",
+            "Vision is off. Choose a route in Settings > AI bridge > Vision.",
+        );
         diag!("[overlay-host] F8: vision off and no local OCR — notice shown");
         return;
+    }
+
+    #[cfg(target_os = "macos")]
+    match slint_replay::native::screen::request_screen_capture_access() {
+        slint_replay::native::screen::ScreenCaptureAccess::Allowed => {}
+        slint_replay::native::screen::ScreenCaptureAccess::RestartRequired => {
+            spawn_vision_notice(
+                events,
+                cfg,
+                "screen_capture_restart",
+                "Доступ к записи экрана выдан. Полностью закройте и снова откройте Suflyor, затем повторите F8.",
+                "Screen Recording access was granted. Fully quit and reopen Suflyor, then try F8 again.",
+            );
+            return;
+        }
+        slint_replay::native::screen::ScreenCaptureAccess::Denied => {
+            spawn_vision_notice(
+                events,
+                cfg,
+                "screen_capture_denied",
+                "Запись экрана недоступна этой копии Suflyor. Включите Suflyor в Системных настройках > Конфиденциальность и безопасность > Запись экрана и системного звука, затем полностью перезапустите приложение.",
+                "Screen capture is unavailable to this copy of Suflyor. Enable it in System Settings > Privacy & Security > Screen & System Audio Recording, then fully quit and reopen the app.",
+            );
+            return;
+        }
     }
 
     // Freeze the virtual desktop for region selection. Windows composes all
@@ -183,6 +223,13 @@ pub(crate) fn fire_f8_vision_capture(
         Ok(x) => x,
         Err(e) => {
             diag!("[overlay-host] F8: virtual capture failed: {e}");
+            spawn_vision_notice(
+                events,
+                cfg,
+                "screen_capture_failed",
+                "Не удалось получить кадр экрана. Полностью закройте и снова откройте Suflyor, затем повторите F8.",
+                "Couldn't capture the screen. Fully quit and reopen Suflyor, then try F8 again.",
+            );
             return;
         }
     };

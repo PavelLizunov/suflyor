@@ -6,6 +6,8 @@ extern "C" {
         capacity: usize,
     ) -> usize;
     fn suflyor_macos_cursor_position(out_x: *mut i32, out_y: *mut i32) -> i32;
+    fn suflyor_macos_screen_capture_preflight() -> i32;
+    fn suflyor_macos_screen_capture_request() -> i32;
 
     fn suflyor_macos_capture_display_bgra(
         out_width: *mut u32,
@@ -50,6 +52,14 @@ pub struct DisplayRect {
 /// Captured BGRA bytes, pixel dimensions, and global display bounds.
 pub type DisplayCapture = (Vec<u8>, u32, u32, DisplayRect);
 
+/// Result of checking Screen Recording access after an explicit user action.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ScreenCaptureAccess {
+    Allowed,
+    RestartRequired,
+    Denied,
+}
+
 impl From<MacDisplayRect> for DisplayRect {
     fn from(value: MacDisplayRect) -> Self {
         Self {
@@ -84,6 +94,20 @@ pub fn cursor_position() -> Option<(i32, i32)> {
     let mut x = 0;
     let mut y = 0;
     (unsafe { suflyor_macos_cursor_position(&mut x, &mut y) } == 1).then_some((x, y))
+}
+
+/// Check Screen Recording access and, only because the user explicitly asked
+/// for a capture, request it when needed. macOS requires a full app restart
+/// after a newly accepted request.
+#[must_use]
+pub fn request_screen_capture_access() -> ScreenCaptureAccess {
+    if unsafe { suflyor_macos_screen_capture_preflight() } == 1 {
+        ScreenCaptureAccess::Allowed
+    } else if unsafe { suflyor_macos_screen_capture_request() } == 1 {
+        ScreenCaptureAccess::RestartRequired
+    } else {
+        ScreenCaptureAccess::Denied
+    }
 }
 
 /// Smallest rectangle containing every active display.

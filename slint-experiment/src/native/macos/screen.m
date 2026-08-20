@@ -80,6 +80,14 @@ static SCDisplay *suflyor_display_under_cursor(SCShareableContent *content) {
     return primary ?: content.displays.firstObject;
 }
 
+int32_t suflyor_macos_screen_capture_preflight(void) {
+    return CGPreflightScreenCaptureAccess() ? 1 : 0;
+}
+
+int32_t suflyor_macos_screen_capture_request(void) {
+    return CGRequestScreenCaptureAccess() ? 1 : 0;
+}
+
 int32_t suflyor_macos_capture_display_bgra(
     uint32_t *out_width,
     uint32_t *out_height,

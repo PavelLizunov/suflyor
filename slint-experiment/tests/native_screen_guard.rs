@@ -44,6 +44,8 @@ fn macos_screencapturekit_adapter_is_wired() {
     let screen_rs =
         fs::read_to_string(root.join("src/native/macos/screen.rs")).expect("read screen.rs");
     assert!(screen_rs.contains("suflyor_macos_capture_display_bgra"));
+    assert!(screen_rs.contains("pub fn request_screen_capture_access"));
+    assert!(screen_rs.contains("ScreenCaptureAccess::RestartRequired"));
     assert!(screen_rs.contains("suflyor_macos_copy_active_displays"));
     assert!(screen_rs.contains("pub fn display_union"));
     assert!(screen_rs.contains("pub fn cursor_position"));
@@ -55,6 +57,16 @@ fn macos_screencapturekit_adapter_is_wired() {
         fs::read_to_string(root.join("src/native/macos/screen.m")).expect("read screen.m");
     assert!(screen_m.contains("SCShareableContent"));
     assert!(screen_m.contains("SCScreenshotManager"));
+    assert!(screen_m.contains("CGPreflightScreenCaptureAccess"));
+    assert!(screen_m.contains("CGRequestScreenCaptureAccess"));
+    assert!(
+        screen_m
+            .find("CGPreflightScreenCaptureAccess")
+            .expect("preflight")
+            < screen_m
+                .find("[SCShareableContent getShareableContent")
+                .expect("capture")
+    );
     assert!(screen_m.contains("CGGetActiveDisplayList"));
     assert!(screen_m.contains("CGEventGetLocation"));
     assert!(screen_m.contains("excludingApplications:@[self_application]"));
@@ -65,6 +77,18 @@ fn macos_screencapturekit_adapter_is_wired() {
     assert!(screen_m.contains("@autoreleasepool"));
     assert!(screen_m.contains("request.automaticallyDetectsLanguage = YES"));
     assert!(screen_m.contains("if (!*out_text)"));
+}
+
+#[test]
+fn f8_permission_failure_is_visible_and_requires_a_restart() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let capture = fs::read_to_string(root.join("src/bin/overlay_host/vision_capture.rs"))
+        .expect("read vision capture");
+    assert!(capture.contains("request_screen_capture_access()"));
+    assert!(capture.contains("screen_capture_denied"));
+    assert!(capture.contains("screen_capture_restart"));
+    assert!(capture.contains("Fully quit and reopen Suflyor"));
+    assert!(capture.contains("Полностью закройте и снова откройте Suflyor"));
 }
 
 #[test]

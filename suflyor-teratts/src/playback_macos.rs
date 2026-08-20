@@ -53,6 +53,19 @@ impl Drop for ExitNotifier {
 
 const BACK_HISTORY_SECONDS: u64 = 30;
 const STRETCH_INPUT_CHUNK: usize = 4096;
+const PCM_QUEUE_TARGET: usize = 16_384;
+const PREBUFFER_MILLIS: u32 = 50;
+
+fn should_start_stream(
+    pending_samples: usize,
+    sample_rate: u32,
+    end_of_stream: bool,
+    source_drained: bool,
+) -> bool {
+    let prebuffer = (sample_rate as usize).saturating_mul(PREBUFFER_MILLIS as usize) / 1000;
+    pending_samples > 0
+        && (pending_samples >= prebuffer.max(1) || (end_of_stream && source_drained))
+}
 
 struct BufferedTimeline {
     samples: VecDeque<f32>,
@@ -346,7 +359,9 @@ fn render_loop(
     let mut stretcher: Option<suflyor_wsola::StreamingWsola> = None;
     let mut stretch_finished = false;
 
-    let pcm_queue = Arc::new(std::sync::Mutex::new(VecDeque::<f32>::new()));
+    let pcm_queue = Arc::new(std::sync::Mutex::new(VecDeque::<f32>::with_capacity(
+        PCM_QUEUE_TARGET,
+    )));
     let pcm_queue_callback = Arc::clone(&pcm_queue);
 
     let stream = device
@@ -368,9 +383,8 @@ fn render_loop(
         )
         .map_err(|e| anyhow!("build_output_stream: {e}"))?;
 
-    stream.play().map_err(|e| anyhow!("stream.play: {e}"))?;
-
     let mut resampler = ContinuousResampler::new(sample_rate, device_rate);
+    let mut stream_started = false;
 
     loop {
         if stop.load(Ordering::Acquire) {
@@ -418,6 +432,18 @@ fn render_loop(
             guard.len()
         };
 
+        if !stream_started
+            && should_start_stream(
+                pending_samples,
+                device_rate,
+                eos.load(Ordering::Acquire),
+                timeline.available() == 0 && output.is_empty(),
+            )
+        {
+            stream.play().map_err(|e| anyhow!("stream.play: {e}"))?;
+            stream_started = true;
+        }
+
         if output.is_empty() {
             let is_eos = eos.load(Ordering::Acquire) && timeline.available() == 0;
             match empty_queue_action(is_eos, pending_samples) {
@@ -427,17 +453,22 @@ fn render_loop(
                 }
             }
         } else {
-            let mut guard = pcm_queue
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            while guard.len() < 16384 && !output.is_empty() {
+            let queue_space = PCM_QUEUE_TARGET.saturating_sub(pending_samples);
+            let mut resampled = VecDeque::with_capacity(queue_space.min(STRETCH_INPUT_CHUNK));
+            while resampled.len() < queue_space && !output.is_empty() {
                 let mut chunk = Vec::with_capacity(2048);
                 while chunk.len() < 2048 && !output.is_empty() {
                     if let Some(s) = output.pop_front() {
                         chunk.push(s);
                     }
                 }
-                resampler.process(&chunk, &mut guard);
+                resampler.process(&chunk, &mut resampled);
+            }
+            if !resampled.is_empty() {
+                let mut guard = pcm_queue
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                guard.extend(resampled);
             }
             std::thread::sleep(std::time::Duration::from_millis(5));
         }
@@ -470,5 +501,13 @@ mod tests {
             })));
         }
         assert!(notified.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn stream_waits_for_prebuffer_but_short_eos_still_starts() {
+        assert!(!should_start_stream(100, 48_000, false, false));
+        assert!(should_start_stream(2_400, 48_000, false, false));
+        assert!(should_start_stream(100, 48_000, true, true));
+        assert!(!should_start_stream(0, 48_000, true, true));
     }
 }
