@@ -14,6 +14,9 @@ private let validBearer = String(repeating: "a1", count: 32)
     #expect(!token.contains("путь"))
     #expect(!token.contains("/"))
     #expect(!token.contains("\n"))
+    #expect(sidecarDiagnosticCase(SidecarError.invalidSnapshot) == "invalid_snapshot")
+    #expect(sidecarDiagnosticCase(SidecarError.reasoningBoundaryMissing) == "reasoning_boundary_missing")
+    #expect(sidecarDiagnosticCase(CancellationError()) == "none")
 }
 
 private func startupData(
