@@ -23,6 +23,7 @@ fi
 contents_dir="$app_dir/Contents"
 macos_dir="$contents_dir/MacOS"
 resources_dir="$contents_dir/Resources"
+third_party_notices_dir="$resources_dir/ThirdPartyNotices"
 frameworks_dir="$contents_dir/Frameworks"
 binary="$target_dir/release/overlay-host"
 sidecar_binary="$target_dir/release/suflyor-tts"
@@ -43,6 +44,7 @@ swift build --package-path "$mlx_root" -c release --disable-automatic-resolution
 mlx_bin_dir="$(swift build --package-path "$mlx_root" -c release \
   --disable-automatic-resolution --show-bin-path)"
 mlx_binary="$mlx_bin_dir/suflyor-mlx"
+mlx_metallib="$($mlx_root/Scripts/build-metallib.sh release)"
 
 for executable in "$binary" "$sidecar_binary" "$tera_binary" "$mlx_binary"; do
   if [[ ! -x "$executable" ]]; then
@@ -50,6 +52,10 @@ for executable in "$binary" "$sidecar_binary" "$tera_binary" "$mlx_binary"; do
     exit 1
   fi
 done
+if [[ "$mlx_metallib" != "$mlx_bin_dir/mlx.metallib" || ! -s "$mlx_metallib" ]]; then
+  echo "required MLX Metal library missing after build" >&2
+  exit 1
+fi
 if [[ "$(lipo -archs "$mlx_binary")" != "arm64" ]]; then
   echo "suflyor-mlx must be a thin arm64 executable" >&2
   exit 1
@@ -59,12 +65,13 @@ plutil -lint "$crate_root/macos/Info.plist"
 plutil -lint "$crate_root/macos/entitlements.plist"
 
 rm -rf -- "$app_dir"
-mkdir -p "$macos_dir" "$resources_dir" "$frameworks_dir"
+mkdir -p "$macos_dir" "$resources_dir" "$third_party_notices_dir" "$frameworks_dir"
 cp "$crate_root/macos/Info.plist" "$contents_dir/Info.plist"
 install -m 755 "$binary" "$macos_dir/overlay-host"
 install -m 755 "$sidecar_binary" "$macos_dir/suflyor-tts"
 install -m 755 "$tera_binary" "$macos_dir/suflyor-teratts"
 install -m 755 "$mlx_binary" "$macos_dir/suflyor-mlx"
+install -m 644 "$mlx_metallib" "$macos_dir/mlx.metallib"
 if ! otool -l "$macos_dir/suflyor-mlx" | grep -q '@executable_path/../Frameworks'; then
   install_name_tool -add_rpath '@executable_path/../Frameworks' "$macos_dir/suflyor-mlx"
 fi
@@ -74,6 +81,23 @@ xcrun swift-stdlib-tool --copy --platform macosx \
 while IFS= read -r bundle; do
   cp -R "$bundle" "$resources_dir/"
 done < <(find "$mlx_bin_dir" -maxdepth 1 -type d -name '*.bundle' -print)
+mlx_swift_checkout="$mlx_root/.build/checkouts/mlx-swift"
+for license in \
+  "$mlx_swift_checkout/LICENSE" \
+  "$mlx_swift_checkout/Source/Cmlx/mlx/LICENSE" \
+  "$mlx_swift_checkout/Source/Cmlx/metal-cpp/LICENSE.txt"
+do
+  if [[ ! -s "$license" ]]; then
+    echo "required MLX third-party license is missing: $license" >&2
+    exit 1
+  fi
+done
+install -m 644 "$mlx_swift_checkout/LICENSE" \
+  "$third_party_notices_dir/MLX-SWIFT-LICENSE"
+install -m 644 "$mlx_swift_checkout/Source/Cmlx/mlx/LICENSE" \
+  "$third_party_notices_dir/MLX-LICENSE"
+install -m 644 "$mlx_swift_checkout/Source/Cmlx/metal-cpp/LICENSE.txt" \
+  "$third_party_notices_dir/METAL-CPP-LICENSE"
 bad_mlx_deps="$(otool -L "$macos_dir/suflyor-mlx" | tail -n +2 | awk '{print $1}' \
   | grep -Ev '^(@rpath/|@loader_path/|@executable_path/|/usr/lib/|/System/Library/)' || true)"
 if [[ -n "$bad_mlx_deps" ]]; then

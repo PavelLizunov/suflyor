@@ -3,6 +3,7 @@
 const PLIST: &str = include_str!("../macos/Info.plist");
 const ENTITLEMENTS: &str = include_str!("../macos/entitlements.plist");
 const SCRIPT: &str = include_str!("../scripts/build-macos-app.sh");
+const METAL_SCRIPT: &str = include_str!("../../suflyor-mlx/Scripts/build-metallib.sh");
 const HOST: &str = include_str!("../src/bin/overlay_host_windows.rs");
 const SETTINGS_CONTROLLER: &str = include_str!("../src/bin/overlay_host/settings_controller.rs");
 const SETTINGS_UI: &str = include_str!("../ui/settings_panel.slint");
@@ -110,6 +111,7 @@ fn script_builds_and_ad_hoc_signs_the_app() {
         "cargo build --locked --release --manifest-path \"$crate_root/../suflyor-teratts/Cargo.toml\"",
         "swift build --package-path \"$mlx_root\" -c release --disable-automatic-resolution",
         "mlx_root=\"$crate_root/../suflyor-mlx\"",
+        "mlx_metallib=\"$($mlx_root/Scripts/build-metallib.sh release)\"",
         "if [[ ! -f \"$mlx_root/Package.resolved\" ]]",
         "--manifest-path \"$crate_root/Cargo.toml\"",
         "sidecar_binary=\"$target_dir/release/suflyor-tts\"",
@@ -125,6 +127,11 @@ fn script_builds_and_ad_hoc_signs_the_app() {
         "install -m 755 \"$sidecar_binary\" \"$macos_dir/suflyor-tts\"",
         "install -m 755 \"$tera_binary\" \"$macos_dir/suflyor-teratts\"",
         "install -m 755 \"$mlx_binary\" \"$macos_dir/suflyor-mlx\"",
+        "install -m 644 \"$mlx_metallib\" \"$macos_dir/mlx.metallib\"",
+        "third_party_notices_dir=\"$resources_dir/ThirdPartyNotices\"",
+        "\"$third_party_notices_dir/MLX-SWIFT-LICENSE\"",
+        "\"$third_party_notices_dir/MLX-LICENSE\"",
+        "\"$third_party_notices_dir/METAL-CPP-LICENSE\"",
         "install_name_tool -add_rpath '@executable_path/../Frameworks'",
         "xcrun swift-stdlib-tool --copy --platform macosx",
         "find \"$mlx_bin_dir\" -maxdepth 1 -type d -name '*.bundle'",
@@ -172,6 +179,41 @@ fn script_builds_and_ad_hoc_signs_the_app() {
         "nested executables must be signed before the outer app"
     );
     assert!(SCRIPT.trim_end().ends_with("echo \"$app_dir\""));
+}
+
+#[test]
+fn mlx_metallib_is_built_from_the_audited_pinned_sources() {
+    for required in [
+        "set -euo pipefail",
+        "0bb916c67f4b9e5c682cbe02a42c701c93ab5021",
+        "xcodebuild -downloadComponent MetalToolchain",
+        "xcodebuild -showComponent MetalToolchain -json",
+        "${#sources[@]}",
+        "-mmacosx-version-min=14.2",
+        "arg_reduce.metal",
+        "conv.metal",
+        "gemv.metal",
+        "layer_norm.metal",
+        "random.metal",
+        "rms_norm.metal",
+        "rope.metal",
+        "scaled_dot_product_attention.metal",
+        "steel/attn/kernels/steel_attention.metal",
+        "xcrun -sdk macosx metallib",
+        "xcrun metallib --app-store-validate",
+        "MetalLib executable",
+        "mv -f -- \"$staged\" \"$bin_dir/mlx.metallib\"",
+    ] {
+        assert!(
+            METAL_SCRIPT.contains(required),
+            "missing MLX Metal build invariant: {required}"
+        );
+    }
+    assert_eq!(
+        METAL_SCRIPT.matches(".metal\n").count(),
+        9,
+        "the audited pinned MLX build must keep its exact nine shader entrypoints"
+    );
 }
 
 #[test]

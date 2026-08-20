@@ -60,6 +60,8 @@ echo "=== macOS MLX sidecar (locked) ==="
 test -f suflyor-mlx/Package.resolved
 swift test --package-path suflyor-mlx --disable-automatic-resolution
 swift build --package-path suflyor-mlx -c release --disable-automatic-resolution
+mlx_metallib="$(suflyor-mlx/Scripts/build-metallib.sh release)"
+test -s "$mlx_metallib"
 
 echo "=== macOS TTS sidecar ==="
 cargo fmt --manifest-path suflyor-tts/Cargo.toml --all -- --check
