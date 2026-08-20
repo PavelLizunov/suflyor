@@ -25,6 +25,11 @@
 //! `overlay_backend` config + stt helpers). That is intentional for the move;
 //! imports narrow in a later pass.
 use super::{ComponentHandle, SettingsWindow, SharedString};
+use std::path::{Path, PathBuf};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 /// The two Groq cloud model ids exposed in the STT tab combobox.
 /// Index 0 = turbo (fast, recommended), index 1 = large-v3 (more accurate).
@@ -67,6 +72,23 @@ pub(crate) fn stt_provider_from_index(idx: i32) -> &'static str {
     }
 }
 
+fn managed_gigaam_dir() -> PathBuf {
+    overlay_backend::local_ai::gigaam_default_dir(&overlay_backend::local_ai::default_root())
+}
+
+pub(crate) fn installed_gigaam_dir(saved: &str) -> Option<PathBuf> {
+    let saved = Path::new(saved.trim());
+    if !saved.as_os_str().is_empty() && overlay_backend::local_ai::gigaam_model_present(saved) {
+        return Some(saved.to_path_buf());
+    }
+    let managed = managed_gigaam_dir();
+    overlay_backend::local_ai::gigaam_model_present(&managed).then_some(managed)
+}
+
+fn format_mebibytes(bytes: u64) -> String {
+    format!("{:.0}", bytes as f64 / 1_048_576.0)
+}
+
 fn update_cloud_model<E>(
     config: &mut overlay_backend::config::Config,
     idx: i32,
@@ -89,6 +111,82 @@ fn update_cloud_model<E>(
 /// (cloned per closure); none of the STT blocks touch `state` / `overlay_weak`
 /// / `slint_rt` / `rt_handle`, so no extra params are threaded through.
 pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::config::SharedConfig) {
+    let gigaam_cancel = Arc::new(AtomicBool::new(false));
+    {
+        let weak = win.as_weak();
+        let cfg_c = cfg.clone();
+        let cancel = gigaam_cancel.clone();
+        win.on_stt_gigaam_install(move || {
+            let Some(w) = weak.upgrade() else { return };
+            cancel.store(false, Ordering::Release);
+            w.set_stt_gigaam_installing(true);
+            w.set_stt_gigaam_install_failed(false);
+            w.set_stt_gigaam_install_cancelled(false);
+            w.set_stt_gigaam_install_progress(0.0);
+            let weak_done = w.as_weak();
+            let cfg_t = cfg_c.clone();
+            let cancel_t = cancel.clone();
+            std::thread::spawn(move || {
+                let options = overlay_backend::local_ai::InstallOptions {
+                    skip_llama: true,
+                    skip_whisper: true,
+                    ..Default::default()
+                };
+                let weak_progress = weak_done.clone();
+                let result = overlay_backend::local_ai::install(
+                    &options,
+                    &cancel_t,
+                    &move |progress| {
+                        let overlay_backend::local_ai::Progress::Bytes { done, total, .. } =
+                            progress
+                        else {
+                            return;
+                        };
+                        let weak = weak_progress.clone();
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(w) = weak.upgrade() {
+                                w.set_stt_gigaam_install_progress(
+                                    done as f32 / total.max(1) as f32,
+                                );
+                                w.set_stt_gigaam_install_done(SharedString::from(
+                                    format_mebibytes(done),
+                                ));
+                                w.set_stt_gigaam_install_total(SharedString::from(
+                                    format_mebibytes(total),
+                                ));
+                            }
+                        });
+                    },
+                )
+                .and_then(|result| {
+                    if result.stt_gigaam_dir.is_empty() {
+                        anyhow::bail!("managed GigaAM install did not produce a ready model");
+                    }
+                    let mut c = cfg_t.write();
+                    c.stt_provider = "gigaam".into();
+                    c.stt_gigaam_dir = result.stt_gigaam_dir.clone();
+                    overlay_backend::config::save(&c)?;
+                    Ok(result.stt_gigaam_dir)
+                });
+                let cancelled = cancel_t.load(Ordering::Acquire);
+                let _ = slint::invoke_from_event_loop(move || {
+                    let Some(w) = weak_done.upgrade() else { return };
+                    w.set_stt_gigaam_installing(false);
+                    w.set_stt_gigaam_install_cancelled(cancelled);
+                    w.set_stt_gigaam_install_failed(result.is_err() && !cancelled);
+                    if let Ok(dir) = result {
+                        w.set_stt_gigaam_installed(true);
+                        w.set_stt_gigaam_dir_input(SharedString::from(dir));
+                        w.set_stt_provider_index(1);
+                    }
+                });
+            });
+        });
+    }
+    {
+        let cancel = gigaam_cancel;
+        win.on_stt_gigaam_install_cancel(move || cancel.store(true, Ordering::Release));
+    }
     {
         let cfg_c = cfg.clone();
         win.on_stt_gigaam_gpu_changed(move |on| {
@@ -138,10 +236,22 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
     // Phase E10 — STT provider selector + local-engine fields.
     {
         let cfg_c = cfg.clone();
+        let weak = win.as_weak();
         win.on_stt_provider_changed(move |idx| {
             let provider = stt_provider_from_index(idx);
             let mut c = cfg_c.write();
             c.stt_provider = provider.to_string();
+            if provider == "gigaam" {
+                if let Some(dir) = installed_gigaam_dir(&c.stt_gigaam_dir) {
+                    c.stt_gigaam_dir = dir.to_string_lossy().into_owned();
+                    if let Some(w) = weak.upgrade() {
+                        w.set_stt_gigaam_dir_input(SharedString::from(
+                            c.stt_gigaam_dir.clone(),
+                        ));
+                        w.set_stt_gigaam_installed(true);
+                    }
+                }
+            }
             if let Err(e) = overlay_backend::config::save(&c) {
                 eprintln!("[overlay-host] stt_provider save failed: {e:#}");
                 return;
@@ -269,6 +379,12 @@ mod tests {
         assert_eq!(stt_provider_from_index(0), "cloud");
         assert_eq!(stt_provider_from_index(1), "gigaam");
         assert_eq!(stt_provider_from_index(2), "whisper");
+    }
+
+    #[test]
+    fn gigaam_progress_matches_the_windows_megabyte_display() {
+        assert_eq!(format_mebibytes(0), "0");
+        assert_eq!(format_mebibytes(224_893_347), "214");
     }
 
     #[test]

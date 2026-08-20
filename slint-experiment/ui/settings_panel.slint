@@ -425,7 +425,7 @@ export component SettingsWindow inherits Window {
     in-out property <bool> mlx-text-cancelled: false;
     in-out property <float> mlx-text-progress: 0.0;
     in-out property <string> mlx-text-done: "0";
-    in-out property <string> mlx-text-total: "4851993338";
+    in-out property <string> mlx-text-total: "4627";
     callback mlx-text-download();
     callback mlx-text-cancel();
     callback mlx-text-enable();
@@ -437,7 +437,7 @@ export component SettingsWindow inherits Window {
     in-out property <bool> mlx-vision-cancelled: false;
     in-out property <float> mlx-vision-progress: 0.0;
     in-out property <string> mlx-vision-done: "0";
-    in-out property <string> mlx-vision-total: "1749079691";
+    in-out property <string> mlx-vision-total: "1668";
     callback mlx-vision-download();
     callback mlx-vision-cancel();
     callback mlx-vision-enable();
@@ -629,14 +629,22 @@ export component SettingsWindow inherits Window {
     // Phase E6 v27 — connection test buttons (AI bridge + STT).
     in-out property <string> ai-bridge-test-result: "";
     in-out property <string> stt-test-result: "";
-    // STT provider: Windows 0=cloud, 1=GigaAM, 2=Whisper;
-    // macOS 0=cloud, 1=external Whisper.
+    // STT provider: 0=cloud, 1=GigaAM, 2=Whisper/external Whisper.
     in-out property <int> stt-provider-index: 0;
     // Recognition language (stt_language): 0=auto-detect, 1=Russian, 2=English.
     in-out property <int> stt-language-index: 0;
     // Cloud recognition model (stt_model): 0=turbo (fast), 1=large-v3 (accurate).
     in-out property <int> stt-cloud-model-index: 0;
     in-out property <string> stt-gigaam-dir-input: "";
+    in-out property <bool> stt-gigaam-installed: false;
+    in-out property <bool> stt-gigaam-installing: false;
+    in-out property <bool> stt-gigaam-install-failed: false;
+    in-out property <bool> stt-gigaam-install-cancelled: false;
+    in-out property <float> stt-gigaam-install-progress: 0.0;
+    in-out property <string> stt-gigaam-install-done: "0";
+    in-out property <string> stt-gigaam-install-total: "214";
+    callback stt-gigaam-install();
+    callback stt-gigaam-install-cancel();
     // GigaAM GPU acceleration via the ONNX Runtime DirectML EP (default on).
     in-out property <bool> stt-gigaam-gpu: true;
     in-out property <string> stt-whisper-url-input: "";
@@ -2265,7 +2273,7 @@ export component SettingsWindow inherits Window {
                             color: Theme.warning;
                             wrap: word-wrap;
                         }
-                        if Platform.is-macos : SettingsCard {
+                        if Platform.is-macos && root.ai-provider-index == 4 : SettingsCard {
                             title: @tr("Managed MLX text model");
                             Text {
                                 text: @tr("MLX runs locally on Apple-silicon Macs only. Models are downloaded only when you ask.");
@@ -2278,7 +2286,7 @@ export component SettingsWindow inherits Window {
                                 current-index: 0;
                             }
                             Text {
-                                text: @tr("Download size: 4,851,993,338 bytes (4.52 GiB).");
+                                text: @tr("Download size: 4.52 GiB.");
                                 font-size: 10px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
@@ -2302,7 +2310,7 @@ export component SettingsWindow inherits Window {
                                 wrap: word-wrap;
                             }
                             if root.mlx-text-busy : Text {
-                                text: @tr("{} / {} downloaded bytes", root.mlx-text-done, root.mlx-text-total);
+                                text: @tr("{} / {} MB downloaded", root.mlx-text-done, root.mlx-text-total);
                                 font-size: 10px;
                                 color: Theme.text-muted;
                             }
@@ -2311,6 +2319,8 @@ export component SettingsWindow inherits Window {
                                 border-radius: 3px;
                                 background: Theme.border;
                                 Rectangle {
+                                    x: 0;
+                                    y: 0;
                                     height: parent.height;
                                     width: parent.width * root.mlx-text-progress;
                                     border-radius: 3px;
@@ -3242,7 +3252,7 @@ export component SettingsWindow inherits Window {
                             color: Theme.warning;
                             wrap: word-wrap;
                         }
-                        if Platform.is-macos : SettingsCard {
+                        if Platform.is-macos && root.vision-provider-index == 6 : SettingsCard {
                             title: @tr("Managed MLX Vision model");
                             Text {
                                 text: @tr("Separate image-capable model for screenshots. MLX runs locally on Apple-silicon Macs only.");
@@ -3255,7 +3265,7 @@ export component SettingsWindow inherits Window {
                                 current-index: 0;
                             }
                             Text {
-                                text: @tr("Download size: 1,749,079,691 bytes (1.63 GiB). Supports image input. License: Apache-2.0.");
+                                text: @tr("Download size: 1.63 GiB. Supports image input. License: Apache-2.0.");
                                 font-size: 10px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
@@ -3279,7 +3289,7 @@ export component SettingsWindow inherits Window {
                                 wrap: word-wrap;
                             }
                             if root.mlx-vision-busy : Text {
-                                text: @tr("{} / {} downloaded bytes", root.mlx-vision-done, root.mlx-vision-total);
+                                text: @tr("{} / {} MB downloaded", root.mlx-vision-done, root.mlx-vision-total);
                                 font-size: 10px;
                                 color: Theme.text-muted;
                             }
@@ -3288,6 +3298,8 @@ export component SettingsWindow inherits Window {
                                 border-radius: 3px;
                                 background: Theme.border;
                                 Rectangle {
+                                    x: 0;
+                                    y: 0;
                                     height: parent.height;
                                     width: parent.width * root.mlx-vision-progress;
                                     border-radius: 3px;
@@ -3815,6 +3827,50 @@ export component SettingsWindow inherits Window {
                                 text: @tr("Save");
                                 clicked => {
                                     root.stt-gigaam-dir-save(root.stt-gigaam-dir-input);
+                                }
+                            }
+                        }
+                        if Platform.is-macos && root.stt-provider-index == 1 : VerticalLayout {
+                            spacing: 6px;
+                            Text {
+                                text: root.stt-gigaam-installing ? @tr("Downloading and verifying…")
+                                    : root.stt-gigaam-installed ? @tr("Installed")
+                                    : root.stt-gigaam-install-failed ? @tr("Download or activation failed. Retry when ready.")
+                                    : root.stt-gigaam-install-cancelled ? @tr("Download cancelled. Resume keeps verified files.")
+                                    : @tr("Not installed");
+                                font-size: 11px;
+                                color: root.stt-gigaam-install-failed ? Theme.danger
+                                    : root.stt-gigaam-installed ? Theme.success
+                                    : Theme.text-secondary;
+                            }
+                            if root.stt-gigaam-installing : Text {
+                                text: @tr("{} / {} MB downloaded", root.stt-gigaam-install-done, root.stt-gigaam-install-total);
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                            }
+                            if root.stt-gigaam-installing : Rectangle {
+                                height: 6px;
+                                border-radius: 3px;
+                                background: Theme.border;
+                                Rectangle {
+                                    x: 0;
+                                    y: 0;
+                                    height: parent.height;
+                                    width: parent.width * root.stt-gigaam-install-progress;
+                                    border-radius: 3px;
+                                    background: Theme.accent;
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: @tr("Download / Resume");
+                                    enabled: !root.stt-gigaam-installing && !root.stt-gigaam-installed;
+                                    clicked => { root.stt-gigaam-install(); }
+                                }
+                                if root.stt-gigaam-installing : Button {
+                                    text: @tr("Cancel");
+                                    clicked => { root.stt-gigaam-install-cancel(); }
                                 }
                             }
                         }

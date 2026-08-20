@@ -2221,8 +2221,8 @@ msgstr "MLX работает локально только на Mac с Apple sil
 msgid "LFM2.5-8B-A1B MLX 4-bit"
 msgstr "LFM2.5-8B-A1B MLX 4-bit"
 
-msgid "Download size: 4,851,993,338 bytes (4.52 GiB)."
-msgstr "Размер загрузки: 4 851 993 338 байт (4,52 ГиБ)."
+msgid "Download size: 4.52 GiB."
+msgstr "Размер загрузки: 4,52 ГиБ."
 
 msgid "[!] LFM Open License v1.0 has commercial-use conditions. Review the license before commercial use. Russian response quality is not guaranteed."
 msgstr "[!] В LFM Open License v1.0 есть условия коммерческого использования. Перед коммерческим применением изучите лицензию. Качество ответов на русском языке не гарантируется."
@@ -2239,8 +2239,8 @@ msgstr "Не удалось загрузить или активировать �
 msgid "Download cancelled. Resume keeps verified files."
 msgstr "Загрузка отменена. При продолжении проверенные файлы сохранятся."
 
-msgid "{} / {} downloaded bytes"
-msgstr "{} / {} байт загружено"
+msgid "{} / {} MB downloaded"
+msgstr "{} / {} МБ загружено"
 
 msgid "Download / Resume"
 msgstr "Загрузить / Продолжить"
@@ -2257,8 +2257,8 @@ msgstr "Отдельная модель с поддержкой изображе
 msgid "Qwen3.5-2B MLX 4-bit (Vision)"
 msgstr "Qwen3.5-2B MLX 4-bit (Vision)"
 
-msgid "Download size: 1,749,079,691 bytes (1.63 GiB). Supports image input. License: Apache-2.0."
-msgstr "Размер загрузки: 1 749 079 691 байт (1,63 ГиБ). Поддерживает изображения. Лицензия: Apache-2.0."
+msgid "Download size: 1.63 GiB. Supports image input. License: Apache-2.0."
+msgstr "Размер загрузки: 1,63 ГиБ. Поддерживает изображения. Лицензия: Apache-2.0."
 
 msgid "One managed MLX model stays active at a time. The app switches between the selected text and Vision models when a request needs the other one."
 msgstr "Одновременно активна одна управляемая модель MLX. Приложение переключается между выбранными текстовой и Vision-моделями, когда запросу нужна другая модель."

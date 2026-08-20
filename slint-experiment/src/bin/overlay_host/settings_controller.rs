@@ -1386,12 +1386,17 @@ pub(crate) fn populate_component_rows(
                     ComponentKind::Stt => {
                         c.installed = match snap.stt_provider.as_str() {
                             "cloud" => !snap.groq_api_key.trim().is_empty(),
+                            "gigaam" => super::settings_stt::installed_gigaam_dir(
+                                &snap.stt_gigaam_dir,
+                            )
+                            .is_some(),
                             "whisper" => !snap.stt_whisper_url.trim().is_empty(),
                             _ => false,
                         };
                         c.detail = if c.installed {
                             match snap.stt_provider.as_str() {
                                 "cloud" => "Groq Whisper".into(),
+                                "gigaam" => "GigaAM".into(),
                                 "whisper" => "External Whisper".into(),
                                 _ => String::new(),
                             }
@@ -1420,12 +1425,12 @@ pub(crate) fn populate_component_rows(
                 if ru {
                     (
                         "Распознавание речи (STT)",
-                        "Настройки → STT → Cloud или External Whisper",
+                        "Настройки → STT → Cloud, GigaAM или External Whisper",
                     )
                 } else {
                     (
                         "Speech recognition (STT)",
-                        "Settings → STT → Cloud or External Whisper",
+                        "Settings → STT → Cloud, GigaAM or External Whisper",
                     )
                 }
             } else {
@@ -1871,7 +1876,20 @@ pub(crate) fn populate_token_status(
     });
     // Cloud recognition model (stt_model): turbo → 0, large-v3 → 1.
     win.set_stt_cloud_model_index(cloud_model_index(&c.stt_model));
-    win.set_stt_gigaam_dir_input(SharedString::from(c.stt_gigaam_dir.clone()));
+    if !win.get_stt_gigaam_installing() {
+        let installed = super::settings_stt::installed_gigaam_dir(&c.stt_gigaam_dir);
+        win.set_stt_gigaam_installed(installed.is_some());
+        win.set_stt_gigaam_install_failed(false);
+        win.set_stt_gigaam_install_cancelled(false);
+        win.set_stt_gigaam_install_progress(0.0);
+        win.set_stt_gigaam_install_done(SharedString::from("0"));
+        win.set_stt_gigaam_install_total(SharedString::from("214"));
+        win.set_stt_gigaam_dir_input(SharedString::from(
+            installed
+                .map(|path| path.to_string_lossy().into_owned())
+                .unwrap_or_else(|| c.stt_gigaam_dir.clone()),
+        ));
+    }
     win.set_stt_gigaam_gpu(c.stt_gigaam_gpu);
     win.set_stt_whisper_url_input(SharedString::from(c.stt_whisper_url.clone()));
     win.set_stt_whisper_bearer_input(SharedString::from(c.stt_whisper_bearer.clone()));

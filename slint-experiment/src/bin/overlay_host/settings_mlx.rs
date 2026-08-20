@@ -50,17 +50,23 @@ fn set_busy(window: &SettingsWindow, role: Role, busy: bool) {
     }
 }
 
+fn format_mebibytes(bytes: u64) -> String {
+    format!("{:.0}", bytes as f64 / 1_048_576.0)
+}
+
 fn set_progress(window: &SettingsWindow, role: Role, done: u64, total: u64) {
+    let done_label = SharedString::from(format_mebibytes(done));
+    let total_label = SharedString::from(format_mebibytes(total));
     match role {
         Role::Text => {
             window.set_mlx_text_progress(done as f32 / total.max(1) as f32);
-            window.set_mlx_text_done(SharedString::from(done.to_string()));
-            window.set_mlx_text_total(SharedString::from(total.to_string()));
+            window.set_mlx_text_done(done_label);
+            window.set_mlx_text_total(total_label);
         }
         Role::Vision => {
             window.set_mlx_vision_progress(done as f32 / total.max(1) as f32);
-            window.set_mlx_vision_done(SharedString::from(done.to_string()));
-            window.set_mlx_vision_total(SharedString::from(total.to_string()));
+            window.set_mlx_vision_done(done_label);
+            window.set_mlx_vision_total(total_label);
         }
     }
 }
@@ -209,7 +215,7 @@ pub(super) fn populate(win: &SettingsWindow) {
         win.set_mlx_text_cancelled(false);
         win.set_mlx_text_progress(0.0);
         win.set_mlx_text_done(SharedString::from("0"));
-        win.set_mlx_text_total(SharedString::from("4851993338"));
+        win.set_mlx_text_total(SharedString::from(format_mebibytes(4_851_993_338)));
     }
     if !win.get_mlx_vision_busy() {
         win.set_mlx_vision_installed(false);
@@ -218,7 +224,7 @@ pub(super) fn populate(win: &SettingsWindow) {
         win.set_mlx_vision_cancelled(false);
         win.set_mlx_vision_progress(0.0);
         win.set_mlx_vision_done(SharedString::from("0"));
-        win.set_mlx_vision_total(SharedString::from("1749079691"));
+        win.set_mlx_vision_total(SharedString::from(format_mebibytes(1_749_079_691)));
     }
     if cfg!(target_os = "macos") && !win.get_mlx_text_busy() {
         win.set_mlx_text_checking(true);
@@ -227,5 +233,19 @@ pub(super) fn populate(win: &SettingsWindow) {
     if cfg!(target_os = "macos") && !win.get_mlx_vision_busy() {
         win.set_mlx_vision_checking(true);
         refresh(Role::Vision, win.as_weak());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
+
+    use super::format_mebibytes;
+
+    #[test]
+    fn progress_bytes_match_the_windows_megabyte_display() {
+        assert_eq!(format_mebibytes(0), "0");
+        assert_eq!(format_mebibytes(4_851_993_338), "4627");
+        assert_eq!(format_mebibytes(1_749_079_691), "1668");
     }
 }

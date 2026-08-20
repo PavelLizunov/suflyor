@@ -114,6 +114,18 @@ fn macos_gigaam_is_coreml_backed_and_primary_on_fresh_config() {
     assert!(stt.contains("transcribe_rs::OrtAccelerator::CoreMl"));
     assert!(config.contains("if cfg!(target_os = \"macos\") {\n        \"gigaam\".into()"));
     assert!(config.contains("gigaam_default_dir(&crate::local_ai::default_root())"));
+
+    let settings = read("src/bin/overlay_host/settings_stt.rs");
+    let controller = read("src/bin/overlay_host/settings_controller.rs");
+    let ui = read("ui/settings_panel.slint");
+    assert!(settings.contains("skip_llama: true,"));
+    assert!(settings.contains("skip_whisper: true,"));
+    assert!(settings.contains("win.on_stt_gigaam_install("));
+    assert!(settings.contains("win.on_stt_gigaam_install_cancel("));
+    assert!(settings.contains("installed_gigaam_dir(&c.stt_gigaam_dir)"));
+    assert!(controller.contains("set_stt_gigaam_installed(installed.is_some())"));
+    assert!(ui.contains("if Platform.is-macos && root.stt-provider-index == 1 : VerticalLayout"));
+    assert!(ui.contains("root.stt-gigaam-install-progress"));
 }
 
 #[test]
@@ -133,8 +145,14 @@ fn macos_mlx_models_are_opt_in_downloads_with_honest_state() {
     assert!(ui.contains("@tr(\"Download / Resume\")"));
     assert!(ui.contains("@tr(\"Enable for text\")"));
     assert!(ui.contains("@tr(\"Enable for Vision\")"));
-    assert!(ui.contains("4,851,993,338 bytes (4.52 GiB)"));
-    assert!(ui.contains("1,749,079,691 bytes (1.63 GiB)"));
+    assert!(ui.contains("if Platform.is-macos && root.ai-provider-index == 4 : SettingsCard"));
+    assert!(ui.contains("if Platform.is-macos && root.vision-provider-index == 6 : SettingsCard"));
+    assert!(ui.contains("Download size: 4.52 GiB."));
+    assert!(ui.contains("Download size: 1.63 GiB."));
+    assert!(ui.contains("@tr(\"{} / {} MB downloaded\""));
+    assert_eq!(ui.matches("x: 0;\n                                    y: 0;\n                                    height: parent.height;\n                                    width: parent.width * root.mlx").count(), 2);
+    assert!(mlx.contains("format_mebibytes(4_851_993_338)"));
+    assert!(mlx.contains("format_mebibytes(1_749_079_691)"));
     assert!(ui.contains("Russian response quality is not guaranteed"));
     assert!(ui.contains("One managed MLX model stays active at a time"));
     assert!(!mlx.contains("install(role.model(), &cancel, &|_, _| {})"));
