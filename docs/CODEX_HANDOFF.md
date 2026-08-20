@@ -1,14 +1,77 @@
 # Codex handoff — macOS port recovery
 
-Updated 2026-08-19. Read `AGENTS.md` before acting. This document replaces the
-stale v0.36.0 release handoff that was previously committed here.
+Updated 2026-08-20. Read `AGENTS.md` before acting. The section immediately
+below is authoritative. The older P0n recovery narrative is retained after it
+for provenance only and must not override the current state.
 
 Operational note: Windows jobs follow
 [`docs/winbrat-recovery.md`](winbrat-recovery.md). Never start a duplicate job
 because SSH or a terminal disconnected. macOS builds and live QA run only on
 `mm4`; Windows compilation and the repository gate run only on `winbrat`.
 
-## Current state
+## Current operational state — 2026-08-20
+
+- Worktree: `C:\Users\x3d_mutant\Natively\suflyor-macos-mlx-runtime`
+- Branch: `codex/macos-mlx-runtime`
+- Packaged code commit: `02ac938a46beb1c3fb335fda9f5310f92ef48d8b`
+- Packaged code tree: `703ce482d60f90e836f663eac903ff12c7a49b53`
+- The work remains local. No push, PR, merge, tag, notarization, or release was
+  made.
+
+The verified arm64 app is installed on mm4 at
+`/Users/slovn/Applications/Suflyor.app`. The previous installed app was moved
+to durable evidence before replacement. A cross-device archive for the
+MacBook Air is available at
+`C:\suflyor-test-evidence\macos-mlx-package-02ac938-20260820\Suflyor-02ac938-macos-arm64.zip`
+(54,385,893 bytes, SHA-256
+`1934588a878c20f62bfd93665ba1cc177634b94a935dd7d1150ab08f2bb54621`).
+The Air was offline and was not contacted or modified.
+
+### What is working now
+
+- The owner confirmed managed GigaAM/CoreML is working well as the primary STT
+  on mm4. The exact managed model remains outside the app bundle.
+- Native MLX text uses pinned `LiquidAI/LFM2.5-8B-A1B-MLX-4bit`; native MLX
+  Vision uses pinned `mlx-community/Qwen3.5-2B-4bit`. Both verified snapshots
+  are installed under mm4 Application Support and are selected/downloaded from
+  the macOS Settings UI. Merely choosing a catalog row does not silently change
+  the provider; the user explicitly enables it.
+- The exact packaged text sidecar passed READY, authentication, health/model
+  identity, non-streaming generation, streaming generation, and terminal
+  `[DONE]`. The exact packaged Vision sidecar passed the same flow with a valid
+  deterministic 64x64 PNG.
+- The package includes the required signed `mlx.metallib`, three Swift resource
+  bundles, Swift runtime closure, three MLX license notices, Piper, TeraTTS,
+  and the host. All four executables are thin arm64. Strict nested and deep app
+  signature checks pass; signing is local ad-hoc, not Developer ID/notarized.
+- The exact app was launched through LaunchServices as an `LSUIElement` and
+  left running with its direct TeraTTS child. Configuration and secrets were
+  not read or rewritten during package/live acceptance.
+
+### Validation and operational limits
+
+- Exact final Windows validation on Winbrat is green: focused packaging guard
+  8/8 and full `scripts/ci.ps1` exit 0 for commit `02ac938a`.
+- Full macOS compile-seam validation was green for parent `d82eea86`; `02ac938a`
+  differs only by signing/verifying `mlx.metallib` and its structural guard.
+  On `02ac938a`, the focused guard is 8/8 green and the real package build,
+  independent artifact audit, packaged-model live smoke, and LaunchServices
+  launch are green.
+- Run macOS Cargo and Swift builds with one job. Unbounded Clippy previously
+  spawned nine compilers, exhausted RAM/swap, and filled the disk. Regenerable
+  debug targets were removed; models, evidence, installed apps, source, locks,
+  and unrelated worktrees were preserved.
+- Audible TTS quality/latency and every Settings page still require owner UI
+  testing. Screen capture and menu-bar automation from SSH remain constrained
+  by macOS TCC. Do not weaken TCC or treat process liveness as audible QA.
+- A pre-existing launchd service `com.mlx.vlm` runs Python `mlx_vlm.server` on
+  loopback port 8082 with the old `mlx-community/gemma-4-e4b-it-4bit` model. It
+  was deliberately preserved. At the final audit it was idle and almost all of
+  its roughly 5.5 GiB charged footprint was compressed/swapped, but stopping it
+  can break the legacy external Vision route and launchd may restart it. Do not
+  stop or disable it without explicit owner authorization.
+
+## Historical P0n recovery state (superseded)
 
 - Worktree: `C:\Users\x3d_mutant\Natively\suflyor-macos-port-recovery`
 - Branch: `codex/macos-port-recovery`
